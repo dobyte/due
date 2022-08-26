@@ -260,4 +260,4 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 
 ### 6.详细示例
 
-更多详细示例请点击[example](example/)
+更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
