@@ -1,0 +1,58 @@
+version: "3"
+
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: dev-mysql
+    platform: linux/x86_64
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+    ports:
+      - '3306:3306'
+    volumes:
+      - ./mysql:/var/lib/mysql
+    networks:
+      - middleware
+  redis:
+    image: redis:6.0
+    container_name: dev-redis
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./redis:/data
+    networks:
+      - middleware
+  etcd:
+    image: bitnami/etcd:latest
+    container_name: dev-etcd
+    platform: linux/x86_64
+    restart: always
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    ports:
+      - '2379:2379'
+      - '2380:2380'
+    networks:
+      - middleware
+  consul:
+    image: bitnami/consul:latest
+    container_name: dev-consul
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '8300:8300'
+      - '8301:8301'
+      - '8301:8301/udp'
+      - '8500:8500'
+      - '8600:8600'
+      - '8600:8600/udp'
+    volumes:
+      - ./consul:/bitnami
+networks:
+  middleware:
+    driver: bridge
