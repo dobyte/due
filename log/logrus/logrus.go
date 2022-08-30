@@ -13,6 +13,8 @@ import (
 	"github.com/dobyte/due/log"
 )
 
+var _ log.Logger = NewLogger()
+
 type logger struct {
 	logger *logrus.Logger
 }
@@ -28,6 +30,8 @@ func NewLogger(opts ...Option) log.Logger {
 	l := &logger{logger: logrus.New()}
 	
 	switch o.level {
+	case log.LevelTrace:
+		l.logger.SetLevel(logrus.TraceLevel)
 	case log.LevelDebug:
 		l.logger.SetLevel(logrus.DebugLevel)
 	case log.LevelInfo:
@@ -42,17 +46,21 @@ func NewLogger(opts ...Option) log.Logger {
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 	
+	l.logger.SetFormatter(&logrus.JSONFormatter{})
+	
+	logrus.TextFormatter{}
+	
 	return l
 }
 
-// Info 打印信息日志
-func (l *logger) Info(a ...interface{}) {
-	l.logger.Info(a...)
+// Trace 打印事件调试日志
+func (l *logger) Trace(a ...interface{}) {
+	l.logger.Trace(a...)
 }
 
-// Infof 打印信息模板日志
-func (l *logger) Infof(format string, a ...interface{}) {
-	l.logger.Infof(format, a...)
+// Tracef 打印事件调试模板日志
+func (l *logger) Tracef(format string, a ...interface{}) {
+	l.logger.Tracef(format, a...)
 }
 
 // Debug 打印调试日志
@@ -63,6 +71,16 @@ func (l *logger) Debug(a ...interface{}) {
 // Debugf 打印调试模板日志
 func (l *logger) Debugf(format string, a ...interface{}) {
 	l.logger.Debugf(format, a...)
+}
+
+// Info 打印信息日志
+func (l *logger) Info(a ...interface{}) {
+	l.logger.Info(a...)
+}
+
+// Infof 打印信息模板日志
+func (l *logger) Infof(format string, a ...interface{}) {
+	l.logger.Infof(format, a...)
 }
 
 // Warn 打印警告日志
@@ -92,5 +110,15 @@ func (l *logger) Fatal(a ...interface{}) {
 
 // Fatalf 打印致命错误模板日志
 func (l *logger) Fatalf(format string, a ...interface{}) {
+	l.logger.Fatalf(format, a...)
+}
+
+// Panic 打印Panic日志
+func (l *logger) Panic(a ...interface{}) {
+	l.logger.Fatal(a...)
+}
+
+// Panicf 打印Panic模板日志
+func (l *logger) Panicf(format string, a ...interface{}) {
 	l.logger.Fatalf(format, a...)
 }
