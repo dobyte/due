@@ -34,14 +34,14 @@ func (l *stdLogger) Log(level Level, a ...interface{}) {
 	l.pool.Put(buf)
 }
 
-// Info 打印信息日志
-func (l *stdLogger) Info(a ...interface{}) {
-	l.Log(LevelInfo, a...)
+// Trace 打印事件调试日志
+func (l *stdLogger) Trace(a ...interface{}) {
+	l.Log(LevelTrace, a...)
 }
 
-// Infof 打印信息模板日志
-func (l *stdLogger) Infof(format string, a ...interface{}) {
-	l.Log(LevelInfo, fmt.Sprintf(format, a...))
+// Tracef 打印事件调试模板日志
+func (l *stdLogger) Tracef(format string, a ...interface{}) {
+	l.Log(LevelTrace, fmt.Sprintf(format, a...))
 }
 
 // Debug 打印调试日志
@@ -52,6 +52,16 @@ func (l *stdLogger) Debug(a ...interface{}) {
 // Debugf 打印调试模板日志
 func (l *stdLogger) Debugf(format string, a ...interface{}) {
 	l.Log(LevelDebug, fmt.Sprintf(format, a...))
+}
+
+// Info 打印信息日志
+func (l *stdLogger) Info(a ...interface{}) {
+	l.Log(LevelInfo, a...)
+}
+
+// Infof 打印信息模板日志
+func (l *stdLogger) Infof(format string, a ...interface{}) {
+	l.Log(LevelInfo, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
@@ -83,5 +93,17 @@ func (l *stdLogger) Fatal(a ...interface{}) {
 // Fatalf 打印致命错误模板日志
 func (l *stdLogger) Fatalf(format string, a ...interface{}) {
 	l.Log(LevelFatal, fmt.Sprintf(format, a...))
+	os.Exit(0)
+}
+
+// Panic 打印Panic日志
+func (l *stdLogger) Panic(a ...interface{}) {
+	l.Log(LevelPanic, a...)
+	os.Exit(0)
+}
+
+// Panicf 打印Panic模板日志
+func (l *stdLogger) Panicf(format string, a ...interface{}) {
+	l.Log(LevelPanic, fmt.Sprintf(format, a...))
 	os.Exit(0)
 }
