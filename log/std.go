@@ -93,13 +93,13 @@ func (l *stdLogger) Fatal(a ...interface{}) {
 // Fatalf 打印致命错误模板日志
 func (l *stdLogger) Fatalf(format string, a ...interface{}) {
 	l.Log(LevelFatal, fmt.Sprintf(format, a...))
-	os.Exit(0)
+	os.Exit(1)
 }
 
 // Panic 打印Panic日志
 func (l *stdLogger) Panic(a ...interface{}) {
 	l.Log(LevelPanic, a...)
-	os.Exit(0)
+	os.Exit(1)
 }
 
 // Panicf 打印Panic模板日志
