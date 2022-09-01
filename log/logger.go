@@ -7,10 +7,6 @@ import (
 var defaultLogger Logger
 
 type Logger interface {
-	// Trace 打印事件调试日志
-	Trace(a ...interface{})
-	// Tracef 打印事件调试模板日志
-	Tracef(format string, a ...interface{})
 	// Debug 打印调试日志
 	Debug(a ...interface{})
 	// Debugf 打印调试模板日志
@@ -51,16 +47,6 @@ func SetLogger(logger Logger) {
 // GetLogger 获取日志记录器
 func GetLogger() Logger {
 	return defaultLogger
-}
-
-// Trace 打印事件调试日志
-func Trace(a ...interface{}) {
-	defaultLogger.Trace(a...)
-}
-
-// Tracef 打印事件调试模板日志
-func Tracef(format string, a ...interface{}) {
-	defaultLogger.Tracef(format, a...)
 }
 
 // Debug 打印调试日志
