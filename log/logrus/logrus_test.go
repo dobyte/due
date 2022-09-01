@@ -16,8 +16,9 @@ import (
 
 func TestNewLogger(t *testing.T) {
 	l := logrus.NewLogger(
-		//logrus.WithOutFile("./log.txt"),
+		logrus.WithOutFile("./log.txt"),
 		logrus.WithOutFormat(log.JsonFormat),
+		logrus.WithFileCutRule(log.DayCutRule),
 		logrus.WithCallerFullPath(true),
 	)
 

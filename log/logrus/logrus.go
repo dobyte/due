@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	defaultOutSize         = 100 * 1024 * 1024
+	defaultFileExt         = ".log"
 	defaultOutLevel        = log.LevelWarn
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
+	defaultFileMaxSize     = 100 * 1024 * 1024
+	defaultFileCutRule     = log.DayCutRule
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
@@ -38,10 +40,11 @@ type logger struct {
 
 func NewLogger(opts ...Option) log.Logger {
 	o := &options{
-		outSize:         defaultOutSize,
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
 		fileMaxAge:      defaultFileMaxAge,
+		fileMaxSize:     defaultFileMaxSize,
+		fileCutRule:     defaultFileCutRule,
 		timestampFormat: defaultTimestampFormat,
 	}
 	for _, opt := range opts {
@@ -89,18 +92,42 @@ func NewLogger(opts ...Option) log.Logger {
 
 		_, srcFilename := filepath.Split(o.outFile)
 
-		var newFilename string
-		if ext := filepath.Ext(o.outFile); ext == "" {
-			newFilename = srcFilename + ".%Y%m%d.log"
+		var filename string
+		ext := filepath.Ext(o.outFile)
+		if ext == "" {
+			filename, ext = srcFilename, defaultFileExt
 		} else {
-			newFilename = strings.TrimRight(srcFilename, ext) + ".%Y%m%d" + ext
+			filename = strings.TrimRight(srcFilename, ext)
+		}
+
+		var newFilename string
+		var rotationTime time.Duration
+		switch o.fileCutRule {
+		case log.YearCutRule:
+			newFilename = filename + ".%Y" + ext
+			rotationTime = 365 * 24 * time.Hour
+		case log.MonthCutRule:
+			newFilename = filename + ".%Y%m" + ext
+			rotationTime = 31 * 24 * time.Hour
+		case log.DayCutRule:
+			newFilename = filename + ".%Y%m%d" + ext
+			rotationTime = 24 * time.Hour
+		case log.HourCutRule:
+			newFilename = filename + ".%Y%m%d%H" + ext
+			rotationTime = time.Hour
+		case log.MinuteCutRule:
+			newFilename = filename + ".%Y%m%d%H%M" + ext
+			rotationTime = time.Minute
+		case log.SecondCutRule:
+			newFilename = filename + ".%Y%m%d%H%M%S" + ext
+			rotationTime = time.Second
 		}
 
 		writer, err := rotatelogs.New(
 			newFilename,
 			rotatelogs.WithLinkName(srcFilename),
 			rotatelogs.WithMaxAge(o.fileMaxAge),
-			rotatelogs.WithRotationTime(24*time.Hour),
+			rotatelogs.WithRotationTime(rotationTime),
 			rotatelogs.WithRotationSize(o.fileMaxSize),
 		)
 		if err != nil {
