@@ -28,7 +28,7 @@ const (
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
-	defaultFileCutRule     = log.DayCutRule
+	defaultFileCutRule     = log.CutByDay
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
@@ -103,22 +103,22 @@ func NewLogger(opts ...Option) log.Logger {
 		var newFilename string
 		var rotationTime time.Duration
 		switch o.fileCutRule {
-		case log.YearCutRule:
+		case log.CutByYear:
 			newFilename = filename + ".%Y" + ext
 			rotationTime = 365 * 24 * time.Hour
-		case log.MonthCutRule:
+		case log.CutByMonth:
 			newFilename = filename + ".%Y%m" + ext
 			rotationTime = 31 * 24 * time.Hour
-		case log.DayCutRule:
+		case log.CutByDay:
 			newFilename = filename + ".%Y%m%d" + ext
 			rotationTime = 24 * time.Hour
-		case log.HourCutRule:
+		case log.CutByHour:
 			newFilename = filename + ".%Y%m%d%H" + ext
 			rotationTime = time.Hour
-		case log.MinuteCutRule:
+		case log.CutByMinute:
 			newFilename = filename + ".%Y%m%d%H%M" + ext
 			rotationTime = time.Minute
-		case log.SecondCutRule:
+		case log.CutBySecond:
 			newFilename = filename + ".%Y%m%d%H%M%S" + ext
 			rotationTime = time.Second
 		}

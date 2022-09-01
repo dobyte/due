@@ -18,14 +18,16 @@ func TestNewLogger(t *testing.T) {
 	l := logrus.NewLogger(
 		logrus.WithOutFile("./log.txt"),
 		logrus.WithOutFormat(log.JsonFormat),
-		logrus.WithFileCutRule(log.DayCutRule),
+		logrus.WithOutLevel(log.LevelWarn),
+		logrus.WithFileCutRule(log.CutByHour),
 		logrus.WithCallerFullPath(true),
 	)
 
-	for i := 0; i < 1000; i++ {
-		l.Warn(`"hello world"`)
+	for i := 0; i < 10; i++ {
+		l.Trace(`log: trace`)
+		l.Debug(`log: debug`)
+		l.Info(`log: info`)
+		l.Warn(`log: warn`)
+		l.Error(`log: error`)
 	}
-
-	//l.Error("hello world")
-	//l.Fatal("hello world")
 }
