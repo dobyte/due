@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultFileExt         = ".log"
-	defaultOutLevel        = log.LevelWarn
+	defaultOutLevel        = log.WarnLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
@@ -52,17 +52,17 @@ func NewLogger(opts ...Option) log.Logger {
 	)
 
 	switch o.outLevel {
-	case log.LevelDebug:
+	case log.DebugLevel:
 		level = zapcore.DebugLevel
-	case log.LevelInfo:
+	case log.InfoLevel:
 		level = zapcore.InfoLevel
-	case log.LevelWarn:
+	case log.WarnLevel:
 		level = zapcore.WarnLevel
-	case log.LevelError:
+	case log.ErrorLevel:
 		level = zapcore.ErrorLevel
-	case log.LevelFatal:
+	case log.FatalLevel:
 		level = zapcore.FatalLevel
-	case log.LevelPanic:
+	case log.PanicLevel:
 		level = zapcore.PanicLevel
 	}
 

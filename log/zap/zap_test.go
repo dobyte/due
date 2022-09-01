@@ -15,7 +15,9 @@ import (
 )
 
 func TestNewLogger(t *testing.T) {
-	l := zap.NewLogger(zap.WithOutLevel(log.DebugLevel))
+	l := zap.NewLogger(
+		zap.WithOutLevel(log.DebugLevel),
+	)
 
 	l.Debug()
 }
