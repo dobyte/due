@@ -7,14 +7,18 @@ import (
 var defaultLogger Logger
 
 type Logger interface {
-	// Info 打印信息日志
-	Info(a ...interface{})
-	// Infof 打印信息模板日志
-	Infof(format string, a ...interface{})
+	// Trace 打印事件调试日志
+	Trace(a ...interface{})
+	// Tracef 打印事件调试模板日志
+	Tracef(format string, a ...interface{})
 	// Debug 打印调试日志
 	Debug(a ...interface{})
 	// Debugf 打印调试模板日志
 	Debugf(format string, a ...interface{})
+	// Info 打印信息日志
+	Info(a ...interface{})
+	// Infof 打印信息模板日志
+	Infof(format string, a ...interface{})
 	// Warn 打印警告日志
 	Warn(a ...interface{})
 	// Warnf 打印警告模板日志
@@ -27,6 +31,10 @@ type Logger interface {
 	Fatal(a ...interface{})
 	// Fatalf 打印致命错误模板日志
 	Fatalf(format string, a ...interface{})
+	// Panic 打印Panic日志
+	Panic(a ...interface{})
+	// Panicf 打印Panic模板日志
+	Panicf(format string, a ...interface{})
 }
 
 func init() {
@@ -45,14 +53,14 @@ func GetLogger() Logger {
 	return defaultLogger
 }
 
-// Info 打印信息日志
-func Info(a ...interface{}) {
-	defaultLogger.Info(a...)
+// Trace 打印事件调试日志
+func Trace(a ...interface{}) {
+	defaultLogger.Trace(a...)
 }
 
-// Infof 打印信息模板日志
-func Infof(format string, a ...interface{}) {
-	defaultLogger.Infof(format, a...)
+// Tracef 打印事件调试模板日志
+func Tracef(format string, a ...interface{}) {
+	defaultLogger.Tracef(format, a...)
 }
 
 // Debug 打印调试日志
@@ -63,6 +71,16 @@ func Debug(a ...interface{}) {
 // Debugf 打印调试模板日志
 func Debugf(format string, a ...interface{}) {
 	defaultLogger.Debugf(format, a...)
+}
+
+// Info 打印信息日志
+func Info(a ...interface{}) {
+	defaultLogger.Info(a...)
+}
+
+// Infof 打印信息模板日志
+func Infof(format string, a ...interface{}) {
+	defaultLogger.Infof(format, a...)
 }
 
 // Warn 打印警告日志
@@ -93,4 +111,14 @@ func Fatal(a ...interface{}) {
 // Fatalf 打印致命错误模板日志
 func Fatalf(format string, a ...interface{}) {
 	defaultLogger.Fatalf(format, a...)
+}
+
+// Panic 打印Panic日志
+func Panic(a ...interface{}) {
+	defaultLogger.Panic(a...)
+}
+
+// Fatalf 打印Panic模板日志
+func Panicf(format string, a ...interface{}) {
+	defaultLogger.Panicf(format, a...)
 }

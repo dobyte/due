@@ -11,6 +11,8 @@ service Gate {
   rpc Unbind(UnbindRequest) returns (UnbindReply) {}
   // 获取客户端IP
   rpc GetIP(GetIPRequest) returns (GetIPReply) {}
+  // 断开连接
+  rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
   // 推送消息
   rpc Push(PushRequest) returns (PushReply) {}
   // 推送组播消息
@@ -42,6 +44,16 @@ message GetIPRequest {
 
 message GetIPReply {
   string IP = 1; // IP地址
+}
+
+message DisconnectRequest {
+  string NID = 1; // 节点ID
+  int32 Kind = 2; // 推送类型 1：CID 2：UID
+  int64 Target = 3; // 推送目标
+  bool IsForce = 4; // 是否强制断开连接
+}
+
+message DisconnectReply {
 }
 
 message PushRequest {

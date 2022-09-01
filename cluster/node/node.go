@@ -44,17 +44,18 @@ type eventEntity struct {
 
 type Node struct {
 	component.Base
-	opts      *options
-	ctx       context.Context
-	cancel    context.CancelFunc
-	chEvent   chan *eventEntity
-	chRequest chan *request
-	rw        sync.RWMutex
-	routes    map[int32]routeEntity
-	events    map[cluster.Event]EventHandler
-	proxy     *proxy
-	router    *router.Router
-	instance  *registry.ServiceInstance
+	opts                *options
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	chEvent             chan *eventEntity
+	chRequest           chan *request
+	rw                  sync.RWMutex
+	routes              map[int32]routeEntity
+	defaultRouteHandler RouteHandler
+	events              map[cluster.Event]EventHandler
+	proxy               *proxy
+	router              *router.Router
+	instance            *registry.ServiceInstance
 }
 
 func NewNode(opts ...Option) *Node {
@@ -159,12 +160,14 @@ func (n *Node) dispatch() {
 				n.rw.RLock()
 				route, ok := n.routes[req.route]
 				n.rw.RUnlock()
-				if !ok {
-					log.Warnf("message routing does not register handler function, route: %v", req.route)
-					continue
-				}
 
-				route.handler(req)
+				if ok {
+					route.handler(req)
+				} else if n.defaultRouteHandler != nil {
+					n.defaultRouteHandler(req)
+				} else {
+					log.Warnf("message routing does not register handler function, route: %v", req.route)
+				}
 			}
 		}
 	}()
@@ -240,7 +243,7 @@ func (n *Node) buildInstance() {
 }
 
 // 添加路由处理器
-func (n *Node) addRoute(route int32, stateful bool, handler RouteHandler) {
+func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
@@ -256,8 +259,11 @@ func (n *Node) isStatefulRoute(route int32) (bool, bool) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
-	entity, ok := n.routes[route]
-	return entity.stateful, ok
+	if entity, ok := n.routes[route]; ok {
+		return entity.stateful, ok
+	}
+
+	return false, n.defaultRouteHandler != nil
 }
 
 // 添加事件处理器

@@ -308,6 +308,115 @@ func (x *GetIPReply) GetIP() string {
 	return ""
 }
 
+type DisconnectRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	NID     string `protobuf:"bytes,1,opt,name=NID,proto3" json:"NID,omitempty"`          // 节点ID
+	Kind    int32  `protobuf:"varint,2,opt,name=Kind,proto3" json:"Kind,omitempty"`       // 推送类型 1：CID 2：UID
+	Target  int64  `protobuf:"varint,3,opt,name=Target,proto3" json:"Target,omitempty"`   // 推送目标
+	IsForce bool   `protobuf:"varint,4,opt,name=IsForce,proto3" json:"IsForce,omitempty"` // 是否强制断开连接
+}
+
+func (x *DisconnectRequest) Reset() {
+	*x = DisconnectRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_gate_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DisconnectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisconnectRequest) ProtoMessage() {}
+
+func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gate_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
+func (*DisconnectRequest) Descriptor() ([]byte, []int) {
+	return file_gate_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DisconnectRequest) GetNID() string {
+	if x != nil {
+		return x.NID
+	}
+	return ""
+}
+
+func (x *DisconnectRequest) GetKind() int32 {
+	if x != nil {
+		return x.Kind
+	}
+	return 0
+}
+
+func (x *DisconnectRequest) GetTarget() int64 {
+	if x != nil {
+		return x.Target
+	}
+	return 0
+}
+
+func (x *DisconnectRequest) GetIsForce() bool {
+	if x != nil {
+		return x.IsForce
+	}
+	return false
+}
+
+type DisconnectReply struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *DisconnectReply) Reset() {
+	*x = DisconnectReply{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_gate_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DisconnectReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisconnectReply) ProtoMessage() {}
+
+func (x *DisconnectReply) ProtoReflect() protoreflect.Message {
+	mi := &file_gate_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisconnectReply.ProtoReflect.Descriptor instead.
+func (*DisconnectReply) Descriptor() ([]byte, []int) {
+	return file_gate_proto_rawDescGZIP(), []int{7}
+}
+
 type PushRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -323,7 +432,7 @@ type PushRequest struct {
 func (x *PushRequest) Reset() {
 	*x = PushRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[6]
+		mi := &file_gate_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -336,7 +445,7 @@ func (x *PushRequest) String() string {
 func (*PushRequest) ProtoMessage() {}
 
 func (x *PushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[6]
+	mi := &file_gate_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -349,7 +458,7 @@ func (x *PushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushRequest.ProtoReflect.Descriptor instead.
 func (*PushRequest) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{6}
+	return file_gate_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PushRequest) GetNID() string {
@@ -396,7 +505,7 @@ type PushReply struct {
 func (x *PushReply) Reset() {
 	*x = PushReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[7]
+		mi := &file_gate_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -409,7 +518,7 @@ func (x *PushReply) String() string {
 func (*PushReply) ProtoMessage() {}
 
 func (x *PushReply) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[7]
+	mi := &file_gate_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -422,7 +531,7 @@ func (x *PushReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushReply.ProtoReflect.Descriptor instead.
 func (*PushReply) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{7}
+	return file_gate_proto_rawDescGZIP(), []int{9}
 }
 
 type MulticastRequest struct {
@@ -440,7 +549,7 @@ type MulticastRequest struct {
 func (x *MulticastRequest) Reset() {
 	*x = MulticastRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[8]
+		mi := &file_gate_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -453,7 +562,7 @@ func (x *MulticastRequest) String() string {
 func (*MulticastRequest) ProtoMessage() {}
 
 func (x *MulticastRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[8]
+	mi := &file_gate_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -466,7 +575,7 @@ func (x *MulticastRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MulticastRequest.ProtoReflect.Descriptor instead.
 func (*MulticastRequest) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{8}
+	return file_gate_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MulticastRequest) GetNID() string {
@@ -515,7 +624,7 @@ type MulticastReply struct {
 func (x *MulticastReply) Reset() {
 	*x = MulticastReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[9]
+		mi := &file_gate_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -528,7 +637,7 @@ func (x *MulticastReply) String() string {
 func (*MulticastReply) ProtoMessage() {}
 
 func (x *MulticastReply) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[9]
+	mi := &file_gate_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +650,7 @@ func (x *MulticastReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MulticastReply.ProtoReflect.Descriptor instead.
 func (*MulticastReply) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{9}
+	return file_gate_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MulticastReply) GetTotal() int64 {
@@ -565,7 +674,7 @@ type BroadcastRequest struct {
 func (x *BroadcastRequest) Reset() {
 	*x = BroadcastRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[10]
+		mi := &file_gate_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -578,7 +687,7 @@ func (x *BroadcastRequest) String() string {
 func (*BroadcastRequest) ProtoMessage() {}
 
 func (x *BroadcastRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[10]
+	mi := &file_gate_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -591,7 +700,7 @@ func (x *BroadcastRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BroadcastRequest.ProtoReflect.Descriptor instead.
 func (*BroadcastRequest) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{10}
+	return file_gate_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *BroadcastRequest) GetNID() string {
@@ -633,7 +742,7 @@ type BroadcastReply struct {
 func (x *BroadcastReply) Reset() {
 	*x = BroadcastReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gate_proto_msgTypes[11]
+		mi := &file_gate_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -646,7 +755,7 @@ func (x *BroadcastReply) String() string {
 func (*BroadcastReply) ProtoMessage() {}
 
 func (x *BroadcastReply) ProtoReflect() protoreflect.Message {
-	mi := &file_gate_proto_msgTypes[11]
+	mi := &file_gate_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -659,7 +768,7 @@ func (x *BroadcastReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BroadcastReply.ProtoReflect.Descriptor instead.
 func (*BroadcastReply) Descriptor() ([]byte, []int) {
-	return file_gate_proto_rawDescGZIP(), []int{11}
+	return file_gate_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *BroadcastReply) GetTotal() int64 {
@@ -686,7 +795,15 @@ var file_gate_proto_rawDesc = []byte{
 	0x28, 0x05, 0x52, 0x04, 0x4b, 0x69, 0x6e, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x54, 0x61, 0x72, 0x67,
 	0x65, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74,
 	0x22, 0x1c, 0x0a, 0x0a, 0x47, 0x65, 0x74, 0x49, 0x50, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x12, 0x0e,
-	0x0a, 0x02, 0x49, 0x50, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x49, 0x50, 0x22, 0x79,
+	0x0a, 0x02, 0x49, 0x50, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x49, 0x50, 0x22, 0x6b,
+	0x0a, 0x11, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x4e, 0x49, 0x44, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x03, 0x4e, 0x49, 0x44, 0x12, 0x12, 0x0a, 0x04, 0x4b, 0x69, 0x6e, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x05, 0x52, 0x04, 0x4b, 0x69, 0x6e, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x54, 0x61, 0x72,
+	0x67, 0x65, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x54, 0x61, 0x72, 0x67, 0x65,
+	0x74, 0x12, 0x18, 0x0a, 0x07, 0x49, 0x73, 0x46, 0x6f, 0x72, 0x63, 0x65, 0x18, 0x04, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x07, 0x49, 0x73, 0x46, 0x6f, 0x72, 0x63, 0x65, 0x22, 0x11, 0x0a, 0x0f, 0x44,
+	0x69, 0x73, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x79,
 	0x0a, 0x0b, 0x50, 0x75, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a,
 	0x03, 0x4e, 0x49, 0x44, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x4e, 0x49, 0x44, 0x12,
 	0x12, 0x0a, 0x04, 0x4b, 0x69, 0x6e, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x04, 0x4b,
@@ -715,7 +832,7 @@ var file_gate_proto_rawDesc = []byte{
 	0x0c, 0x52, 0x06, 0x42, 0x75, 0x66, 0x66, 0x65, 0x72, 0x22, 0x26, 0x0a, 0x0e, 0x42, 0x72, 0x6f,
 	0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x54,
 	0x6f, 0x74, 0x61, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x54, 0x6f, 0x74, 0x61,
-	0x6c, 0x32, 0xa9, 0x02, 0x0a, 0x04, 0x47, 0x61, 0x74, 0x65, 0x12, 0x28, 0x0a, 0x04, 0x42, 0x69,
+	0x6c, 0x32, 0xe5, 0x02, 0x0a, 0x04, 0x47, 0x61, 0x74, 0x65, 0x12, 0x28, 0x0a, 0x04, 0x42, 0x69,
 	0x6e, 0x64, 0x12, 0x0f, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x69, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75,
 	0x65, 0x73, 0x74, 0x1a, 0x0d, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x69, 0x6e, 0x64, 0x52, 0x65, 0x70,
 	0x6c, 0x79, 0x22, 0x00, 0x12, 0x2e, 0x0a, 0x06, 0x55, 0x6e, 0x62, 0x69, 0x6e, 0x64, 0x12, 0x11,
@@ -724,17 +841,21 @@ var file_gate_proto_rawDesc = []byte{
 	0x6c, 0x79, 0x22, 0x00, 0x12, 0x2b, 0x0a, 0x05, 0x47, 0x65, 0x74, 0x49, 0x50, 0x12, 0x10, 0x2e,
 	0x70, 0x62, 0x2e, 0x47, 0x65, 0x74, 0x49, 0x50, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x0e, 0x2e, 0x70, 0x62, 0x2e, 0x47, 0x65, 0x74, 0x49, 0x50, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22,
-	0x00, 0x12, 0x28, 0x0a, 0x04, 0x50, 0x75, 0x73, 0x68, 0x12, 0x0f, 0x2e, 0x70, 0x62, 0x2e, 0x50,
-	0x75, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x0d, 0x2e, 0x70, 0x62, 0x2e,
-	0x50, 0x75, 0x73, 0x68, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x12, 0x37, 0x0a, 0x09, 0x4d,
-	0x75, 0x6c, 0x74, 0x69, 0x63, 0x61, 0x73, 0x74, 0x12, 0x14, 0x2e, 0x70, 0x62, 0x2e, 0x4d, 0x75,
-	0x6c, 0x74, 0x69, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12,
-	0x2e, 0x70, 0x62, 0x2e, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x70,
-	0x6c, 0x79, 0x22, 0x00, 0x12, 0x37, 0x0a, 0x09, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73,
-	0x74, 0x12, 0x14, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x72, 0x6f,
-	0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x42, 0x06, 0x5a,
-	0x04, 0x2e, 0x2f, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x00, 0x12, 0x3a, 0x0a, 0x0a, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x12,
+	0x15, 0x2e, 0x70, 0x62, 0x2e, 0x44, 0x69, 0x73, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e, 0x70, 0x62, 0x2e, 0x44, 0x69, 0x73, 0x63,
+	0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x12, 0x28, 0x0a,
+	0x04, 0x50, 0x75, 0x73, 0x68, 0x12, 0x0f, 0x2e, 0x70, 0x62, 0x2e, 0x50, 0x75, 0x73, 0x68, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x0d, 0x2e, 0x70, 0x62, 0x2e, 0x50, 0x75, 0x73, 0x68,
+	0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x12, 0x37, 0x0a, 0x09, 0x4d, 0x75, 0x6c, 0x74, 0x69,
+	0x63, 0x61, 0x73, 0x74, 0x12, 0x14, 0x2e, 0x70, 0x62, 0x2e, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x63,
+	0x61, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x62, 0x2e,
+	0x4d, 0x75, 0x6c, 0x74, 0x69, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00,
+	0x12, 0x37, 0x0a, 0x09, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x12, 0x14, 0x2e,
+	0x70, 0x62, 0x2e, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x62, 0x2e, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61,
+	0x73, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x42, 0x06, 0x5a, 0x04, 0x2e, 0x2f, 0x70,
+	0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -749,36 +870,40 @@ func file_gate_proto_rawDescGZIP() []byte {
 	return file_gate_proto_rawDescData
 }
 
-var file_gate_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_gate_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_gate_proto_goTypes = []interface{}{
-	(*BindRequest)(nil),      // 0: pb.BindRequest
-	(*BindReply)(nil),        // 1: pb.BindReply
-	(*UnbindRequest)(nil),    // 2: pb.UnbindRequest
-	(*UnbindReply)(nil),      // 3: pb.UnbindReply
-	(*GetIPRequest)(nil),     // 4: pb.GetIPRequest
-	(*GetIPReply)(nil),       // 5: pb.GetIPReply
-	(*PushRequest)(nil),      // 6: pb.PushRequest
-	(*PushReply)(nil),        // 7: pb.PushReply
-	(*MulticastRequest)(nil), // 8: pb.MulticastRequest
-	(*MulticastReply)(nil),   // 9: pb.MulticastReply
-	(*BroadcastRequest)(nil), // 10: pb.BroadcastRequest
-	(*BroadcastReply)(nil),   // 11: pb.BroadcastReply
+	(*BindRequest)(nil),       // 0: pb.BindRequest
+	(*BindReply)(nil),         // 1: pb.BindReply
+	(*UnbindRequest)(nil),     // 2: pb.UnbindRequest
+	(*UnbindReply)(nil),       // 3: pb.UnbindReply
+	(*GetIPRequest)(nil),      // 4: pb.GetIPRequest
+	(*GetIPReply)(nil),        // 5: pb.GetIPReply
+	(*DisconnectRequest)(nil), // 6: pb.DisconnectRequest
+	(*DisconnectReply)(nil),   // 7: pb.DisconnectReply
+	(*PushRequest)(nil),       // 8: pb.PushRequest
+	(*PushReply)(nil),         // 9: pb.PushReply
+	(*MulticastRequest)(nil),  // 10: pb.MulticastRequest
+	(*MulticastReply)(nil),    // 11: pb.MulticastReply
+	(*BroadcastRequest)(nil),  // 12: pb.BroadcastRequest
+	(*BroadcastReply)(nil),    // 13: pb.BroadcastReply
 }
 var file_gate_proto_depIdxs = []int32{
 	0,  // 0: pb.Gate.Bind:input_type -> pb.BindRequest
 	2,  // 1: pb.Gate.Unbind:input_type -> pb.UnbindRequest
 	4,  // 2: pb.Gate.GetIP:input_type -> pb.GetIPRequest
-	6,  // 3: pb.Gate.Push:input_type -> pb.PushRequest
-	8,  // 4: pb.Gate.Multicast:input_type -> pb.MulticastRequest
-	10, // 5: pb.Gate.Broadcast:input_type -> pb.BroadcastRequest
-	1,  // 6: pb.Gate.Bind:output_type -> pb.BindReply
-	3,  // 7: pb.Gate.Unbind:output_type -> pb.UnbindReply
-	5,  // 8: pb.Gate.GetIP:output_type -> pb.GetIPReply
-	7,  // 9: pb.Gate.Push:output_type -> pb.PushReply
-	9,  // 10: pb.Gate.Multicast:output_type -> pb.MulticastReply
-	11, // 11: pb.Gate.Broadcast:output_type -> pb.BroadcastReply
-	6,  // [6:12] is the sub-list for method output_type
-	0,  // [0:6] is the sub-list for method input_type
+	6,  // 3: pb.Gate.Disconnect:input_type -> pb.DisconnectRequest
+	8,  // 4: pb.Gate.Push:input_type -> pb.PushRequest
+	10, // 5: pb.Gate.Multicast:input_type -> pb.MulticastRequest
+	12, // 6: pb.Gate.Broadcast:input_type -> pb.BroadcastRequest
+	1,  // 7: pb.Gate.Bind:output_type -> pb.BindReply
+	3,  // 8: pb.Gate.Unbind:output_type -> pb.UnbindReply
+	5,  // 9: pb.Gate.GetIP:output_type -> pb.GetIPReply
+	7,  // 10: pb.Gate.Disconnect:output_type -> pb.DisconnectReply
+	9,  // 11: pb.Gate.Push:output_type -> pb.PushReply
+	11, // 12: pb.Gate.Multicast:output_type -> pb.MulticastReply
+	13, // 13: pb.Gate.Broadcast:output_type -> pb.BroadcastReply
+	7,  // [7:14] is the sub-list for method output_type
+	0,  // [0:7] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -863,7 +988,7 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PushRequest); i {
+			switch v := v.(*DisconnectRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -875,7 +1000,7 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PushReply); i {
+			switch v := v.(*DisconnectReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -887,7 +1012,7 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MulticastRequest); i {
+			switch v := v.(*PushRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -899,7 +1024,7 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MulticastReply); i {
+			switch v := v.(*PushReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -911,7 +1036,7 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BroadcastRequest); i {
+			switch v := v.(*MulticastRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -923,6 +1048,30 @@ func file_gate_proto_init() {
 			}
 		}
 		file_gate_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MulticastReply); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_gate_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BroadcastRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_gate_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BroadcastReply); i {
 			case 0:
 				return &v.state
@@ -941,7 +1090,7 @@ func file_gate_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_gate_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

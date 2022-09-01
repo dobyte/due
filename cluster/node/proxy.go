@@ -35,7 +35,12 @@ var (
 
 type Proxy interface {
 	// AddRoute 添加路由
+	// DEPRECATED: Use AddRouteHandler instead.
 	AddRoute(route int32, stateful bool, handler RouteHandler)
+	// AddRouteHandler 添加路由处理器
+	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
+	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
+	SetDefaultRouteHandler(handler RouteHandler)
 	// AddEventListener 添加事件监听器
 	AddEventListener(event cluster.Event, handler EventHandler)
 	// BindGate 绑定网关
@@ -60,6 +65,8 @@ type Proxy interface {
 	Multicast(ctx context.Context, args *MulticastArgs) (int64, error)
 	// Broadcast 推送广播消息
 	Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error)
+	// Disconnect 断开连接
+	Disconnect(ctx context.Context, args *DisconnectArgs) error
 }
 
 type proxy struct {
@@ -79,8 +86,19 @@ func newProxy(node *Node) *proxy {
 }
 
 // AddRoute 添加路由
+// DEPRECATED: Use AddRouteHandler instead.
 func (p *proxy) AddRoute(route int32, stateful bool, handler RouteHandler) {
-	p.node.addRoute(route, stateful, handler)
+	p.node.addRouteHandler(route, stateful, handler)
+}
+
+// AddRouteHandler 添加路由处理器
+func (p *proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler) {
+	p.node.addRouteHandler(route, stateful, handler)
+}
+
+// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
+func (p *proxy) SetDefaultRouteHandler(handler RouteHandler) {
+	p.node.defaultRouteHandler = handler
 }
 
 // AddEventListener 添加事件监听器
@@ -445,6 +463,53 @@ func (p *proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 		return total, nil
 	}
 	return total, err
+}
+
+// Disconnect 断开连接
+func (p *proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
+	switch args.Kind {
+	case session.Conn:
+		return p.directDisconnect(ctx, args.GID, args.Kind, args.Target)
+	case session.User:
+		if args.GID == "" {
+			return p.indirectDisconnect(ctx, args.Target)
+		} else {
+			return p.directDisconnect(ctx, args.GID, args.Kind, args.Target)
+		}
+	default:
+		return ErrInvalidSessionKind
+	}
+}
+
+// 直接断开连接
+func (p *proxy) directDisconnect(ctx context.Context, gid string, kind session.Kind, target int64) error {
+	client, err := p.getGateClientByGID(gid)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Disconnect(ctx, &pb.DisconnectRequest{
+		NID:    p.node.opts.id,
+		Kind:   int32(kind),
+		Target: target,
+	})
+
+	return err
+}
+
+// 间接断开连接
+func (p *proxy) indirectDisconnect(ctx context.Context, uid int64) error {
+	_, err := p.doGateRPC(ctx, uid, func(client pb.GateClient) (bool, interface{}, error) {
+		reply, err := client.Disconnect(ctx, &pb.DisconnectRequest{
+			NID:    p.node.opts.id,
+			Kind:   int32(session.User),
+			Target: uid,
+		})
+
+		return status.Code(err) == code.NotFoundSession, reply, err
+	})
+
+	return err
 }
 
 //// Deliver 投递消息给当前节点处理

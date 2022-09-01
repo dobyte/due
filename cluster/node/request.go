@@ -24,6 +24,8 @@ type Request interface {
 	UID() int64
 	// Route 获取路由
 	Route() int32
+	// Buffer 获取数据
+	Buffer() interface{}
 	// Parse 解析请求
 	Parse(v interface{}) error
 	// Context 获取上线文
@@ -66,6 +68,11 @@ func (r *request) UID() int64 {
 // Route 获取路由
 func (r *request) Route() int32 {
 	return r.route
+}
+
+// Buffer 获取数据
+func (r *request) Buffer() interface{} {
+	return r.buffer
 }
 
 // Parse 解析消息
