@@ -8,9 +8,26 @@
 package logrus
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
-	
+
+	"github.com/lestrrat-go/file-rotatelogs"
+
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/log/logrus/internal/formatter"
+)
+
+const (
+	defaultOutSize         = 100 * 1024 * 1024
+	defaultOutLevel        = log.LevelWarn
+	defaultOutFormat       = log.TextFormat
+	defaultFileMaxAge      = 7 * 24 * time.Hour
+	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
 var _ log.Logger = NewLogger()
@@ -21,15 +38,19 @@ type logger struct {
 
 func NewLogger(opts ...Option) log.Logger {
 	o := &options{
-		level: log.LevelWarn,
+		outSize:         defaultOutSize,
+		outLevel:        defaultOutLevel,
+		outFormat:       defaultOutFormat,
+		fileMaxAge:      defaultFileMaxAge,
+		timestampFormat: defaultTimestampFormat,
 	}
 	for _, opt := range opts {
 		opt(o)
 	}
-	
+
 	l := &logger{logger: logrus.New()}
-	
-	switch o.level {
+
+	switch o.outLevel {
 	case log.LevelTrace:
 		l.logger.SetLevel(logrus.TraceLevel)
 	case log.LevelDebug:
@@ -45,11 +66,62 @@ func NewLogger(opts ...Option) log.Logger {
 	case log.LevelPanic:
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
-	
-	l.logger.SetFormatter(&logrus.JSONFormatter{})
-	
-	logrus.TextFormatter{}
-	
+
+	var f logrus.Formatter
+	switch o.outFormat {
+	case log.JsonFormat:
+		f = &formatter.JsonFormatter{
+			TimestampFormat: o.timestampFormat,
+			CallerFullPath:  o.callerFullPath,
+		}
+	default:
+		f = &formatter.TextFormatter{
+			TimestampFormat: o.timestampFormat,
+			CallerFullPath:  o.callerFullPath,
+		}
+	}
+
+	if o.outFile != "" {
+		_, err := os.OpenFile(o.outFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, srcFilename := filepath.Split(o.outFile)
+
+		var newFilename string
+		if ext := filepath.Ext(o.outFile); ext == "" {
+			newFilename = srcFilename + ".%Y%m%d.log"
+		} else {
+			newFilename = strings.TrimRight(srcFilename, ext) + ".%Y%m%d" + ext
+		}
+
+		writer, err := rotatelogs.New(
+			newFilename,
+			rotatelogs.WithLinkName(srcFilename),
+			rotatelogs.WithMaxAge(o.fileMaxAge),
+			rotatelogs.WithRotationTime(24*time.Hour),
+			rotatelogs.WithRotationSize(o.fileMaxSize),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		l.logger.AddHook(lfshook.NewHook(lfshook.WriterMap{
+			logrus.TraceLevel: writer,
+			logrus.DebugLevel: writer,
+			logrus.InfoLevel:  writer,
+			logrus.WarnLevel:  writer,
+			logrus.ErrorLevel: writer,
+			logrus.FatalLevel: writer,
+			logrus.PanicLevel: writer,
+		}, f))
+	}
+
+	l.logger.SetFormatter(f)
+	l.logger.SetOutput(os.Stdout)
+	l.logger.SetReportCaller(true)
+
 	return l
 }
 
