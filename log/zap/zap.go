@@ -8,16 +8,22 @@
 package zap
 
 import (
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/log/zap/internal/encoder"
 )
 
 const (
-	defaultFileExt         = ".log"
+	defaultFileExt         = "log"
 	defaultOutLevel        = log.WarnLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
@@ -30,6 +36,14 @@ var _ log.Logger = NewLogger()
 
 type logger struct {
 	logger *zap.Logger
+}
+
+type WriterOptions struct {
+	Path       string
+	MaxAge     time.Duration
+	MaxSize    int64
+	MaxBackups uint
+	CutRule    log.CutRule
 }
 
 func NewLogger(opts ...Option) log.Logger {
@@ -46,9 +60,9 @@ func NewLogger(opts ...Option) log.Logger {
 	}
 
 	var (
-		level   zapcore.LevelEnabler
-		encoder zapcore.Encoder
-		syncer  zapcore.WriteSyncer
+		level  zapcore.LevelEnabler
+		ed     zapcore.Encoder
+		syncer zapcore.WriteSyncer
 	)
 
 	switch o.outLevel {
@@ -67,19 +81,91 @@ func NewLogger(opts ...Option) log.Logger {
 	}
 
 	config := zap.NewProductionEncoderConfig()
+	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncodeTime = func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
+		encoder.AppendString(t.Format(o.timestampFormat))
+	}
 
 	switch o.outFormat {
 	case log.JsonFormat:
-		encoder = zapcore.NewJSONEncoder(config)
+		ed = zapcore.NewJSONEncoder(config)
 	default:
-		encoder = zapcore.NewConsoleEncoder(config)
+		ed = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath)
 	}
 
-	l := &logger{
-		logger: zap.New(zapcore.NewCore(encoder, syncer, level)),
+	if o.outFile != "" {
+		writer, err := NewWriter(WriterOptions{
+			Path:       o.outFile,
+			MaxAge:     o.fileMaxAge,
+			MaxSize:    o.fileMaxSize,
+			MaxBackups: o.fileMaxBackups,
+			CutRule:    o.fileCutRule,
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		syncer = zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
+	} else {
+		syncer = zapcore.AddSync(os.Stdout)
 	}
+
+	l := &logger{logger: zap.New(zapcore.NewCore(ed, syncer, level))}
 
 	return l
+}
+
+func NewWriter(opts WriterOptions) (io.Writer, error) {
+	var (
+		path, file   = filepath.Split(opts.Path)
+		list         = strings.Split(file, ".")
+		fileExt      string
+		fileName     string
+		newFileName  string
+		rotationTime time.Duration
+	)
+
+	switch c := len(list); c {
+	case 1:
+		fileName, fileExt = file, defaultFileExt
+	case 2:
+		fileName, fileExt = list[0], list[1]
+	default:
+		fileName, fileExt = strings.Join(list[:c-1], "."), list[c-1]
+	}
+
+	switch opts.CutRule {
+	case log.CutByYear:
+		newFileName = fileName + ".%Y." + fileExt
+		rotationTime = 365 * 24 * time.Hour
+	case log.CutByMonth:
+		newFileName = fileName + ".%Y%m." + fileExt
+		rotationTime = 31 * 24 * time.Hour
+	case log.CutByDay:
+		newFileName = fileName + ".%Y%m%d." + fileExt
+		rotationTime = 24 * time.Hour
+	case log.CutByHour:
+		newFileName = fileName + ".%Y%m%d%H." + fileExt
+		rotationTime = time.Hour
+	case log.CutByMinute:
+		newFileName = fileName + ".%Y%m%d%H%M." + fileExt
+		rotationTime = time.Minute
+	case log.CutBySecond:
+		newFileName = fileName + ".%Y%m%d%H%M%S." + fileExt
+		rotationTime = time.Second
+	}
+
+	srcFileName := filepath.Join(path, fileName+"."+fileExt)
+	newFileName = filepath.Join(path, newFileName)
+
+	return rotatelogs.New(
+		newFileName,
+		rotatelogs.WithLinkName(srcFileName),
+		rotatelogs.WithMaxAge(opts.MaxAge),
+		rotatelogs.WithRotationTime(rotationTime),
+		rotatelogs.WithRotationSize(opts.MaxSize),
+		rotatelogs.WithRotationCount(opts.MaxBackups),
+	)
 }
 
 // Trace 打印事件调试日志
@@ -95,7 +181,7 @@ func (l *logger) Tracef(format string, a ...interface{}) {
 // Debug 打印调试日志
 func (l *logger) Debug(a ...interface{}) {
 	//defer l.logger.Sync()
-	l.logger.Sugar().Info("aaa", zap.String("url", "bbb"))
+	l.logger.Sugar().Debug("aaa", zap.String("url", "bbb"))
 }
 
 // Debugf 打印调试模板日志

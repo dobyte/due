@@ -17,8 +17,9 @@ type options struct {
 	outFile         string        // 输出的文件路径
 	outLevel        log.Level     // 输出的最低日志级别，默认Warn
 	outFormat       log.Format    // 输出的日志格式，默认Text
-	fileMaxAge      time.Duration // 文件最大留存时间，默认7天
-	fileMaxSize     int64         // 文件最大尺寸限制，单位（byte），默认100MB
+	fileMaxAge      time.Duration // 文件最大留存时间，单位（）默认7天
+	fileMaxSize     int64         // 文件最大尺寸限制，单位（MB），默认100MB
+	fileMaxBackups  uint          //
 	fileCutRule     log.CutRule   // 文件切割规则，默认按照天
 	timestampFormat string        // 日志时间戳格式，标准库时间格式，默认2006/01/02 15:04:05.000000
 	callerFullPath  bool          // 是否显示调用者全路径，默认短路径
@@ -49,6 +50,10 @@ func WithFileMaxAge(maxAge time.Duration) Option {
 // 设置输出的单个文件尺寸限制
 func WithFileMaxSize(size int64) Option {
 	return func(o *options) { o.fileMaxSize = size }
+}
+
+func WithFileMaxBackups(backups uint) Option {
+	return func(o *options) { o.fileMaxBackups = backups }
 }
 
 // 设置文件切割规则
