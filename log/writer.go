@@ -16,7 +16,10 @@ import (
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 )
 
-const defaultFileExt = "log"
+const (
+	defaultFileExt  = "log"
+	defaultFileName = "log"
+)
 
 type WriterOptions struct {
 	Path       string
@@ -28,15 +31,18 @@ type WriterOptions struct {
 
 func NewWriter(opts WriterOptions) (io.Writer, error) {
 	var (
-		path, file   = filepath.Split(opts.Path)
-		list         = strings.Split(file, ".")
 		fileExt      string
 		fileName     string
 		newFileName  string
 		rotationTime time.Duration
 	)
 
+	path, file := filepath.Split(opts.Path)
+
+	list := strings.Split(file, ".")
 	switch c := len(list); c {
+	case 0:
+		fileName, fileExt = defaultFileName, defaultFileExt
 	case 1:
 		fileName, fileExt = file, defaultFileExt
 	case 2:
