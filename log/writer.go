@@ -22,65 +22,78 @@ const (
 )
 
 type WriterOptions struct {
-	Path       string
-	MaxAge     time.Duration
-	MaxSize    int64
-	MaxBackups uint
-	CutRule    CutRule
+	Path    string
+	Level   Level
+	MaxAge  time.Duration
+	MaxSize int64
+	CutRule CutRule
 }
 
 func NewWriter(opts WriterOptions) (io.Writer, error) {
 	var (
 		fileExt      string
 		fileName     string
-		newFileName  string
 		rotationTime time.Duration
 	)
 
 	path, file := filepath.Split(opts.Path)
-
 	list := strings.Split(file, ".")
 	switch c := len(list); c {
-	case 0:
-		fileName, fileExt = defaultFileName, defaultFileExt
 	case 1:
-		fileName, fileExt = file, defaultFileExt
+		if list[0] == "" {
+			fileName, fileExt = defaultFileName, defaultFileExt
+		} else {
+			fileName, fileExt = list[0], defaultFileExt
+		}
 	case 2:
 		fileName, fileExt = list[0], list[1]
 	default:
 		fileName, fileExt = strings.Join(list[:c-1], "."), list[c-1]
 	}
 
+	fileParts := make([]string, 0, 4)
+	fileParts = append(fileParts, fileName)
+	if opts.Level != 0 {
+		fileParts = append(fileParts, strings.ToLower(opts.Level.String()))
+	}
+
 	switch opts.CutRule {
 	case CutByYear:
-		newFileName = fileName + ".%Y." + fileExt
+		fileParts = append(fileParts, "%Y")
 		rotationTime = 365 * 24 * time.Hour
 	case CutByMonth:
-		newFileName = fileName + ".%Y%m." + fileExt
+		fileParts = append(fileParts, "%Y%m")
 		rotationTime = 31 * 24 * time.Hour
 	case CutByDay:
-		newFileName = fileName + ".%Y%m%d." + fileExt
+		fileParts = append(fileParts, "%Y%m%d")
 		rotationTime = 24 * time.Hour
 	case CutByHour:
-		newFileName = fileName + ".%Y%m%d%H." + fileExt
+		fileParts = append(fileParts, "%Y%m%d%H")
 		rotationTime = time.Hour
 	case CutByMinute:
-		newFileName = fileName + ".%Y%m%d%H%M." + fileExt
+		fileParts = append(fileParts, "%Y%m%d%H%M")
 		rotationTime = time.Minute
 	case CutBySecond:
-		newFileName = fileName + ".%Y%m%d%H%M%S." + fileExt
+		fileParts = append(fileParts, "%Y%m%d%H%M%S")
 		rotationTime = time.Second
 	}
 
-	srcFileName := filepath.Join(path, fileName+"."+fileExt)
-	newFileName = filepath.Join(path, newFileName)
+	fileParts = append(fileParts, fileExt)
 
-	return rotatelogs.New(
-		newFileName,
-		rotatelogs.WithLinkName(srcFileName),
-		rotatelogs.WithMaxAge(opts.MaxAge),
-		rotatelogs.WithRotationTime(rotationTime),
-		rotatelogs.WithRotationSize(opts.MaxSize),
-		rotatelogs.WithRotationCount(opts.MaxBackups),
-	)
+	srcFileName := filepath.Join(path, fileName+"."+fileExt)
+	newFileName := filepath.Join(path, strings.Join(fileParts, "."))
+
+	options := make([]rotatelogs.Option, 0, 4)
+	options = append(options, rotatelogs.WithLinkName(srcFileName))
+	if opts.MaxAge > 0 {
+		options = append(options, rotatelogs.WithMaxAge(opts.MaxAge))
+	}
+	if opts.MaxSize > 0 {
+		options = append(options, rotatelogs.WithRotationSize(opts.MaxSize))
+	}
+	if rotationTime > 0 {
+		options = append(options, rotatelogs.WithRotationTime(rotationTime))
+	}
+
+	return rotatelogs.New(newFileName, options...)
 }
