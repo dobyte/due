@@ -8,13 +8,9 @@
 package zap
 
 import (
-	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
-	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -23,7 +19,6 @@ import (
 )
 
 const (
-	defaultFileExt         = "log"
 	defaultOutLevel        = log.WarnLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
@@ -34,19 +29,12 @@ const (
 
 var _ log.Logger = NewLogger()
 
-type logger struct {
-	logger *zap.Logger
+type Logger struct {
+	logger *zap.SugaredLogger
+	opts   *options
 }
 
-type WriterOptions struct {
-	Path       string
-	MaxAge     time.Duration
-	MaxSize    int64
-	MaxBackups uint
-	CutRule    log.CutRule
-}
-
-func NewLogger(opts ...Option) log.Logger {
+func NewLogger(opts ...Option) *Logger {
 	o := &options{
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
@@ -59,26 +47,7 @@ func NewLogger(opts ...Option) log.Logger {
 		opt(o)
 	}
 
-	var (
-		level  zapcore.LevelEnabler
-		ed     zapcore.Encoder
-		syncer zapcore.WriteSyncer
-	)
-
-	switch o.outLevel {
-	case log.DebugLevel:
-		level = zapcore.DebugLevel
-	case log.InfoLevel:
-		level = zapcore.InfoLevel
-	case log.WarnLevel:
-		level = zapcore.WarnLevel
-	case log.ErrorLevel:
-		level = zapcore.ErrorLevel
-	case log.FatalLevel:
-		level = zapcore.FatalLevel
-	case log.PanicLevel:
-		level = zapcore.PanicLevel
-	}
+	l := &Logger{opts: o}
 
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -86,6 +55,7 @@ func NewLogger(opts ...Option) log.Logger {
 		encoder.AppendString(t.Format(o.timestampFormat))
 	}
 
+	var ed zapcore.Encoder
 	switch o.outFormat {
 	case log.JsonFormat:
 		ed = zapcore.NewJSONEncoder(config)
@@ -93,126 +63,135 @@ func NewLogger(opts ...Option) log.Logger {
 		ed = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath)
 	}
 
+	enabler := l.buildLevelEnabler()
 	if o.outFile != "" {
-		writer, err := NewWriter(WriterOptions{
-			Path:       o.outFile,
-			MaxAge:     o.fileMaxAge,
-			MaxSize:    o.fileMaxSize,
-			MaxBackups: o.fileMaxBackups,
-			CutRule:    o.fileCutRule,
-		})
-		if err != nil {
-			panic(err)
+		if o.fileClassifyStorage {
+			l.logger = zap.New(zapcore.NewTee(
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), enabler),
+			)).Sugar()
+		} else {
+			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(), enabler)).Sugar()
 		}
-
-		syncer = zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
 	} else {
-		syncer = zapcore.AddSync(os.Stdout)
+		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), enabler)).Sugar()
 	}
-
-	l := &logger{logger: zap.New(zapcore.NewCore(ed, syncer, level))}
 
 	return l
 }
 
-func NewWriter(opts WriterOptions) (io.Writer, error) {
-	var (
-		path, file   = filepath.Split(opts.Path)
-		list         = strings.Split(file, ".")
-		fileExt      string
-		fileName     string
-		newFileName  string
-		rotationTime time.Duration
-	)
+func (l *Logger) buildWriteSyncer(level ...log.Level) zapcore.WriteSyncer {
+	var path string
+	if len(level) > 0 {
 
-	switch c := len(list); c {
-	case 1:
-		fileName, fileExt = file, defaultFileExt
-	case 2:
-		fileName, fileExt = list[0], list[1]
-	default:
-		fileName, fileExt = strings.Join(list[:c-1], "."), list[c-1]
+	} else {
+		path = l.opts.outFile
 	}
 
-	switch opts.CutRule {
-	case log.CutByYear:
-		newFileName = fileName + ".%Y." + fileExt
-		rotationTime = 365 * 24 * time.Hour
-	case log.CutByMonth:
-		newFileName = fileName + ".%Y%m." + fileExt
-		rotationTime = 31 * 24 * time.Hour
-	case log.CutByDay:
-		newFileName = fileName + ".%Y%m%d." + fileExt
-		rotationTime = 24 * time.Hour
-	case log.CutByHour:
-		newFileName = fileName + ".%Y%m%d%H." + fileExt
-		rotationTime = time.Hour
-	case log.CutByMinute:
-		newFileName = fileName + ".%Y%m%d%H%M." + fileExt
-		rotationTime = time.Minute
-	case log.CutBySecond:
-		newFileName = fileName + ".%Y%m%d%H%M%S." + fileExt
-		rotationTime = time.Second
+	writer, err := log.NewWriter(log.WriterOptions{
+		Path:    path,
+		MaxAge:  l.opts.fileMaxAge,
+		MaxSize: l.opts.fileMaxSize,
+		CutRule: l.opts.fileCutRule,
+	})
+	if err != nil {
+		panic(err)
 	}
 
-	srcFileName := filepath.Join(path, fileName+"."+fileExt)
-	newFileName = filepath.Join(path, newFileName)
-
-	return rotatelogs.New(
-		newFileName,
-		rotatelogs.WithLinkName(srcFileName),
-		rotatelogs.WithMaxAge(opts.MaxAge),
-		rotatelogs.WithRotationTime(rotationTime),
-		rotatelogs.WithRotationSize(opts.MaxSize),
-		rotatelogs.WithRotationCount(opts.MaxBackups),
-	)
+	return zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
 }
 
-// Trace 打印事件调试日志
-func (l *logger) Trace(a ...interface{}) {
+func (l *Logger) buildLevelEnabler() zapcore.LevelEnabler {
+	return zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+		switch l.opts.outLevel {
+		case log.DebugLevel:
+			return level >= zapcore.DebugLevel
+		case log.InfoLevel:
+			return level >= zapcore.InfoLevel
+		case log.WarnLevel:
+			return level >= zapcore.WarnLevel
+		case log.ErrorLevel:
+			return level >= zapcore.ErrorLevel
+		case log.FatalLevel:
+			return level == zapcore.FatalLevel || level == zapcore.PanicLevel
+		case log.PanicLevel:
+			return level == zapcore.PanicLevel
+		}
 
-}
-
-// Tracef 打印事件调试模板日志
-func (l *logger) Tracef(format string, a ...interface{}) {
-	//l.logger.Log(format, a...)
+		return false
+	})
 }
 
 // Debug 打印调试日志
-func (l *logger) Debug(a ...interface{}) {
-	//defer l.logger.Sync()
-	l.logger.Sugar().Debug("aaa", zap.String("url", "bbb"))
+func (l *Logger) Debug(a ...interface{}) {
+	l.logger.Debug(a...)
 }
 
 // Debugf 打印调试模板日志
-func (l *logger) Debugf(format string, a ...interface{}) {}
+func (l *Logger) Debugf(format string, a ...interface{}) {
+	l.logger.Debugf(format, a...)
+}
 
 // Info 打印信息日志
-func (l *logger) Info(a ...interface{}) {}
+func (l *Logger) Info(a ...interface{}) {
+	l.logger.Info(a...)
+}
 
 // Infof 打印信息模板日志
-func (l *logger) Infof(format string, a ...interface{}) {}
+func (l *Logger) Infof(format string, a ...interface{}) {
+	l.logger.Infof(format, a...)
+}
 
 // Warn 打印警告日志
-func (l *logger) Warn(a ...interface{}) {}
+func (l *Logger) Warn(a ...interface{}) {
+	l.logger.Warn(a...)
+}
 
 // Warnf 打印警告模板日志
-func (l *logger) Warnf(format string, a ...interface{}) {}
+func (l *Logger) Warnf(format string, a ...interface{}) {
+	l.logger.Warnf(format, a...)
+}
 
 // Error 打印错误日志
-func (l *logger) Error(a ...interface{}) {}
+func (l *Logger) Error(a ...interface{}) {
+	l.logger.Error(a...)
+}
 
 // Errorf 打印错误模板日志
-func (l *logger) Errorf(format string, a ...interface{}) {}
+func (l *Logger) Errorf(format string, a ...interface{}) {
+	l.logger.Errorf(format, a...)
+}
 
 // Fatal 打印致命错误日志
-func (l *logger) Fatal(a ...interface{}) {}
+func (l *Logger) Fatal(a ...interface{}) {
+	l.logger.Fatal(a...)
+}
 
 // Fatalf 打印致命错误模板日志
-func (l *logger) Fatalf(format string, a ...interface{}) {}
+func (l *Logger) Fatalf(format string, a ...interface{}) {
+	l.logger.Fatalf(format, a...)
+}
 
 // Panic 打印Panic日志
-func (l *logger) Panic(a ...interface{}) {}
+func (l *Logger) Panic(a ...interface{}) {
+	l.logger.Panic(a...)
+}
 
 // Panicf 打印Panic模板日志
-func (l *logger) Panicf(format string, a ...interface{}) {}
+func (l *Logger) Panicf(format string, a ...interface{}) {
+	l.logger.Panicf(format, a...)
+}
+
+// 同步缓存中的日志
+func (l *Logger) Sync() error {
+	return l.logger.Sync()
+}
+
+// Close 关闭日志
+func (l *Logger) Close() error {
+	return l.logger.Sync()
+}

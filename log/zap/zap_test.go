@@ -17,10 +17,11 @@ import (
 func TestNewLogger(t *testing.T) {
 	l := zap.NewLogger(
 		zap.WithOutFile("./log/log.log"),
-		zap.WithOutLevel(log.DebugLevel),
+		zap.WithOutLevel(log.WarnLevel),
 	)
 
-	l.Debug()
+	l.Info("aaa")
+	l.Warn("aaa")
 
 	//list := strings.Split("a.b.log" , ".")
 	//
