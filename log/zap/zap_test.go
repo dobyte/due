@@ -18,7 +18,7 @@ func TestNewLogger(t *testing.T) {
 	l := zap.NewLogger(
 		zap.WithOutFile("./log/due.log"),
 		zap.WithOutLevel(log.WarnLevel),
-		zap.WithOutFormat(log.TextFormat),
+		zap.WithOutFormat(log.JsonFormat),
 		zap.WithOutStackLevel(log.WarnLevel),
 		zap.WithFileClassifyStorage(true),
 		zap.WithCallerFullPath(true),
@@ -27,7 +27,7 @@ func TestNewLogger(t *testing.T) {
 	//l.Info("info")
 	//l.Warn("warn")
 	l.Error("error")
-	l.Error("error")
+	//l.Error("error")
 	//l.Fatal("fatal")
 	//l.Panic("panic")
 }

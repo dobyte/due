@@ -10,6 +10,7 @@ package encoder
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap/buffer"
@@ -84,7 +85,15 @@ func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 
 	if ent.Stack != "" {
 		line.AppendByte('\n')
-		line.AppendString(ent.Stack)
+		line.AppendString("Stack:\n")
+
+		stacks := strings.Split(ent.Stack, "\n")
+		for i := range stacks {
+			if i%2 == 0 {
+				stacks[i] = strconv.Itoa(i/2+1) + ". " + stacks[i]
+			}
+		}
+		line.AppendString(strings.Join(stacks, "\n"))
 	}
 
 	line.AppendString("\n")

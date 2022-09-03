@@ -19,11 +19,13 @@ import (
 )
 
 const (
-	fieldKeyLevel = "level"
-	fieldKeyTime  = "time"
-	fieldKeyFile  = "file"
-	fieldKeyMsg   = "msg"
-	fieldKeyStack = "stack"
+	fieldKeyLevel     = "level"
+	fieldKeyTime      = "time"
+	fieldKeyFile      = "file"
+	fieldKeyMsg       = "msg"
+	fieldKeyStack     = "stack"
+	fieldKeyStackFunc = "func"
+	fieldKeyStackFile = "file"
 )
 
 type JsonEncoder struct {
@@ -64,7 +66,21 @@ func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyMsg, utils.Addslashes(strings.TrimSuffix(ent.Message, "\n"))))
 
 	if ent.Stack != "" {
-		line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyStack, utils.Addslashes(ent.Stack)))
+		line.AppendString(fmt.Sprintf(`,"%s":[`, fieldKeyStack))
+
+		stacks := strings.Split(ent.Stack, "\n")
+		for i := range stacks {
+			if i%2 == 0 {
+				if i/2 == 0 {
+					line.AppendString(fmt.Sprintf(`{"%s":"%s"`, fieldKeyStackFunc, stacks[i]))
+				} else {
+					line.AppendString(fmt.Sprintf(`,{"%s":"%s"`, fieldKeyStackFunc, stacks[i]))
+				}
+			} else {
+				line.AppendString(fmt.Sprintf(`,"%s":"%s"}`, fieldKeyStackFile, strings.TrimLeft(stacks[i], "\t")))
+			}
+		}
+		line.AppendByte(']')
 	}
 
 	line.AppendByte('}')
