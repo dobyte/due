@@ -19,10 +19,10 @@ const (
 type CutRule int
 
 const (
-	CutByYear   CutRule = iota // 按照年切割
-	CutByMonth                 // 按照月切割
-	CutByDay                   // 按照日切割
-	CutByHour                  // 按照时切割
-	CutByMinute                // 按照分切割
-	CutBySecond                // 按照秒切割
+	CutByYear   CutRule = iota + 1 // 按照年切割
+	CutByMonth                     // 按照月切割
+	CutByDay                       // 按照日切割
+	CutByHour                      // 按照时切割
+	CutByMinute                    // 按照分切割
+	CutBySecond                    // 按照秒切割
 )
