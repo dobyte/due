@@ -64,38 +64,60 @@ func NewLogger(opts ...Option) *Logger {
 		opt(o)
 	}
 
-	l := &Logger{opts: o}
-
-	config := zap.NewProductionEncoderConfig()
-	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	config.EncodeTime = func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
-		encoder.AppendString(t.Format(o.timestampFormat))
-	}
-
-	var ed zapcore.Encoder
+	var (
+		fileEncoder     zapcore.Encoder
+		terminalEncoder zapcore.Encoder
+	)
 	switch o.outFormat {
 	case log.JsonFormat:
-		ed = zapcore.NewJSONEncoder(config)
+		fileEncoder = encoder.NewJsonEncoder(o.timestampFormat, o.callerFullPath)
+		terminalEncoder = fileEncoder
 	default:
-		ed = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath)
+		fileEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath, false)
+		terminalEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath, true)
 	}
+
+	options := make([]zap.Option, 0, 2)
+	options = append(options, zap.AddCaller())
+	switch o.outStackLevel {
+	case log.DebugLevel:
+		options = append(options, zap.AddStacktrace(zapcore.DebugLevel))
+	case log.InfoLevel:
+		options = append(options, zap.AddStacktrace(zapcore.InfoLevel))
+	case log.WarnLevel:
+		options = append(options, zap.AddStacktrace(zapcore.WarnLevel))
+	case log.ErrorLevel:
+		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
+	case log.FatalLevel:
+		options = append(options, zap.AddStacktrace(zapcore.FatalLevel))
+	case log.PanicLevel:
+		options = append(options, zap.AddStacktrace(zapcore.PanicLevel))
+	}
+
+	l := &Logger{opts: o}
 
 	if o.outFile != "" {
 		if o.classifyStorage {
 			l.logger = zap.New(zapcore.NewTee(
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(log.WarnLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(log.ErrorLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
-				zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
-			)).Sugar()
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(log.WarnLevel)),
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(log.ErrorLevel)),
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
+				zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
+			), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).Sugar()
 		} else {
-			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel))).Sugar()
+			l.logger = zap.New(zapcore.NewTee(
+				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel)),
+				zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
+			), options...).Sugar()
 		}
 	} else {
-		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel))).Sugar()
+		l.logger = zap.New(
+			zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
+			options...,
+		).Sugar()
 	}
 
 	return l
@@ -113,11 +135,7 @@ func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 		panic(err)
 	}
 
-	if level != defaultNoneLevel {
-		return zapcore.AddSync(writer)
-	}
-
-	return zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
+	return zapcore.AddSync(writer)
 }
 
 func (l *Logger) buildLevelEnabler(level log.Level) zapcore.LevelEnabler {

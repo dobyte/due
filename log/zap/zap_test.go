@@ -10,15 +10,18 @@ package zap_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap"
 )
 
 func TestNewLogger(t *testing.T) {
 	l := zap.NewLogger(
-		zap.WithOutFile("./log/log.log"),
-		//zap.WithOutLevel(log.WarnLevel),
-		zap.WithOutLevel(0),
-		zap.WithClassifyStorage(true),
+		zap.WithOutFile("./log/due.log"),
+		zap.WithOutLevel(log.WarnLevel),
+		zap.WithOutFormat(log.TextFormat),
+		zap.WithOutStackLevel(log.WarnLevel),
+		zap.WithClassifyStorage(false),
+		zap.WithCallerFullPath(true),
 	)
 
 	//l.Info("info")
@@ -26,19 +29,4 @@ func TestNewLogger(t *testing.T) {
 	l.Error("error")
 	//l.Fatal("fatal")
 	//l.Panic("panic")
-
-	//list := strings.Split("a.b.log" , ".")
-	//
-	//switch len(list) {
-	//case 0:
-	//
-	//}
-	//
-	//if len(list)  2 {
-	//
-	//}
-	//
-	//
-	//fmt.Println(strings.Split("a.b.log" , "."))
-	//fmt.Println(strings.Split("a.b.log" , "." , 2))
 }
