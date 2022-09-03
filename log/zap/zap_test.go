@@ -27,6 +27,7 @@ func TestNewLogger(t *testing.T) {
 	//l.Info("info")
 	//l.Warn("warn")
 	l.Error("error")
+	l.Error("error")
 	//l.Fatal("fatal")
 	//l.Panic("panic")
 }
