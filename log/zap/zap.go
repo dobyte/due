@@ -27,7 +27,24 @@ const (
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
+const (
+	defaultNoneLevel log.Level = 0
+)
+
 var _ log.Logger = NewLogger()
+
+var levelMap map[zapcore.Level]log.Level
+
+func init() {
+	levelMap = map[zapcore.Level]log.Level{
+		zap.DebugLevel: log.DebugLevel,
+		zap.InfoLevel:  log.InfoLevel,
+		zap.WarnLevel:  log.WarnLevel,
+		zap.ErrorLevel: log.ErrorLevel,
+		zap.FatalLevel: log.FatalLevel,
+		zap.PanicLevel: log.PanicLevel,
+	}
+}
 
 type Logger struct {
 	logger *zap.SugaredLogger
@@ -66,18 +83,19 @@ func NewLogger(opts ...Option) *Logger {
 	if o.outFile != "" {
 		if o.classifyStorage {
 			l.logger = zap.New(zapcore.NewTee(
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(zapcore.DebugLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(zapcore.InfoLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(zapcore.WarnLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(zapcore.ErrorLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(zapcore.FatalLevel)),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(zapcore.PanicLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(log.WarnLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(log.ErrorLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
+				zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
 			)).Sugar()
 		} else {
-			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(0), l.buildLevelEnabler(zapcore.DebugLevel-1))).Sugar()
+			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel))).Sugar()
 		}
 	} else {
-		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(zapcore.DebugLevel-1))).Sugar()
+		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel))).Sugar()
 	}
 
 	return l
@@ -95,28 +113,20 @@ func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 		panic(err)
 	}
 
+	if level != defaultNoneLevel {
+		return zapcore.AddSync(writer)
+	}
+
 	return zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
 }
 
-func (l *Logger) buildLevelEnabler(level zapcore.Level) zapcore.LevelEnabler {
-	none := zapcore.DebugLevel - 1
+func (l *Logger) buildLevelEnabler(level log.Level) zapcore.LevelEnabler {
 	return zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		switch l.opts.outLevel {
-		case log.DebugLevel:
-			return lvl >= zapcore.DebugLevel && (level == none || (level >= zapcore.DebugLevel && lvl >= level))
-		case log.InfoLevel:
-			return lvl >= zapcore.InfoLevel && (level == none || (level >= zapcore.InfoLevel && lvl >= level))
-		case log.WarnLevel:
-			return lvl >= zapcore.WarnLevel && (level == none || (level >= zapcore.WarnLevel && lvl >= level))
-		case log.ErrorLevel:
-			return lvl >= zapcore.ErrorLevel && (level == none || (level >= zapcore.ErrorLevel && lvl >= level))
-		case log.FatalLevel:
-			return (lvl == zapcore.FatalLevel || lvl == zapcore.PanicLevel) && (level == none || level == zapcore.FatalLevel || level == zapcore.PanicLevel)
-		case log.PanicLevel:
-			return lvl == zapcore.PanicLevel && (level == none || level >= zapcore.PanicLevel)
+		if v := levelMap[lvl]; l.opts.outLevel != defaultNoneLevel {
+			return v >= l.opts.outLevel && (level == defaultNoneLevel || (level >= l.opts.outLevel && v >= level))
+		} else {
+			return level == defaultNoneLevel || v >= level
 		}
-
-		return false
 	})
 }
 

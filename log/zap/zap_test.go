@@ -10,20 +10,22 @@ package zap_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap"
 )
 
 func TestNewLogger(t *testing.T) {
 	l := zap.NewLogger(
 		zap.WithOutFile("./log/log.log"),
-		zap.WithOutLevel(log.WarnLevel),
+		//zap.WithOutLevel(log.WarnLevel),
+		zap.WithOutLevel(0),
 		zap.WithClassifyStorage(true),
 	)
 
-	//l.Info("aaa")
-	//l.Warn("aaa")
+	//l.Info("info")
+	//l.Warn("warn")
 	l.Error("error")
+	//l.Fatal("fatal")
+	//l.Panic("panic")
 
 	//list := strings.Split("a.b.log" , ".")
 	//
