@@ -78,7 +78,7 @@ func NewLogger(opts ...Option) *Logger {
 	}
 
 	options := make([]zap.Option, 0, 2)
-	options = append(options, zap.AddCaller())
+	options = append(options, zap.AddCaller(), zap.AddCallerSkip(1))
 	switch o.outStackLevel {
 	case log.DebugLevel:
 		options = append(options, zap.AddStacktrace(zapcore.DebugLevel))
