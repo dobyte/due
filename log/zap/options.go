@@ -14,15 +14,15 @@ import (
 )
 
 type options struct {
-	outFile             string        // 输出的文件路径
-	outLevel            log.Level     // 输出的最低日志级别，默认Warn
-	outFormat           log.Format    // 输出的日志格式，默认Text
-	fileMaxAge          time.Duration // 文件最大留存时间，单位（）默认7天
-	fileMaxSize         int64         // 文件最大尺寸限制，单位（MB），默认100MB
-	fileCutRule         log.CutRule   // 文件切割规则，默认按照天
-	fileClassifyStorage bool          // 文件分级存储，默认统一存储
-	timestampFormat     string        // 日志时间戳格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	callerFullPath      bool          // 是否显示调用者全路径，默认短路径
+	outFile         string        // 输出的文件路径
+	outLevel        log.Level     // 输出的最低日志级别，默认Warn
+	outFormat       log.Format    // 输出的日志格式，默认Text
+	fileMaxAge      time.Duration // 文件最大留存时间，单位（）默认7天
+	fileMaxSize     int64         // 文件最大尺寸限制，单位（MB），默认100MB
+	fileCutRule     log.CutRule   // 文件切割规则，默认按照天
+	classifyStorage bool          // 文件分级存储，默认统一存储
+	timestampFormat string        // 日志时间戳格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	callerFullPath  bool          // 是否显示调用者全路径，默认短路径
 }
 
 type Option func(o *options)
@@ -58,8 +58,8 @@ func WithFileCutRule(cutRule log.CutRule) Option {
 }
 
 // 设置文件分类存储
-func WithFileClassifyStorage(enable bool) Option {
-	return func(o *options) { o.fileClassifyStorage = enable }
+func WithClassifyStorage(enable bool) Option {
+	return func(o *options) { o.classifyStorage = enable }
 }
 
 // 设置日志输出时间戳格式，标准库时间格式

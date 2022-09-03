@@ -18,10 +18,12 @@ func TestNewLogger(t *testing.T) {
 	l := zap.NewLogger(
 		zap.WithOutFile("./log/log.log"),
 		zap.WithOutLevel(log.WarnLevel),
+		zap.WithClassifyStorage(true),
 	)
 
-	l.Info("aaa")
-	l.Warn("aaa")
+	//l.Info("aaa")
+	//l.Warn("aaa")
+	l.Error("error")
 
 	//list := strings.Split("a.b.log" , ".")
 	//

@@ -63,37 +63,30 @@ func NewLogger(opts ...Option) *Logger {
 		ed = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath)
 	}
 
-	enabler := l.buildLevelEnabler()
 	if o.outFile != "" {
-		if o.fileClassifyStorage {
+		if o.classifyStorage {
 			l.logger = zap.New(zapcore.NewTee(
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), enabler),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), enabler),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), enabler),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), enabler),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), enabler),
-				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), enabler),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(zapcore.DebugLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(zapcore.InfoLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(zapcore.WarnLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(zapcore.ErrorLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(zapcore.FatalLevel)),
+				zapcore.NewCore(ed, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(zapcore.PanicLevel)),
 			)).Sugar()
 		} else {
-			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(), enabler)).Sugar()
+			l.logger = zap.New(zapcore.NewCore(ed, l.buildWriteSyncer(0), l.buildLevelEnabler(zapcore.DebugLevel-1))).Sugar()
 		}
 	} else {
-		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), enabler)).Sugar()
+		l.logger = zap.New(zapcore.NewCore(ed, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(zapcore.DebugLevel-1))).Sugar()
 	}
 
 	return l
 }
 
-func (l *Logger) buildWriteSyncer(level ...log.Level) zapcore.WriteSyncer {
-	var path string
-	if len(level) > 0 {
-
-	} else {
-		path = l.opts.outFile
-	}
-
+func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 	writer, err := log.NewWriter(log.WriterOptions{
-		Path:    path,
+		Path:    l.opts.outFile,
+		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
 		MaxSize: l.opts.fileMaxSize,
 		CutRule: l.opts.fileCutRule,
@@ -105,21 +98,22 @@ func (l *Logger) buildWriteSyncer(level ...log.Level) zapcore.WriteSyncer {
 	return zapcore.NewMultiWriteSyncer(zapcore.AddSync(writer), zapcore.AddSync(os.Stdout))
 }
 
-func (l *Logger) buildLevelEnabler() zapcore.LevelEnabler {
-	return zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+func (l *Logger) buildLevelEnabler(level zapcore.Level) zapcore.LevelEnabler {
+	none := zapcore.DebugLevel - 1
+	return zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		switch l.opts.outLevel {
 		case log.DebugLevel:
-			return level >= zapcore.DebugLevel
+			return lvl >= zapcore.DebugLevel && (level == none || (level >= zapcore.DebugLevel && lvl >= level))
 		case log.InfoLevel:
-			return level >= zapcore.InfoLevel
+			return lvl >= zapcore.InfoLevel && (level == none || (level >= zapcore.InfoLevel && lvl >= level))
 		case log.WarnLevel:
-			return level >= zapcore.WarnLevel
+			return lvl >= zapcore.WarnLevel && (level == none || (level >= zapcore.WarnLevel && lvl >= level))
 		case log.ErrorLevel:
-			return level >= zapcore.ErrorLevel
+			return lvl >= zapcore.ErrorLevel && (level == none || (level >= zapcore.ErrorLevel && lvl >= level))
 		case log.FatalLevel:
-			return level == zapcore.FatalLevel || level == zapcore.PanicLevel
+			return (lvl == zapcore.FatalLevel || lvl == zapcore.PanicLevel) && (level == none || level == zapcore.FatalLevel || level == zapcore.PanicLevel)
 		case log.PanicLevel:
-			return level == zapcore.PanicLevel
+			return lvl == zapcore.PanicLevel && (level == none || level >= zapcore.PanicLevel)
 		}
 
 		return false
