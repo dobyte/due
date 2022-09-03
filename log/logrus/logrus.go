@@ -8,23 +8,20 @@
 package logrus
 
 import (
+	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 
-	"github.com/lestrrat-go/file-rotatelogs"
-
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/logrus/internal/formatter"
+	"github.com/dobyte/due/log/logrus/internal/hook"
 )
 
 const (
-	defaultFileExt         = ".log"
-	defaultOutLevel        = log.LevelWarn
+	defaultOutLevel        = log.WarnLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
@@ -32,13 +29,18 @@ const (
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
+const (
+	defaultNoneLevel log.Level = 0
+)
+
 var _ log.Logger = NewLogger()
 
-type logger struct {
+type Logger struct {
+	opts   *options
 	logger *logrus.Logger
 }
 
-func NewLogger(opts ...Option) log.Logger {
+func NewLogger(opts ...Option) *Logger {
 	o := &options{
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
@@ -51,22 +53,20 @@ func NewLogger(opts ...Option) log.Logger {
 		opt(o)
 	}
 
-	l := &logger{logger: logrus.New()}
+	l := &Logger{opts: o, logger: logrus.New()}
 
 	switch o.outLevel {
-	case log.LevelTrace:
-		l.logger.SetLevel(logrus.TraceLevel)
-	case log.LevelDebug:
+	case log.DebugLevel:
 		l.logger.SetLevel(logrus.DebugLevel)
-	case log.LevelInfo:
+	case log.InfoLevel:
 		l.logger.SetLevel(logrus.InfoLevel)
-	case log.LevelWarn:
+	case log.WarnLevel:
 		l.logger.SetLevel(logrus.WarnLevel)
-	case log.LevelError:
+	case log.ErrorLevel:
 		l.logger.SetLevel(logrus.ErrorLevel)
-	case log.LevelFatal:
+	case log.FatalLevel:
 		l.logger.SetLevel(logrus.FatalLevel)
-	case log.LevelPanic:
+	case log.PanicLevel:
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 
@@ -85,64 +85,19 @@ func NewLogger(opts ...Option) log.Logger {
 	}
 
 	if o.outFile != "" {
-		_, err := os.OpenFile(o.outFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, srcFilename := filepath.Split(o.outFile)
-
-		var filename string
-		ext := filepath.Ext(o.outFile)
-		if ext == "" {
-			filename, ext = srcFilename, defaultFileExt
+		if o.fileClassifyStorage {
+			l.logger.AddHook(hook.NewWriterHook())
+			//l.logger.AddHook(lfshook.NewHook(lfshook.WriterMap{
+			//	logrus.DebugLevel: l.buildWriter(log.DebugLevel),
+			//	logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
+			//	logrus.WarnLevel:  l.buildWriter(log.WarnLevel),
+			//	logrus.ErrorLevel: l.buildWriter(log.ErrorLevel),
+			//	logrus.FatalLevel: l.buildWriter(log.FatalLevel),
+			//	logrus.PanicLevel: l.buildWriter(log.PanicLevel),
+			//}, f))
 		} else {
-			filename = strings.TrimRight(srcFilename, ext)
+			l.logger.AddHook(lfshook.NewHook(l.buildWriter(defaultNoneLevel), f))
 		}
-
-		var newFilename string
-		var rotationTime time.Duration
-		switch o.fileCutRule {
-		case log.CutByYear:
-			newFilename = filename + ".%Y" + ext
-			rotationTime = 365 * 24 * time.Hour
-		case log.CutByMonth:
-			newFilename = filename + ".%Y%m" + ext
-			rotationTime = 31 * 24 * time.Hour
-		case log.CutByDay:
-			newFilename = filename + ".%Y%m%d" + ext
-			rotationTime = 24 * time.Hour
-		case log.CutByHour:
-			newFilename = filename + ".%Y%m%d%H" + ext
-			rotationTime = time.Hour
-		case log.CutByMinute:
-			newFilename = filename + ".%Y%m%d%H%M" + ext
-			rotationTime = time.Minute
-		case log.CutBySecond:
-			newFilename = filename + ".%Y%m%d%H%M%S" + ext
-			rotationTime = time.Second
-		}
-
-		writer, err := rotatelogs.New(
-			newFilename,
-			rotatelogs.WithLinkName(srcFilename),
-			rotatelogs.WithMaxAge(o.fileMaxAge),
-			rotatelogs.WithRotationTime(rotationTime),
-			rotatelogs.WithRotationSize(o.fileMaxSize),
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		l.logger.AddHook(lfshook.NewHook(lfshook.WriterMap{
-			logrus.TraceLevel: writer,
-			logrus.DebugLevel: writer,
-			logrus.InfoLevel:  writer,
-			logrus.WarnLevel:  writer,
-			logrus.ErrorLevel: writer,
-			logrus.FatalLevel: writer,
-			logrus.PanicLevel: writer,
-		}, f))
 	}
 
 	l.logger.SetFormatter(f)
@@ -152,72 +107,77 @@ func NewLogger(opts ...Option) log.Logger {
 	return l
 }
 
-// Trace 打印事件调试日志
-func (l *logger) Trace(a ...interface{}) {
-	l.logger.Trace(a...)
-}
+func (l *Logger) buildWriter(level log.Level) io.Writer {
+	writer, err := log.NewWriter(log.WriterOptions{
+		Path:    l.opts.outFile,
+		Level:   level,
+		MaxAge:  l.opts.fileMaxAge,
+		MaxSize: l.opts.fileMaxSize,
+		CutRule: l.opts.fileCutRule,
+	})
+	if err != nil {
+		panic(err)
+	}
 
-// Tracef 打印事件调试模板日志
-func (l *logger) Tracef(format string, a ...interface{}) {
-	l.logger.Tracef(format, a...)
+	return writer
 }
 
 // Debug 打印调试日志
-func (l *logger) Debug(a ...interface{}) {
+func (l *Logger) Debug(a ...interface{}) {
 	l.logger.Debug(a...)
 }
 
 // Debugf 打印调试模板日志
-func (l *logger) Debugf(format string, a ...interface{}) {
+func (l *Logger) Debugf(format string, a ...interface{}) {
 	l.logger.Debugf(format, a...)
 }
 
 // Info 打印信息日志
-func (l *logger) Info(a ...interface{}) {
+func (l *Logger) Info(a ...interface{}) {
 	l.logger.Info(a...)
 }
 
 // Infof 打印信息模板日志
-func (l *logger) Infof(format string, a ...interface{}) {
+func (l *Logger) Infof(format string, a ...interface{}) {
 	l.logger.Infof(format, a...)
 }
 
 // Warn 打印警告日志
-func (l *logger) Warn(a ...interface{}) {
+func (l *Logger) Warn(a ...interface{}) {
 	l.logger.Warn(a...)
 }
 
 // Warnf 打印警告模板日志
-func (l *logger) Warnf(format string, a ...interface{}) {
+func (l *Logger) Warnf(format string, a ...interface{}) {
 	l.logger.Warnf(format, a...)
 }
 
 // Error 打印错误日志
-func (l *logger) Error(a ...interface{}) {
+func (l *Logger) Error(a ...interface{}) {
 	l.logger.Error(a...)
 }
 
 // Errorf 打印错误模板日志
-func (l *logger) Errorf(format string, a ...interface{}) {
+func (l *Logger) Errorf(format string, a ...interface{}) {
 	l.logger.Errorf(format, a...)
 }
 
 // Fatal 打印致命错误日志
-func (l *logger) Fatal(a ...interface{}) {
+func (l *Logger) Fatal(a ...interface{}) {
 	l.logger.Fatal(a...)
 }
 
 // Fatalf 打印致命错误模板日志
-func (l *logger) Fatalf(format string, a ...interface{}) {
+func (l *Logger) Fatalf(format string, a ...interface{}) {
 	l.logger.Fatalf(format, a...)
 }
 
 // Panic 打印Panic日志
-func (l *logger) Panic(a ...interface{}) {
+func (l *Logger) Panic(a ...interface{}) {
 	l.logger.Fatal(a...)
 }
 
 // Panicf 打印Panic模板日志
-func (l *logger) Panicf(format string, a ...interface{}) {
+func (l *Logger) Panicf(format string, a ...interface{}) {
 	l.logger.Fatalf(format, a...)
 }
