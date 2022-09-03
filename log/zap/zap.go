@@ -97,7 +97,7 @@ func NewLogger(opts ...Option) *Logger {
 	l := &Logger{opts: o}
 
 	if o.outFile != "" {
-		if o.classifyStorage {
+		if o.fileClassifyStorage {
 			l.logger = zap.New(zapcore.NewTee(
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
@@ -106,7 +106,7 @@ func NewLogger(opts ...Option) *Logger {
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
 				zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
-			), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).Sugar()
+			), options...).Sugar()
 		} else {
 			l.logger = zap.New(zapcore.NewTee(
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel)),
