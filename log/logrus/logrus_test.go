@@ -18,12 +18,12 @@ func TestNewLogger(t *testing.T) {
 	l := logrus.NewLogger(
 		logrus.WithOutFile("./log/due.log"),
 		logrus.WithOutFormat(log.TextFormat),
-		logrus.WithOutLevel(log.ErrorLevel),
+		logrus.WithOutLevel(log.WarnLevel),
 		logrus.WithFileCutRule(log.CutByHour),
 		logrus.WithCallerFullPath(true),
 		logrus.WithFileClassifyStorage(true),
 	)
 
 	l.Warn(`log: warn`)
-	//l.Error(`log: error`)
+	l.Error(`log: error`)
 }

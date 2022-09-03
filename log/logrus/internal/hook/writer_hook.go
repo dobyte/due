@@ -8,28 +8,67 @@
 package hook
 
 import (
-	"fmt"
+	"io"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 )
 
-var _ logrus.Hook = NewWriterHook()
+var _ logrus.Hook = NewWriterHook(nil)
+
+type WriterMap map[logrus.Level]io.Writer
 
 type WriterHook struct {
-	logger *logrus.Logger
+	mu            sync.Mutex
+	writers       WriterMap
+	defaultWriter io.Writer
 }
 
-func NewWriterHook() *WriterHook {
-	return &WriterHook{}
+func NewWriterHook(output interface{}) *WriterHook {
+	h := &WriterHook{}
+
+	switch writer := output.(type) {
+	case io.Writer:
+		h.defaultWriter = writer
+	case WriterMap:
+		h.writers = writer
+	}
+
+	return h
 }
 
 func (h *WriterHook) Levels() []logrus.Level {
-	return nil
+	return logrus.AllLevels
 }
 
 func (h *WriterHook) Fire(entry *logrus.Entry) error {
-	fmt.Println(entry.Level)
-	h.logger.IsLevelEnabled(entry.Level)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	data, err := entry.Logger.Formatter.Format(entry)
+	if err != nil {
+		return err
+	}
+
+	for level, writer := range h.writers {
+		if !entry.Logger.IsLevelEnabled(level) {
+			continue
+		}
+
+		if entry.Level > level {
+			continue
+		}
+
+		if _, err = writer.Write(data); err != nil {
+			return err
+		}
+	}
+
+	if h.defaultWriter != nil {
+		if _, err = h.defaultWriter.Write(data); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

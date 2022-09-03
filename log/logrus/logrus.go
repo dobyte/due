@@ -12,7 +12,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 
 	"github.com/dobyte/due/log"
@@ -86,17 +85,16 @@ func NewLogger(opts ...Option) *Logger {
 
 	if o.outFile != "" {
 		if o.fileClassifyStorage {
-			l.logger.AddHook(hook.NewWriterHook())
-			//l.logger.AddHook(lfshook.NewHook(lfshook.WriterMap{
-			//	logrus.DebugLevel: l.buildWriter(log.DebugLevel),
-			//	logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
-			//	logrus.WarnLevel:  l.buildWriter(log.WarnLevel),
-			//	logrus.ErrorLevel: l.buildWriter(log.ErrorLevel),
-			//	logrus.FatalLevel: l.buildWriter(log.FatalLevel),
-			//	logrus.PanicLevel: l.buildWriter(log.PanicLevel),
-			//}, f))
+			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
+				logrus.DebugLevel: l.buildWriter(log.DebugLevel),
+				logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
+				logrus.WarnLevel:  l.buildWriter(log.WarnLevel),
+				logrus.ErrorLevel: l.buildWriter(log.ErrorLevel),
+				logrus.FatalLevel: l.buildWriter(log.FatalLevel),
+				logrus.PanicLevel: l.buildWriter(log.PanicLevel),
+			}))
 		} else {
-			l.logger.AddHook(lfshook.NewHook(l.buildWriter(defaultNoneLevel), f))
+			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(defaultNoneLevel)))
 		}
 	}
 

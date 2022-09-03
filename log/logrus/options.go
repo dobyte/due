@@ -17,6 +17,7 @@ type options struct {
 	outFile             string        // 输出的文件路径
 	outLevel            log.Level     // 输出的最低日志级别，默认Warn
 	outFormat           log.Format    // 输出的日志格式，默认Text
+	outStackLevel       log.Level     // 输出堆栈的日志级别，默认不输出堆栈
 	fileMaxAge          time.Duration // 文件最大留存时间，默认7天
 	fileMaxSize         int64         // 文件最大尺寸限制，单位（byte），默认100MB
 	fileCutRule         log.CutRule   // 文件切割规则，默认按照天
@@ -40,6 +41,11 @@ func WithOutLevel(level log.Level) Option {
 // 设置输出的日志格式
 func WithOutFormat(format log.Format) Option {
 	return func(o *options) { o.outFormat = format }
+}
+
+// 设置输出堆栈的日志级别
+func WithOutStackLevel(level log.Level) Option {
+	return func(o *options) { o.outStackLevel = level }
 }
 
 // 设置文件最大留存时间
