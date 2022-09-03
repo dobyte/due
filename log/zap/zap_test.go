@@ -20,12 +20,13 @@ func TestNewLogger(t *testing.T) {
 		zap.WithOutLevel(log.WarnLevel),
 		zap.WithOutFormat(log.TextFormat),
 		zap.WithOutStackLevel(log.WarnLevel),
-		zap.WithClassifyStorage(false),
+		zap.WithFileClassifyStorage(true),
 		zap.WithCallerFullPath(true),
 	)
 
 	//l.Info("info")
 	//l.Warn("warn")
+	l.Error("error")
 	l.Error("error")
 	//l.Fatal("fatal")
 	//l.Panic("panic")
