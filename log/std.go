@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,10 +29,21 @@ const (
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
+const defaultNoneLevel Level = 0
+
 type stdLogger struct {
-	log  *log.Logger
-	opts *options
-	pool sync.Pool
+	log     *log.Logger
+	opts    *options
+	pool    sync.Pool
+	syncers []syncer
+}
+
+type enabler func(level Level) bool
+
+type syncer struct {
+	writer   io.Writer
+	terminal bool
+	enabler  enabler
 }
 
 type entity struct {
@@ -56,43 +68,134 @@ func NewLogger(opts ...Option) Logger {
 		opt(o)
 	}
 
-	return &stdLogger{
-		opts: o,
-		pool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
+	l := &stdLogger{
+		opts:    o,
+		pool:    sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
+		syncers: make([]syncer, 0, 7),
 	}
+
+	if o.outFile != "" {
+		if o.fileClassifyStorage {
+			l.syncers = append(l.syncers, syncer{
+				writer:   os.Stdout,
+				terminal: true,
+				enabler:  l.buildEnabler(defaultNoneLevel),
+			}, syncer{
+				writer:  l.buildWriter(DebugLevel),
+				enabler: l.buildEnabler(DebugLevel),
+			}, syncer{
+				writer:  l.buildWriter(InfoLevel),
+				enabler: l.buildEnabler(InfoLevel),
+			}, syncer{
+				writer:  l.buildWriter(WarnLevel),
+				enabler: l.buildEnabler(WarnLevel),
+			}, syncer{
+				writer:  l.buildWriter(ErrorLevel),
+				enabler: l.buildEnabler(ErrorLevel),
+			}, syncer{
+				writer:  l.buildWriter(FatalLevel),
+				enabler: l.buildEnabler(FatalLevel),
+			}, syncer{
+				writer:  l.buildWriter(PanicLevel),
+				enabler: l.buildEnabler(PanicLevel),
+			})
+		} else {
+			l.syncers = append(l.syncers, syncer{
+				writer:   os.Stdout,
+				terminal: true,
+				enabler:  l.buildEnabler(defaultNoneLevel),
+			}, syncer{
+				writer:  l.buildWriter(defaultNoneLevel),
+				enabler: l.buildEnabler(defaultNoneLevel),
+			})
+		}
+	} else {
+		l.syncers = append(l.syncers, syncer{
+			writer:   os.Stdout,
+			terminal: true,
+			enabler:  l.buildEnabler(defaultNoneLevel),
+		})
+	}
+
+	return l
 }
 
 func (l *stdLogger) Log(level Level, a ...interface{}) {
+	if level < l.opts.outLevel {
+		return
+	}
+
 	switch l.opts.outFormat {
 	case TextFormat:
 		l.logText(level, fmt.Sprintf("%v", a))
 	case JsonFormat:
-		l.logText(level, fmt.Sprintf("%v", a))
+		l.logJson(level, fmt.Sprintf("%v", a))
 	}
 }
 
 func (l *stdLogger) logText(level Level, msg string) {
 	e := l.buildEntity(level, msg)
-	b := l.pool.Get().(*bytes.Buffer)
+	buffers := make(map[bool]*bytes.Buffer, 2)
 
-	fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.color, e.level, e.time)
-
-	if e.caller != "" {
-		fmt.Fprint(b, " "+e.caller)
+	for _, s := range l.syncers {
+		if !s.enabler(level) {
+			continue
+		}
+		b, ok := buffers[s.terminal]
+		if !ok {
+			b = l.buildTextBuffer(e, s.terminal)
+			buffers[s.terminal] = b
+		}
+		s.writer.Write(b.Bytes())
 	}
 
-	if e.message != "" {
-		fmt.Fprint(b, " "+e.message)
+	for _, b := range buffers {
+		b.Reset()
+		l.pool.Put(b)
 	}
+}
 
-	fmt.Fprintf(b, "\n")
+func (l *stdLogger) logJson(level Level, msg string) {
+	e := l.buildEntity(level, msg)
+	b := l.buildJsonBuffer(e)
 
-	NewWriter(WriterOptions{})
-
-	_, _ = os.Stdout.Write(b.Bytes())
+	for _, s := range l.syncers {
+		if !s.enabler(level) {
+			continue
+		}
+		s.writer.Write(b.Bytes())
+	}
 
 	b.Reset()
 	l.pool.Put(b)
+}
+
+func (l *stdLogger) buildTextBuffer(e *entity, isTerminal bool) *bytes.Buffer {
+	b := l.pool.Get().(*bytes.Buffer)
+
+	if isTerminal {
+		_, _ = fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.color, e.level, e.time)
+	} else {
+		_, _ = fmt.Fprintf(b, "%s[%s]", e.level, e.time)
+	}
+
+	if e.caller != "" {
+		_, _ = fmt.Fprint(b, " "+e.caller)
+	}
+
+	if e.message != "" {
+		_, _ = fmt.Fprint(b, " "+e.message)
+	}
+
+	_, _ = fmt.Fprintf(b, "\n")
+
+	return b
+}
+
+func (l *stdLogger) buildJsonBuffer(e *entity) *bytes.Buffer {
+	b := l.pool.Get().(*bytes.Buffer)
+
+	return b
 }
 
 func (l *stdLogger) buildEntity(level Level, msg string) *entity {
@@ -122,7 +225,39 @@ func (l *stdLogger) buildEntity(level Level, msg string) *entity {
 		e.caller = fmt.Sprintf("%s:%d", file, line)
 	}
 
+	pcs := make([]uintptr, 5)
+	num := runtime.Callers(4, pcs)
+
+	for _, pc := range pcs[:num] {
+		fun := runtime.FuncForPC(pc)
+		file, line := fun.FileLine(pc - 1)
+		fmt.Println(fun.Name(), file, line)
+	}
+
+	//debug.PrintStack()
+
 	return e
+}
+
+func (l *stdLogger) buildWriter(level Level) io.Writer {
+	writer, err := NewWriter(WriterOptions{
+		Path:    l.opts.outFile,
+		Level:   level,
+		MaxAge:  l.opts.fileMaxAge,
+		MaxSize: l.opts.fileMaxSize,
+		CutRule: l.opts.fileCutRule,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	return writer
+}
+
+func (l *stdLogger) buildEnabler(level Level) enabler {
+	return func(lvl Level) bool {
+		return lvl >= l.opts.outLevel && (level == defaultNoneLevel || (lvl >= level && level >= l.opts.outLevel))
+	}
 }
 
 // Debug 打印调试日志

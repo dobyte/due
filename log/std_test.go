@@ -15,9 +15,10 @@ import (
 
 func TestNewLogger(t *testing.T) {
 	logger := log.NewLogger(
-	//log2.WithWriter(log.Writer()),
-	//log2.WithFlag(log.Ldate|log.Lmicroseconds),
+		log.WithOutFile("./log/due.log"),
+		log.WithFileClassifyStorage(true),
 	)
 
-	logger.Info("aaa", "bbb")
+	logger.Warn("aaa", "bbb")
+	logger.Error("aaa", "bbb")
 }
