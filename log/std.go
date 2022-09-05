@@ -5,33 +5,124 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"time"
+)
+
+const (
+	red    = 31
+	yellow = 33
+	blue   = 36
+	gray   = 37
+)
+
+const (
+	defaultOutLevel        = WarnLevel
+	defaultOutFormat       = TextFormat
+	defaultFileMaxAge      = 7 * 24 * time.Hour
+	defaultFileMaxSize     = 100 * 1024 * 1024
+	defaultFileCutRule     = CutByDay
+	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
 type stdLogger struct {
 	log  *log.Logger
+	opts *options
 	pool sync.Pool
 }
 
+type entity struct {
+	color   int
+	level   string
+	time    string
+	caller  string
+	message string
+	stack   []string
+}
+
 func NewLogger(opts ...Option) Logger {
-	o := &options{}
+	o := &options{
+		outLevel:        defaultOutLevel,
+		outFormat:       defaultOutFormat,
+		fileMaxAge:      defaultFileMaxAge,
+		fileMaxSize:     defaultFileMaxSize,
+		fileCutRule:     defaultFileCutRule,
+		timestampFormat: defaultTimestampFormat,
+	}
 	for _, opt := range opts {
 		opt(o)
 	}
 
 	return &stdLogger{
-		log:  log.New(o.writer, o.prefix, o.flag),
+		opts: o,
 		pool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 	}
 }
 
 func (l *stdLogger) Log(level Level, a ...interface{}) {
-	buf := l.pool.Get().(*bytes.Buffer)
-	buf.WriteString(fmt.Sprintf("[%s] ", level.String()))
-	_, _ = fmt.Fprintf(buf, "%v", a...)
-	_ = l.log.Output(3, buf.String())
-	buf.Reset()
-	l.pool.Put(buf)
+	switch l.opts.outFormat {
+	case TextFormat:
+		l.logText(level, fmt.Sprintf("%v", a))
+	case JsonFormat:
+		l.logText(level, fmt.Sprintf("%v", a))
+	}
+}
+
+func (l *stdLogger) logText(level Level, msg string) {
+	e := l.buildEntity(level, msg)
+	b := l.pool.Get().(*bytes.Buffer)
+
+	fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.color, e.level, e.time)
+
+	if e.caller != "" {
+		fmt.Fprint(b, " "+e.caller)
+	}
+
+	if e.message != "" {
+		fmt.Fprint(b, " "+e.message)
+	}
+
+	fmt.Fprintf(b, "\n")
+
+	NewWriter(WriterOptions{})
+
+	_, _ = os.Stdout.Write(b.Bytes())
+
+	b.Reset()
+	l.pool.Put(b)
+}
+
+func (l *stdLogger) buildEntity(level Level, msg string) *entity {
+	e := &entity{}
+
+	switch level {
+	case DebugLevel:
+		e.color = gray
+	case WarnLevel:
+		e.color = yellow
+	case ErrorLevel, FatalLevel, PanicLevel:
+		e.color = red
+	case InfoLevel:
+		e.color = blue
+	default:
+		e.color = blue
+	}
+
+	e.level = level.String()[:4]
+	e.time = time.Now().Format(l.opts.timestampFormat)
+	e.message = strings.TrimRight(msg, "\n")
+
+	if _, file, line, ok := runtime.Caller(2); ok {
+		if !l.opts.callerFullPath {
+			_, file = filepath.Split(file)
+		}
+		e.caller = fmt.Sprintf("%s:%d", file, line)
+	}
+
+	return e
 }
 
 // Debug 打印调试日志
@@ -77,7 +168,7 @@ func (l *stdLogger) Errorf(format string, a ...interface{}) {
 // Fatal 打印致命错误日志
 func (l *stdLogger) Fatal(a ...interface{}) {
 	l.Log(FatalLevel, a...)
-	os.Exit(0)
+	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志

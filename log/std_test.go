@@ -8,16 +8,15 @@
 package log_test
 
 import (
-	"log"
 	"testing"
 
-	log2 "github.com/dobyte/due/log"
+	"github.com/dobyte/due/log"
 )
 
 func TestNewLogger(t *testing.T) {
-	logger := log2.NewLogger(
-		log2.WithWriter(log.Writer()),
-		log2.WithFlag(log.Ldate|log.Lmicroseconds),
+	logger := log.NewLogger(
+	//log2.WithWriter(log.Writer()),
+	//log2.WithFlag(log.Ldate|log.Lmicroseconds),
 	)
 
 	logger.Info("aaa", "bbb")

@@ -1,9 +1,5 @@
 package log
 
-import (
-	"log"
-)
-
 var defaultLogger Logger
 
 type Logger interface {
@@ -35,7 +31,7 @@ type Logger interface {
 
 func init() {
 	SetLogger(NewLogger(
-		WithWriter(log.Writer()),
+	//WithWriter(log.Writer()),
 	))
 }
 
