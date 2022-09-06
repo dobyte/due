@@ -1,27 +1,15 @@
 package log
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	red    = 31
-	yellow = 33
-	blue   = 36
-	gray   = 37
-)
-
-const (
-	defaultOutLevel        = WarnLevel
+	defaultOutLevel        = InfoLevel
 	defaultOutFormat       = TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
@@ -31,11 +19,16 @@ const (
 
 const defaultNoneLevel Level = 0
 
+type formatter interface {
+	format(e *entity, isTerminal bool) []byte
+}
+
 type stdLogger struct {
-	log     *log.Logger
-	opts    *options
-	pool    sync.Pool
-	syncers []syncer
+	opts       *options
+	formatter  formatter
+	syncers    []syncer
+	bufferPool sync.Pool
+	entityPool *entityPool
 }
 
 type enabler func(level Level) bool
@@ -44,15 +37,6 @@ type syncer struct {
 	writer   io.Writer
 	terminal bool
 	enabler  enabler
-}
-
-type entity struct {
-	color   int
-	level   string
-	time    string
-	caller  string
-	message string
-	stack   []string
 }
 
 func NewLogger(opts ...Option) Logger {
@@ -69,9 +53,16 @@ func NewLogger(opts ...Option) Logger {
 	}
 
 	l := &stdLogger{
-		opts:    o,
-		pool:    sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
-		syncers: make([]syncer, 0, 7),
+		opts:       o,
+		entityPool: newEntityPool(o.outStackLevel, o.callerFullPath, o.timestampFormat),
+		syncers:    make([]syncer, 0, 7),
+	}
+
+	switch l.opts.outFormat {
+	case TextFormat:
+		l.formatter = newTextFormatter()
+	case JsonFormat:
+		l.formatter = newJsonFormatter()
 	}
 
 	if o.outFile != "" {
@@ -120,123 +111,26 @@ func NewLogger(opts ...Option) Logger {
 	return l
 }
 
-func (l *stdLogger) Log(level Level, a ...interface{}) {
+func (l *stdLogger) log(level Level, a ...interface{}) {
 	if level < l.opts.outLevel {
 		return
 	}
 
-	switch l.opts.outFormat {
-	case TextFormat:
-		l.logText(level, fmt.Sprintf("%v", a))
-	case JsonFormat:
-		l.logJson(level, fmt.Sprintf("%v", a))
-	}
-}
+	e := l.entityPool.build(level, fmt.Sprintf("%v", a))
+	defer e.free()
 
-func (l *stdLogger) logText(level Level, msg string) {
-	e := l.buildEntity(level, msg)
-	buffers := make(map[bool]*bytes.Buffer, 2)
-
+	buffers := make(map[bool][]byte, 2)
 	for _, s := range l.syncers {
 		if !s.enabler(level) {
 			continue
 		}
 		b, ok := buffers[s.terminal]
 		if !ok {
-			b = l.buildTextBuffer(e, s.terminal)
+			b = l.formatter.format(e, s.terminal)
 			buffers[s.terminal] = b
 		}
-		s.writer.Write(b.Bytes())
+		s.writer.Write(b)
 	}
-
-	for _, b := range buffers {
-		b.Reset()
-		l.pool.Put(b)
-	}
-}
-
-func (l *stdLogger) logJson(level Level, msg string) {
-	e := l.buildEntity(level, msg)
-	b := l.buildJsonBuffer(e)
-
-	for _, s := range l.syncers {
-		if !s.enabler(level) {
-			continue
-		}
-		s.writer.Write(b.Bytes())
-	}
-
-	b.Reset()
-	l.pool.Put(b)
-}
-
-func (l *stdLogger) buildTextBuffer(e *entity, isTerminal bool) *bytes.Buffer {
-	b := l.pool.Get().(*bytes.Buffer)
-
-	if isTerminal {
-		_, _ = fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.color, e.level, e.time)
-	} else {
-		_, _ = fmt.Fprintf(b, "%s[%s]", e.level, e.time)
-	}
-
-	if e.caller != "" {
-		_, _ = fmt.Fprint(b, " "+e.caller)
-	}
-
-	if e.message != "" {
-		_, _ = fmt.Fprint(b, " "+e.message)
-	}
-
-	_, _ = fmt.Fprintf(b, "\n")
-
-	return b
-}
-
-func (l *stdLogger) buildJsonBuffer(e *entity) *bytes.Buffer {
-	b := l.pool.Get().(*bytes.Buffer)
-
-	return b
-}
-
-func (l *stdLogger) buildEntity(level Level, msg string) *entity {
-	e := &entity{}
-
-	switch level {
-	case DebugLevel:
-		e.color = gray
-	case WarnLevel:
-		e.color = yellow
-	case ErrorLevel, FatalLevel, PanicLevel:
-		e.color = red
-	case InfoLevel:
-		e.color = blue
-	default:
-		e.color = blue
-	}
-
-	e.level = level.String()[:4]
-	e.time = time.Now().Format(l.opts.timestampFormat)
-	e.message = strings.TrimRight(msg, "\n")
-
-	if _, file, line, ok := runtime.Caller(2); ok {
-		if !l.opts.callerFullPath {
-			_, file = filepath.Split(file)
-		}
-		e.caller = fmt.Sprintf("%s:%d", file, line)
-	}
-
-	pcs := make([]uintptr, 5)
-	num := runtime.Callers(4, pcs)
-
-	for _, pc := range pcs[:num] {
-		fun := runtime.FuncForPC(pc)
-		file, line := fun.FileLine(pc - 1)
-		fmt.Println(fun.Name(), file, line)
-	}
-
-	//debug.PrintStack()
-
-	return e
 }
 
 func (l *stdLogger) buildWriter(level Level) io.Writer {
@@ -262,64 +156,64 @@ func (l *stdLogger) buildEnabler(level Level) enabler {
 
 // Debug 打印调试日志
 func (l *stdLogger) Debug(a ...interface{}) {
-	l.Log(DebugLevel, a...)
+	l.log(DebugLevel, a...)
 }
 
 // Debugf 打印调试模板日志
 func (l *stdLogger) Debugf(format string, a ...interface{}) {
-	l.Log(DebugLevel, fmt.Sprintf(format, a...))
+	l.log(DebugLevel, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
 func (l *stdLogger) Info(a ...interface{}) {
-	l.Log(InfoLevel, a...)
+	l.log(InfoLevel, a...)
 }
 
 // Infof 打印信息模板日志
 func (l *stdLogger) Infof(format string, a ...interface{}) {
-	l.Log(InfoLevel, fmt.Sprintf(format, a...))
+	l.log(InfoLevel, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
 func (l *stdLogger) Warn(a ...interface{}) {
-	l.Log(WarnLevel, a...)
+	l.log(WarnLevel, a...)
 }
 
 // Warnf 打印警告模板日志
 func (l *stdLogger) Warnf(format string, a ...interface{}) {
-	l.Log(WarnLevel, fmt.Sprintf(format, a...))
+	l.log(WarnLevel, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
 func (l *stdLogger) Error(a ...interface{}) {
-	l.Log(ErrorLevel, a...)
+	l.log(ErrorLevel, a...)
 }
 
 // Errorf 打印错误模板日志
 func (l *stdLogger) Errorf(format string, a ...interface{}) {
-	l.Log(ErrorLevel, fmt.Sprintf(format, a...))
+	l.log(ErrorLevel, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
 func (l *stdLogger) Fatal(a ...interface{}) {
-	l.Log(FatalLevel, a...)
+	l.log(FatalLevel, a...)
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *stdLogger) Fatalf(format string, a ...interface{}) {
-	l.Log(FatalLevel, fmt.Sprintf(format, a...))
+	l.log(FatalLevel, fmt.Sprintf(format, a...))
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
 func (l *stdLogger) Panic(a ...interface{}) {
-	l.Log(PanicLevel, a...)
+	l.log(PanicLevel, a...)
 	os.Exit(0)
 }
 
 // Panicf 打印Panic模板日志
 func (l *stdLogger) Panicf(format string, a ...interface{}) {
-	l.Log(PanicLevel, fmt.Sprintf(format, a...))
+	l.log(PanicLevel, fmt.Sprintf(format, a...))
 	os.Exit(0)
 }

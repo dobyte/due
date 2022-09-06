@@ -16,9 +16,10 @@ import (
 func TestNewLogger(t *testing.T) {
 	logger := log.NewLogger(
 		log.WithOutFile("./log/due.log"),
+		log.WithOutFormat(log.JsonFormat),
+		log.WithOutStackLevel(log.InfoLevel),
 		log.WithFileClassifyStorage(true),
 	)
 
 	logger.Warn("aaa", "bbb")
-	logger.Error("aaa", "bbb")
 }
