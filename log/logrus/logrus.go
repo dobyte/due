@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultOutLevel        = log.WarnLevel
+	defaultOutLevel        = log.InfoLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
@@ -83,6 +83,8 @@ func NewLogger(opts ...Option) *Logger {
 		}
 	}
 
+	l.logger.AddHook(hook.NewStackHook(o.outStackLevel))
+
 	if o.outFile != "" {
 		if o.fileClassifyStorage {
 			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
@@ -100,7 +102,6 @@ func NewLogger(opts ...Option) *Logger {
 
 	l.logger.SetFormatter(f)
 	l.logger.SetOutput(os.Stdout)
-	l.logger.SetReportCaller(true)
 
 	return l
 }

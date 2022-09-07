@@ -15,7 +15,7 @@ import (
 
 type options struct {
 	outFile             string        // 输出的文件路径
-	outLevel            log.Level     // 输出的最低日志级别，默认Warn
+	outLevel            log.Level     // 输出的最低日志级别，默认Info
 	outFormat           log.Format    // 输出的日志格式，默认Text
 	outStackLevel       log.Level     // 输出堆栈的日志级别，默认不输出堆栈
 	fileMaxAge          time.Duration // 文件最大留存时间，默认7天

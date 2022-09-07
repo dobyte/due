@@ -11,16 +11,20 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	FieldKeyLevel = logrus.FieldKeyLevel
-	FieldKeyTime  = logrus.FieldKeyTime
-	FieldKeyFile  = logrus.FieldKeyFile
-	FieldKeyMsg   = logrus.FieldKeyMsg
+	fieldKeyLevel     = "level"
+	fieldKeyTime      = "time"
+	fieldKeyFile      = "file"
+	fieldKeyMsg       = "msg"
+	fieldKeyStack     = "stack"
+	fieldKeyStackFunc = "func"
+	fieldKeyStackFile = "file"
 )
 
 type JsonFormatter struct {
@@ -37,38 +41,51 @@ func (f *JsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b = &bytes.Buffer{}
 	}
 
-	levelText := strings.ToUpper(entry.Level.String())
-	levelText = levelText[0:4]
+	levelText := strings.ToUpper(entry.Level.String())[0:4]
 
-	caller := ""
-	if entry.HasCaller() {
-		if f.CallerFullPath {
-			caller = fmt.Sprintf("%s:%d", entry.Caller.File, entry.Caller.Line)
-		} else {
-			_, file := filepath.Split(entry.Caller.File)
-			caller = fmt.Sprintf("%s:%d", file, entry.Caller.Line)
+	fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyLevel, levelText)
+	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, entry.Time.Format(f.TimestampFormat))
+
+	var frames []runtime.Frame
+	if v, ok := entry.Data["frames"]; ok {
+		frames = v.([]runtime.Frame)
+	}
+
+	if len(frames) > 0 {
+		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyFile, f.framesToCaller(frames))
+	}
+
+	message := strings.TrimSuffix(entry.Message, "\n")
+	if message != "" {
+		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyMsg, message)
+	}
+
+	if len(frames) > 1 {
+		fmt.Fprintf(b, `,"%s":[`, fieldKeyStack)
+		for i, frame := range frames {
+			if i == 0 {
+				fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
+			} else {
+				fmt.Fprintf(b, `,{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
+			}
+			fmt.Fprintf(b, `,"%s":"%s:%d"}`, fieldKeyStackFile, frame.File, frame.Line)
 		}
+		fmt.Fprint(b, "]")
 	}
 
-	if _, ok := entry.Data[defaultOutFileFlag]; len(entry.Logger.Hooks) == 0 || ok {
-		entry.Message = strings.TrimSuffix(entry.Message, "\n")
-	} else {
-		entry.Data[defaultOutFileFlag] = true
-		entry.Message = strings.ReplaceAll(strings.TrimSuffix(entry.Message, "\n"), `"`, `\"`)
-	}
-
-	_, _ = fmt.Fprintf(b,
-		`{"%s":"%s","%s":"%s","%s":"%s","%s":"%s"}`,
-		FieldKeyLevel,
-		levelText,
-		FieldKeyTime,
-		entry.Time.Format(f.TimestampFormat),
-		FieldKeyFile,
-		caller,
-		FieldKeyMsg,
-		entry.Message,
-	)
-
-	b.WriteByte('\n')
+	fmt.Fprint(b, "}\n")
 	return b.Bytes(), nil
+}
+
+func (f *JsonFormatter) framesToCaller(frames []runtime.Frame) string {
+	if len(frames) == 0 {
+		return ""
+	}
+
+	file := frames[0].File
+	if !f.CallerFullPath {
+		_, file = filepath.Split(file)
+	}
+
+	return fmt.Sprintf("%s:%d", file, frames[0].Line)
 }

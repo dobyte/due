@@ -17,11 +17,11 @@ import (
 func TestNewLogger(t *testing.T) {
 	l := logrus.NewLogger(
 		logrus.WithOutFile("./log/due.log"),
-		logrus.WithOutFormat(log.TextFormat),
-		logrus.WithOutLevel(log.WarnLevel),
+		logrus.WithOutFormat(log.JsonFormat),
 		logrus.WithFileCutRule(log.CutByHour),
 		logrus.WithCallerFullPath(true),
 		logrus.WithFileClassifyStorage(true),
+		logrus.WithOutStackLevel(log.ErrorLevel),
 	)
 
 	l.Warn(`log: warn`)
