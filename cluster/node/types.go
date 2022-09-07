@@ -10,6 +10,12 @@ type GetIPArgs struct {
 	Target int64        // 会话目标，CID 或 UID
 }
 
+type DisconnectArgs struct {
+	GID    string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind   session.Kind // 会话类型，session.Conn 或 session.User
+	Target int64        // 会话目标，CID 或 UID
+}
+
 type PushArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User

@@ -28,6 +28,8 @@ type GateClient interface {
 	Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*UnbindReply, error)
 	// 获取客户端IP
 	GetIP(ctx context.Context, in *GetIPRequest, opts ...grpc.CallOption) (*GetIPReply, error)
+	// 断开连接
+	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectReply, error)
 	// 推送消息
 	Push(ctx context.Context, in *PushRequest, opts ...grpc.CallOption) (*PushReply, error)
 	// 推送组播消息
@@ -71,6 +73,15 @@ func (c *gateClient) GetIP(ctx context.Context, in *GetIPRequest, opts ...grpc.C
 	return out, nil
 }
 
+func (c *gateClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectReply, error) {
+	out := new(DisconnectReply)
+	err := c.cc.Invoke(ctx, "/pb.Gate/Disconnect", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gateClient) Push(ctx context.Context, in *PushRequest, opts ...grpc.CallOption) (*PushReply, error) {
 	out := new(PushReply)
 	err := c.cc.Invoke(ctx, "/pb.Gate/Push", in, out, opts...)
@@ -108,6 +119,8 @@ type GateServer interface {
 	Unbind(context.Context, *UnbindRequest) (*UnbindReply, error)
 	// 获取客户端IP
 	GetIP(context.Context, *GetIPRequest) (*GetIPReply, error)
+	// 断开连接
+	Disconnect(context.Context, *DisconnectRequest) (*DisconnectReply, error)
 	// 推送消息
 	Push(context.Context, *PushRequest) (*PushReply, error)
 	// 推送组播消息
@@ -129,6 +142,9 @@ func (UnimplementedGateServer) Unbind(context.Context, *UnbindRequest) (*UnbindR
 }
 func (UnimplementedGateServer) GetIP(context.Context, *GetIPRequest) (*GetIPReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIP not implemented")
+}
+func (UnimplementedGateServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
 }
 func (UnimplementedGateServer) Push(context.Context, *PushRequest) (*PushReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Push not implemented")
@@ -206,6 +222,24 @@ func _Gate_GetIP_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gate_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DisconnectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GateServer).Disconnect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.Gate/Disconnect",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GateServer).Disconnect(ctx, req.(*DisconnectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gate_Push_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PushRequest)
 	if err := dec(in); err != nil {
@@ -278,6 +312,10 @@ var Gate_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetIP",
 			Handler:    _Gate_GetIP_Handler,
+		},
+		{
+			MethodName: "Disconnect",
+			Handler:    _Gate_Disconnect_Handler,
 		},
 		{
 			MethodName: "Push",
