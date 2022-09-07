@@ -12,20 +12,22 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
 )
 
 type serverConn struct {
-	rw      sync.RWMutex   // 锁
-	id      int64          // 连接ID
-	uid     int64          // 用户ID
-	state   int32          // 连接状态
-	conn    net.Conn       // TCP源连接
-	connMgr *serverConnMgr // 连接管理
-	chWrite chan chWrite   // 写入队列
-	done    chan struct{}  // 写入完成信号
+	rw                sync.RWMutex   // 锁
+	id                int64          // 连接ID
+	uid               int64          // 用户ID
+	state             int32          // 连接状态
+	conn              net.Conn       // TCP源连接
+	connMgr           *serverConnMgr // 连接管理
+	chWrite           chan chWrite   // 写入队列
+	lastHeartbeatTime int64          // 上次心跳时间
+	done              chan struct{}  // 写入完成信号
 }
 
 var _ network.Conn = &serverConn{}
@@ -180,8 +182,9 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 	c.id = cm.id
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 256)
+	c.chWrite = make(chan chWrite, 1024)
 	c.done = make(chan struct{})
+	c.lastHeartbeatTime = time.Now().Unix()
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
 	if c.connMgr.server.connectHandler != nil {
@@ -207,11 +210,18 @@ func (c *serverConn) read() {
 			break
 		}
 
+		atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
+
 		switch c.State() {
 		case network.ConnHanged:
 			continue
 		case network.ConnClosed:
 			return
+		}
+
+		// ignore heartbeat packet
+		if len(msg) == 0 {
+			continue
 		}
 
 		if c.connMgr.server.receiveHandler != nil {
@@ -222,6 +232,9 @@ func (c *serverConn) read() {
 
 // 写入消息
 func (c *serverConn) write() {
+	ticker := time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case write, ok := <-c.chWrite:
@@ -243,6 +256,13 @@ func (c *serverConn) write() {
 			if _, err = c.conn.Write(buf); err != nil {
 				log.Errorf("write message error: %v", err)
 				continue
+			}
+		case <-ticker.C:
+			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
+			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+				_ = c.Close(true)
+				log.Warnf("connection heartbeat timeout")
+				return
 			}
 		}
 	}

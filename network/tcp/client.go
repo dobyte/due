@@ -3,6 +3,7 @@ package tcp
 import (
 	"github.com/dobyte/due/network"
 	"net"
+	"time"
 )
 
 type client struct {
@@ -16,8 +17,9 @@ var _ network.Client = &client{}
 
 func NewClient(opts ...ClientOption) network.Client {
 	o := &clientOptions{
-		addr:         "127.0.0.1:3553",
-		maxMsgLength: 1024 * 1024,
+		addr:              "127.0.0.1:3553",
+		maxMsgLength:      1024 * 1024,
+		heartbeatInterval: 10 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(o)

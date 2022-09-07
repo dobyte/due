@@ -1,10 +1,11 @@
 package tcp_test
 
 import (
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/network/tcp"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/network/tcp"
 )
 
 func TestNewClient(t *testing.T) {

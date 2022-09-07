@@ -1,12 +1,14 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/internal/xnet"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/dobyte/due/internal/xnet"
+	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/network"
 )
 
 type clientConn struct {
@@ -28,7 +30,7 @@ func newClientConn(client *client, conn net.Conn) network.Conn {
 		conn:    conn,
 		state:   int32(network.ConnOpened),
 		client:  client,
-		chWrite: make(chan chWrite),
+		chWrite: make(chan chWrite, 1024),
 		done:    make(chan struct{}),
 	}
 
@@ -212,8 +214,13 @@ func (c *clientConn) read() {
 
 // 写入消息
 func (c *clientConn) write() {
+	ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
+		case <-ticker.C:
+			c.chWrite <- chWrite{typ: heartbeatPacket}
 		case write, ok := <-c.chWrite:
 			if !ok {
 				return
@@ -232,7 +239,6 @@ func (c *clientConn) write() {
 
 			if _, err = c.conn.Write(buf); err != nil {
 				log.Errorf("write message error: %v", err)
-				continue
 			}
 		}
 	}
