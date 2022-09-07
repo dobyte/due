@@ -39,7 +39,7 @@ func TestServer(t *testing.T) {
 	})
 
 	if err := server.Start(); err != nil {
-		log.Fatal("start server failed: %v", err)
+		log.Fatalf("start server failed: %v", err)
 	}
 
 	select {}
