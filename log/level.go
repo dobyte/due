@@ -9,11 +9,12 @@ package log
 
 //go:generate stringer -type Level -linecomment
 const (
-	LevelInfo  Level = iota + 1 // INFO
-	LevelDebug                  // DEBUG
-	LevelWarn                   // WARN
-	LevelError                  // ERROR
-	LevelFatal                  // FATAL
+	DebugLevel Level = iota + 1 // DEBUG
+	InfoLevel                   // INFO
+	WarnLevel                   // WARN
+	ErrorLevel                  // ERROR
+	FatalLevel                  // FATAL
+	PanicLevel                  // PANIC
 )
 
 type Level int

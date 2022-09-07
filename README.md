@@ -1,5 +1,6 @@
 # due
 
+[![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -59,12 +60,21 @@ tcp协议格式：
 
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
 
-0.下载框架
+0.启动组件
+```shell
+docker-compose up
+```
+> docker-compose.yaml文件已在docker目录中备好，可以直接取用
+
+1.获取框架
+
 ```shell
 go get github.com/dobyte/due@latest
+go get github.com/dobyte/due/network/ws@latest
+go get github.com/dobyte/due/registry/consul@latest
 ```
 
-1.构建Gate服务器
+2.构建Gate服务器
 
 ```go
 package main
@@ -177,8 +187,6 @@ func greetHandler(req node.Request) {
 package main
 
 import (
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
 	"github.com/dobyte/due/network/ws"
@@ -186,16 +194,14 @@ import (
 )
 
 var (
-	codec    encoding.Codec
 	handlers map[int32]handlerFunc
 )
 
 type handlerFunc func(conn network.Conn, buffer []byte)
 
 func init() {
-	codec = encoding.Invoke(proto.Name)
 	handlers = map[int32]handlerFunc{
-		1:   greetHandler,
+		1: greetHandler,
 	}
 }
 
@@ -236,7 +242,7 @@ func main() {
 }
 
 func greetHandler(conn network.Conn, buffer []byte) {
-	log.Errorf("%s" , string(buffer))
+	log.Infof("received message from server: %s", string(buffer))
 }
 
 func push(conn network.Conn, route int32, buffer []byte) error {
@@ -254,4 +260,4 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 
 ### 6.详细示例
 
-更多详细示例请点击[example](example/)
+更多详细示例请点击[due-example](https://github.com/dobyte/due-example)

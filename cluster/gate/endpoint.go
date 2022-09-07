@@ -126,3 +126,24 @@ func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb
 
 	return &pb.BroadcastReply{Total: int64(total)}, nil
 }
+
+// Disconnect 断开连接
+func (e *endpoint) Disconnect(ctx context.Context, req *pb.DisconnectRequest) (*pb.DisconnectReply, error) {
+	s, err := e.gate.group.GetSession(session.Kind(req.Kind), req.Target)
+	if err != nil {
+		switch err {
+		case session.ErrSessionNotFound:
+			return nil, status.New(code.NotFoundSession, err.Error()).Err()
+		case session.ErrInvalidSessionKind:
+			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
+		default:
+			return nil, status.New(codes.Internal, err.Error()).Err()
+		}
+	}
+
+	if err = s.Close(req.IsForce); err != nil {
+		return nil, status.New(codes.Internal, err.Error()).Err()
+	}
+
+	return &pb.DisconnectReply{}, nil
+}
