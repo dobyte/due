@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultFileExt  = "log"
-	defaultFileName = "log"
+	defaultFileName = "due"
 )
 
 type WriterOptions struct {
