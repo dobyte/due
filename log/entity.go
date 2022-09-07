@@ -61,10 +61,10 @@ func (p *entityPool) build(level Level, msg string) *entity {
 	e.message = strings.TrimRight(msg, "\n")
 
 	if p.outStackLevel != defaultNoneLevel && level >= p.outStackLevel {
-		e.frames = GetFrames(4, StacktraceFull)
+		e.frames = GetFrames(3, StacktraceFull)
 		e.caller = p.framesToCaller(e.frames)
 	} else {
-		e.frames = GetFrames(4, StacktraceFirst)
+		e.frames = GetFrames(3, StacktraceFirst)
 		e.caller = p.framesToCaller(e.frames)
 		e.frames = nil
 	}
