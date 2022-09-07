@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package log
+package std
 
 import (
 	"bytes"
@@ -23,17 +23,17 @@ const (
 	fieldKeyStackFile = "file"
 )
 
-type jsonFormatter struct {
+type JsonFormatter struct {
 	bufferPool sync.Pool
 }
 
-func newJsonFormatter() *jsonFormatter {
-	return &jsonFormatter{
+func newJsonFormatter() *JsonFormatter {
+	return &JsonFormatter{
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 	}
 }
 
-func (f *jsonFormatter) format(e *entity, isTerminal bool) []byte {
+func (f *JsonFormatter) format(e *entity, isTerminal bool) []byte {
 	b := f.bufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		b.Reset()

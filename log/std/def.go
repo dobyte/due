@@ -5,7 +5,37 @@
  * @Desc: TODO
  */
 
-package log
+package std
+
+// 日志级别
+type Level int
+
+const (
+	DebugLevel Level = iota + 1 // DEBUG
+	InfoLevel                   // INFO
+	WarnLevel                   // WARN
+	ErrorLevel                  // ERROR
+	FatalLevel                  // FATAL
+	PanicLevel                  // PANIC
+)
+
+func (l Level) String() string {
+	switch l {
+	case DebugLevel:
+		return "DEBUG"
+	case InfoLevel:
+		return "INFO"
+	case WarnLevel:
+		return "WARN"
+	case ErrorLevel:
+		return "ERROR"
+	case FatalLevel:
+		return "FATAL"
+	case PanicLevel:
+		return "PANIC"
+	}
+	return "UNKNOWN"
+}
 
 // 日志输出格式
 type Format int

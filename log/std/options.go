@@ -1,4 +1,4 @@
-package log
+package std
 
 import (
 	"time"

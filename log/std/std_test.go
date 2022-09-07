@@ -5,23 +5,23 @@
  * @Desc: TODO
  */
 
-package log_test
+package std_test
 
 import (
 	"testing"
 
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/log/std"
 	"github.com/dobyte/due/mode"
 )
 
 func TestNewLogger(t *testing.T) {
 	mode.SetMode(mode.TestMode)
 
-	logger := log.NewLogger(
-		log.WithOutFile("./log/due.log"),
-		log.WithOutFormat(log.TextFormat),
-		log.WithStackLevel(log.InfoLevel),
-		log.WithEnableLeveledStorage(true),
+	logger := std.NewLogger(
+		std.WithOutFile("./log/due.log"),
+		std.WithOutFormat(std.TextFormat),
+		std.WithStackLevel(std.InfoLevel),
+		std.WithEnableLeveledStorage(true),
 	)
 
 	logger.Warn("aaa", "bbb")

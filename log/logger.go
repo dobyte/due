@@ -1,5 +1,7 @@
 package log
 
+import "github.com/dobyte/due/log/std"
+
 var defaultLogger Logger
 
 type Logger interface {
@@ -30,7 +32,7 @@ type Logger interface {
 }
 
 func init() {
-	SetLogger(NewLogger(WithCallerSkip(1)))
+	SetLogger(std.NewLogger(std.WithCallerSkip(1)))
 }
 
 // SetLogger 设置日志记录器

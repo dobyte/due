@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package log
+package std
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ const (
 	gray   = 37
 )
 
-type entityPool struct {
+type Pool struct {
 	pool            sync.Pool
 	stackLevel      Level
 	callerFormat    CallerFormat
@@ -31,8 +31,8 @@ type entityPool struct {
 	callerSkip      int
 }
 
-func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *entityPool {
-	return &entityPool{
+func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *Pool {
+	return &Pool{
 		pool:            sync.Pool{New: func() interface{} { return &entity{} }},
 		stackLevel:      stackLevel,
 		callerFormat:    callerFormat,
@@ -41,7 +41,7 @@ func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat 
 	}
 }
 
-func (p *entityPool) build(level Level, msg string) *entity {
+func (p *Pool) build(level Level, msg string) *entity {
 	e := p.pool.Get().(*entity)
 	e.pool = p
 
@@ -62,7 +62,7 @@ func (p *entityPool) build(level Level, msg string) *entity {
 	e.time = time.Now().Format(p.timestampFormat)
 	e.message = strings.TrimRight(msg, "\n")
 
-	if p.stackLevel != defaultNoneLevel && level >= p.stackLevel {
+	if p.stackLevel != 0 && level >= p.stackLevel {
 		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFull)
 		e.caller = p.framesToCaller(e.frames)
 	} else {
@@ -74,7 +74,7 @@ func (p *entityPool) build(level Level, msg string) *entity {
 	return e
 }
 
-func (p *entityPool) framesToCaller(frames []runtime.Frame) string {
+func (p *Pool) framesToCaller(frames []runtime.Frame) string {
 	if len(frames) == 0 {
 		return ""
 	}
@@ -94,7 +94,7 @@ type entity struct {
 	caller  string
 	message string
 	frames  []runtime.Frame
-	pool    *entityPool
+	pool    *Pool
 }
 
 func (e *entity) free() {

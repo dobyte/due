@@ -1,4 +1,4 @@
-package log
+package std
 
 import (
 	"fmt"
@@ -26,12 +26,12 @@ type formatter interface {
 	format(e *entity, isTerminal bool) []byte
 }
 
-type stdLogger struct {
+type Logger struct {
 	opts       *options
 	formatter  formatter
 	syncers    []syncer
 	bufferPool sync.Pool
-	entityPool *entityPool
+	entityPool *Pool
 }
 
 type enabler func(level Level) bool
@@ -42,7 +42,7 @@ type syncer struct {
 	enabler  enabler
 }
 
-func NewLogger(opts ...Option) Logger {
+func NewLogger(opts ...Option) *Logger {
 	o := &options{
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
@@ -55,7 +55,7 @@ func NewLogger(opts ...Option) Logger {
 		opt(o)
 	}
 
-	l := &stdLogger{
+	l := &Logger{
 		opts:       o,
 		entityPool: newEntityPool(o.stackLevel, o.callerFormat, o.timestampFormat, o.callerSkip),
 		syncers:    make([]syncer, 0, 7),
@@ -108,7 +108,7 @@ func NewLogger(opts ...Option) Logger {
 	return l
 }
 
-func (l *stdLogger) log(level Level, a ...interface{}) {
+func (l *Logger) log(level Level, a ...interface{}) {
 	if level < l.opts.outLevel {
 		return
 	}
@@ -135,8 +135,8 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 	}
 }
 
-func (l *stdLogger) buildWriter(level Level) io.Writer {
-	writer, err := NewWriter(WriterOptions{
+func (l *Logger) buildWriter(level Level) io.Writer {
+	w, err := newWriter(writerOptions{
 		Path:    l.opts.outFile,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
@@ -147,75 +147,73 @@ func (l *stdLogger) buildWriter(level Level) io.Writer {
 		panic(err)
 	}
 
-	return writer
+	return w
 }
 
-func (l *stdLogger) buildEnabler(level Level) enabler {
+func (l *Logger) buildEnabler(level Level) enabler {
 	return func(lvl Level) bool {
 		return lvl >= l.opts.outLevel && (level == defaultNoneLevel || (lvl >= level && level >= l.opts.outLevel))
 	}
 }
 
 // Debug 打印调试日志
-func (l *stdLogger) Debug(a ...interface{}) {
+func (l *Logger) Debug(a ...interface{}) {
 	l.log(DebugLevel, a...)
 }
 
 // Debugf 打印调试模板日志
-func (l *stdLogger) Debugf(format string, a ...interface{}) {
+func (l *Logger) Debugf(format string, a ...interface{}) {
 	l.log(DebugLevel, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
-func (l *stdLogger) Info(a ...interface{}) {
+func (l *Logger) Info(a ...interface{}) {
 	l.log(InfoLevel, a...)
 }
 
 // Infof 打印信息模板日志
-func (l *stdLogger) Infof(format string, a ...interface{}) {
+func (l *Logger) Infof(format string, a ...interface{}) {
 	l.log(InfoLevel, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
-func (l *stdLogger) Warn(a ...interface{}) {
+func (l *Logger) Warn(a ...interface{}) {
 	l.log(WarnLevel, a...)
 }
 
 // Warnf 打印警告模板日志
-func (l *stdLogger) Warnf(format string, a ...interface{}) {
+func (l *Logger) Warnf(format string, a ...interface{}) {
 	l.log(WarnLevel, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
-func (l *stdLogger) Error(a ...interface{}) {
+func (l *Logger) Error(a ...interface{}) {
 	l.log(ErrorLevel, a...)
 }
 
 // Errorf 打印错误模板日志
-func (l *stdLogger) Errorf(format string, a ...interface{}) {
+func (l *Logger) Errorf(format string, a ...interface{}) {
 	l.log(ErrorLevel, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
-func (l *stdLogger) Fatal(a ...interface{}) {
+func (l *Logger) Fatal(a ...interface{}) {
 	l.log(FatalLevel, a...)
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
-func (l *stdLogger) Fatalf(format string, a ...interface{}) {
+func (l *Logger) Fatalf(format string, a ...interface{}) {
 	l.log(FatalLevel, fmt.Sprintf(format, a...))
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
-func (l *stdLogger) Panic(a ...interface{}) {
+func (l *Logger) Panic(a ...interface{}) {
 	l.log(PanicLevel, a...)
-	os.Exit(0)
 }
 
 // Panicf 打印Panic模板日志
-func (l *stdLogger) Panicf(format string, a ...interface{}) {
+func (l *Logger) Panicf(format string, a ...interface{}) {
 	l.log(PanicLevel, fmt.Sprintf(format, a...))
-	os.Exit(0)
 }

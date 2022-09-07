@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package log
+package std
 
 import (
 	"bytes"
@@ -13,17 +13,17 @@ import (
 	"sync"
 )
 
-type textFormatter struct {
+type TextFormatter struct {
 	bufferPool sync.Pool
 }
 
-func newTextFormatter() *textFormatter {
-	return &textFormatter{
+func newTextFormatter() *TextFormatter {
+	return &TextFormatter{
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 	}
 }
 
-func (f *textFormatter) format(e *entity, isTerminal bool) []byte {
+func (f *TextFormatter) format(e *entity, isTerminal bool) []byte {
 	b := f.bufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		b.Reset()

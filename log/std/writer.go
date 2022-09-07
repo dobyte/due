@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package log
+package std
 
 import (
 	"io"
@@ -21,7 +21,7 @@ const (
 	defaultFileName = "due"
 )
 
-type WriterOptions struct {
+type writerOptions struct {
 	Path    string
 	Level   Level
 	MaxAge  time.Duration
@@ -29,7 +29,7 @@ type WriterOptions struct {
 	CutRule CutRule
 }
 
-func NewWriter(opts WriterOptions) (io.Writer, error) {
+func newWriter(opts writerOptions) (io.Writer, error) {
 	var (
 		fileExt      string
 		fileName     string
