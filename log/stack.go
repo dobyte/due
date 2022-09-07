@@ -82,7 +82,7 @@ func GetFrames(skip int, depth StacktraceDepth) []runtime.Frame {
 	frame, more := stack.Next()
 	frames = append(frames, frame)
 	for more {
-		// ignore runtime.goexit
+		// ignore runtime.main or runtime.goexit
 		if frame, more = stack.Next(); more {
 			frames = append(frames, frame)
 		}
