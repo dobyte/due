@@ -13,6 +13,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -20,14 +21,15 @@ import (
 )
 
 type serverConn struct {
-	rw      sync.RWMutex    // 锁
-	id      int64           // 连接ID
-	uid     int64           // 用户ID
-	state   int32           // 连接状态
-	conn    *websocket.Conn // WS源连接
-	connMgr *connMgr        // 连接管理
-	chWrite chan chWrite    // 写入队列
-	done    chan struct{}   // 写入完成信号
+	rw                sync.RWMutex    // 锁
+	id                int64           // 连接ID
+	uid               int64           // 用户ID
+	state             int32           // 连接状态
+	conn              *websocket.Conn // WS源连接
+	connMgr           *connMgr        // 连接管理
+	chWrite           chan chWrite    // 写入队列
+	done              chan struct{}   // 写入完成信号
+	lastHeartbeatTime int64           // 上次心跳时间
 }
 
 var _ network.Conn = &serverConn{}
@@ -188,6 +190,7 @@ func (c *serverConn) init(conn *websocket.Conn, cm *connMgr) {
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 256)
 	c.done = make(chan struct{})
+	atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
 	if c.connMgr.server.connectHandler != nil {
@@ -216,10 +219,12 @@ func (c *serverConn) read() {
 	defer c.close()
 
 	for {
-		msgType, buf, err := c.conn.ReadMessage()
+		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			break
 		}
+
+		atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
 
 		switch c.State() {
 		case network.ConnHanged:
@@ -228,14 +233,22 @@ func (c *serverConn) read() {
 			return
 		}
 
+		// ignore heartbeat packet
+		if len(msg) == 0 {
+			continue
+		}
+
 		if c.connMgr.server.receiveHandler != nil {
-			c.connMgr.server.receiveHandler(c, buf, msgType)
+			c.connMgr.server.receiveHandler(c, msg, msgType)
 		}
 	}
 }
 
 // 写入消息
 func (c *serverConn) write() {
+	ticker := time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case write, ok := <-c.chWrite:
@@ -250,6 +263,13 @@ func (c *serverConn) write() {
 
 			if err := c.conn.WriteMessage(write.msgType, write.msg); err != nil {
 				log.Errorf("write message error: %v", err)
+			}
+		case <-ticker.C:
+			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
+			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+				_ = c.Close(true)
+				log.Warnf("connection heartbeat timeout")
+				return
 			}
 		}
 	}

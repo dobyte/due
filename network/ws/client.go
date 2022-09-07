@@ -18,20 +18,18 @@ var _ network.Client = &client{}
 
 func NewClient(opts ...ClientOption) network.Client {
 	o := &clientOptions{
-		url:              "ws://127.0.0.1:3553",
-		maxMsgLength:     1024 * 1024,
-		handshakeTimeout: 10 * time.Second,
+		url:               "ws://127.0.0.1:3553",
+		maxMsgLength:      1024 * 1024,
+		handshakeTimeout:  10 * time.Second,
+		heartbeatInterval: 10 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	return &client{
-		opts: o,
-		dialer: &websocket.Dialer{
-			HandshakeTimeout: o.handshakeTimeout,
-		},
-	}
+	return &client{opts: o, dialer: &websocket.Dialer{
+		HandshakeTimeout: o.handshakeTimeout,
+	}}
 }
 
 // Dial 拨号连接

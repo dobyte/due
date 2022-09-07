@@ -8,39 +8,39 @@
 package ws_test
 
 import (
-	"fmt"
-	"github.com/dobyte/due/network/ws"
-	"net/http"
 	"testing"
+
+	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/network/ws"
 
 	"github.com/dobyte/due/network"
 )
 
 func TestServer(t *testing.T) {
 	server := ws.NewServer(
-		ws.WithAddr(":8088"),
-		ws.WithMaxConnNum(5),
-		ws.WithCheckOrigin(func(r *http.Request) bool { return true }),
+		ws.WithServerListenAddr(":3553"),
+		ws.WithServerMaxConnNum(5),
 	)
+	server.OnStart(func() {
+		log.Info("server is started")
+	})
+	server.OnConnect(func(conn network.Conn) {
+		log.Info("connection is opened, connection id: %d", conn.ID())
+	})
+	server.OnDisconnect(func(conn network.Conn) {
+		log.Info("connection is closed, connection id: %d", conn.ID())
+	})
+	server.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
+		log.Info("receive msg from client, connection id: %d, msg: %s", conn.ID(), string(msg))
 
-	server.OnStart(func(s network.Server) {
-		fmt.Println("server is started")
-	})
-	server.OnConnect(func(s network.Server, conn network.Conn) {
-		fmt.Printf("conn is opened, conn id: %d\n", conn.ID())
-	})
-	server.OnDisconnect(func(s network.Server, conn network.Conn) {
-		fmt.Printf("conn is closed, conn id: %d\n", conn.ID())
-	})
-	server.OnReceive(func(s network.Server, conn network.Conn, msg []byte, msgType int) {
-		fmt.Printf("receive msg from conn, conn id: %d, msg: %s\n", conn.ID(), string(msg))
-		_ = conn.Close()
-		if err := conn.Send([]byte("hello world")); err != nil {
-			fmt.Println(err)
+		if err := conn.Push([]byte("I'm fine~~")); err != nil {
+			log.Errorf("push message failed: %v", err)
 		}
 	})
 
-	_ = server.Start()
+	if err := server.Start(); err != nil {
+		log.Fatal("start server failed: %v", err)
+	}
 
 	select {}
 }
