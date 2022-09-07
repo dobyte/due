@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultOutLevel        = log.WarnLevel
+	defaultOutLevel        = log.InfoLevel
 	defaultOutFormat       = log.TextFormat
 	defaultFileMaxAge      = 7 * 24 * time.Hour
 	defaultFileMaxSize     = 100 * 1024 * 1024
@@ -27,9 +27,7 @@ const (
 	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
-const (
-	defaultNoneLevel log.Level = 0
-)
+const defaultNoneLevel log.Level = 0
 
 var _ log.Logger = NewLogger()
 
