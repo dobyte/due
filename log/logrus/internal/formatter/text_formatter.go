@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -39,20 +40,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b = &bytes.Buffer{}
 	}
 
-	levelText := strings.ToUpper(entry.Level.String())
-	levelText = levelText[0:4]
-
-	caller := ""
-	if entry.HasCaller() {
-		if f.CallerFullPath {
-			caller = fmt.Sprintf("%s:%d", entry.Caller.File, entry.Caller.Line)
-		} else {
-			_, file := filepath.Split(entry.Caller.File)
-			caller = fmt.Sprintf("%s:%d", file, entry.Caller.Line)
-		}
-	}
-
-	entry.Message = strings.TrimSuffix(entry.Message, "\n")
+	levelText := strings.ToUpper(entry.Level.String())[0:4]
 
 	if _, ok := entry.Data[defaultOutFileFlag]; len(entry.Logger.Hooks) == 0 || ok {
 		var levelColor int
@@ -69,12 +57,47 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			levelColor = blue
 		}
 
-		_, _ = fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s] %s %-44s ", levelColor, levelText, entry.Time.Format(f.TimestampFormat), caller, entry.Message)
+		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimestampFormat))
 	} else {
 		entry.Data[defaultOutFileFlag] = true
-		_, _ = fmt.Fprintf(b, "%s[%s] %s %-44s ", levelText, entry.Time.Format(f.TimestampFormat), caller, entry.Message)
+		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimestampFormat))
+	}
+
+	var frames []runtime.Frame
+	if v, ok := entry.Data["frames"]; ok {
+		frames = v.([]runtime.Frame)
+	}
+
+	if len(frames) > 0 {
+		fmt.Fprintf(b, " %s", f.framesToCaller(frames))
+	}
+
+	message := strings.TrimSuffix(entry.Message, "\n")
+	if message != "" {
+		fmt.Fprintf(b, " %s", message)
+	}
+
+	if len(frames) > 1 {
+		fmt.Fprint(b, "\nStack:")
+		for i, frame := range frames {
+			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)
+			fmt.Fprintf(b, "\t%s:%d", frame.File, frame.Line)
+		}
 	}
 
 	b.WriteByte('\n')
 	return b.Bytes(), nil
+}
+
+func (f *TextFormatter) framesToCaller(frames []runtime.Frame) string {
+	if len(frames) == 0 {
+		return ""
+	}
+
+	file := frames[0].File
+	if !f.CallerFullPath {
+		_, file = filepath.Split(file)
+	}
+
+	return fmt.Sprintf("%s:%d", file, frames[0].Line)
 }
