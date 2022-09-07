@@ -25,17 +25,19 @@ const (
 
 type entityPool struct {
 	pool            sync.Pool
-	outStackLevel   Level
-	callerFullPath  bool
+	stackLevel      Level
+	callerFormat    CallerFormat
 	timestampFormat string
+	callerSkip      int
 }
 
-func newEntityPool(outStackLevel Level, callerFullPath bool, timestampFormat string) *entityPool {
+func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *entityPool {
 	return &entityPool{
 		pool:            sync.Pool{New: func() interface{} { return &entity{} }},
-		outStackLevel:   outStackLevel,
-		callerFullPath:  callerFullPath,
+		stackLevel:      stackLevel,
+		callerFormat:    callerFormat,
 		timestampFormat: timestampFormat,
+		callerSkip:      callerSkip,
 	}
 }
 
@@ -60,11 +62,11 @@ func (p *entityPool) build(level Level, msg string) *entity {
 	e.time = time.Now().Format(p.timestampFormat)
 	e.message = strings.TrimRight(msg, "\n")
 
-	if p.outStackLevel != defaultNoneLevel && level >= p.outStackLevel {
-		e.frames = GetFrames(3, StacktraceFull)
+	if p.stackLevel != defaultNoneLevel && level >= p.stackLevel {
+		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFull)
 		e.caller = p.framesToCaller(e.frames)
 	} else {
-		e.frames = GetFrames(3, StacktraceFirst)
+		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFirst)
 		e.caller = p.framesToCaller(e.frames)
 		e.frames = nil
 	}
@@ -78,7 +80,7 @@ func (p *entityPool) framesToCaller(frames []runtime.Frame) string {
 	}
 
 	file := frames[0].File
-	if !p.callerFullPath {
+	if p.callerFormat == CallerShortPath {
 		_, file = filepath.Split(file)
 	}
 

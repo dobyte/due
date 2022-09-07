@@ -11,14 +11,17 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/mode"
 )
 
 func TestNewLogger(t *testing.T) {
+	mode.SetMode(mode.TestMode)
+
 	logger := log.NewLogger(
 		log.WithOutFile("./log/due.log"),
 		log.WithOutFormat(log.TextFormat),
-		log.WithOutStackLevel(log.InfoLevel),
-		log.WithFileClassifyStorage(true),
+		log.WithStackLevel(log.InfoLevel),
+		log.WithEnableLeveledStorage(true),
 	)
 
 	logger.Warn("aaa", "bbb")

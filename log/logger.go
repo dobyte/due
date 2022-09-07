@@ -30,7 +30,7 @@ type Logger interface {
 }
 
 func init() {
-	SetLogger(NewLogger())
+	SetLogger(NewLogger(WithCallerSkip(1)))
 }
 
 // SetLogger 设置日志记录器

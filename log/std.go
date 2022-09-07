@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/dobyte/due/mode"
 )
 
 const (
@@ -54,7 +57,7 @@ func NewLogger(opts ...Option) Logger {
 
 	l := &stdLogger{
 		opts:       o,
-		entityPool: newEntityPool(o.outStackLevel, o.callerFullPath, o.timestampFormat),
+		entityPool: newEntityPool(o.stackLevel, o.callerFormat, o.timestampFormat, o.callerSkip),
 		syncers:    make([]syncer, 0, 7),
 	}
 
@@ -66,12 +69,8 @@ func NewLogger(opts ...Option) Logger {
 	}
 
 	if o.outFile != "" {
-		if o.fileClassifyStorage {
+		if o.enableLeveledStorage {
 			l.syncers = append(l.syncers, syncer{
-				writer:   os.Stdout,
-				terminal: true,
-				enabler:  l.buildEnabler(defaultNoneLevel),
-			}, syncer{
 				writer:  l.buildWriter(DebugLevel),
 				enabler: l.buildEnabler(DebugLevel),
 			}, syncer{
@@ -92,15 +91,13 @@ func NewLogger(opts ...Option) Logger {
 			})
 		} else {
 			l.syncers = append(l.syncers, syncer{
-				writer:   os.Stdout,
-				terminal: true,
-				enabler:  l.buildEnabler(defaultNoneLevel),
-			}, syncer{
 				writer:  l.buildWriter(defaultNoneLevel),
 				enabler: l.buildEnabler(defaultNoneLevel),
 			})
 		}
-	} else {
+	}
+
+	if mode.IsDebugMode() {
 		l.syncers = append(l.syncers, syncer{
 			writer:   os.Stdout,
 			terminal: true,
@@ -117,8 +114,8 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 	}
 
 	var msg string
-	if len(a) > 0 {
-		msg = fmt.Sprintf("%v", a[0])
+	if c := len(a); c > 0 {
+		msg = fmt.Sprintf(strings.TrimRight(strings.Repeat("%v ", c), " "), a...)
 	}
 
 	e := l.entityPool.build(level, msg)
