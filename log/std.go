@@ -116,7 +116,12 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 		return
 	}
 
-	e := l.entityPool.build(level, fmt.Sprintf("%v", a))
+	var msg string
+	if len(a) > 0 {
+		msg = fmt.Sprintf("%v", a[0])
+	}
+
+	e := l.entityPool.build(level, msg)
 	defer e.free()
 
 	buffers := make(map[bool][]byte, 2)

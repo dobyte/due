@@ -16,7 +16,7 @@ import (
 func TestNewLogger(t *testing.T) {
 	logger := log.NewLogger(
 		log.WithOutFile("./log/due.log"),
-		log.WithOutFormat(log.JsonFormat),
+		log.WithOutFormat(log.TextFormat),
 		log.WithOutStackLevel(log.InfoLevel),
 		log.WithFileClassifyStorage(true),
 	)
