@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap/internal/utils"
 )
 
@@ -32,14 +33,14 @@ type JsonEncoder struct {
 	zapcore.ObjectEncoder
 	bufferPool      buffer.Pool
 	timestampFormat string
-	callerFullPath  bool
+	callerFormat    log.CallerFormat
 }
 
-func NewJsonEncoder(timestampFormat string, callerFullPath bool) zapcore.Encoder {
+func NewJsonEncoder(timestampFormat string, callerFormat log.CallerFormat) zapcore.Encoder {
 	return &JsonEncoder{
 		bufferPool:      buffer.NewPool(),
 		timestampFormat: timestampFormat,
-		callerFullPath:  callerFullPath,
+		callerFormat:    callerFormat,
 	}
 }
 
@@ -55,7 +56,7 @@ func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 
 	if ent.Caller.Defined {
 		var file string
-		if e.callerFullPath {
+		if e.callerFormat == log.CallerFullPath {
 			file = ent.Caller.File
 		} else {
 			_, file = filepath.Split(ent.Caller.File)

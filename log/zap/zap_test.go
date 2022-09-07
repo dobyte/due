@@ -19,9 +19,8 @@ func TestNewLogger(t *testing.T) {
 		zap.WithOutFile("./log/due.log"),
 		zap.WithOutLevel(log.WarnLevel),
 		zap.WithOutFormat(log.JsonFormat),
-		zap.WithOutStackLevel(log.WarnLevel),
-		zap.WithFileClassifyStorage(true),
-		zap.WithCallerFullPath(true),
+		zap.WithStackLevel(log.WarnLevel),
+		zap.WithEnableLeveledStorage(true),
 	)
 
 	//l.Info("info")
