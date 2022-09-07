@@ -32,6 +32,14 @@ type Request interface {
 	Context() context.Context
 	// Response 响应请求
 	Response(message interface{}) error
+	// BindGate 绑定网关
+	BindGate(uid int64) error
+	// UnbindGate 解绑网关
+	UnbindGate() error
+	// BindNode 绑定节点
+	BindNode() error
+	// UnbindNode 解绑节点
+	UnbindNode() error
 }
 
 // 请求数据
@@ -97,4 +105,24 @@ func (r *request) Context() context.Context {
 // Response 响应请求
 func (r *request) Response(message interface{}) error {
 	return r.node.proxy.Response(r.Context(), r, message)
+}
+
+// BindGate 绑定网关
+func (r *request) BindGate(uid int64) error {
+	return r.node.proxy.BindGate(r.Context(), r.gid, r.cid, uid)
+}
+
+// UnbindGate 解绑网关
+func (r *request) UnbindGate() error {
+	return r.node.proxy.UnbindGate(r.Context(), r.uid)
+}
+
+// BindNode 绑定节点
+func (r *request) BindNode() error {
+	return r.node.proxy.BindNode(r.Context(), r.uid)
+}
+
+// UnbindNode 解绑节点
+func (r *request) UnbindNode() error {
+	return r.node.proxy.UnbindNode(r.Context(), r.uid)
 }
