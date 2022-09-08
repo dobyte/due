@@ -29,9 +29,10 @@ var _ network.Server = &server{}
 
 func NewServer(opts ...ServerOption) network.Server {
 	o := &serverOptions{
-		addr:         ":3553",
-		maxConnNum:   5000,
-		maxMsgLength: 1024 * 1024,
+		addr:              ":3553",
+		maxConnNum:        5000,
+		maxMsgLength:      1024 * 1024,
+		heartbeatInterval: 10 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(o)
