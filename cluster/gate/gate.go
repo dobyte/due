@@ -9,12 +9,13 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/pb"
 	"sync"
 	"time"
 
-	"github.com/dobyte/due"
+	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/cluster/internal/pb"
+	"github.com/dobyte/due/mode"
+
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
@@ -235,7 +236,7 @@ func (g *Gate) buildInstance() {
 }
 
 func (g *Gate) debugPrint() {
-	if !due.IsDebugMode() {
+	if !mode.IsDebugMode() {
 		return
 	}
 	log.Debugf("The gate server startup successful")

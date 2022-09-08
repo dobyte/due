@@ -26,3 +26,11 @@ const (
 	CutByMinute                    // 按照分切割
 	CutBySecond                    // 按照秒切割
 )
+
+// 调用则格式
+type CallerFormat int
+
+const (
+	CallerShortPath CallerFormat = iota // 调用者短路径
+	CallerFullPath                      // 调用者全路径
+)
