@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type clientConn struct {
@@ -29,7 +30,7 @@ func newClientConn(client *client, conn *websocket.Conn) network.Conn {
 		conn:    conn,
 		state:   int32(network.ConnOpened),
 		client:  client,
-		chWrite: make(chan chWrite),
+		chWrite: make(chan chWrite, 1024),
 		done:    make(chan struct{}),
 	}
 
@@ -226,8 +227,13 @@ func (c *clientConn) read() {
 
 // 写入消息
 func (c *clientConn) write() {
+	ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
+		case <-ticker.C:
+			c.chWrite <- chWrite{typ: heartbeatPacket, msgType: BinaryMessage}
 		case write, ok := <-c.chWrite:
 			if !ok {
 				return

@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/log"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -32,10 +33,11 @@ var _ network.Server = &server{}
 
 func NewServer(opts ...ServerOption) network.Server {
 	o := &serverOptions{
-		addr:        ":3553",
-		maxConnNum:  5000,
-		path:        "/",
-		checkOrigin: func(r *http.Request) bool { return true },
+		addr:              ":3553",
+		maxConnNum:        5000,
+		path:              "/",
+		checkOrigin:       func(r *http.Request) bool { return true },
+		heartbeatInterval: 10 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(o)
