@@ -62,7 +62,7 @@ func (p *entityPool) build(level Level, msg string) *entity {
 	e.time = time.Now().Format(p.timestampFormat)
 	e.message = strings.TrimRight(msg, "\n")
 
-	if p.stackLevel != defaultNoneLevel && level >= p.stackLevel {
+	if p.stackLevel != 0 && level >= p.stackLevel {
 		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFull)
 		e.caller = p.framesToCaller(e.frames)
 	} else {

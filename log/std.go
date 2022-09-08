@@ -42,7 +42,7 @@ type syncer struct {
 	enabler  enabler
 }
 
-func NewLogger(opts ...Option) Logger {
+func NewLogger(opts ...Option) *stdLogger {
 	o := &options{
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
@@ -136,7 +136,7 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 }
 
 func (l *stdLogger) buildWriter(level Level) io.Writer {
-	writer, err := NewWriter(WriterOptions{
+	w, err := NewWriter(WriterOptions{
 		Path:    l.opts.outFile,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
@@ -147,7 +147,7 @@ func (l *stdLogger) buildWriter(level Level) io.Writer {
 		panic(err)
 	}
 
-	return writer
+	return w
 }
 
 func (l *stdLogger) buildEnabler(level Level) enabler {
@@ -211,11 +211,9 @@ func (l *stdLogger) Fatalf(format string, a ...interface{}) {
 // Panic 打印Panic日志
 func (l *stdLogger) Panic(a ...interface{}) {
 	l.log(PanicLevel, a...)
-	os.Exit(0)
 }
 
 // Panicf 打印Panic模板日志
 func (l *stdLogger) Panicf(format string, a ...interface{}) {
 	l.log(PanicLevel, fmt.Sprintf(format, a...))
-	os.Exit(0)
 }
