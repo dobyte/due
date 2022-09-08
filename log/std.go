@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/dobyte/due/mode"
 )
 
 const (
@@ -39,7 +42,7 @@ type syncer struct {
 	enabler  enabler
 }
 
-func NewLogger(opts ...Option) Logger {
+func NewLogger(opts ...Option) *stdLogger {
 	o := &options{
 		outLevel:        defaultOutLevel,
 		outFormat:       defaultOutFormat,
@@ -54,7 +57,7 @@ func NewLogger(opts ...Option) Logger {
 
 	l := &stdLogger{
 		opts:       o,
-		entityPool: newEntityPool(o.outStackLevel, o.callerFullPath, o.timestampFormat),
+		entityPool: newEntityPool(o.stackLevel, o.callerFormat, o.timestampFormat, o.callerSkip),
 		syncers:    make([]syncer, 0, 7),
 	}
 
@@ -66,12 +69,8 @@ func NewLogger(opts ...Option) Logger {
 	}
 
 	if o.outFile != "" {
-		if o.fileClassifyStorage {
+		if o.enableLeveledStorage {
 			l.syncers = append(l.syncers, syncer{
-				writer:   os.Stdout,
-				terminal: true,
-				enabler:  l.buildEnabler(defaultNoneLevel),
-			}, syncer{
 				writer:  l.buildWriter(DebugLevel),
 				enabler: l.buildEnabler(DebugLevel),
 			}, syncer{
@@ -92,15 +91,13 @@ func NewLogger(opts ...Option) Logger {
 			})
 		} else {
 			l.syncers = append(l.syncers, syncer{
-				writer:   os.Stdout,
-				terminal: true,
-				enabler:  l.buildEnabler(defaultNoneLevel),
-			}, syncer{
 				writer:  l.buildWriter(defaultNoneLevel),
 				enabler: l.buildEnabler(defaultNoneLevel),
 			})
 		}
-	} else {
+	}
+
+	if mode.IsDebugMode() {
 		l.syncers = append(l.syncers, syncer{
 			writer:   os.Stdout,
 			terminal: true,
@@ -117,8 +114,8 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 	}
 
 	var msg string
-	if len(a) > 0 {
-		msg = fmt.Sprintf("%v", a[0])
+	if c := len(a); c > 0 {
+		msg = fmt.Sprintf(strings.TrimRight(strings.Repeat("%v ", c), " "), a...)
 	}
 
 	e := l.entityPool.build(level, msg)
@@ -139,7 +136,7 @@ func (l *stdLogger) log(level Level, a ...interface{}) {
 }
 
 func (l *stdLogger) buildWriter(level Level) io.Writer {
-	writer, err := NewWriter(WriterOptions{
+	w, err := NewWriter(WriterOptions{
 		Path:    l.opts.outFile,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
@@ -150,7 +147,7 @@ func (l *stdLogger) buildWriter(level Level) io.Writer {
 		panic(err)
 	}
 
-	return writer
+	return w
 }
 
 func (l *stdLogger) buildEnabler(level Level) enabler {
@@ -214,11 +211,9 @@ func (l *stdLogger) Fatalf(format string, a ...interface{}) {
 // Panic 打印Panic日志
 func (l *stdLogger) Panic(a ...interface{}) {
 	l.log(PanicLevel, a...)
-	os.Exit(0)
 }
 
 // Panicf 打印Panic模板日志
 func (l *stdLogger) Panicf(format string, a ...interface{}) {
 	l.log(PanicLevel, fmt.Sprintf(format, a...))
-	os.Exit(0)
 }
