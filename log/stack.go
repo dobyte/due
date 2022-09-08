@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package std
+package log
 
 import (
 	"runtime"

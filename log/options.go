@@ -1,4 +1,4 @@
-package std
+package log
 
 import (
 	"time"
@@ -11,7 +11,7 @@ type options struct {
 	stackLevel           Level         // 堆栈的最低输出级别，默认不输出堆栈
 	callerFormat         CallerFormat  // 调用者格式，默认短路径
 	timestampFormat      string        // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	fileMaxAge           time.Duration // 文件最大留存时间，单位（）默认7天
+	fileMaxAge           time.Duration // 文件最大留存时间，默认7天
 	fileMaxSize          int64         // 文件最大尺寸限制，单位（MB），默认100MB
 	fileCutRule          CutRule       // 文件切割规则，默认按照天
 	enableLeveledStorage bool          // 是否启用分级存储，默认不分级

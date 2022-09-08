@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package std
+package log
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ const (
 	gray   = 37
 )
 
-type Pool struct {
+type entityPool struct {
 	pool            sync.Pool
 	stackLevel      Level
 	callerFormat    CallerFormat
@@ -31,8 +31,8 @@ type Pool struct {
 	callerSkip      int
 }
 
-func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *Pool {
-	return &Pool{
+func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *entityPool {
+	return &entityPool{
 		pool:            sync.Pool{New: func() interface{} { return &entity{} }},
 		stackLevel:      stackLevel,
 		callerFormat:    callerFormat,
@@ -41,7 +41,7 @@ func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat 
 	}
 }
 
-func (p *Pool) build(level Level, msg string) *entity {
+func (p *entityPool) build(level Level, msg string) *entity {
 	e := p.pool.Get().(*entity)
 	e.pool = p
 
@@ -74,7 +74,7 @@ func (p *Pool) build(level Level, msg string) *entity {
 	return e
 }
 
-func (p *Pool) framesToCaller(frames []runtime.Frame) string {
+func (p *entityPool) framesToCaller(frames []runtime.Frame) string {
 	if len(frames) == 0 {
 		return ""
 	}
@@ -94,7 +94,7 @@ type entity struct {
 	caller  string
 	message string
 	frames  []runtime.Frame
-	pool    *Pool
+	pool    *entityPool
 }
 
 func (e *entity) free() {
