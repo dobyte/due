@@ -17,6 +17,7 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/logrus/internal/formatter"
 	"github.com/dobyte/due/log/logrus/internal/hook"
+	"github.com/dobyte/due/mode"
 )
 
 const (
@@ -72,15 +73,15 @@ func NewLogger(opts ...Option) *Logger {
 	var f logrus.Formatter
 	switch o.outFormat {
 	case log.JsonFormat:
-		f = &formatter.JsonFormatter{
+		l.logger.SetFormatter(&formatter.JsonFormatter{
 			TimestampFormat: o.timestampFormat,
 			CallerFullPath:  o.callerFullPath,
-		}
+		})
 	default:
-		f = &formatter.TextFormatter{
+		l.logger.SetFormatter(&formatter.TextFormatter{
 			TimestampFormat: o.timestampFormat,
 			CallerFullPath:  o.callerFullPath,
-		}
+		})
 	}
 
 	l.logger.AddHook(hook.NewStackHook(o.outStackLevel))
@@ -100,8 +101,9 @@ func NewLogger(opts ...Option) *Logger {
 		}
 	}
 
-	l.logger.SetFormatter(f)
-	l.logger.SetOutput(os.Stdout)
+	if mode.IsDebugMode() {
+		l.logger.SetOutput(os.Stdout)
+	}
 
 	return l
 }
