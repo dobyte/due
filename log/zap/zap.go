@@ -16,6 +16,7 @@ import (
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap/internal/encoder"
+	"github.com/dobyte/due/mode"
 )
 
 const (
@@ -68,54 +69,54 @@ func NewLogger(opts ...Option) *Logger {
 	)
 	switch o.outFormat {
 	case log.JsonFormat:
-		fileEncoder = encoder.NewJsonEncoder(o.timestampFormat, o.callerFullPath)
+		fileEncoder = encoder.NewJsonEncoder(o.timestampFormat, o.callerFormat)
 		terminalEncoder = fileEncoder
 	default:
-		fileEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath, false)
-		terminalEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFullPath, true)
+		fileEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFormat, false)
+		terminalEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFormat, true)
 	}
 
-	options := make([]zap.Option, 0, 2)
-	options = append(options, zap.AddCaller(), zap.AddCallerSkip(1))
-	switch o.outStackLevel {
+	options := make([]zap.Option, 0, 3)
+	options = append(options, zap.AddCaller())
+	switch o.stackLevel {
 	case log.DebugLevel:
-		options = append(options, zap.AddStacktrace(zapcore.DebugLevel))
+		options = append(options, zap.AddStacktrace(zapcore.DebugLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.InfoLevel:
-		options = append(options, zap.AddStacktrace(zapcore.InfoLevel))
+		options = append(options, zap.AddStacktrace(zapcore.InfoLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.WarnLevel:
-		options = append(options, zap.AddStacktrace(zapcore.WarnLevel))
+		options = append(options, zap.AddStacktrace(zapcore.WarnLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.ErrorLevel:
-		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
+		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.FatalLevel:
-		options = append(options, zap.AddStacktrace(zapcore.FatalLevel))
+		options = append(options, zap.AddStacktrace(zapcore.FatalLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.PanicLevel:
-		options = append(options, zap.AddStacktrace(zapcore.PanicLevel))
+		options = append(options, zap.AddStacktrace(zapcore.PanicLevel), zap.AddCallerSkip(1+o.callerSkip))
 	}
 
 	l := &Logger{opts: o}
 
+	var cores []zapcore.Core
 	if o.outFile != "" {
-		if o.fileClassifyStorage {
-			l.logger = zap.New(zapcore.NewTee(
+		if o.enableLeveledStorage {
+			cores = append(cores,
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(log.WarnLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(log.ErrorLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
-				zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
-			), options...).Sugar()
+			)
 		} else {
-			l.logger = zap.New(zapcore.NewTee(
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel)),
-				zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
-			), options...).Sugar()
+			cores = append(cores, zapcore.NewCore(fileEncoder, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel)))
 		}
-	} else {
-		l.logger = zap.New(
-			zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)),
-			options...,
-		).Sugar()
+	}
+
+	if mode.IsDebugMode() {
+		cores = append(cores, zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)))
+	}
+
+	if len(cores) >= 0 {
+		l.logger = zap.New(zapcore.NewTee(cores...), options...).Sugar()
 	}
 
 	return l

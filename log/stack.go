@@ -42,7 +42,7 @@ func GetStacktrace(skip int, depth StacktraceDepth) *stacktrace {
 	}
 
 	numFrames := runtime.Callers(
-		skip+1,
+		skip+2,
 		stack.pcs,
 	)
 
@@ -50,7 +50,7 @@ func GetStacktrace(skip int, depth StacktraceDepth) *stacktrace {
 		pcs := stack.pcs
 		for numFrames == len(pcs) {
 			pcs = make([]uintptr, len(pcs)*2)
-			numFrames = runtime.Callers(skip+1, pcs)
+			numFrames = runtime.Callers(skip+2, pcs)
 		}
 
 		stack.pcs = pcs[:numFrames]

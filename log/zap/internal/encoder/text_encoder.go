@@ -15,13 +15,15 @@ import (
 
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/dobyte/due/log"
 )
 
 type TextEncoder struct {
 	zapcore.ObjectEncoder
 	bufferPool      buffer.Pool
 	timestampFormat string
-	callerFullPath  bool
+	callerFormat    log.CallerFormat
 	isTerminal      bool
 }
 
@@ -34,11 +36,11 @@ const (
 
 var _ zapcore.Encoder = &TextEncoder{}
 
-func NewTextEncoder(timestampFormat string, callerFullPath bool, isTerminal bool) zapcore.Encoder {
+func NewTextEncoder(timestampFormat string, callerFormat log.CallerFormat, isTerminal bool) zapcore.Encoder {
 	return &TextEncoder{
 		bufferPool:      buffer.NewPool(),
 		timestampFormat: timestampFormat,
-		callerFullPath:  callerFullPath,
+		callerFormat:    callerFormat,
 		isTerminal:      isTerminal,
 	}
 }
@@ -73,7 +75,7 @@ func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 	}
 
 	if ent.Caller.Defined {
-		if e.callerFullPath {
+		if e.callerFormat == log.CallerFullPath {
 			line.AppendString(fmt.Sprintf(" %s:%d ", ent.Caller.File, ent.Caller.Line))
 		} else {
 			_, file := filepath.Split(ent.Caller.File)
