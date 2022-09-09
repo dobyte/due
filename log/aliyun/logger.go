@@ -175,12 +175,14 @@ func (l *Logger) Errorf(format string, a ...interface{}) {
 // Fatal 打印致命错误日志
 func (l *Logger) Fatal(a ...interface{}) {
 	l.log(log.FatalLevel, a...)
+	l.Close()
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *Logger) Fatalf(format string, a ...interface{}) {
 	l.log(log.FatalLevel, fmt.Sprintf(format, a...))
+	l.Close()
 	os.Exit(1)
 }
 
