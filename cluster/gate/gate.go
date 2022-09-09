@@ -14,8 +14,6 @@ import (
 
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/cluster/internal/pb"
-	"github.com/dobyte/due/mode"
-
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
@@ -236,9 +234,6 @@ func (g *Gate) buildInstance() {
 }
 
 func (g *Gate) debugPrint() {
-	if !mode.IsDebugMode() {
-		return
-	}
 	log.Debugf("The gate server startup successful")
 	log.Debugf("Gate server, listen: %s protocol: %s", xnet.FulfillAddr(g.opts.server.Addr()), g.opts.server.Protocol())
 	log.Debugf("GRPC server, listen: %s protocol: %s", xnet.FulfillAddr(g.opts.grpc.Addr()), g.opts.grpc.Scheme())
