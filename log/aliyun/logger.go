@@ -85,7 +85,7 @@ func (l *Logger) log(level log.Level, a ...interface{}) {
 
 	if !l.opts.disableSyncing {
 		logData := producer.GenerateLog(uint32(time.Now().Unix()), l.buildLogRaw(e))
-		_ = l.producer.SendLog(l.opts.project, l.opts.logstore, "", "", logData)
+		_ = l.producer.SendLog(l.opts.project, l.opts.logstore, l.opts.topic, l.opts.source, logData)
 	}
 
 	e.Log()

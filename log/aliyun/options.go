@@ -12,11 +12,13 @@ import "github.com/dobyte/due/log"
 type Option func(o *options)
 
 type options struct {
-	project         string           // 项目名称
-	logstore        string           // 日志存储
+	project         string           // 阿里云SLS项目名称
+	logstore        string           // 阿里云SLS日志存储
 	endpoint        string           // 阿里云SLS服务域名，公网使用公网域名，内网使用私网域名
-	accessKeyID     string           // 阿里云访问密钥ID
-	accessKeySecret string           // 阿里云访问密钥密码
+	accessKeyID     string           // 阿里云SLS访问密钥ID
+	accessKeySecret string           // 阿里云SLS访问密钥密码
+	topic           string           // 主题标签，默认为空
+	source          string           // 来源标签，默认为空
 	outLevel        log.Level        // 输出的最低日志级别，默认Info
 	stackLevel      log.Level        // 堆栈的最低输出级别，默认不输出堆栈
 	callerFormat    log.CallerFormat // 调用者格式，默认短路径
@@ -48,6 +50,16 @@ func WithAccessKeyID(accessKeyID string) Option {
 // WithAccessKeySecret 设置访问密钥密码
 func WithAccessKeySecret(accessKeySecret string) Option {
 	return func(o *options) { o.accessKeySecret = accessKeySecret }
+}
+
+// WithTopic 设置主题标签
+func WithTopic(topic string) Option {
+	return func(o *options) { o.topic = topic }
+}
+
+// WithSource 设置来源标签
+func WithSource(source string) Option {
+	return func(o *options) { o.source = source }
 }
 
 // WithOutLevel 设置输出的最低日志级别
