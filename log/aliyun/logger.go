@@ -122,6 +122,11 @@ func (l *Logger) buildLogRaw(e *log.Entity) map[string]string {
 	return raw
 }
 
+// Producer 获取阿里云Producer
+func (l *Logger) Producer() *producer.Producer {
+	return l.producer
+}
+
 // 关闭日志服务
 func (l *Logger) Close() error {
 	return l.producer.Close(5000)
