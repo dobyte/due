@@ -33,28 +33,28 @@ func newJsonFormatter() *jsonFormatter {
 	}
 }
 
-func (f *jsonFormatter) format(e *entity, isTerminal bool) []byte {
+func (f *jsonFormatter) format(e *Entity, isTerminal bool) []byte {
 	b := f.bufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		b.Reset()
 		f.bufferPool.Put(b)
 	}()
 
-	fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyLevel, e.level)
-	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, e.time)
+	fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyLevel, e.Level.String()[:4])
+	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, e.Time)
 
-	if e.caller != "" {
-		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyFile, e.caller)
+	if e.Caller != "" {
+		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyFile, e.Caller)
 	}
 
-	if e.message != "" {
-		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyMsg, e.message)
+	if e.Message != "" {
+		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyMsg, e.Message)
 	}
 
-	if len(e.frames) > 0 {
+	if len(e.Frames) > 0 {
 		fmt.Fprintf(b, `,"%s":[`, fieldKeyStack)
 
-		for i, frame := range e.frames {
+		for i, frame := range e.Frames {
 			if i == 0 {
 				fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
 			} else {

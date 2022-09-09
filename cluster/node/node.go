@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/cluster/internal/pb"
 	"github.com/dobyte/due/internal/xnet"
-	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/router"
 
@@ -295,9 +294,6 @@ func (n *Node) deliver(gid, nid string, cid, uid int64, route int32, buffer inte
 }
 
 func (n *Node) debugPrint() {
-	if !mode.IsDebugMode() {
-		return
-	}
 	log.Debugf("The node server startup successful")
 	log.Debugf("GRPC server, listen: %s protocol: %s", xnet.FulfillAddr(n.opts.grpc.Addr()), n.opts.grpc.Scheme())
 }
