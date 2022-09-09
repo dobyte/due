@@ -10,6 +10,7 @@ package aliyun_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/aliyun"
 )
 
@@ -20,8 +21,9 @@ func TestNewLogger(t *testing.T) {
 		aliyun.WithEndpoint("cn-guangzhou.log.aliyuncs.com"),
 		aliyun.WithAccessKeyID("LTAI5tKwurmJ2AJi6EYFEga8"),
 		aliyun.WithAccessKeySecret("hXwR1rtW4DcByOQ4LgR1rpfk7JcR8E"),
+		aliyun.WithStackLevel(log.InfoLevel),
 	)
 	defer l.Close()
 
-	l.Debug("debug")
+	l.Info("info")
 }
