@@ -23,31 +23,33 @@ func newTextFormatter() *textFormatter {
 	}
 }
 
-func (f *textFormatter) format(e *entity, isTerminal bool) []byte {
+func (f *textFormatter) format(e *Entity, isTerminal bool) []byte {
 	b := f.bufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		b.Reset()
 		f.bufferPool.Put(b)
 	}()
 
+	level := e.Level.String()[:4]
+
 	if isTerminal {
-		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.color, e.level, e.time)
+		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.Color, level, e.Time)
 	} else {
-		fmt.Fprintf(b, "%s[%s]", e.level, e.time)
+		fmt.Fprintf(b, "%s[%s]", level, e.Time)
 	}
 
-	if e.caller != "" {
-		fmt.Fprint(b, " "+e.caller)
+	if e.Caller != "" {
+		fmt.Fprint(b, " "+e.Caller)
 	}
 
-	if e.message != "" {
-		fmt.Fprint(b, " "+e.message)
+	if e.Message != "" {
+		fmt.Fprint(b, " "+e.Message)
 	}
 
-	if len(e.frames) > 0 {
+	if len(e.Frames) > 0 {
 		fmt.Fprint(b, "\n")
 		fmt.Fprint(b, "Stack:")
-		for i, frame := range e.frames {
+		for i, frame := range e.Frames {
 			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)
 			fmt.Fprintf(b, "\t%s:%d", frame.File, frame.Line)
 		}
