@@ -18,9 +18,9 @@ func TestNewLogger(t *testing.T) {
 	l := aliyun.NewLogger(
 		aliyun.WithProject("due-test"),
 		aliyun.WithLogstore("app"),
-		aliyun.WithEndpoint("cn-guangzhou.log.aliyuncs.com"),
-		aliyun.WithAccessKeyID("LTAI5tKwurmJ2AJi6EYFEga8"),
-		aliyun.WithAccessKeySecret("hXwR1rtW4DcByOQ4LgR1rpfk7JcR8E"),
+		aliyun.WithEndpoint(""),
+		aliyun.WithAccessKeyID(""),
+		aliyun.WithAccessKeySecret(""),
 		aliyun.WithStackLevel(log.InfoLevel),
 	)
 	defer l.Close()
