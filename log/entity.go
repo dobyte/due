@@ -23,86 +23,106 @@ const (
 	gray   = 37
 )
 
-type entityPool struct {
-	pool            sync.Pool
-	stackLevel      Level
-	callerFormat    CallerFormat
-	timestampFormat string
-	callerSkip      int
+type EntityPool struct {
+	pool sync.Pool
+	std  *Std
 }
 
-func newEntityPool(stackLevel Level, callerFormat CallerFormat, timestampFormat string, callerSkip int) *entityPool {
-	return &entityPool{
-		pool:            sync.Pool{New: func() interface{} { return &entity{} }},
-		stackLevel:      stackLevel,
-		callerFormat:    callerFormat,
-		timestampFormat: timestampFormat,
-		callerSkip:      callerSkip,
+func newEntityPool(std *Std) *EntityPool {
+	return &EntityPool{
+		pool: sync.Pool{New: func() interface{} { return &Entity{} }},
+		std:  std,
 	}
 }
 
-func (p *entityPool) build(level Level, msg string) *entity {
-	e := p.pool.Get().(*entity)
+func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
+	e := p.pool.Get().(*Entity)
 	e.pool = p
 
 	switch level {
 	case DebugLevel:
-		e.color = gray
+		e.Color = gray
 	case WarnLevel:
-		e.color = yellow
+		e.Color = yellow
 	case ErrorLevel, FatalLevel, PanicLevel:
-		e.color = red
+		e.Color = red
 	case InfoLevel:
-		e.color = blue
+		e.Color = blue
 	default:
-		e.color = blue
+		e.Color = blue
 	}
 
-	e.level = level.String()[:4]
-	e.time = time.Now().Format(p.timestampFormat)
-	e.message = strings.TrimRight(msg, "\n")
+	var msg string
+	if c := len(a); c > 0 {
+		msg = fmt.Sprintf(strings.TrimRight(strings.Repeat("%v ", c), " "), a...)
+	}
 
-	if p.stackLevel != 0 && level >= p.stackLevel {
-		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFull)
-		e.caller = p.framesToCaller(e.frames)
+	e.Level = level
+	e.Time = time.Now().Format(p.std.opts.timestampFormat)
+	e.Message = strings.TrimRight(msg, "\n")
+
+	if p.std.opts.stackLevel != 0 && level >= p.std.opts.stackLevel {
+		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFull)
+		e.Caller = p.framesToCaller(e.Frames)
 	} else {
-		e.frames = GetFrames(3+e.pool.callerSkip, StacktraceFirst)
-		e.caller = p.framesToCaller(e.frames)
-		e.frames = nil
+		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFirst)
+		e.Caller = p.framesToCaller(e.Frames)
+		e.Frames = nil
 	}
 
 	return e
 }
 
-func (p *entityPool) framesToCaller(frames []runtime.Frame) string {
+func (p *EntityPool) framesToCaller(frames []runtime.Frame) string {
 	if len(frames) == 0 {
 		return ""
 	}
 
 	file := frames[0].File
-	if p.callerFormat == CallerShortPath {
+	if p.std.opts.callerFormat == CallerShortPath {
 		_, file = filepath.Split(file)
 	}
 
 	return fmt.Sprintf("%s:%d", file, frames[0].Line)
 }
 
-type entity struct {
-	color   int
-	level   string
-	time    string
-	caller  string
-	message string
-	frames  []runtime.Frame
-	pool    *entityPool
+type Entity struct {
+	Color   int
+	Level   Level
+	Time    string
+	Caller  string
+	Message string
+	Frames  []runtime.Frame
+	pool    *EntityPool
 }
 
-func (e *entity) free() {
-	e.color = 0
-	e.level = ""
-	e.time = ""
-	e.caller = ""
-	e.message = ""
-	e.frames = nil
+func (e *Entity) Free() {
+	e.Color = 0
+	e.Level = 0
+	e.Time = ""
+	e.Caller = ""
+	e.Message = ""
+	e.Frames = nil
 	e.pool.pool.Put(e)
+}
+
+func (e *Entity) Log() {
+	defer e.Free()
+
+	if e.Level < e.pool.std.opts.outLevel {
+		return
+	}
+
+	buffers := make(map[bool][]byte, 2)
+	for _, s := range e.pool.std.syncers {
+		if !s.enabler(e.Level) {
+			continue
+		}
+		b, ok := buffers[s.terminal]
+		if !ok {
+			b = e.pool.std.formatter.format(e, s.terminal)
+			buffers[s.terminal] = b
+		}
+		s.writer.Write(b)
+	}
 }
