@@ -17,9 +17,9 @@ import (
 func TestNewLogger(t *testing.T) {
 	l := tencent.NewLogger(
 		tencent.WithEndpoint("ap-guangzhou.cls.tencentcs.com"),
-		tencent.WithAccessKeyID("AKIDe8QUJtJpCRaWExSs7B1d3GEzWqwMbcOw"),
-		tencent.WithAccessKeySecret("NVP4UgiV3NT3PXQ6XjhRwCE10kGXaOxJ"),
-		tencent.WithTopicID("ff3fd9ba-360e-4cb9-8066-229c2290b213"),
+		tencent.WithAccessKeyID(""),
+		tencent.WithAccessKeySecret(""),
+		tencent.WithTopicID(""),
 		tencent.WithStackLevel(log.InfoLevel),
 	)
 	defer l.Close()
