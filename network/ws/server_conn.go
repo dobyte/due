@@ -104,7 +104,7 @@ func (c *serverConn) State() network.ConnState {
 	return network.ConnState(atomic.LoadInt32(&c.state))
 }
 
-// Close 关闭连接
+// Close 关闭连接（主动关闭）
 func (c *serverConn) Close(isForce ...bool) error {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -123,20 +123,38 @@ func (c *serverConn) Close(isForce ...bool) error {
 
 	close(c.chWrite)
 
-	err := c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		return err
+	}
 	c.conn = nil
 	c.connMgr.recycle(c)
-
-	return err
-}
-
-// 关闭连接
-func (c *serverConn) close() {
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
+
+	return nil
+}
+
+// 关闭连接（被动关闭）
+func (c *serverConn) close() {
+	c.rw.Lock()
+	defer c.rw.Unlock()
+
+	if err := c.checkState(); err != nil {
+		return
+	}
+
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+
+	close(c.chWrite)
+
+	if c.connMgr.server.disconnectHandler != nil {
+		c.connMgr.server.disconnectHandler(c)
+	}
+
+	c.conn = nil
+	c.connMgr.recycle(c)
 }
 
 // LocalIP 获取本地IP
@@ -216,12 +234,11 @@ func (c *serverConn) checkState() error {
 
 // 读取消息
 func (c *serverConn) read() {
-	defer c.close()
-
 	for {
 		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
-			break
+			c.close()
+			return
 		}
 
 		atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
@@ -267,8 +284,8 @@ func (c *serverConn) write() {
 		case <-ticker.C:
 			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				_ = c.Close(true)
 				log.Warnf("connection heartbeat timeout")
+				_ = c.Close(true)
 				return
 			}
 		}

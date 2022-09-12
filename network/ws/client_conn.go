@@ -115,7 +115,7 @@ func (c *clientConn) State() network.ConnState {
 	return network.ConnState(atomic.LoadInt32(&c.state))
 }
 
-// Close 关闭连接
+// Close 关闭连接（主动关闭）
 func (c *clientConn) Close(isForce ...bool) error {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -134,7 +134,33 @@ func (c *clientConn) Close(isForce ...bool) error {
 
 	close(c.chWrite)
 
-	return c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		return err
+	}
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
+
+	return nil
+}
+
+// 关闭连接（被动关闭）
+func (c *clientConn) close() {
+	c.rw.Lock()
+	defer c.rw.Unlock()
+
+	if err := c.checkState(); err != nil {
+		return
+	}
+
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+
+	close(c.chWrite)
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
 }
 
 // LocalIP 获取本地IP
@@ -181,15 +207,6 @@ func (c *clientConn) RemoteAddr() (net.Addr, error) {
 	return c.conn.RemoteAddr(), nil
 }
 
-// 关闭连接
-func (c *clientConn) close() {
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
-	}
-}
-
 // 检测连接状态
 func (c *clientConn) checkState() error {
 	switch network.ConnState(atomic.LoadInt32(&c.state)) {
@@ -204,12 +221,11 @@ func (c *clientConn) checkState() error {
 
 // 读取消息
 func (c *clientConn) read() {
-	defer c.close()
-
 	for {
 		msgType, buf, err := c.conn.ReadMessage()
 		if err != nil {
-			break
+			c.close()
+			return
 		}
 
 		switch c.State() {
