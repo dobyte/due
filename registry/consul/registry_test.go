@@ -22,7 +22,7 @@ func TestServe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	
 	go func(ls net.Listener) {
 		for {
 			conn, err := ls.Accept()
@@ -36,7 +36,7 @@ func TestServe(t *testing.T) {
 			}
 		}
 	}(ls)
-
+	
 	select {}
 }
 
@@ -45,15 +45,15 @@ func TestRegistry_Register1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if err = reg.Register(&registry.ServiceInstance{
+	
+	if err = reg.Register(context.Background(), &registry.ServiceInstance{
 		ID:       "test-1",
 		Name:     serviceName,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}); err != nil {
 		t.Fatal(err)
 	}
-
+	
 	select {}
 }
 
@@ -62,15 +62,15 @@ func TestRegistry_Register2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if err = reg.Register(&registry.ServiceInstance{
+	
+	if err = reg.Register(context.Background(), &registry.ServiceInstance{
 		ID:       "test-2",
 		Name:     serviceName,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}); err != nil {
 		t.Fatal(err)
 	}
-
+	
 	select {}
 }
 
@@ -79,7 +79,7 @@ func TestRegistry_Services(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	
 	for _, service := range services {
 		t.Logf("%+v", service)
 	}
@@ -90,13 +90,13 @@ func TestRegistry_Watch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	
 	for {
 		services, err := watcher.Next()
 		if err != nil {
 			t.Error(err)
 		}
-
+		
 		for _, service := range services {
 			t.Logf("%+v", service)
 		}
