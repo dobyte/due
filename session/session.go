@@ -72,6 +72,14 @@ func (s *Session) Bind(uid int64) {
 	}
 }
 
+// Close 关闭会话
+func (s *Session) Close(isForce ...bool) error {
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
+	return s.conn.Close(isForce...)
+}
+
 // LocalIP 获取本地IP
 func (s *Session) LocalIP() (string, error) {
 	return s.conn.LocalIP()

@@ -1,5 +1,6 @@
 # due
 
+[![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -55,16 +56,50 @@ tcp协议格式：
 3. 默认使用小端序编码。
 4. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，默认使用小端序编码。
 
-### 5.快速开始
+### 5.心跳
+
+很意外，在due框架中，我们并没有采用0号路由来作为默认的心跳包来检测，默认我们采用的空包作为心跳检测包。
+
+> 设计初衷：不想心跳检测侵入到业务路由层，哪怕是特殊的0号路由。
+
+ws心跳包格式：
+```go
+[]byte
+```
+
+tcp心跳包格式：
+```
+-------
+| len |
+-------
+|  0  |
+-------
+```
+
+说明：
+
+1. ws协议心跳包默认为空bytes。
+2. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，包长度固定为0。
+
+### 6.快速开始
 
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
 
-0.下载框架
+0.启动组件
+```shell
+docker-compose up
+```
+> docker-compose.yaml文件已在docker目录中备好，可以直接取用
+
+1.获取框架
+
 ```shell
 go get github.com/dobyte/due@latest
+go get github.com/dobyte/due/network/ws@latest
+go get github.com/dobyte/due/registry/consul@latest
 ```
 
-1.构建Gate服务器
+2.构建Gate服务器
 
 ```go
 package main
@@ -177,8 +212,6 @@ func greetHandler(req node.Request) {
 package main
 
 import (
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
 	"github.com/dobyte/due/network/ws"
@@ -186,16 +219,14 @@ import (
 )
 
 var (
-	codec    encoding.Codec
 	handlers map[int32]handlerFunc
 )
 
 type handlerFunc func(conn network.Conn, buffer []byte)
 
 func init() {
-	codec = encoding.Invoke(proto.Name)
 	handlers = map[int32]handlerFunc{
-		1:   greetHandler,
+		1: greetHandler,
 	}
 }
 
@@ -236,7 +267,7 @@ func main() {
 }
 
 func greetHandler(conn network.Conn, buffer []byte) {
-	log.Errorf("%s" , string(buffer))
+	log.Infof("received message from server: %s", string(buffer))
 }
 
 func push(conn network.Conn, route int32, buffer []byte) error {
@@ -254,4 +285,4 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 
 ### 6.详细示例
 
-更多详细示例请点击[example](example/)
+更多详细示例请点击[due-example](https://github.com/dobyte/due-example)

@@ -1,20 +1,18 @@
 package log
 
 import (
-	"log"
+	"sync"
 )
 
-var defaultLogger Logger
-
 type Logger interface {
-	// Info 打印信息日志
-	Info(a ...interface{})
-	// Infof 打印信息模板日志
-	Infof(format string, a ...interface{})
 	// Debug 打印调试日志
 	Debug(a ...interface{})
 	// Debugf 打印调试模板日志
 	Debugf(format string, a ...interface{})
+	// Info 打印信息日志
+	Info(a ...interface{})
+	// Infof 打印信息模板日志
+	Infof(format string, a ...interface{})
 	// Warn 打印警告日志
 	Warn(a ...interface{})
 	// Warnf 打印警告模板日志
@@ -27,70 +25,105 @@ type Logger interface {
 	Fatal(a ...interface{})
 	// Fatalf 打印致命错误模板日志
 	Fatalf(format string, a ...interface{})
+	// Panic 打印Panic日志
+	Panic(a ...interface{})
+	// Panicf 打印Panic模板日志
+	Panicf(format string, a ...interface{})
 }
+
+var defaultLogger = &globalLogger{}
 
 func init() {
 	SetLogger(NewLogger(
-		WithWriter(log.Writer()),
+		WithOutFile("./log/due.log"),
+		WithCallerSkip(1),
 	))
+}
+
+type globalLogger struct {
+	rw     sync.RWMutex
+	logger Logger
+}
+
+// 设置
+func (l *globalLogger) SetLogger(logger Logger) {
+	l.rw.Lock()
+	defer l.rw.Unlock()
+	l.logger = logger
+}
+
+func (l *globalLogger) GetLogger() Logger {
+	l.rw.RLock()
+	defer l.rw.RUnlock()
+	return l.logger
 }
 
 // SetLogger 设置日志记录器
 func SetLogger(logger Logger) {
-	defaultLogger = logger
+	defaultLogger.SetLogger(logger)
 }
 
 // GetLogger 获取日志记录器
 func GetLogger() Logger {
-	return defaultLogger
-}
-
-// Info 打印信息日志
-func Info(a ...interface{}) {
-	defaultLogger.Info(a...)
-}
-
-// Infof 打印信息模板日志
-func Infof(format string, a ...interface{}) {
-	defaultLogger.Infof(format, a...)
+	return defaultLogger.GetLogger()
 }
 
 // Debug 打印调试日志
 func Debug(a ...interface{}) {
-	defaultLogger.Debug(a...)
+	GetLogger().Debug(a...)
 }
 
 // Debugf 打印调试模板日志
 func Debugf(format string, a ...interface{}) {
-	defaultLogger.Debugf(format, a...)
+	GetLogger().Debugf(format, a...)
+}
+
+// Info 打印信息日志
+func Info(a ...interface{}) {
+	GetLogger().Info(a...)
+}
+
+// Infof 打印信息模板日志
+func Infof(format string, a ...interface{}) {
+	GetLogger().Infof(format, a...)
 }
 
 // Warn 打印警告日志
 func Warn(a ...interface{}) {
-	defaultLogger.Warn(a...)
+	GetLogger().Warn(a...)
 }
 
 // Warnf 打印警告模板日志
 func Warnf(format string, a ...interface{}) {
-	defaultLogger.Warnf(format, a...)
+	GetLogger().Warnf(format, a...)
 }
 
 // Error 打印错误日志
 func Error(a ...interface{}) {
-	defaultLogger.Error(a...)
+	GetLogger().Error(a...)
 }
 
 // Errorf 打印错误模板日志
 func Errorf(format string, a ...interface{}) {
-	defaultLogger.Errorf(format, a...)
+	GetLogger().Errorf(format, a...)
 }
 
 // Fatal 打印致命错误日志
 func Fatal(a ...interface{}) {
-	defaultLogger.Fatal(a...)
+	GetLogger().Fatal(a...)
 }
 
 // Fatalf 打印致命错误模板日志
 func Fatalf(format string, a ...interface{}) {
-	defaultLogger.Fatalf(format, a...)
+	GetLogger().Fatalf(format, a...)
+}
+
+// Panic 打印Panic日志
+func Panic(a ...interface{}) {
+	GetLogger().Panic(a...)
+}
+
+// Fatalf 打印Panic模板日志
+func Panicf(format string, a ...interface{}) {
+	GetLogger().Panicf(format, a...)
 }

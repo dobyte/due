@@ -2,14 +2,14 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/cluster/internal/pb"
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/router"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -44,17 +44,18 @@ type eventEntity struct {
 
 type Node struct {
 	component.Base
-	opts      *options
-	ctx       context.Context
-	cancel    context.CancelFunc
-	chEvent   chan *eventEntity
-	chRequest chan *request
-	rw        sync.RWMutex
-	routes    map[int32]routeEntity
-	events    map[cluster.Event]EventHandler
-	proxy     *proxy
-	router    *router.Router
-	instance  *registry.ServiceInstance
+	opts                *options
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	chEvent             chan *eventEntity
+	chRequest           chan *request
+	rw                  sync.RWMutex
+	routes              map[int32]routeEntity
+	defaultRouteHandler RouteHandler
+	events              map[cluster.Event]EventHandler
+	proxy               *proxy
+	router              *router.Router
+	instance            *registry.ServiceInstance
 }
 
 func NewNode(opts ...Option) *Node {
@@ -104,6 +105,10 @@ func (n *Node) Name() string {
 // Init 初始化节点
 func (n *Node) Init() {
 	n.buildInstance()
+
+	n.registerInstance()
+
+	n.watchInstance()
 }
 
 // Start 启动节点
@@ -114,8 +119,6 @@ func (n *Node) Start() {
 
 	n.dispatch()
 
-	n.registry()
-
 	n.debugPrint()
 }
 
@@ -124,9 +127,11 @@ func (n *Node) Destroy() {
 	close(n.chEvent)
 	close(n.chRequest)
 
-	n.cancel()
-
 	n.stopGRPC()
+
+	n.deregisterInstance()
+
+	n.cancel()
 }
 
 // Proxy 获取节点代理
@@ -159,12 +164,14 @@ func (n *Node) dispatch() {
 				n.rw.RLock()
 				route, ok := n.routes[req.route]
 				n.rw.RUnlock()
-				if !ok {
-					log.Warnf("message routing does not register handler function, route: %v", req.route)
-					continue
-				}
 
-				route.handler(req)
+				if ok {
+					route.handler(req)
+				} else if n.defaultRouteHandler != nil {
+					n.defaultRouteHandler(req)
+				} else {
+					log.Warnf("message routing does not register handler function, route: %v", req.route)
+				}
 			}
 		}
 	}()
@@ -182,10 +189,6 @@ func (n *Node) startGRPC() {
 
 // 停止GRPC服务
 func (n *Node) stopGRPC() {
-	if err := n.opts.registry.Deregister(n.instance); err != nil {
-		log.Errorf("the node service instance deregister failed: %v", err)
-	}
-
 	if err := n.opts.grpc.Stop(); err != nil {
 		log.Errorf("the grpc server stop failed: %v", err)
 	}
@@ -197,18 +200,45 @@ func (n *Node) startProxy() {
 }
 
 // 注册服务实例
-func (n *Node) registry() {
-	if err := n.opts.registry.Register(n.instance); err != nil {
+func (n *Node) registerInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	if err := n.opts.registry.Register(ctx, n.instance); err != nil {
 		log.Fatalf("the node service instance register failed: %v", err)
 	}
+}
 
-	watcher, err := n.opts.registry.Watch(context.Background(), string(cluster.Gate))
+// 解注册服务实例
+func (n *Node) deregisterInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	if err := n.opts.registry.Deregister(ctx, n.instance); err != nil {
+		log.Errorf("the node service instance deregister failed: %v", err)
+	}
+}
+
+// 监听服务实例
+func (n *Node) watchInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	watcher, err := n.opts.registry.Watch(ctx, string(cluster.Gate))
 	if err != nil {
 		log.Fatalf("the gate service watch failed: %v", err)
 	}
 
 	go func() {
+		defer watcher.Stop()
+
 		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			default:
+				// exec watch
+			}
 			services, err := watcher.Next()
 			if err != nil {
 				continue
@@ -240,7 +270,7 @@ func (n *Node) buildInstance() {
 }
 
 // 添加路由处理器
-func (n *Node) addRoute(route int32, stateful bool, handler RouteHandler) {
+func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
@@ -256,8 +286,11 @@ func (n *Node) isStatefulRoute(route int32) (bool, bool) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
-	entity, ok := n.routes[route]
-	return entity.stateful, ok
+	if entity, ok := n.routes[route]; ok {
+		return entity.stateful, ok
+	}
+
+	return false, n.defaultRouteHandler != nil
 }
 
 // 添加事件处理器
@@ -288,9 +321,6 @@ func (n *Node) deliver(gid, nid string, cid, uid int64, route int32, buffer inte
 }
 
 func (n *Node) debugPrint() {
-	if !due.IsDebugMode() {
-		return
-	}
 	log.Debugf("The node server startup successful")
 	log.Debugf("GRPC server, listen: %s protocol: %s", xnet.FulfillAddr(n.opts.grpc.Addr()), n.opts.grpc.Scheme())
 }

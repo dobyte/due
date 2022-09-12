@@ -4,9 +4,9 @@ import "context"
 
 type Registry interface {
 	// Register 注册服务实例
-	Register(ins *ServiceInstance) error
+	Register(ctx context.Context, ins *ServiceInstance) error
 	// Deregister 解注册服务实例
-	Deregister(ins *ServiceInstance) error
+	Deregister(ctx context.Context, ins *ServiceInstance) error
 	// Watch 监听相同服务名的服务实例变化
 	Watch(ctx context.Context, serviceName string) (Watcher, error)
 	// Services 获取服务实例列表

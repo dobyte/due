@@ -8,17 +8,26 @@
 package log_test
 
 import (
-	"log"
 	"testing"
 
-	log2 "github.com/dobyte/due/log"
+	"github.com/dobyte/due/log"
 )
 
 func TestNewLogger(t *testing.T) {
-	logger := log2.NewLogger(
-		log2.WithWriter(log.Writer()),
-		log2.WithFlag(log.Ldate|log.Lmicroseconds),
+	logger := log.NewLogger(
+		log.WithOutFile("./log/due.log"),
+		log.WithOutFormat(log.TextFormat),
+		log.WithStackLevel(log.ErrorLevel),
+		log.WithFileMaxSize(100*1024*1024),
+		log.WithEnableLeveledStorage(false),
+		//log.WithOutFile("./logs/due.log"),
+		//log.WithOutLevel(log.InfoLevel),
+		//log.WithOutFormat(log.TextFormat),
+		//log.WithStackLevel(log.ErrorLevel),
+		//log.WithFileMaxAge(100*1024*1024),
+		//log.WithTimestampFormat("2006/01/02 15:04:05.000000"),
+		//log.WithFileCutRule(log.CutByDay),
 	)
 
-	logger.Info("aaa", "bbb")
+	logger.Warn("aaa", "bbb")
 }

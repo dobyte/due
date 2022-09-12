@@ -3,6 +3,8 @@ package due
 import (
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/mode"
+
 	"os"
 	"os/signal"
 	"syscall"
@@ -56,7 +58,7 @@ func (c *Container) Close() {
 }
 
 func debugPrint() {
-	if !IsDebugMode() {
+	if !mode.IsDebugMode() {
 		return
 	}
 

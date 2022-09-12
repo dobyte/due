@@ -1,13 +1,14 @@
-package due_test
+package mode_test
 
 import (
 	"flag"
-	"github.com/dobyte/due"
 	"testing"
+
+	"github.com/dobyte/due/mode"
 )
 
 func TestGetMode(t *testing.T) {
 	flag.Parse()
 
-	t.Log(due.GetMode())
+	t.Log(mode.GetMode())
 }

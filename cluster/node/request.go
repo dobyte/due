@@ -24,12 +24,22 @@ type Request interface {
 	UID() int64
 	// Route 获取路由
 	Route() int32
+	// Buffer 获取数据
+	Buffer() interface{}
 	// Parse 解析请求
 	Parse(v interface{}) error
 	// Context 获取上线文
 	Context() context.Context
 	// Response 响应请求
 	Response(message interface{}) error
+	// BindGate 绑定网关
+	BindGate(uid int64) error
+	// UnbindGate 解绑网关
+	UnbindGate() error
+	// BindNode 绑定节点
+	BindNode() error
+	// UnbindNode 解绑节点
+	UnbindNode() error
 }
 
 // 请求数据
@@ -68,6 +78,11 @@ func (r *request) Route() int32 {
 	return r.route
 }
 
+// Buffer 获取数据
+func (r *request) Buffer() interface{} {
+	return r.buffer
+}
+
 // Parse 解析消息
 func (r *request) Parse(v interface{}) error {
 	if msg, ok := r.buffer.([]byte); ok {
@@ -90,4 +105,24 @@ func (r *request) Context() context.Context {
 // Response 响应请求
 func (r *request) Response(message interface{}) error {
 	return r.node.proxy.Response(r.Context(), r, message)
+}
+
+// BindGate 绑定网关
+func (r *request) BindGate(uid int64) error {
+	return r.node.proxy.BindGate(r.Context(), r.gid, r.cid, uid)
+}
+
+// UnbindGate 解绑网关
+func (r *request) UnbindGate() error {
+	return r.node.proxy.UnbindGate(r.Context(), r.uid)
+}
+
+// BindNode 绑定节点
+func (r *request) BindNode() error {
+	return r.node.proxy.BindNode(r.Context(), r.uid)
+}
+
+// UnbindNode 解绑节点
+func (r *request) UnbindNode() error {
+	return r.node.proxy.UnbindNode(r.Context(), r.uid)
 }

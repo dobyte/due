@@ -1,4 +1,4 @@
-package due
+package mode
 
 import (
 	"flag"
@@ -28,17 +28,15 @@ func init() {
 
 // SetMode 设置运行模式
 func SetMode(m string) {
-	if m == "" && dueMode == "" {
+	if m == "" {
 		m = DebugMode
-	} else {
-		return
 	}
 
 	switch m {
 	case DebugMode, TestMode, ReleaseMode:
 		dueMode = m
 	default:
-		panic("due mode unknown: " + m + " (available mode: debug release test)")
+		panic("due mode unknown: " + m + " (available mode: debug test release)")
 	}
 }
 

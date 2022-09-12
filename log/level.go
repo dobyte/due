@@ -1,19 +1,38 @@
 /**
  * @Author: fuxiao
  * @Email: 576101059@qq.com
- * @Date: 2022/7/13 1:45 上午
+ * @Date: 2022/9/8 10:37 上午
  * @Desc: TODO
  */
 
 package log
 
-//go:generate stringer -type Level -linecomment
+// 日志级别
+type Level int
+
 const (
-	LevelInfo  Level = iota + 1 // INFO
-	LevelDebug                  // DEBUG
-	LevelWarn                   // WARN
-	LevelError                  // ERROR
-	LevelFatal                  // FATAL
+	DebugLevel Level = iota + 1 // DEBUG
+	InfoLevel                   // INFO
+	WarnLevel                   // WARN
+	ErrorLevel                  // ERROR
+	FatalLevel                  // FATAL
+	PanicLevel                  // PANIC
 )
 
-type Level int
+func (l Level) String() string {
+	switch l {
+	case DebugLevel:
+		return "DEBUG"
+	case InfoLevel:
+		return "INFO"
+	case WarnLevel:
+		return "WARN"
+	case ErrorLevel:
+		return "ERROR"
+	case FatalLevel:
+		return "FATAL"
+	case PanicLevel:
+		return "PANIC"
+	}
+	return "UNKNOWN"
+}
