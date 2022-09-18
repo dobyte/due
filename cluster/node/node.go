@@ -97,7 +97,7 @@ func NewNode(opts ...Option) *Node {
 	return n
 }
 
-// Name 组件名称
+// Kind 组件名称
 func (n *Node) Name() string {
 	return n.opts.name
 }

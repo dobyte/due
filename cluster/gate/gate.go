@@ -83,7 +83,7 @@ func NewGate(opts ...Option) *Gate {
 	return g
 }
 
-// Name 组件名称
+// Kind 组件名称
 func (g *Gate) Name() string {
 	return g.opts.name
 }
