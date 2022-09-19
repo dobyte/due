@@ -5,7 +5,7 @@
  * @Desc: 定位用户所在网关和节点
  */
 
-package locate
+package locator
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type Locator interface {
 	// Set 设置用户定位
 	Set(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error
 	// Rem 移除用户定位
-	Rem(ctx context.Context, uid int64, insKind cluster.Kind) error
+	Rem(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error
 	// Watch 监听用户定位变化
 	Watch(ctx context.Context, insKinds ...cluster.Kind) (Watcher, error)
 }
