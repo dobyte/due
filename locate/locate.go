@@ -14,18 +14,18 @@ import (
 )
 
 type Locator interface {
-	// 获取用户定位
+	// Get 获取用户定位
 	Get(ctx context.Context, uid int64, insKind cluster.Kind) (string, error)
-	// 设置用户定位
+	// Set 设置用户定位
 	Set(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error
-	// 移除用户定位
+	// Rem 移除用户定位
 	Rem(ctx context.Context, uid int64, insKind cluster.Kind) error
-	// 监听用户定位变化
+	// Watch 监听用户定位变化
 	Watch(ctx context.Context, insKinds ...cluster.Kind) (Watcher, error)
 }
 
 type Watcher interface {
-	// 返回用户位置列表
+	// Next 返回用户位置列表
 	Next() ([]*Event, error)
 	// Stop 停止监听
 	Stop() error
