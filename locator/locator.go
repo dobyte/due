@@ -9,7 +9,6 @@ package locator
 
 import (
 	"context"
-
 	"github.com/dobyte/due/cluster"
 )
 

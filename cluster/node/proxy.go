@@ -3,16 +3,12 @@ package node
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/enum"
-	"strconv"
-	"strings"
+	"github.com/dobyte/due/locator"
 	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
@@ -22,7 +18,6 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/third/redis"
 )
 
 var (
@@ -34,9 +29,6 @@ var (
 )
 
 type Proxy interface {
-	// AddRoute 添加路由
-	// DEPRECATED: Use AddRouteHandler instead.
-	AddRoute(route int32, stateful bool, handler RouteHandler)
 	// AddRouteHandler 添加路由处理器
 	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -70,25 +62,13 @@ type Proxy interface {
 }
 
 type proxy struct {
-	node       *Node              // 节点
-	kind       string             // 代理类型
-	sourceGate sync.Map           // 用户来源网关
-	sourceNode sync.Map           // 用户来源节点
-	sfgGate    singleflight.Group // singleFlight
-	sfgNode    singleflight.Group // singleFlight
+	node       *Node    // 节点
+	sourceGate sync.Map // 用户来源网关
+	sourceNode sync.Map // 用户来源节点
 }
 
 func newProxy(node *Node) *proxy {
-	return &proxy{
-		node: node,
-		kind: string(cluster.Node),
-	}
-}
-
-// AddRoute 添加路由
-// DEPRECATED: Use AddRouteHandler instead.
-func (p *proxy) AddRoute(route int32, stateful bool, handler RouteHandler) {
-	p.node.addRouteHandler(route, stateful, handler)
+	return &proxy{node: node}
 }
 
 // AddRouteHandler 添加路由处理器
@@ -145,30 +125,24 @@ func (p *proxy) UnbindGate(ctx context.Context, uid int64) error {
 
 // BindNode 绑定节点
 func (p *proxy) BindNode(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.node.opts.redis.HSet(ctx, key, string(cluster.Node), p.node.opts.id).Err()
+	err := p.node.opts.locator.Set(ctx, uid, cluster.Node, p.node.opts.id)
 	if err != nil {
 		return err
 	}
 
 	p.sourceNode.Store(uid, p.node.opts.id)
 
-	p.synchronize(ctx, uid, enum.BindAction)
-
 	return nil
 }
 
 // UnbindNode 解绑节点
 func (p *proxy) UnbindNode(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.node.opts.redis.HDel(ctx, key, string(cluster.Node)).Err()
+	err := p.node.opts.locator.Rem(ctx, uid, cluster.Node, p.node.opts.id)
 	if err != nil {
 		return err
 	}
 
 	p.sourceNode.Delete(uid)
-
-	p.synchronize(ctx, uid, enum.UnbindAction)
 
 	return nil
 }
@@ -181,26 +155,18 @@ func (p *proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 		}
 	}
 
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	val, err, _ := p.sfgGate.Do(key+string(cluster.Gate), func() (interface{}, error) {
-		val, err := p.node.opts.redis.HGet(ctx, key, string(cluster.Gate)).Result()
-		if err != nil && err != redis.Nil {
-			return "", err
-		}
-
-		if val == "" {
-			return "", ErrNotFoundUserSource
-		}
-
-		p.sourceGate.Store(uid, val)
-
-		return val, nil
-	})
+	gid, err := p.node.opts.locator.Get(ctx, uid, cluster.Gate)
 	if err != nil {
 		return "", err
 	}
 
-	return val.(string), nil
+	if gid == "" {
+		return "", ErrNotFoundUserSource
+	}
+
+	p.sourceGate.Store(uid, gid)
+
+	return gid, nil
 }
 
 // LocateNode 定位用户所在节点
@@ -211,26 +177,18 @@ func (p *proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
 		}
 	}
 
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	val, err, _ := p.sfgNode.Do(key+string(cluster.Node), func() (interface{}, error) {
-		val, err := p.node.opts.redis.HGet(ctx, key, string(cluster.Node)).Result()
-		if err != nil && err != redis.Nil {
-			return "", err
-		}
-
-		if val == "" {
-			return "", ErrNotFoundUserSource
-		}
-
-		p.sourceNode.Store(uid, val)
-
-		return val, nil
-	})
+	nid, err := p.node.opts.locator.Get(ctx, uid, cluster.Node)
 	if err != nil {
 		return "", err
 	}
 
-	return val.(string), nil
+	if nid == "" {
+		return "", ErrNotFoundUserSource
+	}
+
+	p.sourceNode.Store(uid, nid)
+
+	return nid, nil
 }
 
 // GetIP 获取客户端IP
@@ -694,54 +652,47 @@ func (p *proxy) newNodeClient(ep *router.Endpoint) (pb.NodeClient, error) {
 	return pb.NewNodeClient(conn), nil
 }
 
-// 同步
-func (p *proxy) synchronize(ctx context.Context, uid int64, action string) {
-	msg := fmt.Sprintf("%d@%s@%s@%s", uid, p.kind, p.node.opts.id, action)
-	channel := fmt.Sprintf(enum.UserSourcesBroadcastKey, p.kind)
-	err := p.node.opts.redis.Publish(ctx, channel, msg).Err()
+// 启动代理
+func (p *proxy) watch(ctx context.Context) {
+	watcher, err := p.node.opts.locator.Watch(ctx, cluster.Gate, cluster.Node)
 	if err != nil {
-		log.Errorf("the user source broadcast failed: %v", err)
+		log.Fatalf("user locate event watch failed: %v", err)
 	}
-}
 
-// 监听
-func (p *proxy) listen(ctx context.Context) {
-	channels := []string{
-		fmt.Sprintf(enum.UserSourcesBroadcastKey, string(cluster.Node)),
-		fmt.Sprintf(enum.UserSourcesBroadcastKey, string(cluster.Gate)),
-	}
-	sub := p.node.opts.redis.Subscribe(ctx, channels...)
+	go func() {
+		defer watcher.Stop()
 
-	for {
-		iface, err := sub.Receive(ctx)
-		if err != nil {
-			return
-		}
-
-		switch v := iface.(type) {
-		case *redis.Subscription:
-			log.Debugf("channel subscribe succeeded, %s", v.Channel)
-		case *redis.Message:
-			slice := strings.Split(v.Payload, "@")
-			if len(slice) != 4 {
-				log.Errorf("invalid synchronize payload, %s", v.Payload)
-				continue
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// exec watch
 			}
-
-			uid, err := strconv.ParseInt(slice[0], 10, 64)
+			events, err := watcher.Next()
 			if err != nil {
-				log.Errorf("invalid synchronize payload, %s", v.Payload)
 				continue
 			}
+			for _, event := range events {
+				var source *sync.Map
+				switch event.InsKind {
+				case cluster.Gate:
+					source = &p.sourceGate
+				case cluster.Node:
+					source = &p.sourceNode
+				}
 
-			switch slice[3] {
-			case enum.BindAction:
-				p.sourceGate.Store(uid, slice[2])
-			case enum.UnbindAction:
-				p.sourceGate.Delete(uid)
+				if source == nil {
+					continue
+				}
+
+				switch event.Type {
+				case locator.SetLocation:
+					source.Store(event.UID, event.InsID)
+				case locator.RemLocation:
+					source.Delete(event.UID)
+				}
 			}
-		default:
-			// handle error
 		}
-	}
+	}()
 }
