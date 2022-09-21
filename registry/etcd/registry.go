@@ -66,9 +66,9 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	_, ok := r.registrars.Load(ins.ID)
+	v, ok := r.registrars.Load(ins.ID)
 	if ok {
-		return nil
+		return v.(*registrar).register(ctx, ins)
 	}
 
 	reg := newRegistrar(r)
@@ -93,7 +93,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Name, ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Kind.String(), ins.ID)
 	_, err := r.opts.client.Delete(ctx, key)
 
 	return err

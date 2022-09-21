@@ -10,9 +10,8 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"time"
-
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"time"
 
 	"github.com/dobyte/due/registry"
 )
@@ -23,6 +22,9 @@ type registrar struct {
 	cancel   context.CancelFunc
 	kv       clientv3.KV
 	lease    clientv3.Lease
+	leaseID  int64
+	key      string
+	value    string
 }
 
 func newRegistrar(registry *Registry) *registrar {
@@ -42,7 +44,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
 
 	leaseID, err := r.put(ctx, key, value)
 	if err != nil {
@@ -60,7 +62,7 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 
 	r.registry.registrars.Delete(ins.ID)
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
 	_, err = r.kv.Delete(ctx, key)
 
 	if r.lease != nil {
@@ -72,7 +74,7 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 
 // 写入KV
 func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseID, error) {
-	res, err := r.lease.Grant(ctx, 5)
+	res, err := r.lease.Grant(ctx, int64(r.registry.opts.retryInterval.Seconds())+1)
 	if err != nil {
 		return 0, err
 	}
@@ -89,25 +91,26 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 func (r *registrar) heartbeat(leaseID clientv3.LeaseID, key, value string) {
 	chKA, err := r.lease.KeepAlive(r.ctx, leaseID)
 	ok := err == nil
-
+	fmt.Println(ok)
 	for {
 		if !ok {
 			for i := 0; i < r.registry.opts.retryTimes; i++ {
 				if r.ctx.Err() != nil {
+					fmt.Println("done1")
 					return
 				}
-
-				time.Sleep(r.registry.opts.retryInterval)
 
 				ctx, cancel := context.WithTimeout(r.ctx, r.registry.opts.timeout)
 				leaseID, err = r.put(ctx, key, value)
 				cancel()
 				if err != nil {
+					time.Sleep(r.registry.opts.retryInterval)
 					continue
 				}
 
-				chKA, err = r.lease.KeepAlive(r.ctx, leaseID)
+				chKA, err = r.lease.KeepAlive(ctx, leaseID)
 				if err != nil {
+					time.Sleep(r.registry.opts.retryInterval)
 					continue
 				}
 
@@ -129,6 +132,7 @@ func (r *registrar) heartbeat(leaseID clientv3.LeaseID, key, value string) {
 				continue
 			}
 		case <-r.ctx.Done():
+			fmt.Println("done2")
 			return
 		}
 	}

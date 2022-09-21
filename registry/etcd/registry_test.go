@@ -10,6 +10,7 @@ package etcd_test
 import (
 	"context"
 	"fmt"
+	"github.com/dobyte/due/cluster"
 	"testing"
 	"time"
 
@@ -34,7 +35,9 @@ func TestRegistry_Register1(t *testing.T) {
 	ctx := context.Background()
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
-		Name:     serviceName,
+		Name:     "login-server",
+		Kind:     cluster.Node,
+		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
@@ -47,13 +50,23 @@ func TestRegistry_Register1(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
+	ins.State = cluster.Busy
+	rctx, rcancel = context.WithTimeout(context.Background(), 2*time.Second)
+	err = reg.Register(rctx, ins)
+	rcancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(20 * time.Second)
+
 	if err = reg.Deregister(ctx, ins); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Log("deregister")
 	}
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(40 * time.Second)
 }
 
 func TestRegistry_Register2(t *testing.T) {
@@ -64,7 +77,9 @@ func TestRegistry_Register2(t *testing.T) {
 
 	if err = reg.Register(context.Background(), &registry.ServiceInstance{
 		ID:       "test-2",
-		Name:     serviceName,
+		Name:     "game-server",
+		Kind:     cluster.Node,
+		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}); err != nil {
 		t.Fatal(err)
@@ -143,5 +158,5 @@ func TestRegistry_Watch(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(60 * time.Second)
 }
