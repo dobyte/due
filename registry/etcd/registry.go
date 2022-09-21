@@ -26,7 +26,7 @@ type Registry struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	opts       *options
-	client     *clientv3.Client
+	builtin    bool
 	watchers   sync.Map
 	registrars sync.Map
 }
@@ -48,10 +48,14 @@ func NewRegistry(opts ...Option) *Registry {
 	r := &Registry{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
-	r.client, r.err = clientv3.New(clientv3.Config{
-		Endpoints:   o.addrs,
-		DialTimeout: o.dialTimeout,
-	})
+
+	if o.client == nil {
+		r.builtin = true
+		o.client, r.err = clientv3.New(clientv3.Config{
+			Endpoints:   o.addrs,
+			DialTimeout: o.dialTimeout,
+		})
+	}
 
 	return r
 }
@@ -67,13 +71,13 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return nil
 	}
 
-	registrar := newRegistrar(r)
+	reg := newRegistrar(r)
 
-	if err := registrar.register(ctx, ins); err != nil {
+	if err := reg.register(ctx, ins); err != nil {
 		return err
 	}
 
-	r.registrars.Store(ins.ID, registrar)
+	r.registrars.Store(ins.ID, reg)
 
 	return nil
 }
@@ -90,7 +94,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	}
 
 	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Name, ins.ID)
-	_, err := r.client.Delete(ctx, key)
+	_, err := r.opts.client.Delete(ctx, key)
 
 	return err
 }
@@ -136,14 +140,19 @@ func (r *Registry) Stop() error {
 	}
 
 	r.cancel()
-	return r.client.Close()
+
+	if r.builtin {
+		return r.opts.client.Close()
+	}
+
+	return nil
 }
 
 // 获取服务实例列表
 func (r *Registry) services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	key := fmt.Sprintf("/%s/%s", r.opts.namespace, serviceName)
 
-	res, err := r.client.Get(ctx, key, clientv3.WithPrefix())
+	res, err := r.opts.client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}

@@ -27,8 +27,8 @@ type registrar struct {
 
 func newRegistrar(registry *Registry) *registrar {
 	r := &registrar{}
-	r.kv = clientv3.NewKV(registry.client)
-	r.lease = clientv3.NewLease(registry.client)
+	r.kv = clientv3.NewKV(registry.opts.client)
+	r.lease = clientv3.NewLease(registry.opts.client)
 	r.ctx, r.cancel = context.WithCancel(registry.ctx)
 	r.registry = registry
 
@@ -62,6 +62,10 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 
 	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 	_, err = r.kv.Delete(ctx, key)
+
+	if r.lease != nil {
+		_ = r.lease.Close()
+	}
 
 	return
 }

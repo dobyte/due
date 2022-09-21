@@ -100,7 +100,7 @@ func newWatcherMgr(ctx context.Context, serviceName string, registry *Registry) 
 	w.ctx, w.cancel = context.WithCancel(registry.ctx)
 	w.registry = registry
 	w.serviceName = serviceName
-	w.watcher = clientv3.NewWatcher(registry.client)
+	w.watcher = clientv3.NewWatcher(registry.opts.client)
 	w.chWatch = w.watcher.Watch(w.ctx, fmt.Sprintf("/%s/%s", registry.opts.namespace, w.serviceName), clientv3.WithPrefix())
 	w.watchers = make(map[int64]*watcher)
 
