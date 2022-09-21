@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/registry"
 	"sync"
 	"sync/atomic"
 
@@ -40,13 +41,17 @@ type Proxy interface {
 	// UnbindGate 绑定网关
 	UnbindGate(ctx context.Context, uid int64) error
 	// BindNode 绑定节点
-	BindNode(ctx context.Context, uid int64) error
+	BindNode(ctx context.Context, uid int64, nid ...string) error
 	// UnbindNode 解绑节点
-	UnbindNode(ctx context.Context, uid int64) error
+	UnbindNode(ctx context.Context, uid int64, nid ...string) error
 	// LocateGate 定位用户所在网关
 	LocateGate(ctx context.Context, uid int64) (string, error)
 	// LocateNode 定位用户所在节点
 	LocateNode(ctx context.Context, uid int64) (string, error)
+	// FetchGateList 拉取网关列表
+	FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error)
+	// FetchNodeList 拉取节点列表
+	FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error)
 	// GetIP 获取客户端IP
 	GetIP(ctx context.Context, args *GetIPArgs) (string, error)
 	// Push 推送消息
@@ -124,20 +129,34 @@ func (p *proxy) UnbindGate(ctx context.Context, uid int64) error {
 }
 
 // BindNode 绑定节点
-func (p *proxy) BindNode(ctx context.Context, uid int64) error {
-	err := p.node.opts.locator.Set(ctx, uid, cluster.Node, p.node.opts.id)
+// 单个用户只能被绑定到某一台节点服务器上，多次绑定会直接覆盖上次绑定
+// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
+// nid 为需要绑定的节点ID，默认绑定到当前节点上
+func (p *proxy) BindNode(ctx context.Context, uid int64, nid ...string) error {
+	if len(nid) == 0 || nid[0] == "" {
+		nid = append(nid, p.node.opts.id)
+	}
+
+	err := p.node.opts.locator.Set(ctx, uid, cluster.Node, nid[0])
 	if err != nil {
 		return err
 	}
 
-	p.sourceNode.Store(uid, p.node.opts.id)
+	p.sourceNode.Store(uid, nid[0])
 
 	return nil
 }
 
 // UnbindNode 解绑节点
-func (p *proxy) UnbindNode(ctx context.Context, uid int64) error {
-	err := p.node.opts.locator.Rem(ctx, uid, cluster.Node, p.node.opts.id)
+// 解绑时会对解绑节点ID进行校验，不匹配则解绑失败
+// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
+// nid 为需要解绑的节点ID，默认解绑当前节点
+func (p *proxy) UnbindNode(ctx context.Context, uid int64, nid ...string) error {
+	if len(nid) == 0 || nid[0] == "" {
+		nid = append(nid, p.node.opts.id)
+	}
+
+	err := p.node.opts.locator.Rem(ctx, uid, cluster.Node, nid[0])
 	if err != nil {
 		return err
 	}
@@ -189,6 +208,42 @@ func (p *proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
 	p.sourceNode.Store(uid, nid)
 
 	return nid, nil
+}
+
+// FetchGateList 拉取网关列表
+func (p *proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.fetchInstanceList(ctx, cluster.Gate, states...)
+}
+
+// FetchNodeList 拉取节点列表
+func (p *proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.fetchInstanceList(ctx, cluster.Node, states...)
+}
+
+// 拉取实例列表
+func (p *proxy) fetchInstanceList(ctx context.Context, kind cluster.Kind, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	services, err := p.node.opts.registry.Services(ctx, kind.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if len(states) == 0 {
+		return services, nil
+	}
+
+	mp := make(map[cluster.State]bool, len(states))
+	for _, state := range states {
+		mp[state] = true
+	}
+
+	list := make([]*registry.ServiceInstance, 0, len(services))
+	for i := range services {
+		if mp[services[i].State] {
+			list = append(list, services[i])
+		}
+	}
+
+	return list, nil
 }
 
 // GetIP 获取客户端IP
