@@ -13,11 +13,6 @@ var (
 	ErrNotFoundEndpoint = errors.New("not found endpoint")
 )
 
-var (
-	once     sync.Once
-	instance *Router
-)
-
 type Router struct {
 	rw            sync.RWMutex
 	routes        map[int32]*Route              // 节点路由表
@@ -26,14 +21,11 @@ type Router struct {
 }
 
 func NewRouter() *Router {
-	once.Do(func() {
-		instance = &Router{
-			routes:        make(map[int32]*Route),
-			gateEndpoints: make(map[string]*endpoint.Endpoint),
-			nodeEndpoints: make(map[string]*endpoint.Endpoint),
-		}
-	})
-	return instance
+	return &Router{
+		routes:        make(map[int32]*Route),
+		gateEndpoints: make(map[string]*endpoint.Endpoint),
+		nodeEndpoints: make(map[string]*endpoint.Endpoint),
+	}
 }
 
 // ReplaceServices 替换服务实例
@@ -63,10 +55,10 @@ func (r *Router) RemoveService(service *registry.ServiceInstance) {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	switch cluster.Name(service.Name) {
-	case cluster.Gate:
+	switch service.Name {
+	case cluster.Gate.String():
 		delete(r.gateEndpoints, service.ID)
-	case cluster.Node:
+	case cluster.Node.String():
 		for _, item := range service.Routes {
 			if route, ok := r.routes[item.ID]; ok {
 				route.endpoints.Delete(service.ID)
@@ -82,10 +74,10 @@ func (r *Router) addService(service *registry.ServiceInstance) error {
 		return err
 	}
 
-	switch cluster.Name(service.Name) {
-	case cluster.Gate:
+	switch service.Name {
+	case cluster.Gate.String():
 		r.gateEndpoints[service.ID] = ep
-	case cluster.Node:
+	case cluster.Node.String():
 		r.nodeEndpoints[service.ID] = ep
 		for _, item := range service.Routes {
 			route, ok := r.routes[item.ID]
