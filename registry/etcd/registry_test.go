@@ -41,7 +41,7 @@ func TestRegistry_Register1(t *testing.T) {
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
-	rctx, rcancel := context.WithTimeout(context.Background(), 2*time.Second)
+	rctx, rcancel := context.WithTimeout(ctx, 2*time.Second)
 	err = reg.Register(rctx, ins)
 	rcancel()
 	if err != nil {
@@ -51,7 +51,7 @@ func TestRegistry_Register1(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	ins.State = cluster.Busy
-	rctx, rcancel = context.WithTimeout(context.Background(), 2*time.Second)
+	rctx, rcancel = context.WithTimeout(ctx, 2*time.Second)
 	err = reg.Register(rctx, ins)
 	rcancel()
 	if err != nil {
