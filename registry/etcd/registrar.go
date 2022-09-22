@@ -10,27 +10,59 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"time"
-
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"time"
 
 	"github.com/dobyte/due/registry"
 )
 
+type heartbeat struct {
+	leaseID clientv3.LeaseID
+	key     string
+	value   string
+}
+
 type registrar struct {
-	registry *Registry
-	ctx      context.Context
-	cancel   context.CancelFunc
-	kv       clientv3.KV
-	lease    clientv3.Lease
+	registry    *Registry
+	ctx         context.Context
+	cancel      context.CancelFunc
+	kv          clientv3.KV
+	lease       clientv3.Lease
+	chHeartbeat chan heartbeat
 }
 
 func newRegistrar(registry *Registry) *registrar {
 	r := &registrar{}
-	r.kv = clientv3.NewKV(registry.client)
-	r.lease = clientv3.NewLease(registry.client)
+	r.kv = clientv3.NewKV(registry.opts.client)
+	r.lease = clientv3.NewLease(registry.opts.client)
 	r.ctx, r.cancel = context.WithCancel(registry.ctx)
 	r.registry = registry
+	r.chHeartbeat = make(chan heartbeat)
+
+	go func() {
+		var (
+			ctx    context.Context
+			cancel context.CancelFunc
+		)
+
+		for {
+			select {
+			case heartbeat, ok := <-r.chHeartbeat:
+				if !ok {
+					return
+				}
+
+				if cancel != nil {
+					cancel()
+				}
+
+				ctx, cancel = context.WithCancel(r.ctx)
+				go r.heartbeat(ctx, heartbeat.leaseID, heartbeat.key, heartbeat.value)
+			case <-r.ctx.Done():
+				return
+			}
+		}
+	}()
 
 	return r
 }
@@ -42,14 +74,18 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
 
 	leaseID, err := r.put(ctx, key, value)
 	if err != nil {
 		return err
 	}
 
-	go r.heartbeat(leaseID, key, value)
+	r.chHeartbeat <- heartbeat{
+		leaseID: leaseID,
+		key:     key,
+		value:   value,
+	}
 
 	return nil
 }
@@ -57,18 +93,23 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 // 解注册服务
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) (err error) {
 	r.cancel()
+	close(r.chHeartbeat)
 
 	r.registry.registrars.Delete(ins.ID)
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
 	_, err = r.kv.Delete(ctx, key)
+
+	if r.lease != nil {
+		_ = r.lease.Close()
+	}
 
 	return
 }
 
 // 写入KV
 func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseID, error) {
-	res, err := r.lease.Grant(ctx, 5)
+	res, err := r.lease.Grant(ctx, int64(r.registry.opts.retryInterval.Seconds())+1)
 	if err != nil {
 		return 0, err
 	}
@@ -82,28 +123,28 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 }
 
 // 心跳
-func (r *registrar) heartbeat(leaseID clientv3.LeaseID, key, value string) {
-	chKA, err := r.lease.KeepAlive(r.ctx, leaseID)
+func (r *registrar) heartbeat(ctx context.Context, leaseID clientv3.LeaseID, key, value string) {
+	chKA, err := r.lease.KeepAlive(ctx, leaseID)
 	ok := err == nil
 
 	for {
 		if !ok {
 			for i := 0; i < r.registry.opts.retryTimes; i++ {
-				if r.ctx.Err() != nil {
+				if ctx.Err() != nil {
 					return
 				}
 
-				time.Sleep(r.registry.opts.retryInterval)
-
-				ctx, cancel := context.WithTimeout(r.ctx, r.registry.opts.timeout)
-				leaseID, err = r.put(ctx, key, value)
-				cancel()
+				pctx, pcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+				leaseID, err = r.put(pctx, key, value)
+				pcancel()
 				if err != nil {
+					time.Sleep(r.registry.opts.retryInterval)
 					continue
 				}
 
-				chKA, err = r.lease.KeepAlive(r.ctx, leaseID)
+				chKA, err = r.lease.KeepAlive(ctx, leaseID)
 				if err != nil {
+					time.Sleep(r.registry.opts.retryInterval)
 					continue
 				}
 
@@ -119,12 +160,12 @@ func (r *registrar) heartbeat(leaseID clientv3.LeaseID, key, value string) {
 		select {
 		case _, ok = <-chKA:
 			if !ok {
-				if r.ctx.Err() != nil {
+				if ctx.Err() != nil {
 					return
 				}
 				continue
 			}
-		case <-r.ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
