@@ -72,16 +72,16 @@ func NewNode(opts ...Option) *Node {
 		opt(o)
 	}
 	if o.id == "" {
-		log.Fatal("the node instance ID is not registered.")
-	}
-	if o.redis == nil {
-		log.Fatal("the redis client is not registered.")
+		log.Fatal("instance id can not be empty")
 	}
 	if o.grpc == nil {
-		log.Fatal("the grpc server is not registered.")
+		log.Fatal("grpc plugin is not injected")
+	}
+	if o.locator == nil {
+		log.Fatal("locator plugin is not injected")
 	}
 	if o.registry == nil {
-		log.Fatal("the registry is not registered.")
+		log.Fatal("registry plugin is not injected")
 	}
 
 	n := &Node{}
@@ -105,17 +105,19 @@ func (n *Node) Name() string {
 // Init 初始化节点
 func (n *Node) Init() {
 	n.buildInstance()
+
+	n.registerInstance()
+
+	n.watchInstance()
 }
 
 // Start 启动节点
 func (n *Node) Start() {
 	n.startGRPC()
 
-	n.startProxy()
+	n.proxy.watch(n.ctx)
 
-	n.dispatch()
-
-	n.registry()
+	go n.dispatch()
 
 	n.debugPrint()
 }
@@ -125,9 +127,11 @@ func (n *Node) Destroy() {
 	close(n.chEvent)
 	close(n.chRequest)
 
-	n.cancel()
-
 	n.stopGRPC()
+
+	n.deregisterInstance()
+
+	n.cancel()
 }
 
 // Proxy 获取节点代理
@@ -137,46 +141,45 @@ func (n *Node) Proxy() Proxy {
 
 // 分发处理消息
 func (n *Node) dispatch() {
-	go func() {
-		for {
-			select {
-			case entity, ok := <-n.chEvent:
-				if !ok {
-					return
-				}
+	for {
+		select {
+		case entity, ok := <-n.chEvent:
+			if !ok {
+				return
+			}
 
-				handler, ok := n.events[entity.event]
-				if !ok {
-					log.Warnf("event does not register handler function, event: %v", entity.event)
-					continue
-				}
+			handler, ok := n.events[entity.event]
+			if !ok {
+				log.Warnf("event does not register handler function, event: %v", entity.event)
+				continue
+			}
 
-				handler(entity.gid, entity.uid)
-			case req, ok := <-n.chRequest:
-				if !ok {
-					return
-				}
+			handler(entity.gid, entity.uid)
+		case req, ok := <-n.chRequest:
+			if !ok {
+				return
+			}
 
-				n.rw.RLock()
-				route, ok := n.routes[req.route]
-				n.rw.RUnlock()
+			n.rw.RLock()
+			route, ok := n.routes[req.route]
+			n.rw.RUnlock()
 
-				if ok {
-					route.handler(req)
-				} else if n.defaultRouteHandler != nil {
-					n.defaultRouteHandler(req)
-				} else {
-					log.Warnf("message routing does not register handler function, route: %v", req.route)
-				}
+			if ok {
+				route.handler(req)
+			} else if n.defaultRouteHandler != nil {
+				n.defaultRouteHandler(req)
+			} else {
+				log.Warnf("message routing does not register handler function, route: %v", req.route)
 			}
 		}
-	}()
+	}
 }
 
 // 启动GRPC服务
 func (n *Node) startGRPC() {
+	n.opts.grpc.RegisterService(&pb.Node_ServiceDesc, &endpoint{node: n})
+
 	go func() {
-		n.opts.grpc.RegisterService(&pb.Node_ServiceDesc, &endpoint{node: n})
 		if err := n.opts.grpc.Start(); err != nil {
 			log.Fatalf("the grpc server startup failed: %v", err)
 		}
@@ -185,33 +188,51 @@ func (n *Node) startGRPC() {
 
 // 停止GRPC服务
 func (n *Node) stopGRPC() {
-	if err := n.opts.registry.Deregister(n.instance); err != nil {
-		log.Errorf("the node service instance deregister failed: %v", err)
-	}
-
 	if err := n.opts.grpc.Stop(); err != nil {
 		log.Errorf("the grpc server stop failed: %v", err)
 	}
 }
 
-// 启动实例代理
-func (n *Node) startProxy() {
-	go n.proxy.listen(n.ctx)
-}
-
 // 注册服务实例
-func (n *Node) registry() {
-	if err := n.opts.registry.Register(n.instance); err != nil {
+func (n *Node) registerInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	if err := n.opts.registry.Register(ctx, n.instance); err != nil {
 		log.Fatalf("the node service instance register failed: %v", err)
 	}
+}
 
-	watcher, err := n.opts.registry.Watch(context.Background(), string(cluster.Gate))
+// 解注册服务实例
+func (n *Node) deregisterInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	if err := n.opts.registry.Deregister(ctx, n.instance); err != nil {
+		log.Errorf("the node service instance deregister failed: %v", err)
+	}
+}
+
+// 监听服务实例
+func (n *Node) watchInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	defer cancel()
+
+	watcher, err := n.opts.registry.Watch(ctx, string(cluster.Gate))
 	if err != nil {
 		log.Fatalf("the gate service watch failed: %v", err)
 	}
 
 	go func() {
+		defer watcher.Stop()
+
 		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			default:
+				// exec watch
+			}
 			services, err := watcher.Next()
 			if err != nil {
 				continue
@@ -237,6 +258,9 @@ func (n *Node) buildInstance() {
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
 		Name:     string(cluster.Node),
+		Kind:     cluster.Node,
+		Alias:    n.opts.name,
+		State:    cluster.Work,
 		Routes:   routes,
 		Endpoint: n.opts.grpc.Endpoint().String(),
 	}
