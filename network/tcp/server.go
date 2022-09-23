@@ -8,6 +8,7 @@
 package tcp
 
 import (
+	"github.com/dobyte/due/log"
 	"net"
 	"time"
 
@@ -125,15 +126,28 @@ func (s *server) init() error {
 
 // 等待连接
 func (s *server) serve() {
+	var tempDelay time.Duration
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				time.Sleep(time.Millisecond)
+			if e, ok := err.(net.Error); ok && e.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+				if max := 1 * time.Second; tempDelay > max {
+					tempDelay = max
+				}
+
+				log.Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
+				time.Sleep(tempDelay)
 				continue
 			}
 			return
 		}
+
+		tempDelay = 0
 
 		if err := s.connMgr.allocate(conn); err != nil {
 			_ = conn.Close()
