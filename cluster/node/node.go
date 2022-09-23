@@ -218,7 +218,7 @@ func (n *Node) watchInstance() {
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	defer cancel()
 
-	watcher, err := n.opts.registry.Watch(ctx, cluster.Gate.String())
+	watcher, err := n.opts.registry.Watch(ctx, string(cluster.Gate))
 	if err != nil {
 		log.Fatalf("the gate service watch failed: %v", err)
 	}
@@ -257,8 +257,9 @@ func (n *Node) buildInstance() {
 
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
-		Name:     n.opts.name,
+		Name:     string(cluster.Node),
 		Kind:     cluster.Node,
+		Alias:    n.opts.name,
 		State:    cluster.Work,
 		Routes:   routes,
 		Endpoint: n.opts.grpc.Endpoint().String(),
