@@ -59,8 +59,8 @@ func NewLocator(opts ...Option) *Locator {
 // Get 获取用户定位
 func (l *Locator) Get(ctx context.Context, uid int64, insKind cluster.Kind) (string, error) {
 	key := fmt.Sprintf(userLocationsKey, uid)
-	val, err, _ := l.sfg.Do(key+insKind.String(), func() (interface{}, error) {
-		val, err := l.opts.client.HGet(ctx, key, insKind.String()).Result()
+	val, err, _ := l.sfg.Do(key+string(insKind), func() (interface{}, error) {
+		val, err := l.opts.client.HGet(ctx, key, string(insKind)).Result()
 		if err != nil && err != redis.Nil {
 			return "", err
 		}
@@ -77,7 +77,7 @@ func (l *Locator) Get(ctx context.Context, uid int64, insKind cluster.Kind) (str
 // Set 设置用户定位
 func (l *Locator) Set(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error {
 	key := fmt.Sprintf(userLocationsKey, uid)
-	err := l.opts.client.HSet(ctx, key, insKind.String(), insID).Err()
+	err := l.opts.client.HSet(ctx, key, string(insKind), insID).Err()
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (l *Locator) Rem(ctx context.Context, uid int64, insKind cluster.Kind, insI
 	}
 
 	key := fmt.Sprintf(userLocationsKey, uid)
-	err = l.opts.client.HDel(ctx, key, insKind.String()).Err()
+	err = l.opts.client.HDel(ctx, key, string(insKind)).Err()
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (l *Locator) publish(ctx context.Context, uid int64, insKind cluster.Kind, 
 		return err
 	}
 
-	channel := fmt.Sprintf(channelEventKey, insKind.String())
+	channel := fmt.Sprintf(channelEventKey, string(insKind))
 
 	return l.opts.client.Publish(ctx, channel, msg).Err()
 }
@@ -138,7 +138,7 @@ func (l *Locator) toUniqueKey(insKinds ...cluster.Kind) string {
 
 	keys := make([]string, 0, len(insKinds))
 	for _, insKind := range insKinds {
-		keys = append(keys, insKind.String())
+		keys = append(keys, string(insKind))
 	}
 
 	return strings.Join(keys, "&")
