@@ -93,7 +93,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Kind.String(), ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Name, ins.ID)
 	_, err := r.opts.client.Delete(ctx, key)
 
 	return err

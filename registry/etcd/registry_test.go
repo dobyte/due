@@ -37,6 +37,7 @@ func TestRegistry_Register1(t *testing.T) {
 		ID:       "test-1",
 		Name:     "login-server",
 		Kind:     cluster.Node,
+		Alias:    "mahjong",
 		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
