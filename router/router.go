@@ -55,10 +55,10 @@ func (r *Router) RemoveService(service *registry.ServiceInstance) {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	switch service.Name {
-	case cluster.Gate.String():
+	switch service.Kind {
+	case cluster.Gate:
 		delete(r.gateEndpoints, service.ID)
-	case cluster.Node.String():
+	case cluster.Node:
 		for _, item := range service.Routes {
 			if route, ok := r.routes[item.ID]; ok {
 				route.endpoints.Delete(service.ID)
@@ -74,10 +74,10 @@ func (r *Router) addService(service *registry.ServiceInstance) error {
 		return err
 	}
 
-	switch service.Name {
-	case cluster.Gate.String():
+	switch service.Kind {
+	case cluster.Gate:
 		r.gateEndpoints[service.ID] = ep
-	case cluster.Node.String():
+	case cluster.Node:
 		r.nodeEndpoints[service.ID] = ep
 		for _, item := range service.Routes {
 			route, ok := r.routes[item.ID]
