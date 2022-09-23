@@ -257,8 +257,9 @@ func (n *Node) buildInstance() {
 
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
-		Name:     n.opts.name,
+		Name:     string(cluster.Node),
 		Kind:     cluster.Node,
+		Alias:    n.opts.name,
 		State:    cluster.Work,
 		Routes:   routes,
 		Endpoint: n.opts.grpc.Endpoint().String(),

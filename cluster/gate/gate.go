@@ -253,8 +253,9 @@ func (g *Gate) watchInstance() {
 func (g *Gate) buildInstance() {
 	g.instance = &registry.ServiceInstance{
 		ID:       g.opts.id,
-		Name:     g.opts.name,
+		Name:     string(cluster.Gate),
 		Kind:     cluster.Gate,
+		Alias:    g.opts.name,
 		State:    cluster.Work,
 		Endpoint: g.opts.grpc.Endpoint().String(),
 	}
