@@ -9,11 +9,11 @@ package gate
 
 import (
 	"context"
+	"github.com/dobyte/due/cluster/internal/pb"
 	"sync"
 	"time"
 
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/pb"
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
@@ -57,19 +57,19 @@ func NewGate(opts ...Option) *Gate {
 		opt(o)
 	}
 	if o.id == "" {
-		log.Fatal("the gate instance ID is not registered")
-	}
-	if o.redis == nil {
-		log.Fatal("the redis client is not registered.")
-	}
-	if o.server == nil {
-		log.Fatal("the gate server is not registered.")
+		log.Fatal("instance id can not be empty")
 	}
 	if o.grpc == nil {
-		log.Fatal("the grpc server is not registered.")
+		log.Fatal("grpc plugin is not injected")
+	}
+	if o.server == nil {
+		log.Fatal("server plugin is not injected")
+	}
+	if o.locator == nil {
+		log.Fatal("locator plugin is not injected")
 	}
 	if o.registry == nil {
-		log.Fatal("the registry is not registered.")
+		log.Fatal("registry plugin is not injected")
 	}
 
 	g := &Gate{}
@@ -83,7 +83,7 @@ func NewGate(opts ...Option) *Gate {
 	return g
 }
 
-// Kind 组件名称
+// Name 组件名称
 func (g *Gate) Name() string {
 	return g.opts.name
 }
@@ -103,7 +103,7 @@ func (g *Gate) Start() {
 
 	g.startGRPC()
 
-	g.startProxy()
+	g.proxy.watch(g.ctx)
 
 	g.debugPrint()
 }
@@ -139,8 +139,9 @@ func (g *Gate) stopGate() {
 
 // 启动GRPC服务
 func (g *Gate) startGRPC() {
+	g.opts.grpc.RegisterService(&pb.Gate_ServiceDesc, &endpoint{gate: g})
+
 	go func() {
-		g.opts.grpc.RegisterService(&pb.Gate_ServiceDesc, &endpoint{gate: g})
 		if err := g.opts.grpc.Start(); err != nil {
 			log.Fatalf("the grpc server startup failed: %v", err)
 		}
@@ -152,11 +153,6 @@ func (g *Gate) stopGRPC() {
 	if err := g.opts.grpc.Stop(); err != nil {
 		log.Errorf("the grpc server stop failed: %v", err)
 	}
-}
-
-// 启动实例代理
-func (g *Gate) startProxy() {
-	go g.proxy.listen(g.ctx)
 }
 
 // 处理连接打开
@@ -196,10 +192,11 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-	if err = g.proxy.deliver(ctx, conn.ID(), conn.UID(), message); err != nil {
+	err = g.proxy.deliver(ctx, conn.ID(), conn.UID(), message)
+	cancel()
+	if err != nil {
 		log.Errorf("deliver message failed: %v", err)
 	}
-	cancel()
 }
 
 // 注册服务实例
@@ -257,6 +254,9 @@ func (g *Gate) buildInstance() {
 	g.instance = &registry.ServiceInstance{
 		ID:       g.opts.id,
 		Name:     string(cluster.Gate),
+		Kind:     cluster.Gate,
+		Alias:    g.opts.name,
+		State:    cluster.Work,
 		Endpoint: g.opts.grpc.Endpoint().String(),
 	}
 }

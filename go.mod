@@ -3,10 +3,11 @@ module github.com/dobyte/due
 go 1.16
 
 require (
-	github.com/go-redis/redis/v8 v8.11.5
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/uuid v1.3.0
-	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible // indirect
+	github.com/jonboulle/clockwork v0.3.0 // indirect
+	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lestrrat-go/strftime v1.0.6 // indirect
 	golang.org/x/net v0.0.0-20220524220425-1d687d428aca // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
