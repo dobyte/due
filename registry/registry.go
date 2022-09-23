@@ -28,6 +28,8 @@ type ServiceInstance struct {
 	ID string `json:"id"`
 	// 服务实体名
 	Name string `json:"name"`
+	// 服务实体别名
+	Alias string `json:"alias"`
 	// 服务实体类型
 	Kind cluster.Kind `json:"kind"`
 	// 服务实例状态
