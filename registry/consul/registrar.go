@@ -33,7 +33,7 @@ func newRegistrar(registry *Registry) *registrar {
 	r.chHeartbeat = make(chan string)
 
 	if r.registry.opts.enableHeartbeatCheck {
-		go r.heartbeatCheck()
+		go r.keepHeartbeat()
 	}
 
 	return r
@@ -57,7 +57,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	registration := &api.AgentServiceRegistration{
 		ID:      ins.ID,
-		Name:    ins.Kind.String(),
+		Name:    string(ins.Kind),
 		Meta:    make(map[string]string, len(ins.Routes)+2),
 		Address: host,
 		Port:    port,
@@ -68,8 +68,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	registration.Meta[metaFieldName] = ins.Name
-	registration.Meta[metaFieldState] = strconv.Itoa(int(ins.State))
-
+	registration.Meta[metaFieldState] = string(ins.State)
 	for _, route := range ins.Routes {
 		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.FormatBool(route.Stateful)
 	}
@@ -103,7 +102,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 }
 
 // 心跳检测
-func (r *registrar) heartbeatCheck() {
+func (r *registrar) keepHeartbeat() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -112,15 +111,12 @@ func (r *registrar) heartbeatCheck() {
 	for {
 		select {
 		case insID, ok := <-r.chHeartbeat:
-			if !ok {
-				if cancel != nil {
-					cancel()
-				}
-				return
-			}
-
 			if cancel != nil {
 				cancel()
+			}
+
+			if !ok {
+				return
 			}
 
 			ctx, cancel = context.WithCancel(r.ctx)
@@ -136,8 +132,6 @@ func (r *registrar) heartbeatCheck() {
 
 // 心跳
 func (r *registrar) heartbeat(ctx context.Context, insID string) {
-	time.Sleep(time.Second)
-
 	checkID := fmt.Sprintf(checkIDFormat, insID)
 
 	err := r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing)
