@@ -15,7 +15,8 @@ import (
 const (
 	checkIDFormat     = "service:%s"
 	checkUpdateOutput = "passed"
-	metaFieldName     = "name"
+	metaFieldKind     = "kind"
+	metaFieldAlias    = "alias"
 	metaFieldState    = "state"
 )
 
@@ -39,6 +40,7 @@ func newRegistrar(registry *Registry) *registrar {
 	return r
 }
 
+// 注册服务
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
 	raw, err := url.Parse(ins.Endpoint)
 	if err != nil {
@@ -57,8 +59,8 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	registration := &api.AgentServiceRegistration{
 		ID:      ins.ID,
-		Name:    string(ins.Kind),
-		Meta:    make(map[string]string, len(ins.Routes)+2),
+		Name:    ins.Name,
+		Meta:    make(map[string]string, len(ins.Routes)+3),
 		Address: host,
 		Port:    port,
 		TaggedAddresses: map[string]api.ServiceAddress{raw.Scheme: {
@@ -67,7 +69,8 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		}},
 	}
 
-	registration.Meta[metaFieldName] = ins.Name
+	registration.Meta[metaFieldKind] = string(ins.Kind)
+	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = string(ins.State)
 	for _, route := range ins.Routes {
 		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.FormatBool(route.Stateful)
@@ -99,6 +102,16 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	return nil
+}
+
+// 解注册服务
+func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.cancel()
+	close(r.chHeartbeat)
+
+	r.registry.registrars.Delete(ins.ID)
+
+	return r.registry.opts.client.Agent().ServiceDeregister(ins.ID)
 }
 
 // 心跳检测

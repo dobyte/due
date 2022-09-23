@@ -2,8 +2,7 @@ package consul
 
 import (
 	"context"
-	"fmt"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/cluster"
 	"net"
 	"net/url"
 	"strconv"
@@ -18,16 +17,12 @@ import (
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err    error
-	ctx    context.Context
-	cancel context.CancelFunc
-	opts   *options
-
-	//watchers   sync.Map
+	err        error
+	ctx        context.Context
+	cancel     context.CancelFunc
+	opts       *options
+	watchers   sync.Map
 	registrars sync.Map
-
-	mu       sync.Mutex
-	watchers map[string]*watcher
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -47,7 +42,6 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
-	r.watchers = make(map[string]*watcher)
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
@@ -86,75 +80,47 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 
 // Deregister 解注册服务实例
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	r.cancel()
+	v, ok := r.registrars.Load(ins.ID)
+	if ok {
+		return v.(*registrar).deregister(ctx, ins)
+	}
+
 	return r.opts.client.Agent().ServiceDeregister(ins.ID)
 }
 
 // Services 获取服务实例列表
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if w, ok := r.watchers[serviceName]; ok {
-		if services := w.services(); len(services) > 0 {
-			return services, nil
-		}
+	if r.err != nil {
+		return nil, r.err
 	}
 
-	services, _, err := r.services(ctx, serviceName, 0, true)
-
-	return services, err
+	v, ok := r.watchers.Load(serviceName)
+	if ok {
+		return v.(*watcherMgr).services(), nil
+	} else {
+		services, _, err := r.services(ctx, serviceName, 0, true)
+		return services, err
+	}
 }
 
 // Watch 监听服务
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	w, ok := r.watchers[serviceName]
-	if !ok {
-		w = newWatcher(r.ctx, serviceName)
-		r.watchers[serviceName] = w
+	if r.err != nil {
+		return nil, r.err
 	}
 
-	if err := r.resolve(ctx, w); err != nil {
+	v, ok := r.watchers.Load(serviceName)
+	if ok {
+		return v.(*watcherMgr).fork(), nil
+	}
+
+	w, err := newWatcherMgr(ctx, serviceName, r)
+	if err != nil {
 		return nil, err
 	}
+	r.watchers.Store(serviceName, w)
 
-	return w, nil
-}
-
-func (r *Registry) resolve(ctx context.Context, w *watcher) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	services, index, err := r.services(ctx, w.serviceName, 0, true)
-	cancel()
-	if err != nil {
-		return err
-	}
-	w.update(services)
-
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				ctx, cancel = context.WithTimeout(ctx, 120*time.Second)
-				services, tmpIndex, err := r.services(ctx, w.serviceName, index, true)
-				cancel()
-				if err != nil {
-					time.Sleep(time.Second)
-					continue
-				}
-				if index != tmpIndex {
-					w.update(services)
-					index = tmpIndex
-				}
-			}
-		}
-	}()
-
-	return nil
+	return w.fork(), nil
 }
 
 // 获取服务实体列表
@@ -172,70 +138,53 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 
 	services := make([]*registry.ServiceInstance, 0, len(entries))
 	for _, entry := range entries {
-		routes := make([]registry.Route, 0, len(entry.Service.Meta))
-		for k, v := range entry.Service.Meta {
-			route, err := strconv.Atoi(k)
-			if err != nil {
-				continue
-			}
-
-			stateful, err := strconv.ParseBool(v)
-			if err != nil {
-				continue
-			}
-
-			routes = append(routes, registry.Route{
-				ID:       int32(route),
-				Stateful: stateful,
-			})
+		ins := &registry.ServiceInstance{
+			ID:     entry.Service.ID,
+			Name:   entry.Service.Service,
+			Routes: make([]registry.Route, 0, len(entry.Service.Meta)),
 		}
 
-		var endpoint string
 		for scheme, addr := range entry.Service.TaggedAddresses {
 			if scheme == "lan_ipv4" || scheme == "wan_ipv4" || scheme == "lan_ipv6" || scheme == "wan_ipv6" {
 				continue
 			}
-			endpoint = (&url.URL{
+			ins.Endpoint = (&url.URL{
 				Scheme: scheme,
 				Host:   net.JoinHostPort(addr.Address, strconv.Itoa(addr.Port)),
 			}).String()
 		}
-		if endpoint == "" {
+		if ins.Endpoint == "" {
 			continue
 		}
 
-		services = append(services, &registry.ServiceInstance{
-			ID:       entry.Service.ID,
-			Name:     entry.Service.Service,
-			Routes:   routes,
-			Endpoint: endpoint,
-		})
+		for k, v := range entry.Service.Meta {
+			switch k {
+			case metaFieldKind:
+				ins.Kind = cluster.Kind(v)
+			case metaFieldAlias:
+				ins.Alias = v
+			case metaFieldState:
+				ins.State = cluster.State(v)
+			default:
+				route, err := strconv.Atoi(k)
+				if err != nil {
+					continue
+				}
+
+				stateful, err := strconv.ParseBool(v)
+				if err != nil {
+					continue
+				}
+
+				ins.Routes = append(ins.Routes, registry.Route{
+					ID:       int32(route),
+					Stateful: stateful,
+				})
+			}
+		}
+
+		services = append(services, ins)
 	}
 
 	return services, meta.LastIndex, nil
-}
-
-// 心跳
-func (r *Registry) heartbeat(insID string) {
-	time.Sleep(time.Second)
-
-	checkID := fmt.Sprintf(checkIDFormat, insID)
-
-	err := r.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing)
-	if err != nil {
-		log.Errorf("update heartbeat ttl failed: %v", err)
-	}
-
-	ticker := time.NewTicker(time.Duration(r.opts.heartbeatCheckInterval) * time.Second / 2)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if err = r.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing); err != nil {
-				log.Errorf("update heartbeat ttl failed: %v", err)
-			}
-		case <-r.ctx.Done():
-			return
-		}
-	}
 }
