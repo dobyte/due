@@ -218,7 +218,7 @@ func (n *Node) watchInstance() {
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	defer cancel()
 
-	watcher, err := n.opts.registry.Watch(ctx, cluster.Gate.String())
+	watcher, err := n.opts.registry.Watch(ctx, string(cluster.Gate))
 	if err != nil {
 		log.Fatalf("the gate service watch failed: %v", err)
 	}

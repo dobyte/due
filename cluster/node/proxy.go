@@ -222,7 +222,7 @@ func (p *proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 
 // 拉取实例列表
 func (p *proxy) fetchInstanceList(ctx context.Context, kind cluster.Kind, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	services, err := p.node.opts.registry.Services(ctx, kind.String())
+	services, err := p.node.opts.registry.Services(ctx, string(kind))
 	if err != nil {
 		return nil, err
 	}
@@ -231,14 +231,14 @@ func (p *proxy) fetchInstanceList(ctx context.Context, kind cluster.Kind, states
 		return services, nil
 	}
 
-	mp := make(map[cluster.State]bool, len(states))
+	mp := make(map[cluster.State]struct{}, len(states))
 	for _, state := range states {
-		mp[state] = true
+		mp[state] = struct{}{}
 	}
 
 	list := make([]*registry.ServiceInstance, 0, len(services))
 	for i := range services {
-		if mp[services[i].State] {
+		if _, ok := mp[services[i].State]; ok {
 			list = append(list, services[i])
 		}
 	}
