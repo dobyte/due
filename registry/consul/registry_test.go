@@ -3,11 +3,13 @@ package consul_test
 import (
 	"context"
 	"fmt"
+	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/registry/consul"
 	"net"
 	"testing"
+	"time"
 )
 
 const (
@@ -17,12 +19,12 @@ const (
 
 var reg = consul.NewRegistry()
 
-func TestServe(t *testing.T) {
+func server(t *testing.T) {
 	ls, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	go func(ls net.Listener) {
 		for {
 			conn, err := ls.Accept()
@@ -36,42 +38,38 @@ func TestServe(t *testing.T) {
 			}
 		}
 	}(ls)
-	
-	select {}
 }
 
-func TestRegistry_Register1(t *testing.T) {
+func TestRegistry_Register(t *testing.T) {
+	server(t)
+
 	host, err := xnet.ExternalIP()
 	if err != nil {
 		t.Fatal(err)
 	}
-	
-	if err = reg.Register(context.Background(), &registry.ServiceInstance{
+
+	ctx := context.Background()
+	ins := &registry.ServiceInstance{
 		ID:       "test-1",
 		Name:     serviceName,
+		Kind:     cluster.Node,
+		Alias:    "mahjong",
+		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
-	}); err != nil {
-		t.Fatal(err)
 	}
-	
-	select {}
-}
 
-func TestRegistry_Register2(t *testing.T) {
-	host, err := xnet.ExternalIP()
-	if err != nil {
+	if err = reg.Register(ctx, ins); err != nil {
 		t.Fatal(err)
 	}
-	
-	if err = reg.Register(context.Background(), &registry.ServiceInstance{
-		ID:       "test-2",
-		Name:     serviceName,
-		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
-	}); err != nil {
+
+	time.Sleep(10 * time.Second)
+
+	ins.State = cluster.Busy
+	if err = reg.Register(ctx, ins); err != nil {
 		t.Fatal(err)
 	}
-	
-	select {}
+
+	time.Sleep(30 * time.Second)
 }
 
 func TestRegistry_Services(t *testing.T) {
@@ -79,26 +77,63 @@ func TestRegistry_Services(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	for _, service := range services {
 		t.Logf("%+v", service)
 	}
 }
 
 func TestRegistry_Watch(t *testing.T) {
-	watcher, err := reg.Watch(context.Background(), serviceName)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	watcher1, err := reg.Watch(ctx, serviceName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	
-	for {
-		services, err := watcher.Next()
-		if err != nil {
-			t.Error(err)
-		}
-		
-		for _, service := range services {
-			t.Logf("%+v", service)
-		}
+
+	watcher2, err := reg.Watch(context.Background(), serviceName)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		watcher1.Stop()
+		time.Sleep(5 * time.Second)
+		watcher2.Stop()
+	}()
+
+	go func() {
+		for {
+			services, err := watcher1.Next()
+			if err != nil {
+				t.Errorf("goroutine 1: %v", err)
+				return
+			}
+
+			fmt.Println("goroutine 1: new event entity")
+
+			for _, service := range services {
+				t.Logf("goroutine 1: %+v", service)
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			services, err := watcher2.Next()
+			if err != nil {
+				t.Errorf("goroutine 2: %v", err)
+				return
+			}
+
+			fmt.Println("goroutine 2: new event entity")
+
+			for _, service := range services {
+				t.Logf("goroutine 2: %+v", service)
+			}
+		}
+	}()
+
+	time.Sleep(60 * time.Second)
 }
