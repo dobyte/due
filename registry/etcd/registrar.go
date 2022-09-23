@@ -48,17 +48,20 @@ func newRegistrar(registry *Registry) *registrar {
 		for {
 			select {
 			case heartbeat, ok := <-r.chHeartbeat:
-				if !ok {
-					return
-				}
-
 				if cancel != nil {
 					cancel()
+				}
+
+				if !ok {
+					return
 				}
 
 				ctx, cancel = context.WithCancel(r.ctx)
 				go r.heartbeat(ctx, heartbeat.leaseID, heartbeat.key, heartbeat.value)
 			case <-r.ctx.Done():
+				if cancel != nil {
+					cancel()
+				}
 				return
 			}
 		}
@@ -74,7 +77,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 
 	leaseID, err := r.put(ctx, key, value)
 	if err != nil {
@@ -97,7 +100,7 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 
 	r.registry.registrars.Delete(ins.ID)
 
-	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Kind.String(), ins.ID)
+	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 	_, err = r.kv.Delete(ctx, key)
 
 	if r.lease != nil {

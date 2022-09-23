@@ -34,13 +34,14 @@ import (
 func main() {
 	reg := etcd.NewRegistry()
 	
-	watch(reg, cluster.Node.String(), 1)
-	watch(reg, cluster.Node.String(), 2)
+	watch(reg, string(cluster.Node), 1)
+	watch(reg, string(cluster.Node), 2)
 	
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
 		Name:     "login-server",
 		Kind:     cluster.Node,
+		Alias:    "mahjong",
 		State:    cluster.Work,
 		Endpoint: "grpc://127.0.0.1:6339",
 	}
