@@ -173,7 +173,7 @@ func main() {
 }
 ```
 
-2.构建Node服务器
+3.构建Node服务器
 
 ```go
 package main
@@ -240,7 +240,7 @@ func greetHandler(r node.Request) {
 }
 ```
 
-3.构建客户端
+4.构建客户端
 
 ```go
 package main
@@ -326,6 +326,6 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 }
 ```
 
-### 6.详细示例
+### 7.详细示例
 
 更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
