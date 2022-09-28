@@ -100,7 +100,8 @@ docker-compose up
 ```shell
 go get github.com/dobyte/due@latest
 go get github.com/dobyte/due/network/ws@latest
-go get github.com/dobyte/due/registry/consul@latest
+go get github.com/dobyte/due/registry/etcd@latest
+go get github.com/dobyte/due/locator/redis@latest
 ```
 
 2.构建Gate服务器
