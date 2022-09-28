@@ -63,11 +63,13 @@ tcp协议格式：
 > 设计初衷：不想心跳检测侵入到业务路由层，哪怕是特殊的0号路由。
 
 ws心跳包格式：
+
 ```go
 []byte
 ```
 
 tcp心跳包格式：
+
 ```
 -------
 | len |
@@ -86,9 +88,11 @@ tcp心跳包格式：
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
 
 0.启动组件
+
 ```shell
 docker-compose up
 ```
+
 > docker-compose.yaml文件已在docker目录中备好，可以直接取用
 
 1.获取框架
@@ -107,49 +111,63 @@ package main
 import (
 	"github.com/dobyte/due"
 	"github.com/dobyte/due/cluster/gate"
+	"github.com/dobyte/due/locator/redis"
+	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/network/ws"
-	"github.com/dobyte/due/registry/consul"
-	"github.com/dobyte/due/third/redis"
+	"github.com/dobyte/due/registry/etcd"
 	"github.com/dobyte/due/transport/grpc"
 )
+
+func init() {
+	// 设置模式
+	mode.SetMode(mode.DebugMode)
+
+	// 设置日志
+	log.SetLogger(log.NewLogger(
+		log.WithOutFile("./log/gate.log"),
+		log.WithCallerSkip(1),
+		log.WithOutLevel(log.DebugLevel),
+	))
+}
 
 func main() {
 	// 创建容器
 	container := due.NewContainer()
 
 	// 创建服务器
-	svr := ws.NewServer(
+	server := ws.NewServer(
 		ws.WithServerListenAddr(":3553"),
 		ws.WithServerMaxConnNum(5000),
 	)
 
-	// 创建redis客户端
-	rds := redis.NewClient(
+	// 创建定位器
+	locator := redis.NewLocator(
 		redis.WithAddrs("127.0.0.1:6379"),
-		redis.WithDB(0),
 	)
 
-	// 创建grpc服务器
-	gs := grpc.NewServer(
+	// 创建服务发现
+	registry := etcd.NewRegistry(
+		etcd.WithAddrs("127.0.0.1:2379"),
+	)
+
+	// 创建传输器
+	transport := grpc.NewServer(
 		grpc.WithServerListenAddr(":8081"),
 	)
 
-	// 创建registry注册发现
-	registry := consul.NewRegistry(
-		consul.WithAddress("127.0.0.1:8500"),
-	)
-
-	// 创建网关
-	server := gate.NewGate(
-		gate.WithRedis(rds),
-		gate.WithServer(svr),
-		gate.WithGRPCServer(gs),
+	// 创建网关组件
+	component := gate.NewGate(
+		gate.WithName("gate"),
+		gate.WithServer(server),
+		gate.WithLocator(locator),
 		gate.WithRegistry(registry),
+		gate.WithGRPCServer(transport),
 	)
 
-	// 添加组件
-	container.Add(server)
-	// 启动服务器
+	// 添加网关组件
+	container.Add(component)
+	// 启动容器
 	container.Serve()
 }
 ```
@@ -162,69 +180,93 @@ package main
 import (
 	"github.com/dobyte/due"
 	"github.com/dobyte/due/cluster/node"
-	"github.com/dobyte/due/registry/consul"
-	"github.com/dobyte/due/third/redis"
+	"github.com/dobyte/due/locator/redis"
+	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/mode"
+	"github.com/dobyte/due/registry/etcd"
 	"github.com/dobyte/due/transport/grpc"
 )
+
+func init() {
+	// 设置模式
+	mode.SetMode(mode.DebugMode)
+
+	// 设置日志
+	log.SetLogger(log.NewLogger(
+		log.WithOutFile("./log/node.log"),
+		log.WithCallerSkip(1),
+		log.WithOutLevel(log.DebugLevel),
+	))
+}
 
 func main() {
 	// 创建容器
 	container := due.NewContainer()
 
-	// 创建redis客户端
-	rds := redis.NewClient(
+	// 创建定位器
+	locator := redis.NewLocator(
 		redis.WithAddrs("127.0.0.1:6379"),
-		redis.WithDB(0),
 	)
 
-	// 创建grpc服务器
-	gs := grpc.NewServer(
+	// 创建服务发现
+	registry := etcd.NewRegistry(
+		etcd.WithAddrs("127.0.0.1:2379"),
+	)
+
+	// 创建传输器
+	transport := grpc.NewServer(
 		grpc.WithServerListenAddr(":8082"),
 	)
 
-	// 创建registry注册发现
-	registry := consul.NewRegistry(
-		consul.WithAddress("127.0.0.1:8500"),
-	)
-
-	// 创建节点服务器
-	server := node.NewNode(
-		node.WithRedis(rds),
-		node.WithGRPCServer(gs),
+	// 创建网关组件
+	component := node.NewNode(
+		node.WithName("node"),
+		node.WithLocator(locator),
 		node.WithRegistry(registry),
+		node.WithGRPCServer(transport),
 	)
 
 	// 注册路由
-	server.Proxy().AddRoute(1, false, greetHandler)
+	component.Proxy().AddRouteHandler(1, false, greetHandler)
 	// 添加组件
-	container.Add(server)
+	container.Add(component)
 	// 启动服务器
 	container.Serve()
 }
 
-func greetHandler(req node.Request) {
-	_ = req.Response([]byte("hello world~~"))
+func greetHandler(r node.Request) {
+	_ = r.Response([]byte("hello world~~"))
 }
 ```
 
 3.构建客户端
+
 ```go
 package main
 
 import (
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/network"
 	"github.com/dobyte/due/network/ws"
 	"github.com/dobyte/due/packet"
 )
 
-var (
-	handlers map[int32]handlerFunc
-)
+var handlers map[int32]handlerFunc
 
 type handlerFunc func(conn network.Conn, buffer []byte)
 
 func init() {
+	// 设置模式
+	mode.SetMode(mode.DebugMode)
+
+	// 设置日志
+	log.SetLogger(log.NewLogger(
+		log.WithOutFile("./log/client.log"),
+		log.WithCallerSkip(1),
+		log.WithOutLevel(log.DebugLevel),
+	))
+
 	handlers = map[int32]handlerFunc{
 		1: greetHandler,
 	}
