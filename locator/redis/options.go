@@ -33,6 +33,10 @@ type options struct {
 	// 客户端
 	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
 	client redis.UniversalClient
+
+	// 前缀
+	// key前缀，默认为due
+	prefix string
 }
 
 // WithContext 设置上下文
@@ -68,4 +72,9 @@ func WithMaxRetries(maxRetries int) Option {
 // WithClient 设置外部客户端
 func WithClient(client redis.UniversalClient) Option {
 	return func(o *options) { o.client = client }
+}
+
+// WithPrefix 设置前缀
+func WithPrefix(prefix string) Option {
+	return func(o *options) { o.prefix = prefix }
 }
