@@ -10,6 +10,7 @@ package gate
 import (
 	"context"
 	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/grpc"
 	"time"
 
@@ -20,14 +21,15 @@ import (
 type Option func(o *options)
 
 type options struct {
-	id       string            // 实例ID
-	name     string            // 实例名称
-	ctx      context.Context   // 上下文
-	server   network.Server    // 服务器
-	grpc     *grpc.Server      // GRPC服务器
-	locator  locator.Locator   // 定位器
-	registry registry.Registry // 服务注册
-	timeout  time.Duration     // rpc调用超时时间
+	id          string                // 实例ID
+	name        string                // 实例名称
+	ctx         context.Context       // 上下文
+	server      network.Server        // 服务器
+	grpc        *grpc.Server          // GRPC服务器
+	timeout     time.Duration         // rpc调用超时时间
+	locator     locator.Locator       // 定位器
+	registry    registry.Registry     // 服务注册
+	transporter transport.Transporter // 传输器
 }
 
 // WithID 设置实例ID
@@ -50,11 +52,6 @@ func WithServer(server network.Server) Option {
 	return func(o *options) { o.server = server }
 }
 
-// WithGRPCServer 设置GRPC服务器
-func WithGRPCServer(grpc *grpc.Server) Option {
-	return func(o *options) { o.grpc = grpc }
-}
-
 // WithTimeout 设置RPC调用超时时间
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
@@ -68,4 +65,9 @@ func WithLocator(locator locator.Locator) Option {
 // WithRegistry 设置服务注册
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
+}
+
+// WithTransporter 设置传输器
+func WithTransporter(transporter *grpc.Server) Option {
+	return func(o *options) { o.transporter = transporter }
 }

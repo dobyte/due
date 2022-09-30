@@ -108,11 +108,14 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, uid int64) err
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Message) error {
 	_, err := p.doNodeRPC(ctx, message.Route, uid, func(ctx context.Context, client pb.NodeClient) (bool, interface{}, error) {
 		reply, err := client.Deliver(ctx, &pb.DeliverRequest{
-			GID:    p.gate.opts.id,
-			CID:    cid,
-			UID:    uid,
-			Route:  message.Route,
-			Buffer: message.Buffer,
+			GID: p.gate.opts.id,
+			CID: cid,
+			UID: uid,
+			Message: &pb.Message{
+				Seq:    message.Seq,
+				Route:  message.Route,
+				Buffer: message.Buffer,
+			},
 		})
 		return status.Code(err) == code.NotFoundSession, reply, err
 	})
