@@ -80,7 +80,7 @@ func (st *Stack) Frames() []runtime.Frame {
 }
 
 func (st *Stack) String() string {
-	return ""
+	return fmt.Sprintf("%s", st)
 }
 
 func (st *Stack) Format(s fmt.State, verb rune) {

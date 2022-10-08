@@ -1,4 +1,4 @@
-package errors
+package code
 
 import (
 	"fmt"
@@ -6,10 +6,10 @@ import (
 )
 
 var (
-	CodeNil              = NewCode(-1, "", nil)
-	CodeInternalError    = NewCode(1, "internal error", nil)
-	CodeInvalidParameter = NewCode(2, "invalid parameter", nil)
-	CodeNotLocatedUser   = NewCode(3, "not located user", nil)
+	Nil              = NewCode(-1, "", nil)
+	InternalError    = NewCode(1, "internal error", nil)
+	InvalidParameter = NewCode(2, "invalid parameter", nil)
+	NotLocatedUser   = NewCode(3, "not located user", nil)
 )
 
 type Code interface {

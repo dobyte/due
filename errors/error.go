@@ -2,13 +2,10 @@ package errors
 
 import (
 	"fmt"
+	"github.com/dobyte/due/code"
 	"github.com/dobyte/due/internal/stack"
 	"io"
 )
-
-type format interface {
-	Format(fmt.State, rune)
-}
 
 type Error interface {
 	error
@@ -17,7 +14,7 @@ type Error interface {
 	// As 返回当前错误是否是某一类错误
 	As(target interface{}) bool
 	// Code 返回错误码
-	Code() Code
+	Code() code.Code
 	// Next 返回下一个错误
 	Next() error
 	// Cause 返回根因错误
@@ -26,9 +23,14 @@ type Error interface {
 	Stack() *stack.Stack
 }
 
+// NewError 新建一个错误
+// 可传入一下参数：
+// text : 文本字符串
+// code : 错误码
+// error: 原生错误
 func NewError(args ...interface{}) error {
 	e := &defaultError{
-		code:  CodeNil,
+		code:  code.Nil,
 		stack: stack.Callers(1, stack.Full),
 	}
 
@@ -38,7 +40,7 @@ func NewError(args ...interface{}) error {
 			e.err = v
 		case string:
 			e.text = v
-		case Code:
+		case code.Code:
 			e.code = v
 		}
 	}
@@ -46,11 +48,55 @@ func NewError(args ...interface{}) error {
 	return e
 }
 
+// Code 返回错误码
+func Code(err error) code.Code {
+	if err != nil {
+		if e, ok := err.(interface{ Code() code.Code }); ok {
+			return e.Code()
+		}
+	}
+
+	return code.Nil
+}
+
+// Next 返回下一个错误
+func Next(err error) error {
+	if err != nil {
+		if e, ok := err.(interface{ Next() error }); ok {
+			return e.Next()
+		}
+	}
+
+	return nil
+}
+
+// Cause 返回根因错误
+func Cause(err error) error {
+	if err != nil {
+		if e, ok := err.(interface{ Cause() error }); ok {
+			return e.Cause()
+		}
+	}
+
+	return nil
+}
+
+// Stack 返回堆栈
+func Stack(err error) *stack.Stack {
+	if err != nil {
+		if e, ok := err.(interface{ Stack() *stack.Stack }); ok {
+			return e.Stack()
+		}
+	}
+
+	return nil
+}
+
 var _ Error = &defaultError{}
 
 type defaultError struct {
 	err   error
-	code  Code
+	code  code.Code
 	text  string
 	stack *stack.Stack
 }
@@ -62,7 +108,7 @@ func (e *defaultError) Error() (text string) {
 
 	text = e.text
 
-	if text == "" && e.code != CodeNil {
+	if text == "" && e.code != code.Nil {
 		text = e.code.Message()
 	}
 
@@ -87,9 +133,9 @@ func (e *defaultError) As(target interface{}) bool {
 }
 
 // Code 返回错误码
-func (e *defaultError) Code() Code {
+func (e *defaultError) Code() code.Code {
 	if e == nil {
-		return CodeNil
+		return code.Nil
 	}
 
 	return e.code
@@ -141,7 +187,7 @@ func (e *defaultError) Unwrap() error {
 
 // String 格式化错误信息
 func (e *defaultError) String() string {
-	return ""
+	return fmt.Sprintf("%+v", e)
 }
 
 func (e *defaultError) error() (text string) {
@@ -150,7 +196,7 @@ func (e *defaultError) error() (text string) {
 	}
 
 	text = e.text
-	if text == "" && e.code != CodeNil {
+	if text == "" && e.code != code.Nil {
 		text = e.code.Message()
 	}
 
@@ -200,7 +246,7 @@ func (e *defaultError) Format(s fmt.State, verb rune) {
 		if e.text != "" {
 			io.WriteString(s, e.text)
 		} else {
-			e.code.(format).Format(s, verb)
+			e.code.(interface{ Format(fmt.State, rune) }).Format(s, verb)
 		}
 	}
 }

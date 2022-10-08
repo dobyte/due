@@ -2,6 +2,7 @@ package errors_test
 
 import (
 	"fmt"
+	"github.com/dobyte/due/code"
 	"github.com/dobyte/due/errors"
 	"testing"
 )
@@ -9,13 +10,13 @@ import (
 func TestNew(t *testing.T) {
 	innerErr := errors.NewError(
 		"db error",
-		errors.NewCode(2, "internal error", ""),
+		code.NewCode(2, "internal error", ""),
 		errors.New("std not found"),
 	)
 
 	err := errors.NewError(
 		//"not found",
-		errors.NewCode(1, "not found", ""),
+		code.NewCode(1, "not found", ""),
 		innerErr,
 	)
 
