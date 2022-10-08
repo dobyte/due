@@ -1,9 +1,5 @@
 package log
 
-import (
-	"sync"
-)
-
 type Logger interface {
 	// Debug 打印调试日志
 	Debug(a ...interface{})
@@ -31,7 +27,7 @@ type Logger interface {
 	Panicf(format string, a ...interface{})
 }
 
-var defaultLogger = &globalLogger{}
+var defaultLogger Logger
 
 func init() {
 	SetLogger(NewLogger(
@@ -40,32 +36,14 @@ func init() {
 	))
 }
 
-type globalLogger struct {
-	rw     sync.RWMutex
-	logger Logger
-}
-
-// 设置
-func (l *globalLogger) SetLogger(logger Logger) {
-	l.rw.Lock()
-	defer l.rw.Unlock()
-	l.logger = logger
-}
-
-func (l *globalLogger) GetLogger() Logger {
-	l.rw.RLock()
-	defer l.rw.RUnlock()
-	return l.logger
-}
-
 // SetLogger 设置日志记录器
 func SetLogger(logger Logger) {
-	defaultLogger.SetLogger(logger)
+	defaultLogger = logger
 }
 
 // GetLogger 获取日志记录器
 func GetLogger() Logger {
-	return defaultLogger.GetLogger()
+	return defaultLogger
 }
 
 // Debug 打印调试日志
@@ -123,7 +101,7 @@ func Panic(a ...interface{}) {
 	GetLogger().Panic(a...)
 }
 
-// Fatalf 打印Panic模板日志
+// Panicf 打印Panic模板日志
 func Panicf(format string, a ...interface{}) {
 	GetLogger().Panicf(format, a...)
 }

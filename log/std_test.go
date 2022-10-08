@@ -29,5 +29,5 @@ func TestNewLogger(t *testing.T) {
 		//log.WithFileCutRule(log.CutByDay),
 	)
 
-	logger.Warn("aaa", "bbb")
+	logger.Error("aaa")
 }
