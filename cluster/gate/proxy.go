@@ -3,14 +3,9 @@ package gate
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/enum"
-	"strconv"
-	"strings"
 	"sync"
 
-	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
@@ -20,7 +15,6 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/router"
-	"github.com/dobyte/due/third/redis"
 )
 
 var (
@@ -28,29 +22,20 @@ var (
 )
 
 type proxy struct {
-	gate    *Gate              // 网关服
-	kind    string             // 代理类型
-	channel string             // 发布订阅通道
-	sources sync.Map           // 用户来源
-	sfg     singleflight.Group // singleFlight
+	gate    *Gate    // 网关服
+	sources sync.Map // 用户来源
 }
 
 func newProxy(gate *Gate) *proxy {
-	return &proxy{
-		gate: gate,
-		kind: string(cluster.Gate),
-	}
+	return &proxy{gate: gate}
 }
 
 // 绑定用户与网关间的关系
 func (p *proxy) bindGate(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.gate.opts.redis.HSet(ctx, key, p.kind, p.gate.opts.id).Err()
+	err := p.gate.opts.locator.Set(ctx, uid, cluster.Gate, p.gate.opts.id)
 	if err != nil {
 		return err
 	}
-
-	p.synchronize(ctx, uid, enum.BindAction)
 
 	err = p.trigger(ctx, cluster.Reconnect, uid)
 	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
@@ -62,13 +47,10 @@ func (p *proxy) bindGate(ctx context.Context, uid int64) error {
 
 // 解绑用户与网关间的关系
 func (p *proxy) unbindGate(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.gate.opts.redis.HDel(ctx, key, p.kind).Err()
+	err := p.gate.opts.locator.Rem(ctx, uid, cluster.Gate, p.gate.opts.id)
 	if err != nil {
 		return err
 	}
-
-	p.synchronize(ctx, uid, enum.UnbindAction)
 
 	err = p.trigger(ctx, cluster.Disconnect, uid)
 	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
@@ -76,57 +58,6 @@ func (p *proxy) unbindGate(ctx context.Context, uid int64) error {
 	}
 
 	return nil
-}
-
-// 广播
-func (p *proxy) synchronize(ctx context.Context, uid int64, action string) {
-	msg := fmt.Sprintf("%d@%s@%s@%s", uid, p.kind, p.gate.opts.id, action)
-	channel := fmt.Sprintf(enum.UserSourcesBroadcastKey, cluster.Gate)
-	err := p.gate.opts.redis.Publish(ctx, channel, msg).Err()
-	if err != nil {
-		log.Errorf("the user source broadcast failed: %v", err)
-	}
-}
-
-// 监听
-func (p *proxy) listen(ctx context.Context) {
-	channel := fmt.Sprintf(enum.UserSourcesBroadcastKey, string(cluster.Node))
-	sub := p.gate.opts.redis.Subscribe(ctx, channel)
-
-	for {
-		iface, err := sub.Receive(ctx)
-		if err != nil {
-			return
-		}
-
-		switch v := iface.(type) {
-		case *redis.Subscription:
-			log.Debugf("channel subscribe succeeded, %s", channel)
-		case *redis.Message:
-			slice := strings.Split(v.Payload, "@")
-			if len(slice) != 4 {
-				log.Errorf("invalid broadcast payload, %s", v.Payload)
-				continue
-			}
-
-			uid, err := strconv.ParseInt(slice[0], 10, 64)
-			if err != nil {
-				log.Errorf("invalid broadcast payload, %s", v.Payload)
-				continue
-			}
-
-			switch slice[3] {
-			case enum.BindAction:
-				p.sources.Store(uid, slice[2])
-			case enum.UnbindAction:
-				p.sources.Delete(uid)
-			}
-		case *redis.Pong:
-			log.Debugf("channel received pong, %s", channel)
-		default:
-			// handle error
-		}
-	}
 }
 
 // 触发事件
@@ -176,11 +107,14 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, uid int64) err
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Message) error {
 	_, err := p.doNodeRPC(ctx, message.Route, uid, func(ctx context.Context, client pb.NodeClient) (bool, interface{}, error) {
 		reply, err := client.Deliver(ctx, &pb.DeliverRequest{
-			GID:    p.gate.opts.id,
-			CID:    cid,
-			UID:    uid,
-			Route:  message.Route,
-			Buffer: message.Buffer,
+			GID: p.gate.opts.id,
+			CID: cid,
+			UID: uid,
+			Message: &pb.Message{
+				Seq:    message.Seq,
+				Route:  message.Route,
+				Buffer: message.Buffer,
+			},
 		})
 		return status.Code(err) == code.NotFoundSession, reply, err
 	})
@@ -238,31 +172,23 @@ func (p *proxy) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(c
 // 定位用户所在节点
 func (p *proxy) locateNode(ctx context.Context, uid int64) (string, error) {
 	if val, ok := p.sources.Load(uid); ok {
-		if insID := val.(string); insID != "" {
-			return insID, nil
+		if nid := val.(string); nid != "" {
+			return nid, nil
 		}
 	}
 
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	val, err, _ := p.sfg.Do(key, func() (interface{}, error) {
-		val, err := p.gate.opts.redis.HGet(ctx, key, string(cluster.Node)).Result()
-		if err != nil && err != redis.Nil {
-			return "", err
-		}
-
-		if val == "" {
-			return "", ErrNotFoundUserSource
-		}
-
-		p.sources.Store(uid, val)
-
-		return val, nil
-	})
+	nid, err := p.gate.opts.locator.Get(ctx, uid, cluster.Node)
 	if err != nil {
 		return "", err
 	}
 
-	return val.(string), nil
+	if nid == "" {
+		return "", ErrNotFoundUserSource
+	}
+
+	p.sources.Store(uid, nid)
+
+	return nid, nil
 }
 
 // 新建节点RPC客户端
@@ -273,4 +199,37 @@ func (p *proxy) newNodeClient(ep *router.Endpoint) (pb.NodeClient, error) {
 	}
 
 	return pb.NewNodeClient(conn), nil
+}
+
+// 监听
+func (p *proxy) watch(ctx context.Context) {
+	watcher, err := p.gate.opts.locator.Watch(ctx, cluster.Node)
+	if err != nil {
+		log.Fatalf("user locate event watch failed: %v", err)
+	}
+
+	go func() {
+		defer watcher.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// exec watch
+			}
+			events, err := watcher.Next()
+			if err != nil {
+				continue
+			}
+			for _, event := range events {
+				switch event.Type {
+				case locate.SetLocation:
+					p.sources.Store(event.UID, event.InsID)
+				case locate.RemLocation:
+					p.sources.Delete(event.UID)
+				}
+			}
+		}
+	}()
 }

@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option go_package = "./pb";
+
+package pb;
+
+message Message {
+  int32 Seq = 1; // 序列号
+  int32 Route = 2;  // 路由
+  bytes Buffer = 3; // 消息内容
+}
