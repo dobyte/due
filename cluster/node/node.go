@@ -75,7 +75,7 @@ func NewNode(opts ...Option) *Node {
 		log.Fatal("instance id can not be empty")
 	}
 	if o.grpc == nil {
-		log.Fatal("grpc plugin is not injected")
+		log.Fatal("transporter plugin is not injected")
 	}
 	if o.locator == nil {
 		log.Fatal("locator plugin is not injected")

@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/encoding"
+	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport/grpc"
 	"time"

@@ -6,7 +6,10 @@ import (
 )
 
 var (
-	CodeNil = NewCode(-1, "", nil)
+	CodeNil              = NewCode(-1, "", nil)
+	CodeInternalError    = NewCode(1, "internal error", nil)
+	CodeInvalidParameter = NewCode(2, "invalid parameter", nil)
+	CodeNotLocatedUser   = NewCode(3, "not located user", nil)
 )
 
 type Code interface {
