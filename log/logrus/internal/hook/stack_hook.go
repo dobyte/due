@@ -8,6 +8,7 @@
 package hook
 
 import (
+	"github.com/dobyte/due/internal/stack"
 	"github.com/sirupsen/logrus"
 
 	"github.com/dobyte/due/log"
@@ -44,11 +45,16 @@ func (h *StackHook) Fire(entry *logrus.Entry) error {
 		level = log.PanicLevel
 	}
 
+	var depth stack.Depth
 	if h.outStackLevel != defaultNoneLevel && level >= h.outStackLevel {
-		entry.Data["frames"] = log.GetFrames(9, log.StacktraceFull)
+		depth = stack.Full
 	} else {
-		entry.Data["frames"] = log.GetFrames(9, log.StacktraceFirst)
+		depth = stack.First
 	}
+
+	st := stack.Callers(9, depth)
+	defer st.Frames()
+	entry.Data["frames"] = st.Frames()
 
 	return nil
 }
