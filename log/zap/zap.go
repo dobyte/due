@@ -207,7 +207,7 @@ func (l *Logger) Panicf(format string, a ...interface{}) {
 	l.logger.Panicf(format, a...)
 }
 
-// 同步缓存中的日志
+// Sync 同步缓存中的日志
 func (l *Logger) Sync() error {
 	return l.logger.Sync()
 }
