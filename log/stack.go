@@ -64,10 +64,10 @@ func GetStacktrace(skip int, depth StacktraceDepth) *stacktrace {
 	return stack
 }
 
-func (s *stacktrace) Free() {
-	s.pcs = nil
-	s.frames = nil
-	stackPool.Put(s)
+func (st *stacktrace) Free() {
+	st.pcs = nil
+	st.frames = nil
+	stackPool.Put(st)
 }
 
 func (st *stacktrace) Next() (_ runtime.Frame, more bool) {

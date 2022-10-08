@@ -9,7 +9,7 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/grpc"
 	"time"
@@ -27,7 +27,7 @@ type options struct {
 	server      network.Server        // 服务器
 	grpc        *grpc.Server          // GRPC服务器
 	timeout     time.Duration         // rpc调用超时时间
-	locator     locator.Locator       // 定位器
+	locator     locate.Locator        // 定位器
 	registry    registry.Registry     // 服务注册
 	transporter transport.Transporter // 传输器
 }
@@ -58,7 +58,7 @@ func WithTimeout(timeout time.Duration) Option {
 }
 
 // WithLocator 设置定位器
-func WithLocator(locator locator.Locator) Option {
+func WithLocator(locator locate.Locator) Option {
 	return func(o *options) { o.locator = locator }
 }
 

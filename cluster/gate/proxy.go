@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -225,9 +224,9 @@ func (p *proxy) watch(ctx context.Context) {
 			}
 			for _, event := range events {
 				switch event.Type {
-				case locator.SetLocation:
+				case locate.SetLocation:
 					p.sources.Store(event.UID, event.InsID)
-				case locator.RemLocation:
+				case locate.RemLocation:
 					p.sources.Delete(event.UID)
 				}
 			}

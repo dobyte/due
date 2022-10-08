@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator"
 	"github.com/dobyte/due/registry"
 	"sync"
 	"sync/atomic"
@@ -758,9 +757,9 @@ func (p *proxy) watch(ctx context.Context) {
 				}
 
 				switch event.Type {
-				case locator.SetLocation:
+				case locate.SetLocation:
 					source.Store(event.UID, event.InsID)
-				case locator.RemLocation:
+				case locate.RemLocation:
 					source.Delete(event.UID)
 				}
 			}
