@@ -70,7 +70,6 @@ func NewLogger(opts ...Option) *Logger {
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 
-	var f logrus.Formatter
 	switch o.outFormat {
 	case log.JsonFormat:
 		l.logger.SetFormatter(&formatter.JsonFormatter{

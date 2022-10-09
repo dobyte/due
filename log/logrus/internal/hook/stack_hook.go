@@ -48,13 +48,14 @@ func (h *StackHook) Fire(entry *logrus.Entry) error {
 	var depth stack.Depth
 	if h.outStackLevel != defaultNoneLevel && level >= h.outStackLevel {
 		depth = stack.Full
+		entry.Data["stack_out"] = struct{}{}
 	} else {
 		depth = stack.First
 	}
 
-	st := stack.Callers(9, depth)
-	defer st.Frames()
-	entry.Data["frames"] = st.Frames()
+	st := stack.Callers(8, depth)
+	defer st.Free()
+	entry.Data["stack_frames"] = st.Frames()
 
 	return nil
 }

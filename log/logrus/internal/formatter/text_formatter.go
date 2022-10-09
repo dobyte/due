@@ -77,7 +77,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		fmt.Fprintf(b, " %s", message)
 	}
 
-	if len(frames) > 1 {
+	if _, ok := entry.Data["stack_out"]; ok && len(frames) > 0 {
 		fmt.Fprint(b, "\nStack:")
 		for i, frame := range frames {
 			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)
