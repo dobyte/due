@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"sync"
 	"sync/atomic"
@@ -303,12 +303,12 @@ func (p *proxy) indirectGetIP(ctx context.Context, uid int64) (string, error) {
 func (p *proxy) Push(ctx context.Context, args *PushArgs) error {
 	switch args.Kind {
 	case session.Conn:
-		return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Route, args.Message)
+		return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Message)
 	case session.User:
 		if args.GID == "" {
-			return p.indirectPush(ctx, args.Target, args.Route, args.Message)
+			return p.indirectPush(ctx, args.Target, args.Message)
 		} else {
-			return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Route, args.Message)
+			return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Message)
 		}
 	default:
 		return ErrInvalidSessionKind
@@ -316,8 +316,8 @@ func (p *proxy) Push(ctx context.Context, args *PushArgs) error {
 }
 
 // 直接推送
-func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, target int64, route int32, message interface{}) error {
-	buffer, err := p.toBuffer(message)
+func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, target int64, message *Message) error {
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return err
 	}
@@ -331,16 +331,19 @@ func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, t
 		NID:    p.node.opts.id,
 		Kind:   int32(kind),
 		Target: target,
-		Route:  route,
-		Buffer: buffer,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: buffer,
+		},
 	})
 
 	return err
 }
 
 // 间接推送
-func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, message interface{}) error {
-	buffer, err := p.toBuffer(message)
+func (p *proxy) indirectPush(ctx context.Context, uid int64, message *Message) error {
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return err
 	}
@@ -350,8 +353,11 @@ func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, messag
 			NID:    p.node.opts.id,
 			Kind:   int32(session.User),
 			Target: uid,
-			Route:  route,
-			Buffer: buffer,
+			Message: &pb.Message{
+				Seq:    message.Seq,
+				Route:  message.Route,
+				Buffer: buffer,
+			},
 		})
 
 		return status.Code(err) == code.NotFoundSession, reply, err
@@ -362,19 +368,23 @@ func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, messag
 
 // Response 响应消息
 func (p *proxy) Response(ctx context.Context, req Request, message interface{}) error {
-	return p.directPush(ctx, req.GID(), session.Conn, req.CID(), req.Route(), message)
+	return p.directPush(ctx, req.GID(), session.Conn, req.CID(), &Message{
+		Seq:   req.Seq(),
+		Route: req.Route(),
+		Data:  message,
+	})
 }
 
 // Multicast 推送组播消息
 func (p *proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	switch args.Kind {
 	case session.Conn:
-		return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Route, args.Message)
+		return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Message)
 	case session.User:
 		if args.GID == "" {
-			return p.indirectMulticast(ctx, args.Targets, args.Route, args.Message)
+			return p.indirectMulticast(ctx, args.Targets, args.Message)
 		} else {
-			return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Route, args.Message)
+			return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Message)
 		}
 	default:
 		return 0, ErrInvalidSessionKind
@@ -382,12 +392,12 @@ func (p *proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, erro
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
-func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Kind, targets []int64, route int32, message interface{}) (int64, error) {
+func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Kind, targets []int64, message *Message) (int64, error) {
 	if len(targets) == 0 {
 		return 0, ErrReceiveTargetEmpty
 	}
 
-	buffer, err := p.toBuffer(message)
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return 0, err
 	}
@@ -401,8 +411,11 @@ func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Ki
 		NID:     p.node.opts.id,
 		Kind:    int32(kind),
 		Targets: targets,
-		Route:   route,
-		Buffer:  buffer,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: buffer,
+		},
 	})
 	if err != nil {
 		return 0, err
@@ -412,14 +425,14 @@ func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Ki
 }
 
 // 间接推送组播消息
-func (p *proxy) indirectMulticast(ctx context.Context, uids []int64, route int32, message interface{}) (int64, error) {
+func (p *proxy) indirectMulticast(ctx context.Context, uids []int64, message *Message) (int64, error) {
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, target := range uids {
 		uid := target
 		eg.Go(func() error {
-			if err := p.indirectPush(ctx, uid, route, message); err != nil {
+			if err := p.indirectPush(ctx, uid, message); err != nil {
 				return err
 			}
 			atomic.AddInt64(&total, 1)
@@ -453,10 +466,13 @@ func (p *proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 			}
 
 			reply, err := client.Broadcast(ctx, &pb.BroadcastRequest{
-				NID:    p.node.opts.id,
-				Kind:   int32(args.Kind),
-				Route:  args.Route,
-				Buffer: buffer,
+				NID:  p.node.opts.id,
+				Kind: int32(args.Kind),
+				Message: &pb.Message{
+					Seq:    args.Message.Seq,
+					Route:  args.Message.Route,
+					Buffer: buffer,
+				},
 			})
 			if err != nil {
 				return err
@@ -742,9 +758,9 @@ func (p *proxy) watch(ctx context.Context) {
 				}
 
 				switch event.Type {
-				case locator.SetLocation:
+				case locate.SetLocation:
 					source.Store(event.UID, event.InsID)
-				case locator.RemLocation:
+				case locate.RemLocation:
 					source.Delete(event.UID)
 				}
 			}

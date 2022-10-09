@@ -75,7 +75,7 @@ func NewNode(opts ...Option) *Node {
 		log.Fatal("instance id can not be empty")
 	}
 	if o.grpc == nil {
-		log.Fatal("grpc plugin is not injected")
+		log.Fatal("transporter plugin is not injected")
 	}
 	if o.locator == nil {
 		log.Fatal("locator plugin is not injected")
@@ -305,15 +305,16 @@ func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
 }
 
 // 投递消息给当前节点处理
-func (n *Node) deliver(gid, nid string, cid, uid int64, route int32, buffer interface{}) {
+func (n *Node) deliver(gid, nid string, cid, uid int64, message *pb.Message) {
 	n.chRequest <- &request{
-		gid:    gid,
-		nid:    nid,
-		cid:    cid,
-		uid:    uid,
-		route:  route,
-		buffer: buffer,
-		node:   n,
+		gid:   gid,
+		nid:   nid,
+		cid:   cid,
+		uid:   uid,
+		node:  n,
+		seq:   message.Seq,
+		route: message.Route,
+		data:  message.Buffer,
 	}
 }
 

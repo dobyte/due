@@ -4,6 +4,8 @@ option go_package = "./pb";
 
 package pb;
 
+import "message.proto";
+
 service Node {
   // 触发事件
   rpc Trigger(TriggerRequest) returns (TriggerReply) {}
@@ -25,8 +27,7 @@ message DeliverRequest {
   string NID = 2; // 节点ID
   int64 CID = 3; // 连接ID
   int64 UID = 4; // 用户ID
-  int32 Route = 5; // 路由ID
-  bytes Buffer = 6; // 消息内容
+  Message Message = 5; // 消息
 }
 
 message DeliverReply {

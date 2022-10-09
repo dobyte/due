@@ -5,7 +5,7 @@
  * @Desc: 定位用户所在网关和节点
  */
 
-package locator
+package locate
 
 import (
 	"context"

@@ -9,6 +9,7 @@ package log
 
 import (
 	"fmt"
+	"github.com/dobyte/due/internal/stack"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -62,10 +63,14 @@ func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
 	e.Message = strings.TrimRight(msg, "\n")
 
 	if p.std.opts.stackLevel != 0 && level >= p.std.opts.stackLevel {
-		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFull)
+		st := stack.Callers(3+p.std.opts.callerSkip, stack.Full)
+		defer st.Free()
+		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)
 	} else {
-		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFirst)
+		st := stack.Callers(3+p.std.opts.callerSkip, stack.First)
+		defer st.Free()
+		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)
 		e.Frames = nil
 	}
