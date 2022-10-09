@@ -131,7 +131,7 @@ func (l *Logger) Producer() *cls.AsyncProducerClient {
 	return l.producer
 }
 
-// 关闭日志服务
+// Close 关闭日志服务
 func (l *Logger) Close() error {
 	return l.producer.Close(60000)
 }
