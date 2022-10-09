@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator/redis"
+	"github.com/dobyte/due/locate/redis"
 	"strconv"
 	"testing"
 	"time"

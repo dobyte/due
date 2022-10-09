@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/log"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
@@ -23,7 +23,7 @@ const (
 	defaultPrefix = "due"
 )
 
-var _ locator.Locator = &Locator{}
+var _ locate.Locator = &Locator{}
 
 type Locator struct {
 	ctx      context.Context
@@ -91,7 +91,7 @@ func (l *Locator) Set(ctx context.Context, uid int64, insKind cluster.Kind, insI
 		return err
 	}
 
-	err = l.publish(ctx, uid, insKind, insID, locator.SetLocation)
+	err = l.publish(ctx, uid, insKind, insID, locate.SetLocation)
 	if err != nil {
 		log.Errorf("location event publish failed: %v", err)
 	}
@@ -116,7 +116,7 @@ func (l *Locator) Rem(ctx context.Context, uid int64, insKind cluster.Kind, insI
 		return err
 	}
 
-	err = l.publish(ctx, uid, insKind, insID, locator.RemLocation)
+	err = l.publish(ctx, uid, insKind, insID, locate.RemLocation)
 	if err != nil {
 		log.Errorf("location event publish failed: %v", err)
 	}
@@ -124,8 +124,8 @@ func (l *Locator) Rem(ctx context.Context, uid int64, insKind cluster.Kind, insI
 	return nil
 }
 
-func (l *Locator) publish(ctx context.Context, uid int64, insKind cluster.Kind, insID string, eventType locator.EventType) error {
-	msg, err := marshal(&locator.Event{
+func (l *Locator) publish(ctx context.Context, uid int64, insKind cluster.Kind, insID string, eventType locate.EventType) error {
+	msg, err := marshal(&locate.Event{
 		UID:     uid,
 		Type:    eventType,
 		InsID:   insID,
@@ -154,7 +154,7 @@ func (l *Locator) toUniqueKey(insKinds ...cluster.Kind) string {
 }
 
 // Watch 监听用户定位变化
-func (l *Locator) Watch(ctx context.Context, insKinds ...cluster.Kind) (locator.Watcher, error) {
+func (l *Locator) Watch(ctx context.Context, insKinds ...cluster.Kind) (locate.Watcher, error) {
 	key := l.toUniqueKey(insKinds...)
 
 	v, ok := l.watchers.Load(key)
@@ -172,7 +172,7 @@ func (l *Locator) Watch(ctx context.Context, insKinds ...cluster.Kind) (locator.
 	return w.fork(), nil
 }
 
-func marshal(event *locator.Event) (string, error) {
+func marshal(event *locate.Event) (string, error) {
 	buf, err := json.Marshal(event)
 	if err != nil {
 		return "", err
@@ -180,8 +180,8 @@ func marshal(event *locator.Event) (string, error) {
 	return string(buf), nil
 }
 
-func unmarshal(data []byte) (*locator.Event, error) {
-	event := &locator.Event{}
+func unmarshal(data []byte) (*locate.Event, error) {
+	event := &locate.Event{}
 	if err := json.Unmarshal(data, event); err != nil {
 		return nil, err
 	}

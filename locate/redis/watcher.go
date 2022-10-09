@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locator"
+	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/log"
 	"github.com/go-redis/redis/v8"
 	"sync"
@@ -16,7 +16,7 @@ type watcher struct {
 	state      int32
 	ctx        context.Context
 	cancel     context.CancelFunc
-	chEvent    chan []*locator.Event
+	chEvent    chan []*locate.Event
 	watcherMgr *watcherMgr
 }
 
@@ -25,12 +25,12 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w.idx = idx
 	w.watcherMgr = wm
 	w.ctx, w.cancel = context.WithCancel(wm.ctx)
-	w.chEvent = make(chan []*locator.Event, 16)
+	w.chEvent = make(chan []*locate.Event, 16)
 
 	return w
 }
 
-func (w *watcher) notify(events []*locator.Event) {
+func (w *watcher) notify(events []*locate.Event) {
 	if atomic.LoadInt32(&w.state) == 0 {
 		return
 	}
@@ -39,7 +39,7 @@ func (w *watcher) notify(events []*locator.Event) {
 }
 
 // Next 返回变动事件列表
-func (w *watcher) Next() ([]*locator.Event, error) {
+func (w *watcher) Next() ([]*locate.Event, error) {
 	if atomic.LoadInt32(&w.state) == 0 {
 		atomic.StoreInt32(&w.state, 1)
 	}
@@ -120,7 +120,7 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, insKinds ...clus
 	return wm, nil
 }
 
-func (wm *watcherMgr) fork() locator.Watcher {
+func (wm *watcherMgr) fork() locate.Watcher {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
@@ -145,7 +145,7 @@ func (wm *watcherMgr) recycle(idx int64) error {
 	return nil
 }
 
-func (wm *watcherMgr) broadcast(events ...*locator.Event) {
+func (wm *watcherMgr) broadcast(events ...*locate.Event) {
 	wm.rw.RLock()
 	defer wm.rw.RUnlock()
 
