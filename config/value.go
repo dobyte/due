@@ -1,7 +1,6 @@
 package config
 
 import (
-	"github.com/dobyte/due/utils/conv"
 	"sync/atomic"
 	"time"
 )
@@ -15,59 +14,59 @@ func (v *Value) Value() interface{} {
 }
 
 func (v *Value) Int() int {
-	return conv.Int(v.Value())
+	return xconv.Int(v.Value())
 }
 
 func (v *Value) Int8() int8 {
-	return conv.Int8(v.Value())
+	return xconv.Int8(v.Value())
 }
 
 func (v *Value) Int16() int16 {
-	return conv.Int16(v.Value())
+	return xconv.Int16(v.Value())
 }
 
 func (v *Value) Int32() int32 {
-	return conv.Int32(v.Value())
+	return xconv.Int32(v.Value())
 }
 
 func (v *Value) Int64() int64 {
-	return conv.Int64(v.Value())
+	return xconv.Int64(v.Value())
 }
 
 func (v *Value) Uint() uint {
-	return conv.Uint(v.Value())
+	return xconv.Uint(v.Value())
 }
 
 func (v *Value) Uint8() uint8 {
-	return conv.Uint8(v.Value())
+	return xconv.Uint8(v.Value())
 }
 
 func (v *Value) Uint16() uint16 {
-	return conv.Uint16(v.Value())
+	return xconv.Uint16(v.Value())
 }
 
 func (v *Value) Uint32() uint32 {
-	return conv.Uint32(v.Value())
+	return xconv.Uint32(v.Value())
 }
 
 func (v *Value) Uint64() uint64 {
-	return conv.Uint64(v.Value())
+	return xconv.Uint64(v.Value())
 }
 
 func (v *Value) Float32() float32 {
-	return conv.Float32(v.Value())
+	return xconv.Float32(v.Value())
 }
 
 func (v *Value) Float64() float64 {
-	return conv.Float64(v.Value())
+	return xconv.Float64(v.Value())
 }
 
 func (v *Value) Bool() bool {
-	return conv.Bool(v.Value())
+	return xconv.Bool(v.Value())
 }
 
 func (v *Value) String() string {
-	return conv.String(v.Value())
+	return xconv.String(v.Value())
 }
 
 func (v *Value) Time() time.Time {
@@ -75,7 +74,7 @@ func (v *Value) Time() time.Time {
 }
 
 func (v *Value) Duration() time.Duration {
-	return conv.Duration(v.Value())
+	return xconv.Duration(v.Value())
 }
 
 func (v *Value) Map() map[string]interface{} {
