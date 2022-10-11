@@ -3,6 +3,7 @@ module github.com/dobyte/due
 go 1.16
 
 require (
+	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/uuid v1.3.0
@@ -15,4 +16,6 @@ require (
 	google.golang.org/genproto v0.0.0-20220525015930-6ca3db687a9d // indirect
 	google.golang.org/grpc v1.46.2
 	google.golang.org/protobuf v1.28.0
+	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

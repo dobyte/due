@@ -1,16 +1,16 @@
 package config
 
 import (
-	"sync/atomic"
+	"github.com/dobyte/due/utils/xconv"
 	"time"
 )
 
 type Value struct {
-	val atomic.Value
+	val interface{}
 }
 
 func (v *Value) Value() interface{} {
-	return v.val.Load()
+	return v.val
 }
 
 func (v *Value) Int() int {
