@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/dobyte/due/log"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -76,6 +77,15 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 		case map[string]interface{}:
 			if v, ok := vs[key]; ok {
 				values = v
+			} else {
+				found = false
+			}
+		case []interface{}:
+			i, err := strconv.Atoi(key)
+			if err != nil {
+				found = false
+			} else if len(vs) > i {
+				values = vs[i]
 			} else {
 				found = false
 			}

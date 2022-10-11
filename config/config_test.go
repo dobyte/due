@@ -6,7 +6,7 @@ import (
 )
 
 func TestConfig(t *testing.T) {
-	v := config.Get("c.c.d").Int()
+	v := config.Get("c.redis.addrs.3", "192.168.0.1:3308").String()
 	t.Log(v)
 
 	//reader := config.NewReader(config.WithSources(
