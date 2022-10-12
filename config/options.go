@@ -13,7 +13,7 @@ import (
 
 type Option func(o *options)
 
-type Decoder func(configuration *Configuration) (map[string]interface{}, error)
+type Decoder func(configuration *Configuration) (interface{}, error)
 
 type options struct {
 	sources []Source
@@ -31,20 +31,28 @@ func WithDecoder(decoder Decoder) Option {
 }
 
 // 默认解码器
-func defaultDecoder(c *Configuration) (map[string]interface{}, error) {
-	var name string
+func defaultDecoder(c *Configuration) (interface{}, error) {
+	var (
+		codec encoding.Codec
+		dest  interface{}
+	)
+
 	switch strings.ToLower(c.Format) {
 	case json.Name, xml.Name, proto.Name, toml.Name, yaml.Name:
-		name = c.Format
+		codec = encoding.Invoke(c.Format)
 	case "yml":
-		name = yaml.Name
+		codec = encoding.Invoke(yaml.Name)
 	default:
 		return nil, errors.New("invalid encoding format")
 	}
 
-	dest := make(map[string]interface{})
-	err := encoding.Invoke(name).Unmarshal(c.Content, &dest)
-	if err != nil {
+	dest = make(map[string]interface{})
+	if err := codec.Unmarshal(c.Content, &dest); err == nil {
+		return dest, nil
+	}
+
+	dest = make([]interface{}, 0)
+	if err := codec.Unmarshal(c.Content, &dest); err != nil {
 		return nil, err
 	}
 

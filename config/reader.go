@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"github.com/dobyte/due/log"
 	"strconv"
 	"strings"
@@ -11,7 +12,7 @@ type Reader interface {
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) *Value
 	// Set 设置配置值
-	Set(pattern string, value string)
+	Set(pattern string, value interface{})
 }
 
 type defaultReader struct {
@@ -20,6 +21,8 @@ type defaultReader struct {
 	rw     sync.RWMutex
 	values map[string]interface{}
 }
+
+var _ Reader = &defaultReader{}
 
 func NewReader(opts ...Option) Reader {
 	o := &options{
@@ -92,6 +95,10 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 		default:
 			found = false
 		}
+
+		if !found {
+			break
+		}
 	}
 
 	if found {
@@ -106,6 +113,85 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 }
 
 // Set 设置配置值
-func (r *defaultReader) Set(pattern string, value string) {
+func (r *defaultReader) Set(pattern string, value interface{}) {
+	r.rw.Lock()
+	defer r.rw.Unlock()
 
+	var (
+		keys   = strings.Split(pattern, ".")
+		values interface{}
+	)
+
+	values = r.values
+	for i, key := range keys {
+		switch vs := values.(type) {
+		case map[string]interface{}:
+			if i == len(keys)-1 {
+				vs[key] = value
+			} else {
+				rebuild := false
+				_, err := strconv.Atoi(keys[i+1])
+				if next, ok := vs[key]; ok {
+					switch next.(type) {
+					case map[string]interface{}:
+						rebuild = err == nil
+					case []interface{}:
+						rebuild = err != nil
+					default:
+						rebuild = true
+					}
+				} else {
+					rebuild = true
+				}
+
+				if rebuild {
+					if err != nil {
+						vs[key] = make(map[string]interface{})
+					} else {
+						vs[key] = make([]interface{}, 0)
+					}
+				}
+
+				values = vs[key]
+			}
+		case []interface{}:
+			ii, err := strconv.Atoi(key)
+			if err != nil {
+				return
+			}
+
+			if ii >= len(vs) {
+				vs = append(vs, struct{}{})
+				ii = len(vs) - 1
+				fmt.Println(vs[ii])
+			}
+
+			if i == len(keys)-1 {
+				vs[ii] = value
+			} else {
+				rebuild := false
+				_, err = strconv.Atoi(keys[i+1])
+				switch vs[ii].(type) {
+				case map[string]interface{}:
+					rebuild = err == nil
+				case []interface{}:
+					rebuild = err != nil
+				default:
+					rebuild = true
+				}
+
+				if rebuild {
+					if err != nil {
+						vs[ii] = make(map[string]interface{})
+					} else {
+						vs[ii] = make([]interface{}, 0)
+					}
+				}
+
+				values = vs[ii]
+			}
+		}
+	}
+
+	fmt.Println(r.values)
 }

@@ -16,9 +16,14 @@ func GetReader() Reader {
 	return globalReader
 }
 
-// Get 读取配置
+// Get 获取配置值
 func Get(pattern string, def ...interface{}) *Value {
 	return globalReader.Get(pattern, def...)
+}
+
+// Set 设置配置值
+func Set(pattern string, value interface{}) {
+	globalReader.Set(pattern, value)
 }
 
 // Load 加载配置
