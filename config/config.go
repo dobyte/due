@@ -30,8 +30,3 @@ func Set(pattern string, value interface{}) {
 func Close() {
 	globalReader.Close()
 }
-
-// Load 加载配置
-func Load(name ...string) {
-	//return globalReader.Load(name...)
-}

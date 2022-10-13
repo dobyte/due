@@ -46,7 +46,8 @@ func NewReader(opts ...Option) Reader {
 		opt(o)
 	}
 
-	r := &defaultReader{opts: o}
+	r := &defaultReader{}
+	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 	r.init()
 	r.watch()
@@ -136,9 +137,9 @@ func (r *defaultReader) Close() {
 // Get 获取配置值
 func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 	var (
-		keys   = strings.Split(pattern, ".")
-		values interface{}
-		found  = true
+		keys  = strings.Split(pattern, ".")
+		node  interface{}
+		found = true
 	)
 
 	values, err := r.copyValues()
@@ -147,11 +148,13 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 		goto NOTFOUND
 	}
 
+	keys = reviseKeys(keys, values)
+	node = values
 	for _, key := range keys {
-		switch vs := values.(type) {
+		switch vs := node.(type) {
 		case map[string]interface{}:
 			if v, ok := vs[key]; ok {
-				values = v
+				node = v
 			} else {
 				found = false
 			}
@@ -160,7 +163,7 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 			if err != nil {
 				found = false
 			} else if len(vs) > i {
-				values = vs[i]
+				node = vs[i]
 			} else {
 				found = false
 			}
@@ -174,7 +177,7 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 	}
 
 	if found {
-		return &Value{val: values}
+		return &Value{val: node}
 	}
 
 NOTFOUND:
@@ -188,19 +191,20 @@ NOTFOUND:
 // Set 设置配置值
 func (r *defaultReader) Set(pattern string, value interface{}) {
 	var (
-		keys   = strings.Split(pattern, ".")
-		values interface{}
+		keys = strings.Split(pattern, ".")
+		node interface{}
 	)
 
-	src, err := r.copyValues()
+	values, err := r.copyValues()
 	if err != nil {
 		log.Errorf("copy configurations failed: %v", err)
 		return
 	}
 
-	values = src
+	keys = reviseKeys(keys, values)
+	node = values
 	for i, key := range keys {
-		switch vs := values.(type) {
+		switch vs := node.(type) {
 		case map[string]interface{}:
 			if i == len(keys)-1 {
 				vs[key] = value
@@ -235,7 +239,7 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 					}
 				}
 
-				values = vs[key]
+				node = vs[key]
 			}
 		case []interface{}:
 			ii, err := strconv.Atoi(key)
@@ -276,12 +280,12 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 					}
 				}
 
-				values = vs[ii]
+				node = vs[ii]
 			}
 		}
 	}
 
-	r.values.Store(src)
+	r.values.Store(values)
 }
 
 func (r *defaultReader) copyValues() (map[string]interface{}, error) {
@@ -298,4 +302,19 @@ func (r *defaultReader) copyValues() (map[string]interface{}, error) {
 		return nil, err
 	}
 	return dest, nil
+}
+
+func reviseKeys(keys []string, values map[string]interface{}) []string {
+	for i := 1; i < len(keys); i++ {
+		key := strings.Join(keys[:i+1], ".")
+		if _, ok := values[key]; ok {
+			keys[0] = key
+			temp := keys[i+1:]
+			copy(keys[1:], temp)
+			keys = keys[:len(temp)+1]
+			break
+		}
+	}
+
+	return keys
 }
