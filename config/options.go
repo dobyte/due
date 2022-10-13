@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"github.com/dobyte/due/encoding"
 	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/encoding/proto"
@@ -16,8 +17,14 @@ type Option func(o *options)
 type Decoder func(configuration *Configuration) (interface{}, error)
 
 type options struct {
+	ctx     context.Context
 	sources []Source
 	decoder Decoder
+}
+
+// WithContext 设置上下文
+func WithContext(ctx context.Context) Option {
+	return func(o *options) { o.ctx = ctx }
 }
 
 // WithSources 设置配置源

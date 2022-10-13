@@ -2,18 +2,24 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"github.com/dobyte/due/log"
+	"github.com/imdario/mergo"
 	"strconv"
 	"strings"
 	"sync/atomic"
 )
+
+const defaultFilePath = "./config"
 
 type Reader interface {
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) *Value
 	// Set 设置配置值
 	Set(pattern string, value interface{})
+	// Close 关闭读取器
+	Close()
 }
 
 func init() {
@@ -23,6 +29,8 @@ func init() {
 
 type defaultReader struct {
 	opts   *options
+	ctx    context.Context
+	cancel context.CancelFunc
 	values atomic.Value
 }
 
@@ -30,7 +38,8 @@ var _ Reader = &defaultReader{}
 
 func NewReader(opts ...Option) Reader {
 	o := &options{
-		sources: []Source{NewSource("./config")},
+		ctx:     context.Background(),
+		sources: []Source{NewSource(defaultFilePath)},
 		decoder: defaultDecoder,
 	}
 	for _, opt := range opts {
@@ -38,11 +47,14 @@ func NewReader(opts ...Option) Reader {
 	}
 
 	r := &defaultReader{opts: o}
+	r.ctx, r.cancel = context.WithCancel(o.ctx)
 	r.init()
+	r.watch()
 
 	return r
 }
 
+// 初始化配置源
 func (r *defaultReader) init() {
 	values := make(map[string]interface{})
 	for _, s := range r.opts.sources {
@@ -62,6 +74,63 @@ func (r *defaultReader) init() {
 	}
 
 	r.values.Store(values)
+}
+
+// 监听配置源变化
+func (r *defaultReader) watch() {
+	for _, s := range r.opts.sources {
+		watcher, err := s.Watch(r.ctx)
+		if err != nil {
+			log.Fatalf("watching configure change failed: %v", err)
+		}
+
+		go func() {
+			defer watcher.Stop()
+
+			for {
+				select {
+				case <-r.ctx.Done():
+					return
+				default:
+					// exec watch
+				}
+				cs, err := watcher.Next()
+				if err != nil {
+					log.Warnf("extract configure failed: %v", err)
+					continue
+				}
+
+				values := make(map[string]interface{})
+				for _, c := range cs {
+					v, err := r.opts.decoder(c)
+					if err != nil {
+						log.Warnf("decode configure failed: %v", err)
+						continue
+					}
+					values[c.Name] = v
+				}
+
+				dst, err := r.copyValues()
+				if err != nil {
+					log.Warnf("copy original configure failed: %v", err)
+					continue
+				}
+
+				err = mergo.Merge(&dst, values, mergo.WithOverride)
+				if err != nil {
+					log.Warnf("merge configure failed: %v", err)
+					continue
+				}
+
+				r.values.Store(dst)
+			}
+		}()
+	}
+}
+
+// Close 关闭读取器
+func (r *defaultReader) Close() {
+	r.cancel()
 }
 
 // Get 获取配置值
