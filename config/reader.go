@@ -11,6 +11,10 @@ import (
 	"sync/atomic"
 )
 
+const (
+	dueConfigEnvName = "DUE_CONFIG"
+)
+
 const defaultFilePath = "./config"
 
 type Reader interface {
@@ -39,11 +43,14 @@ var _ Reader = &defaultReader{}
 func NewReader(opts ...Option) Reader {
 	o := &options{
 		ctx:     context.Background(),
-		sources: []Source{NewSource(defaultFilePath)},
 		decoder: defaultDecoder,
 	}
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	if len(o.sources) == 0 {
+		o.sources = append(o.sources, NewSource(defaultFilePath))
 	}
 
 	r := &defaultReader{}

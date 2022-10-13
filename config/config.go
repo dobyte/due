@@ -30,3 +30,7 @@ func Set(pattern string, value interface{}) {
 func Close() {
 	globalReader.Close()
 }
+
+func GetEnv() {
+
+}
