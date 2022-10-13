@@ -1,11 +1,12 @@
 package config
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/gob"
 	"github.com/dobyte/due/log"
 	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 )
 
 type Reader interface {
@@ -15,11 +16,14 @@ type Reader interface {
 	Set(pattern string, value interface{})
 }
 
+func init() {
+	gob.Register(map[string]interface{}{})
+	gob.Register([]interface{}{})
+}
+
 type defaultReader struct {
-	err    error
 	opts   *options
-	rw     sync.RWMutex
-	values map[string]interface{}
+	values atomic.Value
 }
 
 var _ Reader = &defaultReader{}
@@ -33,8 +37,14 @@ func NewReader(opts ...Option) Reader {
 		opt(o)
 	}
 
-	r := &defaultReader{opts: o, values: make(map[string]interface{})}
+	r := &defaultReader{opts: o}
+	r.init()
 
+	return r
+}
+
+func (r *defaultReader) init() {
+	values := make(map[string]interface{})
 	for _, s := range r.opts.sources {
 		cs, err := s.Load()
 		if err != nil {
@@ -47,34 +57,27 @@ func NewReader(opts ...Option) Reader {
 				log.Fatalf("decode configure failed: %v", err)
 			}
 
-			r.rw.Lock()
-			r.values[c.Name] = v
-			r.rw.Unlock()
+			values[c.Name] = v
 		}
 	}
 
-	return r
-}
-
-func (r *defaultReader) Load(name ...string) *Value {
-	r.rw.RLock()
-	defer r.rw.RUnlock()
-
-	return nil
+	r.values.Store(values)
 }
 
 // Get 获取配置值
 func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
-	r.rw.RLock()
-	defer r.rw.RUnlock()
-
 	var (
 		keys   = strings.Split(pattern, ".")
 		values interface{}
 		found  = true
 	)
 
-	values = r.values
+	values, err := r.copyValues()
+	if err != nil {
+		log.Errorf("copy configurations failed: %v", err)
+		goto NOTFOUND
+	}
+
 	for _, key := range keys {
 		switch vs := values.(type) {
 		case map[string]interface{}:
@@ -105,6 +108,7 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 		return &Value{val: values}
 	}
 
+NOTFOUND:
 	if len(def) > 0 {
 		return &Value{val: def[0]}
 	}
@@ -114,15 +118,18 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 
 // Set 设置配置值
 func (r *defaultReader) Set(pattern string, value interface{}) {
-	r.rw.Lock()
-	defer r.rw.Unlock()
-
 	var (
 		keys   = strings.Split(pattern, ".")
 		values interface{}
 	)
 
-	values = r.values
+	src, err := r.copyValues()
+	if err != nil {
+		log.Errorf("copy configurations failed: %v", err)
+		return
+	}
+
+	values = src
 	for i, key := range keys {
 		switch vs := values.(type) {
 		case map[string]interface{}:
@@ -130,13 +137,20 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 				vs[key] = value
 			} else {
 				rebuild := false
-				_, err := strconv.Atoi(keys[i+1])
+				ii, err := strconv.Atoi(keys[i+1])
 				if next, ok := vs[key]; ok {
-					switch next.(type) {
+					switch nv := next.(type) {
 					case map[string]interface{}:
 						rebuild = err == nil
 					case []interface{}:
 						rebuild = err != nil
+						// the next node capacity is not enough
+						// expand capacity
+						if err == nil && ii >= len(nv) {
+							dst := make([]interface{}, ii+1)
+							copy(dst, nv)
+							vs[key] = dst
+						}
 					default:
 						rebuild = true
 					}
@@ -148,7 +162,7 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 					if err != nil {
 						vs[key] = make(map[string]interface{})
 					} else {
-						vs[key] = make([]interface{}, 0)
+						vs[key] = make([]interface{}, 1)
 					}
 				}
 
@@ -161,9 +175,7 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 			}
 
 			if ii >= len(vs) {
-				vs = append(vs, struct{}{})
-				ii = len(vs) - 1
-				fmt.Println(vs[ii])
+				return
 			}
 
 			if i == len(keys)-1 {
@@ -171,11 +183,18 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 			} else {
 				rebuild := false
 				_, err = strconv.Atoi(keys[i+1])
-				switch vs[ii].(type) {
+				switch nv := vs[ii].(type) {
 				case map[string]interface{}:
 					rebuild = err == nil
 				case []interface{}:
 					rebuild = err != nil
+					// the next node capacity is not enough
+					// expand capacity
+					if err == nil && ii >= len(nv) {
+						dst := make([]interface{}, ii+1)
+						copy(dst, nv)
+						vs[ii] = dst
+					}
 				default:
 					rebuild = true
 				}
@@ -184,7 +203,7 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 					if err != nil {
 						vs[ii] = make(map[string]interface{})
 					} else {
-						vs[ii] = make([]interface{}, 0)
+						vs[ii] = make([]interface{}, 1)
 					}
 				}
 
@@ -193,5 +212,21 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 		}
 	}
 
-	fmt.Println(r.values)
+	r.values.Store(src)
+}
+
+func (r *defaultReader) copyValues() (map[string]interface{}, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	dec := gob.NewDecoder(&buf)
+	err := enc.Encode(r.values.Load())
+	if err != nil {
+		return nil, err
+	}
+	var dest map[string]interface{}
+	err = dec.Decode(&dest)
+	if err != nil {
+		return nil, err
+	}
+	return dest, nil
 }
