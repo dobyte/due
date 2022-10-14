@@ -17,8 +17,6 @@ import (
 	"github.com/dobyte/due/mode"
 )
 
-const defaultNoneLevel log.Level = 0
-
 var _ log.Logger = NewLogger()
 
 var levelMap map[zapcore.Level]log.Level
