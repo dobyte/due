@@ -3,14 +3,21 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/log"
+	"strings"
 )
 
 var (
 	ErrMessageIsNil  = errors.New("the message is nil")
 	ErrSeqOverflow   = errors.New("the message seq overflow")
 	ErrRouteOverflow = errors.New("the message route overflow")
+)
+
+const (
+	littleEndian = "little"
+	bigEndian    = "big"
 )
 
 type Packer interface {
@@ -27,9 +34,17 @@ type packer struct {
 func NewPacker(opts ...Option) Packer {
 	o := &options{
 		byteOrder:     binary.LittleEndian,
-		seqBytesLen:   2,
-		routeBytesLen: 2,
+		seqBytesLen:   config.Get("config.packet.seqLength", 2).Int(),
+		routeBytesLen: config.Get("config.packet.routeLength", 2).Int(),
 	}
+	endian := config.Get("config.packet.endian", littleEndian).String()
+	switch strings.ToLower(endian) {
+	case littleEndian:
+		o.byteOrder = binary.LittleEndian
+	case bigEndian:
+		o.byteOrder = binary.BigEndian
+	}
+
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -58,7 +73,7 @@ func (p *packer) Pack(message *Message) ([]byte, error) {
 	}
 
 	if message.Route > int32(1<<(8*p.opts.routeBytesLen-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytesLen-1)) {
-		return nil, ErrSeqOverflow
+		return nil, ErrRouteOverflow
 	}
 
 	var (

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"github.com/dobyte/due/env"
+	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/internal/value"
 	"github.com/dobyte/due/log"
 	"github.com/imdario/mergo"
 	"strconv"
@@ -11,17 +14,11 @@ import (
 	"sync/atomic"
 )
 
-const (
-	dueConfigEnvName = "DUE_CONFIG"
-)
-
-const defaultFilePath = "./config"
-
 type Reader interface {
 	// Get 获取配置值
-	Get(pattern string, def ...interface{}) *Value
+	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
-	Set(pattern string, value interface{})
+	Set(pattern string, value interface{}) error
 	// Close 关闭读取器
 	Close()
 }
@@ -50,7 +47,8 @@ func NewReader(opts ...Option) Reader {
 	}
 
 	if len(o.sources) == 0 {
-		o.sources = append(o.sources, NewSource(defaultFilePath))
+		path := env.Get(dueConfigEnvName, defaultConfigPath).String()
+		o.sources = append(o.sources, NewSource(path))
 	}
 
 	r := &defaultReader{}
@@ -142,7 +140,7 @@ func (r *defaultReader) Close() {
 }
 
 // Get 获取配置值
-func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
+func (r *defaultReader) Get(pattern string, def ...interface{}) value.Value {
 	var (
 		keys  = strings.Split(pattern, ".")
 		node  interface{}
@@ -184,19 +182,15 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) *Value {
 	}
 
 	if found {
-		return &Value{val: node}
+		return value.NewValue(node)
 	}
 
 NOTFOUND:
-	if len(def) > 0 {
-		return &Value{val: def[0]}
-	}
-
-	return &Value{val: nil}
+	return value.NewValue(def...)
 }
 
 // Set 设置配置值
-func (r *defaultReader) Set(pattern string, value interface{}) {
+func (r *defaultReader) Set(pattern string, value interface{}) error {
 	var (
 		keys = strings.Split(pattern, ".")
 		node interface{}
@@ -204,8 +198,7 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 
 	values, err := r.copyValues()
 	if err != nil {
-		log.Errorf("copy configurations failed: %v", err)
-		return
+		return err
 	}
 
 	keys = reviseKeys(keys, values)
@@ -251,11 +244,11 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 		case []interface{}:
 			ii, err := strconv.Atoi(key)
 			if err != nil {
-				return
+				return err
 			}
 
 			if ii >= len(vs) {
-				return
+				return errors.New("index overflow")
 			}
 
 			if i == len(keys)-1 {
@@ -293,6 +286,8 @@ func (r *defaultReader) Set(pattern string, value interface{}) {
 	}
 
 	r.values.Store(values)
+
+	return nil
 }
 
 func (r *defaultReader) copyValues() (map[string]interface{}, error) {

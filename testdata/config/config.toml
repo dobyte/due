@@ -1,0 +1,7 @@
+[packet]
+    # 字节序，little或者big
+    endian = "big"
+    # 序列号字节长度（字节）
+    seqLength = 2
+    # 路由字节长度（字节）
+    routeLength = 2

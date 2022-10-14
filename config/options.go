@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/encoding"
 	"github.com/dobyte/due/encoding/json"
-	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/encoding/toml"
 	"github.com/dobyte/due/encoding/xml"
 	"github.com/dobyte/due/encoding/yaml"
@@ -45,7 +44,7 @@ func defaultDecoder(c *Configuration) (interface{}, error) {
 	)
 
 	switch strings.ToLower(c.Format) {
-	case json.Name, xml.Name, proto.Name, toml.Name, yaml.Name:
+	case json.Name, xml.Name, toml.Name, yaml.Name:
 		codec = encoding.Invoke(c.Format)
 	case "yml":
 		codec = encoding.Invoke(yaml.Name)

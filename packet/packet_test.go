@@ -1,19 +1,19 @@
 package packet_test
 
 import (
-	"encoding/binary"
 	"github.com/dobyte/due/packet"
 	"testing"
 )
 
 func TestPacket(t *testing.T) {
-	packet.SetPacker(packet.NewPacker(
-		packet.WithByteOrder(binary.BigEndian),
-		packet.WithSeqBytesLen(0),
-	))
+
+	//packet.SetPacker(packet.NewPacker(
+	//	packet.WithByteOrder(binary.BigEndian),
+	//	packet.WithSeqBytesLen(0),
+	//))
 
 	data, err := packet.Pack(&packet.Message{
-		Seq:    -65536,
+		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello world"),
 	})

@@ -6,7 +6,7 @@ import (
 )
 
 // Get 获取环境变量值
-func Get(key string, def ...interface{}) *value.Value {
+func Get(key string, def ...interface{}) value.Value {
 	if val, ok := os.LookupEnv(key); ok {
 		return value.NewValue(val)
 	}
@@ -22,4 +22,10 @@ func Set(key string, value string) error {
 // Del 删除环境变量
 func Del(key string) error {
 	return os.Unsetenv(key)
+}
+
+// Has 是否存在环境变量
+func Has(key string) bool {
+	_, ok := os.LookupEnv(key)
+	return ok
 }
