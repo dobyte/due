@@ -10,18 +10,19 @@ package zap_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap"
 )
 
 func TestNewLogger(t *testing.T) {
-	l := zap.NewLogger(
-		zap.WithOutFile("./log/due.log"),
-		zap.WithOutLevel(log.WarnLevel),
-		zap.WithOutFormat(log.JsonFormat),
-		zap.WithStackLevel(log.WarnLevel),
-		zap.WithEnableLeveledStorage(true),
-	)
+	//l := zap.NewLogger(
+	//	zap.WithFile("./log/due.log"),
+	//	zap.WithLevel(log.WarnLevel),
+	//	zap.WithFormat(log.JsonFormat),
+	//	zap.WithStackLevel(log.WarnLevel),
+	//	zap.WithClassifiedStorage(true),
+	//)
+
+	l := zap.NewLogger()
 
 	//l.Info("info")
 	//l.Warn("warn")

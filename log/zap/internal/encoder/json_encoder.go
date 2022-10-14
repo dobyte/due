@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap/internal/utils"
 )
 
@@ -31,16 +30,16 @@ const (
 
 type JsonEncoder struct {
 	zapcore.ObjectEncoder
-	bufferPool      buffer.Pool
-	timestampFormat string
-	callerFormat    log.CallerFormat
+	bufferPool     buffer.Pool
+	timeFormat     string
+	callerFullPath bool
 }
 
-func NewJsonEncoder(timestampFormat string, callerFormat log.CallerFormat) zapcore.Encoder {
+func NewJsonEncoder(timeFormat string, callerFullPath bool) zapcore.Encoder {
 	return &JsonEncoder{
-		bufferPool:      buffer.NewPool(),
-		timestampFormat: timestampFormat,
-		callerFormat:    callerFormat,
+		bufferPool:     buffer.NewPool(),
+		timeFormat:     timeFormat,
+		callerFullPath: callerFullPath,
 	}
 }
 
@@ -52,11 +51,11 @@ func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 	line := e.bufferPool.Get()
 	line.AppendByte('{')
 	line.AppendString(fmt.Sprintf(`"%s":"%s"`, fieldKeyLevel, ent.Level.CapitalString()))
-	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyTime, ent.Time.Format(e.timestampFormat)))
+	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyTime, ent.Time.Format(e.timeFormat)))
 
 	if ent.Caller.Defined {
 		var file string
-		if e.callerFormat == log.CallerFullPath {
+		if e.callerFullPath {
 			file = ent.Caller.File
 		} else {
 			_, file = filepath.Split(ent.Caller.File)
