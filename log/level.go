@@ -13,13 +13,13 @@ import "strings"
 type Level int
 
 const (
-	UnknownLevel Level = iota // UNKNOWN
-	DebugLevel                // DEBUG
-	InfoLevel                 // INFO
-	WarnLevel                 // WARN
-	ErrorLevel                // ERROR
-	FatalLevel                // FATAL
-	PanicLevel                // PANIC
+	NoneLevel  Level = iota // NONE
+	DebugLevel              // DEBUG
+	InfoLevel               // INFO
+	WarnLevel               // WARN
+	ErrorLevel              // ERROR
+	FatalLevel              // FATAL
+	PanicLevel              // PANIC
 )
 
 func (l Level) String() string {
@@ -37,7 +37,7 @@ func (l Level) String() string {
 	case PanicLevel:
 		return "PANIC"
 	}
-	return "UNKNOWN"
+	return "NONE"
 }
 
 func ParseLevel(level string) Level {
@@ -55,6 +55,6 @@ func ParseLevel(level string) Level {
 	case PanicLevel.String():
 		return PanicLevel
 	default:
-		return UnknownLevel
+		return NoneLevel
 	}
 }

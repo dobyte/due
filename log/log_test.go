@@ -5,6 +5,6 @@ import (
 	"testing"
 )
 
-func Test_Logger(t *testing.T) {
+func TestLog(t *testing.T) {
 	log.Info("hello due game framework")
 }

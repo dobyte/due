@@ -35,8 +35,6 @@ type Logger interface {
 	Panicf(format string, a ...interface{})
 }
 
-const defaultNoneLevel Level = 0
-
 type defaultLogger struct {
 	opts       *options
 	formatter  formatter
@@ -70,15 +68,15 @@ func NewLogger(opts ...Option) *defaultLogger {
 	l.syncers = make([]syncer, 0, 7)
 	l.entityPool = newEntityPool(l)
 
-	switch l.opts.outFormat {
+	switch l.opts.format {
 	case TextFormat:
 		l.formatter = newTextFormatter()
 	case JsonFormat:
 		l.formatter = newJsonFormatter()
 	}
 
-	if o.outFile != "" {
-		if o.enableLeveledStorage {
+	if o.file != "" {
+		if o.classifiedStorage {
 			l.syncers = append(l.syncers, syncer{
 				writer:  l.buildWriter(DebugLevel),
 				enabler: l.buildEnabler(DebugLevel),
@@ -100,17 +98,17 @@ func NewLogger(opts ...Option) *defaultLogger {
 			})
 		} else {
 			l.syncers = append(l.syncers, syncer{
-				writer:  l.buildWriter(defaultNoneLevel),
-				enabler: l.buildEnabler(defaultNoneLevel),
+				writer:  l.buildWriter(NoneLevel),
+				enabler: l.buildEnabler(NoneLevel),
 			})
 		}
 	}
 
-	if mode.IsDebugMode() {
+	if mode.IsDebugMode() && o.stdout {
 		l.syncers = append(l.syncers, syncer{
 			writer:   os.Stdout,
 			terminal: true,
-			enabler:  l.buildEnabler(defaultNoneLevel),
+			enabler:  l.buildEnabler(NoneLevel),
 		})
 	}
 
@@ -119,7 +117,7 @@ func NewLogger(opts ...Option) *defaultLogger {
 
 func (l *defaultLogger) buildWriter(level Level) io.Writer {
 	w, err := NewWriter(WriterOptions{
-		Path:    l.opts.outFile,
+		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
 		MaxSize: l.opts.fileMaxSize * 1024 * 1024,
@@ -134,7 +132,7 @@ func (l *defaultLogger) buildWriter(level Level) io.Writer {
 
 func (l *defaultLogger) buildEnabler(level Level) enabler {
 	return func(lvl Level) bool {
-		return lvl >= l.opts.outLevel && (level == defaultNoneLevel || (lvl >= level && level >= l.opts.outLevel))
+		return lvl >= l.opts.level && (level == NoneLevel || (lvl >= level && level >= l.opts.level))
 	}
 }
 
