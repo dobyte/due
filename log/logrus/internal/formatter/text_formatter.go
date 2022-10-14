@@ -27,8 +27,8 @@ const (
 const defaultOutFileFlag = "@outFileFlag@"
 
 type TextFormatter struct {
-	TimestampFormat string
-	CallerFullPath  bool
+	TimeFormat     string
+	CallerFullPath bool
 }
 
 // Format renders a single log entry
@@ -57,10 +57,10 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			levelColor = blue
 		}
 
-		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimestampFormat))
+		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimeFormat))
 	} else {
 		entry.Data[defaultOutFileFlag] = true
-		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimestampFormat))
+		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimeFormat))
 	}
 
 	var frames []runtime.Frame

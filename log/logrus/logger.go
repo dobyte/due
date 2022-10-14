@@ -37,7 +37,7 @@ func NewLogger(opts ...Option) *Logger {
 
 	l := &Logger{opts: o, logger: logrus.New()}
 
-	switch o.outLevel {
+	switch o.level {
 	case log.DebugLevel:
 		l.logger.SetLevel(logrus.DebugLevel)
 	case log.InfoLevel:
@@ -52,23 +52,23 @@ func NewLogger(opts ...Option) *Logger {
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 
-	switch o.outFormat {
+	switch o.format {
 	case log.JsonFormat:
 		l.logger.SetFormatter(&formatter.JsonFormatter{
-			TimestampFormat: o.timestampFormat,
-			CallerFullPath:  o.callerFullPath,
+			TimeFormat:     o.timeFormat,
+			CallerFullPath: o.callerFullPath,
 		})
 	default:
 		l.logger.SetFormatter(&formatter.TextFormatter{
-			TimestampFormat: o.timestampFormat,
-			CallerFullPath:  o.callerFullPath,
+			TimeFormat:     o.timeFormat,
+			CallerFullPath: o.callerFullPath,
 		})
 	}
 
-	l.logger.AddHook(hook.NewStackHook(o.outStackLevel))
+	l.logger.AddHook(hook.NewStackHook(o.stackLevel, o.callerSkip))
 
-	if o.outFile != "" {
-		if o.fileClassifyStorage {
+	if o.file != "" {
+		if o.classifiedStorage {
 			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
 				logrus.DebugLevel: l.buildWriter(log.DebugLevel),
 				logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
@@ -82,7 +82,7 @@ func NewLogger(opts ...Option) *Logger {
 		}
 	}
 
-	if mode.IsDebugMode() {
+	if mode.IsDebugMode() && o.stdout {
 		l.logger.SetOutput(os.Stdout)
 	}
 
@@ -91,10 +91,10 @@ func NewLogger(opts ...Option) *Logger {
 
 func (l *Logger) buildWriter(level log.Level) io.Writer {
 	writer, err := log.NewWriter(log.WriterOptions{
-		Path:    l.opts.outFile,
+		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
-		MaxSize: l.opts.fileMaxSize,
+		MaxSize: l.opts.fileMaxSize * 1024 * 1024,
 		CutRule: l.opts.fileCutRule,
 	})
 	if err != nil {

@@ -28,8 +28,8 @@ const (
 )
 
 type JsonFormatter struct {
-	TimestampFormat string
-	CallerFullPath  bool
+	TimeFormat     string
+	CallerFullPath bool
 }
 
 // Format renders a single log entry
@@ -44,7 +44,7 @@ func (f *JsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	levelText := strings.ToUpper(entry.Level.String())[0:4]
 
 	fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyLevel, levelText)
-	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, entry.Time.Format(f.TimestampFormat))
+	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, entry.Time.Format(f.TimeFormat))
 
 	var frames []runtime.Frame
 	if v, ok := entry.Data["stack_frames"]; ok {

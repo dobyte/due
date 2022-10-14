@@ -8,20 +8,20 @@
 package logrus_test
 
 import (
+	"github.com/dobyte/due/log"
 	"testing"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/logrus"
 )
 
 func TestNewLogger(t *testing.T) {
 	l := logrus.NewLogger(
-		logrus.WithOutFile("./log/due.log"),
-		logrus.WithOutFormat(log.JsonFormat),
+		logrus.WithFile("./log/due.log"),
+		logrus.WithFormat(log.JsonFormat),
+		logrus.WithStackLevel(log.ErrorLevel),
 		logrus.WithFileCutRule(log.CutByHour),
 		logrus.WithCallerFullPath(true),
-		logrus.WithFileClassifyStorage(true),
-		logrus.WithOutStackLevel(log.ErrorLevel),
+		logrus.WithClassifiedStorage(true),
 	)
 
 	l.Warn(`log: warn`)

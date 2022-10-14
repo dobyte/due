@@ -16,164 +16,166 @@ import (
 )
 
 const (
-	defaultOutFile         = "./log/due.log"
-	defaultOutLevel        = log.InfoLevel
-	defaultOutFormat       = log.TextFormat
-	defaultFileMaxAge      = 7 * 24 * time.Hour
-	defaultFileMaxSize     = 100
-	defaultFileCutRule     = log.CutByDay
-	defaultCallerFormat    = log.CallerFullPath
-	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
+	defaultFile              = "./log/due.log"
+	defaultLevel             = log.InfoLevel
+	defaultFormat            = log.TextFormat
+	defaultStdout            = true
+	defaultFileMaxAge        = 7 * 24 * time.Hour
+	defaultFileMaxSize       = 100
+	defaultFileCutRule       = log.CutByDay
+	defaultTimeFormat        = "2006/01/02 15:04:05.000000"
+	defaultCallerFullPath    = false
+	defaultClassifiedStorage = false
+)
+
+const (
+	defaultFileKey              = "config.log.file"
+	defaultLevelKey             = "config.log.level"
+	defaultFormatKey            = "config.log.format"
+	defaultTimeFormatKey        = "config.log.timeFormat"
+	defaultStackLevelKey        = "config.log.stackLevel"
+	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
+	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
+	defaultFileCutRuleKey       = "config.log.fileCutRule"
+	defaultStdoutKey            = "config.log.stdout"
+	defaultCallerFullPathKey    = "config.log.callerFullPath"
+	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+)
+
+const (
+	logrusFileKey              = "config.log.logrus.file"
+	logrusLevelKey             = "config.log.logrus.level"
+	logrusFormatKey            = "config.log.logrus.format"
+	logrusTimeFormatKey        = "config.log.logrus.timeFormat"
+	logrusStackLevelKey        = "config.log.logrus.stackLevel"
+	logrusFileMaxAgeKey        = "config.log.logrus.fileMaxAge"
+	logrusFileMaxSizeKey       = "config.log.logrus.fileMaxSize"
+	logrusFileCutRuleKey       = "config.log.logrus.fileCutRule"
+	logrusStdoutKey            = "config.log.logrus.stdout"
+	logrusCallerFullPathKey    = "config.log.logrus.callerFullPath"
+	logrusClassifiedStorageKey = "config.log.logrus.classifiedStorage"
 )
 
 type options struct {
-	outFile              string        // 输出的文件路径，有文件路径才会输出到文件，否则只会输出到终端
-	outLevel             log.Level     // 输出的最低日志级别，默认Info
-	outFormat            log.Format    // 输出的日志格式，Text或者Json，默认Text
-	stackLevel           log.Level     // 堆栈的最低输出级别，默认不输出堆栈
-	callerFormat         CallerFormat  // 调用者格式，默认短路径
-	timestampFormat      string        // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	fileMaxAge           time.Duration // 文件最大留存时间，默认7天
-	fileMaxSize          int64         // 文件最大尺寸限制，单位（MB），默认100MB
-	fileCutRule          CutRule       // 文件切割规则，默认按照天
-	enableLeveledStorage bool          // 是否启用分级存储，默认不分级
-	callerSkip           int           // 调用者跳过的层级深度
-}
-
-type options struct {
-	outFile             string           // 输出的文件路径
-	outLevel            log.Level        // 输出的最低日志级别，默认Info
-	outFormat           log.Format       // 输出的日志格式，默认Text
-	outStackLevel       log.Level        // 输出堆栈的日志级别，默认不输出堆栈
-	fileMaxAge          time.Duration    // 文件最大留存时间，默认7天
-	fileMaxSize         int64            // 文件最大尺寸限制，单位（byte），默认100MB
-	fileCutRule         log.CutRule      // 文件切割规则，默认按照天
-	fileClassifyStorage bool             // 文件分级存储，默认不分级
-	timestampFormat     string           // 日志时间戳格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	callerFullPath      bool             // 是否显示调用者全路径，默认短路径
-	callerFormat        log.CallerFormat // 调用者格式，默认短路径
+	file              string        // 输出的文件路径，有文件路径才会输出到文件，否则只会输出到终端
+	level             log.Level     // 输出的最低日志级别，默认Info
+	format            log.Format    // 输出的日志格式，Text或者Json，默认Text
+	stdout            bool          // 是否输出到终端，debug模式下默认输出到终端
+	timeFormat        string        // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	stackLevel        log.Level     // 堆栈的最低输出级别，默认不输出堆栈
+	fileMaxAge        time.Duration // 文件最大留存时间，默认7天
+	fileMaxSize       int64         // 文件最大尺寸限制，单位（MB），默认100MB
+	fileCutRule       log.CutRule   // 文件切割规则，默认按照天
+	callerSkip        int           // 调用者跳过的层级深度
+	callerFullPath    bool          // 是否启用调用文件全路径，默认短路径
+	classifiedStorage bool          // 是否启用分级存储，默认不分级
 }
 
 type Option func(o *options)
 
 func defaultOptions() *options {
 	opts := &options{
-		outFile:         defaultOutFile,
-		outLevel:        defaultOutLevel,
-		outFormat:       defaultOutFormat,
-		fileMaxAge:      defaultFileMaxAge,
-		fileMaxSize:     defaultFileMaxSize,
-		fileCutRule:     defaultFileCutRule,
-		callerFormat:    defaultCallerFormat,
-		timestampFormat: defaultTimestampFormat,
+		file:              defaultFile,
+		level:             defaultLevel,
+		format:            defaultFormat,
+		stdout:            defaultStdout,
+		timeFormat:        defaultTimeFormat,
+		fileMaxAge:        defaultFileMaxAge,
+		fileMaxSize:       defaultFileMaxSize,
+		fileCutRule:       defaultFileCutRule,
+		callerFullPath:    defaultCallerFullPath,
+		classifiedStorage: defaultClassifiedStorage,
 	}
 
-	file := config.Get("config.log.file").String()
+	file := config.Get(logrusFileKey, config.Get(defaultFileKey).String()).String()
 	if file != "" {
-		opts.outFile = file
+		opts.file = file
 	}
 
-	level := config.Get("config.log.level").String()
-	switch strings.ToUpper(level) {
-	case DebugLevel.String():
-		opts.outLevel = DebugLevel
-	case InfoLevel.String():
-		opts.outLevel = InfoLevel
-	case WarnLevel.String():
-		opts.outLevel = WarnLevel
-	case ErrorLevel.String():
-		opts.outLevel = ErrorLevel
-	case FatalLevel.String():
-		opts.outLevel = FatalLevel
-	case PanicLevel.String():
-		opts.outLevel = PanicLevel
+	level := config.Get(logrusLevelKey, config.Get(defaultLevelKey).String()).String()
+	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
+		opts.level = lvl
 	}
 
-	format := config.Get("config.log.format").String()
+	format := config.Get(logrusFormatKey, config.Get(defaultFormatKey).String()).String()
 	switch strings.ToLower(format) {
-	case "json":
-		opts.outFormat = JsonFormat
-	case "text":
-		opts.outFormat = TextFormat
+	case log.JsonFormat.String():
+		opts.format = log.JsonFormat
+	case log.TextFormat.String():
+		opts.format = log.TextFormat
 	}
 
-	stackLevel := config.Get("config.log.stackLevel").String()
-	switch strings.ToUpper(stackLevel) {
-	case DebugLevel.String():
-		opts.stackLevel = DebugLevel
-	case InfoLevel.String():
-		opts.stackLevel = InfoLevel
-	case WarnLevel.String():
-		opts.stackLevel = WarnLevel
-	case ErrorLevel.String():
-		opts.stackLevel = ErrorLevel
-	case FatalLevel.String():
-		opts.stackLevel = FatalLevel
-	case PanicLevel.String():
-		opts.stackLevel = PanicLevel
+	timeFormat := config.Get(logrusTimeFormatKey, config.Get(defaultTimeFormatKey).String()).String()
+	if timeFormat != "" {
+		opts.timeFormat = timeFormat
 	}
 
-	fileMaxAge := config.Get("config.log.logrus.fileMaxAge").Duration()
+	stackLevel := config.Get(logrusStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
+	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
+		opts.stackLevel = lvl
+	}
+
+	fileMaxAge := config.Get(logrusFileMaxAgeKey, config.Get(defaultFileMaxAgeKey).Duration()).Duration()
 	if fileMaxAge > 0 {
 		opts.fileMaxAge = fileMaxAge
 	}
 
-	fileMaxSize := config.Get("config.log.logrus.fileMaxSize").Int64()
+	fileMaxSize := config.Get(logrusFileMaxSizeKey, config.Get(defaultFileMaxSizeKey).Int64()).Int64()
 	if fileMaxSize > 0 {
 		opts.fileMaxSize = fileMaxSize
 	}
 
-	fileCutRule := config.Get("config.log.logrus.fileCutRule").String()
+	fileCutRule := config.Get(logrusFileCutRuleKey, config.Get(defaultFileCutRuleKey).String()).String()
 	switch strings.ToLower(fileCutRule) {
-	case "year":
-		opts.fileCutRule = CutByYear
-	case "month":
-		opts.fileCutRule = CutByMonth
-	case "day":
-		opts.fileCutRule = CutByDay
-	case "hour":
-		opts.fileCutRule = CutByHour
-	case "minute":
-		opts.fileCutRule = CutByMinute
-	case "second":
-		opts.fileCutRule = CutBySecond
+	case log.CutByYear.String():
+		opts.fileCutRule = log.CutByYear
+	case log.CutByMonth.String():
+		opts.fileCutRule = log.CutByMonth
+	case log.CutByDay.String():
+		opts.fileCutRule = log.CutByDay
+	case log.CutByHour.String():
+		opts.fileCutRule = log.CutByHour
+	case log.CutByMinute.String():
+		opts.fileCutRule = log.CutByMinute
+	case log.CutBySecond.String():
+		opts.fileCutRule = log.CutBySecond
 	}
 
-	callerShortPath := config.Get("config.log.logrus.callerShortPath").Bool()
-	if callerShortPath {
-		opts.callerFormat = CallerShortPath
-	} else {
-		opts.callerFormat = CallerFullPath
-	}
-
-	timestampFormat := config.Get("config.log.logrus.timestampFormat").String()
-	if timestampFormat != "" {
-		opts.timestampFormat = timestampFormat
-	}
-
-	opts.enableLeveledStorage = config.Get("config.log.logrus.leveledStorage").Bool()
+	opts.stdout = config.Get(logrusStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
+	opts.callerFullPath = config.Get(logrusCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.classifiedStorage = config.Get(logrusClassifiedStorageKey, config.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()).Bool()
 
 	return opts
 }
 
-// WithOutFile 设置输出的文件路径
-func WithOutFile(file string) Option {
-	return func(o *options) { o.outFile = file }
+// WithFile 设置输出的文件路径
+func WithFile(file string) Option {
+	return func(o *options) { o.file = file }
 }
 
-// WithOutLevel 设置输出的最低日志级别
-func WithOutLevel(level log.Level) Option {
-	return func(o *options) { o.outLevel = level }
+// WithLevel 设置输出的最低日志级别
+func WithLevel(level log.Level) Option {
+	return func(o *options) { o.level = level }
 }
 
-// WithOutFormat 设置输出的日志格式
-func WithOutFormat(format log.Format) Option {
-	return func(o *options) { o.outFormat = format }
+// WithFormat 设置输出的日志格式
+func WithFormat(format log.Format) Option {
+	return func(o *options) { o.format = format }
 }
 
-// WithOutStackLevel 设置输出堆栈的日志级别
-func WithOutStackLevel(level log.Level) Option {
-	return func(o *options) { o.outStackLevel = level }
+// WithStdout 设置是否输出到终端
+func WithStdout(enable bool) Option {
+	return func(o *options) { o.stdout = enable }
+}
+
+// WithTimeFormat 设置时间格式
+func WithTimeFormat(format string) Option {
+	return func(o *options) { o.timeFormat = format }
+}
+
+// WithStackLevel 设置堆栈的最小输出级别
+func WithStackLevel(level log.Level) Option {
+	return func(o *options) { o.stackLevel = level }
 }
 
 // WithFileMaxAge 设置文件最大留存时间
@@ -191,17 +193,19 @@ func WithFileCutRule(cutRule log.CutRule) Option {
 	return func(o *options) { o.fileCutRule = cutRule }
 }
 
-// WithFileClassifyStorage 设置文件分级存储
-func WithFileClassifyStorage(enable bool) Option {
-	return func(o *options) { o.fileClassifyStorage = enable }
+// WithCallerSkip 设置调用者跳过的层级深度
+func WithCallerSkip(skip int) Option {
+	return func(o *options) { o.callerSkip = skip }
 }
 
-// WithTimestampFormat 设置日志输出时间戳格式，标准库时间格式
-func WithTimestampFormat(format string) Option {
-	return func(o *options) { o.timestampFormat = format }
+// WithCallerFullPath 设置是否启用调用文件全路径
+func WithCallerFullPath(enable bool) Option {
+	return func(o *options) { o.callerFullPath = enable }
 }
 
-// WithCallerFullPath 设置是否显示调用者全路径
-func WithCallerFullPath(callerFullPath bool) Option {
-	return func(o *options) { o.callerFullPath = callerFullPath }
+// WithClassifiedStorage 设置启用文件分级存储
+// 启用后，日志将进行分级存储，大一级的日志将存储于小于等于自身的日志级别文件中
+// 例如：InfoLevel级的日志将存储于due.debug.20220910.log、due.info.20220910.log两个日志文件中
+func WithClassifiedStorage(enable bool) Option {
+	return func(o *options) { o.classifiedStorage = enable }
 }
