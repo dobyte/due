@@ -8,25 +8,14 @@
 package logrus
 
 import (
+	"github.com/sirupsen/logrus"
 	"io"
 	"os"
-	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/logrus/internal/formatter"
 	"github.com/dobyte/due/log/logrus/internal/hook"
 	"github.com/dobyte/due/mode"
-)
-
-const (
-	defaultOutLevel        = log.InfoLevel
-	defaultOutFormat       = log.TextFormat
-	defaultFileMaxAge      = 7 * 24 * time.Hour
-	defaultFileMaxSize     = 100 * 1024 * 1024
-	defaultFileCutRule     = log.CutByDay
-	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
 const (
@@ -41,14 +30,7 @@ type Logger struct {
 }
 
 func NewLogger(opts ...Option) *Logger {
-	o := &options{
-		outLevel:        defaultOutLevel,
-		outFormat:       defaultOutFormat,
-		fileMaxAge:      defaultFileMaxAge,
-		fileMaxSize:     defaultFileMaxSize,
-		fileCutRule:     defaultFileCutRule,
-		timestampFormat: defaultTimestampFormat,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
