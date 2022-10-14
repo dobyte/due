@@ -68,7 +68,11 @@ func (e *endpoint) GetIP(ctx context.Context, req *pb.GetIPRequest) (*pb.GetIPRe
 
 // Push 推送消息给连接
 func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply, error) {
-	msg, err := packet.Pack(&packet.Message{Route: req.Route, Buffer: req.Buffer})
+	msg, err := packet.Pack(&packet.Message{
+		Seq:    req.Message.Seq,
+		Route:  req.Message.Route,
+		Buffer: req.Message.Buffer,
+	})
 	if err != nil {
 		return nil, status.New(codes.Internal, err.Error()).Err()
 	}
@@ -89,7 +93,11 @@ func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply
 
 // Multicast 推送组播消息
 func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb.MulticastReply, error) {
-	msg, err := packet.Pack(&packet.Message{Route: req.Route, Buffer: req.Buffer})
+	msg, err := packet.Pack(&packet.Message{
+		Seq:    req.Message.Seq,
+		Route:  req.Message.Route,
+		Buffer: req.Message.Buffer,
+	})
 	if err != nil {
 		return nil, status.New(codes.Internal, err.Error()).Err()
 	}
@@ -109,7 +117,11 @@ func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb
 
 // Broadcast 推送广播消息
 func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb.BroadcastReply, error) {
-	msg, err := packet.Pack(&packet.Message{Route: req.Route, Buffer: req.Buffer})
+	msg, err := packet.Pack(&packet.Message{
+		Seq:    req.Message.Seq,
+		Route:  req.Message.Route,
+		Buffer: req.Message.Buffer,
+	})
 	if err != nil {
 		return nil, status.New(codes.Internal, err.Error()).Err()
 	}

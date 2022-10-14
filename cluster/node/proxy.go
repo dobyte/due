@@ -3,16 +3,13 @@ package node
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/enum"
-	"strconv"
-	"strings"
+	"github.com/dobyte/due/locate"
+	"github.com/dobyte/due/registry"
 	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
@@ -22,7 +19,6 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/third/redis"
 )
 
 var (
@@ -34,9 +30,6 @@ var (
 )
 
 type Proxy interface {
-	// AddRoute 添加路由
-	// DEPRECATED: Use AddRouteHandler instead.
-	AddRoute(route int32, stateful bool, handler RouteHandler)
 	// AddRouteHandler 添加路由处理器
 	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -48,13 +41,17 @@ type Proxy interface {
 	// UnbindGate 绑定网关
 	UnbindGate(ctx context.Context, uid int64) error
 	// BindNode 绑定节点
-	BindNode(ctx context.Context, uid int64) error
+	BindNode(ctx context.Context, uid int64, nid ...string) error
 	// UnbindNode 解绑节点
-	UnbindNode(ctx context.Context, uid int64) error
+	UnbindNode(ctx context.Context, uid int64, nid ...string) error
 	// LocateGate 定位用户所在网关
 	LocateGate(ctx context.Context, uid int64) (string, error)
 	// LocateNode 定位用户所在节点
 	LocateNode(ctx context.Context, uid int64) (string, error)
+	// FetchGateList 拉取网关列表
+	FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error)
+	// FetchNodeList 拉取节点列表
+	FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error)
 	// GetIP 获取客户端IP
 	GetIP(ctx context.Context, args *GetIPArgs) (string, error)
 	// Push 推送消息
@@ -70,25 +67,13 @@ type Proxy interface {
 }
 
 type proxy struct {
-	node       *Node              // 节点
-	kind       string             // 代理类型
-	sourceGate sync.Map           // 用户来源网关
-	sourceNode sync.Map           // 用户来源节点
-	sfgGate    singleflight.Group // singleFlight
-	sfgNode    singleflight.Group // singleFlight
+	node       *Node    // 节点
+	sourceGate sync.Map // 用户来源网关
+	sourceNode sync.Map // 用户来源节点
 }
 
 func newProxy(node *Node) *proxy {
-	return &proxy{
-		node: node,
-		kind: string(cluster.Node),
-	}
-}
-
-// AddRoute 添加路由
-// DEPRECATED: Use AddRouteHandler instead.
-func (p *proxy) AddRoute(route int32, stateful bool, handler RouteHandler) {
-	p.node.addRouteHandler(route, stateful, handler)
+	return &proxy{node: node}
 }
 
 // AddRouteHandler 添加路由处理器
@@ -144,31 +129,39 @@ func (p *proxy) UnbindGate(ctx context.Context, uid int64) error {
 }
 
 // BindNode 绑定节点
-func (p *proxy) BindNode(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.node.opts.redis.HSet(ctx, key, string(cluster.Node), p.node.opts.id).Err()
+// 单个用户只能被绑定到某一台节点服务器上，多次绑定会直接覆盖上次绑定
+// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
+// nid 为需要绑定的节点ID，默认绑定到当前节点上
+func (p *proxy) BindNode(ctx context.Context, uid int64, nid ...string) error {
+	if len(nid) == 0 || nid[0] == "" {
+		nid = append(nid, p.node.opts.id)
+	}
+
+	err := p.node.opts.locator.Set(ctx, uid, cluster.Node, nid[0])
 	if err != nil {
 		return err
 	}
 
-	p.sourceNode.Store(uid, p.node.opts.id)
-
-	p.synchronize(ctx, uid, enum.BindAction)
+	p.sourceNode.Store(uid, nid[0])
 
 	return nil
 }
 
 // UnbindNode 解绑节点
-func (p *proxy) UnbindNode(ctx context.Context, uid int64) error {
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	err := p.node.opts.redis.HDel(ctx, key, string(cluster.Node)).Err()
+// 解绑时会对解绑节点ID进行校验，不匹配则解绑失败
+// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
+// nid 为需要解绑的节点ID，默认解绑当前节点
+func (p *proxy) UnbindNode(ctx context.Context, uid int64, nid ...string) error {
+	if len(nid) == 0 || nid[0] == "" {
+		nid = append(nid, p.node.opts.id)
+	}
+
+	err := p.node.opts.locator.Rem(ctx, uid, cluster.Node, nid[0])
 	if err != nil {
 		return err
 	}
 
 	p.sourceNode.Delete(uid)
-
-	p.synchronize(ctx, uid, enum.UnbindAction)
 
 	return nil
 }
@@ -181,26 +174,18 @@ func (p *proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 		}
 	}
 
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	val, err, _ := p.sfgGate.Do(key+string(cluster.Gate), func() (interface{}, error) {
-		val, err := p.node.opts.redis.HGet(ctx, key, string(cluster.Gate)).Result()
-		if err != nil && err != redis.Nil {
-			return "", err
-		}
-
-		if val == "" {
-			return "", ErrNotFoundUserSource
-		}
-
-		p.sourceGate.Store(uid, val)
-
-		return val, nil
-	})
+	gid, err := p.node.opts.locator.Get(ctx, uid, cluster.Gate)
 	if err != nil {
 		return "", err
 	}
 
-	return val.(string), nil
+	if gid == "" {
+		return "", ErrNotFoundUserSource
+	}
+
+	p.sourceGate.Store(uid, gid)
+
+	return gid, nil
 }
 
 // LocateNode 定位用户所在节点
@@ -211,26 +196,54 @@ func (p *proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
 		}
 	}
 
-	key := fmt.Sprintf(enum.UserSourcesKey, uid)
-	val, err, _ := p.sfgNode.Do(key+string(cluster.Node), func() (interface{}, error) {
-		val, err := p.node.opts.redis.HGet(ctx, key, string(cluster.Node)).Result()
-		if err != nil && err != redis.Nil {
-			return "", err
-		}
-
-		if val == "" {
-			return "", ErrNotFoundUserSource
-		}
-
-		p.sourceNode.Store(uid, val)
-
-		return val, nil
-	})
+	nid, err := p.node.opts.locator.Get(ctx, uid, cluster.Node)
 	if err != nil {
 		return "", err
 	}
 
-	return val.(string), nil
+	if nid == "" {
+		return "", ErrNotFoundUserSource
+	}
+
+	p.sourceNode.Store(uid, nid)
+
+	return nid, nil
+}
+
+// FetchGateList 拉取网关列表
+func (p *proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.fetchInstanceList(ctx, cluster.Gate, states...)
+}
+
+// FetchNodeList 拉取节点列表
+func (p *proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.fetchInstanceList(ctx, cluster.Node, states...)
+}
+
+// 拉取实例列表
+func (p *proxy) fetchInstanceList(ctx context.Context, kind cluster.Kind, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	services, err := p.node.opts.registry.Services(ctx, string(kind))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(states) == 0 {
+		return services, nil
+	}
+
+	mp := make(map[cluster.State]struct{}, len(states))
+	for _, state := range states {
+		mp[state] = struct{}{}
+	}
+
+	list := make([]*registry.ServiceInstance, 0, len(services))
+	for i := range services {
+		if _, ok := mp[services[i].State]; ok {
+			list = append(list, services[i])
+		}
+	}
+
+	return list, nil
 }
 
 // GetIP 获取客户端IP
@@ -290,12 +303,12 @@ func (p *proxy) indirectGetIP(ctx context.Context, uid int64) (string, error) {
 func (p *proxy) Push(ctx context.Context, args *PushArgs) error {
 	switch args.Kind {
 	case session.Conn:
-		return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Route, args.Message)
+		return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Message)
 	case session.User:
 		if args.GID == "" {
-			return p.indirectPush(ctx, args.Target, args.Route, args.Message)
+			return p.indirectPush(ctx, args.Target, args.Message)
 		} else {
-			return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Route, args.Message)
+			return p.directPush(ctx, args.GID, args.Kind, args.Target, args.Message)
 		}
 	default:
 		return ErrInvalidSessionKind
@@ -303,8 +316,8 @@ func (p *proxy) Push(ctx context.Context, args *PushArgs) error {
 }
 
 // 直接推送
-func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, target int64, route int32, message interface{}) error {
-	buffer, err := p.toBuffer(message)
+func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, target int64, message *Message) error {
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return err
 	}
@@ -318,16 +331,19 @@ func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, t
 		NID:    p.node.opts.id,
 		Kind:   int32(kind),
 		Target: target,
-		Route:  route,
-		Buffer: buffer,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: buffer,
+		},
 	})
 
 	return err
 }
 
 // 间接推送
-func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, message interface{}) error {
-	buffer, err := p.toBuffer(message)
+func (p *proxy) indirectPush(ctx context.Context, uid int64, message *Message) error {
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return err
 	}
@@ -337,8 +353,11 @@ func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, messag
 			NID:    p.node.opts.id,
 			Kind:   int32(session.User),
 			Target: uid,
-			Route:  route,
-			Buffer: buffer,
+			Message: &pb.Message{
+				Seq:    message.Seq,
+				Route:  message.Route,
+				Buffer: buffer,
+			},
 		})
 
 		return status.Code(err) == code.NotFoundSession, reply, err
@@ -349,19 +368,23 @@ func (p *proxy) indirectPush(ctx context.Context, uid int64, route int32, messag
 
 // Response 响应消息
 func (p *proxy) Response(ctx context.Context, req Request, message interface{}) error {
-	return p.directPush(ctx, req.GID(), session.Conn, req.CID(), req.Route(), message)
+	return p.directPush(ctx, req.GID(), session.Conn, req.CID(), &Message{
+		Seq:   req.Seq(),
+		Route: req.Route(),
+		Data:  message,
+	})
 }
 
 // Multicast 推送组播消息
 func (p *proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	switch args.Kind {
 	case session.Conn:
-		return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Route, args.Message)
+		return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Message)
 	case session.User:
 		if args.GID == "" {
-			return p.indirectMulticast(ctx, args.Targets, args.Route, args.Message)
+			return p.indirectMulticast(ctx, args.Targets, args.Message)
 		} else {
-			return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Route, args.Message)
+			return p.directMulticast(ctx, args.GID, args.Kind, args.Targets, args.Message)
 		}
 	default:
 		return 0, ErrInvalidSessionKind
@@ -369,12 +392,12 @@ func (p *proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, erro
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
-func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Kind, targets []int64, route int32, message interface{}) (int64, error) {
+func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Kind, targets []int64, message *Message) (int64, error) {
 	if len(targets) == 0 {
 		return 0, ErrReceiveTargetEmpty
 	}
 
-	buffer, err := p.toBuffer(message)
+	buffer, err := p.toBuffer(message.Data)
 	if err != nil {
 		return 0, err
 	}
@@ -388,8 +411,11 @@ func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Ki
 		NID:     p.node.opts.id,
 		Kind:    int32(kind),
 		Targets: targets,
-		Route:   route,
-		Buffer:  buffer,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: buffer,
+		},
 	})
 	if err != nil {
 		return 0, err
@@ -399,14 +425,14 @@ func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Ki
 }
 
 // 间接推送组播消息
-func (p *proxy) indirectMulticast(ctx context.Context, uids []int64, route int32, message interface{}) (int64, error) {
+func (p *proxy) indirectMulticast(ctx context.Context, uids []int64, message *Message) (int64, error) {
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, target := range uids {
 		uid := target
 		eg.Go(func() error {
-			if err := p.indirectPush(ctx, uid, route, message); err != nil {
+			if err := p.indirectPush(ctx, uid, message); err != nil {
 				return err
 			}
 			atomic.AddInt64(&total, 1)
@@ -440,10 +466,13 @@ func (p *proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 			}
 
 			reply, err := client.Broadcast(ctx, &pb.BroadcastRequest{
-				NID:    p.node.opts.id,
-				Kind:   int32(args.Kind),
-				Route:  args.Route,
-				Buffer: buffer,
+				NID:  p.node.opts.id,
+				Kind: int32(args.Kind),
+				Message: &pb.Message{
+					Seq:    args.Message.Seq,
+					Route:  args.Message.Route,
+					Buffer: buffer,
+				},
 			})
 			if err != nil {
 				return err
@@ -694,54 +723,47 @@ func (p *proxy) newNodeClient(ep *router.Endpoint) (pb.NodeClient, error) {
 	return pb.NewNodeClient(conn), nil
 }
 
-// 同步
-func (p *proxy) synchronize(ctx context.Context, uid int64, action string) {
-	msg := fmt.Sprintf("%d@%s@%s@%s", uid, p.kind, p.node.opts.id, action)
-	channel := fmt.Sprintf(enum.UserSourcesBroadcastKey, p.kind)
-	err := p.node.opts.redis.Publish(ctx, channel, msg).Err()
+// 启动代理
+func (p *proxy) watch(ctx context.Context) {
+	watcher, err := p.node.opts.locator.Watch(ctx, cluster.Gate, cluster.Node)
 	if err != nil {
-		log.Errorf("the user source broadcast failed: %v", err)
+		log.Fatalf("user locate event watch failed: %v", err)
 	}
-}
 
-// 监听
-func (p *proxy) listen(ctx context.Context) {
-	channels := []string{
-		fmt.Sprintf(enum.UserSourcesBroadcastKey, string(cluster.Node)),
-		fmt.Sprintf(enum.UserSourcesBroadcastKey, string(cluster.Gate)),
-	}
-	sub := p.node.opts.redis.Subscribe(ctx, channels...)
+	go func() {
+		defer watcher.Stop()
 
-	for {
-		iface, err := sub.Receive(ctx)
-		if err != nil {
-			return
-		}
-
-		switch v := iface.(type) {
-		case *redis.Subscription:
-			log.Debugf("channel subscribe succeeded, %s", v.Channel)
-		case *redis.Message:
-			slice := strings.Split(v.Payload, "@")
-			if len(slice) != 4 {
-				log.Errorf("invalid synchronize payload, %s", v.Payload)
-				continue
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// exec watch
 			}
-
-			uid, err := strconv.ParseInt(slice[0], 10, 64)
+			events, err := watcher.Next()
 			if err != nil {
-				log.Errorf("invalid synchronize payload, %s", v.Payload)
 				continue
 			}
+			for _, event := range events {
+				var source *sync.Map
+				switch event.InsKind {
+				case cluster.Gate:
+					source = &p.sourceGate
+				case cluster.Node:
+					source = &p.sourceNode
+				}
 
-			switch slice[3] {
-			case enum.BindAction:
-				p.sourceGate.Store(uid, slice[2])
-			case enum.UnbindAction:
-				p.sourceGate.Delete(uid)
+				if source == nil {
+					continue
+				}
+
+				switch event.Type {
+				case locate.SetLocation:
+					source.Store(event.UID, event.InsID)
+				case locate.RemLocation:
+					source.Delete(event.UID)
+				}
 			}
-		default:
-			// handle error
 		}
-	}
+	}()
 }
