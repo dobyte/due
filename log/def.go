@@ -7,7 +7,7 @@
 
 package log
 
-// 日志输出格式
+// Format 日志输出格式
 type Format int
 
 const (
@@ -15,7 +15,7 @@ const (
 	JsonFormat               // JSON格式
 )
 
-// 日志切割规则
+// CutRule 日志切割规则
 type CutRule int
 
 const (
@@ -27,7 +27,7 @@ const (
 	CutBySecond                    // 按照秒切割
 )
 
-// 调用则格式
+// CallerFormat 调用则格式
 type CallerFormat int
 
 const (

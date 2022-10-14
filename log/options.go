@@ -1,7 +1,20 @@
 package log
 
 import (
+	"github.com/dobyte/due/config"
+	"strings"
 	"time"
+)
+
+const (
+	defaultOutFile         = "./log/due.log"
+	defaultOutLevel        = InfoLevel
+	defaultOutFormat       = TextFormat
+	defaultFileMaxAge      = 7 * 24 * time.Hour
+	defaultFileMaxSize     = 100
+	defaultFileCutRule     = CutByDay
+	defaultCallerFormat    = CallerFullPath
+	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
 )
 
 type options struct {
@@ -19,6 +32,106 @@ type options struct {
 }
 
 type Option func(o *options)
+
+func defaultOptions() *options {
+	opts := &options{
+		outFile:         defaultOutFile,
+		outLevel:        defaultOutLevel,
+		outFormat:       defaultOutFormat,
+		fileMaxAge:      defaultFileMaxAge,
+		fileMaxSize:     defaultFileMaxSize,
+		fileCutRule:     defaultFileCutRule,
+		callerFormat:    defaultCallerFormat,
+		timestampFormat: defaultTimestampFormat,
+	}
+
+	file := config.Get("config.log.file").String()
+	if file != "" {
+		opts.outFile = file
+	}
+
+	level := config.Get("config.log.level").String()
+	switch strings.ToUpper(level) {
+	case DebugLevel.String():
+		opts.outLevel = DebugLevel
+	case InfoLevel.String():
+		opts.outLevel = InfoLevel
+	case WarnLevel.String():
+		opts.outLevel = WarnLevel
+	case ErrorLevel.String():
+		opts.outLevel = ErrorLevel
+	case FatalLevel.String():
+		opts.outLevel = FatalLevel
+	case PanicLevel.String():
+		opts.outLevel = PanicLevel
+	}
+
+	format := config.Get("config.log.format").String()
+	switch strings.ToLower(format) {
+	case "json":
+		opts.outFormat = JsonFormat
+	case "text":
+		opts.outFormat = TextFormat
+	}
+
+	stackLevel := config.Get("config.log.stackLevel").String()
+	switch strings.ToUpper(stackLevel) {
+	case DebugLevel.String():
+		opts.stackLevel = DebugLevel
+	case InfoLevel.String():
+		opts.stackLevel = InfoLevel
+	case WarnLevel.String():
+		opts.stackLevel = WarnLevel
+	case ErrorLevel.String():
+		opts.stackLevel = ErrorLevel
+	case FatalLevel.String():
+		opts.stackLevel = FatalLevel
+	case PanicLevel.String():
+		opts.stackLevel = PanicLevel
+	}
+
+	fileMaxAge := config.Get("config.log.fileMaxAge").Duration()
+	if fileMaxAge > 0 {
+		opts.fileMaxAge = fileMaxAge
+	}
+
+	fileMaxSize := config.Get("config.log.fileMaxSize").Int64()
+	if fileMaxSize > 0 {
+		opts.fileMaxSize = fileMaxSize
+	}
+
+	fileCutRule := config.Get("config.log.fileCutRule").String()
+	switch strings.ToLower(fileCutRule) {
+	case "year":
+		opts.fileCutRule = CutByYear
+	case "month":
+		opts.fileCutRule = CutByMonth
+	case "day":
+		opts.fileCutRule = CutByDay
+	case "hour":
+		opts.fileCutRule = CutByHour
+	case "minute":
+		opts.fileCutRule = CutByMinute
+	case "second":
+		opts.fileCutRule = CutBySecond
+	}
+
+	callerShortPath := config.Get("config.log.callerShortPath").Bool()
+	if callerShortPath {
+		opts.callerFormat = CallerShortPath
+	} else {
+		opts.callerFormat = CallerFullPath
+	}
+
+	timestampFormat := config.Get("config.log.timestampFormat").String()
+	if timestampFormat != "" {
+		opts.timestampFormat = timestampFormat
+	}
+
+	opts.enableLeveledStorage = config.Get("config.log.leveledStorage").Bool()
+
+	return opts
+}
 
 // WithOutFile 设置输出的文件路径
 func WithOutFile(file string) Option {
