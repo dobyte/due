@@ -6,5 +6,5 @@ import (
 )
 
 func TestLog(t *testing.T) {
-	log.Info("hello due game framework")
+	log.Info("welcome to due-framework")
 }
