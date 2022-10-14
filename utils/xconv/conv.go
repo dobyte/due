@@ -1,4 +1,4 @@
-package conv
+package xconv
 
 import (
 	"encoding/json"
@@ -388,6 +388,25 @@ func Float64(any interface{}) float64 {
 
 func Byte(any interface{}) byte {
 	return Uint8(any)
+}
+
+func Bytes(any interface{}) []byte {
+	if any == nil {
+		return nil
+	}
+
+	switch v := any.(type) {
+	case string:
+		return []byte(v)
+	case *string:
+		return []byte(*v)
+	case []byte:
+		return v
+	case *[]byte:
+		return *v
+	default:
+		return nil
+	}
 }
 
 func Bool(any interface{}) bool {
