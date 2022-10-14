@@ -1,7 +1,26 @@
 [packet]
-    # 字节序，little或者big
+    # 字节序，little | big
     endian = "big"
     # 序列号字节长度（字节）
-    seqLength = 2
+    seqBytesLen = 2
     # 路由字节长度（字节）
-    routeLength = 2
+    routeBytesLength = 2
+[log]
+    # 日志输出文件
+    file = "../testdata/log/due.log"
+    # 日志输出级别，可选：debug | info | warn | error | fatal | panic
+    level = "info"
+    # 日志输出格式，可选：text | json
+    format = "text"
+    # 堆栈的最低输出级别，可选：debug | info | warn | error | fatal | panic
+    stackLevel = "error"
+    # 文件最大留存时间，d:天、h:时、m:分、s:秒
+    fileMaxAge = "7d"
+    # 文件最大尺寸限制，单位（MB）
+    fileMaxSize = 100
+    # 文件切割方式
+    fileCutRule = "day"
+    # 是否启用调用者短路径
+    callerShortPath = true
+    # 时间格式，标准库时间格式
+    timestampFormat = "2006/01/02 15:04:05.000000"

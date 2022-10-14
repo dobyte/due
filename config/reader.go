@@ -7,8 +7,8 @@ import (
 	"github.com/dobyte/due/env"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/internal/value"
-	"github.com/dobyte/due/log"
 	"github.com/imdario/mergo"
+	"log"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -102,7 +102,6 @@ func (r *defaultReader) watch() {
 				}
 				cs, err := watcher.Next()
 				if err != nil {
-					log.Warnf("extract configure failed: %v", err)
 					continue
 				}
 
@@ -110,7 +109,6 @@ func (r *defaultReader) watch() {
 				for _, c := range cs {
 					v, err := r.opts.decoder(c)
 					if err != nil {
-						log.Warnf("decode configure failed: %v", err)
 						continue
 					}
 					values[c.Name] = v
@@ -118,13 +116,11 @@ func (r *defaultReader) watch() {
 
 				dst, err := r.copyValues()
 				if err != nil {
-					log.Warnf("copy original configure failed: %v", err)
 					continue
 				}
 
 				err = mergo.Merge(&dst, values, mergo.WithOverride)
 				if err != nil {
-					log.Warnf("merge configure failed: %v", err)
 					continue
 				}
 
@@ -149,7 +145,6 @@ func (r *defaultReader) Get(pattern string, def ...interface{}) value.Value {
 
 	values, err := r.copyValues()
 	if err != nil {
-		log.Errorf("copy configurations failed: %v", err)
 		goto NOTFOUND
 	}
 

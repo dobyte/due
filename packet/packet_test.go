@@ -6,12 +6,6 @@ import (
 )
 
 func TestPacket(t *testing.T) {
-
-	//packet.SetPacker(packet.NewPacker(
-	//	packet.WithByteOrder(binary.BigEndian),
-	//	packet.WithSeqBytesLen(0),
-	//))
-
 	data, err := packet.Pack(&packet.Message{
 		Seq:    1,
 		Route:  1,

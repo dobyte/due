@@ -3,21 +3,14 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/log"
-	"strings"
 )
 
 var (
 	ErrMessageIsNil  = errors.New("the message is nil")
 	ErrSeqOverflow   = errors.New("the message seq overflow")
 	ErrRouteOverflow = errors.New("the message route overflow")
-)
-
-const (
-	littleEndian = "little"
-	bigEndian    = "big"
 )
 
 type Packer interface {
@@ -27,24 +20,12 @@ type Packer interface {
 	Unpack(data []byte) (*Message, error)
 }
 
-type packer struct {
+type defaultPacker struct {
 	opts *options
 }
 
 func NewPacker(opts ...Option) Packer {
-	o := &options{
-		byteOrder:     binary.LittleEndian,
-		seqBytesLen:   config.Get("config.packet.seqLength", 2).Int(),
-		routeBytesLen: config.Get("config.packet.routeLength", 2).Int(),
-	}
-	endian := config.Get("config.packet.endian", littleEndian).String()
-	switch strings.ToLower(endian) {
-	case littleEndian:
-		o.byteOrder = binary.LittleEndian
-	case bigEndian:
-		o.byteOrder = binary.BigEndian
-	}
-
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -57,11 +38,11 @@ func NewPacker(opts ...Option) Packer {
 		log.Fatalf("the route bytes length must be 1、2、4, and give %d", o.seqBytesLen)
 	}
 
-	return &packer{opts: o}
+	return &defaultPacker{opts: o}
 }
 
 // Pack 打包消息
-func (p *packer) Pack(message *Message) ([]byte, error) {
+func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 	if message == nil {
 		return nil, ErrMessageIsNil
 	}
@@ -116,7 +97,7 @@ func (p *packer) Pack(message *Message) ([]byte, error) {
 }
 
 // Unpack 解包消息
-func (p *packer) Unpack(data []byte) (*Message, error) {
+func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 	var (
 		err     error
 		reader  = bytes.NewReader(data)

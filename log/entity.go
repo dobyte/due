@@ -26,10 +26,10 @@ const (
 
 type EntityPool struct {
 	pool sync.Pool
-	std  *Std
+	std  *defaultLogger
 }
 
-func newEntityPool(std *Std) *EntityPool {
+func newEntityPool(std *defaultLogger) *EntityPool {
 	return &EntityPool{
 		pool: sync.Pool{New: func() interface{} { return &Entity{} }},
 		std:  std,
