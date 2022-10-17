@@ -4,6 +4,8 @@ option go_package = "./pb";
 
 package pb;
 
+import "message.proto";
+
 service Gate {
   // 绑定用户与连接
   rpc Bind(BindRequest) returns (BindReply) {}
@@ -60,8 +62,7 @@ message PushRequest {
   string NID = 1; // 节点ID
   int32 Kind = 2; // 推送类型 1：CID 2：UID
   int64 Target = 3; // 推送目标
-  int32 Route = 4;  // 路由
-  bytes Buffer = 5; // 消息内容
+  Message Message = 4; // 消息
 }
 
 message PushReply {}
@@ -70,8 +71,7 @@ message MulticastRequest {
   string NID = 1; // 节点ID
   int32 Kind = 2; // 推送类型 1：CID 2：UID
   repeated int64 Targets = 3; // 推送目标
-  int32 Route = 4;  // 路由
-  bytes Buffer = 5; // 消息内容
+  Message Message = 4; // 消息
 }
 
 message MulticastReply {
@@ -81,8 +81,7 @@ message MulticastReply {
 message BroadcastRequest {
   string NID = 1; // 节点ID
   int32 Kind = 2; // 推送类型 1：CID 2：UID
-  int32 Route = 3;  // 路由
-  bytes Buffer = 4; // 消息内容
+  Message Message = 3; // 消息
 }
 
 message BroadcastReply {

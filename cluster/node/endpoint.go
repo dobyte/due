@@ -49,7 +49,7 @@ func (e *endpoint) Trigger(ctx context.Context, req *pb.TriggerRequest) (*pb.Tri
 
 // Deliver 投递消息
 func (e *endpoint) Deliver(ctx context.Context, req *pb.DeliverRequest) (*pb.DeliverReply, error) {
-	stateful, ok := e.node.isStatefulRoute(req.Route)
+	stateful, ok := e.node.isStatefulRoute(req.Message.Route)
 	if !ok {
 		return &pb.DeliverReply{}, nil
 	}
@@ -74,7 +74,7 @@ func (e *endpoint) Deliver(ctx context.Context, req *pb.DeliverRequest) (*pb.Del
 		}
 	}
 
-	e.node.deliver(req.GID, req.NID, req.CID, req.UID, req.Route, req.Buffer)
+	e.node.deliver(req.GID, req.NID, req.CID, req.UID, req.Message)
 
 	return &pb.DeliverReply{}, nil
 }

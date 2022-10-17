@@ -5,6 +5,7 @@ import (
 	"unsafe"
 )
 
+// StringToBytes 字符串无拷贝转字节数组
 func StringToBytes(s string) (b []byte) {
 	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -14,6 +15,7 @@ func StringToBytes(s string) (b []byte) {
 	return
 }
 
+// BytesToString 字节数组无拷贝转字符串
 func BytesToString(b []byte) (s string) {
 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
