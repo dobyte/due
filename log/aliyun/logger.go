@@ -42,15 +42,8 @@ func NewLogger(opts ...Option) *Logger {
 		opt(o)
 	}
 
-	config := producer.GetDefaultProducerConfig()
-	config.Endpoint = o.endpoint
-	config.AccessKeyID = o.accessKeyID
-	config.AccessKeySecret = o.accessKeySecret
-	config.AllowLogLevel = "error"
-
 	l := &Logger{
 		opts:       o,
-		producer:   producer.InitProducer(config),
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 		logger: log.NewLogger(
 			log.WithFile(""),
@@ -64,7 +57,16 @@ func NewLogger(opts ...Option) *Logger {
 		),
 	}
 
-	l.producer.Start()
+	if o.syncout {
+		config := producer.GetDefaultProducerConfig()
+		config.Endpoint = o.endpoint
+		config.AccessKeyID = o.accessKeyID
+		config.AccessKeySecret = o.accessKeySecret
+		config.AllowLogLevel = "error"
+
+		l.producer = producer.InitProducer(config)
+		l.producer.Start()
+	}
 
 	return l
 }
@@ -124,7 +126,10 @@ func (l *Logger) Producer() *producer.Producer {
 
 // Close 关闭日志服务
 func (l *Logger) Close() error {
-	return l.producer.Close(5000)
+	if l.opts.syncout {
+		return l.producer.Close(5000)
+	}
+	return nil
 }
 
 // Debug 打印调试日志

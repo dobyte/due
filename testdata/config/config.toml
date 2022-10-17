@@ -48,9 +48,9 @@
         # 日志输出级别，可选：debug | info | warn | error | fatal | panic
         level = "info"
         # 是否输出到终端
-        stdout = false
+        stdout = true
         # 是否同步输出到远端
-        syncout = true
+        syncout = false
         # 时间格式，标准库时间格式
         timeFormat = "2006/01/02 15:04:05.000000"
         # 堆栈的最低输出级别，可选：debug | info | warn | error | fatal | panic
