@@ -10,68 +10,59 @@ package aliyun
 import (
 	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
-	"time"
 )
 
 const (
-	defaultFile              = "./log/due.log"
-	defaultLevel             = log.InfoLevel
-	defaultFormat            = log.TextFormat
-	defaultStdout            = true
-	defaultSyncout           = false
-	defaultFileMaxAge        = 7 * 24 * time.Hour
-	defaultFileMaxSize       = 100
-	defaultFileCutRule       = log.CutByDay
-	defaultTimeFormat        = "2006/01/02 15:04:05.000000"
-	defaultCallerFullPath    = false
-	defaultClassifiedStorage = false
+	defaultLevel          = log.InfoLevel
+	defaultStdout         = true
+	defaultSyncout        = true
+	defaultTimeFormat     = "2006/01/02 15:04:05.000000"
+	defaultCallerFullPath = true
 )
 
 const (
-	defaultFileKey              = "config.log.file"
-	defaultLevelKey             = "config.log.level"
-	defaultFormatKey            = "config.log.format"
-	defaultTimeFormatKey        = "config.log.timeFormat"
-	defaultStackLevelKey        = "config.log.stackLevel"
-	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
-	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
-	defaultFileCutRuleKey       = "config.log.fileCutRule"
-	defaultStdoutKey            = "config.log.stdout"
-	defaultSyncoutKey           = "config.log.syncout"
-	defaultCallerFullPathKey    = "config.log.callerFullPath"
-	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+	defaultLevelKey          = "config.log.level"
+	defaultTimeFormatKey     = "config.log.timeFormat"
+	defaultStackLevelKey     = "config.log.stackLevel"
+	defaultStdoutKey         = "config.log.stdout"
+	defaultSyncoutKey        = "config.log.syncout"
+	defaultCallerFullPathKey = "config.log.callerFullPath"
 )
 
 const (
-	aliyunLevelKey          = "config.log.aliyun.level"
-	aliyunFormatKey         = "config.log.aliyun.format"
-	aliyunTimeFormatKey     = "config.log.aliyun.timeFormat"
-	aliyunStackLevelKey     = "config.log.aliyun.stackLevel"
-	aliyunFileMaxAgeKey     = "config.log.aliyun.fileMaxAge"
-	aliyunFileMaxSizeKey    = "config.log.aliyun.fileMaxSize"
-	aliyunFileCutRuleKey    = "config.log.aliyun.fileCutRule"
-	aliyunStdoutKey         = "config.log.aliyun.stdout"
-	aliyunSyncoutKey        = "config.log.aliyun.syncout"
-	aliyunCallerFullPathKey = "config.log.aliyun.callerFullPath"
+	aliyunEndpointKey        = "config.log.aliyun.endpoint"
+	aliyunAccessKeyIDKey     = "config.log.aliyun.accessKeyID"
+	aliyunAccessKeySecretKey = "config.log.aliyun.accessKeySecret"
+	aliyunProjectKey         = "config.log.aliyun.project"
+	aliyunLogstoreKey        = "config.log.aliyun.logstore"
+	aliyunTopicKey           = "config.log.aliyun.topic"
+	aliyunSourceKey          = "config.log.aliyun.source"
+	aliyunLevelKey           = "config.log.aliyun.level"
+	aliyunTimeFormatKey      = "config.log.aliyun.timeFormat"
+	aliyunStackLevelKey      = "config.log.aliyun.stackLevel"
+	aliyunStdoutKey          = "config.log.aliyun.stdout"
+	aliyunSyncoutKey         = "config.log.aliyun.syncout"
+	aliyunCallerFullPathKey  = "config.log.aliyun.callerFullPath"
 )
 
 type Option func(o *options)
 
 type options struct {
-	project         string    // 阿里云SLS项目名称
-	logstore        string    // 阿里云SLS日志存储
-	endpoint        string    // 阿里云SLS服务域名，公网使用公网域名，内网使用私网域名
-	accessKeyID     string    // 阿里云SLS访问密钥ID
-	accessKeySecret string    // 阿里云SLS访问密钥密码
-	topic           string    // 主题标签，默认为空
-	source          string    // 来源标签，默认为空
-	stdout          bool      // 是否输出到终端，debug模式下默认输出到终端
-	syncout         bool      // 是否同步输出到远端，debug模式下默认不输出到远端
-	level           log.Level // 输出的最低日志级别，默认Info
-	stackLevel      log.Level // 堆栈的最低输出级别，默认不输出堆栈
-	timeFormat      string    // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	callerSkip      int       // 调用者跳过的层级深度，默认为0
-	callerFullPath  bool      // 是否启用调用文件全路径，默认短路径
+	endpoint        string // 阿里云SLS服务域名，公网使用公网域名，内网使用私网域名
+	accessKeyID     string // 阿里云SLS访问密钥ID
+	accessKeySecret string // 阿里云SLS访问密钥密码
+	project         string // 阿里云SLS项目名称
+	logstore        string // 阿里云SLS日志存储
+	topic           string // 主题标签，默认为空
+	source          string // 来源标签，默认为空
+
+	stdout         bool      // 是否输出到终端，debug模式下默认输出到终端
+	syncout        bool      // 是否同步输出到远端，debug模式下默认不输出到远端
+	level          log.Level // 输出的最低日志级别，默认Info
+	stackLevel     log.Level // 堆栈的最低输出级别，默认不输出堆栈
+	timeFormat     string    // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	callerSkip     int       // 调用者跳过的层级深度，默认为0
+	callerFullPath bool      // 是否启用调用文件全路径，默认全路径
 }
 
 func defaultOptions() *options {
@@ -101,6 +92,13 @@ func defaultOptions() *options {
 	opts.stdout = config.Get(aliyunStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
 	opts.syncout = config.Get(aliyunSyncoutKey, config.Get(defaultSyncoutKey, defaultSyncout).Bool()).Bool()
 	opts.callerFullPath = config.Get(aliyunCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.endpoint = config.Get(aliyunEndpointKey).String()
+	opts.accessKeyID = config.Get(aliyunAccessKeyIDKey).String()
+	opts.accessKeySecret = config.Get(aliyunAccessKeySecretKey).String()
+	opts.project = config.Get(aliyunProjectKey).String()
+	opts.logstore = config.Get(aliyunLogstoreKey).String()
+	opts.topic = config.Get(aliyunTopicKey).String()
+	opts.source = config.Get(aliyunSourceKey).String()
 
 	return opts
 }

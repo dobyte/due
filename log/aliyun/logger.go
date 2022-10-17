@@ -53,7 +53,10 @@ func NewLogger(opts ...Option) *Logger {
 		producer:   producer.InitProducer(config),
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 		logger: log.NewLogger(
+			log.WithFile(""),
 			log.WithLevel(o.level),
+			log.WithFormat(log.TextFormat),
+			log.WithStdout(o.stdout),
 			log.WithTimeFormat(o.timeFormat),
 			log.WithStackLevel(o.stackLevel),
 			log.WithCallerFullPath(o.callerFullPath),
@@ -79,8 +82,6 @@ func (l *Logger) log(level log.Level, a ...interface{}) {
 		logData := producer.GenerateLog(uint32(time.Now().Unix()), l.buildLogRaw(e))
 		_ = l.producer.SendLog(l.opts.project, l.opts.logstore, l.opts.topic, l.opts.source, logData)
 	}
-
-	e.Log()
 }
 
 func (l *Logger) buildLogRaw(e *log.Entity) map[string]string {
