@@ -28,3 +28,32 @@
     callerFullPath = true
     # 是否启用分级存储
     classifiedStorage = true
+
+    # 阿里云SLS日志服务。以下配置项如果不存在，则会使用log域中的默认配置项；如果都未配置，则会使用系统默认配置
+    [log.aliyun]
+        # 服务域名，公网使用公网域名，内网使用私网域名
+        endpoint = "cn-chengdu.log.aliyuncs.com"
+        # 访问密钥ID
+        accessKeyID = ""
+        # 访问密钥密码
+        accessKeySecret = ""
+        # 项目名称
+        project = "due-test"
+        # 日志存储
+        logstore = "app"
+        # 主题标签，默认为空
+        topic = ""
+        # 来源标签，默认为空
+        source = ""
+        # 日志输出级别，可选：debug | info | warn | error | fatal | panic
+        level = "info"
+        # 是否输出到终端
+        stdout = false
+        # 是否同步输出到远端
+        syncout = true
+        # 时间格式，标准库时间格式
+        timeFormat = "2006/01/02 15:04:05.000000"
+        # 堆栈的最低输出级别，可选：debug | info | warn | error | fatal | panic
+        stackLevel = "error"
+        # 是否启用调用文件全路径
+        callerFullPath = true
