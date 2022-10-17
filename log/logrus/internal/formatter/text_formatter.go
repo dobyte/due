@@ -64,7 +64,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	}
 
 	var frames []runtime.Frame
-	if v, ok := entry.Data["frames"]; ok {
+	if v, ok := entry.Data["stack_frames"]; ok {
 		frames = v.([]runtime.Frame)
 	}
 

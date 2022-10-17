@@ -18,10 +18,6 @@ import (
 	"github.com/dobyte/due/mode"
 )
 
-const (
-	defaultNoneLevel log.Level = 0
-)
-
 var _ log.Logger = NewLogger()
 
 type Logger struct {
@@ -78,7 +74,7 @@ func NewLogger(opts ...Option) *Logger {
 				logrus.PanicLevel: l.buildWriter(log.PanicLevel),
 			}))
 		} else {
-			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(defaultNoneLevel)))
+			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(log.NoneLevel)))
 		}
 	}
 
