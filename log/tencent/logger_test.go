@@ -22,6 +22,6 @@ func init() {
 func TestNewLogger(t *testing.T) {
 	defer logger.Close()
 
-	logger.Info("info")
+	logger.Error("error")
 	logger.Close()
 }

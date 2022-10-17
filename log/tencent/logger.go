@@ -42,17 +42,26 @@ func NewLogger(opts ...Option) *Logger {
 		opt(o)
 	}
 
-	config := cls.GetDefaultAsyncProducerClientConfig()
-	config.Endpoint = o.endpoint
-	config.AccessKeyID = o.accessKeyID
-	config.AccessKeySecret = o.accessKeySecret
+	var (
+		err      error
+		producer *cls.AsyncProducerClient
+	)
 
-	producer, err := cls.NewAsyncProducerClient(config)
-	if err != nil {
-		panic(err)
+	if o.syncout {
+		config := cls.GetDefaultAsyncProducerClientConfig()
+		config.Endpoint = o.endpoint
+		config.AccessKeyID = o.accessKeyID
+		config.AccessKeySecret = o.accessKeySecret
+
+		producer, err = cls.NewAsyncProducerClient(config)
+		if err != nil {
+			panic(err)
+		}
+
+		producer.Start()
 	}
 
-	l := &Logger{
+	return &Logger{
 		opts:       o,
 		producer:   producer,
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
@@ -67,10 +76,6 @@ func NewLogger(opts ...Option) *Logger {
 			log.WithCallerSkip(o.callerSkip+1),
 		),
 	}
-
-	l.producer.Start()
-
-	return l
 }
 
 func (l *Logger) log(level log.Level, a ...interface{}) {
@@ -128,7 +133,10 @@ func (l *Logger) Producer() *cls.AsyncProducerClient {
 
 // Close 关闭日志服务
 func (l *Logger) Close() error {
-	return l.producer.Close(60000)
+	if l.opts.syncout {
+		return l.producer.Close(60000)
+	}
+	return nil
 }
 
 // Debug 打印调试日志
