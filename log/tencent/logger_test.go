@@ -23,5 +23,4 @@ func TestNewLogger(t *testing.T) {
 	defer logger.Close()
 
 	logger.Error("error")
-	logger.Close()
 }
