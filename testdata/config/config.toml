@@ -32,7 +32,7 @@
     # 腾讯云云CLS日志服务。以下配置项如果不存在，则会使用log域中的默认配置项；如果都未配置，则会使用系统默认配置
     [log.tencent]
         # 服务域名，公网使用公网域名，内网使用私网域名
-        endpoint = "cn-chengdu.log.aliyuncs.com"
+        endpoint = "ap-guangzhou.cls.tencentcs.com"
         # 访问密钥ID
         accessKeyID = ""
         # 访问密钥密码
