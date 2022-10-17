@@ -7,7 +7,7 @@
     routeBytesLength = 2
 [log]
     # 日志输出文件
-    file = "../testdata/log/due.log"
+    file = "../../testdata/log/due.log"
     # 日志输出级别，可选：debug | info | warn | error | fatal | panic
     level = "info"
     # 日志输出格式，可选：text | json
@@ -32,7 +32,7 @@
     # zap日志组件。以下配置项如果不存在，则会使用log域中的默认配置项；如果均未配置，则会使用系统默认配置
     [log.zap]
         # 日志输出文件
-        file = "../testdata/log/due.log"
+        file = "../../testdata/log/due.log"
         # 日志输出级别，可选：debug | info | warn | error | fatal | panic
         level = "info"
         # 日志输出格式，可选：text | json

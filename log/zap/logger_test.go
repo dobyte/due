@@ -13,21 +13,17 @@ import (
 	"github.com/dobyte/due/log/zap"
 )
 
+var logger *zap.Logger
+
+func init() {
+	logger = zap.NewLogger()
+}
+
 func TestNewLogger(t *testing.T) {
-	//l := zap.NewLogger(
-	//	zap.WithFile("./log/due.log"),
-	//	zap.WithLevel(log.WarnLevel),
-	//	zap.WithFormat(log.JsonFormat),
-	//	zap.WithStackLevel(log.WarnLevel),
-	//	zap.WithClassifiedStorage(true),
-	//)
-
-	l := zap.NewLogger()
-
-	//l.Info("info")
-	//l.Warn("warn")
-	l.Error("error")
-	//l.Error("error")
-	//l.Fatal("fatal")
-	//l.Panic("panic")
+	logger.Info("info")
+	logger.Warn("warn")
+	logger.Error("error")
+	logger.Error("error")
+	logger.Fatal("fatal")
+	logger.Panic("panic")
 }
