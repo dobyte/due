@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/locate"
 	"sync"
 
 	"google.golang.org/grpc"

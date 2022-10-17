@@ -1,3 +1,10 @@
+[cluster]
+    # 集群网关配置
+    [cluster.gate]
+        # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
+        id = ""
+        # 实例名称
+        name = "gate"
 [packet]
     # 字节序，little | big
     endian = "big"
