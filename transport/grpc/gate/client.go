@@ -1,0 +1,132 @@
+package gate
+
+import (
+	"context"
+	"github.com/dobyte/due/router"
+	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/transport/grpc/internal/code"
+	"github.com/dobyte/due/transport/grpc/internal/pb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+)
+
+type client struct {
+	client pb.GateClient
+}
+
+func NewClient(ep *router.Endpoint) (*client, error) {
+	conn, err := grpc.Dial(ep.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+
+	return &client{client: pb.NewGateClient(conn)}, nil
+}
+
+// Bind 绑定用户与连接
+func (c *client) Bind(ctx context.Context, cid, uid int64) (miss bool, err error) {
+	_, err = c.client.Bind(ctx, &pb.BindRequest{
+		CID: cid,
+		UID: uid,
+	})
+
+	miss = status.Code(err) == code.NotFoundSession
+
+	return
+}
+
+// Unbind 解绑用户与连接
+func (c *client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
+	_, err = c.client.Unbind(ctx, &pb.UnbindRequest{
+		UID: uid,
+	})
+
+	miss = status.Code(err) == code.NotFoundSession
+
+	return
+}
+
+// GetIP 获取客户端IP
+func (c *client) GetIP(ctx context.Context, nid string, kind session.Kind, target int64) (string, bool, error) {
+	reply, err := c.client.GetIP(ctx, &pb.GetIPRequest{
+		NID:    nid,
+		Kind:   int32(kind),
+		Target: target,
+	})
+	if err != nil {
+		return "", status.Code(err) == code.NotFoundSession, err
+	}
+
+	return reply.IP, false, nil
+}
+
+// Disconnect 断开连接
+func (c *client) Disconnect(ctx context.Context, nid string, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
+	_, err = c.client.Disconnect(ctx, &pb.DisconnectRequest{
+		NID:     nid,
+		Kind:    int32(kind),
+		Target:  target,
+		IsForce: isForce,
+	})
+
+	miss = status.Code(err) == code.NotFoundSession
+
+	return
+}
+
+// Push 推送消息
+func (c *client) Push(ctx context.Context, nid string, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
+	_, err = c.client.Push(ctx, &pb.PushRequest{
+		NID:    nid,
+		Kind:   int32(kind),
+		Target: target,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: message.Buffer,
+		},
+	})
+
+	miss = status.Code(err) == code.NotFoundSession
+
+	return
+}
+
+// Multicast 推送组播消息
+func (c *client) Multicast(ctx context.Context, nid string, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
+	reply, err := c.client.Multicast(ctx, &pb.MulticastRequest{
+		NID:     nid,
+		Kind:    int32(kind),
+		Targets: targets,
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: message.Buffer,
+		},
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return reply.Total, nil
+}
+
+// Broadcast 推送广播消息
+func (c *client) Broadcast(ctx context.Context, nid string, kind session.Kind, message *transport.Message) (int64, error) {
+	reply, err := c.client.Broadcast(ctx, &pb.BroadcastRequest{
+		NID:  nid,
+		Kind: int32(kind),
+		Message: &pb.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: message.Buffer,
+		},
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return reply.Total, nil
+}
