@@ -2,7 +2,24 @@ package redis
 
 import (
 	"context"
+	"github.com/dobyte/due/config"
 	"github.com/go-redis/redis/v8"
+)
+
+const (
+	defaultAddr       = "127.0.0.1:6379"
+	defaultDB         = 0
+	defaultMaxRetries = 3
+	defaultPrefix     = "due"
+)
+
+const (
+	defaultAddrsKey      = "config.locate.redis.addrs"
+	defaultDBKey         = "config.locate.redis.db"
+	defaultMaxRetriesKey = "config.locate.redis.maxRetries"
+	defaultPrefixKey     = "config.locate.redis.prefix"
+	defaultUsernameKey   = "config.locate.redis.username"
+	defaultPasswordKey   = "config.locate.redis.password"
 )
 
 type Option func(o *options)
@@ -37,6 +54,18 @@ type options struct {
 	// 前缀
 	// key前缀，默认为due
 	prefix string
+}
+
+func defaultOptions() *options {
+	return &options{
+		ctx:        context.Background(),
+		addrs:      config.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		db:         config.Get(defaultDBKey, defaultDB).Int(),
+		maxRetries: config.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
+		prefix:     config.Get(defaultPrefixKey, defaultPrefix).String(),
+		username:   config.Get(defaultUsernameKey).String(),
+		password:   config.Get(defaultPasswordKey).String(),
+	}
 }
 
 // WithContext 设置上下文

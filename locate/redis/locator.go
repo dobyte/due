@@ -19,10 +19,6 @@ const (
 	channelEventKey  = "%s:locate:channel:%v:event"  // channel
 )
 
-const (
-	defaultPrefix = "due"
-)
-
 var _ locate.Locator = &Locator{}
 
 type Locator struct {
@@ -34,12 +30,7 @@ type Locator struct {
 }
 
 func NewLocator(opts ...Option) *Locator {
-	o := &options{
-		ctx:        context.Background(),
-		addrs:      []string{"127.0.0.1:6379"},
-		maxRetries: 3,
-		prefix:     defaultPrefix,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
