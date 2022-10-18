@@ -4,14 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/locate"
+	"github.com/dobyte/due/transport"
 	"sync"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-
-	"github.com/dobyte/due/cluster/internal/code"
-	"github.com/dobyte/due/cluster/internal/pb"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/router"
@@ -66,7 +62,7 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, uid int64) err
 		err    error
 		nid    string
 		prev   string
-		client pb.NodeClient
+		client transport.NodeClient
 		ep     *router.Endpoint
 	)
 
@@ -83,16 +79,13 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, uid int64) err
 			return err
 		}
 
-		if client, err = p.newNodeClient(ep); err != nil {
+		client, err = p.gate.opts.transporter.NewNodeClient(ep)
+		if err != nil {
 			return err
 		}
 
-		_, err = client.Trigger(ctx, &pb.TriggerRequest{
-			GID:   p.gate.opts.id,
-			UID:   uid,
-			Event: int32(event),
-		})
-		if status.Code(err) == code.NotFoundSession {
+		miss, _ := client.Trigger(ctx, event, p.gate.opts.id, uid)
+		if miss {
 			p.sources.Delete(uid)
 			continue
 		}
@@ -105,30 +98,25 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, uid int64) err
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Message) error {
-	_, err := p.doNodeRPC(ctx, message.Route, uid, func(ctx context.Context, client pb.NodeClient) (bool, interface{}, error) {
-		reply, err := client.Deliver(ctx, &pb.DeliverRequest{
-			GID: p.gate.opts.id,
-			CID: cid,
-			UID: uid,
-			Message: &pb.Message{
-				Seq:    message.Seq,
-				Route:  message.Route,
-				Buffer: message.Buffer,
-			},
+	_, err := p.doNodeRPC(ctx, message.Route, uid, func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error) {
+		miss, err := client.Deliver(ctx, p.gate.opts.id, "", cid, uid, &transport.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: message.Buffer,
 		})
-		return status.Code(err) == code.NotFoundSession, reply, err
+		return miss, nil, err
 	})
 
 	return err
 }
 
 // 执行RPC调用
-func (p *proxy) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(ctx context.Context, client pb.NodeClient) (bool, interface{}, error)) (interface{}, error) {
+func (p *proxy) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error)) (interface{}, error) {
 	var (
 		err       error
 		nid       string
 		prev      string
-		client    pb.NodeClient
+		client    transport.NodeClient
 		entity    *router.Route
 		ep        *router.Endpoint
 		continued bool
@@ -150,15 +138,18 @@ func (p *proxy) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(c
 			prev = nid
 		}
 
-		if ep, err = entity.FindEndpoint(nid); err != nil {
+		ep, err = entity.FindEndpoint(nid)
+		if err != nil {
 			return nil, err
 		}
 
-		if client, err = p.newNodeClient(ep); err != nil {
+		client, err = p.gate.opts.transporter.NewNodeClient(ep)
+		if err != nil {
 			return nil, err
 		}
 
-		if continued, reply, err = fn(ctx, client); continued {
+		continued, reply, err = fn(ctx, client)
+		if continued {
 			p.sources.Delete(uid)
 			continue
 		}
@@ -189,16 +180,6 @@ func (p *proxy) locateNode(ctx context.Context, uid int64) (string, error) {
 	p.sources.Store(uid, nid)
 
 	return nid, nil
-}
-
-// 新建节点RPC客户端
-func (p *proxy) newNodeClient(ep *router.Endpoint) (pb.NodeClient, error) {
-	conn, err := grpc.Dial(ep.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-
-	return pb.NewNodeClient(conn), nil
 }
 
 // 监听
