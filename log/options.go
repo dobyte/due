@@ -19,6 +19,20 @@ const (
 	defaultClassifiedStorage = false
 )
 
+const (
+	defaultFileKey              = "config.log.file"
+	defaultLevelKey             = "config.log.level"
+	defaultFormatKey            = "config.log.format"
+	defaultTimeFormatKey        = "config.log.timeFormat"
+	defaultStackLevelKey        = "config.log.stackLevel"
+	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
+	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
+	defaultFileCutRuleKey       = "config.log.fileCutRule"
+	defaultStdoutKey            = "config.log.stdout"
+	defaultCallerFullPathKey    = "config.log.callerFullPath"
+	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+)
+
 type options struct {
 	file              string        // 输出的文件路径，有文件路径才会输出到文件，否则只会输出到终端
 	level             Level         // 输出的最低日志级别，默认Info
@@ -50,28 +64,17 @@ func defaultOptions() *options {
 		classifiedStorage: defaultClassifiedStorage,
 	}
 
-	file := config.Get("config.log.file").String()
+	file := config.Get(defaultFileKey).String()
 	if file != "" {
 		opts.file = file
 	}
 
-	level := config.Get("config.log.level").String()
-	switch strings.ToUpper(level) {
-	case DebugLevel.String():
-		opts.level = DebugLevel
-	case InfoLevel.String():
-		opts.level = InfoLevel
-	case WarnLevel.String():
-		opts.level = WarnLevel
-	case ErrorLevel.String():
-		opts.level = ErrorLevel
-	case FatalLevel.String():
-		opts.level = FatalLevel
-	case PanicLevel.String():
-		opts.level = PanicLevel
+	level := config.Get(defaultLevelKey).String()
+	if lvl := ParseLevel(level); lvl != NoneLevel {
+		opts.level = lvl
 	}
 
-	format := config.Get("config.log.format").String()
+	format := config.Get(defaultFormatKey).String()
 	switch strings.ToLower(format) {
 	case JsonFormat.String():
 		opts.format = JsonFormat
@@ -79,38 +82,27 @@ func defaultOptions() *options {
 		opts.format = TextFormat
 	}
 
-	timeFormat := config.Get("config.log.timeFormat").String()
+	timeFormat := config.Get(defaultTimeFormatKey).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get("config.log.stackLevel").String()
-	switch strings.ToUpper(stackLevel) {
-	case DebugLevel.String():
-		opts.stackLevel = DebugLevel
-	case InfoLevel.String():
-		opts.stackLevel = InfoLevel
-	case WarnLevel.String():
-		opts.stackLevel = WarnLevel
-	case ErrorLevel.String():
-		opts.stackLevel = ErrorLevel
-	case FatalLevel.String():
-		opts.stackLevel = FatalLevel
-	case PanicLevel.String():
-		opts.stackLevel = PanicLevel
+	stackLevel := config.Get(defaultStackLevelKey).String()
+	if lvl := ParseLevel(stackLevel); lvl != NoneLevel {
+		opts.stackLevel = lvl
 	}
 
-	fileMaxAge := config.Get("config.log.fileMaxAge").Duration()
+	fileMaxAge := config.Get(defaultFileMaxAgeKey).Duration()
 	if fileMaxAge > 0 {
 		opts.fileMaxAge = fileMaxAge
 	}
 
-	fileMaxSize := config.Get("config.log.fileMaxSize").Int64()
+	fileMaxSize := config.Get(defaultFileMaxSizeKey).Int64()
 	if fileMaxSize > 0 {
 		opts.fileMaxSize = fileMaxSize
 	}
 
-	fileCutRule := config.Get("config.log.fileCutRule").String()
+	fileCutRule := config.Get(defaultFileCutRuleKey).String()
 	switch strings.ToLower(fileCutRule) {
 	case CutByYear.String():
 		opts.fileCutRule = CutByYear
@@ -126,9 +118,9 @@ func defaultOptions() *options {
 		opts.fileCutRule = CutBySecond
 	}
 
-	opts.stdout = config.Get("config.log.stdout", defaultStdout).Bool()
-	opts.callerFullPath = config.Get("config.log.callerFullPath", defaultCallerFullPath).Bool()
-	opts.classifiedStorage = config.Get("config.log.classifiedStorage", defaultClassifiedStorage).Bool()
+	opts.stdout = config.Get(defaultStdoutKey, defaultStdout).Bool()
+	opts.callerFullPath = config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()
+	opts.classifiedStorage = config.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()
 
 	return opts
 }
