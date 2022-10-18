@@ -9,27 +9,20 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster/internal/pb"
+	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/transport"
 	"sync"
 	"time"
 
-	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
 
-	"github.com/google/uuid"
-
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
-)
-
-const (
-	defaultName    = "gate"
-	defaultTimeout = 3 * time.Second // 默认超时时间
 )
 
 type Gate struct {
@@ -42,34 +35,13 @@ type Gate struct {
 	proxy    *proxy
 	router   *router.Router
 	instance *registry.ServiceInstance
+	rpc      transport.Server
 }
 
 func NewGate(opts ...Option) *Gate {
-	o := &options{
-		ctx:     context.Background(),
-		name:    defaultName,
-		timeout: defaultTimeout,
-	}
-	if id, err := uuid.NewUUID(); err == nil {
-		o.id = id.String()
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
-	}
-	if o.id == "" {
-		log.Fatal("instance id can not be empty")
-	}
-	if o.grpc == nil {
-		log.Fatal("grpc plugin is not injected")
-	}
-	if o.server == nil {
-		log.Fatal("server plugin is not injected")
-	}
-	if o.locator == nil {
-		log.Fatal("locator plugin is not injected")
-	}
-	if o.registry == nil {
-		log.Fatal("registry plugin is not injected")
 	}
 
 	g := &Gate{}
@@ -90,18 +62,30 @@ func (g *Gate) Name() string {
 
 // Init 初始化
 func (g *Gate) Init() {
-	g.buildInstance()
-
-	g.registerInstance()
-
-	g.watchInstance()
+	if g.opts.id == "" {
+		log.Fatal("instance id can not be empty")
+	}
+	if g.opts.server == nil {
+		log.Fatal("server plugin is not injected")
+	}
+	if g.opts.locator == nil {
+		log.Fatal("locator plugin is not injected")
+	}
+	if g.opts.registry == nil {
+		log.Fatal("registry plugin is not injected")
+	}
+	if g.opts.transporter == nil {
+		log.Fatal("transporter plugin is not injected")
+	}
 }
 
 // Start 启动组件
 func (g *Gate) Start() {
-	g.startGate()
+	g.startRPCServer()
 
-	g.startGRPC()
+	g.startGateServer()
+
+	g.registerInstance()
 
 	g.proxy.watch(g.ctx)
 
@@ -110,17 +94,17 @@ func (g *Gate) Start() {
 
 // Destroy 销毁组件
 func (g *Gate) Destroy() {
-	g.stopGate()
-
-	g.stopGRPC()
-
 	g.deregisterInstance()
+
+	g.stopRPCServer()
+
+	g.stopGateServer()
 
 	g.cancel()
 }
 
-// 启动Gate服务
-func (g *Gate) startGate() {
+// 启动网关服务器
+func (g *Gate) startGateServer() {
 	g.opts.server.OnConnect(g.handleConnect)
 	g.opts.server.OnDisconnect(g.handleDisconnect)
 	g.opts.server.OnReceive(g.handleReceive)
@@ -130,28 +114,10 @@ func (g *Gate) startGate() {
 	}
 }
 
-// 停止Gate服务
-func (g *Gate) stopGate() {
+// 停止网关服务器
+func (g *Gate) stopGateServer() {
 	if err := g.opts.server.Stop(); err != nil {
 		log.Errorf("the gate server stop failed: %v", err)
-	}
-}
-
-// 启动GRPC服务
-func (g *Gate) startGRPC() {
-	g.opts.grpc.RegisterService(&pb.Gate_ServiceDesc, &endpoint{gate: g})
-
-	go func() {
-		if err := g.opts.grpc.Start(); err != nil {
-			log.Fatalf("the grpc server startup failed: %v", err)
-		}
-	}()
-}
-
-// 停止GRPC服务
-func (g *Gate) stopGRPC() {
-	if err := g.opts.grpc.Stop(); err != nil {
-		log.Errorf("the grpc server stop failed: %v", err)
 	}
 }
 
@@ -199,34 +165,52 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
 	}
 }
 
+// 启动RPC服务器
+func (g *Gate) startRPCServer() {
+	var err error
+
+	g.rpc, err = g.opts.transporter.NewGateServer(&provider{g})
+	if err != nil {
+		log.Fatalf("the rpc server build failed: %v", err)
+	}
+
+	go func() {
+		if err = g.rpc.Start(); err != nil {
+			log.Fatalf("the rpc server startup failed: %v", err)
+		}
+	}()
+}
+
+// 停止RPC服务器
+func (g *Gate) stopRPCServer() {
+	if err := g.rpc.Stop(); err != nil {
+		log.Errorf("the rpc server stop failed: %v", err)
+	}
+}
+
 // 注册服务实例
 func (g *Gate) registerInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	defer cancel()
+	g.instance = &registry.ServiceInstance{
+		ID:       g.opts.id,
+		Name:     string(cluster.Gate),
+		Kind:     cluster.Gate,
+		Alias:    g.opts.name,
+		State:    cluster.Work,
+		Endpoint: g.rpc.Endpoint().String(),
+	}
 
-	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
+	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	err := g.opts.registry.Register(ctx, g.instance)
+	cancel()
+	if err != nil {
 		log.Fatalf("the gate service instance register failed: %v", err)
 	}
-}
 
-// 解注册服务实例
-func (g *Gate) deregisterInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	defer cancel()
-
-	if err := g.opts.registry.Deregister(ctx, g.instance); err != nil {
-		log.Errorf("the gate service instance deregister failed: %v", err)
-	}
-}
-
-// 监听服务实例
-func (g *Gate) watchInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	defer cancel()
-
+	ctx, cancel = context.WithTimeout(g.ctx, 10*time.Second)
 	watcher, err := g.opts.registry.Watch(ctx, string(cluster.Node))
+	cancel()
 	if err != nil {
-		log.Fatalf("the node service watch failed: %v", err)
+		log.Fatalf("the node service instances watch failed: %v", err)
 	}
 
 	go func() {
@@ -249,20 +233,18 @@ func (g *Gate) watchInstance() {
 	}()
 }
 
-// 构建服务实例
-func (g *Gate) buildInstance() {
-	g.instance = &registry.ServiceInstance{
-		ID:       g.opts.id,
-		Name:     string(cluster.Gate),
-		Kind:     cluster.Gate,
-		Alias:    g.opts.name,
-		State:    cluster.Work,
-		Endpoint: g.opts.grpc.Endpoint().String(),
+// 解注册服务实例
+func (g *Gate) deregisterInstance() {
+	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	err := g.opts.registry.Deregister(ctx, g.instance)
+	defer cancel()
+	if err != nil {
+		log.Errorf("the gate service instance deregister failed: %v", err)
 	}
 }
 
 func (g *Gate) debugPrint() {
 	log.Debugf("The gate server startup successful")
 	log.Debugf("Gate server, listen: %s protocol: %s", xnet.FulfillAddr(g.opts.server.Addr()), g.opts.server.Protocol())
-	log.Debugf("GRPC server, listen: %s protocol: %s", xnet.FulfillAddr(g.opts.grpc.Addr()), g.opts.grpc.Scheme())
+	log.Debugf("RPC  server, listen: %s protocol: %s", xnet.FulfillAddr(g.rpc.Addr()), g.rpc.Scheme())
 }
