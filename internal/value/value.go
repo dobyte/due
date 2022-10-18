@@ -23,6 +23,7 @@ type Value interface {
 	String() string
 	Time() time.Time
 	Duration() time.Duration
+	Strings() []string
 	Map() map[string]interface{}
 	Slice() []interface{}
 	Scan(pointer interface{}) error
@@ -105,6 +106,10 @@ func (v *value) Time() time.Time {
 
 func (v *value) Duration() time.Duration {
 	return xconv.Duration(v.Value())
+}
+
+func (v *value) Strings() []string {
+	return xconv.Strings(v.Value())
 }
 
 func (v *value) Map() map[string]interface{} {
