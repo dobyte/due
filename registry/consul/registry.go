@@ -26,16 +26,7 @@ type Registry struct {
 }
 
 func NewRegistry(opts ...Option) *Registry {
-	o := &options{
-		ctx:                            context.Background(),
-		addr:                           "127.0.0.1:8500",
-		enableHealthCheck:              true,
-		healthCheckInterval:            10,
-		healthCheckTimeout:             5,
-		enableHeartbeatCheck:           true,
-		heartbeatCheckInterval:         10,
-		deregisterCriticalServiceAfter: 30,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
