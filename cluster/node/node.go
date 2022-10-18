@@ -2,28 +2,17 @@ package node
 
 import (
 	"context"
+	"github.com/dobyte/due/transport"
 	"sync"
 	"time"
 
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal/pb"
 	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/router"
 
-	"github.com/google/uuid"
-
-	"github.com/dobyte/due/encoding/proto"
-
 	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/encoding"
 	"github.com/dobyte/due/log"
-)
-
-const (
-	defaultNodeName  = "node"          // 默认节点名称
-	defaultCodecName = proto.Name      // 默认编解码器
-	defaultTimeout   = 3 * time.Second // 默认超时时间
 )
 
 type RouteHandler func(req Request)
@@ -56,32 +45,13 @@ type Node struct {
 	proxy               *proxy
 	router              *router.Router
 	instance            *registry.ServiceInstance
+	rpc                 transport.Server
 }
 
 func NewNode(opts ...Option) *Node {
-	o := &options{
-		ctx:     context.Background(),
-		name:    defaultNodeName,
-		codec:   encoding.Invoke(defaultCodecName),
-		timeout: defaultTimeout,
-	}
-	if id, err := uuid.NewUUID(); err == nil {
-		o.id = id.String()
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
-	}
-	if o.id == "" {
-		log.Fatal("instance id can not be empty")
-	}
-	if o.grpc == nil {
-		log.Fatal("grpc plugin is not injected")
-	}
-	if o.locator == nil {
-		log.Fatal("locator plugin is not injected")
-	}
-	if o.registry == nil {
-		log.Fatal("registry plugin is not injected")
 	}
 
 	n := &Node{}
@@ -104,16 +74,28 @@ func (n *Node) Name() string {
 
 // Init 初始化节点
 func (n *Node) Init() {
-	n.buildInstance()
-
-	n.registerInstance()
-
-	n.watchInstance()
+	if n.opts.id == "" {
+		log.Fatal("instance id can not be empty")
+	}
+	if n.opts.codec == nil {
+		log.Fatal("codec plugin is not injected")
+	}
+	if n.opts.locator == nil {
+		log.Fatal("locator plugin is not injected")
+	}
+	if n.opts.registry == nil {
+		log.Fatal("registry plugin is not injected")
+	}
+	if n.opts.transporter == nil {
+		log.Fatal("transporter plugin is not injected")
+	}
 }
 
 // Start 启动节点
 func (n *Node) Start() {
-	n.startGRPC()
+	n.startRPCServer()
+
+	n.registerInstance()
 
 	n.proxy.watch(n.ctx)
 
@@ -124,13 +106,12 @@ func (n *Node) Start() {
 
 // Destroy 销毁网关服务器
 func (n *Node) Destroy() {
-	close(n.chEvent)
-	close(n.chRequest)
-
-	n.stopGRPC()
-
 	n.deregisterInstance()
 
+	n.stopRPCServer()
+
+	close(n.chEvent)
+	close(n.chRequest)
 	n.cancel()
 }
 
@@ -175,57 +156,67 @@ func (n *Node) dispatch() {
 	}
 }
 
-// 启动GRPC服务
-func (n *Node) startGRPC() {
-	n.opts.grpc.RegisterService(&pb.Node_ServiceDesc, &endpoint{node: n})
+// 启动RPC服务器
+func (n *Node) startRPCServer() {
+	var err error
+
+	n.rpc, err = n.opts.transporter.NewNodeServer(&provider{n})
+	if err != nil {
+		log.Fatalf("the rpc server build failed: %v", err)
+	}
 
 	go func() {
-		if err := n.opts.grpc.Start(); err != nil {
-			log.Fatalf("the grpc server startup failed: %v", err)
+		if err = n.rpc.Start(); err != nil {
+			log.Fatalf("the rpc server startup failed: %v", err)
 		}
 	}()
 }
 
-// 停止GRPC服务
-func (n *Node) stopGRPC() {
-	if err := n.opts.grpc.Stop(); err != nil {
-		log.Errorf("the grpc server stop failed: %v", err)
+// 停止RPC服务器
+func (n *Node) stopRPCServer() {
+	if err := n.rpc.Stop(); err != nil {
+		log.Errorf("the rpc server stop failed: %v", err)
 	}
 }
 
 // 注册服务实例
 func (n *Node) registerInstance() {
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-	defer cancel()
+	n.rw.RLock()
+	routes := make([]registry.Route, 0, len(n.routes))
+	for _, entity := range n.routes {
+		routes = append(routes, registry.Route{
+			ID:       entity.route,
+			Stateful: entity.stateful,
+		})
+	}
+	n.rw.RUnlock()
 
-	if err := n.opts.registry.Register(ctx, n.instance); err != nil {
+	n.instance = &registry.ServiceInstance{
+		ID:       n.opts.id,
+		Name:     string(cluster.Node),
+		Kind:     cluster.Node,
+		Alias:    n.opts.name,
+		State:    cluster.Work,
+		Routes:   routes,
+		Endpoint: n.rpc.Endpoint().String(),
+	}
+
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	err := n.opts.registry.Register(ctx, n.instance)
+	cancel()
+	if err != nil {
 		log.Fatalf("the node service instance register failed: %v", err)
 	}
-}
 
-// 解注册服务实例
-func (n *Node) deregisterInstance() {
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-	defer cancel()
-
-	if err := n.opts.registry.Deregister(ctx, n.instance); err != nil {
-		log.Errorf("the node service instance deregister failed: %v", err)
-	}
-}
-
-// 监听服务实例
-func (n *Node) watchInstance() {
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-	defer cancel()
-
+	ctx, cancel = context.WithTimeout(n.ctx, 10*time.Second)
 	watcher, err := n.opts.registry.Watch(ctx, string(cluster.Gate))
+	cancel()
 	if err != nil {
 		log.Fatalf("the gate service watch failed: %v", err)
 	}
 
 	go func() {
 		defer watcher.Stop()
-
 		for {
 			select {
 			case <-n.ctx.Done():
@@ -242,27 +233,13 @@ func (n *Node) watchInstance() {
 	}()
 }
 
-// 构建服务实例
-func (n *Node) buildInstance() {
-	n.rw.RLock()
-	defer n.rw.RUnlock()
-
-	routes := make([]registry.Route, 0, len(n.routes))
-	for _, entity := range n.routes {
-		routes = append(routes, registry.Route{
-			ID:       entity.route,
-			Stateful: entity.stateful,
-		})
-	}
-
-	n.instance = &registry.ServiceInstance{
-		ID:       n.opts.id,
-		Name:     string(cluster.Node),
-		Kind:     cluster.Node,
-		Alias:    n.opts.name,
-		State:    cluster.Work,
-		Routes:   routes,
-		Endpoint: n.opts.grpc.Endpoint().String(),
+// 解注册服务实例
+func (n *Node) deregisterInstance() {
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	err := n.opts.registry.Deregister(ctx, n.instance)
+	cancel()
+	if err != nil {
+		log.Errorf("the node service instance deregister failed: %v", err)
 	}
 }
 
@@ -279,7 +256,7 @@ func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler)
 }
 
 // 是否为有状态路由
-func (n *Node) isStatefulRoute(route int32) (bool, bool) {
+func (n *Node) checkRouteStateful(route int32) (bool, bool) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
@@ -295,8 +272,8 @@ func (n *Node) addEventListener(event cluster.Event, handler EventHandler) {
 	n.events[event] = handler
 }
 
-// trigger 触发事件
-func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
+// 触发事件
+func (n *Node) triggerEvent(event cluster.Event, gid string, uid int64) {
 	n.chEvent <- &eventEntity{
 		event: event,
 		gid:   gid,
@@ -305,19 +282,20 @@ func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
 }
 
 // 投递消息给当前节点处理
-func (n *Node) deliver(gid, nid string, cid, uid int64, route int32, buffer interface{}) {
+func (n *Node) deliverMessage(gid, nid string, cid, uid int64, message *Message) {
 	n.chRequest <- &request{
-		gid:    gid,
-		nid:    nid,
-		cid:    cid,
-		uid:    uid,
-		route:  route,
-		buffer: buffer,
-		node:   n,
+		gid:   gid,
+		nid:   nid,
+		cid:   cid,
+		uid:   uid,
+		node:  n,
+		seq:   message.Seq,
+		route: message.Route,
+		data:  message.Data,
 	}
 }
 
 func (n *Node) debugPrint() {
 	log.Debugf("The node server startup successful")
-	log.Debugf("GRPC server, listen: %s protocol: %s", xnet.FulfillAddr(n.opts.grpc.Addr()), n.opts.grpc.Scheme())
+	log.Debugf("RPC server, listen: %s protocol: %s", xnet.FulfillAddr(n.rpc.Addr()), n.rpc.Scheme())
 }
