@@ -11,10 +11,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
-	"time"
-
 	"go.etcd.io/etcd/client/v3"
+	"sync"
 
 	"github.com/dobyte/due/registry"
 )
@@ -32,15 +30,7 @@ type Registry struct {
 }
 
 func NewRegistry(opts ...Option) *Registry {
-	o := &options{
-		ctx:           context.Background(),
-		addrs:         []string{"localhost:2379"},
-		dialTimeout:   5 * time.Second,
-		namespace:     "services",
-		timeout:       3 * time.Second,
-		retryTimes:    3,
-		retryInterval: 10 * time.Second,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}

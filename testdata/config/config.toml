@@ -54,3 +54,17 @@
     callerFullPath = true
     # 是否启用分级存储
     classifiedStorage = true
+[registry]
+    [registry.etcd]
+        # 客户端连接地址
+        addrs = ["127.0.0.1:2379"]
+        # 客户端拨号超时时间（秒）
+        dialTimeout = 5
+        # 命名空间
+        namespace = "services"
+        # 超时时间（秒）
+        timeout = 3
+        # 心跳重试次数
+        retryTimes = 3
+        # 心跳重试间隔（秒）
+        retryInterval = 10
