@@ -68,9 +68,6 @@ func (c *clientConn) Bind(uid int64) {
 
 // Send 发送消息（同步）
 func (c *clientConn) Send(msg []byte, msgType ...int) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -81,6 +78,9 @@ func (c *clientConn) Send(msg []byte, msgType ...int) error {
 
 	switch msgType[0] {
 	case TextMessage, BinaryMessage:
+		c.rw.RLock()
+		defer c.rw.RUnlock()
+
 		return c.conn.WriteMessage(msgType[0], msg)
 	default:
 		return network.ErrIllegalMsgType
@@ -89,9 +89,6 @@ func (c *clientConn) Send(msg []byte, msgType ...int) error {
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte, msgType ...int) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -116,12 +113,9 @@ func (c *clientConn) State() network.ConnState {
 }
 
 // Close 关闭连接（主动关闭）
-func (c *clientConn) Close(isForce ...bool) error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
-	if err := c.checkState(); err != nil {
-		return err
+func (c *clientConn) Close(isForce ...bool) (err error) {
+	if err = c.checkState(); err != nil {
+		return
 	}
 
 	if len(isForce) > 0 && isForce[0] {
@@ -134,28 +128,24 @@ func (c *clientConn) Close(isForce ...bool) error {
 
 	close(c.chWrite)
 
-	if err := c.conn.Close(); err != nil {
-		return err
-	}
+	c.rw.Lock()
+	err = c.conn.Close()
+	c.rw.Unlock()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
 
-	return nil
+	return
 }
 
 // 关闭连接（被动关闭）
 func (c *clientConn) close() {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
 	if err := c.checkState(); err != nil {
 		return
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-
 	close(c.chWrite)
 
 	if c.client.disconnectHandler != nil {
@@ -243,8 +233,13 @@ func (c *clientConn) read() {
 
 // 写入消息
 func (c *clientConn) write() {
-	ticker := time.NewTicker(c.client.opts.heartbeatInterval)
-	defer ticker.Stop()
+	var ticker *time.Ticker
+	if c.client.opts.enableHeartbeat {
+		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
+		defer ticker.Stop()
+	} else {
+		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+	}
 
 	for {
 		select {
@@ -255,12 +250,19 @@ func (c *clientConn) write() {
 				return
 			}
 
+			if c.State() == network.ConnClosed {
+				return
+			}
+
 			if write.typ == closeSig {
 				c.done <- struct{}{}
 				return
 			}
 
-			if err := c.conn.WriteMessage(write.msgType, write.msg); err != nil {
+			c.rw.RLock()
+			err := c.conn.WriteMessage(write.msgType, write.msg)
+			c.rw.RUnlock()
+			if err != nil {
 				log.Errorf("write message error: %v", err)
 			}
 		}

@@ -57,9 +57,6 @@ func (c *serverConn) Bind(uid int64) {
 
 // Send 发送消息（同步）
 func (c *serverConn) Send(msg []byte, msgType ...int) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -70,6 +67,9 @@ func (c *serverConn) Send(msg []byte, msgType ...int) error {
 
 	switch msgType[0] {
 	case TextMessage, BinaryMessage:
+		c.rw.RLock()
+		defer c.rw.RUnlock()
+
 		return c.conn.WriteMessage(msgType[0], msg)
 	default:
 		return network.ErrIllegalMsgType
@@ -78,9 +78,6 @@ func (c *serverConn) Send(msg []byte, msgType ...int) error {
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte, msgType ...int) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -105,12 +102,9 @@ func (c *serverConn) State() network.ConnState {
 }
 
 // Close 关闭连接（主动关闭）
-func (c *serverConn) Close(isForce ...bool) error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
-	if err := c.checkState(); err != nil {
-		return err
+func (c *serverConn) Close(isForce ...bool) (err error) {
+	if err = c.checkState(); err != nil {
+		return
 	}
 
 	if len(isForce) > 0 && isForce[0] {
@@ -123,38 +117,36 @@ func (c *serverConn) Close(isForce ...bool) error {
 
 	close(c.chWrite)
 
-	if err := c.conn.Close(); err != nil {
-		return err
-	}
+	c.rw.Lock()
+	err = c.conn.Close()
 	c.conn = nil
 	c.connMgr.recycle(c)
+	c.rw.Unlock()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
-	return nil
+	return
 }
 
 // 关闭连接（被动关闭）
 func (c *serverConn) close() {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
 	if err := c.checkState(); err != nil {
 		return
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-
 	close(c.chWrite)
+
+	c.rw.Lock()
+	c.conn = nil
+	c.connMgr.recycle(c)
+	c.rw.Unlock()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
-
-	c.conn = nil
-	c.connMgr.recycle(c)
 }
 
 // LocalIP 获取本地IP
@@ -169,12 +161,12 @@ func (c *serverConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *serverConn) LocalAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
+
+	c.rw.RLock()
+	defer c.rw.RUnlock()
 
 	return c.conn.LocalAddr(), nil
 }
@@ -191,12 +183,12 @@ func (c *serverConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
+
+	c.rw.RLock()
+	defer c.rw.RUnlock()
 
 	return c.conn.RemoteAddr(), nil
 }
@@ -208,6 +200,7 @@ func (c *serverConn) init(conn *websocket.Conn, cm *connMgr) {
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 256)
 	c.done = make(chan struct{})
+	c.lastHeartbeatTime = 0
 	atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
@@ -263,8 +256,14 @@ func (c *serverConn) read() {
 
 // 写入消息
 func (c *serverConn) write() {
-	ticker := time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
-	defer ticker.Stop()
+	var ticker *time.Ticker
+
+	if c.connMgr.server.opts.enableHeartbeatCheck {
+		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatCheckInterval)
+		defer ticker.Stop()
+	} else {
+		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+	}
 
 	for {
 		select {
@@ -273,16 +272,23 @@ func (c *serverConn) write() {
 				return
 			}
 
+			if c.State() == network.ConnClosed {
+				return
+			}
+
 			if write.typ == closeSig {
 				c.done <- struct{}{}
 				return
 			}
 
-			if err := c.conn.WriteMessage(write.msgType, write.msg); err != nil {
+			c.rw.RLock()
+			err := c.conn.WriteMessage(write.msgType, write.msg)
+			c.rw.RUnlock()
+			if err != nil {
 				log.Errorf("write message error: %v", err)
 			}
 		case <-ticker.C:
-			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
+			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatCheckInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Warnf("connection heartbeat timeout")
 				_ = c.Close(true)
