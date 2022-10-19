@@ -30,7 +30,7 @@
     # 序列号字节长度（字节）
     seqBytesLen = 2
     # 路由字节长度（字节）
-    routeBytesLength = 2
+    routeBytesLen = 2
 [log]
     # 日志输出文件
     file = "../../testdata/log/due.log"

@@ -1,6 +1,7 @@
 package xconv_test
 
 import (
+	"github.com/dobyte/due/utils/xconv"
 	"math"
 	"math/cmplx"
 	"testing"
@@ -40,4 +41,9 @@ func TestBool(t *testing.T) {
 
 func TestDuration(t *testing.T) {
 	t.Log(xconv.Duration("3d5m4h0.4d"))
+}
+
+func TestStrings(t *testing.T) {
+	any := []int64{1, 2, 3, 4}
+	t.Log(xconv.Strings(any))
 }
