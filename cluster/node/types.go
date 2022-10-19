@@ -11,9 +11,10 @@ type GetIPArgs struct {
 }
 
 type DisconnectArgs struct {
-	GID    string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind   session.Kind // 会话类型，session.Conn 或 session.User
-	Target int64        // 会话目标，CID 或 UID
+	GID     string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind    session.Kind // 会话类型，session.Conn 或 session.User
+	Target  int64        // 会话目标，CID 或 UID
+	IsForce bool         // 是否强制断开
 }
 
 type Message struct {

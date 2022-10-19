@@ -781,3 +781,207 @@ func Duration(any interface{}) time.Duration {
 		}
 	}
 }
+
+func Strings(any interface{}) (slice []string) {
+	if any == nil {
+		return
+	}
+
+	switch v := any.(type) {
+	case []int:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]int:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []int8:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]int8:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []int16:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]int16:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []int32:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]int32:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []int64:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]int64:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []uint:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]uint:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []uint8:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]uint8:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []uint16:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]uint16:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []uint32:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]uint32:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []uint64:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]uint64:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []float32:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]float32:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []float64:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]float64:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []complex64:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]complex64:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []complex128:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]complex128:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []string:
+		return v
+	case *[]string:
+		return *v
+	case []bool:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]bool:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case []interface{}:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[]interface{}:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	case [][]byte:
+		slice = make([]string, len(v))
+		for i := range v {
+			slice[i] = String(v[i])
+		}
+	case *[][]byte:
+		slice = make([]string, len(*v))
+		for i := range *v {
+			slice[i] = String((*v)[i])
+		}
+	default:
+		var (
+			rv   = reflect.ValueOf(any)
+			kind = rv.Kind()
+		)
+
+		for kind == reflect.Ptr {
+			rv = rv.Elem()
+			kind = rv.Kind()
+		}
+
+		switch kind {
+		case reflect.Slice, reflect.Array:
+			count := rv.Len()
+			slice = make([]string, count)
+			for i := 0; i < count; i++ {
+				slice[i] = String(rv.Index(i).Interface())
+			}
+		}
+	}
+
+	return
+}
