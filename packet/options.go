@@ -16,6 +16,12 @@ const (
 	defaultRouteBytesLen = 2
 )
 
+const (
+	defaultEndianKey        = "config.packet.endian"
+	defaultSeqBytesLenKey   = "config.packet.seqBytesLen"
+	defaultRouteBytesLenKey = "config.packet.seqBytesLen"
+)
+
 type options struct {
 	// 字节序
 	// 默认为binary.LittleEndian
@@ -35,26 +41,16 @@ type Option func(o *options)
 func defaultOptions() *options {
 	opts := &options{
 		byteOrder:     binary.LittleEndian,
-		seqBytesLen:   defaultSeqBytesLen,
-		routeBytesLen: defaultRouteBytesLen,
+		seqBytesLen:   config.Get(defaultSeqBytesLenKey, defaultSeqBytesLen).Int(),
+		routeBytesLen: config.Get(defaultRouteBytesLenKey, defaultRouteBytesLen).Int(),
 	}
 
-	endian := config.Get("config.packet.endian").String()
+	endian := config.Get(defaultEndianKey).String()
 	switch strings.ToLower(endian) {
 	case littleEndian:
 		opts.byteOrder = binary.LittleEndian
 	case bigEndian:
 		opts.byteOrder = binary.BigEndian
-	}
-
-	seqBytesLen := config.Get("config.packet.seqBytesLen").Int()
-	if seqBytesLen > 0 {
-		opts.seqBytesLen = seqBytesLen
-	}
-
-	routeBytesLen := config.Get("config.packet.routeBytesLen").Int()
-	if routeBytesLen > 0 {
-		opts.routeBytesLen = routeBytesLen
 	}
 
 	return opts
