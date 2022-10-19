@@ -25,7 +25,7 @@ func NewSession() *Session {
 	return &Session{}
 }
 
-// Init 初始化SESSION
+// Init 初始化会话
 func (s *Session) Init(conn network.Conn) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -34,7 +34,7 @@ func (s *Session) Init(conn network.Conn) {
 	s.groups = make(map[*Group]struct{})
 }
 
-// Reset 重置SESSION
+// Reset 重置会话
 func (s *Session) Reset() {
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -68,7 +68,19 @@ func (s *Session) Bind(uid int64) {
 	s.uid = uid
 	s.conn.Bind(uid)
 	for group := range s.groups {
-		group.addUserMap(uid, s)
+		group.addUserSession(uid, s)
+	}
+}
+
+// Unbind 解绑用户ID
+func (s *Session) Unbind(uid int64) {
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
+	s.uid = 0
+	s.conn.Bind(0)
+	for group := range s.groups {
+		group.remUserSession(uid)
 	}
 }
 
@@ -82,59 +94,76 @@ func (s *Session) Close(isForce ...bool) error {
 
 // LocalIP 获取本地IP
 func (s *Session) LocalIP() (string, error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.LocalIP()
 }
 
 // LocalAddr 获取本地地址
 func (s *Session) LocalAddr() (net.Addr, error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.LocalAddr()
 }
 
 // RemoteIP 获取远端IP
 func (s *Session) RemoteIP() (string, error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.RemoteIP()
 }
 
 // RemoteAddr 获取远端地址
 func (s *Session) RemoteAddr() (net.Addr, error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.RemoteAddr()
 }
 
 // Send 发送消息（同步）
 func (s *Session) Send(msg []byte, msgType ...int) error {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.Send(msg, msgType...)
 }
 
 // Push 发送消息（异步）
 func (s *Session) Push(msg []byte, msgType ...int) error {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
 	return s.conn.Push(msg, msgType...)
 }
 
-// JoinGroup 加入群组
-func (s *Session) JoinGroup(groups ...*Group) {
+// AddToGroups 添加到会话组
+func (s *Session) AddToGroups(groups ...*Group) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
 	for i := range groups {
 		group := groups[i]
-		group.add(s)
+		group.addSession(s)
 		s.groups[group] = struct{}{}
 	}
 }
 
-// 加入群组
-func (s *Session) joinGroup(groups ...*Group) {
+// 添加到会话组
+func (s *Session) addToGroups(groups ...*Group) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
 	for i := range groups {
-		group := groups[i]
-		s.groups[group] = struct{}{}
+		s.groups[groups[i]] = struct{}{}
 	}
 }
 
-// QuitGroup 退出群组
-func (s *Session) QuitGroup(groups ...*Group) {
+// RemFromGroups 从会话组移除
+func (s *Session) RemFromGroups(groups ...*Group) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
@@ -144,8 +173,8 @@ func (s *Session) QuitGroup(groups ...*Group) {
 	}
 }
 
-// 退出群组
-func (s *Session) quitGroup(groups ...*Group) {
+// 从会话组移除
+func (s *Session) remFromGroups(groups ...*Group) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
