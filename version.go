@@ -7,5 +7,5 @@
 
 package due
 
-// 当前due框架版本
-const Version = "0.0.2"
+// Version 当前due框架版本
+const Version = "0.0.4"
