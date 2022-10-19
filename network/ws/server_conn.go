@@ -107,15 +107,15 @@ func (c *serverConn) Close(isForce ...bool) (err error) {
 		return
 	}
 
-	if len(isForce) > 0 && isForce[0] {
-		atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	} else {
+	if len(isForce) == 0 || !isForce[0] {
 		atomic.StoreInt32(&c.state, int32(network.ConnHanged))
 		c.chWrite <- chWrite{typ: closeSig}
 		<-c.done
 	}
 
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.done)
 
 	c.rw.Lock()
 	err = c.conn.Close()
@@ -138,6 +138,7 @@ func (c *serverConn) close() {
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.done)
 
 	c.rw.Lock()
 	c.conn = nil
@@ -257,7 +258,6 @@ func (c *serverConn) read() {
 // 写入消息
 func (c *serverConn) write() {
 	var ticker *time.Ticker
-
 	if c.connMgr.server.opts.enableHeartbeatCheck {
 		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatCheckInterval)
 		defer ticker.Stop()

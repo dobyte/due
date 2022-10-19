@@ -118,15 +118,15 @@ func (c *clientConn) Close(isForce ...bool) (err error) {
 		return
 	}
 
-	if len(isForce) > 0 && isForce[0] {
-		atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	} else {
+	if len(isForce) == 0 || !isForce[0] {
 		atomic.StoreInt32(&c.state, int32(network.ConnHanged))
 		c.chWrite <- chWrite{typ: closeSig}
 		<-c.done
 	}
 
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.done)
 
 	c.rw.Lock()
 	err = c.conn.Close()
@@ -147,6 +147,7 @@ func (c *clientConn) close() {
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.done)
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
