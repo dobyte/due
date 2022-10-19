@@ -201,7 +201,6 @@ func (c *serverConn) init(conn *websocket.Conn, cm *connMgr) {
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 256)
 	c.done = make(chan struct{})
-	c.lastHeartbeatTime = 0
 	atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
