@@ -9,6 +9,7 @@ import (
 const (
 	defaultServerAddr                   = ":3553"
 	defaultServerPath                   = "/"
+	defaultServerMaxMsgLen              = 1024
 	defaultServerMaxConnNum             = 5000
 	defaultServerCheckOrigin            = "*"
 	defaultServerHeartbeatCheck         = false
@@ -19,6 +20,7 @@ const (
 const (
 	defaultServerAddrKey                   = "config.network.ws.server.addr"
 	defaultServerPathKey                   = "config.network.ws.server.path"
+	defaultServerMaxMsgLenKey              = "config.network.ws.server.maxMsgLen"
 	defaultServerMaxConnNumKey             = "config.network.ws.server.maxConnNum"
 	defaultServerCheckOriginsKey           = "config.network.ws.server.origins"
 	defaultServerKeyFileKey                = "config.network.ws.server.keyFile"
@@ -34,6 +36,7 @@ type CheckOriginFunc func(r *http.Request) bool
 
 type serverOptions struct {
 	addr                   string          // 监听地址
+	maxMsgLen              int             // 最大消息长度（字节），默认1kb
 	maxConnNum             int             // 最大连接数
 	certFile               string          // 证书文件
 	keyFile                string          // 秘钥文件
@@ -63,6 +66,7 @@ func defaultServerOptions() *serverOptions {
 
 	return &serverOptions{
 		addr:                   config.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxMsgLen:              config.Get(defaultServerMaxMsgLenKey, defaultServerMaxMsgLen).Int(),
 		maxConnNum:             config.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
 		path:                   config.Get(defaultServerPathKey, defaultServerPath).String(),
 		checkOrigin:            checkOrigin,

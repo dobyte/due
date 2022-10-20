@@ -61,6 +61,8 @@
             addr = ":3553"
             # 客户端连接路径
             path = "/"
+            # 最大消息长度（字节），默认1kb
+            maxMsgLen = 1024
             # 服务器最大连接数
             maxConnNum = 5000
             # 秘钥文件
@@ -78,6 +80,8 @@
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # 最大消息长度（字节），默认1kb
+            maxMsgLen = 1024
             # 握手超时时间（秒）
             handshakeTimeout = 10
             # 是否启用心跳，默认不启用

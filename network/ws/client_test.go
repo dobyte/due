@@ -48,6 +48,5 @@ func TestNewClient(t *testing.T) {
 		}
 	}
 OVER:
-
 	select {}
 }
