@@ -44,6 +44,11 @@ func Set(pattern string, value interface{}) error {
 	return globalReader.Set(pattern, value)
 }
 
+// Load 加载配置
+func Load() {
+	globalReader.Load()
+}
+
 // Close 关闭配置读取器
 func Close() {
 	globalReader.Close()
