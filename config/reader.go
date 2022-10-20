@@ -15,14 +15,16 @@ import (
 )
 
 type Reader interface {
+	// Load 加载配置
+	Load()
+	// Close 关闭读取器
+	Close()
 	// Has 是否存在配置
 	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
-	// Close 关闭读取器
-	Close()
 }
 
 func init() {
@@ -56,10 +58,14 @@ func NewReader(opts ...Option) Reader {
 	r := &defaultReader{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
-	r.init()
-	r.watch()
 
 	return r
+}
+
+// Load 加载配置
+func (r *defaultReader) Load() {
+	r.init()
+	r.watch()
 }
 
 // 初始化配置源

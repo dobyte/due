@@ -109,9 +109,11 @@ func (g *Gate) startGateServer() {
 	g.opts.server.OnDisconnect(g.handleDisconnect)
 	g.opts.server.OnReceive(g.handleReceive)
 
-	if err := g.opts.server.Start(); err != nil {
-		log.Fatalf("the gate server startup failed: %v", err)
-	}
+	go func() {
+		if err := g.opts.server.Start(); err != nil {
+			log.Fatalf("the gate server startup failed: %v", err)
+		}
+	}()
 }
 
 // 停止网关服务器
