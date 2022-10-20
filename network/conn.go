@@ -36,7 +36,7 @@ type (
 		// Bind 绑定用户ID
 		Bind(uid int64)
 		// Unbind 解绑用户ID
-		Unbind(uid int64)
+		Unbind()
 		// Send 发送消息（同步）
 		Send(msg []byte, msgType ...int) error
 		// Push 发送消息（异步）
