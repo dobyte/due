@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultClientDialAddr          = "127.0.0.1:3553"
-	defaultClientMaxMsgLen         = 1024 * 1024
+	defaultClientMaxMsgLen         = 1024
 	defaultClientHeartbeat         = false
 	defaultClientHeartbeatInterval = 10
 )

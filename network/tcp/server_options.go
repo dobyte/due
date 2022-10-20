@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultServerAddr                   = ":3553"
-	defaultServerMaxMsgLen              = 1024 * 1024
+	defaultServerMaxMsgLen              = 1024
 	defaultServerMaxConnNum             = 5000
 	defaultServerHeartbeatCheck         = false
 	defaultServerHeartbeatCheckInterval = 10
