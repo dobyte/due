@@ -7,16 +7,19 @@
 
 package log
 
-// 日志级别
+import "strings"
+
+// Level 日志级别
 type Level int
 
 const (
-	DebugLevel Level = iota + 1 // DEBUG
-	InfoLevel                   // INFO
-	WarnLevel                   // WARN
-	ErrorLevel                  // ERROR
-	FatalLevel                  // FATAL
-	PanicLevel                  // PANIC
+	NoneLevel  Level = iota // NONE
+	DebugLevel              // DEBUG
+	InfoLevel               // INFO
+	WarnLevel               // WARN
+	ErrorLevel              // ERROR
+	FatalLevel              // FATAL
+	PanicLevel              // PANIC
 )
 
 func (l Level) String() string {
@@ -34,5 +37,24 @@ func (l Level) String() string {
 	case PanicLevel:
 		return "PANIC"
 	}
-	return "UNKNOWN"
+	return "NONE"
+}
+
+func ParseLevel(level string) Level {
+	switch strings.ToUpper(level) {
+	case DebugLevel.String():
+		return DebugLevel
+	case InfoLevel.String():
+		return InfoLevel
+	case WarnLevel.String():
+		return WarnLevel
+	case ErrorLevel.String():
+		return ErrorLevel
+	case FatalLevel.String():
+		return FatalLevel
+	case PanicLevel.String():
+		return PanicLevel
+	default:
+		return NoneLevel
+	}
 }

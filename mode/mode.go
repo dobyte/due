@@ -2,7 +2,7 @@ package mode
 
 import (
 	"flag"
-	"os"
+	"github.com/dobyte/due/env"
 )
 
 const (
@@ -21,9 +21,9 @@ const (
 var dueMode string
 
 func init() {
-	flag.StringVar(&dueMode, "mode", "", "")
-
-	SetMode(os.Getenv(dueModeEnvName))
+	def := flag.String("mode", DebugMode, "Specify the project run mode")
+	mode := env.Get(dueModeEnvName, *def).String()
+	SetMode(mode)
 }
 
 // SetMode 设置运行模式
