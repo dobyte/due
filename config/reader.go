@@ -15,6 +15,8 @@ import (
 )
 
 type Reader interface {
+	// Has 是否存在配置
+	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
@@ -133,6 +135,50 @@ func (r *defaultReader) watch() {
 // Close 关闭读取器
 func (r *defaultReader) Close() {
 	r.cancel()
+}
+
+// Has 是否存在配置
+func (r *defaultReader) Has(pattern string) bool {
+	var (
+		keys  = strings.Split(pattern, ".")
+		node  interface{}
+		found = true
+	)
+
+	values, err := r.copyValues()
+	if err != nil {
+		return false
+	}
+
+	keys = reviseKeys(keys, values)
+	node = values
+	for _, key := range keys {
+		switch vs := node.(type) {
+		case map[string]interface{}:
+			if v, ok := vs[key]; ok {
+				node = v
+			} else {
+				found = false
+			}
+		case []interface{}:
+			i, err := strconv.Atoi(key)
+			if err != nil {
+				found = false
+			} else if len(vs) > i {
+				node = vs[i]
+			} else {
+				found = false
+			}
+		default:
+			found = false
+		}
+
+		if !found {
+			break
+		}
+	}
+
+	return found
 }
 
 // Get 获取配置值

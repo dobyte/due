@@ -11,6 +11,10 @@ func TestConfig(t *testing.T) {
 
 	t.Log(config.Get("config.packet").Map())
 
+	t.Log(config.Has("config.packet"))
+
+	t.Log(config.Has("config.notFound"))
+
 	//ticker1 := time.NewTicker(2 * time.Second)
 	//ticker2 := time.NewTicker(10 * time.Second)
 	//
