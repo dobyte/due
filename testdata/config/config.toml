@@ -237,3 +237,16 @@
         heartbeatCheckInterval = 10
         # 健康检测失败后自动注销服务时间（秒）
         deregisterCriticalServiceAfter = 30
+    [registry.etcd]
+        # 客户端连接地址
+        addrs = ["127.0.0.1:2379"]
+        # 客户端拨号超时时间（秒）
+        dialTimeout = 5
+        # 命名空间
+        namespace = "services"
+        # 超时时间（秒）
+        timeout = 3
+        # 心跳重试次数
+        retryTimes = 3
+        # 心跳重试间隔（秒）
+        retryInterval = 10

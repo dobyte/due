@@ -9,8 +9,27 @@ package etcd
 
 import (
 	"context"
+	"github.com/dobyte/due/config"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
+)
+
+const (
+	defaultAddr          = "127.0.0.1:2379"
+	defaultDialTimeout   = 5
+	defaultNamespace     = "services"
+	defaultTimeout       = 3
+	defaultRetryTimes    = 3
+	defaultRetryInterval = 10
+)
+
+const (
+	defaultAddrsKey         = "config.registry.etcd.addrs"
+	defaultDialTimeoutKey   = "config.registry.etcd.dialTimeout"
+	defaultNamespaceKey     = "config.registry.etcd.namespace"
+	defaultTimeoutKey       = "config.registry.etcd.timeout"
+	defaultRetryTimesKey    = "config.registry.etcd.retryTimes"
+	defaultRetryIntervalKey = "config.registry.etcd.retryInterval"
 )
 
 type Option func(o *options)
@@ -47,6 +66,18 @@ type options struct {
 	// 心跳重试间隔
 	// 默认为10秒
 	retryInterval time.Duration
+}
+
+func defaultOptions() *options {
+	return &options{
+		ctx:           context.Background(),
+		addrs:         config.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		dialTimeout:   config.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
+		namespace:     config.Get(defaultNamespaceKey, defaultNamespace).String(),
+		timeout:       config.Get(defaultTimeoutKey, defaultTimeout).Duration() * time.Second,
+		retryTimes:    config.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
+		retryInterval: config.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration() * time.Second,
+	}
 }
 
 // WithAddrs 设置客户端连接地址
