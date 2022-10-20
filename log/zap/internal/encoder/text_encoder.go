@@ -15,16 +15,14 @@ import (
 
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/dobyte/due/log"
 )
 
 type TextEncoder struct {
 	zapcore.ObjectEncoder
-	bufferPool      buffer.Pool
-	timestampFormat string
-	callerFormat    log.CallerFormat
-	isTerminal      bool
+	bufferPool     buffer.Pool
+	timeFormat     string
+	callerFullPath bool
+	isTerminal     bool
 }
 
 const (
@@ -36,12 +34,12 @@ const (
 
 var _ zapcore.Encoder = &TextEncoder{}
 
-func NewTextEncoder(timestampFormat string, callerFormat log.CallerFormat, isTerminal bool) zapcore.Encoder {
+func NewTextEncoder(timeFormat string, callerFullPath, isTerminal bool) zapcore.Encoder {
 	return &TextEncoder{
-		bufferPool:      buffer.NewPool(),
-		timestampFormat: timestampFormat,
-		callerFormat:    callerFormat,
-		isTerminal:      isTerminal,
+		bufferPool:     buffer.NewPool(),
+		timeFormat:     timeFormat,
+		callerFullPath: callerFullPath,
+		isTerminal:     isTerminal,
 	}
 }
 
@@ -68,14 +66,14 @@ func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 			levelColor = blue
 		}
 		line.AppendString(fmt.Sprintf("\x1b[%dm%s", levelColor, levelText))
-		line.AppendString(fmt.Sprintf("\x1b[0m[%s]", ent.Time.Format(e.timestampFormat)))
+		line.AppendString(fmt.Sprintf("\x1b[0m[%s]", ent.Time.Format(e.timeFormat)))
 	} else {
 		line.AppendString(levelText)
-		line.AppendString(fmt.Sprintf("[%s]", ent.Time.Format(e.timestampFormat)))
+		line.AppendString(fmt.Sprintf("[%s]", ent.Time.Format(e.timeFormat)))
 	}
 
 	if ent.Caller.Defined {
-		if e.callerFormat == log.CallerFullPath {
+		if e.callerFullPath {
 			line.AppendString(fmt.Sprintf(" %s:%d ", ent.Caller.File, ent.Caller.Line))
 		} else {
 			_, file := filepath.Split(ent.Caller.File)

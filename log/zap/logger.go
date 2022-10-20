@@ -8,27 +8,14 @@
 package zap
 
 import (
-	"os"
-	"time"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"os"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/zap/internal/encoder"
 	"github.com/dobyte/due/mode"
 )
-
-const (
-	defaultOutLevel        = log.InfoLevel
-	defaultOutFormat       = log.TextFormat
-	defaultFileMaxAge      = 7 * 24 * time.Hour
-	defaultFileMaxSize     = 100 * 1024 * 1024
-	defaultFileCutRule     = log.CutByDay
-	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
-)
-
-const defaultNoneLevel log.Level = 0
 
 var _ log.Logger = NewLogger()
 
@@ -51,14 +38,7 @@ type Logger struct {
 }
 
 func NewLogger(opts ...Option) *Logger {
-	o := &options{
-		outLevel:        defaultOutLevel,
-		outFormat:       defaultOutFormat,
-		fileMaxAge:      defaultFileMaxAge,
-		fileMaxSize:     defaultFileMaxSize,
-		fileCutRule:     defaultFileCutRule,
-		timestampFormat: defaultTimestampFormat,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -67,13 +47,13 @@ func NewLogger(opts ...Option) *Logger {
 		fileEncoder     zapcore.Encoder
 		terminalEncoder zapcore.Encoder
 	)
-	switch o.outFormat {
+	switch o.format {
 	case log.JsonFormat:
-		fileEncoder = encoder.NewJsonEncoder(o.timestampFormat, o.callerFormat)
+		fileEncoder = encoder.NewJsonEncoder(o.timeFormat, o.callerFullPath)
 		terminalEncoder = fileEncoder
 	default:
-		fileEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFormat, false)
-		terminalEncoder = encoder.NewTextEncoder(o.timestampFormat, o.callerFormat, true)
+		fileEncoder = encoder.NewTextEncoder(o.timeFormat, o.callerFullPath, false)
+		terminalEncoder = encoder.NewTextEncoder(o.timeFormat, o.callerFullPath, true)
 	}
 
 	options := make([]zap.Option, 0, 3)
@@ -96,8 +76,8 @@ func NewLogger(opts ...Option) *Logger {
 	l := &Logger{opts: o}
 
 	var cores []zapcore.Core
-	if o.outFile != "" {
-		if o.enableLeveledStorage {
+	if o.file != "" {
+		if o.classifiedStorage {
 			cores = append(cores,
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
@@ -107,12 +87,12 @@ func NewLogger(opts ...Option) *Logger {
 				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
 			)
 		} else {
-			cores = append(cores, zapcore.NewCore(fileEncoder, l.buildWriteSyncer(defaultNoneLevel), l.buildLevelEnabler(defaultNoneLevel)))
+			cores = append(cores, zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.NoneLevel), l.buildLevelEnabler(log.NoneLevel)))
 		}
 	}
 
-	if mode.IsDebugMode() {
-		cores = append(cores, zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(defaultNoneLevel)))
+	if mode.IsDebugMode() && o.stdout {
+		cores = append(cores, zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(log.NoneLevel)))
 	}
 
 	if len(cores) >= 0 {
@@ -124,10 +104,10 @@ func NewLogger(opts ...Option) *Logger {
 
 func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 	writer, err := log.NewWriter(log.WriterOptions{
-		Path:    l.opts.outFile,
+		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
-		MaxSize: l.opts.fileMaxSize,
+		MaxSize: l.opts.fileMaxSize * 1024 * 1024,
 		CutRule: l.opts.fileCutRule,
 	})
 	if err != nil {
@@ -139,10 +119,10 @@ func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 
 func (l *Logger) buildLevelEnabler(level log.Level) zapcore.LevelEnabler {
 	return zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		if v := levelMap[lvl]; l.opts.outLevel != defaultNoneLevel {
-			return v >= l.opts.outLevel && (level == defaultNoneLevel || (level >= l.opts.outLevel && v >= level))
+		if v := levelMap[lvl]; l.opts.level != log.NoneLevel {
+			return v >= l.opts.level && (level == log.NoneLevel || (level >= l.opts.level && v >= level))
 		} else {
-			return level == defaultNoneLevel || v >= level
+			return level == log.NoneLevel || v >= level
 		}
 	})
 }
@@ -207,7 +187,7 @@ func (l *Logger) Panicf(format string, a ...interface{}) {
 	l.logger.Panicf(format, a...)
 }
 
-// 同步缓存中的日志
+// Sync 同步缓存中的日志
 func (l *Logger) Sync() error {
 	return l.logger.Sync()
 }
