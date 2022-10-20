@@ -15,10 +15,7 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	server := tcp.NewServer(
-		tcp.WithServerListenAddr(":3553"),
-		tcp.WithServerMaxConnNum(5),
-	)
+	server := tcp.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
@@ -39,6 +36,4 @@ func TestServer(t *testing.T) {
 	if err := server.Start(); err != nil {
 		t.Fatal(err)
 	}
-
-	select {}
 }

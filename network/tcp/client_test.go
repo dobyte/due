@@ -9,9 +9,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	client := tcp.NewClient(
-		tcp.WithClientDialAddr("127.0.0.1:3553"),
-	)
+	client := tcp.NewClient()
 
 	client.OnConnect(func(conn network.Conn) {
 		t.Log("connection is opened")
@@ -30,7 +28,7 @@ func TestNewClient(t *testing.T) {
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	defer conn.Close()
+
 	for {
 		select {
 		case <-ticker.C:
@@ -38,6 +36,10 @@ func TestNewClient(t *testing.T) {
 				t.Error(err)
 				return
 			}
+			goto OVER
 		}
 	}
+
+OVER:
+	select {}
 }

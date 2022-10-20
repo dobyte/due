@@ -29,12 +29,7 @@ type server struct {
 var _ network.Server = &server{}
 
 func NewServer(opts ...ServerOption) network.Server {
-	o := &serverOptions{
-		addr:              ":3553",
-		maxConnNum:        5000,
-		maxMsgLength:      1024 * 1024,
-		heartbeatInterval: 10 * time.Second,
-	}
+	o := defaultServerOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -61,9 +56,7 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	go s.serve()
-
-	return nil
+	return s.serve()
 }
 
 // Stop 关闭服务器
@@ -125,8 +118,9 @@ func (s *server) init() error {
 }
 
 // 等待连接
-func (s *server) serve() {
+func (s *server) serve() error {
 	var tempDelay time.Duration
+
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -144,12 +138,13 @@ func (s *server) serve() {
 				time.Sleep(tempDelay)
 				continue
 			}
-			return
+
+			return err
 		}
 
 		tempDelay = 0
 
-		if err := s.connMgr.allocate(conn); err != nil {
+		if err = s.connMgr.allocate(conn); err != nil {
 			_ = conn.Close()
 		}
 	}
