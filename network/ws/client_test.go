@@ -17,9 +17,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	client := ws.NewClient(
-		ws.WithClientDialUrl("ws://127.0.0.1:3553"),
-	)
+	client := ws.NewClient()
 
 	client.OnConnect(func(conn network.Conn) {
 		log.Info("connection is opened")
@@ -28,7 +26,7 @@ func TestNewClient(t *testing.T) {
 		log.Info("connection is closed")
 	})
 	client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-		log.Info("receive msg from server, msg: %s", string(msg))
+		log.Infof("receive msg from server, msg: %s", string(msg))
 	})
 
 	conn, err := client.Dial()
@@ -46,6 +44,9 @@ func TestNewClient(t *testing.T) {
 				log.Errorf("push message failed: %v", err)
 				return
 			}
+			goto OVER
 		}
 	}
+OVER:
+	select {}
 }

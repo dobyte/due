@@ -9,11 +9,9 @@ package ws
 
 import (
 	"github.com/dobyte/due/log"
+	"github.com/gorilla/websocket"
 	"net"
 	"net/http"
-	"time"
-
-	"github.com/gorilla/websocket"
 
 	"github.com/dobyte/due/network"
 )
@@ -32,13 +30,7 @@ type server struct {
 var _ network.Server = &server{}
 
 func NewServer(opts ...ServerOption) network.Server {
-	o := &serverOptions{
-		addr:              ":3553",
-		maxConnNum:        5000,
-		path:              "/",
-		checkOrigin:       func(r *http.Request) bool { return true },
-		heartbeatInterval: 10 * time.Second,
-	}
+	o := defaultServerOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -70,9 +62,7 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	go s.serve()
-
-	return nil
+	return s.serve()
 }
 
 // Stop 关闭服务器
@@ -104,7 +94,7 @@ func (s *server) init() error {
 }
 
 // 启动服务器
-func (s *server) serve() {
+func (s *server) serve() error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
@@ -129,17 +119,11 @@ func (s *server) serve() {
 		}
 	})
 
-	var err error
-
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
-		err = http.ServeTLS(s.listener, nil, s.opts.certFile, s.opts.keyFile)
-	} else {
-		err = http.Serve(s.listener, nil)
+		return http.ServeTLS(s.listener, nil, s.opts.certFile, s.opts.keyFile)
 	}
 
-	if err != nil {
-		log.Fatalf("websocket server start error: %v\n", err)
-	}
+	return http.Serve(s.listener, nil)
 }
 
 // OnStart 监听服务器启动

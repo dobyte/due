@@ -3,7 +3,6 @@ package ws
 import (
 	"github.com/dobyte/due/network"
 	"github.com/gorilla/websocket"
-	"time"
 )
 
 type client struct {
@@ -17,12 +16,7 @@ type client struct {
 var _ network.Client = &client{}
 
 func NewClient(opts ...ClientOption) network.Client {
-	o := &clientOptions{
-		url:               "ws://127.0.0.1:3553",
-		maxMsgLength:      1024 * 1024,
-		handshakeTimeout:  10 * time.Second,
-		heartbeatInterval: 10 * time.Second,
-	}
+	o := defaultClientOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
