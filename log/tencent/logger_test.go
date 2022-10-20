@@ -10,19 +10,17 @@ package tencent_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/tencent"
 )
 
-func TestNewLogger(t *testing.T) {
-	l := tencent.NewLogger(
-		tencent.WithEndpoint("ap-guangzhou.cls.tencentcs.com"),
-		tencent.WithAccessKeyID(""),
-		tencent.WithAccessKeySecret(""),
-		tencent.WithTopicID(""),
-		tencent.WithStackLevel(log.InfoLevel),
-	)
-	defer l.Close()
+var logger *tencent.Logger
 
-	l.Info("info")
+func init() {
+	logger = tencent.NewLogger()
+}
+
+func TestNewLogger(t *testing.T) {
+	defer logger.Close()
+
+	logger.Error("error")
 }
