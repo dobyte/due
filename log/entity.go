@@ -9,6 +9,7 @@ package log
 
 import (
 	"fmt"
+	"github.com/dobyte/due/internal/stack"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -24,14 +25,14 @@ const (
 )
 
 type EntityPool struct {
-	pool sync.Pool
-	std  *Std
+	pool   sync.Pool
+	logger *defaultLogger
 }
 
-func newEntityPool(std *Std) *EntityPool {
+func newEntityPool(logger *defaultLogger) *EntityPool {
 	return &EntityPool{
-		pool: sync.Pool{New: func() interface{} { return &Entity{} }},
-		std:  std,
+		pool:   sync.Pool{New: func() interface{} { return &Entity{} }},
+		logger: logger,
 	}
 }
 
@@ -58,14 +59,18 @@ func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
 	}
 
 	e.Level = level
-	e.Time = time.Now().Format(p.std.opts.timestampFormat)
+	e.Time = time.Now().Format(p.logger.opts.timeFormat)
 	e.Message = strings.TrimRight(msg, "\n")
 
-	if p.std.opts.stackLevel != 0 && level >= p.std.opts.stackLevel {
-		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFull)
+	if p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
+		st := stack.Callers(3+p.logger.opts.callerSkip, stack.Full)
+		defer st.Free()
+		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)
 	} else {
-		e.Frames = GetFrames(3+p.std.opts.callerSkip, StacktraceFirst)
+		st := stack.Callers(3+p.logger.opts.callerSkip, stack.First)
+		defer st.Free()
+		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)
 		e.Frames = nil
 	}
@@ -79,7 +84,7 @@ func (p *EntityPool) framesToCaller(frames []runtime.Frame) string {
 	}
 
 	file := frames[0].File
-	if p.std.opts.callerFormat == CallerShortPath {
+	if !p.logger.opts.callerFullPath {
 		_, file = filepath.Split(file)
 	}
 
@@ -109,18 +114,18 @@ func (e *Entity) Free() {
 func (e *Entity) Log() {
 	defer e.Free()
 
-	if e.Level < e.pool.std.opts.outLevel {
+	if e.Level < e.pool.logger.opts.level {
 		return
 	}
 
 	buffers := make(map[bool][]byte, 2)
-	for _, s := range e.pool.std.syncers {
+	for _, s := range e.pool.logger.syncers {
 		if !s.enabler(e.Level) {
 			continue
 		}
 		b, ok := buffers[s.terminal]
 		if !ok {
-			b = e.pool.std.formatter.format(e, s.terminal)
+			b = e.pool.logger.formatter.format(e, s.terminal)
 			buffers[s.terminal] = b
 		}
 		s.writer.Write(b)

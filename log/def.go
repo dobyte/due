@@ -7,7 +7,7 @@
 
 package log
 
-// 日志输出格式
+// Format 日志输出格式
 type Format int
 
 const (
@@ -15,7 +15,17 @@ const (
 	JsonFormat               // JSON格式
 )
 
-// 日志切割规则
+func (f Format) String() string {
+	switch f {
+	case TextFormat:
+		return "text"
+	case JsonFormat:
+		return "json"
+	}
+	return "none"
+}
+
+// CutRule 日志切割规则
 type CutRule int
 
 const (
@@ -27,10 +37,20 @@ const (
 	CutBySecond                    // 按照秒切割
 )
 
-// 调用则格式
-type CallerFormat int
-
-const (
-	CallerShortPath CallerFormat = iota // 调用者短路径
-	CallerFullPath                      // 调用者全路径
-)
+func (c CutRule) String() string {
+	switch c {
+	case CutByYear:
+		return "year"
+	case CutByMonth:
+		return "month"
+	case CutByDay:
+		return "day"
+	case CutByHour:
+		return "hour"
+	case CutByMinute:
+		return "minute"
+	case CutBySecond:
+		return "second"
+	}
+	return "none"
+}
