@@ -103,21 +103,22 @@ func (c *serverConn) State() network.ConnState {
 
 // Close 关闭连接（主动关闭）
 func (c *serverConn) Close(isForce ...bool) (err error) {
-	if err = c.checkState(); err != nil {
-		return
-	}
-
 	if len(isForce) == 0 || !isForce[0] {
-		atomic.StoreInt32(&c.state, int32(network.ConnHanged))
+		if err = c.changeState(network.ConnHanged); err != nil {
+			return
+		}
 		c.chWrite <- chWrite{typ: closeSig}
 		<-c.done
+		atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	} else {
+		if err = c.changeState(network.ConnClosed); err != nil {
+			return
+		}
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	c.rw.Lock()
 	close(c.chWrite)
 	close(c.done)
-
-	c.rw.Lock()
 	err = c.conn.Close()
 	c.conn = nil
 	c.connMgr.recycle(c)
@@ -132,15 +133,14 @@ func (c *serverConn) Close(isForce ...bool) (err error) {
 
 // 关闭连接（被动关闭）
 func (c *serverConn) close() {
-	if err := c.checkState(); err != nil {
+	c.rw.Lock()
+	if c.checkState() != nil {
+		c.rw.Unlock()
 		return
 	}
-
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-
-	c.rw.Lock()
 	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
@@ -223,6 +223,18 @@ func (c *serverConn) checkState() error {
 	}
 
 	return nil
+}
+
+// 变更连接状态
+func (c *serverConn) changeState(state network.ConnState) (err error) {
+	c.rw.Lock()
+	defer c.rw.RLock()
+
+	if err = c.checkState(); err == nil {
+		atomic.StoreInt32(&c.state, int32(state))
+	}
+
+	return
 }
 
 // 读取消息

@@ -33,7 +33,7 @@
     routeBytesLen = 2
 [log]
     # 日志输出文件
-    file = "../testdata/log/due.log"
+    file = "../../testdata/log/due.log"
     # 日志输出级别，可选：debug | info | warn | error | fatal | panic
     level = "info"
     # 日志输出格式，可选：text | json
