@@ -8,29 +8,14 @@
 package logrus
 
 import (
+	"github.com/sirupsen/logrus"
 	"io"
 	"os"
-	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/logrus/internal/formatter"
 	"github.com/dobyte/due/log/logrus/internal/hook"
 	"github.com/dobyte/due/mode"
-)
-
-const (
-	defaultOutLevel        = log.InfoLevel
-	defaultOutFormat       = log.TextFormat
-	defaultFileMaxAge      = 7 * 24 * time.Hour
-	defaultFileMaxSize     = 100 * 1024 * 1024
-	defaultFileCutRule     = log.CutByDay
-	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
-)
-
-const (
-	defaultNoneLevel log.Level = 0
 )
 
 var _ log.Logger = NewLogger()
@@ -41,21 +26,14 @@ type Logger struct {
 }
 
 func NewLogger(opts ...Option) *Logger {
-	o := &options{
-		outLevel:        defaultOutLevel,
-		outFormat:       defaultOutFormat,
-		fileMaxAge:      defaultFileMaxAge,
-		fileMaxSize:     defaultFileMaxSize,
-		fileCutRule:     defaultFileCutRule,
-		timestampFormat: defaultTimestampFormat,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
 
 	l := &Logger{opts: o, logger: logrus.New()}
 
-	switch o.outLevel {
+	switch o.level {
 	case log.DebugLevel:
 		l.logger.SetLevel(logrus.DebugLevel)
 	case log.InfoLevel:
@@ -70,24 +48,23 @@ func NewLogger(opts ...Option) *Logger {
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 
-	var f logrus.Formatter
-	switch o.outFormat {
+	switch o.format {
 	case log.JsonFormat:
 		l.logger.SetFormatter(&formatter.JsonFormatter{
-			TimestampFormat: o.timestampFormat,
-			CallerFullPath:  o.callerFullPath,
+			TimeFormat:     o.timeFormat,
+			CallerFullPath: o.callerFullPath,
 		})
 	default:
 		l.logger.SetFormatter(&formatter.TextFormatter{
-			TimestampFormat: o.timestampFormat,
-			CallerFullPath:  o.callerFullPath,
+			TimeFormat:     o.timeFormat,
+			CallerFullPath: o.callerFullPath,
 		})
 	}
 
-	l.logger.AddHook(hook.NewStackHook(o.outStackLevel))
+	l.logger.AddHook(hook.NewStackHook(o.stackLevel, o.callerSkip))
 
-	if o.outFile != "" {
-		if o.fileClassifyStorage {
+	if o.file != "" {
+		if o.classifiedStorage {
 			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
 				logrus.DebugLevel: l.buildWriter(log.DebugLevel),
 				logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
@@ -97,11 +74,11 @@ func NewLogger(opts ...Option) *Logger {
 				logrus.PanicLevel: l.buildWriter(log.PanicLevel),
 			}))
 		} else {
-			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(defaultNoneLevel)))
+			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(log.NoneLevel)))
 		}
 	}
 
-	if mode.IsDebugMode() {
+	if mode.IsDebugMode() && o.stdout {
 		l.logger.SetOutput(os.Stdout)
 	}
 
@@ -110,10 +87,10 @@ func NewLogger(opts ...Option) *Logger {
 
 func (l *Logger) buildWriter(level log.Level) io.Writer {
 	writer, err := log.NewWriter(log.WriterOptions{
-		Path:    l.opts.outFile,
+		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
-		MaxSize: l.opts.fileMaxSize,
+		MaxSize: l.opts.fileMaxSize * 1024 * 1024,
 		CutRule: l.opts.fileCutRule,
 	})
 	if err != nil {

@@ -27,8 +27,8 @@ const (
 const defaultOutFileFlag = "@outFileFlag@"
 
 type TextFormatter struct {
-	TimestampFormat string
-	CallerFullPath  bool
+	TimeFormat     string
+	CallerFullPath bool
 }
 
 // Format renders a single log entry
@@ -57,14 +57,14 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			levelColor = blue
 		}
 
-		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimestampFormat))
+		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimeFormat))
 	} else {
 		entry.Data[defaultOutFileFlag] = true
-		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimestampFormat))
+		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimeFormat))
 	}
 
 	var frames []runtime.Frame
-	if v, ok := entry.Data["frames"]; ok {
+	if v, ok := entry.Data["stack_frames"]; ok {
 		frames = v.([]runtime.Frame)
 	}
 
@@ -77,7 +77,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		fmt.Fprintf(b, " %s", message)
 	}
 
-	if len(frames) > 1 {
+	if _, ok := entry.Data["stack_out"]; ok && len(frames) > 0 {
 		fmt.Fprint(b, "\nStack:")
 		for i, frame := range frames {
 			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)

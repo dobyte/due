@@ -8,19 +8,19 @@
 package hook
 
 import (
+	"github.com/dobyte/due/internal/stack"
 	"github.com/sirupsen/logrus"
 
 	"github.com/dobyte/due/log"
 )
 
-const defaultNoneLevel log.Level = 0
-
 type StackHook struct {
-	outStackLevel log.Level
+	stackLevel log.Level
+	callerSkip int
 }
 
-func NewStackHook(outStackLevel log.Level) *StackHook {
-	return &StackHook{outStackLevel: outStackLevel}
+func NewStackHook(stackLevel log.Level, callerSkip int) *StackHook {
+	return &StackHook{stackLevel: stackLevel, callerSkip: callerSkip}
 }
 
 func (h *StackHook) Levels() []logrus.Level {
@@ -44,11 +44,17 @@ func (h *StackHook) Fire(entry *logrus.Entry) error {
 		level = log.PanicLevel
 	}
 
-	if h.outStackLevel != defaultNoneLevel && level >= h.outStackLevel {
-		entry.Data["frames"] = log.GetFrames(9, log.StacktraceFull)
+	var depth stack.Depth
+	if h.stackLevel != log.NoneLevel && level >= h.stackLevel {
+		depth = stack.Full
+		entry.Data["stack_out"] = struct{}{}
 	} else {
-		entry.Data["frames"] = log.GetFrames(9, log.StacktraceFirst)
+		depth = stack.First
 	}
+
+	st := stack.Callers(8+h.callerSkip, depth)
+	defer st.Free()
+	entry.Data["stack_frames"] = st.Frames()
 
 	return nil
 }
