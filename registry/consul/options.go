@@ -2,7 +2,28 @@ package consul
 
 import (
 	"context"
+	"github.com/dobyte/due/config"
 	"github.com/hashicorp/consul/api"
+)
+
+const (
+	defaultAddr                           = "127.0.0.1:8500"
+	defaultHealthCheck                    = true
+	defaultHealthCheckInterval            = 10
+	defaultHealthCheckTimeout             = 5
+	defaultHeartbeatCheck                 = true
+	defaultHeartbeatCheckInterval         = 10
+	defaultDeregisterCriticalServiceAfter = 30
+)
+
+const (
+	defaultAddrKey                           = "config.registry.consul.addr"
+	defaultHealthCheckKey                    = "config.registry.consul.healthCheck"
+	defaultHealthCheckIntervalKey            = "config.registry.consul.healthCheckInterval"
+	defaultHealthCheckTimeoutKey             = "config.registry.consul.healthCheckTimeout"
+	defaultHeartbeatCheckKey                 = "config.registry.consul.heartbeatCheck"
+	defaultHeartbeatCheckIntervalKey         = "config.registry.consul.heartbeatCheckInterval"
+	defaultDeregisterCriticalServiceAfterKey = "config.registry.consul.deregisterCriticalServiceAfter"
 )
 
 type Option func(o *options)
@@ -43,6 +64,19 @@ type options struct {
 	// 健康检测失败后自动注销服务时间（秒）
 	// 默认30秒
 	deregisterCriticalServiceAfter int
+}
+
+func defaultOptions() *options {
+	return &options{
+		ctx:                            context.Background(),
+		addr:                           config.Get(defaultAddrKey, defaultAddr).String(),
+		enableHealthCheck:              config.Get(defaultHealthCheckKey, defaultHealthCheck).Bool(),
+		healthCheckInterval:            config.Get(defaultHealthCheckIntervalKey, defaultHealthCheckInterval).Int(),
+		healthCheckTimeout:             config.Get(defaultHealthCheckTimeoutKey, defaultHealthCheckTimeout).Int(),
+		enableHeartbeatCheck:           config.Get(defaultHeartbeatCheckKey, defaultHeartbeatCheck).Bool(),
+		heartbeatCheckInterval:         config.Get(defaultHeartbeatCheckIntervalKey, defaultHeartbeatCheckInterval).Int(),
+		deregisterCriticalServiceAfter: config.Get(defaultDeregisterCriticalServiceAfterKey, defaultDeregisterCriticalServiceAfter).Int(),
+	}
 }
 
 // WithAddr 设置客户端连接地址

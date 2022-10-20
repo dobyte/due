@@ -221,3 +221,19 @@
             heartbeat = false
             # 心跳间隔时间（秒），默认为10秒
             heartbeatInterval = 10
+[registry]
+    [registry.consul]
+        # 客户端连接地址
+        addr = "127.0.0.1:8500"
+        # 是否启用健康检查
+        healthCheck = true
+        # 健康检查时间间隔（秒），仅在启用健康检查后生效
+        healthCheckInterval = 10
+        # 健康检查超时时间（秒），仅在启用健康检查后生效
+        healthCheckTimeout = 5
+        # 是否启用心跳检查
+        heartbeatCheck = true
+        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效
+        heartbeatCheckInterval = 10
+        # 健康检测失败后自动注销服务时间（秒）
+        deregisterCriticalServiceAfter = 30
