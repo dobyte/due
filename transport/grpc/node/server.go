@@ -23,7 +23,7 @@ func NewServer(provider transport.NodeProvider, opts *server.Options) (*server.S
 }
 
 type endpoint struct {
-	pb.UnimplementedGateServer
+	pb.UnimplementedNodeServer
 	provider transport.NodeProvider
 }
 
