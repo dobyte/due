@@ -20,12 +20,6 @@ import (
 )
 
 const (
-	defaultOutLevel        = log.InfoLevel
-	defaultCallerFormat    = log.CallerShortPath
-	defaultTimestampFormat = "2006/01/02 15:04:05.000000"
-)
-
-const (
 	fieldKeyLevel     = "level"
 	fieldKeyTime      = "time"
 	fieldKeyFile      = "file"
@@ -37,53 +31,56 @@ const (
 
 type Logger struct {
 	opts       *options
-	std        *log.Std
+	logger     interface{}
 	producer   *producer.Producer
 	bufferPool sync.Pool
 }
 
 func NewLogger(opts ...Option) *Logger {
-	o := &options{
-		outLevel:        defaultOutLevel,
-		callerFormat:    defaultCallerFormat,
-		timestampFormat: defaultTimestampFormat,
-	}
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	config := producer.GetDefaultProducerConfig()
-	config.Endpoint = o.endpoint
-	config.AccessKeyID = o.accessKeyID
-	config.AccessKeySecret = o.accessKeySecret
-	config.AllowLogLevel = "error"
-
 	l := &Logger{
 		opts:       o,
-		producer:   producer.InitProducer(config),
 		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
-		std: log.NewLogger(
-			log.WithOutLevel(o.outLevel),
+		logger: log.NewLogger(
+			log.WithFile(""),
+			log.WithLevel(o.level),
+			log.WithFormat(log.TextFormat),
+			log.WithStdout(o.stdout),
+			log.WithTimeFormat(o.timeFormat),
 			log.WithStackLevel(o.stackLevel),
-			log.WithCallerFormat(o.callerFormat),
-			log.WithTimestampFormat(o.timestampFormat),
+			log.WithCallerFullPath(o.callerFullPath),
 			log.WithCallerSkip(o.callerSkip+1),
 		),
 	}
 
-	l.producer.Start()
+	if o.syncout {
+		config := producer.GetDefaultProducerConfig()
+		config.Endpoint = o.endpoint
+		config.AccessKeyID = o.accessKeyID
+		config.AccessKeySecret = o.accessKeySecret
+		config.AllowLogLevel = "error"
+
+		l.producer = producer.InitProducer(config)
+		l.producer.Start()
+	}
 
 	return l
 }
 
 func (l *Logger) log(level log.Level, a ...interface{}) {
-	if level < l.opts.outLevel {
+	if level < l.opts.level {
 		return
 	}
 
-	e := l.std.Entity(level, a...)
+	e := l.logger.(interface {
+		Entity(log.Level, ...interface{}) *log.Entity
+	}).Entity(level, a...)
 
-	if !l.opts.disableSyncing {
+	if l.opts.syncout {
 		logData := producer.GenerateLog(uint32(time.Now().Unix()), l.buildLogRaw(e))
 		_ = l.producer.SendLog(l.opts.project, l.opts.logstore, l.opts.topic, l.opts.source, logData)
 	}
@@ -127,9 +124,12 @@ func (l *Logger) Producer() *producer.Producer {
 	return l.producer
 }
 
-// 关闭日志服务
+// Close 关闭日志服务
 func (l *Logger) Close() error {
-	return l.producer.Close(5000)
+	if l.opts.syncout {
+		return l.producer.Close(5000)
+	}
+	return nil
 }
 
 // Debug 打印调试日志

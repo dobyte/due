@@ -10,20 +10,17 @@ package aliyun_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/log/aliyun"
 )
 
-func TestNewLogger(t *testing.T) {
-	l := aliyun.NewLogger(
-		aliyun.WithProject("due-test"),
-		aliyun.WithLogstore("app"),
-		aliyun.WithEndpoint(""),
-		aliyun.WithAccessKeyID(""),
-		aliyun.WithAccessKeySecret(""),
-		aliyun.WithStackLevel(log.InfoLevel),
-	)
-	defer l.Close()
+var logger *aliyun.Logger
 
-	l.Info("info")
+func init() {
+	logger = aliyun.NewLogger()
+}
+
+func TestNewLogger(t *testing.T) {
+	defer logger.Close()
+
+	logger.Info("info")
 }
