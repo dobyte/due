@@ -63,9 +63,9 @@
             path = "/"
             # 服务器最大连接数
             maxConnNum = 5000
-            # 秘钥文件地址
+            # 秘钥文件
             keyFile = ""
-            # 证书文件地址
+            # 证书文件
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
