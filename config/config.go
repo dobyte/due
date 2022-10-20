@@ -29,6 +29,11 @@ func GetReader() Reader {
 	return globalReader
 }
 
+// Has 是否存在配置
+func Has(pattern string) bool {
+	return globalReader.Has(pattern)
+}
+
 // Get 获取配置值
 func Get(pattern string, def ...interface{}) value.Value {
 	return globalReader.Get(pattern, def...)

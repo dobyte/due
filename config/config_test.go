@@ -9,7 +9,11 @@ func TestConfig(t *testing.T) {
 	//v := config.Get("c.redis.addrs.1A", "192.168.0.1:3308").String()
 	//t.Log(v)
 
-	t.Log(config.Get("wechat.redis.db", 0))
+	t.Log(config.Get("config.packet").Map())
+
+	t.Log(config.Has("config.packet"))
+
+	t.Log(config.Has("config.notFound"))
 
 	//ticker1 := time.NewTicker(2 * time.Second)
 	//ticker2 := time.NewTicker(10 * time.Second)
