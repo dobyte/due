@@ -44,12 +44,12 @@ func Set(pattern string, value interface{}) error {
 	return globalReader.Set(pattern, value)
 }
 
-// Load 加载配置
-func Load() {
-	globalReader.Load()
+// Watch 监听配置变化
+func Watch() {
+	globalReader.Watch()
 }
 
-// Close 关闭配置读取器
+// Close 关闭配置监听
 func Close() {
 	globalReader.Close()
 }
