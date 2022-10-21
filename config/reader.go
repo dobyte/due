@@ -15,9 +15,9 @@ import (
 )
 
 type Reader interface {
-	// Load 加载配置
-	Load()
-	// Close 关闭读取器
+	// Watch 监听配置变化
+	Watch()
+	// Close 关闭配置监听
 	Close()
 	// Has 是否存在配置
 	Has(pattern string) bool
@@ -62,8 +62,8 @@ func NewReader(opts ...Option) Reader {
 	return r
 }
 
-// Load 加载配置
-func (r *defaultReader) Load() {
+// Watch 监听配置变化
+func (r *defaultReader) Watch() {
 	r.init()
 	r.watch()
 }
@@ -138,7 +138,7 @@ func (r *defaultReader) watch() {
 	}
 }
 
-// Close 关闭读取器
+// Close 关闭配置监听
 func (r *defaultReader) Close() {
 	r.cancel()
 }
