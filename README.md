@@ -27,7 +27,7 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
 * 注册：支持consul、etcd、k8s、nacos、servicecomb、zookeeper等多种服务注册中心。
 * 协议：支持json、protobuf等多种通信协议。
-* 配置：支持json、yaml、toml、xml、ini等多种文件格式。
+* 配置：支持json、yaml、toml、xml等多种文件格式。
 * 通信：支持grpc、rpcx等多种高性能传输方案。
 * 重启：支持服务器的平滑重启。
 
@@ -101,7 +101,8 @@ docker-compose up
 go get github.com/dobyte/due@latest
 go get github.com/dobyte/due/network/ws@latest
 go get github.com/dobyte/due/registry/etcd@latest
-go get github.com/dobyte/due/locator/redis@latest
+go get github.com/dobyte/due/locate/redis@latest
+go get github.com/dobyte/due/transport/grpc@latest
 ```
 
 2.构建Gate服务器
@@ -112,7 +113,8 @@ package main
 import (
 	"github.com/dobyte/due"
 	"github.com/dobyte/due/cluster/gate"
-	"github.com/dobyte/due/locator/redis"
+	"github.com/dobyte/due/locate/redis"
+	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/network/ws"
@@ -120,50 +122,22 @@ import (
 	"github.com/dobyte/due/transport/grpc"
 )
 
-func init() {
+func main() {
 	// 设置模式
 	mode.SetMode(mode.DebugMode)
 
-	// 设置日志
-	log.SetLogger(log.NewLogger(
-		log.WithOutFile("./log/gate.log"),
-		log.WithCallerSkip(1),
-		log.WithOutLevel(log.DebugLevel),
-	))
-}
+	// 监听配置
+	config.Watch()
+	defer config.Close()
 
-func main() {
 	// 创建容器
 	container := due.NewContainer()
-
-	// 创建服务器
-	server := ws.NewServer(
-		ws.WithServerListenAddr(":3553"),
-		ws.WithServerMaxConnNum(5000),
-	)
-
-	// 创建定位器
-	locator := redis.NewLocator(
-		redis.WithAddrs("127.0.0.1:6379"),
-	)
-
-	// 创建服务发现
-	registry := etcd.NewRegistry(
-		etcd.WithAddrs("127.0.0.1:2379"),
-	)
-
-	// 创建传输器
-	transport := grpc.NewServer(
-		grpc.WithServerListenAddr(":8081"),
-	)
-
 	// 创建网关组件
 	component := gate.NewGate(
-		gate.WithName("gate"),
-		gate.WithServer(server),
-		gate.WithLocator(locator),
-		gate.WithRegistry(registry),
-		gate.WithGRPCServer(transport),
+		gate.WithServer(ws.NewServer()),
+		gate.WithLocator(redis.NewLocator()),
+		gate.WithRegistry(etcd.NewRegistry()),
+		gate.WithTransporter(grpc.NewTransporter()),
 	)
 
 	// 添加网关组件
@@ -181,52 +155,30 @@ package main
 import (
 	"github.com/dobyte/due"
 	"github.com/dobyte/due/cluster/node"
-	"github.com/dobyte/due/locator/redis"
+	"github.com/dobyte/due/locate/redis"
+	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/registry/etcd"
 	"github.com/dobyte/due/transport/grpc"
 )
 
-func init() {
+func main() {
 	// 设置模式
 	mode.SetMode(mode.DebugMode)
 
-	// 设置日志
-	log.SetLogger(log.NewLogger(
-		log.WithOutFile("./log/node.log"),
-		log.WithCallerSkip(1),
-		log.WithOutLevel(log.DebugLevel),
-	))
-}
+	// 监听配置
+	config.Watch()
+	defer config.Close()
 
-func main() {
 	// 创建容器
 	container := due.NewContainer()
-
-	// 创建定位器
-	locator := redis.NewLocator(
-		redis.WithAddrs("127.0.0.1:6379"),
-	)
-
-	// 创建服务发现
-	registry := etcd.NewRegistry(
-		etcd.WithAddrs("127.0.0.1:2379"),
-	)
-
-	// 创建传输器
-	transport := grpc.NewServer(
-		grpc.WithServerListenAddr(":8082"),
-	)
-
 	// 创建网关组件
 	component := node.NewNode(
-		node.WithName("node"),
-		node.WithLocator(locator),
-		node.WithRegistry(registry),
-		node.WithGRPCServer(transport),
+		node.WithLocator(redis.NewLocator()),
+		node.WithRegistry(etcd.NewRegistry()),
+		node.WithTransporter(grpc.NewTransporter()),
 	)
-
 	// 注册路由
 	component.Proxy().AddRouteHandler(1, false, greetHandler)
 	// 添加组件
@@ -246,6 +198,7 @@ func greetHandler(r node.Request) {
 package main
 
 import (
+	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/mode"
 	"github.com/dobyte/due/network"
@@ -258,30 +211,30 @@ var handlers map[int32]handlerFunc
 type handlerFunc func(conn network.Conn, buffer []byte)
 
 func init() {
-	// 设置模式
-	mode.SetMode(mode.DebugMode)
-
-	// 设置日志
-	log.SetLogger(log.NewLogger(
-		log.WithOutFile("./log/client.log"),
-		log.WithCallerSkip(1),
-		log.WithOutLevel(log.DebugLevel),
-	))
-
 	handlers = map[int32]handlerFunc{
 		1: greetHandler,
 	}
 }
 
 func main() {
-	client := ws.NewClient(ws.WithClientDialUrl("ws://127.0.0.1:3553"))
+	// 设置模式
+	mode.SetMode(mode.DebugMode)
 
+	// 监听配置
+	config.Watch()
+	defer config.Close()
+
+	// 创建客户端
+	client := ws.NewClient()
+	// 监听连接
 	client.OnConnect(func(conn network.Conn) {
 		log.Infof("connection is opened")
 	})
+	// 监听断开连接
 	client.OnDisconnect(func(conn network.Conn) {
 		log.Infof("connection is closed")
 	})
+	// 监听收到消息
 	client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
 		message, err := packet.Unpack(msg)
 		if err != nil {
@@ -315,6 +268,7 @@ func greetHandler(conn network.Conn, buffer []byte) {
 
 func push(conn network.Conn, route int32, buffer []byte) error {
 	msg, err := packet.Pack(&packet.Message{
+		Seq:    1,
 		Route:  route,
 		Buffer: buffer,
 	})
@@ -326,6 +280,23 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 }
 ```
 
-### 7.详细示例
+### 7.支持组件
+1. 日志组件
+    * zap: github.com/dobyte/due/log/zap
+    * logrus: github.com/dobyte/due/log/logrus
+    * aliyun: github.com/dobyte/due/log/aliyun
+    * tencent: github.com/dobyte/due/log/zap
+2. 网络组件
+    * ws: github.com/dobyte/due/network/ws
+    * tcp: github.com/dobyte/due/network/tcp
+3. 注册发现
+    * etcd: github.com/dobyte/due/registry/etcd
+    * consul: github.com/dobyte/due/registry/consul
+4. 传输组件
+    * grpc: github.com/dobyte/due/transporter/grpc
+5. 定位组件
+    * redis: github.com/dobyte/due/locate/redis
+
+### 8.详细示例
 
 更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
