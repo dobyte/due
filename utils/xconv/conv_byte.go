@@ -11,9 +11,9 @@ func Bytes(any interface{}) []byte {
 
 	switch v := any.(type) {
 	case string:
-		return []byte(v)
+		return StringToBytes(v)
 	case *string:
-		return []byte(*v)
+		return StringToBytes(*v)
 	case []byte:
 		return v
 	case *[]byte:
