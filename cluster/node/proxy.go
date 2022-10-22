@@ -259,14 +259,14 @@ func (p *proxy) directGetIP(ctx context.Context, gid string, kind session.Kind, 
 		return "", err
 	}
 
-	ip, _, err := client.GetIP(ctx, p.node.opts.id, kind, target)
+	ip, _, err := client.GetIP(ctx, kind, target)
 	return ip, err
 }
 
 // 间接获取IP
 func (p *proxy) indirectGetIP(ctx context.Context, uid int64) (string, error) {
 	v, err := p.doGateRPC(ctx, uid, func(client transport.GateClient) (bool, interface{}, error) {
-		ip, miss, err := client.GetIP(ctx, p.node.opts.id, session.User, uid)
+		ip, miss, err := client.GetIP(ctx, session.User, uid)
 		return miss, ip, err
 	})
 	if err != nil {
@@ -304,7 +304,7 @@ func (p *proxy) directPush(ctx context.Context, gid string, kind session.Kind, t
 		return err
 	}
 
-	_, err = client.Push(ctx, p.node.opts.id, kind, target, &transport.Message{
+	_, err = client.Push(ctx, kind, target, &transport.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,
@@ -320,7 +320,7 @@ func (p *proxy) indirectPush(ctx context.Context, uid int64, message *Message) e
 	}
 
 	_, err = p.doGateRPC(ctx, uid, func(client transport.GateClient) (bool, interface{}, error) {
-		miss, err := client.Push(ctx, p.node.opts.id, session.User, uid, &transport.Message{
+		miss, err := client.Push(ctx, session.User, uid, &transport.Message{
 			Seq:    message.Seq,
 			Route:  message.Route,
 			Buffer: buffer,
@@ -372,7 +372,7 @@ func (p *proxy) directMulticast(ctx context.Context, gid string, kind session.Ki
 		return 0, err
 	}
 
-	return client.Multicast(ctx, p.node.opts.id, kind, targets, &transport.Message{
+	return client.Multicast(ctx, kind, targets, &transport.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,
@@ -420,7 +420,7 @@ func (p *proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 				return err
 			}
 
-			n, err := client.Broadcast(ctx, p.node.opts.id, args.Kind, &transport.Message{
+			n, err := client.Broadcast(ctx, args.Kind, &transport.Message{
 				Seq:    args.Message.Seq,
 				Route:  args.Message.Route,
 				Buffer: buffer,
@@ -468,14 +468,14 @@ func (p *proxy) directDisconnect(ctx context.Context, gid string, kind session.K
 		return err
 	}
 
-	_, err = client.Disconnect(ctx, p.node.opts.id, kind, target, isForce)
+	_, err = client.Disconnect(ctx, kind, target, isForce)
 	return err
 }
 
 // 间接断开连接
 func (p *proxy) indirectDisconnect(ctx context.Context, uid int64, isForce bool) error {
 	_, err := p.doGateRPC(ctx, uid, func(client transport.GateClient) (bool, interface{}, error) {
-		miss, err := client.Disconnect(ctx, p.node.opts.id, session.User, uid, isForce)
+		miss, err := client.Disconnect(ctx, session.User, uid, isForce)
 		return miss, nil, err
 	})
 

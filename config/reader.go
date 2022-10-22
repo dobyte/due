@@ -15,12 +15,16 @@ import (
 )
 
 type Reader interface {
+	// Watch 监听配置变化
+	Watch()
+	// Close 关闭配置监听
+	Close()
+	// Has 是否存在配置
+	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
-	// Close 关闭读取器
-	Close()
 }
 
 func init() {
@@ -54,10 +58,14 @@ func NewReader(opts ...Option) Reader {
 	r := &defaultReader{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
-	r.init()
-	r.watch()
 
 	return r
+}
+
+// Watch 监听配置变化
+func (r *defaultReader) Watch() {
+	r.init()
+	r.watch()
 }
 
 // 初始化配置源
@@ -130,9 +138,53 @@ func (r *defaultReader) watch() {
 	}
 }
 
-// Close 关闭读取器
+// Close 关闭配置监听
 func (r *defaultReader) Close() {
 	r.cancel()
+}
+
+// Has 是否存在配置
+func (r *defaultReader) Has(pattern string) bool {
+	var (
+		keys  = strings.Split(pattern, ".")
+		node  interface{}
+		found = true
+	)
+
+	values, err := r.copyValues()
+	if err != nil {
+		return false
+	}
+
+	keys = reviseKeys(keys, values)
+	node = values
+	for _, key := range keys {
+		switch vs := node.(type) {
+		case map[string]interface{}:
+			if v, ok := vs[key]; ok {
+				node = v
+			} else {
+				found = false
+			}
+		case []interface{}:
+			i, err := strconv.Atoi(key)
+			if err != nil {
+				found = false
+			} else if len(vs) > i {
+				node = vs[i]
+			} else {
+				found = false
+			}
+		default:
+			found = false
+		}
+
+		if !found {
+			break
+		}
+	}
+
+	return found
 }
 
 // Get 获取配置值

@@ -51,7 +51,7 @@ func defaultOptions() *options {
 	}
 
 	id := config.Get(defaultIDKey).String()
-	if id == "" {
+	if id != "" {
 		opts.id = id
 	} else if id, err := xuuid.UUID(); err == nil {
 		opts.id = id
