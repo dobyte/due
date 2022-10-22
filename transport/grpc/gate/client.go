@@ -49,9 +49,8 @@ func (c *client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
 }
 
 // GetIP 获取客户端IP
-func (c *client) GetIP(ctx context.Context, nid string, kind session.Kind, target int64) (string, bool, error) {
+func (c *client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, bool, error) {
 	reply, err := c.client.GetIP(ctx, &pb.GetIPRequest{
-		NID:    nid,
 		Kind:   int32(kind),
 		Target: target,
 	})
@@ -63,9 +62,8 @@ func (c *client) GetIP(ctx context.Context, nid string, kind session.Kind, targe
 }
 
 // Disconnect 断开连接
-func (c *client) Disconnect(ctx context.Context, nid string, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
+func (c *client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
 	_, err = c.client.Disconnect(ctx, &pb.DisconnectRequest{
-		NID:     nid,
 		Kind:    int32(kind),
 		Target:  target,
 		IsForce: isForce,
@@ -77,9 +75,8 @@ func (c *client) Disconnect(ctx context.Context, nid string, kind session.Kind, 
 }
 
 // Push 推送消息
-func (c *client) Push(ctx context.Context, nid string, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
+func (c *client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
 	_, err = c.client.Push(ctx, &pb.PushRequest{
-		NID:    nid,
 		Kind:   int32(kind),
 		Target: target,
 		Message: &pb.Message{
@@ -95,9 +92,8 @@ func (c *client) Push(ctx context.Context, nid string, kind session.Kind, target
 }
 
 // Multicast 推送组播消息
-func (c *client) Multicast(ctx context.Context, nid string, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
+func (c *client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
 	reply, err := c.client.Multicast(ctx, &pb.MulticastRequest{
-		NID:     nid,
 		Kind:    int32(kind),
 		Targets: targets,
 		Message: &pb.Message{
@@ -114,9 +110,8 @@ func (c *client) Multicast(ctx context.Context, nid string, kind session.Kind, t
 }
 
 // Broadcast 推送广播消息
-func (c *client) Broadcast(ctx context.Context, nid string, kind session.Kind, message *transport.Message) (int64, error) {
+func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *transport.Message) (int64, error) {
 	reply, err := c.client.Broadcast(ctx, &pb.BroadcastRequest{
-		NID:  nid,
 		Kind: int32(kind),
 		Message: &pb.Message{
 			Seq:    message.Seq,

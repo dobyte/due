@@ -39,9 +39,8 @@ message UnbindReply {
 }
 
 message GetIPRequest {
-  string NID = 1; // 节点ID
-  int32 Kind = 2; // 推送类型 1：CID 2：UID
-  int64 Target = 3; // 推送目标
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+  int64 Target = 2; // 推送目标
 }
 
 message GetIPReply {
@@ -49,29 +48,26 @@ message GetIPReply {
 }
 
 message DisconnectRequest {
-  string NID = 1; // 节点ID
-  int32 Kind = 2; // 推送类型 1：CID 2：UID
-  int64 Target = 3; // 推送目标
-  bool IsForce = 4; // 是否强制断开连接
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+  int64 Target = 2; // 推送目标
+  bool IsForce = 3; // 是否强制断开连接
 }
 
 message DisconnectReply {
 }
 
 message PushRequest {
-  string NID = 1; // 节点ID
-  int32 Kind = 2; // 推送类型 1：CID 2：UID
-  int64 Target = 3; // 推送目标
-  Message Message = 4; // 消息
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+  int64 Target = 2; // 推送目标
+  Message Message = 3; // 消息
 }
 
 message PushReply {}
 
 message MulticastRequest {
-  string NID = 1; // 节点ID
-  int32 Kind = 2; // 推送类型 1：CID 2：UID
-  repeated int64 Targets = 3; // 推送目标
-  Message Message = 4; // 消息
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+  repeated int64 Targets = 2; // 推送目标
+  Message Message = 3; // 消息
 }
 
 message MulticastReply {
@@ -79,9 +75,8 @@ message MulticastReply {
 }
 
 message BroadcastRequest {
-  string NID = 1; // 节点ID
-  int32 Kind = 2; // 推送类型 1：CID 2：UID
-  Message Message = 3; // 消息
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+  Message Message = 2; // 消息
 }
 
 message BroadcastReply {
