@@ -19,15 +19,15 @@ type GateClient interface {
 	// Unbind 解绑用户与连接
 	Unbind(ctx context.Context, uid int64) (miss bool, err error)
 	// GetIP 获取客户端IP
-	GetIP(ctx context.Context, nid string, kind session.Kind, target int64) (ip string, miss bool, err error)
+	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error)
 	// Disconnect 断开连接
-	Disconnect(ctx context.Context, nid string, kind session.Kind, target int64, isForce bool) (miss bool, err error)
+	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error)
 	// Push 推送消息
-	Push(ctx context.Context, nid string, kind session.Kind, target int64, message *Message) (miss bool, err error)
+	Push(ctx context.Context, kind session.Kind, target int64, message *Message) (miss bool, err error)
 	// Multicast 推送组播消息
-	Multicast(ctx context.Context, nid string, kind session.Kind, targets []int64, message *Message) (total int64, err error)
+	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *Message) (total int64, err error)
 	// Broadcast 推送广播消息
-	Broadcast(ctx context.Context, nid string, kind session.Kind, message *Message) (total int64, err error)
+	Broadcast(ctx context.Context, kind session.Kind, message *Message) (total int64, err error)
 }
 
 type Message struct {
