@@ -5,24 +5,39 @@ import (
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/transport"
+	innerclient "github.com/dobyte/due/transport/grpc/internal/client"
 	"github.com/dobyte/due/transport/grpc/internal/code"
 	"github.com/dobyte/due/transport/grpc/internal/pb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
+	"sync"
 )
+
+var clients sync.Map
 
 type client struct {
 	client pb.NodeClient
 }
 
-func NewClient(ep *router.Endpoint) (*client, error) {
-	conn, err := grpc.Dial(ep.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewClient(ep *router.Endpoint, opts *innerclient.Options) (*client, error) {
+	cli, ok := clients.Load(ep.Address())
+	if ok {
+		return cli.(*client), nil
+	}
+
+	opts.Addr = ep.Address()
+	opts.IsSecure = ep.IsSecure()
+
+	conn, err := innerclient.Dial(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return &client{client: pb.NewNodeClient(conn)}, nil
+	cc := &client{client: pb.NewNodeClient(conn)}
+	clients.Store(ep.Address(), cc)
+
+	return cc, nil
 }
 
 // Trigger 触发事件
@@ -50,7 +65,7 @@ func (c *client) Deliver(ctx context.Context, gid, nid string, cid, uid int64, m
 			Route:  message.Route,
 			Buffer: message.Buffer,
 		},
-	})
+	}, grpc.UseCompressor(gzip.Name))
 
 	miss = status.Code(err) == code.NotFoundSession
 

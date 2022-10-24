@@ -5,24 +5,39 @@ import (
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
 	"github.com/dobyte/due/transport"
+	innerclient "github.com/dobyte/due/transport/grpc/internal/client"
 	"github.com/dobyte/due/transport/grpc/internal/code"
 	"github.com/dobyte/due/transport/grpc/internal/pb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
+	"sync"
 )
+
+var clients sync.Map
 
 type client struct {
 	client pb.GateClient
 }
 
-func NewClient(ep *router.Endpoint) (*client, error) {
-	conn, err := grpc.Dial(ep.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewClient(ep *router.Endpoint, opts *innerclient.Options) (*client, error) {
+	cli, ok := clients.Load(ep.Address())
+	if ok {
+		return cli.(*client), nil
+	}
+
+	opts.Addr = ep.Address()
+	opts.IsSecure = ep.IsSecure()
+	
+	conn, err := innerclient.Dial(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return &client{client: pb.NewGateClient(conn)}, nil
+	cc := &client{client: pb.NewGateClient(conn)}
+	clients.Store(ep.Address(), cc)
+
+	return cc, nil
 }
 
 // Bind 绑定用户与连接
@@ -84,7 +99,7 @@ func (c *client) Push(ctx context.Context, kind session.Kind, target int64, mess
 			Route:  message.Route,
 			Buffer: message.Buffer,
 		},
-	})
+	}, grpc.UseCompressor(gzip.Name))
 
 	miss = status.Code(err) == code.NotFoundSession
 
@@ -101,7 +116,7 @@ func (c *client) Multicast(ctx context.Context, kind session.Kind, targets []int
 			Route:  message.Route,
 			Buffer: message.Buffer,
 		},
-	})
+	}, grpc.UseCompressor(gzip.Name))
 	if err != nil {
 		return 0, err
 	}
@@ -118,7 +133,7 @@ func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *tran
 			Route:  message.Route,
 			Buffer: message.Buffer,
 		},
-	})
+	}, grpc.UseCompressor(gzip.Name))
 	if err != nil {
 		return 0, err
 	}

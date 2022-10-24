@@ -24,6 +24,12 @@
             keyFile = ""
             # 证书文件
             certFile = ""
+        # GRPC客户端相关配置
+        [transport.grpc.client]
+            # 证书文件
+            certFile = ""
+            # 证书域名
+            serverName = ""
 [packet]
     # 字节序，little | big
     endian = "big"
