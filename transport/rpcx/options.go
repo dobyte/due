@@ -20,8 +20,8 @@ type Option func(o *options)
 type options struct {
 	server struct {
 		addr       string              // 地址
-		certFile   string              // 证书文件
 		keyFile    string              // 秘钥文件
+		certFile   string              // 证书文件
 		serverOpts []grpc.ServerOption // 服务器选项
 	}
 }

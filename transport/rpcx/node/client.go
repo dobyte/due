@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
 	cli "github.com/smallnest/rpcx/client"
+	proto "github.com/smallnest/rpcx/protocol"
 	"sync"
 )
 
@@ -28,12 +29,15 @@ func NewClient(ep *router.Endpoint) (*client, error) {
 		return nil, err
 	}
 
+	option := cli.DefaultOption
+	option.CompressType = proto.Gzip
+
 	c := &client{client: cli.NewXClient(
 		servicePath,
 		cli.Failtry,
 		cli.RandomSelect,
 		discovery,
-		cli.DefaultOption,
+		option,
 	)}
 	clients.Store(ep.Address(), c)
 
