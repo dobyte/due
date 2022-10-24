@@ -8,27 +8,36 @@ import (
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
 	cli "github.com/smallnest/rpcx/client"
+	"sync"
 )
+
+var clients sync.Map
 
 type client struct {
 	client cli.XClient
 }
 
 func NewClient(ep *router.Endpoint) (*client, error) {
-	server := "tcp@" + ep.Address()
+	cc, ok := clients.Load(ep.Address())
+	if ok {
+		return cc.(*client), nil
+	}
 
-	discovery, err := cli.NewPeer2PeerDiscovery(server, "")
+	discovery, err := cli.NewPeer2PeerDiscovery("tcp@"+ep.Address(), "")
 	if err != nil {
 		return nil, err
 	}
 
-	return &client{client: cli.NewXClient(
+	c := &client{client: cli.NewXClient(
 		servicePath,
 		cli.Failtry,
 		cli.RandomSelect,
 		discovery,
 		cli.DefaultOption,
-	)}, nil
+	)}
+	clients.Store(ep.Address(), c)
+
+	return c, nil
 }
 
 // Trigger 触发事件
