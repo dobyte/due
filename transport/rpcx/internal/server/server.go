@@ -73,6 +73,5 @@ func (s *Server) Stop() error {
 
 // RegisterService 注册服务
 func (s *Server) RegisterService(name string, ss interface{}) {
-	//s.server.RegisterFunctionName()
 	_ = s.server.RegisterName(name, ss, "")
 }
