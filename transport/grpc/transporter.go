@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/grpc/gate"
+	"github.com/dobyte/due/transport/grpc/internal/client"
 	"github.com/dobyte/due/transport/grpc/internal/server"
 	"github.com/dobyte/due/transport/grpc/node"
 )
@@ -23,12 +24,18 @@ func NewTransporter(opts ...Option) *Transporter {
 
 // NewGateClient 新建网关客户端
 func (t *Transporter) NewGateClient(ep *router.Endpoint) (transport.GateClient, error) {
-	return gate.NewClient(ep)
+	return gate.NewClient(ep, &client.Options{
+		CertFile:   t.opts.client.certFile,
+		ServerName: t.opts.client.serverName,
+	})
 }
 
 // NewNodeClient 新建节点客户端
 func (t *Transporter) NewNodeClient(ep *router.Endpoint) (transport.NodeClient, error) {
-	return node.NewClient(ep)
+	return node.NewClient(ep, &client.Options{
+		CertFile:   t.opts.client.certFile,
+		ServerName: t.opts.client.serverName,
+	})
 }
 
 // NewGateServer 新建网关服务器
