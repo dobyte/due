@@ -15,7 +15,7 @@ type Options struct {
 }
 
 func Dial(opts *Options) (*grpc.ClientConn, error) {
-	options := make([]grpc.DialOption, 1)
+	options := make([]grpc.DialOption, 0, 1)
 
 	if opts.IsSecure {
 		if opts.CertFile == "" {
