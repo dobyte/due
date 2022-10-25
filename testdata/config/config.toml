@@ -30,6 +30,12 @@
             certFile = ""
             # 证书域名
             serverName = ""
+    # RPCX相关配置
+    [transport.rpcx]
+        # RPCX服务器相关配置
+        [transport.rpcx.server]
+            # 服务器监听地址
+            addr = ":8661"
 [packet]
     # 字节序，little | big
     endian = "big"
