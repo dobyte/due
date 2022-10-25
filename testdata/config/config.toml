@@ -14,16 +14,12 @@
         # 编解码器。可选：json | proto
         codec = "proto"
 [transport]
-    # GRPC相关配置
-    [transport.grpc]
-        # GRPC服务器相关配置
-        [transport.grpc.server]
+    # RPCX相关配置
+    [transport.rpcx]
+        # RPCX服务器相关配置
+        [transport.rpcx.server]
             # 服务器监听地址
             addr = ":8661"
-            # 秘钥文件
-            keyFile = ""
-            # 证书文件
-            certFile = ""
 [packet]
     # 字节序，little | big
     endian = "big"
