@@ -7,6 +7,8 @@ type Component interface {
 	Init()
 	// Start 启动组件
 	Start()
+	// Restart 重启组件
+	Restart()
 	// Destroy 销毁组件
 	Destroy()
 }
@@ -22,6 +24,9 @@ func (b *Base) Init() {}
 
 // Start 启动组件
 func (b *Base) Start() {}
+
+// Restart 重启组件
+func (b *Base) Restart() {}
 
 // Destroy 销毁组件
 func (b *Base) Destroy() {}
