@@ -603,6 +603,10 @@ func (p *proxy) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
 		return buf, nil
 	}
 
+	if p.node.opts.encryptor == nil {
+		return nil, errors.New("missing encryptor")
+	}
+
 	return p.node.opts.encryptor.Encrypt(buf)
 }
 
