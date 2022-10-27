@@ -27,6 +27,7 @@ type PushArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Target  int64        // 会话目标，CID 或 UID
+	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
@@ -34,11 +35,13 @@ type MulticastArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Targets []int64      // 会话目标，CID 或 UID
+	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
 type BroadcastArgs struct {
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
+	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
@@ -46,4 +49,7 @@ type DeliverArgs struct {
 	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
 	UID     int64    // 用户ID
 	Message *Message // 消息
+}
+
+type deliverArgs struct {
 }

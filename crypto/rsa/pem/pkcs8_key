@@ -1,21 +1,3 @@
-package rsa_test
-
-import (
-	"github.com/dobyte/due/crypto/rsa"
-	"testing"
-)
-
-const pubPEM = `
------BEGIN RSA PUBLIC KEY-----
-MIIBCgKCAQEAu8LqwgxXnKF7/1HPj12LpQzHV2UaVf+HELO6K0zutR6QYmtVq2uN
-PPle5zpk4KHP5DLofVc650JhGO4jIlZ/SkCVyf9rZidS3iGlbFClo/+p1rH4ahCL
-RBn5St/UvH3TJ8UH6a/+isP4wwQQNiVL56eixmtPt1zf7oSkHLd8Tu0o5aG6XdXs
-vUH0x20WMtRzQgFDgpp/gyClRcYqGGm20bNTr2LfqVPVj0eVIIcukvACAHuFR63u
-zNG9THr7fMwIYWnPnoA1kfFrkJS/7DL2AKklaiUsnHAGsPkzXKCcaeyJ1qVYi9k4
-8+DFEWuVqKJdvG2vtjhh/zNBqb4S2sV0mQIDAQAB
------END RSA PUBLIC KEY-----`
-
-const priPEM = `
 -----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEAu8LqwgxXnKF7/1HPj12LpQzHV2UaVf+HELO6K0zutR6QYmtV
 q2uNPPle5zpk4KHP5DLofVc650JhGO4jIlZ/SkCVyf9rZidS3iGlbFClo/+p1rH4
@@ -42,23 +24,4 @@ VounOHgr7HH+0tsyKHtbKf3xfVPTHGe5lqVwnVgFu+tK/KtZKrV14lBbVTy6Iiwj
 H0kWvmECgYEAjL7p7Oxy2OEyTqx/nYNf/5VcN+HqB5kvkbcxBVA28mqa7ST5xhy7
 mbLBPHHTu0YVRiQW2fl+yAvOm/ESZrgWaMt7Kx2ugaknx/Uj1lYBEu14oVQsAzMw
 cUV1Uhl8Ew0ap4pCC1Bk/YcyswOlYFh9baQB+JNSHVkBJxPfeSgJDD0=
------END RSA PRIVATE KEY-----`
-
-func TestCryptor_Encrypt(t *testing.T) {
-	c := rsa.NewCryptor(
-		rsa.WithPublicKey(pubPEM),
-		rsa.WithPrivateKey(priPEM),
-	)
-
-	plaintext, err := c.Encrypt([]byte("hello"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	v, err := c.Decrypt(plaintext)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(string(v))
-}
+-----END RSA PRIVATE KEY-----

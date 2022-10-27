@@ -54,3 +54,27 @@
     callerFullPath = true
     # 是否启用分级存储
     classifiedStorage = true
+[crypto]
+    [crypto.rsa]
+        # RSA加密设置
+        [crypto.rsa.encryptor]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 填充规则，不区分大小写。可选：NORMAL | OAEP
+            padding = "NORMAL"
+            # 标签，加解密时必需一致
+            label = ""
+            # 加密数据块大小，单位字节。由于加密数据长度限制，需要对加密数据进行分块儿加密
+            blockSize = 0
+            # 公钥，可设置文件路径或公钥串
+            publicKey = ""
+        # RSA加密设置
+        [crypto.rsa.decryptor]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 填充规则，不区分大小写。可选：NORMAL | OAEP
+            padding = "NORMAL"
+            # 标签。加解密时必需一致
+            label = ""
+            # 私钥。可设置文件路径或私钥串
+            privateKey = ""
