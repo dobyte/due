@@ -20,9 +20,10 @@ type RouteHandler func(req Request)
 type EventHandler func(gid string, uid int64)
 
 type routeEntity struct {
-	route    int32
-	stateful bool
-	handler  RouteHandler
+	route    int32        // 路由
+	encrypt  bool         // 是否有加密
+	stateful bool         // 是否有状态
+	handler  RouteHandler // 路由处理器
 }
 
 type eventEntity struct {
@@ -244,12 +245,13 @@ func (n *Node) deregisterInstance() {
 }
 
 // 添加路由处理器
-func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
+func (n *Node) addRouteHandler(route int32, encrypt, stateful bool, handler RouteHandler) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
 	n.routes[route] = routeEntity{
 		route:    route,
+		encrypt:  encrypt,
 		stateful: stateful,
 		handler:  handler,
 	}
@@ -257,14 +259,26 @@ func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler)
 
 // 是否为有状态路由
 func (n *Node) checkRouteStateful(route int32) (bool, bool) {
-	n.rw.Lock()
-	defer n.rw.Unlock()
+	n.rw.RLock()
+	defer n.rw.RUnlock()
 
 	if entity, ok := n.routes[route]; ok {
 		return entity.stateful, ok
 	}
 
 	return false, n.defaultRouteHandler != nil
+}
+
+// 检测路由是否加密
+func (n *Node) checkRouteEncrypt(route int32) bool {
+	n.rw.RLock()
+	defer n.rw.RUnlock()
+
+	if entity, ok := n.routes[route]; ok {
+		return entity.encrypt
+	}
+
+	return false
 }
 
 // 添加事件处理器
@@ -282,17 +296,8 @@ func (n *Node) triggerEvent(event cluster.Event, gid string, uid int64) {
 }
 
 // 投递消息给当前节点处理
-func (n *Node) deliverMessage(gid, nid string, cid, uid int64, message *Message) {
-	n.chRequest <- &request{
-		gid:   gid,
-		nid:   nid,
-		cid:   cid,
-		uid:   uid,
-		node:  n,
-		seq:   message.Seq,
-		route: message.Route,
-		data:  message.Data,
-	}
+func (n *Node) deliverRequest(req *request) {
+	n.chRequest <- req
 }
 
 func (n *Node) debugPrint() {

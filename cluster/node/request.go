@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"github.com/dobyte/due/errors"
 )
 
 type Request interface {
@@ -92,17 +93,28 @@ func (r *request) Data() interface{} {
 }
 
 // Parse 解析消息
-func (r *request) Parse(v interface{}) error {
-	if msg, ok := r.data.([]byte); ok {
-		return r.node.opts.codec.Unmarshal(msg, v)
+func (r *request) Parse(v interface{}) (err error) {
+	msg, ok := r.data.([]byte)
+	if !ok {
+		var buf bytes.Buffer
+		if err = gob.NewEncoder(&buf).Encode(r.data); err != nil {
+			return
+		}
+		return gob.NewDecoder(&buf).Decode(v)
 	}
 
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(r.data); err != nil {
-		return err
+	if r.gid != "" && r.node.checkRouteEncrypt(r.route) {
+		if r.node.opts.decryptor == nil {
+			return errors.New("missing decryptor")
+		}
+
+		msg, err = r.node.opts.decryptor.Decrypt(msg)
+		if err != nil {
+			return
+		}
 	}
 
-	return gob.NewDecoder(&buf).Decode(v)
+	return r.node.opts.codec.Unmarshal(msg, v)
 }
 
 // Context 获取上线文

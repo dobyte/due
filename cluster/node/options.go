@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/encoding"
 	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/locate"
@@ -37,6 +38,8 @@ type options struct {
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
+	encryptor   crypto.Encryptor      // 消息加密器
+	decryptor   crypto.Decryptor      // 消息解密器
 }
 
 func defaultOptions() *options {
@@ -110,4 +113,14 @@ func WithRegistry(r registry.Registry) Option {
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
+}
+
+// WithEncryptor 设置消息加密器
+func WithEncryptor(encryptor crypto.Encryptor) Option {
+	return func(o *options) { o.encryptor = encryptor }
+}
+
+// WithDecryptor 设置消息解密器
+func WithDecryptor(decryptor crypto.Decryptor) Option {
+	return func(o *options) { o.decryptor = decryptor }
 }
