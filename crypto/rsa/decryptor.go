@@ -91,9 +91,9 @@ func (d *Decryptor) parsePrivateKey() (*rsa.PrivateKey, error) {
 		return nil, errors.New("invalid private key")
 	}
 
-	pri, err := x509.ParsePKCS8PrivateKey(black.Bytes)
+	prv, err := x509.ParsePKCS8PrivateKey(black.Bytes)
 	if err == nil {
-		return pri.(*rsa.PrivateKey), nil
+		return prv.(*rsa.PrivateKey), nil
 	}
 
 	return x509.ParsePKCS1PrivateKey(black.Bytes)
