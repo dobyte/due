@@ -25,9 +25,9 @@ const (
 )
 
 const (
-	defaultIDKey      = "config.gate.id"
-	defaultNameKey    = "config.gate.name"
-	defaultTimeoutKey = "config.gate.timeout"
+	defaultIDKey      = "config.cluster.gate.id"
+	defaultNameKey    = "config.cluster.gate.name"
+	defaultTimeoutKey = "config.cluster.gate.timeout"
 )
 
 type Option func(o *options)
