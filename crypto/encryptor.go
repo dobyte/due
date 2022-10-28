@@ -1,0 +1,46 @@
+package crypto
+
+import (
+	"github.com/dobyte/due/log"
+	"strings"
+)
+
+type Encryptor interface {
+	// Name 名称
+	Name() string
+	// Encrypt 加密
+	Encrypt(data []byte) ([]byte, error)
+}
+
+var encryptors = make(map[string]Encryptor)
+
+// RegistryEncryptor 注册加密器
+func RegistryEncryptor(encryptor Encryptor) {
+	if encryptor == nil {
+		log.Fatal("can't register a invalid encryptor")
+	}
+
+	name := strings.ToLower(encryptor.Name())
+
+	if name == "" {
+		log.Fatal("can't register a encryptor without name")
+	}
+
+	if _, ok := encryptors[name]; ok {
+		log.Warnf("the old %s encryptor will be overwritten", name)
+	}
+
+	encryptors[name] = encryptor
+}
+
+// InvokeEncryptor 调用加密器
+func InvokeEncryptor(name string) Encryptor {
+	name = strings.ToLower(name)
+
+	encryptor, ok := encryptors[name]
+	if !ok {
+		log.Fatalf("%s encryptor is not registered", name)
+	}
+
+	return encryptor
+}

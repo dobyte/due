@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"github.com/dobyte/due/errors"
 )
 
 type Request interface {
@@ -103,11 +102,7 @@ func (r *request) Parse(v interface{}) (err error) {
 		return gob.NewDecoder(&buf).Decode(v)
 	}
 
-	if r.gid != "" && r.node.checkRouteEncrypt(r.route) {
-		if r.node.opts.decryptor == nil {
-			return errors.New("missing decryptor")
-		}
-
+	if r.gid != "" && r.node.opts.decryptor != nil {
 		msg, err = r.node.opts.decryptor.Decrypt(msg)
 		if err != nil {
 			return

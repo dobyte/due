@@ -18,6 +18,8 @@ const (
 	OAEP   Padding = "OAEP"   // RSA_PKCS1_OAEP_PADDING，数据切割加密长度算法为：公共模数长度-(2*哈希长度的)-2
 )
 
+const Name = "rsa"
+
 type Hash string
 
 const (

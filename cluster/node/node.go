@@ -21,7 +21,6 @@ type EventHandler func(gid string, uid int64)
 
 type routeEntity struct {
 	route    int32        // 路由
-	encrypt  bool         // 是否有加密
 	stateful bool         // 是否有状态
 	handler  RouteHandler // 路由处理器
 }
@@ -245,13 +244,12 @@ func (n *Node) deregisterInstance() {
 }
 
 // 添加路由处理器
-func (n *Node) addRouteHandler(route int32, encrypt, stateful bool, handler RouteHandler) {
+func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
 	n.rw.Lock()
 	defer n.rw.Unlock()
 
 	n.routes[route] = routeEntity{
 		route:    route,
-		encrypt:  encrypt,
 		stateful: stateful,
 		handler:  handler,
 	}
@@ -267,18 +265,6 @@ func (n *Node) checkRouteStateful(route int32) (bool, bool) {
 	}
 
 	return false, n.defaultRouteHandler != nil
-}
-
-// 检测路由是否加密
-func (n *Node) checkRouteEncrypt(route int32) bool {
-	n.rw.RLock()
-	defer n.rw.RUnlock()
-
-	if entity, ok := n.routes[route]; ok {
-		return entity.encrypt
-	}
-
-	return false
 }
 
 // 添加事件处理器

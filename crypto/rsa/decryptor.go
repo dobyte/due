@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/errors"
 	"math"
 )
@@ -12,6 +13,10 @@ type Decryptor struct {
 	err        error
 	opts       *decryptorOptions
 	privateKey *rsa.PrivateKey
+}
+
+func init() {
+	crypto.RegistryDecryptor(NewDecryptor())
 }
 
 func NewDecryptor(opts ...DecryptorOption) *Decryptor {
@@ -24,6 +29,11 @@ func NewDecryptor(opts ...DecryptorOption) *Decryptor {
 	d.init()
 
 	return d
+}
+
+// Name 名称
+func (d *Decryptor) Name() string {
+	return Name
 }
 
 // Decrypt 解密

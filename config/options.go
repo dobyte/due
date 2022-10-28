@@ -2,12 +2,11 @@ package config
 
 import (
 	"context"
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/encoding/json"
-	"github.com/dobyte/due/encoding/toml"
-	"github.com/dobyte/due/encoding/xml"
-	"github.com/dobyte/due/encoding/yaml"
+	"encoding/json"
+	"encoding/xml"
+	"github.com/BurntSushi/toml"
 	"github.com/dobyte/due/errors"
+	"gopkg.in/yaml.v3"
 	"strings"
 )
 
@@ -38,29 +37,28 @@ func WithDecoder(decoder Decoder) Option {
 
 // 默认解码器
 func defaultDecoder(c *Configuration) (interface{}, error) {
-	var (
-		codec encoding.Codec
-		dest  interface{}
-	)
-
 	switch strings.ToLower(c.Format) {
-	case json.Name, xml.Name, toml.Name, yaml.Name:
-		codec = encoding.Invoke(c.Format)
-	case "yml":
-		codec = encoding.Invoke(yaml.Name)
+	case "json":
+		return unmarshal(c.Content, json.Unmarshal)
+	case "xml":
+		return unmarshal(c.Content, xml.Unmarshal)
+	case "yaml", "yml":
+		return unmarshal(c.Content, yaml.Unmarshal)
+	case "toml":
+		return unmarshal(c.Content, toml.Unmarshal)
 	default:
 		return nil, errors.New("invalid encoding format")
 	}
+}
 
+func unmarshal(content []byte, fn func(data []byte, v interface{}) error) (dest interface{}, err error) {
 	dest = make(map[string]interface{})
-	if err := codec.Unmarshal(c.Content, &dest); err == nil {
-		return dest, nil
+	if err = fn(content, &dest); err == nil {
+		return
 	}
 
 	dest = make([]interface{}, 0)
-	if err := codec.Unmarshal(c.Content, &dest); err != nil {
-		return nil, err
-	}
+	err = fn(content, &dest)
 
-	return dest, nil
+	return
 }
