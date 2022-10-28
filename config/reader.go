@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"github.com/dobyte/due/env"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/internal/value"
 	"github.com/imdario/mergo"
@@ -15,16 +14,14 @@ import (
 )
 
 type Reader interface {
-	// Watch 监听配置变化
-	Watch()
-	// Close 关闭配置监听
-	Close()
 	// Has 是否存在配置
 	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
+	// Close 关闭配置监听
+	Close()
 }
 
 func init() {
@@ -50,22 +47,13 @@ func NewReader(opts ...Option) Reader {
 		opt(o)
 	}
 
-	if len(o.sources) == 0 {
-		path := env.Get(dueConfigEnvName, defaultConfigPath).String()
-		o.sources = append(o.sources, NewSource(path))
-	}
-
 	r := &defaultReader{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
-
-	return r
-}
-
-// Watch 监听配置变化
-func (r *defaultReader) Watch() {
 	r.init()
 	r.watch()
+
+	return r
 }
 
 // 初始化配置源

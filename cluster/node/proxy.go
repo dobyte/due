@@ -29,7 +29,7 @@ type Proxy interface {
 	// GetNID 获取当前节点ID
 	GetNID() string
 	// AddRouteHandler 添加路由处理器
-	AddRouteHandler(route int32, encrypt, stateful bool, handler RouteHandler)
+	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 	SetDefaultRouteHandler(handler RouteHandler)
 	// AddEventListener 添加事件监听器
@@ -82,8 +82,8 @@ func (p *proxy) GetNID() string {
 }
 
 // AddRouteHandler 添加路由处理器
-func (p *proxy) AddRouteHandler(route int32, encrypt, stateful bool, handler RouteHandler) {
-	p.node.addRouteHandler(route, encrypt, stateful, handler)
+func (p *proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler) {
+	p.node.addRouteHandler(route, stateful, handler)
 }
 
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -304,7 +304,7 @@ func (p *proxy) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (p *proxy) directPush(ctx context.Context, args *PushArgs) error {
-	buffer, err := p.toBuffer(args.Message.Data, args.Encrypt)
+	buffer, err := p.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func (p *proxy) directPush(ctx context.Context, args *PushArgs) error {
 
 // 间接推送
 func (p *proxy) indirectPush(ctx context.Context, args *PushArgs) error {
-	buffer, err := p.toBuffer(args.Message.Data, args.Encrypt)
+	buffer, err := p.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
@@ -346,10 +346,9 @@ func (p *proxy) Response(ctx context.Context, req Request, message interface{}) 
 	switch {
 	case req.GID() != "":
 		return p.directPush(ctx, &PushArgs{
-			GID:     req.GID(),
-			Kind:    session.Conn,
-			Target:  req.CID(),
-			Encrypt: p.node.checkRouteEncrypt(req.Route()),
+			GID:    req.GID(),
+			Kind:   session.Conn,
+			Target: req.CID(),
 			Message: &Message{
 				Seq:   req.Seq(),
 				Route: req.Route(),
@@ -393,7 +392,7 @@ func (p *proxy) directMulticast(ctx context.Context, args *MulticastArgs) (int64
 		return 0, ErrReceiveTargetEmpty
 	}
 
-	buffer, err := p.toBuffer(args.Message.Data, args.Encrypt)
+	buffer, err := p.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return 0, err
 	}
@@ -412,7 +411,7 @@ func (p *proxy) directMulticast(ctx context.Context, args *MulticastArgs) (int64
 
 // 间接推送组播消息
 func (p *proxy) indirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
-	buffer, err := p.toBuffer(args.Message.Data, args.Encrypt)
+	buffer, err := p.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return 0, err
 	}
@@ -451,7 +450,7 @@ func (p *proxy) indirectMulticast(ctx context.Context, args *MulticastArgs) (int
 
 // Broadcast 推送广播消息
 func (p *proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
-	buffer, err := p.toBuffer(args.Message.Data, args.Encrypt)
+	buffer, err := p.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return 0, err
 	}
@@ -594,20 +593,16 @@ func (p *proxy) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
 		return v, nil
 	}
 
-	buf, err := p.node.opts.codec.Marshal(message)
+	data, err := p.node.opts.codec.Marshal(message)
 	if err != nil {
 		return nil, err
 	}
 
-	if !encrypt {
-		return buf, nil
+	if encrypt && p.node.opts.encryptor != nil {
+		return p.node.opts.encryptor.Encrypt(data)
 	}
 
-	if p.node.opts.encryptor == nil {
-		return nil, errors.New("missing encryptor")
-	}
-
-	return p.node.opts.encryptor.Encrypt(buf)
+	return data, nil
 }
 
 // 执行RPC调用

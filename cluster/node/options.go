@@ -5,7 +5,6 @@ import (
 	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
@@ -16,15 +15,17 @@ import (
 
 const (
 	defaultName    = "node"          // 默认节点名称
-	defaultCodec   = proto.Name      // 默认编解码器名称
+	defaultCodec   = "proto"         // 默认编解码器名称
 	defaultTimeout = 3 * time.Second // 默认超时时间
 )
 
 const (
-	defaultIDKey      = "config.node.id"
-	defaultNameKey    = "config.node.name"
-	defaultCodecKey   = "config.node.codec"
-	defaultTimeoutKey = "config.node.timeout"
+	defaultIDKey        = "config.node.id"
+	defaultNameKey      = "config.node.name"
+	defaultCodecKey     = "config.node.codec"
+	defaultTimeoutKey   = "config.node.timeout"
+	defaultEncryptorKey = "config.node.encryptor"
+	defaultDecryptorKey = "config.node.decryptor"
 )
 
 type Option func(o *options)
@@ -70,6 +71,16 @@ func defaultOptions() *options {
 	timeout := config.Get(defaultTimeoutKey).Int64()
 	if timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
+	}
+
+	encryptor := config.Get(defaultEncryptorKey).String()
+	if encryptor != "" {
+		opts.encryptor = crypto.InvokeEncryptor(encryptor)
+	}
+
+	decryptor := config.Get(defaultDecryptorKey).String()
+	if decryptor != "" {
+		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts

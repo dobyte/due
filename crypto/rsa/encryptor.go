@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/errors"
 	"math"
 )
@@ -12,6 +13,10 @@ type Encryptor struct {
 	err       error
 	opts      *encryptorOptions
 	publicKey *rsa.PublicKey
+}
+
+func init() {
+	crypto.RegistryEncryptor(NewEncryptor())
 }
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
@@ -24,6 +29,11 @@ func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	e.init()
 
 	return e
+}
+
+// Name 名称
+func (e *Encryptor) Name() string {
+	return Name
 }
 
 // Encrypt 加密

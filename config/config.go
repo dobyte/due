@@ -14,9 +14,11 @@ const (
 var globalReader Reader
 
 func init() {
-	def := flag.String("config", defaultConfigPath, "Specify the configuration file path")
-	path := env.Get(dueConfigEnvName, *def).String()
-	SetReader(NewReader(WithSources(NewSource(path))))
+	path := flag.String("config", defaultConfigPath, "Specify the configuration file path")
+	if v := env.Get(dueConfigEnvName).String(); v != "" {
+		path = &v
+	}
+	SetReader(NewReader(WithSources(NewSource(*path))))
 }
 
 // SetReader 设置配置读取器
@@ -42,11 +44,6 @@ func Get(pattern string, def ...interface{}) value.Value {
 // Set 设置配置值
 func Set(pattern string, value interface{}) error {
 	return globalReader.Set(pattern, value)
-}
-
-// Watch 监听配置变化
-func Watch() {
-	globalReader.Watch()
 }
 
 // Close 关闭配置监听

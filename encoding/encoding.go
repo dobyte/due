@@ -8,7 +8,7 @@
 package encoding
 
 import (
-	"log"
+	"github.com/dobyte/due/log"
 )
 
 type Codec interface {
@@ -29,7 +29,11 @@ func Register(codec Codec) {
 	}
 
 	if codec.Name() == "" {
-		log.Fatal("can't register a codec without a name")
+		log.Fatal("can't register a codec without name")
+	}
+
+	if _, ok := codecs[codec.Name()]; ok {
+		log.Warnf("the old %s codec will be overwritten", codec.Name())
 	}
 
 	codecs[codec.Name()] = codec

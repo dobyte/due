@@ -27,7 +27,6 @@ type PushArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Target  int64        // 会话目标，CID 或 UID
-	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
@@ -35,13 +34,11 @@ type MulticastArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Targets []int64      // 会话目标，CID 或 UID
-	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
 type BroadcastArgs struct {
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
-	Encrypt bool         // 是否加密
 	Message *Message     // 消息
 }
 
