@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/utils/xpath"
 	"io"
 	"os"
 	"path"
@@ -111,45 +112,52 @@ func (k *Key) marshalPrivateKey(format Format, out io.Writer) (err error) {
 }
 
 // SaveKeyPair 保存秘钥对
-func (k *Key) SaveKeyPair(format Format, dir string, filename string) (err error) {
-	err = k.savePublicKey(format, dir, filename)
+func (k *Key) SaveKeyPair(format Format, dir string, file string) (err error) {
+	err = k.savePublicKey(format, dir, file)
 	if err != nil {
 		return
 	}
 
-	return k.savePrivateKey(format, dir, filename)
+	return k.savePrivateKey(format, dir, file)
 }
 
 // 保存公钥
-func (k *Key) savePrivateKey(format Format, dir string, filename string) (err error) {
-	filepath := path.Join(dir, filename)
+func (k *Key) savePrivateKey(format Format, dir string, file string) (err error) {
+	filepath := path.Join(dir, file)
 	defer func() {
 		if err != nil {
 			_ = os.Remove(filepath)
 		}
 	}()
 
-	file, err := os.Create(filepath)
+	f, err := os.Create(filepath)
 	if err != nil {
 		return
 	}
 
-	return k.marshalPrivateKey(format, file)
+	return k.marshalPrivateKey(format, f)
 }
 
 // 保存公钥
-func (k *Key) savePublicKey(format Format, dir string, filename string) (err error) {
-	filepath := path.Join(dir, filename+".pub")
+func (k *Key) savePublicKey(format Format, dir string, file string) (err error) {
+	base, _, name, ext := xpath.Split(file)
+	if ext != "" {
+		file = name + ".pub." + ext
+	} else {
+		file = name + ".pub"
+	}
+
+	filepath := path.Join(dir, base, file)
 	defer func() {
 		if err != nil {
 			_ = os.Remove(filepath)
 		}
 	}()
 
-	file, err := os.Create(filepath)
+	f, err := os.Create(filepath)
 	if err != nil {
 		return
 	}
 
-	return k.marshalPublicKey(format, file)
+	return k.marshalPublicKey(format, f)
 }

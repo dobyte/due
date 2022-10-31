@@ -65,14 +65,12 @@ func (h Hash) Size() int {
 }
 
 func loadKey(key string) (*pem.Block, error) {
-	isFile, err := xpath.IsFile(key)
-	if err != nil {
-		return nil, err
-	}
+	var (
+		err    error
+		buffer []byte
+	)
 
-	var buffer []byte
-
-	if isFile {
+	if xpath.IsFile(key) {
 		buffer, err = ioutil.ReadFile(key)
 		if err != nil {
 			return nil, err

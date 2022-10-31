@@ -64,7 +64,7 @@ func TestKey_SaveKeyPair(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = key.SaveKeyPair(rsa.PKCS1, "./pem", "key")
+	err = key.SaveKeyPair(rsa.PKCS1, "./pem", "key.pem")
 	if err != nil {
 		t.Fatal(err)
 	}
