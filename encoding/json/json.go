@@ -23,6 +23,10 @@ func init() {
 
 type codec struct{}
 
+func NewCodec() *codec {
+	return &codec{}
+}
+
 // Name 编解码器名称
 func (codec) Name() string {
 	return Name

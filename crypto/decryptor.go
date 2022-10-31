@@ -35,6 +35,7 @@ func RegistryDecryptor(decryptor Decryptor) {
 
 // InvokeDecryptor 调用解密器
 func InvokeDecryptor(name string) Decryptor {
+	name = strings.ToLower(name)
 	decryptor, ok := decryptors[name]
 	if !ok {
 		log.Fatalf("%s decryptor is not registered", name)

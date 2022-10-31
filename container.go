@@ -2,14 +2,8 @@ package due
 
 import (
 	"github.com/dobyte/due/component"
-	_ "github.com/dobyte/due/crypto/rsa"
-	_ "github.com/dobyte/due/encoding/json"
-	_ "github.com/dobyte/due/encoding/proto"
-	_ "github.com/dobyte/due/encoding/toml"
-	_ "github.com/dobyte/due/encoding/xml"
-	_ "github.com/dobyte/due/encoding/yaml"
+	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/mode"
 
 	"os"
 	"os/signal"
@@ -44,29 +38,42 @@ func (c *Container) Serve() {
 		comp.Start()
 	}
 
-	signal.Notify(c.sig, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGTERM)
-
-	select {
-	case s := <-c.sig:
-		log.Warnf("container got signal %v", s)
-	case <-c.die:
+	defer func() {
 		log.Warn("container will close")
-	}
+		signal.Stop(c.sig)
+		close(c.die)
+		for _, comp := range c.components {
+			comp.Destroy()
+		}
+	}()
 
-	for _, comp := range c.components {
-		comp.Destroy()
+	signal.Notify(c.sig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2)
+
+RESERVE:
+	select {
+	case sig := <-c.sig:
+		log.Warnf("container got signal %v", sig)
+		switch sig {
+		case syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGTERM: // 监听关闭
+			return
+		case syscall.SIGUSR1, syscall.SIGUSR2: // 监听重启
+			for _, comp := range c.components {
+				comp.Restart()
+			}
+
+			goto RESERVE
+		}
+	case <-c.die:
+		return
 	}
 }
 
 // Close 关闭容器
 func (c *Container) Close() {
 	c.die <- struct{}{}
+	config.Close()
 }
 
 func debugPrint() {
-	if !mode.IsDebugMode() {
-		return
-	}
-
 	log.Debug("Welcome to the due framework, Learn more at https://github.com/dobyte/due")
 }

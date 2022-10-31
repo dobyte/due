@@ -36,7 +36,6 @@ func RegistryEncryptor(encryptor Encryptor) {
 // InvokeEncryptor 调用加密器
 func InvokeEncryptor(name string) Encryptor {
 	name = strings.ToLower(name)
-
 	encryptor, ok := encryptors[name]
 	if !ok {
 		log.Fatalf("%s encryptor is not registered", name)
