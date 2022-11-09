@@ -2,6 +2,7 @@ package rsa_test
 
 import (
 	"fmt"
+	"github.com/dobyte/due/crypto/internal/hash"
 	"github.com/dobyte/due/crypto/rsa"
 	"github.com/dobyte/due/utils/xrand"
 	"testing"
@@ -10,19 +11,33 @@ import (
 var (
 	encryptor *rsa.Encryptor
 	decryptor *rsa.Decryptor
+	signer    *rsa.Signer
+	verifier  *rsa.Verifier
 )
 
 func init() {
 	encryptor = rsa.NewEncryptor(
-		rsa.WithEncryptorHash(rsa.SHA256),
+		rsa.WithEncryptorHash(hash.SHA256),
 		rsa.WithEncryptorPadding(rsa.OAEP),
-		rsa.WithEncryptorPublicKey("./pem/pkcs1_key.pub"),
+		rsa.WithEncryptorPublicKey("./pem/key.pem"),
 	)
 
 	decryptor = rsa.NewDecryptor(
-		rsa.WithDecryptorHash(rsa.SHA256),
+		rsa.WithDecryptorHash(hash.SHA256),
 		rsa.WithDecryptorPadding(rsa.OAEP),
-		rsa.WithDecryptorPrivateKey("./pem/pkcs1_key"),
+		rsa.WithDecryptorPrivateKey("./pem/key.pub.pem"),
+	)
+
+	signer = rsa.NewSigner(
+		rsa.WithSignerHash(hash.SHA256),
+		rsa.WithSignerPadding(rsa.PKCS),
+		rsa.WithSignerPrivateKey("./pem/key.pem"),
+	)
+
+	verifier = rsa.NewVerifier(
+		rsa.WithVerifierHash(hash.SHA256),
+		rsa.WithVerifierPadding(rsa.PKCS),
+		rsa.WithVerifierPublicKey("./pem/key.pub.pem"),
 	)
 }
 
@@ -44,28 +59,19 @@ func Test_Encrypt(t *testing.T) {
 	fmt.Println(string(data))
 }
 
-func TestGenerateKey(t *testing.T) {
-	key, err := rsa.GenerateKey(256)
+func Test_Sign(t *testing.T) {
+	str := xrand.Letters(20000)
+	bytes := []byte(str)
+
+	signature, err := signer.Sign(bytes)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	v, err := key.MarshalPublicKey(rsa.PKCS1)
+	ok, err := verifier.Verify(bytes, signature)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println(string(v))
-}
-
-func TestKey_SaveKeyPair(t *testing.T) {
-	key, err := rsa.GenerateKey(256)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = key.SaveKeyPair(rsa.PKCS1, "./pem", "key.pem")
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Log(ok)
 }

@@ -3,13 +3,11 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"fmt"
 )
 
 type Signer struct {
 	err        error
 	opts       *signerOptions
-	publicKey  *rsa.PublicKey
 	privateKey *rsa.PrivateKey
 }
 
@@ -26,7 +24,7 @@ func NewSigner(opts ...SignerOption) *Signer {
 }
 
 // Name 名称
-func (d *Signer) Name() string {
+func (s *Signer) Name() string {
 	return Name
 }
 
@@ -35,9 +33,6 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-
-	fmt.Println(s.privateKey.Size())
-	fmt.Println(s.privateKey.PublicKey.Size())
 
 	hash := s.opts.hash.Hash()
 	hashed := s.opts.hash.Sum(data)

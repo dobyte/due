@@ -3,6 +3,7 @@ package ecc_test
 import (
 	"fmt"
 	"github.com/dobyte/due/crypto/ecc"
+	"github.com/dobyte/due/crypto/internal/hash"
 	"github.com/dobyte/due/crypto/rsa"
 	"github.com/dobyte/due/utils/xrand"
 	"testing"
@@ -48,6 +49,8 @@ var (
 	eccDecryptor *ecc.Decryptor
 	rsaEncryptor *rsa.Encryptor
 	rsaDecryptor *rsa.Decryptor
+
+	signer *ecc.Signer
 )
 
 var (
@@ -75,6 +78,11 @@ func init() {
 	text = []byte(xrand.Letters(20000))
 	plaintext1, _ = eccEncryptor.Encrypt(text)
 	plaintext2, _ = rsaEncryptor.Encrypt(text)
+
+	signer = ecc.NewSigner(
+		ecc.WithSignerHash(hash.SHA256),
+		ecc.WithSignerPrivateKey("./pem/key.pem"),
+	)
 }
 
 func Test_Encrypt(t *testing.T) {
@@ -129,4 +137,21 @@ func Benchmark_RSA_Decryptor_Decrypt(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func Test_Sign(t *testing.T) {
+	str := xrand.Letters(20000)
+	bytes := []byte(str)
+
+	signature, err := signer.Sign(bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//ok, err := verifier.Verify(bytes, signature)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+
+	t.Log(string(signature))
 }

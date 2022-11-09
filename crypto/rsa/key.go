@@ -26,6 +26,7 @@ type Key struct {
 	prv *rsa.PrivateKey
 }
 
+// GenerateKey 生成秘钥
 func GenerateKey(bits int) (*Key, error) {
 	prv, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
@@ -35,10 +36,12 @@ func GenerateKey(bits int) (*Key, error) {
 	return &Key{prv: prv}, nil
 }
 
+// PublicKey 获取公钥
 func (k *Key) PublicKey() *rsa.PublicKey {
 	return &k.prv.PublicKey
 }
 
+// PrivateKey 获取私钥
 func (k *Key) PrivateKey() *rsa.PrivateKey {
 	return k.prv
 }

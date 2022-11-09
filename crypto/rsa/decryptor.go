@@ -4,18 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"math"
-
-	"github.com/dobyte/due/crypto"
 )
 
 type Decryptor struct {
 	err        error
 	opts       *decryptorOptions
 	privateKey *rsa.PrivateKey
-}
-
-func init() {
-	crypto.RegistryDecryptor(NewDecryptor())
 }
 
 func NewDecryptor(opts ...DecryptorOption) *Decryptor {

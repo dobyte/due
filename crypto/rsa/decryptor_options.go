@@ -22,7 +22,7 @@ type decryptorOptions struct {
 
 	// 填充规则。支持NORMAL和OAEP
 	// 默认为NORMAL
-	padding Padding
+	padding EncryptPadding
 
 	// 标签。加解密时必需一致
 	// 默认为空
@@ -35,7 +35,7 @@ type decryptorOptions struct {
 func defaultDecryptorOptions() *decryptorOptions {
 	return &decryptorOptions{
 		hash:       Hash(strings.ToLower(config.Get(defaultDecryptorHashKey).String())),
-		padding:    Padding(strings.ToUpper(config.Get(defaultDecryptorPaddingKey).String())),
+		padding:    EncryptPadding(strings.ToUpper(config.Get(defaultDecryptorPaddingKey).String())),
 		label:      config.Get(defaultDecryptorLabelKey).Bytes(),
 		privateKey: config.Get(defaultDecryptorPrivateKeyKey).String(),
 	}
@@ -47,7 +47,7 @@ func WithDecryptorHash(hash Hash) DecryptorOption {
 }
 
 // WithDecryptorPadding 设置解密填充规则
-func WithDecryptorPadding(padding Padding) DecryptorOption {
+func WithDecryptorPadding(padding EncryptPadding) DecryptorOption {
 	return func(o *decryptorOptions) { o.padding = padding }
 }
 

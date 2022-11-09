@@ -20,12 +20,10 @@ const (
 )
 
 const (
-	defaultIDKey        = "config.node.id"
-	defaultNameKey      = "config.node.name"
-	defaultCodecKey     = "config.node.codec"
-	defaultTimeoutKey   = "config.node.timeout"
-	defaultEncryptorKey = "config.node.encryptor"
-	defaultDecryptorKey = "config.node.decryptor"
+	defaultIDKey      = "config.node.id"
+	defaultNameKey    = "config.node.name"
+	defaultCodecKey   = "config.node.codec"
+	defaultTimeoutKey = "config.node.timeout"
 )
 
 type Option func(o *options)
@@ -71,16 +69,6 @@ func defaultOptions() *options {
 	timeout := config.Get(defaultTimeoutKey).Int64()
 	if timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	encryptor := config.Get(defaultEncryptorKey).String()
-	if encryptor != "" {
-		opts.encryptor = crypto.InvokeEncryptor(encryptor)
-	}
-
-	decryptor := config.Get(defaultDecryptorKey).String()
-	if decryptor != "" {
-		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts

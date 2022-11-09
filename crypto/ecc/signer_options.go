@@ -1,14 +1,13 @@
-package rsa
+package ecc
 
 import (
-	"strings"
-
 	"github.com/dobyte/due/config"
+	"strings"
 )
 
 const (
 	defaultSignerHashKey       = "config.crypto.rsa.signer.hash"
-	defaultSignerPaddingKey    = "config.crypto.rsa.signer.padding"
+	defaultSignerDelimiterKey  = "config.crypto.rsa.signer.delimiter"
 	defaultSignerPrivateKeyKey = "config.crypto.rsa.signer.privateKey"
 )
 
@@ -19,9 +18,8 @@ type signerOptions struct {
 	// 默认为sha256
 	hash Hash
 
-	// 填充规则。支持NORMAL和OAEP
-	// 默认为NORMAL
-	padding SignPadding
+	// 签名分隔符。
+	delimiter string
 
 	// 私钥。可设置文件路径或私钥串
 	privateKey string
@@ -30,7 +28,7 @@ type signerOptions struct {
 func defaultSignerOptions() *signerOptions {
 	return &signerOptions{
 		hash:       Hash(strings.ToLower(config.Get(defaultSignerHashKey).String())),
-		padding:    SignPadding(strings.ToUpper(config.Get(defaultSignerPaddingKey).String())),
+		delimiter:  config.Get(defaultSignerDelimiterKey, " ").String(),
 		privateKey: config.Get(defaultSignerPrivateKeyKey).String(),
 	}
 }
@@ -40,9 +38,9 @@ func WithSignerHash(hash Hash) SignerOption {
 	return func(o *signerOptions) { o.hash = hash }
 }
 
-// WithSignerPadding 设置加密填充规则
-func WithSignerPadding(padding SignPadding) SignerOption {
-	return func(o *signerOptions) { o.padding = padding }
+// WithSignerDelimiter 设置签名分割符
+func WithSignerDelimiter(delimiter string) SignerOption {
+	return func(o *signerOptions) { o.delimiter = delimiter }
 }
 
 // WithSignerPrivateKey 设置解密私钥

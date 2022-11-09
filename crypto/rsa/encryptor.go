@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"math"
 
-	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/errors"
 )
 
@@ -13,10 +12,6 @@ type Encryptor struct {
 	err       error
 	opts      *encryptorOptions
 	publicKey *rsa.PublicKey
-}
-
-func init() {
-	crypto.RegistryEncryptor(NewEncryptor())
 }
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {

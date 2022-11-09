@@ -5,7 +5,7 @@
  * @Desc: TODO
  */
 
-package rsa
+package hash
 
 import (
 	"crypto"
