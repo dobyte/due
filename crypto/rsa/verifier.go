@@ -2,6 +2,7 @@ package rsa
 
 import (
 	"crypto/rsa"
+	"github.com/dobyte/due/crypto"
 )
 
 type Verifier struct {
@@ -9,6 +10,8 @@ type Verifier struct {
 	opts      *verifierOption
 	publicKey *rsa.PublicKey
 }
+
+var _ crypto.Verifier = &Verifier{}
 
 func NewVerifier(opts ...VerifierOption) *Verifier {
 	o := defaultVerifierOptions()

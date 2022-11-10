@@ -3,6 +3,7 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"github.com/dobyte/due/crypto"
 	"math"
 
 	"github.com/dobyte/due/errors"
@@ -13,6 +14,8 @@ type Encryptor struct {
 	opts      *encryptorOptions
 	publicKey *rsa.PublicKey
 }
+
+var _ crypto.Encryptor = &Encryptor{}
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()

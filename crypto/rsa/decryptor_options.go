@@ -2,6 +2,7 @@ package rsa
 
 import (
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/crypto/hash"
 	"github.com/dobyte/due/utils/xconv"
 	"strings"
 )
@@ -18,7 +19,7 @@ type DecryptorOption func(o *decryptorOptions)
 type decryptorOptions struct {
 	// hash算法。支持sha1、sha224、sha256、sha384、sha512
 	// 默认为sha256
-	hash Hash
+	hash hash.Hash
 
 	// 填充规则。支持NORMAL和OAEP
 	// 默认为NORMAL
@@ -34,7 +35,7 @@ type decryptorOptions struct {
 
 func defaultDecryptorOptions() *decryptorOptions {
 	return &decryptorOptions{
-		hash:       Hash(strings.ToLower(config.Get(defaultDecryptorHashKey).String())),
+		hash:       hash.Hash(strings.ToLower(config.Get(defaultDecryptorHashKey).String())),
 		padding:    EncryptPadding(strings.ToUpper(config.Get(defaultDecryptorPaddingKey).String())),
 		label:      config.Get(defaultDecryptorLabelKey).Bytes(),
 		privateKey: config.Get(defaultDecryptorPrivateKeyKey).String(),
@@ -42,7 +43,7 @@ func defaultDecryptorOptions() *decryptorOptions {
 }
 
 // WithDecryptorHash 设置解密hash算法
-func WithDecryptorHash(hash Hash) DecryptorOption {
+func WithDecryptorHash(hash hash.Hash) DecryptorOption {
 	return func(o *decryptorOptions) { o.hash = hash }
 }
 

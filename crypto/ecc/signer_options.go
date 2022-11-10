@@ -2,6 +2,7 @@ package ecc
 
 import (
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/crypto/hash"
 	"strings"
 )
 
@@ -16,7 +17,7 @@ type SignerOption func(o *signerOptions)
 type signerOptions struct {
 	// hash算法。支持sha1、sha224、sha256、sha384、sha512
 	// 默认为sha256
-	hash Hash
+	hash hash.Hash
 
 	// 签名分隔符。
 	delimiter string
@@ -27,14 +28,14 @@ type signerOptions struct {
 
 func defaultSignerOptions() *signerOptions {
 	return &signerOptions{
-		hash:       Hash(strings.ToLower(config.Get(defaultSignerHashKey).String())),
+		hash:       hash.Hash(strings.ToLower(config.Get(defaultSignerHashKey).String())),
 		delimiter:  config.Get(defaultSignerDelimiterKey, " ").String(),
 		privateKey: config.Get(defaultSignerPrivateKeyKey).String(),
 	}
 }
 
 // WithSignerHash 设置加密hash算法
-func WithSignerHash(hash Hash) SignerOption {
+func WithSignerHash(hash hash.Hash) SignerOption {
 	return func(o *signerOptions) { o.hash = hash }
 }
 

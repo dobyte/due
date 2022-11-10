@@ -1,4 +1,4 @@
-package rsa
+package ecc
 
 import (
 	"github.com/dobyte/due/config"
@@ -8,7 +8,7 @@ import (
 
 const (
 	defaultVerifierHashKey      = "config.crypto.rsa.verifier.hash"
-	defaultVerifierPaddingKey   = "config.crypto.rsa.verifier.padding"
+	defaultVerifierDelimiterKey = "config.crypto.rsa.verifier.delimiter"
 	defaultVerifierPublicKeyKey = "config.crypto.rsa.verifier.publicKey"
 )
 
@@ -19,9 +19,8 @@ type verifierOption struct {
 	// 默认为sha256
 	hash hash.Hash
 
-	// 填充规则。支持NORMAL和OAEP
-	// 默认为NORMAL
-	padding SignPadding
+	// 签名分隔符。
+	delimiter string
 
 	// 公钥。可设置文件路径或公钥串
 	publicKey string
@@ -30,7 +29,7 @@ type verifierOption struct {
 func defaultVerifierOptions() *verifierOption {
 	return &verifierOption{
 		hash:      hash.Hash(strings.ToLower(config.Get(defaultVerifierHashKey).String())),
-		padding:   SignPadding(strings.ToUpper(config.Get(defaultVerifierPaddingKey).String())),
+		delimiter: config.Get(defaultVerifierDelimiterKey, " ").String(),
 		publicKey: config.Get(defaultVerifierPublicKeyKey).String(),
 	}
 }
@@ -40,9 +39,9 @@ func WithVerifierHash(hash hash.Hash) VerifierOption {
 	return func(o *verifierOption) { o.hash = hash }
 }
 
-// WithVerifierPadding 设置加密填充规则
-func WithVerifierPadding(padding SignPadding) VerifierOption {
-	return func(o *verifierOption) { o.padding = padding }
+// WithVerifierDelimiter 设置签名分割符
+func WithVerifierDelimiter(delimiter string) VerifierOption {
+	return func(o *verifierOption) { o.delimiter = delimiter }
 }
 
 // WithVerifierPublicKey 设置验签公钥

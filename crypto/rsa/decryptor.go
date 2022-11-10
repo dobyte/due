@@ -3,6 +3,7 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"github.com/dobyte/due/crypto"
 	"math"
 )
 
@@ -11,6 +12,8 @@ type Decryptor struct {
 	opts       *decryptorOptions
 	privateKey *rsa.PrivateKey
 }
+
+var _ crypto.Decryptor = &Decryptor{}
 
 func NewDecryptor(opts ...DecryptorOption) *Decryptor {
 	o := defaultDecryptorOptions()

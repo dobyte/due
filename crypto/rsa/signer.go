@@ -3,6 +3,7 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"github.com/dobyte/due/crypto"
 )
 
 type Signer struct {
@@ -10,6 +11,8 @@ type Signer struct {
 	opts       *signerOptions
 	privateKey *rsa.PrivateKey
 }
+
+var _ crypto.Signer = &Signer{}
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()

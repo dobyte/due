@@ -2,6 +2,7 @@ package ecc
 
 import (
 	"crypto/rand"
+	"github.com/dobyte/due/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 )
 
@@ -10,6 +11,8 @@ type Encryptor struct {
 	opts      *encryptorOptions
 	publicKey *ecies.PublicKey
 }
+
+var _ crypto.Encryptor = &Encryptor{}
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()

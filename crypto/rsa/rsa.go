@@ -1,7 +1,5 @@
 package rsa
 
-import "github.com/dobyte/due/crypto/internal/hash"
-
 const Name = "rsa"
 
 // EncryptPadding 加密填充算法
@@ -19,5 +17,3 @@ const (
 	PKCS SignPadding = "PKCS" // RSA PKCS #1 v1.5
 	PSS  SignPadding = "PSS"  // RSA PSS
 )
-
-type Hash = hash.Hash

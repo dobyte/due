@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"github.com/dobyte/due/crypto"
 )
 
 type Signer struct {
@@ -11,6 +12,8 @@ type Signer struct {
 	opts       *signerOptions
 	privateKey *ecdsa.PrivateKey
 }
+
+var _ crypto.Signer = &Signer{}
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
