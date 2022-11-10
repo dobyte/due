@@ -2,6 +2,7 @@ package rsa
 
 import (
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/crypto/hash"
 	"github.com/dobyte/due/utils/xconv"
 	"strings"
 )
@@ -19,11 +20,11 @@ type EncryptorOption func(o *encryptorOptions)
 type encryptorOptions struct {
 	// hash算法。支持sha1、sha224、sha256、sha384、sha512
 	// 默认为sha256
-	hash Hash
+	hash hash.Hash
 
 	// 填充规则。支持NORMAL和OAEP
 	// 默认为NORMAL
-	padding Padding
+	padding EncryptPadding
 
 	// 标签。加解密时必需一致
 	// 默认为空
@@ -39,8 +40,8 @@ type encryptorOptions struct {
 
 func defaultEncryptorOptions() *encryptorOptions {
 	return &encryptorOptions{
-		hash:      Hash(strings.ToLower(config.Get(defaultEncryptorHashKey).String())),
-		padding:   Padding(strings.ToUpper(config.Get(defaultEncryptorPaddingKey).String())),
+		hash:      hash.Hash(strings.ToLower(config.Get(defaultEncryptorHashKey).String())),
+		padding:   EncryptPadding(strings.ToUpper(config.Get(defaultEncryptorPaddingKey).String())),
 		label:     config.Get(defaultEncryptorLabelKey).Bytes(),
 		blockSize: config.Get(defaultEncryptorBlockSizeKey).Int(),
 		publicKey: config.Get(defaultEncryptorPublicKeyKey).String(),
@@ -48,12 +49,12 @@ func defaultEncryptorOptions() *encryptorOptions {
 }
 
 // WithEncryptorHash 设置加密hash算法
-func WithEncryptorHash(hash Hash) EncryptorOption {
+func WithEncryptorHash(hash hash.Hash) EncryptorOption {
 	return func(o *encryptorOptions) { o.hash = hash }
 }
 
 // WithEncryptorPadding 设置加密填充规则
-func WithEncryptorPadding(padding Padding) EncryptorOption {
+func WithEncryptorPadding(padding EncryptPadding) EncryptorOption {
 	return func(o *encryptorOptions) { o.padding = padding }
 }
 

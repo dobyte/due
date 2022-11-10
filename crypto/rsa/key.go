@@ -7,8 +7,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/utils/xconv"
 	"github.com/dobyte/due/utils/xpath"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 )
@@ -24,6 +26,7 @@ type Key struct {
 	prv *rsa.PrivateKey
 }
 
+// GenerateKey 生成秘钥
 func GenerateKey(bits int) (*Key, error) {
 	prv, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
@@ -33,10 +36,12 @@ func GenerateKey(bits int) (*Key, error) {
 	return &Key{prv: prv}, nil
 }
 
+// PublicKey 获取公钥
 func (k *Key) PublicKey() *rsa.PublicKey {
 	return &k.prv.PublicKey
 }
 
+// PrivateKey 获取私钥
 func (k *Key) PrivateKey() *rsa.PrivateKey {
 	return k.prv
 }
@@ -160,4 +165,65 @@ func (k *Key) savePublicKey(format Format, dir string, file string) (err error) 
 	}
 
 	return k.marshalPublicKey(format, f)
+}
+
+func loadKey(key string) (*pem.Block, error) {
+	var (
+		err    error
+		buffer []byte
+	)
+
+	if xpath.IsFile(key) {
+		buffer, err = ioutil.ReadFile(key)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		buffer = xconv.StringToBytes(key)
+	}
+
+	block, _ := pem.Decode(buffer)
+
+	return block, nil
+}
+
+func parsePublicKey(publicKey string) (*rsa.PublicKey, error) {
+	black, err := loadKey(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if black == nil {
+		return nil, errors.New("invalid public key")
+	}
+
+	pkcs, err := x509.ParsePKCS1PublicKey(black.Bytes)
+	if err == nil {
+		return pkcs, nil
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(black.Bytes)
+	if err == nil {
+		return pub.(*rsa.PublicKey), nil
+	}
+
+	return nil, err
+}
+
+func parsePrivateKey(privateKey string) (*rsa.PrivateKey, error) {
+	black, err := loadKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if black == nil {
+		return nil, errors.New("invalid private key")
+	}
+
+	priv, err := x509.ParsePKCS8PrivateKey(black.Bytes)
+	if err == nil {
+		return priv.(*rsa.PrivateKey), nil
+	}
+
+	return x509.ParsePKCS1PrivateKey(black.Bytes)
 }

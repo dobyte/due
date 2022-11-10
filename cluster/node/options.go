@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xuuid"
+	"strings"
 	"time"
 )
 
@@ -19,12 +20,10 @@ const (
 )
 
 const (
-	defaultIDKey        = "config.cluster.node.id"
-	defaultNameKey      = "config.cluster.node.name"
-	defaultCodecKey     = "config.cluster.node.codec"
-	defaultTimeoutKey   = "config.cluster.node.timeout"
-	defaultEncryptorKey = "config.cluster.node.encryptor"
-	defaultDecryptorKey = "config.cluster.node.decryptor"
+	defaultIDKey      = "config.node.id"
+	defaultNameKey    = "config.node.name"
+	defaultCodecKey   = "config.node.codec"
+	defaultTimeoutKey = "config.node.timeout"
 )
 
 type Option func(o *options)
@@ -64,22 +63,12 @@ func defaultOptions() *options {
 
 	codec := config.Get(defaultCodecKey).String()
 	if codec != "" {
-		opts.codec = encoding.Invoke(codec)
+		opts.codec = encoding.Invoke(strings.ToLower(codec))
 	}
 
 	timeout := config.Get(defaultTimeoutKey).Int64()
 	if timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	encryptor := config.Get(defaultEncryptorKey).String()
-	if encryptor != "" {
-		opts.encryptor = crypto.InvokeEncryptor(encryptor)
-	}
-
-	decryptor := config.Get(defaultDecryptorKey).String()
-	if decryptor != "" {
-		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts

@@ -13,10 +13,6 @@
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 加密器。不设置，则不对发送给客户端的消息进行加密。可选：rsa
-        encryptor = "rsa"
-        # 解密器。不设置，则不对客户端发送的消息进行加密。可选：rsa
-        decryptor = "rsa"
 [transport]
     # GRPC相关配置
     [transport.grpc]
@@ -267,8 +263,8 @@
         # key前缀
         prefix = "due"
 [crypto]
+    # RSA设置
     [crypto.rsa]
-        # RSA加密设置
         [crypto.rsa.encryptor]
             # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
             hash = "SHA256"
@@ -280,7 +276,6 @@
             blockSize = 0
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
-        # RSA加密设置
         [crypto.rsa.decryptor]
             # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
             hash = "SHA256"
@@ -290,3 +285,47 @@
             label = ""
             # 私钥。可设置文件路径或私钥串
             privateKey = ""
+        [crypto.rsa.signer]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 填充规则，不区分大小写。可选：PKCS | PSS
+            padding = "PSS"
+            # 私钥。可设置文件路径或私钥串
+            privateKey = ""
+        [crypto.rsa.verifier]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 填充规则，不区分大小写。可选：PKCS | PSS
+            padding = "PSS"
+            # 公钥，可设置文件路径或公钥串
+            publicKey = ""
+    # ECC设置
+    [crypto.ecc]
+        [crypto.ecc.encryptor]
+            # 共享信息。加解密时必需一致
+            s1 = ""
+            # 共享信息。加解密时必需一致
+            s2 = ""
+            # 公钥，可设置文件路径或公钥串
+            publicKey = ""
+        [crypto.ecc.decryptor]
+            # 共享信息。加解密时必需一致
+            s1 = ""
+            # 共享信息。加解密时必需一致
+            s2 = ""
+            # 私钥。可设置文件路径或私钥串
+            privateKey = ""
+        [crypto.ecc.signer]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
+            delimiter = " "
+            # 私钥。可设置文件路径或私钥串
+            privateKey = ""
+        [crypto.ecc.verifier]
+            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+            hash = "SHA256"
+            # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
+            delimiter = " "
+            # 公钥，可设置文件路径或公钥串
+            publicKey = ""

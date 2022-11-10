@@ -193,12 +193,47 @@ func (v *value) Map() map[string]interface{} {
 }
 
 func (v *value) Scan(pointer interface{}) error {
-	b, err := json.Marshal(v.Value())
-	if err != nil {
-		return err
+	switch p := pointer.(type) {
+	case *int:
+		*p = v.Int()
+	case *int8:
+		*p = v.Int8()
+	case *int16:
+		*p = v.Int16()
+	case *int32:
+		*p = v.Int32()
+	case *int64:
+		*p = v.Int64()
+	case *uint:
+		*p = v.Uint()
+	case *uint8:
+		*p = v.Uint8()
+	case *uint16:
+		*p = v.Uint16()
+	case *uint32:
+		*p = v.Uint32()
+	case *uint64:
+		*p = v.Uint64()
+	case *float32:
+		*p = v.Float32()
+	case *float64:
+		*p = v.Float64()
+	case *bool:
+		*p = v.Bool()
+	case *string:
+		*p = v.String()
+	case *time.Duration:
+		*p = v.Duration()
+	default:
+		b, err := json.Marshal(v.Value())
+		if err != nil {
+			return err
+		}
+
+		return json.Unmarshal(b, pointer)
 	}
 
-	return json.Unmarshal(b, pointer)
+	return nil
 }
 
 func (v *value) Value() interface{} {

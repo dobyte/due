@@ -3,10 +3,10 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
 	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/errors"
 	"math"
+
+	"github.com/dobyte/due/errors"
 )
 
 type Encryptor struct {
@@ -15,9 +15,7 @@ type Encryptor struct {
 	publicKey *rsa.PublicKey
 }
 
-func init() {
-	crypto.RegistryEncryptor(NewEncryptor())
-}
+var _ crypto.Encryptor = &Encryptor{}
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
@@ -75,7 +73,7 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 }
 
 func (e *Encryptor) init() {
-	e.publicKey, e.err = e.parsePublicKey()
+	e.publicKey, e.err = parsePublicKey(e.opts.publicKey)
 	if e.err != nil {
 		return
 	}
@@ -93,27 +91,4 @@ func (e *Encryptor) init() {
 	} else if e.opts.blockSize > blockSize {
 		e.err = errors.New("block message too long for RSA public key size")
 	}
-}
-
-func (e *Encryptor) parsePublicKey() (*rsa.PublicKey, error) {
-	black, err := loadKey(e.opts.publicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if black == nil {
-		return nil, errors.New("invalid public key")
-	}
-
-	pkcs, err := x509.ParsePKCS1PublicKey(black.Bytes)
-	if err == nil {
-		return pkcs, nil
-	}
-
-	pub, err := x509.ParsePKIXPublicKey(black.Bytes)
-	if err == nil {
-		return pub.(*rsa.PublicKey), nil
-	}
-
-	return nil, err
 }

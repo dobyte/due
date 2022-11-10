@@ -1,6 +1,7 @@
 package due
 
 import (
+	_ "github.com/dobyte/due/crypto/ecc"
 	_ "github.com/dobyte/due/crypto/rsa"
 	_ "github.com/dobyte/due/encoding/json"
 	_ "github.com/dobyte/due/encoding/proto"
