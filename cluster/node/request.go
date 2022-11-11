@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"github.com/dobyte/due/session"
 )
 
 type Request interface {
@@ -32,6 +33,8 @@ type Request interface {
 	Parse(v interface{}) error
 	// Context 获取上线文
 	Context() context.Context
+	// GetIP 获取IP地址
+	GetIP() (string, error)
 	// Response 响应请求
 	Response(message interface{}) error
 	// BindGate 绑定网关
@@ -115,6 +118,15 @@ func (r *request) Parse(v interface{}) (err error) {
 // Context 获取上线文
 func (r *request) Context() context.Context {
 	return context.Background()
+}
+
+// GetIP 获取IP地址
+func (r *request) GetIP() (string, error) {
+	return r.node.proxy.GetIP(r.Context(), &GetIPArgs{
+		GID:    r.gid,
+		Kind:   session.Conn,
+		Target: r.cid,
+	})
 }
 
 // Response 响应请求
