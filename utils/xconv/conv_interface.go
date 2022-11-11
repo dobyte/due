@@ -28,3 +28,8 @@ func Interfaces(any interface{}) (slice []interface{}) {
 
 	return
 }
+
+func InterfacesPointer(any interface{}) *[]interface{} {
+	v := Interfaces(any)
+	return &v
+}

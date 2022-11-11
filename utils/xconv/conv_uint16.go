@@ -209,3 +209,13 @@ func Uint16s(any interface{}) (slice []uint16) {
 
 	return
 }
+
+func Uint16Pointer(any interface{}) *uint16 {
+	v := Uint16(any)
+	return &v
+}
+
+func Uint16sPointer(any interface{}) *[]uint16 {
+	v := Uint16s(any)
+	return &v
+}

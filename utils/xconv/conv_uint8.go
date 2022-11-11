@@ -209,3 +209,13 @@ func Uint8s(any interface{}) (slice []uint8) {
 
 	return
 }
+
+func Uint8Pointer(any interface{}) *uint8 {
+	v := Uint8(any)
+	return &v
+}
+
+func Uint8sPointer(any interface{}) *[]uint8 {
+	v := Uint8s(any)
+	return &v
+}

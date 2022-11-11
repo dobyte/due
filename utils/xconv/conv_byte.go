@@ -22,3 +22,13 @@ func Bytes(any interface{}) []byte {
 		return nil
 	}
 }
+
+func BytePointer(any interface{}) *byte {
+	v := Byte(any)
+	return &v
+}
+
+func BytesPointer(any interface{}) *[]byte {
+	v := Bytes(any)
+	return &v
+}

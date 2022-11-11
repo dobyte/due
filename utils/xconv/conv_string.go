@@ -332,3 +332,13 @@ func Strings(any interface{}) (slice []string) {
 
 	return
 }
+
+func StringPointer(any interface{}) *string {
+	v := String(any)
+	return &v
+}
+
+func StringsPointer(any interface{}) *[]string {
+	v := Strings(any)
+	return &v
+}

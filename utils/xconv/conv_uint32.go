@@ -209,3 +209,13 @@ func Uint32s(any interface{}) (slice []uint32) {
 
 	return
 }
+
+func Uint32Pointer(any interface{}) *uint32 {
+	v := Uint32(any)
+	return &v
+}
+
+func Uint32sPointer(any interface{}) *[]uint32 {
+	v := Uint32s(any)
+	return &v
+}

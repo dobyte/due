@@ -326,3 +326,13 @@ func Float64s(any interface{}) (slice []float64) {
 
 	return
 }
+
+func Float64Pointer(any interface{}) *float64 {
+	v := Float64(any)
+	return &v
+}
+
+func Float64sPointer(any interface{}) *[]float64 {
+	v := Float64s(any)
+	return &v
+}

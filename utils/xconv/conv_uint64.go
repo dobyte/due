@@ -323,3 +323,13 @@ func Uint64s(any interface{}) (slice []uint64) {
 
 	return
 }
+
+func Uint64Pointer(any interface{}) *uint64 {
+	v := Uint64(any)
+	return &v
+}
+
+func Uint64sPointer(any interface{}) *[]uint64 {
+	v := Uint64s(any)
+	return &v
+}
