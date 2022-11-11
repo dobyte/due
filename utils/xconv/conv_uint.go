@@ -216,3 +216,13 @@ func Uints(any interface{}) (slice []uint) {
 
 	return
 }
+
+func UintPointer(any interface{}) *uint {
+	v := Uint(any)
+	return &v
+}
+
+func UintsPointer(any interface{}) *[]uint {
+	v := Uints(any)
+	return &v
+}

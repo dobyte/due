@@ -209,3 +209,13 @@ func Ints(any interface{}) (slice []int) {
 
 	return
 }
+
+func IntPointer(any interface{}) *int {
+	v := Int(any)
+	return &v
+}
+
+func IntsPointer(any interface{}) *[]int {
+	v := Ints(any)
+	return &v
+}

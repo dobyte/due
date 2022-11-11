@@ -209,3 +209,13 @@ func Float32s(any interface{}) (slice []float32) {
 
 	return
 }
+
+func Float32Pointer(any interface{}) *float32 {
+	v := Float32(any)
+	return &v
+}
+
+func Float32sPointer(any interface{}) *[]float32 {
+	v := Float32s(any)
+	return &v
+}

@@ -348,3 +348,13 @@ func Durations(any interface{}) (slice []time.Duration) {
 
 	return
 }
+
+func DurationPointer(any interface{}) *time.Duration {
+	v := Duration(any)
+	return &v
+}
+
+func DurationsPointer(any interface{}) *[]time.Duration {
+	v := Durations(any)
+	return &v
+}

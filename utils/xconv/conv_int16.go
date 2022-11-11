@@ -209,3 +209,13 @@ func Int16s(any interface{}) (slice []int16) {
 
 	return
 }
+
+func Int16Pointer(any interface{}) *int16 {
+	v := Int16(any)
+	return &v
+}
+
+func Int16sPointer(any interface{}) *[]int16 {
+	v := Int16s(any)
+	return &v
+}

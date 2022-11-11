@@ -334,3 +334,13 @@ func Bools(any interface{}) (slice []bool) {
 
 	return
 }
+
+func BoolPointer(any interface{}) *bool {
+	v := Bool(any)
+	return &v
+}
+
+func BoolsPointer(any interface{}) *[]bool {
+	v := Bools(any)
+	return &v
+}
