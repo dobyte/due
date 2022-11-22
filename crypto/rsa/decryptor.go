@@ -15,6 +15,10 @@ type Decryptor struct {
 
 var _ crypto.Decryptor = &Decryptor{}
 
+func init() {
+	crypto.RegisterDecryptor(NewDecryptor())
+}
+
 func NewDecryptor(opts ...DecryptorOption) *Decryptor {
 	o := defaultDecryptorOptions()
 	for _, opt := range opts {

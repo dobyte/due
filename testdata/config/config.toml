@@ -13,6 +13,10 @@
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
+        # 加密器。可选：rsa | ecc
+        encryptor = "ecc"
+        # 解密器。可选：rsa | ecc
+        decryptor = "ecc"
 [transport]
     # GRPC相关配置
     [transport.grpc]
