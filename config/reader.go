@@ -50,6 +50,7 @@ func NewReader(opts ...Option) Reader {
 	r := &defaultReader{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
+	r.init()
 	r.watch()
 
 	return r
