@@ -1,7 +1,6 @@
 package rsa_test
 
 import (
-	"fmt"
 	"github.com/dobyte/due/crypto/hash"
 	"github.com/dobyte/due/crypto/rsa"
 	"github.com/dobyte/due/utils/xrand"
@@ -15,29 +14,34 @@ var (
 	verifier  *rsa.Verifier
 )
 
+const (
+	rsaPublicKey  = "./pem/key.pub.pem"
+	rsaPrivateKey = "./pem/key.pem"
+)
+
 func init() {
 	encryptor = rsa.NewEncryptor(
 		rsa.WithEncryptorHash(hash.SHA256),
 		rsa.WithEncryptorPadding(rsa.OAEP),
-		rsa.WithEncryptorPublicKey("./pem/key.pem"),
+		rsa.WithEncryptorPublicKey(rsaPublicKey),
 	)
 
 	decryptor = rsa.NewDecryptor(
 		rsa.WithDecryptorHash(hash.SHA256),
 		rsa.WithDecryptorPadding(rsa.OAEP),
-		rsa.WithDecryptorPrivateKey("./pem/key.pub.pem"),
+		rsa.WithDecryptorPrivateKey(rsaPrivateKey),
 	)
 
 	signer = rsa.NewSigner(
 		rsa.WithSignerHash(hash.SHA256),
 		rsa.WithSignerPadding(rsa.PKCS),
-		rsa.WithSignerPrivateKey("./pem/key.pem"),
+		rsa.WithSignerPrivateKey(rsaPrivateKey),
 	)
 
 	verifier = rsa.NewVerifier(
 		rsa.WithVerifierHash(hash.SHA256),
 		rsa.WithVerifierPadding(rsa.PKCS),
-		rsa.WithVerifierPublicKey("./pem/key.pub.pem"),
+		rsa.WithVerifierPublicKey(rsaPublicKey),
 	)
 }
 
@@ -55,8 +59,7 @@ func Test_Encrypt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Println(str)
-	fmt.Println(string(data))
+	t.Log(string(data) == str)
 }
 
 func Test_Sign(t *testing.T) {
