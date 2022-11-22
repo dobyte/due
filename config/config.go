@@ -14,15 +14,16 @@ const (
 var globalReader Reader
 
 func init() {
-	path := flag.String("config", defaultConfigPath, "Specify the configuration file path")
-	if v := env.Get(dueConfigEnvName).String(); v != "" {
-		path = &v
-	}
-	SetReader(NewReader(WithSources(NewSource(*path))))
+	def := flag.String("config", defaultConfigPath, "Specify the configuration file path")
+	path := env.Get(dueConfigEnvName, *def).String()
+	SetReader(NewReader(WithSources(NewSource(path))))
 }
 
 // SetReader 设置配置读取器
 func SetReader(reader Reader) {
+	if globalReader != nil {
+		globalReader.Close()
+	}
 	globalReader = reader
 }
 

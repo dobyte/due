@@ -14,6 +14,10 @@ type Encryptor struct {
 
 var _ crypto.Encryptor = &Encryptor{}
 
+func init() {
+	crypto.RegisterEncryptor(NewEncryptor())
+}
+
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
 	for _, opt := range opts {

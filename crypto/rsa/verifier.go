@@ -13,6 +13,10 @@ type Verifier struct {
 
 var _ crypto.Verifier = &Verifier{}
 
+func init() {
+	crypto.RegisterVerifier(NewVerifier())
+}
+
 func NewVerifier(opts ...VerifierOption) *Verifier {
 	o := defaultVerifierOptions()
 	for _, opt := range opts {

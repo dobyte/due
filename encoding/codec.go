@@ -9,7 +9,6 @@ package encoding
 
 import (
 	"github.com/dobyte/due/log"
-	"strings"
 )
 
 type Codec interface {
@@ -29,7 +28,7 @@ func Register(codec Codec) {
 		log.Fatal("can't register a invalid codec")
 	}
 
-	name := strings.ToLower(codec.Name())
+	name := codec.Name()
 
 	if name == "" {
 		log.Fatal("can't register a codec without name")
@@ -44,7 +43,6 @@ func Register(codec Codec) {
 
 // Invoke 调用编解码器
 func Invoke(name string) Codec {
-	name = strings.ToLower(name)
 	codec, ok := codecs[name]
 	if !ok {
 		log.Fatalf("%s codec is not registered", name)

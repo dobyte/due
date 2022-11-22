@@ -25,9 +25,9 @@ const (
 )
 
 const (
-	defaultIDKey      = "config.gate.id"
-	defaultNameKey    = "config.gate.name"
-	defaultTimeoutKey = "config.gate.timeout"
+	defaultIDKey      = "config.cluster.gate.id"
+	defaultNameKey    = "config.cluster.gate.name"
+	defaultTimeoutKey = "config.cluster.gate.timeout"
 )
 
 type Option func(o *options)
@@ -50,20 +50,17 @@ func defaultOptions() *options {
 		timeout: defaultTimeout,
 	}
 
-	id := config.Get(defaultIDKey).String()
-	if id != "" {
+	if id := config.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
 	} else if id, err := xuuid.UUID(); err == nil {
 		opts.id = id
 	}
 
-	name := config.Get(defaultNameKey).String()
-	if name != "" {
+	if name := config.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
 
-	timeout := config.Get(defaultTimeoutKey).Int64()
-	if timeout > 0 {
+	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
 	}
 

@@ -14,6 +14,10 @@ type Signer struct {
 
 var _ crypto.Signer = &Signer{}
 
+func init() {
+	crypto.RegisterSigner(NewSigner())
+}
+
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
 	for _, opt := range opts {

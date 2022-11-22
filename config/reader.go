@@ -50,7 +50,6 @@ func NewReader(opts ...Option) Reader {
 	r := &defaultReader{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
-	r.init()
 	r.watch()
 
 	return r
@@ -62,13 +61,15 @@ func (r *defaultReader) init() {
 	for _, s := range r.opts.sources {
 		cs, err := s.Load()
 		if err != nil {
-			log.Fatalf("load configure failed: %v", err)
+			log.Printf("load configure failed: %v", err)
+			continue
 		}
 
 		for _, c := range cs {
 			v, err := r.opts.decoder(c)
 			if err != nil {
-				log.Fatalf("decode configure failed: %v", err)
+				log.Printf("decode configure failed: %v", err)
+				continue
 			}
 
 			values[c.Name] = v
@@ -83,7 +84,8 @@ func (r *defaultReader) watch() {
 	for _, s := range r.opts.sources {
 		watcher, err := s.Watch(r.ctx)
 		if err != nil {
-			log.Fatalf("watching configure change failed: %v", err)
+			log.Printf("watching configure change failed: %v", err)
+			continue
 		}
 
 		go func() {
