@@ -26,8 +26,8 @@ var (
 )
 
 type Proxy interface {
-	// GetNID 获取当前节点ID
-	GetNID() string
+	// GetID 获取当前节点ID
+	GetID() string
 	// AddRouteHandler 添加路由处理器
 	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -76,8 +76,8 @@ func newProxy(node *Node) *proxy {
 	return &proxy{node: node}
 }
 
-// GetNID 获取当前节点ID
-func (p *proxy) GetNID() string {
+// GetID 获取当前节点ID
+func (p *proxy) GetID() string {
 	return p.node.opts.id
 }
 
@@ -88,7 +88,7 @@ func (p *proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler
 
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 func (p *proxy) SetDefaultRouteHandler(handler RouteHandler) {
-	p.node.defaultRouteHandler = handler
+	p.node.setDefaultRouteHandler(handler)
 }
 
 // AddEventListener 添加事件监听器
