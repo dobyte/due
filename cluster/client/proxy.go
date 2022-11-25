@@ -64,6 +64,9 @@ func (p *proxy) AddEventListener(event cluster.Event, handler EventHandler) {
 
 // Bind 绑定用户ID
 func (p *proxy) Bind(uid int64) error {
+	p.client.rw.RLock()
+	defer p.client.rw.RUnlock()
+
 	if p.client.state == cluster.Shut {
 		return ErrClientShut
 	}
@@ -79,6 +82,9 @@ func (p *proxy) Bind(uid int64) error {
 
 // Unbind 解绑用户ID
 func (p *proxy) Unbind() error {
+	p.client.rw.RLock()
+	defer p.client.rw.RUnlock()
+
 	if p.client.state == cluster.Shut {
 		return ErrClientShut
 	}
