@@ -2,17 +2,14 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/transport"
-	"sync"
-	"time"
-
 	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/internal/xnet"
+	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/router"
-
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/transport"
+	"time"
 )
 
 type RouteHandler func(req Request)
@@ -38,14 +35,14 @@ type Node struct {
 	cancel              context.CancelFunc
 	chEvent             chan *eventEntity
 	chRequest           chan *request
-	rw                  sync.RWMutex
 	routes              map[int32]routeEntity
-	defaultRouteHandler RouteHandler
 	events              map[cluster.Event]EventHandler
+	defaultRouteHandler RouteHandler
 	proxy               *proxy
 	router              *router.Router
 	instance            *registry.ServiceInstance
 	rpc                 transport.Server
+	state               cluster.State
 }
 
 func NewNode(opts ...Option) *Node {
@@ -62,6 +59,7 @@ func NewNode(opts ...Option) *Node {
 	n.chRequest = make(chan *request, 1024)
 	n.proxy = newProxy(n)
 	n.router = router.NewRouter()
+	n.state = cluster.Shut
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 
 	return n
@@ -89,6 +87,8 @@ func (n *Node) Init() {
 	if n.opts.transporter == nil {
 		log.Fatal("transporter plugin is not injected")
 	}
+
+	n.state = cluster.Work
 }
 
 // Start 启动节点
@@ -141,10 +141,7 @@ func (n *Node) dispatch() {
 				return
 			}
 
-			n.rw.RLock()
 			route, ok := n.routes[req.route]
-			n.rw.RUnlock()
-
 			if ok {
 				route.handler(req)
 			} else if n.defaultRouteHandler != nil {
@@ -181,7 +178,6 @@ func (n *Node) stopRPCServer() {
 
 // 注册服务实例
 func (n *Node) registerInstance() {
-	n.rw.RLock()
 	routes := make([]registry.Route, 0, len(n.routes))
 	for _, entity := range n.routes {
 		routes = append(routes, registry.Route{
@@ -189,14 +185,13 @@ func (n *Node) registerInstance() {
 			Stateful: entity.stateful,
 		})
 	}
-	n.rw.RUnlock()
 
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
 		Name:     string(cluster.Node),
 		Kind:     cluster.Node,
 		Alias:    n.opts.name,
-		State:    cluster.Work,
+		State:    n.state,
 		Routes:   routes,
 		Endpoint: n.rpc.Endpoint().String(),
 	}
@@ -245,21 +240,28 @@ func (n *Node) deregisterInstance() {
 
 // 添加路由处理器
 func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
-	n.rw.Lock()
-	defer n.rw.Unlock()
+	if n.state == cluster.Shut {
+		n.routes[route] = routeEntity{
+			route:    route,
+			stateful: stateful,
+			handler:  handler,
+		}
+	} else {
+		log.Warnf("the node server is working, can't add route handler")
+	}
+}
 
-	n.routes[route] = routeEntity{
-		route:    route,
-		stateful: stateful,
-		handler:  handler,
+// 默认路由处理器
+func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
+	if n.state == cluster.Shut {
+		n.defaultRouteHandler = handler
+	} else {
+		log.Warnf("the node server is working, can't set default route handler")
 	}
 }
 
 // 是否为有状态路由
 func (n *Node) checkRouteStateful(route int32) (bool, bool) {
-	n.rw.RLock()
-	defer n.rw.RUnlock()
-
 	if entity, ok := n.routes[route]; ok {
 		return entity.stateful, ok
 	}
@@ -269,7 +271,11 @@ func (n *Node) checkRouteStateful(route int32) (bool, bool) {
 
 // 添加事件处理器
 func (n *Node) addEventListener(event cluster.Event, handler EventHandler) {
-	n.events[event] = handler
+	if n.state == cluster.Shut {
+		n.events[event] = handler
+	} else {
+		log.Warnf("the node server is working, can't add event handler")
+	}
 }
 
 // 触发事件
