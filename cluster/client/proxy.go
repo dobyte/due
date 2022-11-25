@@ -26,6 +26,10 @@ type Proxy interface {
 	Unbind() error
 	// Push 推送消息
 	Push(seq, route int32, message interface{}) error
+	// Reconnect 重新连接
+	Reconnect() error
+	// Disconnect 断开连接
+	Disconnect() error
 }
 
 var _ Proxy = &proxy{}
@@ -90,6 +94,9 @@ func (p *proxy) Unbind() error {
 
 // Push 推送消息
 func (p *proxy) Push(seq, route int32, message interface{}) error {
+	p.client.rw.RLock()
+	defer p.client.rw.RUnlock()
+
 	if p.client.state == cluster.Shut {
 		return ErrClientShut
 	}
@@ -120,4 +127,33 @@ func (p *proxy) Push(seq, route int32, message interface{}) error {
 	}
 
 	return p.client.conn.Push(msg)
+}
+
+// Reconnect 重新连接
+func (p *proxy) Reconnect() error {
+	p.client.rw.RLock()
+	defer p.client.rw.RUnlock()
+
+	if p.client.state == cluster.Shut {
+		return ErrClientShut
+	}
+
+	_, err := p.client.opts.client.Dial()
+	return err
+}
+
+// Disconnect 断开连接
+func (p *proxy) Disconnect() error {
+	p.client.rw.RLock()
+	defer p.client.rw.RUnlock()
+
+	if p.client.state == cluster.Shut {
+		return ErrClientShut
+	}
+
+	if p.client.conn == nil {
+		return ErrConnectionClosed
+	}
+
+	return p.client.conn.Close()
 }
