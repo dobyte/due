@@ -95,7 +95,7 @@ func (c *Client) handleConnect(conn network.Conn) {
 
 // 处理断开连接
 func (c *Client) handleDisconnect(conn network.Conn) {
-	if handler, ok := c.events[cluster.Connect]; ok {
+	if handler, ok := c.events[cluster.Disconnect]; ok {
 		handler(conn)
 	}
 }
