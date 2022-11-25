@@ -93,23 +93,22 @@ func (c *Client) Proxy() Proxy {
 // 处理连接打开
 func (c *Client) handleConnect(conn network.Conn) {
 	c.rw.Lock()
-	defer c.rw.Unlock()
+	isNew := c.conn == nil
+	c.conn = conn
+	c.rw.Unlock()
 
 	var (
 		ok      bool
 		handler EventHandler
 	)
 
-	if c.conn == nil {
-		handler, ok = c.events[cluster.Connect]
-	} else {
+	if !isNew {
 		handler, ok = c.events[cluster.Reconnect]
-		if !ok {
-			handler, ok = c.events[cluster.Connect]
-		}
 	}
 
-	c.conn = conn
+	if !ok {
+		handler, ok = c.events[cluster.Connect]
+	}
 
 	if !ok {
 		return
