@@ -69,11 +69,10 @@ func (c *Client) Start() {
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 
-	conn, err := c.opts.client.Dial()
+	_, err := c.opts.client.Dial()
 	if err != nil {
 		log.Fatalf("connect server failed: %v", err)
 	}
-	c.conn = conn
 }
 
 // Destroy 销毁组件
@@ -88,16 +87,24 @@ func (c *Client) Proxy() Proxy {
 
 // 处理连接打开
 func (c *Client) handleConnect(conn network.Conn) {
-	if handler, ok := c.events[cluster.Connect]; ok {
-		handler(conn)
+	c.conn = conn
+
+	handler, ok := c.events[cluster.Connect]
+	if !ok {
+		return
 	}
+
+	handler(conn)
 }
 
 // 处理断开连接
 func (c *Client) handleDisconnect(conn network.Conn) {
-	if handler, ok := c.events[cluster.Disconnect]; ok {
-		handler(conn)
+	handler, ok := c.events[cluster.Disconnect]
+	if !ok {
+		return
 	}
+
+	handler(conn)
 }
 
 func (c *Client) handleReceive(conn network.Conn, data []byte, _ int) {
