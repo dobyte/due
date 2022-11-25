@@ -76,6 +76,16 @@ func (c *Client) Start() {
 	c.conn = conn
 }
 
+// Destroy 销毁组件
+func (c *Client) Destroy() {
+	c.conn = nil
+}
+
+// Proxy 获取节点代理
+func (c *Client) Proxy() Proxy {
+	return c.proxy
+}
+
 // 处理连接打开
 func (c *Client) handleConnect(conn network.Conn) {
 	if handler, ok := c.events[cluster.Connect]; ok {
