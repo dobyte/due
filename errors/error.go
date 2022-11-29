@@ -21,6 +21,8 @@ type Error interface {
 	Cause() error
 	// Stack 返回堆栈
 	Stack() *stack.Stack
+	// Replace 替换文本
+	Replace(text string, condition ...code.Code) error
 }
 
 // NewError 新建一个错误
@@ -183,6 +185,15 @@ func (e *defaultError) Unwrap() error {
 		return nil
 	}
 	return e.err
+}
+
+// Replace 替换文本
+func (e *defaultError) Replace(text string, condition ...code.Code) error {
+	if len(condition) == 0 || condition[0] == e.code {
+		e.text = text
+	}
+
+	return e
 }
 
 // String 格式化错误信息
