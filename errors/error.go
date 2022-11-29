@@ -63,10 +63,12 @@ func Code(err error) code.Code {
 
 // Next 返回下一个错误
 func Next(err error) error {
-	if err != nil {
-		if e, ok := err.(interface{ Next() error }); ok {
-			return e.Next()
-		}
+	if err == nil {
+		return nil
+	}
+
+	if e, ok := err.(interface{ Next() error }); ok {
+		return e.Next()
 	}
 
 	return nil
@@ -74,24 +76,43 @@ func Next(err error) error {
 
 // Cause 返回根因错误
 func Cause(err error) error {
-	if err != nil {
-		if e, ok := err.(interface{ Cause() error }); ok {
-			return e.Cause()
-		}
+	if err == nil {
+		return nil
+	}
+
+	if e, ok := err.(interface{ Cause() error }); ok {
+		return e.Cause()
+	}
+
+	return err
+}
+
+// Stack 返回堆栈
+func Stack(err error) *stack.Stack {
+	if err == nil {
+		return nil
+	}
+
+	if e, ok := err.(interface{ Stack() *stack.Stack }); ok {
+		return e.Stack()
 	}
 
 	return nil
 }
 
-// Stack 返回堆栈
-func Stack(err error) *stack.Stack {
-	if err != nil {
-		if e, ok := err.(interface{ Stack() *stack.Stack }); ok {
-			return e.Stack()
-		}
+// Replace 替换文本
+func Replace(err error, text string, condition ...code.Code) error {
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	if e, ok := err.(interface {
+		Replace(text string, condition ...code.Code) error
+	}); ok {
+		return e.Replace(text, condition...)
+	}
+
+	return err
 }
 
 var _ Error = &defaultError{}
