@@ -191,7 +191,7 @@ func (c *serverConn) read() {
 	for {
 		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
-			_ = c.forceClose()
+			c.cleanup()
 			return
 		}
 
@@ -237,33 +237,32 @@ func (c *serverConn) graceClose() (err error) {
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
-	close(c.done)
 	err = c.conn.Close()
-	c.conn = nil
-	c.connMgr.recycle(c)
 	c.rw.Unlock()
-
-	if c.connMgr.server.disconnectHandler != nil {
-		c.connMgr.server.disconnectHandler(c)
-	}
 
 	return
 }
 
 // 强制关闭
-func (c *serverConn) forceClose() (err error) {
+func (c *serverConn) forceClose() error {
 	c.rw.Lock()
+	defer c.rw.Unlock()
 
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+
+	return c.conn.Close()
+}
+
+// 清理连接
+func (c *serverConn) cleanup() {
+	c.rw.Lock()
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-	err = c.conn.Close()
 	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
@@ -271,8 +270,6 @@ func (c *serverConn) forceClose() (err error) {
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
-
-	return
 }
 
 // 写入消息
