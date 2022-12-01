@@ -60,9 +60,7 @@ func (c *Client) Init() {
 		log.Fatal("codec plugin is not injected")
 	}
 
-	c.rw.Lock()
 	c.state = cluster.Work
-	c.rw.Unlock()
 }
 
 // Start 启动组件
@@ -71,8 +69,7 @@ func (c *Client) Start() {
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 
-	_, err := c.opts.client.Dial()
-	if err != nil {
+	if err := c.dial(); err != nil {
 		log.Fatalf("connect server failed: %v", err)
 	}
 }
@@ -145,13 +142,23 @@ func (c *Client) handleReceive(_ network.Conn, data []byte, _ int) {
 	}
 }
 
-// 添加路由处理器
-func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
+// 拨号
+func (c *Client) dial() error {
 	c.rw.RLock()
-	state := c.state
+	isShut := c.state == cluster.Shut
 	c.rw.RUnlock()
 
-	if state == cluster.Shut {
+	if isShut {
+		return ErrClientShut
+	}
+
+	_, err := c.opts.client.Dial()
+	return err
+}
+
+// 添加路由处理器
+func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
+	if c.state == cluster.Shut {
 		c.routes[route] = handler
 	} else {
 		log.Warnf("the client is working, can't add route handler")
@@ -160,11 +167,7 @@ func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 
 // 默认路由处理器
 func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
-	c.rw.RLock()
-	state := c.state
-	c.rw.RUnlock()
-
-	if state == cluster.Shut {
+	if c.state == cluster.Shut {
 		c.defaultRouteHandler = handler
 	} else {
 		log.Warnf("the client is working, can't set default route handler")
@@ -173,11 +176,7 @@ func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 
 // 添加事件处理器
 func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
-	c.rw.RLock()
-	state := c.state
-	c.rw.RUnlock()
-
-	if state == cluster.Shut {
+	if c.state == cluster.Shut {
 		c.events[event] = handler
 	} else {
 		log.Warnf("the client is working, can't add event handler")
