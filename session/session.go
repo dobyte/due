@@ -16,7 +16,6 @@ import (
 
 type Session struct {
 	rw     sync.RWMutex        // 读写锁
-	uid    int64               // 用户ID
 	conn   network.Conn        // 连接
 	groups map[*Group]struct{} // 所在组
 }
@@ -39,7 +38,6 @@ func (s *Session) Reset() {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	s.uid = 0
 	s.conn = nil
 	s.groups = nil
 }
@@ -57,7 +55,7 @@ func (s *Session) UID() int64 {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
-	return s.uid
+	return s.conn.UID()
 }
 
 // Bind 绑定用户ID
@@ -65,7 +63,6 @@ func (s *Session) Bind(uid int64) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	s.uid = uid
 	s.conn.Bind(uid)
 	for group := range s.groups {
 		group.addUserSession(uid, s)
@@ -77,8 +74,7 @@ func (s *Session) Unbind(uid int64) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	s.uid = 0
-	s.conn.Bind(0)
+	s.conn.Unbind()
 	for group := range s.groups {
 		group.remUserSession(uid)
 	}
