@@ -20,10 +20,8 @@ type Request interface {
 	Parse(v interface{}) error
 	// Context 获取上线文
 	Context() context.Context
-	// GetIP 获取IP地址
-	GetIP() (string, error)
-	// Response 响应请求
-	Response(message interface{}) error
+	// Proxy 获取代理
+	Proxy() Proxy
 }
 
 // 请求数据
@@ -76,12 +74,7 @@ func (r *request) Context() context.Context {
 	return context.Background()
 }
 
-// GetIP 获取IP地址
-func (r *request) GetIP() (string, error) {
-	return r.client.conn.RemoteIP()
-}
-
-// Response 响应请求
-func (r *request) Response(message interface{}) error {
-	return r.client.proxy.Push(r.message.Seq, r.message.Route, message)
+// Proxy 响应请求
+func (r *request) Proxy() Proxy {
+	return r.client.proxy
 }
