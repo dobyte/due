@@ -47,6 +47,3 @@ type DeliverArgs struct {
 	UID     int64    // 用户ID
 	Message *Message // 消息
 }
-
-type deliverArgs struct {
-}
