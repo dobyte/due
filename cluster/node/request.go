@@ -45,18 +45,21 @@ type Request interface {
 	BindNode() error
 	// UnbindNode 解绑节点
 	UnbindNode() error
+	// Disconnect 断开连接
+	Disconnect(isForce ...bool) error
 }
 
 // 请求数据
 type request struct {
-	gid   string      // 来源网关ID
-	nid   string      // 来源节点ID
-	cid   int64       // 连接ID
-	uid   int64       // 用户ID
-	seq   int32       // 消息序列号
-	route int32       // 消息路由
-	data  interface{} // 消息内容
-	node  *Node       // 节点服务器
+	ctx   context.Context // context
+	gid   string          // 来源网关ID
+	nid   string          // 来源节点ID
+	cid   int64           // 连接ID
+	uid   int64           // 用户ID
+	seq   int32           // 消息序列号
+	route int32           // 消息路由
+	data  interface{}     // 消息内容
+	node  *Node           // 节点服务器
 }
 
 // GID 获取来源网关ID
@@ -117,7 +120,7 @@ func (r *request) Parse(v interface{}) (err error) {
 
 // Context 获取上线文
 func (r *request) Context() context.Context {
-	return context.Background()
+	return r.ctx
 }
 
 // GetIP 获取IP地址
@@ -152,4 +155,23 @@ func (r *request) BindNode() error {
 // UnbindNode 解绑节点
 func (r *request) UnbindNode() error {
 	return r.node.proxy.UnbindNode(r.Context(), r.uid)
+}
+
+// Disconnect 断开连接
+func (r *request) Disconnect(isForce ...bool) error {
+	if r.gid == "" {
+		return nil
+	}
+
+	isForceClose := false
+	if len(isForce) > 0 && isForce[0] {
+		isForceClose = true
+	}
+
+	return r.node.proxy.Disconnect(r.Context(), &DisconnectArgs{
+		GID:     r.gid,
+		Kind:    session.Conn,
+		Target:  r.cid,
+		IsForce: isForceClose,
+	})
 }
