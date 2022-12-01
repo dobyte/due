@@ -39,6 +39,7 @@ func (p *provider) Trigger(event cluster.Event, gid string, uid int64) {
 // Deliver 投递消息
 func (p *provider) Deliver(gid, nid string, cid, uid int64, message *transport.Message) {
 	p.node.deliverRequest(&request{
+		ctx:   context.Background(),
 		gid:   gid,
 		nid:   nid,
 		cid:   cid,

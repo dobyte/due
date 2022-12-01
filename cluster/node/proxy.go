@@ -532,6 +532,7 @@ func (p *proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 	switch {
 	case args.NID == p.node.opts.id:
 		p.node.deliverRequest(&request{
+			ctx:   context.Background(),
 			nid:   p.node.opts.id,
 			uid:   args.UID,
 			node:  p.node,
