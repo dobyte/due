@@ -8,12 +8,11 @@
 package ws_test
 
 import (
-	"testing"
-	"time"
-
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
 	"github.com/dobyte/due/network/ws"
+	"testing"
+	"time"
 )
 
 func TestNewClient(t *testing.T) {

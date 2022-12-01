@@ -196,40 +196,38 @@ func (c *clientConn) graceClose() (err error) {
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
-	close(c.done)
 	err = c.conn.Close()
-	c.conn = nil
 	c.rw.Unlock()
-
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
-	}
 
 	return
 }
 
 // 强制关闭
-func (c *clientConn) forceClose() (err error) {
+func (c *clientConn) forceClose() error {
 	c.rw.Lock()
+	defer c.rw.Unlock()
 
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+
+	return c.conn.Close()
+}
+
+// 清理连接
+func (c *clientConn) cleanup() {
+	c.rw.Lock()
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-	err = c.conn.Close()
 	c.conn = nil
 	c.rw.Unlock()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
-
-	return
 }
 
 // 读取消息
@@ -237,7 +235,7 @@ func (c *clientConn) read() {
 	for {
 		msgType, buf, err := c.conn.ReadMessage()
 		if err != nil {
-			_ = c.forceClose()
+			c.cleanup()
 			return
 		}
 
