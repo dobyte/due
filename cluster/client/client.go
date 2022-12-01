@@ -12,7 +12,7 @@ import (
 
 type RouteHandler func(req Request)
 
-type EventHandler func()
+type EventHandler func(proxy Proxy)
 
 type Client struct {
 	component.Base
@@ -114,7 +114,7 @@ func (c *Client) handleConnect(conn network.Conn) {
 		return
 	}
 
-	handler()
+	handler(c.proxy)
 }
 
 // 处理断开连接
@@ -124,7 +124,7 @@ func (c *Client) handleDisconnect(_ network.Conn) {
 		return
 	}
 
-	handler()
+	handler(c.proxy)
 }
 
 // 处理接收到的消息
