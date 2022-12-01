@@ -137,15 +137,7 @@ func (p *proxy) Push(seq, route int32, message interface{}) error {
 
 // Reconnect 重新连接
 func (p *proxy) Reconnect() error {
-	p.client.rw.RLock()
-	defer p.client.rw.RUnlock()
-
-	if p.client.state == cluster.Shut {
-		return ErrClientShut
-	}
-
-	_, err := p.client.opts.client.Dial()
-	return err
+	return p.client.dial()
 }
 
 // Disconnect 断开连接
