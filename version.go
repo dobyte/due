@@ -8,4 +8,4 @@
 package due
 
 // Version 框架版本
-const Version = "0.0.6"
+const Version = "0.0.8"
