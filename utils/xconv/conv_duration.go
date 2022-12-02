@@ -19,7 +19,7 @@ func Duration(any interface{}) time.Duration {
 	toDuration := func(s string) time.Duration {
 		reg := regexp.MustCompile(`(((-?\d+)(\.\d+)?)(d))`)
 		d, _ := time.ParseDuration(reg.ReplaceAllStringFunc(strings.ToLower(s), func(ss string) string {
-			v, err := strconv.ParseFloat(strings.TrimRight(ss, "d"), 64)
+			v, err := strconv.ParseFloat(strings.TrimSuffix(ss, "d"), 64)
 			if err != nil {
 				return ""
 			}

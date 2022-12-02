@@ -55,12 +55,12 @@ func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
 
 	var msg string
 	if c := len(a); c > 0 {
-		msg = fmt.Sprintf(strings.TrimRight(strings.Repeat("%v ", c), " "), a...)
+		msg = fmt.Sprintf(strings.TrimSuffix(strings.Repeat("%v ", c), " "), a...)
 	}
 
 	e.Level = level
 	e.Time = time.Now().Format(p.logger.opts.timeFormat)
-	e.Message = strings.TrimRight(msg, "\n")
+	e.Message = strings.TrimSuffix(msg, "\n")
 
 	if p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
 		st := stack.Callers(3+p.logger.opts.callerSkip, stack.Full)
