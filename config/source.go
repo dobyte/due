@@ -77,8 +77,8 @@ func (s *defaultSource) loadFile(path string) (*Configuration, error) {
 	ext := filepath.Ext(info.Name())
 
 	return &Configuration{
-		Name:    strings.TrimRight(info.Name(), ext),
-		Format:  strings.TrimLeft(ext, "."),
+		Name:    strings.TrimSuffix(info.Name(), ext),
+		Format:  strings.TrimPrefix(ext, "."),
 		Content: content,
 	}, nil
 }
