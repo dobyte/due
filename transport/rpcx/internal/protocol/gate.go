@@ -47,7 +47,7 @@ type MulticastRequest struct {
 
 type MulticastReply struct {
 	Code  int
-	Total int
+	Total int64
 }
 
 type BroadcastRequest struct {
@@ -57,7 +57,7 @@ type BroadcastRequest struct {
 
 type BroadcastReply struct {
 	Code  int
-	Total int
+	Total int64
 }
 
 type DisconnectRequest struct {

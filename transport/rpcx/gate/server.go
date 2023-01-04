@@ -2,7 +2,7 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/cluster/gate"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/session"
 	"github.com/dobyte/due/transport"
@@ -39,103 +39,71 @@ type endpoint struct {
 
 // Bind 将用户与当前网关进行绑定
 func (e *endpoint) Bind(ctx context.Context, req *protocol.BindRequest, reply *protocol.BindReply) error {
-	if req.CID <= 0 || req.UID <= 0 {
-		reply.Code = code.InvalidArgument
-		return errors.New("invalid argument")
-	}
-
-	s, err := e.provider.Session(session.Conn, req.CID)
+	err := e.provider.Bind(ctx, req.CID, req.UID)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
 		case session.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
+		case gate.ErrInvalidArgument:
+			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
-	if err = e.provider.Bind(ctx, req.UID); err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	s.Bind(req.UID)
-
-	return nil
+	return err
 }
 
 // Unbind 将用户与当前网关进行解绑
 func (e *endpoint) Unbind(ctx context.Context, req *protocol.UnbindRequest, reply *protocol.UnbindReply) error {
-	if req.UID <= 0 {
-		reply.Code = code.InvalidArgument
-		return errors.New("invalid argument")
-	}
-
-	s, err := e.provider.Session(session.User, req.UID)
+	err := e.provider.Unbind(ctx, req.UID)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
 		case session.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
+		case gate.ErrInvalidArgument:
+			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
-	if err = e.provider.Unbind(ctx, req.UID); err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	s.Unbind(req.UID)
-
-	return nil
+	return err
 }
 
 // GetIP 获取客户端IP地址
-func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply *protocol.GetIPReply) error {
-	s, err := e.provider.Session(req.Kind, req.Target)
+func (e *endpoint) GetIP(_ context.Context, req *protocol.GetIPRequest, reply *protocol.GetIPReply) error {
+	ip, err := e.provider.GetIP(req.Kind, req.Target)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
 		case session.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
+		case gate.ErrInvalidArgument:
+			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
 		}
-		return err
-	}
-
-	ip, err := s.RemoteIP()
-	if err != nil {
-		reply.Code = code.Internal
-		return err
 	}
 
 	reply.IP = ip
 
-	return nil
+	return err
 }
 
 // Push 推送消息给连接
-func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Push(_ context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
+	err := e.provider.Push(req.Kind, req.Target, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
 	if err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	if err = e.provider.Push(req.Kind, req.Target, msg); err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
@@ -144,25 +112,18 @@ func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *p
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
-	return nil
+	return err
 }
 
 // Multicast 推送组播消息
-func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest, reply *protocol.MulticastReply) error {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Multicast(_ context.Context, req *protocol.MulticastRequest, reply *protocol.MulticastReply) error {
+	total, err := e.provider.Multicast(req.Kind, req.Targets, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
-	if err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	total, err := e.provider.Multicast(req.Kind, req.Targets, msg)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:
@@ -170,27 +131,20 @@ func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
 	reply.Total = total
 
-	return nil
+	return err
 }
 
 // Broadcast 推送广播消息
-func (e *endpoint) Broadcast(ctx context.Context, req *protocol.BroadcastRequest, reply *protocol.BroadcastReply) error {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Broadcast(_ context.Context, req *protocol.BroadcastRequest, reply *protocol.BroadcastReply) error {
+	total, err := e.provider.Broadcast(req.Kind, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
-	if err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	total, err := e.provider.Broadcast(req.Kind, msg)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:
@@ -198,17 +152,16 @@ func (e *endpoint) Broadcast(ctx context.Context, req *protocol.BroadcastRequest
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
 	reply.Total = total
 
-	return nil
+	return err
 }
 
 // Disconnect 断开连接
-func (e *endpoint) Disconnect(ctx context.Context, req *protocol.DisconnectRequest, reply *protocol.DisconnectReply) error {
-	s, err := e.provider.Session(req.Kind, req.Target)
+func (e *endpoint) Disconnect(_ context.Context, req *protocol.DisconnectRequest, reply *protocol.DisconnectReply) error {
+	err := e.provider.Disconnect(req.Kind, req.Target, req.IsForce)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -218,13 +171,7 @@ func (e *endpoint) Disconnect(ctx context.Context, req *protocol.DisconnectReque
 		default:
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
-	if err = s.Close(req.IsForce); err != nil {
-		reply.Code = code.Internal
-		return err
-	}
-
-	return nil
+	return err
 }

@@ -2,6 +2,7 @@ package xtime
 
 import (
 	"fmt"
+	"github.com/dobyte/due/config"
 	"math"
 	"time"
 )
@@ -15,36 +16,53 @@ const (
 	DatetimeFormat = "Y-m-d H:i:s"
 )
 
-var defaultTransformRule = []TransformRule{
-	{
-		Max: 60,
-		Tpl: "刚刚",
-	}, {
-		Max: 3600,
-		Tpl: "%d分钟前",
-	}, {
-		Max: 86400,
-		Tpl: "%d小时前",
-	}, {
-		Max: 2592000,
-		Tpl: "%d天前",
-	}, {
-		Max: 31536000,
-		Tpl: "%d个月前",
-	}, {
-		Max: 0,
-		Tpl: "%d年前",
-	},
-}
+var (
+	location             *time.Location
+	defaultTransformRule = []TransformRule{
+		{
+			Max: 60,
+			Tpl: "刚刚",
+		}, {
+			Max: 3600,
+			Tpl: "%d分钟前",
+		}, {
+			Max: 86400,
+			Tpl: "%d小时前",
+		}, {
+			Max: 2592000,
+			Tpl: "%d天前",
+		}, {
+			Max: 31536000,
+			Tpl: "%d个月前",
+		}, {
+			Max: 0,
+			Tpl: "%d年前",
+		},
+	}
+)
 
 type TransformRule struct {
 	Max uint
 	Tpl string
 }
 
+func init() {
+	timeZone := config.Get("config.timezone", "Local").String()
+	if loc, err := time.LoadLocation(timeZone); err != nil {
+		location = time.Local
+	} else {
+		location = loc
+	}
+}
+
+// Now 当前时间
+func Now() time.Time {
+	return time.Now().In(location)
+}
+
 // Today 今天
 func Today() time.Time {
-	now := time.Now()
+	now := Now()
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 }
 
@@ -61,7 +79,7 @@ func Tomorrow() time.Time {
 // Transform 时间转换
 func Transform(t time.Time, rule ...[]TransformRule) string {
 	var (
-		dur                = uint(time.Now().Unix() - t.Unix())
+		dur                = uint(Now().Unix() - t.In(location).Unix())
 		molecular     uint = 1
 		transformRule      = defaultTransformRule
 	)
@@ -81,63 +99,63 @@ func Transform(t time.Time, rule ...[]TransformRule) string {
 	return ""
 }
 
-// UnixToString unix时间转字符串
-func UnixToString(unix int64, format string) string {
-	return time.Unix(unix, 0).Local().Format(format)
+// Unix 时间戳转标准时间
+func Unix(sec, nsec int64) time.Time {
+	return time.Unix(sec, nsec).In(location)
 }
 
-// FirstSecondOfDay 获取一天中的第一秒
-func FirstSecondOfDay(offset ...int) time.Time {
-	var t = time.Now()
-
-	if len(offset) > 0 {
-		t = t.AddDate(0, 0, offset[0])
+// GetFirstSecondOfDay 获取一天中的第一秒
+// offsetDays 		   偏移天数，例如：-1：前一天 0：当前 1：明天
+func GetFirstSecondOfDay(offsetDays ...int) time.Time {
+	now := Now()
+	if len(offsetDays) > 0 {
+		now = now.AddDate(0, 0, offsetDays[0])
 	}
 
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 }
 
-// LastSecondOfDay 获取一天中的最后一秒
-func LastSecondOfDay(offset ...int) time.Time {
-	var t = time.Now()
-
-	if len(offset) > 0 {
-		t = t.AddDate(0, 0, offset[0])
+// GetLastSecondOfDay 获取一天中的最后一秒
+// offsetDays 		  偏移天数，例如：-1：前一天 0：当前 1：明天
+func GetLastSecondOfDay(offsetDays ...int) time.Time {
+	now := Now()
+	if len(offsetDays) > 0 {
+		now = now.AddDate(0, 0, offsetDays[0])
 	}
 
-	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
+	return time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
 }
 
 // GetFirstDayOfWeek 获取一周中的第一天
-// offsetWeek        偏移周，例如：-1：上一周 1：下一周
-func GetFirstDayOfWeek(offsetWeek ...int) time.Time {
+// offsetWeeks       偏移周数，例如：-1：上一周 0：本周 1：下一周
+func GetFirstDayOfWeek(offsetWeeks ...int) time.Time {
 	var (
-		now       = time.Now()
-		offsetDay = int(time.Monday - now.Weekday())
+		now        = Now()
+		offsetDays = int(time.Monday - now.Weekday())
 	)
 
-	if offsetDay == 1 {
-		offsetDay = -6
+	if offsetDays == 1 {
+		offsetDays = -6
 	}
 
-	if len(offsetWeek) > 0 {
-		offsetDay += offsetWeek[0] * 7
+	if len(offsetWeeks) > 0 {
+		offsetDays += offsetWeeks[0] * 7
 	}
 
-	return now.Local().AddDate(0, 0, offsetDay)
+	return now.AddDate(0, 0, offsetDays)
 }
 
 // GetLastDayOfWeek 获取一周中的最后一天
-// offsetWeek       偏移周，例如：-1：上一周 1：下一周
-func GetLastDayOfWeek(offsetWeek ...int) time.Time {
+// offsetWeeks      偏移周数，例如：-1：上一周 0：本周 1：下一周
+func GetLastDayOfWeek(offsetWeeks ...int) time.Time {
 	var (
-		now       = time.Now()
-		offsetDay = int(time.Sunday - now.Weekday() + 7)
+		now        = Now()
+		offsetDays = int(time.Sunday - now.Weekday() + 7)
 	)
 
-	if len(offsetWeek) > 0 {
-		offsetDay += offsetWeek[0] * 7
+	if len(offsetWeeks) > 0 {
+		offsetDays += offsetWeeks[0] * 7
 	}
 
-	return now.Local().AddDate(0, 0, offsetDay)
+	return now.AddDate(0, 0, offsetDays)
 }

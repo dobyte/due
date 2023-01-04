@@ -2,15 +2,14 @@ package transport
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/session"
 )
 
 type NodeClient interface {
 	// Trigger 触发事件
-	Trigger(ctx context.Context, event cluster.Event, gid string, uid int64) (miss bool, err error)
+	Trigger(ctx context.Context, args *TriggerArgs) (miss bool, err error)
 	// Deliver 投递消息
-	Deliver(ctx context.Context, gid, nid string, cid, uid int64, message *Message) (miss bool, err error)
+	Deliver(ctx context.Context, args *DeliverArgs) (miss bool, err error)
 }
 
 type GateClient interface {

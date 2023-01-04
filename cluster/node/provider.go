@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/transport"
 )
 
@@ -32,21 +31,50 @@ func (p *provider) CheckRouteStateful(route int32) (bool, bool) {
 }
 
 // Trigger 触发事件
-func (p *provider) Trigger(event cluster.Event, gid string, uid int64) {
-	p.node.triggerEvent(event, gid, uid)
+func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bool, error) {
+	if args.UID <= 0 {
+		return false, ErrInvalidArgument
+	}
+
+	_, miss, err := p.LocateNode(ctx, args.UID)
+	if err != nil {
+		return miss, err
+	}
+
+	p.node.trigger(args.Event, args.GID, args.UID)
+
+	return false, nil
 }
 
 // Deliver 投递消息
-func (p *provider) Deliver(gid, nid string, cid, uid int64, message *transport.Message) {
-	p.node.deliverRequest(&request{
-		ctx:   context.Background(),
-		gid:   gid,
-		nid:   nid,
-		cid:   cid,
-		uid:   uid,
-		node:  p.node,
-		seq:   message.Seq,
-		route: message.Route,
-		data:  message.Buffer,
+func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bool, error) {
+	stateful, ok := p.CheckRouteStateful(args.Message.Route)
+	if !ok {
+		return false, nil
+	}
+
+	if stateful {
+		if args.UID <= 0 {
+			return false, ErrInvalidArgument
+		}
+
+		_, miss, err := p.LocateNode(ctx, args.UID)
+		if err != nil {
+			return miss, err
+		}
+	}
+
+	p.node.deliver(&request{
+		gid: args.GID,
+		nid: args.NID,
+		cid: args.CID,
+		uid: args.UID,
+		message: &Message{
+			Seq:   args.Message.Seq,
+			Route: args.Message.Route,
+			Data:  args.Message.Buffer,
+		},
 	})
+
+	return false, nil
 }

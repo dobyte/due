@@ -9,6 +9,7 @@ package tcp
 
 import (
 	"github.com/dobyte/due/internal/xnet"
+	"github.com/dobyte/due/utils/xtime"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -157,7 +158,7 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 1024)
 	c.done = make(chan struct{})
-	c.lastHeartbeatTime = time.Now().Unix()
+	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
 	if c.connMgr.server.connectHandler != nil {
@@ -182,7 +183,7 @@ func (c *serverConn) read() {
 			break
 		}
 
-		atomic.StoreInt64(&c.lastHeartbeatTime, time.Now().Unix())
+		atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 
 		switch c.State() {
 		case network.ConnHanged:
@@ -286,7 +287,7 @@ func (c *serverConn) write() {
 				log.Errorf("write message error: %v", err)
 			}
 		case <-ticker.C:
-			deadline := time.Now().Add(-2 * c.connMgr.server.opts.heartbeatCheckInterval).Unix()
+			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatCheckInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Debugf("connection heartbeat timeout")
 				_ = c.Close(true)

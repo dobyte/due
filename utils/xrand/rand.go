@@ -2,8 +2,8 @@ package xrand
 
 import (
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/utils/xtime"
 	"math/rand"
-	"time"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(xtime.Now().UnixNano())
 }
 
 // Str 生成指定长度的字符串

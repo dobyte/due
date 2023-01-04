@@ -10,11 +10,11 @@ package log
 import (
 	"fmt"
 	"github.com/dobyte/due/internal/stack"
+	"github.com/dobyte/due/utils/xtime"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 )
 
 const (
@@ -59,7 +59,7 @@ func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
 	}
 
 	e.Level = level
-	e.Time = time.Now().Format(p.logger.opts.timeFormat)
+	e.Time = xtime.Now().Format(p.logger.opts.timeFormat)
 	e.Message = strings.TrimSuffix(msg, "\n")
 
 	if p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {

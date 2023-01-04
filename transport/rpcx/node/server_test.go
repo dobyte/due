@@ -1,12 +1,15 @@
 package node_test
 
 import (
+	"github.com/dobyte/due/transport/rpcx/internal/server"
 	"github.com/dobyte/due/transport/rpcx/node"
 	"testing"
 )
 
 func TestNewServer(t *testing.T) {
-	s, err := node.NewServer(nil, ":3554")
+	s, err := node.NewServer(nil, &server.Options{
+		Addr: ":3554",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"errors"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
@@ -32,55 +31,42 @@ type endpoint struct {
 
 // Trigger 触发事件
 func (e *endpoint) Trigger(ctx context.Context, req *protocol.TriggerRequest, reply *protocol.TriggerReply) error {
-	if req.UID <= 0 {
-		reply.Code = code.InvalidArgument
-		return errors.New("invalid argument")
-	}
-
-	_, miss, err := e.provider.LocateNode(ctx, req.UID)
+	miss, err := e.provider.Trigger(ctx, &transport.TriggerArgs{
+		Event: req.Event,
+		GID:   req.GID,
+		UID:   req.UID,
+	})
 	if err != nil {
 		if miss {
 			reply.Code = code.NotFoundSession
 		} else {
 			reply.Code = code.Internal
 		}
-		return err
 	}
 
-	e.provider.Trigger(req.Event, req.GID, req.UID)
-
-	return nil
+	return err
 }
 
 // Deliver 投递消息
 func (e *endpoint) Deliver(ctx context.Context, req *protocol.DeliverRequest, reply *protocol.DeliverReply) error {
-	stateful, ok := e.provider.CheckRouteStateful(req.Message.Route)
-	if !ok {
-		return nil
-	}
-
-	if stateful {
-		if req.UID <= 0 {
-			reply.Code = code.InvalidArgument
-			return errors.New("invalid argument")
-		}
-
-		_, miss, err := e.provider.LocateNode(ctx, req.UID)
-		if err != nil {
-			if miss {
-				reply.Code = code.NotFoundSession
-			} else {
-				reply.Code = code.Internal
-			}
-			return err
-		}
-	}
-
-	e.provider.Deliver(req.GID, req.NID, req.CID, req.UID, &transport.Message{
-		Seq:    req.Message.Seq,
-		Route:  req.Message.Route,
-		Buffer: req.Message.Buffer,
+	miss, err := e.provider.Deliver(ctx, &transport.DeliverArgs{
+		GID: req.GID,
+		NID: req.NID,
+		CID: req.CID,
+		UID: req.UID,
+		Message: &transport.Message{
+			Seq:    req.Message.Seq,
+			Route:  req.Message.Route,
+			Buffer: req.Message.Buffer,
+		},
 	})
+	if err != nil {
+		if miss {
+			reply.Code = code.NotFoundSession
+		} else {
+			reply.Code = code.Internal
+		}
+	}
 
-	return nil
+	return err
 }

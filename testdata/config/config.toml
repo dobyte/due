@@ -1,3 +1,7 @@
+# 统一时区设置。项目中的时间获取请使用xtime.Now()
+timezone = "Local"
+
+
 [cluster]
     # 集群网关配置
     [cluster.gate]
@@ -345,3 +349,14 @@
             delimiter = " "
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
+[alert]
+    # 启用的报警器
+    enabledAlerters = ["feishu", "email"]
+    # 飞书报警。通过飞书群聊机器人实现
+    [alert.feishu]
+        # 群聊机器人秘钥。
+        secret = ""
+        # 群聊机器人webhook
+        webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/231e12c0-97b9-4e81-a920-abc24bda286f"
+    # 企业微信报警。通过企业微信群聊机器人实现
+    [alert.work]

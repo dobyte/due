@@ -51,15 +51,13 @@ type Request interface {
 
 // 请求数据
 type request struct {
-	ctx   context.Context // context
-	gid   string          // 来源网关ID
-	nid   string          // 来源节点ID
-	cid   int64           // 连接ID
-	uid   int64           // 用户ID
-	seq   int32           // 消息序列号
-	route int32           // 消息路由
-	data  interface{}     // 消息内容
-	node  *Node           // 节点服务器
+	ctx     context.Context // context
+	gid     string          // 来源网关ID
+	nid     string          // 来源节点ID
+	cid     int64           // 连接ID
+	uid     int64           // 用户ID
+	message *Message        // 请求消息
+	node    *Node           // 节点服务器
 }
 
 // GID 获取来源网关ID
@@ -84,25 +82,25 @@ func (r *request) UID() int64 {
 
 // Seq 获取消息序列号
 func (r *request) Seq() int32 {
-	return r.seq
+	return r.message.Seq
 }
 
 // Route 获取消息路由
 func (r *request) Route() int32 {
-	return r.route
+	return r.message.Route
 }
 
 // Data 获取消息数据
 func (r *request) Data() interface{} {
-	return r.data
+	return r.message.Data
 }
 
 // Parse 解析消息
 func (r *request) Parse(v interface{}) (err error) {
-	msg, ok := r.data.([]byte)
+	msg, ok := r.message.Data.([]byte)
 	if !ok {
 		var buf bytes.Buffer
-		if err = gob.NewEncoder(&buf).Encode(r.data); err != nil {
+		if err = gob.NewEncoder(&buf).Encode(r.message.Data); err != nil {
 			return
 		}
 		return gob.NewDecoder(&buf).Decode(v)

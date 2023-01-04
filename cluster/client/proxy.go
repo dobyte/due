@@ -111,9 +111,16 @@ func (p *proxy) Push(seq, route int32, message interface{}) error {
 		return ErrConnectionClosed
 	}
 
-	buffer, err := p.client.opts.codec.Marshal(message)
-	if err != nil {
-		return err
+	var (
+		err    error
+		buffer []byte
+	)
+
+	if message != nil {
+		buffer, err = p.client.opts.codec.Marshal(message)
+		if err != nil {
+			return err
+		}
 	}
 
 	if p.client.opts.encryptor != nil {

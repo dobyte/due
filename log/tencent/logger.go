@@ -10,11 +10,10 @@ package tencent
 import (
 	"bytes"
 	"fmt"
+	"github.com/dobyte/due/utils/xtime"
+	cls "github.com/tencentcloud/tencentcloud-cls-sdk-go"
 	"os"
 	"sync"
-	"time"
-
-	cls "github.com/tencentcloud/tencentcloud-cls-sdk-go"
 
 	"github.com/dobyte/due/log"
 )
@@ -88,7 +87,7 @@ func (l *Logger) log(level log.Level, a ...interface{}) {
 	}).Entity(level, a...)
 
 	if l.opts.syncout {
-		logData := cls.NewCLSLog(time.Now().Unix(), l.buildLogRaw(e))
+		logData := cls.NewCLSLog(xtime.Now().Unix(), l.buildLogRaw(e))
 		_ = l.producer.SendLog(l.opts.topicID, logData, nil)
 	}
 

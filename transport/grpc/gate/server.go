@@ -30,11 +30,7 @@ type endpoint struct {
 
 // Bind 将用户与当前网关进行绑定
 func (e *endpoint) Bind(ctx context.Context, req *pb.BindRequest) (*pb.BindReply, error) {
-	if req.CID <= 0 || req.UID <= 0 {
-		return nil, status.New(codes.InvalidArgument, "invalid argument").Err()
-	}
-
-	s, err := e.provider.Session(session.Conn, req.CID)
+	err := e.provider.Bind(ctx, req.CID, req.CID)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -45,23 +41,13 @@ func (e *endpoint) Bind(ctx context.Context, req *pb.BindRequest) (*pb.BindReply
 			return nil, status.New(codes.Internal, err.Error()).Err()
 		}
 	}
-
-	if err = e.provider.Bind(ctx, req.UID); err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
-	}
-
-	s.Bind(req.UID)
 
 	return &pb.BindReply{}, nil
 }
 
 // Unbind 将用户与当前网关进行解绑
 func (e *endpoint) Unbind(ctx context.Context, req *pb.UnbindRequest) (*pb.UnbindReply, error) {
-	if req.UID <= 0 {
-		return nil, status.New(codes.InvalidArgument, "invalid argument").Err()
-	}
-
-	s, err := e.provider.Session(session.User, req.UID)
+	err := e.provider.Unbind(ctx, req.UID)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -72,19 +58,13 @@ func (e *endpoint) Unbind(ctx context.Context, req *pb.UnbindRequest) (*pb.Unbin
 			return nil, status.New(codes.Internal, err.Error()).Err()
 		}
 	}
-
-	if err = e.provider.Unbind(ctx, req.UID); err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
-	}
-
-	s.Unbind(req.UID)
 
 	return &pb.UnbindReply{}, nil
 }
 
 // GetIP 获取客户端IP地址
-func (e *endpoint) GetIP(ctx context.Context, req *pb.GetIPRequest) (*pb.GetIPReply, error) {
-	s, err := e.provider.Session(session.Kind(req.Kind), req.Target)
+func (e *endpoint) GetIP(_ context.Context, req *pb.GetIPRequest) (*pb.GetIPReply, error) {
+	ip, err := e.provider.GetIP(session.Kind(req.Kind), req.Target)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -94,28 +74,19 @@ func (e *endpoint) GetIP(ctx context.Context, req *pb.GetIPRequest) (*pb.GetIPRe
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
 		}
-	}
-
-	ip, err := s.RemoteIP()
-	if err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
 	}
 
 	return &pb.GetIPReply{IP: ip}, nil
 }
 
 // Push 推送消息给连接
-func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply, error) {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Push(_ context.Context, req *pb.PushRequest) (*pb.PushReply, error) {
+	err := e.provider.Push(session.Kind(req.Kind), req.Target, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
 	if err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
-	}
-
-	if err = e.provider.Push(session.Kind(req.Kind), req.Target, msg); err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
@@ -130,17 +101,12 @@ func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply
 }
 
 // Multicast 推送组播消息
-func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb.MulticastReply, error) {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Multicast(_ context.Context, req *pb.MulticastRequest) (*pb.MulticastReply, error) {
+	total, err := e.provider.Multicast(session.Kind(req.Kind), req.Targets, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
-	if err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
-	}
-
-	total, err := e.provider.Multicast(session.Kind(req.Kind), req.Targets, msg)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:
@@ -150,21 +116,16 @@ func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb
 		}
 	}
 
-	return &pb.MulticastReply{Total: int64(total)}, nil
+	return &pb.MulticastReply{Total: total}, nil
 }
 
 // Broadcast 推送广播消息
-func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb.BroadcastReply, error) {
-	msg, err := packet.Pack(&packet.Message{
+func (e *endpoint) Broadcast(_ context.Context, req *pb.BroadcastRequest) (*pb.BroadcastReply, error) {
+	total, err := e.provider.Broadcast(session.Kind(req.Kind), &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
 	})
-	if err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
-	}
-
-	total, err := e.provider.Broadcast(session.Kind(req.Kind), msg)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:
@@ -174,12 +135,12 @@ func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb
 		}
 	}
 
-	return &pb.BroadcastReply{Total: int64(total)}, nil
+	return &pb.BroadcastReply{Total: total}, nil
 }
 
 // Disconnect 断开连接
-func (e *endpoint) Disconnect(ctx context.Context, req *pb.DisconnectRequest) (*pb.DisconnectReply, error) {
-	s, err := e.provider.Session(session.Kind(req.Kind), req.Target)
+func (e *endpoint) Disconnect(_ context.Context, req *pb.DisconnectRequest) (*pb.DisconnectReply, error) {
+	err := e.provider.Disconnect(session.Kind(req.Kind), req.Target, req.IsForce)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -189,10 +150,6 @@ func (e *endpoint) Disconnect(ctx context.Context, req *pb.DisconnectRequest) (*
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
 		}
-	}
-
-	if err = s.Close(req.IsForce); err != nil {
-		return nil, status.New(codes.Internal, err.Error()).Err()
 	}
 
 	return &pb.DisconnectReply{}, nil

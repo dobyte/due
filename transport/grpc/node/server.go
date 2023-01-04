@@ -29,11 +29,11 @@ type endpoint struct {
 
 // Trigger 触发事件
 func (e *endpoint) Trigger(ctx context.Context, req *pb.TriggerRequest) (*pb.TriggerReply, error) {
-	if req.UID <= 0 {
-		return nil, status.New(codes.InvalidArgument, "invalid argument").Err()
-	}
-
-	_, miss, err := e.provider.LocateNode(ctx, req.UID)
+	miss, err := e.provider.Trigger(ctx, &transport.TriggerArgs{
+		GID:   req.GID,
+		UID:   req.UID,
+		Event: cluster.Event(req.Event),
+	})
 	if err != nil {
 		if miss {
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
@@ -42,38 +42,29 @@ func (e *endpoint) Trigger(ctx context.Context, req *pb.TriggerRequest) (*pb.Tri
 		}
 	}
 
-	e.provider.Trigger(cluster.Event(req.Event), req.GID, req.UID)
-
 	return &pb.TriggerReply{}, nil
 }
 
 // Deliver 投递消息
 func (e *endpoint) Deliver(ctx context.Context, req *pb.DeliverRequest) (*pb.DeliverReply, error) {
-	stateful, ok := e.provider.CheckRouteStateful(req.Message.Route)
-	if !ok {
-		return &pb.DeliverReply{}, nil
-	}
-
-	if stateful {
-		if req.UID <= 0 {
-			return nil, status.New(codes.InvalidArgument, "invalid argument").Err()
-		}
-
-		_, miss, err := e.provider.LocateNode(ctx, req.UID)
-		if err != nil {
-			if miss {
-				return nil, status.New(code.NotFoundSession, err.Error()).Err()
-			} else {
-				return nil, status.New(codes.Internal, err.Error()).Err()
-			}
-		}
-	}
-
-	e.provider.Deliver(req.GID, req.NID, req.CID, req.UID, &transport.Message{
-		Seq:    req.Message.Seq,
-		Route:  req.Message.Route,
-		Buffer: req.Message.Buffer,
+	miss, err := e.provider.Deliver(ctx, &transport.DeliverArgs{
+		GID: req.GID,
+		NID: req.NID,
+		CID: req.CID,
+		UID: req.UID,
+		Message: &transport.Message{
+			Seq:    req.Message.Seq,
+			Route:  req.Message.Route,
+			Buffer: req.Message.Buffer,
+		},
 	})
+	if err != nil {
+		if miss {
+			return nil, status.New(code.NotFoundSession, err.Error()).Err()
+		} else {
+			return nil, status.New(codes.Internal, err.Error()).Err()
+		}
+	}
 
 	return &pb.DeliverReply{}, nil
 }

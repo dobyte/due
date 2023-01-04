@@ -103,7 +103,7 @@ func (c *client) Multicast(ctx context.Context, kind session.Kind, targets []int
 	}}
 	reply := &protocol.MulticastReply{}
 	err = c.client.Call(ctx, serviceMethodMulticast, req, reply)
-	total = int64(reply.Total)
+	total = reply.Total
 	return
 }
 
@@ -116,6 +116,6 @@ func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *tran
 	}}
 	reply := &protocol.BroadcastReply{}
 	err = c.client.Call(ctx, serviceMethodBroadcast, req, reply)
-	total = int64(reply.Total)
+	total = reply.Total
 	return
 }

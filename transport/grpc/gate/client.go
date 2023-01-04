@@ -28,7 +28,7 @@ func NewClient(ep *router.Endpoint, opts *innerclient.Options) (*client, error) 
 
 	opts.Addr = ep.Address()
 	opts.IsSecure = ep.IsSecure()
-	
+
 	conn, err := innerclient.Dial(opts)
 	if err != nil {
 		return nil, err
@@ -64,27 +64,17 @@ func (c *client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
 }
 
 // GetIP 获取客户端IP
-func (c *client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, bool, error) {
+func (c *client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error) {
 	reply, err := c.client.GetIP(ctx, &pb.GetIPRequest{
 		Kind:   int32(kind),
 		Target: target,
 	})
 	if err != nil {
-		return "", status.Code(err) == code.NotFoundSession, err
+		miss = status.Code(err) == code.NotFoundSession
+		return
 	}
 
-	return reply.IP, false, nil
-}
-
-// Disconnect 断开连接
-func (c *client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
-	_, err = c.client.Disconnect(ctx, &pb.DisconnectRequest{
-		Kind:    int32(kind),
-		Target:  target,
-		IsForce: isForce,
-	})
-
-	miss = status.Code(err) == code.NotFoundSession
+	ip = reply.IP
 
 	return
 }
@@ -139,4 +129,17 @@ func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *tran
 	}
 
 	return reply.Total, nil
+}
+
+// Disconnect 断开连接
+func (c *client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
+	_, err = c.client.Disconnect(ctx, &pb.DisconnectRequest{
+		Kind:    int32(kind),
+		Target:  target,
+		IsForce: isForce,
+	})
+
+	miss = status.Code(err) == code.NotFoundSession
+
+	return
 }

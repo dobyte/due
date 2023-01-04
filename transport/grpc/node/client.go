@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/transport"
 	innerclient "github.com/dobyte/due/transport/grpc/internal/client"
@@ -41,11 +40,11 @@ func NewClient(ep *router.Endpoint, opts *innerclient.Options) (*client, error) 
 }
 
 // Trigger 触发事件
-func (c *client) Trigger(ctx context.Context, event cluster.Event, gid string, uid int64) (miss bool, err error) {
+func (c *client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
 	_, err = c.client.Trigger(ctx, &pb.TriggerRequest{
-		Event: int32(event),
-		GID:   gid,
-		UID:   uid,
+		Event: int32(args.Event),
+		GID:   args.GID,
+		UID:   args.UID,
 	})
 
 	miss = status.Code(err) == code.NotFoundSession
@@ -54,16 +53,16 @@ func (c *client) Trigger(ctx context.Context, event cluster.Event, gid string, u
 }
 
 // Deliver 投递消息
-func (c *client) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message *transport.Message) (miss bool, err error) {
+func (c *client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
 	_, err = c.client.Deliver(ctx, &pb.DeliverRequest{
-		GID: gid,
-		NID: nid,
-		CID: cid,
-		UID: uid,
+		GID: args.GID,
+		NID: args.NID,
+		CID: args.CID,
+		UID: args.UID,
 		Message: &pb.Message{
-			Seq:    message.Seq,
-			Route:  message.Route,
-			Buffer: message.Buffer,
+			Seq:    args.Message.Seq,
+			Route:  args.Message.Route,
+			Buffer: args.Message.Buffer,
 		},
 	}, grpc.UseCompressor(gzip.Name))
 

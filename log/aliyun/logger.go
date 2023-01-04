@@ -10,11 +10,10 @@ package aliyun
 import (
 	"bytes"
 	"fmt"
+	"github.com/aliyun/aliyun-log-go-sdk/producer"
+	"github.com/dobyte/due/utils/xtime"
 	"os"
 	"sync"
-	"time"
-
-	"github.com/aliyun/aliyun-log-go-sdk/producer"
 
 	"github.com/dobyte/due/log"
 )
@@ -81,7 +80,7 @@ func (l *Logger) log(level log.Level, a ...interface{}) {
 	}).Entity(level, a...)
 
 	if l.opts.syncout {
-		logData := producer.GenerateLog(uint32(time.Now().Unix()), l.buildLogRaw(e))
+		logData := producer.GenerateLog(uint32(xtime.Now().Unix()), l.buildLogRaw(e))
 		_ = l.producer.SendLog(l.opts.project, l.opts.logstore, l.opts.topic, l.opts.source, logData)
 	}
 

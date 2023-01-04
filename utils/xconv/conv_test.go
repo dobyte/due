@@ -2,15 +2,15 @@ package xconv_test
 
 import (
 	"github.com/dobyte/due/utils/xconv"
+	"github.com/dobyte/due/utils/xtime"
 	"math"
 	"math/cmplx"
 	"testing"
-	"time"
 )
 
 func TestInt64(t *testing.T) {
 	a := cmplx.Exp(1i*math.Pi) + 20
-	t.Log(xconv.Int64(time.Now()))
+	t.Log(xconv.Int64(xtime.Now()))
 	t.Log(xconv.Int64(func() {}))
 	t.Log(xconv.Int64(&a))
 }
