@@ -8,8 +8,8 @@
 package ws
 
 import (
-	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/utils/xnet"
 	"github.com/dobyte/due/utils/xtime"
 	"net"
 	"sync"

@@ -11,13 +11,12 @@ import (
 	"context"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/utils/xnet"
 	"sync"
 	"time"
 
-	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
 
 	"github.com/dobyte/due/component"

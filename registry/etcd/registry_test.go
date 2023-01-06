@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/registry/etcd"
+	"github.com/dobyte/due/utils/xnet"
 )
 
 const (
@@ -35,9 +35,9 @@ func TestRegistry_Register1(t *testing.T) {
 	ctx := context.Background()
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
-		Name:     "login-server",
+		Name:     serviceName,
 		Kind:     cluster.Node,
-		Alias:    "mahjong",
+		Alias:    "login-server",
 		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
@@ -57,6 +57,8 @@ func TestRegistry_Register1(t *testing.T) {
 	rcancel()
 	if err != nil {
 		t.Fatal(err)
+	} else {
+		t.Log("register")
 	}
 
 	time.Sleep(20 * time.Second)
@@ -78,7 +80,7 @@ func TestRegistry_Register2(t *testing.T) {
 
 	if err = reg.Register(context.Background(), &registry.ServiceInstance{
 		ID:       "test-2",
-		Name:     "game-server",
+		Name:     serviceName,
 		Kind:     cluster.Node,
 		State:    cluster.Work,
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
@@ -106,14 +108,16 @@ func TestRegistry_Services(t *testing.T) {
 }
 
 func TestRegistry_Watch(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	watcher1, err := reg.Watch(ctx, serviceName)
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	watcher2, err := reg.Watch(context.Background(), serviceName)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	watcher2, err := reg.Watch(ctx, serviceName)
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}

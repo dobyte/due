@@ -51,35 +51,52 @@ func Symbols(length int) string {
 	return Str(SymbolSeed, length)
 }
 
-// Int 生成指定范围的整数
+// Int 生成[min,max]的整数
+// min -50 max 100
 func Int(min, max int) int {
+	if min == max {
+		return min
+	}
+
 	if min > max {
 		min, max = max, min
 	}
 
-	return rand.Intn(max-min) + min
+	return rand.Intn(max+1-min) + min
 }
 
-// Int32 生成指定范围的32位整数
+// Int32 生成[min,max]范围间的32位整数，
 func Int32(min, max int32) int32 {
+	if min == max {
+		return min
+	}
+
 	if min > max {
 		min, max = max, min
 	}
 
-	return rand.Int31n(max-min) + min
+	return rand.Int31n(max+1-min) + min
 }
 
-// Int64 生成指定范围的64位整数
+// Int64 生成[min,max]范围间的64位整数
 func Int64(min, max int64) int64 {
+	if min == max {
+		return min
+	}
+
 	if min > max {
 		min, max = max, min
 	}
 
-	return rand.Int63n(max-min) + min
+	return rand.Int63n(max+1-min) + min
 }
 
-// Float32 生成指定范围的32位浮点数
+// Float32 生成[min,max)范围间的32位浮点数
 func Float32(min, max float32) float32 {
+	if min == max {
+		return min
+	}
+
 	if min > max {
 		min, max = max, min
 	}
@@ -87,8 +104,12 @@ func Float32(min, max float32) float32 {
 	return min + rand.Float32()*(max-min)
 }
 
-// Float64 生成指定范围的64位浮点数
+// Float64 生成[min,max)范围间的64位浮点数
 func Float64(min, max float64) float64 {
+	if min == max {
+		return min
+	}
+
 	if min > max {
 		min, max = max, min
 	}

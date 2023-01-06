@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Watcher interface {
@@ -39,7 +40,7 @@ func newWatcher(ctx context.Context, source *defaultSource) (Watcher, error) {
 				return err
 			}
 
-			if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") {
 				return nil
 			}
 

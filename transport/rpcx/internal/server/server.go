@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/internal/xnet"
+	"github.com/dobyte/due/utils/xnet"
 	"github.com/smallnest/rpcx/server"
 	"net"
 )

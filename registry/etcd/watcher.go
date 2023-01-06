@@ -9,7 +9,6 @@ package etcd
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -90,7 +89,7 @@ func (w *watcher) Stop() error {
 	return w.watcherMgr.recycle(w.idx)
 }
 
-func newWatcherMgr(ctx context.Context, serviceName string, registry *Registry) (*watcherMgr, error) {
+func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
 	services, err := registry.services(ctx, serviceName)
 	if err != nil {
 		return nil, err
@@ -101,7 +100,7 @@ func newWatcherMgr(ctx context.Context, serviceName string, registry *Registry) 
 	w.registry = registry
 	w.serviceName = serviceName
 	w.watcher = clientv3.NewWatcher(registry.opts.client)
-	w.chWatch = w.watcher.Watch(w.ctx, fmt.Sprintf("/%s/%s", registry.opts.namespace, w.serviceName), clientv3.WithPrefix())
+	w.chWatch = w.watcher.Watch(w.ctx, buildPrefixKey(registry.opts.namespace, w.serviceName), clientv3.WithPrefix())
 	w.watchers = make(map[int64]*watcher)
 
 	for _, service := range services {

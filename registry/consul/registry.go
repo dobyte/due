@@ -105,7 +105,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return v.(*watcherMgr).fork(), nil
 	}
 
-	w, err := newWatcherMgr(ctx, serviceName, r)
+	w, err := newWatcherMgr(r, ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}

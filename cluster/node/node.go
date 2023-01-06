@@ -4,10 +4,10 @@ import (
 	"context"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/utils/xnet"
 	"time"
 )
 

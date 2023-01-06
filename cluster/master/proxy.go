@@ -3,23 +3,23 @@ package master
 import (
 	"context"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal"
+	"github.com/dobyte/due/internal/link"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/session"
 )
 
 var (
-    ErrInvalidGID         = internal.ErrInvalidGID
-    ErrInvalidNID         = internal.ErrInvalidNID
-    ErrInvalidMessage     = internal.ErrInvalidMessage
-    ErrInvalidArgument    = internal.ErrInvalidArgument
-    ErrInvalidSessionKind = internal.ErrInvalidSessionKind
-    ErrNotFoundUserSource = internal.ErrNotFoundUserSource
-    ErrReceiveTargetEmpty = internal.ErrReceiveTargetEmpty
+	ErrInvalidGID         = link.ErrInvalidGID
+	ErrInvalidNID         = link.ErrInvalidNID
+	ErrInvalidMessage     = link.ErrInvalidMessage
+	ErrInvalidArgument    = link.ErrInvalidArgument
+	ErrInvalidSessionKind = link.ErrInvalidSessionKind
+	ErrNotFoundUserSource = link.ErrNotFoundUserSource
+	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
 )
 
 type (
-    Message = internal.Message
+	Message = link.Message
 )
 
 type Proxy interface {
@@ -46,11 +46,11 @@ type Proxy interface {
 }
 
 type proxy struct {
-	link *internal.Link
+	link *link.Link
 }
 
 func newProxy(opts *options) *proxy {
-	return &proxy{link: internal.NewLink(&internal.Options{
+	return &proxy{link: link.NewLink(&link.Options{
 		Codec:       opts.codec,
 		Locator:     opts.locator,
 		Registry:    opts.registry,
@@ -81,7 +81,7 @@ func (p *proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 
 // GetIP 获取客户端IP
 func (p *proxy) GetIP(ctx context.Context, uid int64) (string, error) {
-	return p.link.GetIP(ctx, &internal.GetIPArgs{
+	return p.link.GetIP(ctx, &link.GetIPArgs{
 		Kind:   session.User,
 		Target: uid,
 	})
@@ -89,7 +89,7 @@ func (p *proxy) GetIP(ctx context.Context, uid int64) (string, error) {
 
 // Push 推送消息
 func (p *proxy) Push(ctx context.Context, uid int64, message *Message) error {
-	return p.link.Push(ctx, &internal.PushArgs{
+	return p.link.Push(ctx, &link.PushArgs{
 		Kind:    session.User,
 		Target:  uid,
 		Message: message,
@@ -98,7 +98,7 @@ func (p *proxy) Push(ctx context.Context, uid int64, message *Message) error {
 
 // Multicast 推送组播消息
 func (p *proxy) Multicast(ctx context.Context, uids []int64, message *Message) (int64, error) {
-	return p.link.Multicast(ctx, &internal.MulticastArgs{
+	return p.link.Multicast(ctx, &link.MulticastArgs{
 		Kind:    session.User,
 		Targets: uids[:],
 		Message: message,
@@ -107,7 +107,7 @@ func (p *proxy) Multicast(ctx context.Context, uids []int64, message *Message) (
 
 // Broadcast 推送广播消息
 func (p *proxy) Broadcast(ctx context.Context, kind session.Kind, message *Message) (int64, error) {
-	return p.link.Broadcast(ctx, &internal.BroadcastArgs{
+	return p.link.Broadcast(ctx, &link.BroadcastArgs{
 		Kind:    kind,
 		Message: message,
 	})
@@ -115,7 +115,7 @@ func (p *proxy) Broadcast(ctx context.Context, kind session.Kind, message *Messa
 
 // Deliver 投递消息给节点处理
 func (p *proxy) Deliver(ctx context.Context, uid int64, message *Message) error {
-	return p.link.Deliver(ctx, &internal.DeliverArgs{
+	return p.link.Deliver(ctx, &link.DeliverArgs{
 		UID:     uid,
 		Message: message,
 	})
@@ -123,7 +123,7 @@ func (p *proxy) Deliver(ctx context.Context, uid int64, message *Message) error 
 
 // Disconnect 断开连接
 func (p *proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
-	return p.link.Disconnect(ctx, &internal.DisconnectArgs{
+	return p.link.Disconnect(ctx, &link.DisconnectArgs{
 		Kind:    session.User,
 		Target:  uid,
 		IsForce: isForce,
@@ -134,5 +134,7 @@ func (p *proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
 func (p *proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
 
-	p.link.WatchServiceInstance(ctx)
+	p.link.WatchServiceInstance(ctx, string(cluster.Gate))
+
+	p.link.WatchServiceInstance(ctx, string(cluster.Node))
 }

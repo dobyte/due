@@ -100,7 +100,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return v.(*watcherMgr).fork(), nil
 	}
 
-	w, err := newWatcherMgr(ctx, serviceName, r)
+	w, err := newWatcherMgr(r, ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +140,7 @@ func (r *Registry) Stop() error {
 
 // 获取服务实例列表
 func (r *Registry) services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
-	key := fmt.Sprintf("/%s/%s", r.opts.namespace, serviceName)
-
-	res, err := r.opts.client.Get(ctx, key, clientv3.WithPrefix())
+	res, err := r.opts.client.Get(ctx, buildPrefixKey(r.opts.namespace, serviceName), clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -173,4 +171,8 @@ func unmarshal(data []byte) (*registry.ServiceInstance, error) {
 		return nil, err
 	}
 	return ins, nil
+}
+
+func buildPrefixKey(namespace, serviceName string) string {
+	return fmt.Sprintf("/%s/%s", namespace, serviceName)
 }

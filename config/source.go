@@ -90,7 +90,7 @@ func (s *defaultSource) loadDir(path string) (cs []*Configuration, err error) {
 			return err
 		}
 
-		if d.IsDir() {
+		if d.IsDir() || strings.HasSuffix(d.Name(), ".") {
 			return nil
 		}
 

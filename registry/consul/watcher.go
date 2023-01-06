@@ -77,7 +77,7 @@ type watcherMgr struct {
 	watchers map[int64]*watcher
 }
 
-func newWatcherMgr(ctx context.Context, serviceName string, registry *Registry) (*watcherMgr, error) {
+func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
 	services, index, err := registry.services(ctx, serviceName, 0, true)
 	if err != nil {
 		return nil, err

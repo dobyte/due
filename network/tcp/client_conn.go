@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/internal/xnet"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/utils/xnet"
 )
 
 type clientConn struct {

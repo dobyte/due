@@ -2,9 +2,8 @@ package gate
 
 import (
 	"context"
-	"errors"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal"
+	"github.com/dobyte/due/internal/link"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/packet"
@@ -12,22 +11,22 @@ import (
 )
 
 var (
-    ErrInvalidGID         = internal.ErrInvalidGID
-    ErrInvalidNID         = internal.ErrInvalidNID
-    ErrInvalidMessage     = internal.ErrInvalidMessage
-    ErrInvalidArgument    = internal.ErrInvalidArgument
-    ErrInvalidSessionKind = internal.ErrInvalidSessionKind
-    ErrNotFoundUserSource = internal.ErrNotFoundUserSource
-    ErrReceiveTargetEmpty = internal.ErrReceiveTargetEmpty
+	ErrInvalidGID         = link.ErrInvalidGID
+	ErrInvalidNID         = link.ErrInvalidNID
+	ErrInvalidMessage     = link.ErrInvalidMessage
+	ErrInvalidArgument    = link.ErrInvalidArgument
+	ErrInvalidSessionKind = link.ErrInvalidSessionKind
+	ErrNotFoundUserSource = link.ErrNotFoundUserSource
+	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
 )
 
 type proxy struct {
-	gate *Gate          // 网关服
-	link *internal.Link // 连接
+	gate *Gate      // 网关服
+	link *link.Link // 连接
 }
 
 func newProxy(gate *Gate) *proxy {
-	return &proxy{gate: gate, link: internal.NewLink(&internal.Options{
+	return &proxy{gate: gate, link: link.NewLink(&link.Options{
 		GID:         gate.opts.id,
 		Locator:     gate.opts.locator,
 		Registry:    gate.opts.registry,
@@ -67,7 +66,7 @@ func (p *proxy) unbindGate(ctx context.Context, uid int64) error {
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Message) error {
-	return p.link.Deliver(ctx, &internal.DeliverArgs{
+	return p.link.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,
 		UID:     uid,
 		Message: message,

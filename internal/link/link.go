@@ -1,4 +1,4 @@
-package internal
+package link
 
 import (
 	"context"
@@ -670,10 +670,10 @@ func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 	return l.opts.Transporter.NewNodeClient(ep)
 }
 
-// 监听服务实例
-func (l *Link) WatchServiceInstance(ctx context.Context, serviceName ...string) {
+// WatchServiceInstance 监听服务实例
+func (l *Link) WatchServiceInstance(ctx context.Context, serviceName string) {
 	tmpCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	watcher, err := l.opts.Registry.Watch(tmpCtx, serviceName...)
+	watcher, err := l.opts.Registry.Watch(tmpCtx, serviceName)
 	cancel()
 	if err != nil {
 		log.Fatalf("the service instance watch failed: %v", err)

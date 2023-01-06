@@ -14,9 +14,9 @@ func Test_Symbols(t *testing.T) {
 }
 
 func Test_Int(t *testing.T) {
-	t.Log(xrand.Int(0, 5))
+	t.Log(xrand.Int(1, 2))
 }
 
 func Test_Float32(t *testing.T) {
-	t.Log(xrand.Float32(0, 5))
+	t.Log(xrand.Float32(-50, 5))
 }

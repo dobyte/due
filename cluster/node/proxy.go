@@ -3,29 +3,28 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/cluster/internal"
+	"github.com/dobyte/due/internal/link"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/session"
-	"sync"
 )
 
 var (
-	ErrInvalidGID         = internal.ErrInvalidGID
-	ErrInvalidNID         = internal.ErrInvalidNID
-	ErrInvalidMessage     = internal.ErrInvalidMessage
-	ErrInvalidArgument    = internal.ErrInvalidArgument
-	ErrInvalidSessionKind = internal.ErrInvalidSessionKind
-	ErrNotFoundUserSource = internal.ErrNotFoundUserSource
-	ErrReceiveTargetEmpty = internal.ErrReceiveTargetEmpty
+	ErrInvalidGID         = link.ErrInvalidGID
+	ErrInvalidNID         = link.ErrInvalidNID
+	ErrInvalidMessage     = link.ErrInvalidMessage
+	ErrInvalidArgument    = link.ErrInvalidArgument
+	ErrInvalidSessionKind = link.ErrInvalidSessionKind
+	ErrNotFoundUserSource = link.ErrNotFoundUserSource
+	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
 )
 
 type (
-	GetIPArgs      = internal.GetIPArgs
-	PushArgs       = internal.PushArgs
-	MulticastArgs  = internal.MulticastArgs
-	BroadcastArgs  = internal.BroadcastArgs
-	DisconnectArgs = internal.DisconnectArgs
-	Message        = internal.Message
+	GetIPArgs      = link.GetIPArgs
+	PushArgs       = link.PushArgs
+	MulticastArgs  = link.MulticastArgs
+	BroadcastArgs  = link.BroadcastArgs
+	DisconnectArgs = link.DisconnectArgs
+	Message        = link.Message
 )
 
 type DeliverArgs struct {
@@ -76,16 +75,14 @@ type Proxy interface {
 }
 
 type proxy struct {
-	node       *Node    // 节点
-	sourceGate sync.Map // 用户来源网关
-	sourceNode sync.Map // 用户来源节点
-	link       *internal.Link
+	node *Node // 节点
+	link *link.Link
 }
 
 func newProxy(node *Node) *proxy {
 	return &proxy{
 		node: node,
-		link: internal.NewLink(&internal.Options{
+		link: link.NewLink(&link.Options{
 			NID:         node.opts.id,
 			Codec:       node.opts.codec,
 			Locator:     node.opts.locator,
@@ -199,7 +196,7 @@ func (p *proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 	}
 
 	if args.NID != p.GetID() {
-		return p.link.Deliver(ctx, &internal.DeliverArgs{
+		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID:     args.NID,
 			UID:     args.UID,
 			Message: message,
@@ -219,7 +216,7 @@ func (p *proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 func (p *proxy) Response(ctx context.Context, req Request, message interface{}) error {
 	switch {
 	case req.GID() != "":
-		return p.link.Push(ctx, &internal.PushArgs{
+		return p.link.Push(ctx, &link.PushArgs{
 			GID:    req.GID(),
 			Kind:   session.Conn,
 			Target: req.CID(),
@@ -230,7 +227,7 @@ func (p *proxy) Response(ctx context.Context, req Request, message interface{}) 
 			},
 		})
 	case req.NID() != "":
-		return p.link.Deliver(ctx, &internal.DeliverArgs{
+		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID: req.NID(),
 			UID: req.UID(),
 			Message: &Message{
@@ -253,5 +250,7 @@ func (p *proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 func (p *proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
 
-	p.link.WatchServiceInstance(ctx)
+	p.link.WatchServiceInstance(ctx, string(cluster.Gate))
+
+	p.link.WatchServiceInstance(ctx, string(cluster.Node))
 }

@@ -1,4 +1,4 @@
-package internal
+package link
 
 import "github.com/dobyte/due/session"
 
