@@ -36,6 +36,8 @@ type DeliverArgs struct {
 type Proxy interface {
 	// GetID 获取当前节点ID
 	GetID() string
+	// GetName 获取当前节点名称
+	GetName() string
 	// AddRouteHandler 添加路由处理器
 	AddRouteHandler(route int32, stateful bool, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -80,22 +82,24 @@ type proxy struct {
 }
 
 func newProxy(node *Node) *proxy {
-	return &proxy{
-		node: node,
-		link: link.NewLink(&link.Options{
-			NID:         node.opts.id,
-			Codec:       node.opts.codec,
-			Locator:     node.opts.locator,
-			Registry:    node.opts.registry,
-			Encryptor:   node.opts.encryptor,
-			Transporter: node.opts.transporter,
-		}),
-	}
+	return &proxy{node: node, link: link.NewLink(&link.Options{
+		NID:         node.opts.id,
+		Codec:       node.opts.codec,
+		Locator:     node.opts.locator,
+		Registry:    node.opts.registry,
+		Encryptor:   node.opts.encryptor,
+		Transporter: node.opts.transporter,
+	})}
 }
 
 // GetID 获取当前节点ID
 func (p *proxy) GetID() string {
 	return p.node.opts.id
+}
+
+// GetName 获取当前节点名称
+func (p *proxy) GetName() string {
+	return p.node.opts.name
 }
 
 // AddRouteHandler 添加路由处理器
@@ -250,7 +254,5 @@ func (p *proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 func (p *proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
 
-	p.link.WatchServiceInstance(ctx, string(cluster.Gate))
-
-	p.link.WatchServiceInstance(ctx, string(cluster.Node))
+	p.link.WatchServiceInstance(ctx, cluster.Gate, cluster.Node)
 }

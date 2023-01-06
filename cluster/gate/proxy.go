@@ -77,5 +77,5 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Mes
 func (p *proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Node)
 
-	p.link.WatchServiceInstance(ctx, string(cluster.Node))
+	p.link.WatchServiceInstance(ctx, cluster.Node)
 }

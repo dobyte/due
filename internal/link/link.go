@@ -31,7 +31,8 @@ var (
 
 type Link struct {
 	opts       *Options
-	router     *router.Router // 路由器
+	gateRouter *router.Router // 网关路由器
+	nodeRouter *router.Router // 节点路由器
 	sourceGate sync.Map       // 用户来源网关
 	sourceNode sync.Map       // 用户来源节点
 }
@@ -48,8 +49,9 @@ type Options struct {
 
 func NewLink(opts *Options) *Link {
 	return &Link{
-		opts:   opts,
-		router: router.NewRouter(),
+		opts:       opts,
+		gateRouter: router.NewRouter(),
+		nodeRouter: router.NewRouter(),
 	}
 }
 
@@ -367,7 +369,7 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
-	l.router.RangeGateEndpoint(func(_ string, ep *router.Endpoint) bool {
+	l.gateRouter.RangeGateEndpoint(func(_ string, ep *router.Endpoint) bool {
 		eg.Go(func() error {
 			client, err := l.opts.Transporter.NewGateClient(ep)
 			if err != nil {
@@ -510,7 +512,7 @@ func (l *Link) Trigger(ctx context.Context, event cluster.Event, uid int64) erro
 
 		prev = nid
 
-		if ep, err = l.router.FindNodeEndpoint(nid); err != nil {
+		if ep, err = l.nodeRouter.FindNodeEndpoint(nid); err != nil {
 			return err
 		}
 
@@ -583,7 +585,7 @@ func (l *Link) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(ct
 		reply     interface{}
 	)
 
-	if entity, err = l.router.FindNodeRoute(route); err != nil {
+	if entity, err = l.nodeRouter.FindNodeRoute(route); err != nil {
 		return nil, err
 	}
 
@@ -648,7 +650,7 @@ func (l *Link) getGateClientByGID(gid string) (transport.GateClient, error) {
 		return nil, ErrInvalidGID
 	}
 
-	ep, err := l.router.FindGateEndpoint(gid)
+	ep, err := l.gateRouter.FindGateEndpoint(gid)
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +664,7 @@ func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 		return nil, ErrInvalidNID
 	}
 
-	ep, err := l.router.FindNodeEndpoint(nid)
+	ep, err := l.nodeRouter.FindNodeEndpoint(nid)
 	if err != nil {
 		return nil, err
 	}
@@ -671,10 +673,17 @@ func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 }
 
 // WatchServiceInstance 监听服务实例
-func (l *Link) WatchServiceInstance(ctx context.Context, serviceName string) {
-	tmpCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	watcher, err := l.opts.Registry.Watch(tmpCtx, serviceName)
-	cancel()
+func (l *Link) WatchServiceInstance(ctx context.Context, kinds ...cluster.Kind) {
+	for _, kind := range kinds {
+		l.watchServiceInstance(ctx, kind)
+	}
+}
+
+// 监听服务实例
+func (l *Link) watchServiceInstance(ctx context.Context, kind cluster.Kind) {
+	rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
+	watcher, err := l.opts.Registry.Watch(rctx, string(kind))
+	rcancel()
 	if err != nil {
 		log.Fatalf("the service instance watch failed: %v", err)
 	}
@@ -692,16 +701,21 @@ func (l *Link) WatchServiceInstance(ctx context.Context, serviceName string) {
 			if err != nil {
 				continue
 			}
-			l.router.ReplaceServices(services...)
+
+			if kind == cluster.Node {
+				l.nodeRouter.ReplaceServices(services...)
+			} else {
+				l.gateRouter.ReplaceServices(services...)
+			}
 		}
 	}()
 }
 
 // WatchUserLocate 监听用户定位
 func (l *Link) WatchUserLocate(ctx context.Context, kinds ...cluster.Kind) {
-	tmpCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	watcher, err := l.opts.Locator.Watch(tmpCtx, kinds...)
-	cancel()
+	rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
+	watcher, err := l.opts.Locator.Watch(rctx, kinds...)
+	rcancel()
 	if err != nil {
 		log.Fatalf("user locate event watch failed: %v", err)
 	}

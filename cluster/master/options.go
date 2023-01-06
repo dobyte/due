@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/utils/xuuid"
 	"time"
 )
 
@@ -18,15 +19,19 @@ const (
 )
 
 const (
+	defaultIDKey        = "config.cluster.master.id"
+	defaultNameKey      = "config.cluster.master.name"
 	defaultCodecKey     = "config.cluster.master.codec"
-    defaultTimeoutKey   = "config.cluster.master.timeout"
-    defaultEncryptorKey = "config.cluster.master.encryptor"
-    defaultDecryptorKey = "config.cluster.master.decryptor"
+	defaultTimeoutKey   = "config.cluster.master.timeout"
+	defaultEncryptorKey = "config.cluster.master.encryptor"
+	defaultDecryptorKey = "config.cluster.master.decryptor"
 )
 
 type Option func(o *options)
 
 type options struct {
+	id          string                // 实例ID
+	name        string                // 实例名称
 	ctx         context.Context       // 上下文
 	codec       encoding.Codec        // 编解码器
 	timeout     time.Duration         // RPC调用超时时间
@@ -41,6 +46,16 @@ func defaultOptions() *options {
 	opts := &options{
 		ctx:     context.Background(),
 		timeout: defaultTimeout,
+	}
+
+	if id := config.Get(defaultIDKey).String(); id != "" {
+		opts.id = id
+	} else if id, err := xuuid.UUID(); err == nil {
+		opts.id = id
+	}
+
+	if name := config.Get(defaultNameKey).String(); name != "" {
+		opts.name = name
 	}
 
 	if codec := config.Get(defaultCodecKey).String(); codec != "" {
@@ -62,6 +77,16 @@ func defaultOptions() *options {
 	}
 
 	return opts
+}
+
+// WithID 设置实例ID
+func WithID(id string) Option {
+	return func(o *options) { o.id = id }
+}
+
+// WithName 设置实例名称
+func WithName(name string) Option {
+	return func(o *options) { o.name = name }
 }
 
 // WithCodec 设置编解码器

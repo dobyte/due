@@ -27,7 +27,7 @@ func NewMaster(opts ...Option) *Master {
 
 	m := &Master{}
 	m.opts = o
-	m.proxy = newProxy(o)
+	m.proxy = newProxy(m)
 	m.ctx, m.cancel = context.WithCancel(o.ctx)
 
 	return m
@@ -35,7 +35,7 @@ func NewMaster(opts ...Option) *Master {
 
 // Name 组件名称
 func (m *Master) Name() string {
-	return defaultName
+	return m.opts.id
 }
 
 // Init 初始化组件

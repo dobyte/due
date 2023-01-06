@@ -23,6 +23,10 @@ type (
 )
 
 type Proxy interface {
+	// GetID 获取当前节点ID
+	GetID() string
+	// GetName 获取当前节点名称
+	GetName() string
 	// LocateGate 定位用户所在网关
 	LocateGate(ctx context.Context, uid int64) (string, error)
 	// LocateNode 定位用户所在节点
@@ -46,17 +50,28 @@ type Proxy interface {
 }
 
 type proxy struct {
-	link *link.Link
+	master *Master
+	link   *link.Link
 }
 
-func newProxy(opts *options) *proxy {
-	return &proxy{link: link.NewLink(&link.Options{
-		Codec:       opts.codec,
-		Locator:     opts.locator,
-		Registry:    opts.registry,
-		Encryptor:   opts.encryptor,
-		Transporter: opts.transporter,
+func newProxy(master *Master) *proxy {
+	return &proxy{master: master, link: link.NewLink(&link.Options{
+		Codec:       master.opts.codec,
+		Locator:     master.opts.locator,
+		Registry:    master.opts.registry,
+		Encryptor:   master.opts.encryptor,
+		Transporter: master.opts.transporter,
 	})}
+}
+
+// GetID 获取当前节点ID
+func (p *proxy) GetID() string {
+	return p.master.opts.id
+}
+
+// GetName 获取当前节点名称
+func (p *proxy) GetName() string {
+	return p.master.opts.name
 }
 
 // LocateGate 定位用户所在网关
@@ -134,7 +149,5 @@ func (p *proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
 func (p *proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
 
-	p.link.WatchServiceInstance(ctx, string(cluster.Gate))
-
-	p.link.WatchServiceInstance(ctx, string(cluster.Node))
+	p.link.WatchServiceInstance(ctx, cluster.Gate, cluster.Node)
 }

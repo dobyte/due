@@ -15,7 +15,7 @@ import (
 )
 
 type connMgr struct {
-	rw     sync.RWMutex                    // 连接读写锁
+	mu     sync.Mutex                      // 连接读写锁
 	id     int64                           // 连接ID
 	pool   sync.Pool                       // 连接池
 	conns  map[*websocket.Conn]*serverConn // 连接集合
@@ -32,8 +32,8 @@ func newConnMgr(server *server) *connMgr {
 
 // 关闭连接
 func (cm *connMgr) close() {
-	cm.rw.Lock()
-	defer cm.rw.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	for _, conn := range cm.conns {
 		_ = conn.Close(false)
@@ -42,8 +42,8 @@ func (cm *connMgr) close() {
 
 // 分配连接
 func (cm *connMgr) allocate(c *websocket.Conn) error {
-	cm.rw.Lock()
-	defer cm.rw.Unlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
 		return network.ErrTooManyConnection
@@ -59,8 +59,8 @@ func (cm *connMgr) allocate(c *websocket.Conn) error {
 
 // 回收连接
 func (cm *connMgr) recycle(conn *serverConn) {
-	cm.rw.Lock()
-	defer cm.rw.Unlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	delete(cm.conns, conn.conn)
 	cm.pool.Put(conn)
