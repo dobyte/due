@@ -1,6 +1,7 @@
 package due
 
 import (
+	"fmt"
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/log"
@@ -27,7 +28,7 @@ func (c *Container) Add(components ...component.Component) {
 
 // Serve 启动容器
 func (c *Container) Serve() {
-	log.Debug("Welcome to the due framework, Learn more at https://github.com/dobyte/due")
+	log.Debug(fmt.Sprintf("Welcome to the due framework %s, Learn more at https://github.com/dobyte/due", Version))
 
 	for _, comp := range c.components {
 		comp.Init()
