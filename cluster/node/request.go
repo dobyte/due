@@ -9,94 +9,60 @@ package node
 
 import (
 	"bytes"
-	"context"
 	"encoding/gob"
-	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/crypto"
+	"github.com/dobyte/due/encoding"
 )
 
-type Request interface {
-	// GID 获取来源网关ID
-	GID() string
-	// NID 获取来源节点ID
-	NID() string
-	// CID 获取来源连接ID
-	CID() int64
-	// UID 获取来源用户ID
-	UID() int64
-	// Seq 获取消息序列号
-	Seq() int32
-	// Route 获取路由
-	Route() int32
-	// Data 获取数据
-	Data() interface{}
-	// Parse 解析请求
-	Parse(v interface{}) error
-	// Context 获取上线文
-	Context() context.Context
-	// GetIP 获取IP地址
-	GetIP() (string, error)
-	// Response 响应请求
-	Response(message interface{}) error
-	// BindGate 绑定网关
-	BindGate(uid int64) error
-	// UnbindGate 解绑网关
-	UnbindGate() error
-	// BindNode 绑定节点
-	BindNode() error
-	// UnbindNode 解绑节点
-	UnbindNode() error
-	// Disconnect 断开连接
-	Disconnect(isForce ...bool) error
-}
+// Request 请求数据
+type Request struct {
+	codec     encoding.Codec   // 编解码器
+	decryptor crypto.Decryptor // 消息解密器
 
-// 请求数据
-type request struct {
-	ctx     context.Context // context
-	gid     string          // 来源网关ID
-	nid     string          // 来源节点ID
-	cid     int64           // 连接ID
-	uid     int64           // 用户ID
-	message *Message        // 请求消息
-	node    *Node           // 节点服务器
+	gid     string   // 来源网关ID
+	nid     string   // 来源节点ID
+	cid     int64    // 连接ID
+	uid     int64    // 用户ID
+	message *Message // 请求消息
 }
 
 // GID 获取来源网关ID
-func (r *request) GID() string {
+func (r *Request) GID() string {
 	return r.gid
 }
 
 // NID 获取来源节点ID
-func (r *request) NID() string {
+func (r *Request) NID() string {
 	return r.nid
 }
 
 // CID 获取来源连接ID
-func (r *request) CID() int64 {
+func (r *Request) CID() int64 {
 	return r.cid
 }
 
 // UID 获取来源用户ID
-func (r *request) UID() int64 {
+func (r *Request) UID() int64 {
 	return r.uid
 }
 
 // Seq 获取消息序列号
-func (r *request) Seq() int32 {
+func (r *Request) Seq() int32 {
 	return r.message.Seq
 }
 
 // Route 获取消息路由
-func (r *request) Route() int32 {
+func (r *Request) Route() int32 {
 	return r.message.Route
 }
 
 // Data 获取消息数据
-func (r *request) Data() interface{} {
+func (r *Request) Data() interface{} {
 	return r.message.Data
 }
 
 // Parse 解析消息
-func (r *request) Parse(v interface{}) (err error) {
+func (r *Request) Parse(v interface{}) (err error) {
 	msg, ok := r.message.Data.([]byte)
 	if !ok {
 		var buf bytes.Buffer
@@ -106,70 +72,12 @@ func (r *request) Parse(v interface{}) (err error) {
 		return gob.NewDecoder(&buf).Decode(v)
 	}
 
-	if r.gid != "" && r.node.opts.decryptor != nil {
-		msg, err = r.node.opts.decryptor.Decrypt(msg)
+	if r.gid != "" && r.decryptor != nil {
+		msg, err = r.decryptor.Decrypt(msg)
 		if err != nil {
 			return
 		}
 	}
 
-	return r.node.opts.codec.Unmarshal(msg, v)
-}
-
-// Context 获取上线文
-func (r *request) Context() context.Context {
-	return r.ctx
-}
-
-// GetIP 获取IP地址
-func (r *request) GetIP() (string, error) {
-	return r.node.proxy.GetIP(r.Context(), &GetIPArgs{
-		GID:    r.gid,
-		Kind:   session.Conn,
-		Target: r.cid,
-	})
-}
-
-// Response 响应请求
-func (r *request) Response(message interface{}) error {
-	return r.node.proxy.Response(r.Context(), r, message)
-}
-
-// BindGate 绑定网关
-func (r *request) BindGate(uid int64) error {
-	return r.node.proxy.BindGate(r.Context(), r.gid, r.cid, uid)
-}
-
-// UnbindGate 解绑网关
-func (r *request) UnbindGate() error {
-	return r.node.proxy.UnbindGate(r.Context(), r.uid)
-}
-
-// BindNode 绑定节点
-func (r *request) BindNode() error {
-	return r.node.proxy.BindNode(r.Context(), r.uid)
-}
-
-// UnbindNode 解绑节点
-func (r *request) UnbindNode() error {
-	return r.node.proxy.UnbindNode(r.Context(), r.uid)
-}
-
-// Disconnect 断开连接
-func (r *request) Disconnect(isForce ...bool) error {
-	if r.gid == "" {
-		return nil
-	}
-
-	isForceClose := false
-	if len(isForce) > 0 && isForce[0] {
-		isForceClose = true
-	}
-
-	return r.node.proxy.Disconnect(r.Context(), &DisconnectArgs{
-		GID:     r.gid,
-		Kind:    session.Conn,
-		Target:  r.cid,
-		IsForce: isForceClose,
-	})
+	return r.codec.Unmarshal(msg, v)
 }

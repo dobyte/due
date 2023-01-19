@@ -21,6 +21,8 @@ timezone = "Local"
         encryptor = "ecc"
         # 解密器。可选：rsa | ecc
         decryptor = "ecc"
+        # 任务池大小
+        taskPoolSize = 100000
     # 集群管理节点配置
     [cluster.master]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID

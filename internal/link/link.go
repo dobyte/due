@@ -6,11 +6,12 @@ import (
 	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/encoding"
 	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/internal/endpoint"
+	"github.com/dobyte/due/internal/router"
 	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/router"
 	"github.com/dobyte/due/session"
 	"github.com/dobyte/due/transport"
 	"golang.org/x/sync/errgroup"
@@ -38,20 +39,21 @@ type Link struct {
 }
 
 type Options struct {
-	GID         string                // 网关ID
-	NID         string                // 节点ID
-	Codec       encoding.Codec        // 编解码器
-	Locator     locate.Locator        // 定位器
-	Registry    registry.Registry     // 注册器
-	Encryptor   crypto.Encryptor      // 加密器
-	Transporter transport.Transporter // 传输器
+	GID             string                 // 网关ID
+	NID             string                 // 节点ID
+	Codec           encoding.Codec         // 编解码器
+	Locator         locate.Locator         // 定位器
+	Registry        registry.Registry      // 注册器
+	Encryptor       crypto.Encryptor       // 加密器
+	Transporter     transport.Transporter  // 传输器
+	BalanceStrategy router.BalanceStrategy // 负载均衡策略
 }
 
 func NewLink(opts *Options) *Link {
 	return &Link{
 		opts:       opts,
-		gateRouter: router.NewRouter(),
-		nodeRouter: router.NewRouter(),
+		gateRouter: router.NewRouter(opts.BalanceStrategy),
+		nodeRouter: router.NewRouter(opts.BalanceStrategy),
 	}
 }
 
@@ -369,7 +371,7 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
-	l.gateRouter.RangeGateEndpoint(func(_ string, ep *router.Endpoint) bool {
+	l.gateRouter.IterationServiceEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
 			client, err := l.opts.Transporter.NewGateClient(ep)
 			if err != nil {
@@ -493,7 +495,7 @@ func (l *Link) Trigger(ctx context.Context, event cluster.Event, uid int64) erro
 		nid    string
 		prev   string
 		client transport.NodeClient
-		ep     *router.Endpoint
+		ep     *endpoint.Endpoint
 		args   = &transport.TriggerArgs{
 			Event: event,
 			GID:   l.opts.GID,
@@ -512,7 +514,7 @@ func (l *Link) Trigger(ctx context.Context, event cluster.Event, uid int64) erro
 
 		prev = nid
 
-		if ep, err = l.nodeRouter.FindNodeEndpoint(nid); err != nil {
+		if ep, err = l.nodeRouter.FindServiceEndpoint(nid); err != nil {
 			return err
 		}
 
@@ -580,12 +582,12 @@ func (l *Link) doNodeRPC(ctx context.Context, route int32, uid int64, fn func(ct
 		prev      string
 		client    transport.NodeClient
 		entity    *router.Route
-		ep        *router.Endpoint
+		ep        *endpoint.Endpoint
 		continued bool
 		reply     interface{}
 	)
 
-	if entity, err = l.nodeRouter.FindNodeRoute(route); err != nil {
+	if entity, err = l.nodeRouter.FindServiceRoute(route); err != nil {
 		return nil, err
 	}
 
@@ -650,7 +652,7 @@ func (l *Link) getGateClientByGID(gid string) (transport.GateClient, error) {
 		return nil, ErrInvalidGID
 	}
 
-	ep, err := l.gateRouter.FindGateEndpoint(gid)
+	ep, err := l.gateRouter.FindServiceEndpoint(gid)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +666,7 @@ func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 		return nil, ErrInvalidNID
 	}
 
-	ep, err := l.nodeRouter.FindNodeEndpoint(nid)
+	ep, err := l.nodeRouter.FindServiceEndpoint(nid)
 	if err != nil {
 		return nil, err
 	}

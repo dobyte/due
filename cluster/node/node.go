@@ -8,18 +8,12 @@ import (
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xnet"
+	"github.com/panjf2000/ants/v2"
+	"sync"
 	"time"
 )
 
-type RouteHandler func(req Request)
-
 type EventHandler func(gid string, uid int64)
-
-type routeEntity struct {
-	route    int32        // 路由
-	stateful bool         // 是否有状态
-	handler  RouteHandler // 路由处理器
-}
 
 type eventEntity struct {
 	event cluster.Event
@@ -29,18 +23,20 @@ type eventEntity struct {
 
 type Node struct {
 	component.Base
-	opts                *options
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	chEvent             chan *eventEntity
-	chRequest           chan *request
-	routes              map[int32]routeEntity
-	events              map[cluster.Event]EventHandler
-	defaultRouteHandler RouteHandler
-	proxy               *proxy
-	instance            *registry.ServiceInstance
-	rpc                 transport.Server
-	state               cluster.State
+	opts      *options
+	ctx       context.Context
+	cancel    context.CancelFunc
+	chEvent   chan *eventEntity
+	chRequest chan *Request
+	events    map[cluster.Event]EventHandler
+	router    *Router
+	proxy     *Proxy
+	instance  *registry.ServiceInstance
+	rpc       transport.Server
+	state     cluster.State
+	ctxPool   sync.Pool
+	reqPool   sync.Pool
+	taskPool  *ants.Pool
 }
 
 func NewNode(opts ...Option) *Node {
@@ -51,13 +47,28 @@ func NewNode(opts ...Option) *Node {
 
 	n := &Node{}
 	n.opts = o
-	n.routes = make(map[int32]routeEntity)
 	n.events = make(map[cluster.Event]EventHandler, 3)
 	n.chEvent = make(chan *eventEntity, 4096)
-	n.chRequest = make(chan *request, 4096)
+	n.chRequest = make(chan *Request, 4096)
+	n.router = newRouter()
 	n.proxy = newProxy(n)
 	n.state = cluster.Shut
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
+	n.ctxPool.New = func() interface{} {
+		return &Context{
+			ctx:        context.Background(),
+			Proxy:      n.proxy,
+			Middleware: &Middleware{},
+		}
+	}
+	n.reqPool.New = func() interface{} {
+		return &Request{codec: o.codec, decryptor: o.decryptor, message: &Message{}}
+	}
+	n.taskPool, _ = ants.NewPool(
+		o.taskPoolSize,
+		ants.WithDisablePurge(true),
+		ants.WithNonblocking(true),
+	)
 
 	return n
 }
@@ -114,10 +125,11 @@ func (n *Node) Destroy() {
 	close(n.chEvent)
 	close(n.chRequest)
 	n.cancel()
+	n.taskPool.Release()
 }
 
 // Proxy 获取节点代理
-func (n *Node) Proxy() Proxy {
+func (n *Node) Proxy() *Proxy {
 	return n.proxy
 }
 
@@ -142,13 +154,44 @@ func (n *Node) dispatch() {
 				return
 			}
 
-			route, ok := n.routes[req.Route()]
-			if ok {
-				route.handler(req)
-			} else if n.defaultRouteHandler != nil {
-				n.defaultRouteHandler(req)
-			} else {
+			route, ok := n.router.routes[req.Route()]
+			if !ok && n.router.defaultRouteHandler == nil {
 				log.Warnf("message routing does not register handler function, route: %v", req.Route())
+				continue
+			}
+
+			ctx := n.ctxPool.Get().(*Context)
+			ctx.Request = req
+
+			if ok {
+				task := func() {
+					if len(route.middlewares) > 0 {
+						ctx.Middleware.reset(route.middlewares)
+						ctx.Middleware.Next(ctx)
+
+						if ctx.Middleware.isFinished() {
+							route.handler(ctx)
+						}
+					} else {
+						route.handler(ctx)
+					}
+
+					n.reqPool.Put(req)
+					n.ctxPool.Put(ctx)
+				}
+
+				if route.stateful {
+					task()
+				} else {
+					if err := n.taskPool.Submit(task); err != nil {
+						log.Warnf("task commit failed, system auto switch to blocking invoke, err: %v", err)
+						task()
+					}
+				}
+			} else {
+				n.router.defaultRouteHandler(ctx)
+				n.reqPool.Put(req)
+				n.ctxPool.Put(ctx)
 			}
 		}
 	}
@@ -179,8 +222,8 @@ func (n *Node) stopTransportServer() {
 
 // 注册服务实例
 func (n *Node) registerServiceInstance() {
-	routes := make([]registry.Route, 0, len(n.routes))
-	for _, entity := range n.routes {
+	routes := make([]registry.Route, 0, len(n.router.routes))
+	for _, entity := range n.router.routes {
 		routes = append(routes, registry.Route{
 			ID:       entity.route,
 			Stateful: entity.stateful,
@@ -218,11 +261,11 @@ func (n *Node) deregisterServiceInstance() {
 // 添加路由处理器
 func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
 	if n.state == cluster.Shut {
-		n.routes[route] = routeEntity{
-			route:    route,
-			stateful: stateful,
-			handler:  handler,
-		}
+		//n.routes[route] = routeEntity{
+		//	route:    route,
+		//	stateful: stateful,
+		//	handler:  handler,
+		//}
 	} else {
 		log.Warnf("the node server is working, can't add route handler")
 	}
@@ -231,7 +274,7 @@ func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler)
 // 默认路由处理器
 func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
 	if n.state == cluster.Shut {
-		n.defaultRouteHandler = handler
+		//n.defaultRouteHandler = handler
 	} else {
 		log.Warnf("the node server is working, can't set default route handler")
 	}
@@ -239,11 +282,11 @@ func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
 
 // 是否为有状态路由
 func (n *Node) checkRouteStateful(route int32) (bool, bool) {
-	if entity, ok := n.routes[route]; ok {
+	if entity, ok := n.router.routes[route]; ok {
 		return entity.stateful, ok
 	}
 
-	return false, n.defaultRouteHandler != nil
+	return false, n.router.defaultRouteHandler != nil
 }
 
 // 添加事件处理器
@@ -262,13 +305,6 @@ func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
 		gid:   gid,
 		uid:   uid,
 	}
-}
-
-// 投递消息给当前节点处理
-func (n *Node) deliver(req *request) {
-	req.ctx = context.Background()
-	req.node = n
-	n.chRequest <- req
 }
 
 func (n *Node) debugPrint() {
