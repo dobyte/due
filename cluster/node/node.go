@@ -54,16 +54,8 @@ func NewNode(opts ...Option) *Node {
 	n.proxy = newProxy(n)
 	n.state = cluster.Shut
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
-	n.ctxPool.New = func() interface{} {
-		return &Context{
-			ctx:        context.Background(),
-			Proxy:      n.proxy,
-			Middleware: &Middleware{},
-		}
-	}
-	n.reqPool.New = func() interface{} {
-		return &Request{codec: o.codec, decryptor: o.decryptor, message: &Message{}}
-	}
+	n.ctxPool.New = func() interface{} { return n.allocateContext() }
+	n.reqPool.New = func() interface{} { return n.allocateRequest() }
 	n.taskPool, _ = ants.NewPool(
 		o.taskPoolSize,
 		ants.WithDisablePurge(true),
@@ -304,6 +296,24 @@ func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
 		event: event,
 		gid:   gid,
 		uid:   uid,
+	}
+}
+
+// 分配Context
+func (n *Node) allocateContext() *Context {
+	return &Context{
+		ctx:        context.Background(),
+		Proxy:      n.proxy,
+		Middleware: &Middleware{},
+	}
+}
+
+// 分配请求
+func (n *Node) allocateRequest() *Request {
+	return &Request{
+		codec:     n.opts.codec,
+		decryptor: n.opts.decryptor,
+		message:   &Message{},
 	}
 }
 
