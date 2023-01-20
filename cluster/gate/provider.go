@@ -21,7 +21,7 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	err = p.gate.proxy.bindGate(ctx, uid)
+	err = p.gate.proxy.bindGate(ctx, cid, uid)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return err
 	}
 
-	err = p.gate.proxy.unbindGate(ctx, uid)
+	err = p.gate.proxy.unbindGate(ctx, s.CID(), uid)
 	if err != nil {
 		return err
 	}

@@ -141,7 +141,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 	if uid := conn.UID(); uid > 0 {
 		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-		err = g.proxy.unbindGate(ctx, uid)
+		err = g.proxy.unbindGate(ctx, conn.ID(), uid)
 		cancel()
 		if err != nil {
 			log.Errorf("user unbind failed, gid: %d, uid: %d, err: %v", g.opts.id, uid, err)

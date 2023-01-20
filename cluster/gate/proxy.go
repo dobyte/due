@@ -4,10 +4,10 @@ import (
 	"context"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/internal/link"
+	"github.com/dobyte/due/internal/router"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/router"
 )
 
 var (
@@ -35,13 +35,17 @@ func newProxy(gate *Gate) *proxy {
 }
 
 // 绑定用户与网关间的关系
-func (p *proxy) bindGate(ctx context.Context, uid int64) error {
+func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 	err := p.gate.opts.locator.Set(ctx, uid, cluster.Gate, p.gate.opts.id)
 	if err != nil {
 		return err
 	}
 
-	err = p.link.Trigger(ctx, cluster.Reconnect, uid)
+	err = p.link.Trigger(ctx, &link.TriggerArgs{
+		Event: cluster.Reconnect,
+		CID:   cid,
+		UID:   uid,
+	})
 	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
 		log.Errorf("trigger event failed, gid: %s, uid: %d, event: %v, err: %v", p.gate.opts.id, uid, cluster.Reconnect, err)
 	}
@@ -50,13 +54,17 @@ func (p *proxy) bindGate(ctx context.Context, uid int64) error {
 }
 
 // 解绑用户与网关间的关系
-func (p *proxy) unbindGate(ctx context.Context, uid int64) error {
+func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	err := p.gate.opts.locator.Rem(ctx, uid, cluster.Gate, p.gate.opts.id)
 	if err != nil {
 		return err
 	}
 
-	err = p.link.Trigger(ctx, cluster.Disconnect, uid)
+	err = p.link.Trigger(ctx, &link.TriggerArgs{
+		Event: cluster.Disconnect,
+		CID:   cid,
+		UID:   uid,
+	})
 	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
 		log.Errorf("trigger event failed, gid: %s, uid: %d, event: %v, err: %v", p.gate.opts.id, uid, cluster.Disconnect, err)
 	}

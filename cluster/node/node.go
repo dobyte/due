@@ -15,9 +15,10 @@ import (
 
 type EventHandler func(gid string, uid int64)
 
-type eventEntity struct {
+type Event struct {
 	event cluster.Event
 	gid   string
+	cid   int64
 	uid   int64
 }
 
@@ -26,7 +27,7 @@ type Node struct {
 	opts      *options
 	ctx       context.Context
 	cancel    context.CancelFunc
-	chEvent   chan *eventEntity
+	chEvent   chan *Event
 	chRequest chan *Request
 	events    map[cluster.Event]EventHandler
 	router    *Router
@@ -36,6 +37,7 @@ type Node struct {
 	state     cluster.State
 	ctxPool   sync.Pool
 	reqPool   sync.Pool
+	evtPool   sync.Pool
 	taskPool  *ants.Pool
 }
 
@@ -48,7 +50,7 @@ func NewNode(opts ...Option) *Node {
 	n := &Node{}
 	n.opts = o
 	n.events = make(map[cluster.Event]EventHandler, 3)
-	n.chEvent = make(chan *eventEntity, 4096)
+	n.chEvent = make(chan *Event, 4096)
 	n.chRequest = make(chan *Request, 4096)
 	n.router = newRouter()
 	n.proxy = newProxy(n)
@@ -56,11 +58,8 @@ func NewNode(opts ...Option) *Node {
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 	n.ctxPool.New = func() interface{} { return n.allocateContext() }
 	n.reqPool.New = func() interface{} { return n.allocateRequest() }
-	n.taskPool, _ = ants.NewPool(
-		o.taskPoolSize,
-		ants.WithDisablePurge(true),
-		ants.WithNonblocking(true),
-	)
+	n.evtPool.New = func() interface{} { return n.allocateEvent() }
+	n.taskPool, _ = ants.NewPool(o.taskPoolSize, ants.WithDisablePurge(true), ants.WithNonblocking(true))
 
 	return n
 }
@@ -129,18 +128,19 @@ func (n *Node) Proxy() *Proxy {
 func (n *Node) dispatch() {
 	for {
 		select {
-		case entity, ok := <-n.chEvent:
+		case evt, ok := <-n.chEvent:
 			if !ok {
 				return
 			}
 
-			handler, ok := n.events[entity.event]
+			handler, ok := n.events[evt.event]
 			if !ok {
-				log.Warnf("event does not register handler function, event: %v", entity.event)
+				log.Warnf("event does not register handler function, event: %v", evt.event)
 				continue
 			}
 
-			handler(entity.gid, entity.uid)
+			handler(evt.gid, evt.uid)
+			n.evtPool.Put(evt)
 		case req, ok := <-n.chRequest:
 			if !ok {
 				return
@@ -290,15 +290,6 @@ func (n *Node) addEventListener(event cluster.Event, handler EventHandler) {
 	}
 }
 
-// 触发事件
-func (n *Node) trigger(event cluster.Event, gid string, uid int64) {
-	n.chEvent <- &eventEntity{
-		event: event,
-		gid:   gid,
-		uid:   uid,
-	}
-}
-
 // 分配Context
 func (n *Node) allocateContext() *Context {
 	return &Context{
@@ -315,6 +306,11 @@ func (n *Node) allocateRequest() *Request {
 		decryptor: n.opts.decryptor,
 		message:   &Message{},
 	}
+}
+
+// 分配事件
+func (n *Node) allocateEvent() *Event {
+	return &Event{}
 }
 
 func (n *Node) debugPrint() {

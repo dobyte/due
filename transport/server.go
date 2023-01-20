@@ -58,7 +58,8 @@ type DeliverArgs struct {
 }
 
 type TriggerArgs struct {
-	GID   string
-	UID   int64
 	Event cluster.Event
+	GID   string
+	CID   int64
+	UID   int64
 }

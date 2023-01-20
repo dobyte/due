@@ -489,22 +489,23 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 }
 
 // Trigger 触发事件
-func (l *Link) Trigger(ctx context.Context, event cluster.Event, uid int64) error {
+func (l *Link) Trigger(ctx context.Context, args *TriggerArgs) error {
 	var (
-		err    error
-		nid    string
-		prev   string
-		client transport.NodeClient
-		ep     *endpoint.Endpoint
-		args   = &transport.TriggerArgs{
-			Event: event,
+		err       error
+		nid       string
+		prev      string
+		client    transport.NodeClient
+		ep        *endpoint.Endpoint
+		arguments = &transport.TriggerArgs{
+			Event: args.Event,
 			GID:   l.opts.GID,
-			UID:   uid,
+			CID:   args.CID,
+			UID:   args.UID,
 		}
 	)
 
 	for i := 0; i < 2; i++ {
-		if nid, err = l.LocateNode(ctx, uid); err != nil {
+		if nid, err = l.LocateNode(ctx, args.UID); err != nil {
 			return err
 		}
 
@@ -523,9 +524,9 @@ func (l *Link) Trigger(ctx context.Context, event cluster.Event, uid int64) erro
 			return err
 		}
 
-		miss, _ := client.Trigger(ctx, args)
+		miss, _ := client.Trigger(ctx, arguments)
 		if miss {
-			l.sourceNode.Delete(uid)
+			l.sourceNode.Delete(args.UID)
 			continue
 		}
 

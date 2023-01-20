@@ -41,7 +41,12 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		return miss, err
 	}
 
-	p.node.trigger(args.Event, args.GID, args.UID)
+	evt := p.node.reqPool.Get().(*Event)
+	evt.event = args.Event
+	evt.gid = args.GID
+	evt.cid = args.CID
+	evt.uid = args.UID
+	p.node.chEvent <- evt
 
 	return false, nil
 }

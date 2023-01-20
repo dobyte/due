@@ -1,6 +1,9 @@
 package link
 
-import "github.com/dobyte/due/session"
+import (
+	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/session"
+)
 
 type GetIPArgs struct {
 	GID    string       // 网关ID，会话类型为用户时可忽略此参数
@@ -38,6 +41,12 @@ type DeliverArgs struct {
 	CID     int64       // 连接ID
 	UID     int64       // 用户ID
 	Message interface{} // 消息
+}
+
+type TriggerArgs struct {
+	Event cluster.Event // 事件
+	CID   int64         // 连接ID
+	UID   int64         // 用户ID
 }
 
 type DisconnectArgs struct {
