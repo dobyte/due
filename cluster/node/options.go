@@ -10,6 +10,7 @@ import (
 	_ "github.com/dobyte/due/encoding/json"
 	_ "github.com/dobyte/due/encoding/proto"
 	_ "github.com/dobyte/due/encoding/xml"
+	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
@@ -18,45 +19,42 @@ import (
 )
 
 const (
-	defaultName         = "node"          // 默认节点名称
-	defaultCodec        = "proto"         // 默认编解码器名称
-	defaultTimeout      = 3 * time.Second // 默认超时时间
-	defaultTaskPoolSize = 100000          // 默认任务池大小
+	defaultName    = "node"          // 默认节点名称
+	defaultCodec   = "proto"         // 默认编解码器名称
+	defaultTimeout = 3 * time.Second // 默认超时时间
 )
 
 const (
-	defaultIDKey           = "config.cluster.node.id"
-	defaultNameKey         = "config.cluster.node.name"
-	defaultCodecKey        = "config.cluster.node.codec"
-	defaultTimeoutKey      = "config.cluster.node.timeout"
-	defaultTaskPoolSizeKey = "config.cluster.node.taskPoolSize"
-	defaultEncryptorKey    = "config.cluster.node.encryptor"
-	defaultDecryptorKey    = "config.cluster.node.decryptor"
+	defaultIDKey        = "config.cluster.node.id"
+	defaultNameKey      = "config.cluster.node.name"
+	defaultCodecKey     = "config.cluster.node.codec"
+	defaultTimeoutKey   = "config.cluster.node.timeout"
+	defaultEncryptorKey = "config.cluster.node.encryptor"
+	defaultDecryptorKey = "config.cluster.node.decryptor"
 )
 
 type Option func(o *options)
 
 type options struct {
-	id           string                // 实例ID
-	name         string                // 实例名称
-	ctx          context.Context       // 上下文
-	codec        encoding.Codec        // 编解码器
-	timeout      time.Duration         // RPC调用超时时间
-	locator      locate.Locator        // 用户定位器
-	registry     registry.Registry     // 服务注册器
-	transporter  transport.Transporter // 消息传输器
-	encryptor    crypto.Encryptor      // 消息加密器
-	decryptor    crypto.Decryptor      // 消息解密器
-	taskPoolSize int                   // 任务池大小
+	id          string                // 实例ID
+	name        string                // 实例名称
+	ctx         context.Context       // 上下文
+	codec       encoding.Codec        // 编解码器
+	timeout     time.Duration         // RPC调用超时时间
+	locator     locate.Locator        // 用户定位器
+	registry    registry.Registry     // 服务注册器
+	transporter transport.Transporter // 消息传输器
+	encryptor   crypto.Encryptor      // 消息加密器
+	decryptor   crypto.Decryptor      // 消息解密器
+	eventbus    eventbus.EventBus     // 事件总线
 }
 
 func defaultOptions() *options {
 	opts := &options{
-		ctx:          context.Background(),
-		name:         defaultName,
-		codec:        encoding.Invoke(defaultCodec),
-		timeout:      defaultTimeout,
-		taskPoolSize: defaultTaskPoolSize,
+		ctx:     context.Background(),
+		name:    defaultName,
+		codec:   encoding.Invoke(defaultCodec),
+		timeout: defaultTimeout,
 	}
 
 	if id := config.Get(defaultIDKey).String(); id != "" {
@@ -75,10 +73,6 @@ func defaultOptions() *options {
 
 	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	if taskPoolSize := config.Get(defaultTaskPoolSizeKey).Int(); taskPoolSize > 0 {
-		opts.taskPoolSize = taskPoolSize
 	}
 
 	if encryptor := config.Get(defaultEncryptorKey).String(); encryptor != "" {
@@ -117,11 +111,6 @@ func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithTaskPoolSize 设置任务池大小
-func WithTaskPoolSize(taskPoolSize int) Option {
-	return func(o *options) { o.taskPoolSize = taskPoolSize }
-}
-
 // WithLocator 设置定位器
 func WithLocator(locator locate.Locator) Option {
 	return func(o *options) { o.locator = locator }
@@ -145,4 +134,9 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 // WithDecryptor 设置消息解密器
 func WithDecryptor(decryptor crypto.Decryptor) Option {
 	return func(o *options) { o.decryptor = decryptor }
+}
+
+// WithEventBus 设置事件总线
+func WithEventBus(eventbus eventbus.EventBus) Option {
+	return func(o *options) { o.eventbus = eventbus }
 }

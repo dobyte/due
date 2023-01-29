@@ -1,6 +1,8 @@
 package xuuid
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 func UUID() (string, error) {
 	id, err := uuid.NewUUID()

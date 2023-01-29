@@ -47,8 +47,8 @@ type TransformRule struct {
 }
 
 func init() {
-	timeZone := config.Get("config.timezone", "Local").String()
-	if loc, err := time.LoadLocation(timeZone); err != nil {
+	timezone := config.Get("config.timezone", "Local").String()
+	if loc, err := time.LoadLocation(timezone); err != nil {
 		location = time.Local
 	} else {
 		location = loc

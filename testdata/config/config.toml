@@ -1,7 +1,14 @@
 # 统一时区设置。项目中的时间获取请使用xtime.Now()
 timezone = "Local"
 
-
+# 任务池
+[task]
+    # 任务池大小(goroutine)
+    size = 100000
+    # 是否非阻塞
+    nonblocking = true
+    # 是否禁用清除。
+    disablePurge = true
 [cluster]
     # 集群网关配置
     [cluster.gate]
@@ -21,8 +28,6 @@ timezone = "Local"
         encryptor = "ecc"
         # 解密器。可选：rsa | ecc
         decryptor = "ecc"
-        # 任务池大小
-        taskPoolSize = 100000
     # 集群管理节点配置
     [cluster.master]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID

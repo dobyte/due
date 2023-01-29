@@ -6,9 +6,9 @@ import (
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
+	"github.com/dobyte/due/task"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xnet"
-	"github.com/panjf2000/ants/v2"
 	"sync"
 	"time"
 )
@@ -38,7 +38,6 @@ type Node struct {
 	ctxPool   sync.Pool
 	reqPool   sync.Pool
 	evtPool   sync.Pool
-	taskPool  *ants.Pool
 }
 
 func NewNode(opts ...Option) *Node {
@@ -59,7 +58,6 @@ func NewNode(opts ...Option) *Node {
 	n.ctxPool.New = func() interface{} { return n.allocateContext() }
 	n.reqPool.New = func() interface{} { return n.allocateRequest() }
 	n.evtPool.New = func() interface{} { return n.allocateEvent() }
-	n.taskPool, _ = ants.NewPool(o.taskPoolSize, ants.WithDisablePurge(true), ants.WithNonblocking(true))
 
 	return n
 }
@@ -88,7 +86,7 @@ func (n *Node) Init() {
 	}
 
 	if n.opts.transporter == nil {
-		log.Fatal("rpc component is not injected")
+		log.Fatal("transporter component is not injected")
 	}
 }
 
@@ -99,6 +97,8 @@ func (n *Node) Start() {
 	n.startTransportServer()
 
 	n.registerServiceInstance()
+
+	n.startEventBus()
 
 	n.proxy.watch(n.ctx)
 
@@ -113,10 +113,12 @@ func (n *Node) Destroy() {
 
 	n.stopTransportServer()
 
+	n.stopEventBus()
+
 	close(n.chEvent)
 	close(n.chRequest)
 	n.cancel()
-	n.taskPool.Release()
+	task.Release()
 }
 
 // Proxy 获取节点代理
@@ -156,7 +158,7 @@ func (n *Node) dispatch() {
 			ctx.Request = req
 
 			if ok {
-				task := func() {
+				fn := func() {
 					if len(route.middlewares) > 0 {
 						ctx.Middleware.reset(route.middlewares)
 						ctx.Middleware.Next(ctx)
@@ -173,11 +175,11 @@ func (n *Node) dispatch() {
 				}
 
 				if route.stateful {
-					task()
+					fn()
 				} else {
-					if err := n.taskPool.Submit(task); err != nil {
-						log.Warnf("task commit failed, system auto switch to blocking invoke, err: %v", err)
-						task()
+					if err := task.AddTask(fn); err != nil {
+						log.Warnf("task add failed, system auto switch to blocking invoke, err: %v", err)
+						fn()
 					}
 				}
 			} else {
@@ -189,7 +191,7 @@ func (n *Node) dispatch() {
 	}
 }
 
-// 启动传输服务器
+// 启动RPC服务器
 func (n *Node) startTransportServer() {
 	var err error
 
@@ -209,6 +211,26 @@ func (n *Node) startTransportServer() {
 func (n *Node) stopTransportServer() {
 	if err := n.rpc.Stop(); err != nil {
 		log.Errorf("the transport server stop failed: %v", err)
+	}
+}
+
+// 启动事件总线
+func (n *Node) startEventBus() {
+	if n.opts.eventbus == nil {
+		return
+	}
+
+	go n.opts.eventbus.Watch()
+}
+
+// 停止事件总线
+func (n *Node) stopEventBus() {
+	if n.opts.eventbus == nil {
+		return
+	}
+
+	if err := n.opts.eventbus.Stop(); err != nil {
+		log.Errorf("the eventbus stop failed: %v", err)
 	}
 }
 
