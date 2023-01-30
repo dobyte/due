@@ -30,7 +30,7 @@ type endpoint struct {
 
 // Bind 将用户与当前网关进行绑定
 func (e *endpoint) Bind(ctx context.Context, req *pb.BindRequest) (*pb.BindReply, error) {
-	err := e.provider.Bind(ctx, req.CID, req.CID)
+	err := e.provider.Bind(ctx, req.CID, req.UID)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
