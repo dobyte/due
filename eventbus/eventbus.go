@@ -1,6 +1,10 @@
 package eventbus
 
-import "context"
+import (
+	"context"
+	"github.com/dobyte/due/internal/value"
+	"time"
+)
 
 type EventBus interface {
 	// Watch 监听事件
@@ -8,17 +12,18 @@ type EventBus interface {
 	// Stop 停止监听
 	Stop() error
 	// Publish 发布事件
-	Publish(ctx context.Context, topic string, payload interface{}) error
+	Publish(ctx context.Context, topic string, message interface{}) error
 	// Subscribe 订阅事件
-	Subscribe(ctx context.Context, topic string, handler Handler) error
+	Subscribe(ctx context.Context, topic string, handler EventHandler) error
 	// Unsubscribe 取消订阅
-	Unsubscribe(ctx context.Context, topic string, handler Handler) error
+	Unsubscribe(ctx context.Context, topic string, handler EventHandler) error
 }
 
-type Payload struct {
-	ID      string      `json:"id"`      // 消息ID
-	Topic   string      `json:"topic"`   // 消息主题
-	Message interface{} `json:"message"` // 消息内容
-}
+type EventHandler func(event *Event)
 
-type Handler func(payload *Payload)
+type Event struct {
+	ID        string      // 事件ID
+	Topic     string      // 事件主题
+	Payload   value.Value // 事件载荷
+	Timestamp time.Time   // 事件时间
+}

@@ -21,7 +21,7 @@ func TestEventBus_Publish(t *testing.T) {
 
 	go eb.Watch()
 
-	err := eb.Subscribe(context.Background(), loginTopic, func(payload *eventbus.Payload) {
+	err := eb.Subscribe(context.Background(), loginTopic, func(payload *eventbus.Event) {
 		t.Log(payload)
 	})
 	if err != nil {
@@ -33,7 +33,7 @@ func TestEventBus_Publish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(context.Background(), paidTopic, func(payload *eventbus.Payload) {
+	err = eb.Subscribe(context.Background(), paidTopic, func(payload *eventbus.Event) {
 		t.Log(payload)
 	})
 	if err != nil {

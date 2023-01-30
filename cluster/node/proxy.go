@@ -93,7 +93,7 @@ func (p *Proxy) Publish(ctx context.Context, topic string, message interface{}) 
 }
 
 // Subscribe 订阅事件
-func (p *Proxy) Subscribe(ctx context.Context, topic string, handler eventbus.Handler) error {
+func (p *Proxy) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	if p.node.opts.eventbus == nil {
 		log.Warn("the eventbus component is not injected, and the subscribe operation will be ignored.")
 		return nil
@@ -103,7 +103,7 @@ func (p *Proxy) Subscribe(ctx context.Context, topic string, handler eventbus.Ha
 }
 
 // Unsubscribe 取消订阅
-func (p *Proxy) Unsubscribe(ctx context.Context, topic string, handler eventbus.Handler) error {
+func (p *Proxy) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	if p.node.opts.eventbus == nil {
 		log.Warn("the eventbus component is not injected, and the unsubscribe operation will be ignored.")
 		return nil

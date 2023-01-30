@@ -2,10 +2,11 @@ package redis
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/task"
+	"github.com/dobyte/due/utils/xtime"
 	"github.com/dobyte/due/utils/xuuid"
 	"github.com/go-redis/redis/v8"
 	"sync"
@@ -18,7 +19,7 @@ type EventBus struct {
 	sub    *redis.PubSub
 
 	rw       sync.RWMutex
-	handlers map[string]map[*eventbus.Handler]struct{}
+	handlers map[string]map[*eventbus.EventHandler]struct{}
 }
 
 func NewEventBus(opts ...Option) *EventBus {
@@ -45,7 +46,7 @@ func NewEventBus(opts ...Option) *EventBus {
 	eb.ctx, eb.cancel = context.WithCancel(o.ctx)
 	eb.opts = o
 	eb.sub = eb.opts.client.Subscribe(eb.ctx)
-	eb.handlers = make(map[string]map[*eventbus.Handler]struct{})
+	eb.handlers = make(map[string]map[*eventbus.EventHandler]struct{})
 
 	return eb
 }
@@ -58,10 +59,11 @@ func (eb *EventBus) Publish(ctx context.Context, topic string, message interface
 	}
 
 	channel := eb.opts.prefix + ":" + topic
-	payload := &eventbus.Payload{
-		ID:      id,
-		Topic:   topic,
-		Message: message,
+	payload := &eventbus.Event{
+		ID:        id,
+		Topic:     topic,
+		Message:   message,
+		Timestamp: xtime.Now(),
 	}
 
 	buf, err := json.Marshal(payload)
@@ -73,10 +75,10 @@ func (eb *EventBus) Publish(ctx context.Context, topic string, message interface
 }
 
 // Subscribe 订阅事件
-func (eb *EventBus) Subscribe(ctx context.Context, topic string, handler eventbus.Handler) error {
+func (eb *EventBus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	eb.rw.Lock()
 	if _, ok := eb.handlers[topic]; !ok {
-		eb.handlers[topic] = make(map[*eventbus.Handler]struct{}, 1)
+		eb.handlers[topic] = make(map[*eventbus.EventHandler]struct{}, 1)
 	}
 	eb.handlers[topic][&handler] = struct{}{}
 	eb.rw.Unlock()
@@ -85,7 +87,7 @@ func (eb *EventBus) Subscribe(ctx context.Context, topic string, handler eventbu
 }
 
 // Unsubscribe 取消订阅
-func (eb *EventBus) Unsubscribe(ctx context.Context, topic string, handler eventbus.Handler) error {
+func (eb *EventBus) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	eb.rw.Lock()
 	if handlers, ok := eb.handlers[topic]; ok {
 		if _, ok = handlers[&handler]; ok {
@@ -113,13 +115,13 @@ func (eb *EventBus) Watch() {
 		case *redis.Subscription:
 			log.Debugf("channel subscribe succeeded, %s", v.Channel)
 		case *redis.Message:
-			payload := &eventbus.Payload{}
+			payload := &eventbus.Event{}
 			if err := json.Unmarshal([]byte(v.Payload), payload); err != nil {
 				log.Errorf("invalid payload, %s", v.Payload)
 				continue
 			}
 
-			func(payload *eventbus.Payload) {
+			func(payload *eventbus.Event) {
 				eb.rw.RLock()
 				defer eb.rw.RUnlock()
 

@@ -1,8 +1,8 @@
 package xconv
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dobyte/due/encoding/json"
 	"reflect"
 	"strconv"
 	"time"

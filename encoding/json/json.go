@@ -8,36 +8,45 @@
 package json
 
 import (
-	"encoding/json"
-
 	"github.com/dobyte/due/encoding"
+	jsoniter "github.com/json-iterator/go"
 )
 
 const Name = "json"
 
-var _ encoding.Codec = &codec{}
+var codec encoding.Codec = &defaultCodec{}
 
 func init() {
-	encoding.Register(&codec{})
+	encoding.Register(codec)
 }
 
-type codec struct{}
+type defaultCodec struct{}
 
-func NewCodec() *codec {
-	return &codec{}
+func NewCodec() *defaultCodec {
+	return &defaultCodec{}
 }
 
 // Name 编解码器名称
-func (codec) Name() string {
+func (defaultCodec) Name() string {
 	return Name
 }
 
 // Marshal 编码
-func (codec) Marshal(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func (defaultCodec) Marshal(v interface{}) ([]byte, error) {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(v)
 }
 
 // Unmarshal 解码
-func (codec) Unmarshal(data []byte, v interface{}) error {
-	return json.Unmarshal(data, v)
+func (defaultCodec) Unmarshal(data []byte, v interface{}) error {
+	return jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, v)
+}
+
+// Marshal 编码
+func Marshal(v interface{}) ([]byte, error) {
+	return codec.Marshal(v)
+}
+
+// Unmarshal 解码
+func Unmarshal(data []byte, v interface{}) error {
+	return codec.Unmarshal(data, v)
 }
