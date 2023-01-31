@@ -33,8 +33,8 @@ func TestEventBus_Publish(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(context.Background(), paidTopic, func(payload *eventbus.Event) {
-		t.Log(payload)
+	err = eb.Subscribe(context.Background(), paidTopic, func(event *eventbus.Event) {
+		t.Logf("%+v", event.Payload.Int64())
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestEventBus_Publish(t *testing.T) {
 	//}
 
 	for i := 0; i < 10; i++ {
-		err = eb.Publish(context.Background(), paidTopic, "paid")
+		err = eb.Publish(context.Background(), paidTopic, 100)
 		if err != nil {
 			t.Fatal(err)
 		}

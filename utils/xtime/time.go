@@ -104,6 +104,21 @@ func Unix(sec, nsec int64) time.Time {
 	return time.Unix(sec, nsec).In(location)
 }
 
+// UnixMilli 时间戳（毫秒）转标准时间
+func UnixMilli(msec int64) time.Time {
+	return time.UnixMilli(msec).In(location)
+}
+
+// UnixMicro 时间戳（微秒）转标准时间
+func UnixMicro(usec int64) time.Time {
+	return time.UnixMicro(usec).In(location)
+}
+
+// UnixNano 时间戳（纳秒）转标准时间
+func UnixNano(nsec int64) time.Time {
+	return time.Unix(nsec/1e9, nsec%1e9).In(location)
+}
+
 // GetFirstSecondOfDay 获取一天中的第一秒
 // offsetDays 		   偏移天数，例如：-1：前一天 0：当前 1：明天
 func GetFirstSecondOfDay(offsetDays ...int) time.Time {

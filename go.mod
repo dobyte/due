@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/BurntSushi/toml v1.2.0
+	github.com/ecies/go/v2 v2.0.4 // indirect
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/gogo/protobuf v1.3.2 // indirect

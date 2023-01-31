@@ -2,7 +2,6 @@ package ecc
 
 import (
 	"crypto/rand"
-	"github.com/dobyte/due/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 )
 
@@ -12,11 +11,7 @@ type Encryptor struct {
 	publicKey *ecies.PublicKey
 }
 
-var _ crypto.Encryptor = &Encryptor{}
-
-func init() {
-	crypto.RegisterEncryptor(NewEncryptor())
-}
+var DefaultEncryptor = NewEncryptor()
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
@@ -42,4 +37,9 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 	}
 
 	return ecies.Encrypt(rand.Reader, e.publicKey, data, e.opts.s1, e.opts.s2)
+}
+
+// Encrypt 加密
+func Encrypt(data []byte) ([]byte, error) {
+	return DefaultEncryptor.Encrypt(data)
 }

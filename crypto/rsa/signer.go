@@ -3,7 +3,6 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"github.com/dobyte/due/crypto"
 )
 
 type Signer struct {
@@ -12,11 +11,7 @@ type Signer struct {
 	privateKey *rsa.PrivateKey
 }
 
-var _ crypto.Signer = &Signer{}
-
-func init() {
-	crypto.RegisterSigner(NewSigner())
-}
+var DefaultSigner = NewSigner()
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
@@ -53,4 +48,9 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 			Hash:       hash,
 		})
 	}
+}
+
+// Sign 签名
+func Sign(data []byte) ([]byte, error) {
+	return DefaultSigner.Sign(data)
 }

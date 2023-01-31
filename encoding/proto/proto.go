@@ -11,31 +11,21 @@ import (
 	"errors"
 
 	"github.com/gogo/protobuf/proto"
-
-	"github.com/dobyte/due/encoding"
 )
 
 const Name = "proto"
 
-var codec encoding.Codec = &defaultCodec{}
+var DefaultCodec = &codec{}
 
-func init() {
-	encoding.Register(codec)
-}
-
-type defaultCodec struct{}
-
-func NewCodec() *defaultCodec {
-	return &defaultCodec{}
-}
+type codec struct{}
 
 // Name 编解码器名称
-func (defaultCodec) Name() string {
+func (codec) Name() string {
 	return Name
 }
 
 // Marshal 编码
-func (defaultCodec) Marshal(v interface{}) ([]byte, error) {
+func (codec) Marshal(v interface{}) ([]byte, error) {
 	msg, ok := v.(proto.Message)
 	if !ok {
 		return nil, errors.New("can't marshal a value that not implements proto.Message interface")
@@ -45,7 +35,7 @@ func (defaultCodec) Marshal(v interface{}) ([]byte, error) {
 }
 
 // Unmarshal 解码
-func (defaultCodec) Unmarshal(data []byte, v interface{}) error {
+func (codec) Unmarshal(data []byte, v interface{}) error {
 	msg, ok := v.(proto.Message)
 	if !ok {
 		return errors.New("can't unmarshal to a value that not implements proto.Message")
@@ -56,10 +46,10 @@ func (defaultCodec) Unmarshal(data []byte, v interface{}) error {
 
 // Marshal 编码
 func Marshal(v interface{}) ([]byte, error) {
-	return codec.Marshal(v)
+	return DefaultCodec.Marshal(v)
 }
 
 // Unmarshal 解码
 func Unmarshal(data []byte, v interface{}) error {
-	return codec.Unmarshal(data, v)
+	return DefaultCodec.Unmarshal(data, v)
 }

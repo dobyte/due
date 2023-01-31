@@ -3,7 +3,6 @@ package ecc
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/errors"
 	"math/big"
 )
@@ -14,11 +13,7 @@ type Verifier struct {
 	publicKey *ecdsa.PublicKey
 }
 
-var _ crypto.Verifier = &Verifier{}
-
-func init() {
-	crypto.RegisterVerifier(NewVerifier())
-}
+var DefaultVerifier = NewVerifier()
 
 func NewVerifier(opts ...VerifierOption) *Verifier {
 	o := defaultVerifierOptions()
@@ -60,4 +55,9 @@ func (v *Verifier) Verify(data []byte, signature []byte) (bool, error) {
 	hashed := v.opts.hash.Sum(data)
 
 	return ecdsa.Verify(v.publicKey, hashed[:], rs, ss), nil
+}
+
+// Verify 验签
+func Verify(data []byte, signature []byte) (bool, error) {
+	return DefaultVerifier.Verify(data, signature)
 }

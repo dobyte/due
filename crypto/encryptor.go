@@ -1,6 +1,10 @@
 package crypto
 
-import "github.com/dobyte/due/log"
+import (
+	"github.com/dobyte/due/crypto/ecc"
+	"github.com/dobyte/due/crypto/rsa"
+	"github.com/dobyte/due/log"
+)
 
 type Encryptor interface {
 	// Name 名称
@@ -10,6 +14,11 @@ type Encryptor interface {
 }
 
 var encryptors = make(map[string]Encryptor)
+
+func init() {
+	RegisterEncryptor(ecc.DefaultEncryptor)
+	RegisterEncryptor(rsa.DefaultEncryptor)
+}
 
 // RegisterEncryptor 注册加密器
 func RegisterEncryptor(encryptor Encryptor) {

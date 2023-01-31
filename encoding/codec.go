@@ -8,8 +8,23 @@
 package encoding
 
 import (
+	"github.com/dobyte/due/encoding/json"
+	"github.com/dobyte/due/encoding/proto"
+	"github.com/dobyte/due/encoding/toml"
+	"github.com/dobyte/due/encoding/xml"
+	"github.com/dobyte/due/encoding/yaml"
 	"github.com/dobyte/due/log"
 )
+
+var codecs = make(map[string]Codec)
+
+func init() {
+	Register(json.DefaultCodec)
+	Register(proto.DefaultCodec)
+	Register(toml.DefaultCodec)
+	Register(xml.DefaultCodec)
+	Register(yaml.DefaultCodec)
+}
 
 type Codec interface {
 	// Name 编解码器类型
@@ -19,8 +34,6 @@ type Codec interface {
 	// Unmarshal 解码
 	Unmarshal(data []byte, v interface{}) error
 }
-
-var codecs = make(map[string]Codec)
 
 // Register 注册编解码器
 func Register(codec Codec) {

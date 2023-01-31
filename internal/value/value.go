@@ -1,7 +1,7 @@
 package value
 
 import (
-	"encoding/json"
+	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/utils/xconv"
 	"time"
 )

@@ -1,6 +1,10 @@
 package crypto
 
-import "github.com/dobyte/due/log"
+import (
+	"github.com/dobyte/due/crypto/ecc"
+	"github.com/dobyte/due/crypto/rsa"
+	"github.com/dobyte/due/log"
+)
 
 type Signer interface {
 	// Name 名称
@@ -10,6 +14,11 @@ type Signer interface {
 }
 
 var signers = make(map[string]Signer)
+
+func init() {
+	RegisterSigner(ecc.DefaultSigner)
+	RegisterSigner(rsa.DefaultSigner)
+}
 
 // RegisterSigner 注册签名器
 func RegisterSigner(signer Signer) {

@@ -1,7 +1,6 @@
 package ecc
 
 import (
-	"github.com/dobyte/due/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 )
 
@@ -11,11 +10,7 @@ type Decryptor struct {
 	privateKey *ecies.PrivateKey
 }
 
-var _ crypto.Decryptor = &Decryptor{}
-
-func init() {
-	crypto.RegisterDecryptor(NewDecryptor())
-}
+var DefaultDecryptor = NewDecryptor()
 
 func NewDecryptor(opts ...DecryptorOption) *Decryptor {
 	o := defaultDecryptorOptions()
@@ -41,4 +36,9 @@ func (d *Decryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 	}
 
 	return d.privateKey.Decrypt(ciphertext, d.opts.s1, d.opts.s2)
+}
+
+// Decrypt 解密
+func Decrypt(ciphertext []byte) ([]byte, error) {
+	return DefaultDecryptor.Decrypt(ciphertext)
 }

@@ -3,7 +3,6 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"github.com/dobyte/due/crypto"
 	"math"
 
 	"github.com/dobyte/due/errors"
@@ -15,11 +14,7 @@ type Encryptor struct {
 	publicKey *rsa.PublicKey
 }
 
-var _ crypto.Encryptor = &Encryptor{}
-
-func init() {
-	crypto.RegisterEncryptor(NewEncryptor())
-}
+var DefaultEncryptor = NewEncryptor()
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
@@ -95,4 +90,9 @@ func (e *Encryptor) init() {
 	} else if e.opts.blockSize > blockSize {
 		e.err = errors.New("block message too long for RSA public key size")
 	}
+}
+
+// Encrypt 加密
+func Encrypt(data []byte) ([]byte, error) {
+	return DefaultEncryptor.Encrypt(data)
 }

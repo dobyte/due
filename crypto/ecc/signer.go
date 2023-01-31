@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"github.com/dobyte/due/crypto"
 )
 
 type Signer struct {
@@ -13,11 +12,7 @@ type Signer struct {
 	privateKey *ecdsa.PrivateKey
 }
 
-var _ crypto.Signer = &Signer{}
-
-func init() {
-	crypto.RegisterSigner(NewSigner())
-}
+var DefaultSigner = NewSigner()
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
@@ -67,4 +62,9 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 	buffer.Write(st)
 
 	return buffer.Bytes(), nil
+}
+
+// Sign 签名
+func Sign(data []byte) ([]byte, error) {
+	return DefaultSigner.Sign(data)
 }

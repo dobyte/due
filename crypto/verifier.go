@@ -1,6 +1,10 @@
 package crypto
 
-import "github.com/dobyte/due/log"
+import (
+	"github.com/dobyte/due/crypto/ecc"
+	"github.com/dobyte/due/crypto/rsa"
+	"github.com/dobyte/due/log"
+)
 
 type Verifier interface {
 	// Name 名称
@@ -10,6 +14,11 @@ type Verifier interface {
 }
 
 var verifiers = make(map[string]Verifier)
+
+func init() {
+	RegisterVerifier(ecc.DefaultVerifier)
+	RegisterVerifier(rsa.DefaultVerifier)
+}
 
 // RegisterVerifier 注册验签器
 func RegisterVerifier(verifier Verifier) {

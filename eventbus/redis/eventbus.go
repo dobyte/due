@@ -2,12 +2,9 @@ package redis
 
 import (
 	"context"
-	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/task"
-	"github.com/dobyte/due/utils/xtime"
-	"github.com/dobyte/due/utils/xuuid"
 	"github.com/go-redis/redis/v8"
 	"sync"
 )
@@ -52,26 +49,13 @@ func NewEventBus(opts ...Option) *EventBus {
 }
 
 // Publish 发布事件
-func (eb *EventBus) Publish(ctx context.Context, topic string, message interface{}) error {
-	id, err := xuuid.UUID()
+func (eb *EventBus) Publish(ctx context.Context, topic string, payload interface{}) error {
+	buf, err := eventbus.BuildPayload(topic, payload)
 	if err != nil {
 		return err
 	}
 
-	channel := eb.opts.prefix + ":" + topic
-	payload := &eventbus.Event{
-		ID:        id,
-		Topic:     topic,
-		Message:   message,
-		Timestamp: xtime.Now(),
-	}
-
-	buf, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	return eb.opts.client.Publish(ctx, channel, buf).Err()
+	return eb.opts.client.Publish(ctx, eb.opts.prefix+":"+topic, buf).Err()
 }
 
 // Subscribe 订阅事件
@@ -115,29 +99,29 @@ func (eb *EventBus) Watch() {
 		case *redis.Subscription:
 			log.Debugf("channel subscribe succeeded, %s", v.Channel)
 		case *redis.Message:
-			payload := &eventbus.Event{}
-			if err := json.Unmarshal([]byte(v.Payload), payload); err != nil {
+			event, err := eventbus.ParsePayload(v.Payload)
+			if err != nil {
 				log.Errorf("invalid payload, %s", v.Payload)
 				continue
 			}
 
-			func(payload *eventbus.Event) {
+			func(event *eventbus.Event) {
 				eb.rw.RLock()
 				defer eb.rw.RUnlock()
 
-				handlers, ok := eb.handlers[payload.Topic]
+				handlers, ok := eb.handlers[event.Topic]
 				if !ok {
 					return
 				}
 
 				for handler := range handlers {
 					fn := *handler
-					if err = task.AddTask(func() { fn(payload) }); err != nil {
+					if err = task.AddTask(func() { fn(event) }); err != nil {
 						log.Warnf("task add failed, system auto switch to blocking invoke, err: %v", err)
-						fn(payload)
+						fn(event)
 					}
 				}
-			}(payload)
+			}(event)
 		}
 	}
 }
