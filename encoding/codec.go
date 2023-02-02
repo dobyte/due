@@ -9,6 +9,7 @@ package encoding
 
 import (
 	"github.com/dobyte/due/encoding/json"
+	"github.com/dobyte/due/encoding/msgpack"
 	"github.com/dobyte/due/encoding/proto"
 	"github.com/dobyte/due/encoding/toml"
 	"github.com/dobyte/due/encoding/xml"
@@ -24,6 +25,7 @@ func init() {
 	Register(toml.DefaultCodec)
 	Register(xml.DefaultCodec)
 	Register(yaml.DefaultCodec)
+	Register(msgpack.DefaultCodec)
 }
 
 type Codec interface {

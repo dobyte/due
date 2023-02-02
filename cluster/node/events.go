@@ -64,9 +64,10 @@ func (e *Events) close() {
 
 // AddEventListener 添加事件处理器
 func (e *Events) AddEventListener(event cluster.Event, handler EventHandler) {
-	//if e.node.state == cluster.Shut {
-	//	e.events[event] = handler
-	//} else {
-	//	log.Warnf("the node server is working, can't add event handler")
-	//}
+	if e.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't add event handler")
+		return
+	}
+
+	e.events[event] = handler
 }

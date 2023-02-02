@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"fmt"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
@@ -17,16 +16,15 @@ import (
 
 type Node struct {
 	component.Base
-	opts      *options
-	ctx       context.Context
-	cancel    context.CancelFunc
-	chRequest chan *Request
-	events    *Events
-	router    *Router
-	proxy     *Proxy
-	instance  *registry.ServiceInstance
-	rpc       transport.Server
-	state     cluster.State
+	opts     *options
+	ctx      context.Context
+	cancel   context.CancelFunc
+	state    cluster.State
+	events   *Events
+	router   *Router
+	proxy    *Proxy
+	instance *registry.ServiceInstance
+	rpc      transport.Server
 }
 
 func NewNode(opts ...Option) *Node {
@@ -37,16 +35,10 @@ func NewNode(opts ...Option) *Node {
 
 	n := &Node{}
 	n.opts = o
-	n.chRequest = make(chan *Request, 4096)
 	n.events = newEvents(n)
 	n.router = newRouter(n)
 	n.proxy = newProxy(n)
-	//n.state = cluster.Shut
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
-
-	//n.switchState(cluster.Shut)
-
-	fmt.Println(n.loadState())
 
 	return n
 }
@@ -81,8 +73,7 @@ func (n *Node) Init() {
 
 // Start 启动节点
 func (n *Node) Start() {
-	//n.state = cluster.Work
-	//atomic.StoreInt32()
+	n.setState(cluster.Work)
 
 	n.startRPCServer()
 
@@ -193,11 +184,11 @@ func (n *Node) registerServiceInstance() {
 	}
 
 	n.instance = &registry.ServiceInstance{
-		ID:    n.opts.id,
-		Name:  string(cluster.Node),
-		Kind:  cluster.Node,
-		Alias: n.opts.name,
-		//State:    n.state,
+		ID:       n.opts.id,
+		Name:     string(cluster.Node),
+		Kind:     cluster.Node,
+		Alias:    n.opts.name,
+		State:    n.getState(),
 		Routes:   routes,
 		Endpoint: n.rpc.Endpoint().String(),
 	}
@@ -242,19 +233,18 @@ func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
 	//}
 }
 
-// 切换节点状态
-func (n *Node) switchState(state cluster.State) {
+// 设置节点状态
+func (n *Node) setState(state cluster.State) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)), unsafe.Pointer(&state))
 }
 
-func (n *Node) loadState() string {
-	state := (*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state))))
-
-	if state == nil {
-		return ""
+// 获取节点状态
+func (n *Node) getState() cluster.State {
+	if state := (*cluster.State)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)))); state == nil {
+		return cluster.Shut
+	} else {
+		return *state
 	}
-
-	return *state
 }
 
 func (n *Node) debugPrint() {

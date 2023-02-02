@@ -68,15 +68,7 @@ func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bo
 		}
 	}
 
-	req := p.node.reqPool.Get().(*Request)
-	req.gid = args.GID
-	req.nid = args.NID
-	req.cid = args.CID
-	req.uid = args.UID
-	req.message.Seq = args.Message.Seq
-	req.message.Route = args.Message.Route
-	req.message.Data = args.Message.Buffer
-	p.node.chRequest <- req
+	p.node.router.deliver(args.GID, args.NID, args.CID, args.UID, args.Message.Seq, args.Message.Route, args.Message.Buffer)
 
 	return false, nil
 }

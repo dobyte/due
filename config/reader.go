@@ -1,12 +1,12 @@
 package config
 
 import (
-	"bytes"
 	"context"
 	"encoding/gob"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/internal/value"
 	"github.com/imdario/mergo"
+	"github.com/jinzhu/copier"
 	"log"
 	"strconv"
 	"strings"
@@ -77,7 +77,9 @@ func (r *defaultReader) init() {
 		}
 	}
 
-	r.values.Store(values)
+	if err := r.store(values); err != nil {
+		log.Printf("store configure failed: %v", err)
+	}
 }
 
 // 监听配置源变化
@@ -123,7 +125,7 @@ func (r *defaultReader) watch() {
 					continue
 				}
 
-				r.values.Store(dst)
+				_ = r.store(dst)
 			}
 		}()
 	}
@@ -323,25 +325,24 @@ func (r *defaultReader) Set(pattern string, value interface{}) error {
 		}
 	}
 
+	return r.store(values)
+}
+
+func (r *defaultReader) store(values map[string]interface{}) error {
 	r.values.Store(values)
 
 	return nil
 }
 
 func (r *defaultReader) copyValues() (map[string]interface{}, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	dec := gob.NewDecoder(&buf)
-	err := enc.Encode(r.values.Load())
+	dst := make(map[string]interface{})
+
+	err := copier.Copy(&dst, r.values.Load())
 	if err != nil {
 		return nil, err
 	}
-	var dest map[string]interface{}
-	err = dec.Decode(&dest)
-	if err != nil {
-		return nil, err
-	}
-	return dest, nil
+
+	return dst, nil
 }
 
 func reviseKeys(keys []string, values map[string]interface{}) []string {

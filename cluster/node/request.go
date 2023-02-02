@@ -8,8 +8,7 @@
 package node
 
 import (
-	"bytes"
-	"encoding/gob"
+	"github.com/dobyte/due/encoding/msgpack"
 )
 
 // Request 请求数据
@@ -58,21 +57,24 @@ func (r *Request) Data() interface{} {
 }
 
 // Parse 解析消息
-func (r *Request) Parse(v interface{}) (err error) {
+func (r *Request) Parse(v interface{}) error {
 	msg, ok := r.message.Data.([]byte)
 	if !ok {
-		var buf bytes.Buffer
-		if err = gob.NewEncoder(&buf).Encode(r.message.Data); err != nil {
-			return
+		buf, err := msgpack.Marshal(r.message.Data)
+		if err != nil {
+			return err
 		}
-		return gob.NewDecoder(&buf).Decode(v)
+
+		return msgpack.Unmarshal(buf, v)
 	}
 
 	if r.gid != "" && r.node.opts.decryptor != nil {
-		msg, err = r.node.opts.decryptor.Decrypt(msg)
+		data, err := r.node.opts.decryptor.Decrypt(msg)
 		if err != nil {
-			return
+			return err
 		}
+
+		return r.node.opts.codec.Unmarshal(data, v)
 	}
 
 	return r.node.opts.codec.Unmarshal(msg, v)

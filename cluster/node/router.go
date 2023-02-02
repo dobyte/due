@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/task"
 	"sync"
@@ -48,10 +49,10 @@ func newRouter(node *Node) *Router {
 
 // AddRouteHandler 添加路由处理器
 func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	//if r.node.state != cluster.Shut {
-	//	log.Warnf("the node server is working, can't add route handler")
-	//	return
-	//}
+	if r.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't add route handler")
+		return
+	}
 
 	r.routes[route] = &routeEntity{
 		route:       route,
@@ -61,22 +62,27 @@ func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandle
 	}
 }
 
-// CheckRouteStateful 是否为有状态路由
-func (r *Router) CheckRouteStateful(route int32) (stateful bool, exist bool) {
-	if entity, ok := r.routes[route]; ok {
-		exist, stateful = ok, entity.stateful
-	}
-	return
-}
-
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
+	if r.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't set default route handler")
+		return
+	}
+
 	r.defaultRouteHandler = handler
 }
 
 // HasDefaultRouteHandler 是否存在默认路由处理器
 func (r *Router) HasDefaultRouteHandler() bool {
 	return r.defaultRouteHandler != nil
+}
+
+// CheckRouteStateful 是否为有状态路由
+func (r *Router) CheckRouteStateful(route int32) (stateful bool, exist bool) {
+	if entity, ok := r.routes[route]; ok {
+		exist, stateful = ok, entity.stateful
+	}
+	return
 }
 
 // Group 路由组
@@ -91,6 +97,18 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	}
 
 	return group
+}
+
+func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data interface{}) {
+	req := r.reqPool.Get().(*Request)
+	req.gid = gid
+	req.nid = nid
+	req.cid = cid
+	req.uid = uid
+	req.message.Seq = seq
+	req.message.Route = route
+	req.message.Data = data
+	r.chRequest <- req
 }
 
 func (r *Router) receive() <-chan *Request {

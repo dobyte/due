@@ -18,13 +18,13 @@ func (c *Context) Context() context.Context {
 }
 
 // BindGate 绑定网关
-func (c *Context) BindGate(uid int64) error {
-	return c.Proxy.BindGate(c.ctx, c.Request.gid, c.Request.cid, uid)
+func (c *Context) BindGate(ctx context.Context, uid int64) error {
+	return c.Proxy.BindGate(ctx, c.Request.gid, c.Request.cid, uid)
 }
 
 // UnbindGate 解绑网关
-func (c *Context) UnbindGate() error {
-	return c.Proxy.UnbindGate(c.ctx, c.Request.uid)
+func (c *Context) UnbindGate(ctx context.Context) error {
+	return c.Proxy.UnbindGate(ctx, c.Request.uid)
 }
 
 // BindNode 绑定节点

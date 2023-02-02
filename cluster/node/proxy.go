@@ -199,15 +199,7 @@ func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 			},
 		})
 	} else {
-		req := p.node.reqPool.Get().(*Request)
-		req.gid = ""
-		req.nid = args.NID
-		req.cid = 0
-		req.uid = args.UID
-		req.message.Seq = args.Message.Seq
-		req.message.Route = args.Message.Route
-		req.message.Data = args.Message.Data
-		p.node.chRequest <- req
+		p.node.router.deliver("", args.NID, 0, args.UID, args.Message.Seq, args.Message.Route, args.Message.Data)
 	}
 
 	return nil

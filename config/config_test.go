@@ -37,3 +37,11 @@ func TestConfig(t *testing.T) {
 	//
 	//select {}
 }
+
+func BenchmarkGet(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		config.Get("config").Map()
+	}
+
+	//b.Logf("%+v", config.Get("config").Map())
+}
