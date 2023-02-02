@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
@@ -9,35 +10,23 @@ import (
 	"github.com/dobyte/due/task"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xnet"
-	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 )
-
-type EventHandler func(gid string, uid int64)
-
-type Event struct {
-	event cluster.Event
-	gid   string
-	cid   int64
-	uid   int64
-}
 
 type Node struct {
 	component.Base
 	opts      *options
 	ctx       context.Context
 	cancel    context.CancelFunc
-	chEvent   chan *Event
 	chRequest chan *Request
-	events    map[cluster.Event]EventHandler
+	events    *Events
 	router    *Router
 	proxy     *Proxy
 	instance  *registry.ServiceInstance
 	rpc       transport.Server
 	state     cluster.State
-	ctxPool   sync.Pool
-	reqPool   sync.Pool
-	evtPool   sync.Pool
 }
 
 func NewNode(opts ...Option) *Node {
@@ -48,16 +37,16 @@ func NewNode(opts ...Option) *Node {
 
 	n := &Node{}
 	n.opts = o
-	n.events = make(map[cluster.Event]EventHandler, 3)
-	n.chEvent = make(chan *Event, 4096)
 	n.chRequest = make(chan *Request, 4096)
-	n.router = newRouter()
+	n.events = newEvents(n)
+	n.router = newRouter(n)
 	n.proxy = newProxy(n)
-	n.state = cluster.Shut
+	//n.state = cluster.Shut
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
-	n.ctxPool.New = func() interface{} { return n.allocateContext() }
-	n.reqPool.New = func() interface{} { return n.allocateRequest() }
-	n.evtPool.New = func() interface{} { return n.allocateEvent() }
+
+	//n.switchState(cluster.Shut)
+
+	fmt.Println(n.loadState())
 
 	return n
 }
@@ -92,9 +81,10 @@ func (n *Node) Init() {
 
 // Start 启动节点
 func (n *Node) Start() {
-	n.state = cluster.Work
+	//n.state = cluster.Work
+	//atomic.StoreInt32()
 
-	n.startTransportServer()
+	n.startRPCServer()
 
 	n.registerServiceInstance()
 
@@ -111,13 +101,16 @@ func (n *Node) Start() {
 func (n *Node) Destroy() {
 	n.deregisterServiceInstance()
 
-	n.stopTransportServer()
+	n.stopRPCServer()
 
 	n.stopEventBus()
 
-	close(n.chEvent)
-	close(n.chRequest)
+	n.events.close()
+
+	n.router.close()
+
 	n.cancel()
+
 	task.Release()
 }
 
@@ -130,69 +123,24 @@ func (n *Node) Proxy() *Proxy {
 func (n *Node) dispatch() {
 	for {
 		select {
-		case evt, ok := <-n.chEvent:
+		case evt, ok := <-n.events.event():
 			if !ok {
 				return
 			}
 
-			handler, ok := n.events[evt.event]
-			if !ok {
-				log.Warnf("event does not register handler function, event: %v", evt.event)
-				continue
-			}
-
-			handler(evt.gid, evt.uid)
-			n.evtPool.Put(evt)
-		case req, ok := <-n.chRequest:
+			n.events.handle(evt)
+		case req, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
 
-			route, ok := n.router.routes[req.Route()]
-			if !ok && n.router.defaultRouteHandler == nil {
-				log.Warnf("message routing does not register handler function, route: %v", req.Route())
-				continue
-			}
-
-			ctx := n.ctxPool.Get().(*Context)
-			ctx.Request = req
-
-			if ok {
-				fn := func() {
-					if len(route.middlewares) > 0 {
-						ctx.Middleware.reset(route.middlewares)
-						ctx.Middleware.Next(ctx)
-
-						if ctx.Middleware.isFinished() {
-							route.handler(ctx)
-						}
-					} else {
-						route.handler(ctx)
-					}
-
-					n.reqPool.Put(req)
-					n.ctxPool.Put(ctx)
-				}
-
-				if route.stateful {
-					fn()
-				} else {
-					if err := task.AddTask(fn); err != nil {
-						log.Warnf("task add failed, system auto switch to blocking invoke, err: %v", err)
-						fn()
-					}
-				}
-			} else {
-				n.router.defaultRouteHandler(ctx)
-				n.reqPool.Put(req)
-				n.ctxPool.Put(ctx)
-			}
+			n.router.handle(req)
 		}
 	}
 }
 
 // 启动RPC服务器
-func (n *Node) startTransportServer() {
+func (n *Node) startRPCServer() {
 	var err error
 
 	n.rpc, err = n.opts.transporter.NewNodeServer(&provider{n})
@@ -208,7 +156,7 @@ func (n *Node) startTransportServer() {
 }
 
 // 停止RPC服务器
-func (n *Node) stopTransportServer() {
+func (n *Node) stopRPCServer() {
 	if err := n.rpc.Stop(); err != nil {
 		log.Errorf("the transport server stop failed: %v", err)
 	}
@@ -245,11 +193,11 @@ func (n *Node) registerServiceInstance() {
 	}
 
 	n.instance = &registry.ServiceInstance{
-		ID:       n.opts.id,
-		Name:     string(cluster.Node),
-		Kind:     cluster.Node,
-		Alias:    n.opts.name,
-		State:    n.state,
+		ID:    n.opts.id,
+		Name:  string(cluster.Node),
+		Kind:  cluster.Node,
+		Alias: n.opts.name,
+		//State:    n.state,
 		Routes:   routes,
 		Endpoint: n.rpc.Endpoint().String(),
 	}
@@ -274,65 +222,39 @@ func (n *Node) deregisterServiceInstance() {
 
 // 添加路由处理器
 func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
-	if n.state == cluster.Shut {
-		//n.routes[route] = routeEntity{
-		//	route:    route,
-		//	stateful: stateful,
-		//	handler:  handler,
-		//}
-	} else {
-		log.Warnf("the node server is working, can't add route handler")
-	}
+	//if n.state == cluster.Shut {
+	//	//n.routes[route] = routeEntity{
+	//	//	route:    route,
+	//	//	stateful: stateful,
+	//	//	handler:  handler,
+	//	//}
+	//} else {
+	//	log.Warnf("the node server is working, can't add route handler")
+	//}
 }
 
 // 默认路由处理器
 func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
-	if n.state == cluster.Shut {
-		//n.defaultRouteHandler = handler
-	} else {
-		log.Warnf("the node server is working, can't set default route handler")
-	}
+	//if n.state == cluster.Shut {
+	//	//n.defaultRouteHandler = handler
+	//} else {
+	//	log.Warnf("the node server is working, can't set default route handler")
+	//}
 }
 
-// 是否为有状态路由
-func (n *Node) checkRouteStateful(route int32) (bool, bool) {
-	if entity, ok := n.router.routes[route]; ok {
-		return entity.stateful, ok
-	}
-
-	return false, n.router.defaultRouteHandler != nil
+// 切换节点状态
+func (n *Node) switchState(state cluster.State) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)), unsafe.Pointer(&state))
 }
 
-// 添加事件处理器
-func (n *Node) addEventListener(event cluster.Event, handler EventHandler) {
-	if n.state == cluster.Shut {
-		n.events[event] = handler
-	} else {
-		log.Warnf("the node server is working, can't add event handler")
-	}
-}
+func (n *Node) loadState() string {
+	state := (*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state))))
 
-// 分配Context
-func (n *Node) allocateContext() *Context {
-	return &Context{
-		ctx:        context.Background(),
-		Proxy:      n.proxy,
-		Middleware: &Middleware{},
+	if state == nil {
+		return ""
 	}
-}
 
-// 分配请求
-func (n *Node) allocateRequest() *Request {
-	return &Request{
-		codec:     n.opts.codec,
-		decryptor: n.opts.decryptor,
-		message:   &Message{},
-	}
-}
-
-// 分配事件
-func (n *Node) allocateEvent() *Event {
-	return &Event{}
+	return *state
 }
 
 func (n *Node) debugPrint() {

@@ -79,7 +79,7 @@ func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
 
 // AddEventListener 添加事件监听器
 func (p *Proxy) AddEventListener(event cluster.Event, handler EventHandler) {
-	p.node.addEventListener(event, handler)
+	p.node.events.AddEventListener(event, handler)
 }
 
 // Publish 发布事件

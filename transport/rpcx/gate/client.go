@@ -2,7 +2,7 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/router"
+	ep "github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/session"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/rpcx/internal/code"
@@ -18,10 +18,10 @@ type client struct {
 	client cli.XClient
 }
 
-func NewClient(ep *router.Endpoint) (*client, error) {
-	cc, ok := clients.Load(ep.Address())
+func NewClient(ep *ep.Endpoint) (*client, error) {
+	v, ok := clients.Load(ep.Address())
 	if ok {
-		return cc.(*client), nil
+		return v.(*client), nil
 	}
 
 	discovery, err := cli.NewPeer2PeerDiscovery("tcp@"+ep.Address(), "")

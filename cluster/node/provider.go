@@ -26,8 +26,12 @@ func (p *provider) LocateNode(ctx context.Context, uid int64) (nid string, miss 
 }
 
 // CheckRouteStateful 检测某个路由是否为有状态路由
-func (p *provider) CheckRouteStateful(route int32) (bool, bool) {
-	return p.node.checkRouteStateful(route)
+func (p *provider) CheckRouteStateful(route int32) (stateful bool, exist bool) {
+	stateful, exist = p.node.router.CheckRouteStateful(route)
+
+	exist = exist || p.node.router.HasDefaultRouteHandler()
+
+	return
 }
 
 // Trigger 触发事件
@@ -41,12 +45,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		return miss, err
 	}
 
-	evt := p.node.reqPool.Get().(*Event)
-	evt.event = args.Event
-	evt.gid = args.GID
-	evt.cid = args.CID
-	evt.uid = args.UID
-	p.node.chEvent <- evt
+	p.node.events.trigger(args.Event, args.GID, args.CID, args.UID)
 
 	return false, nil
 }

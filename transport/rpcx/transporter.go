@@ -1,7 +1,7 @@
 package rpcx
 
 import (
-	"github.com/dobyte/due/router"
+	"github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/rpcx/gate"
 	"github.com/dobyte/due/transport/rpcx/internal/server"
@@ -22,12 +22,12 @@ func NewTransporter(opts ...Option) *Transporter {
 }
 
 // NewGateClient 新建网关客户端
-func (t *Transporter) NewGateClient(ep *router.Endpoint) (transport.GateClient, error) {
+func (t *Transporter) NewGateClient(ep *endpoint.Endpoint) (transport.GateClient, error) {
 	return gate.NewClient(ep)
 }
 
 // NewNodeClient 新建节点客户端
-func (t *Transporter) NewNodeClient(ep *router.Endpoint) (transport.NodeClient, error) {
+func (t *Transporter) NewNodeClient(ep *endpoint.Endpoint) (transport.NodeClient, error) {
 	return node.NewClient(ep)
 }
 

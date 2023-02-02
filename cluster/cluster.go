@@ -19,6 +19,21 @@ const (
 	Shut State = "shut" // 关闭（节点已经关闭，无法正常访问该节点）
 )
 
+func (s State) String() string {
+	switch s {
+	case Work:
+		return "work"
+	case Busy:
+		return "busy"
+	case Hang:
+		return "hang"
+	case Shut:
+		return "shut"
+	default:
+		return "shut"
+	}
+}
+
 // Event 事件
 type Event int
 

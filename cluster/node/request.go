@@ -10,15 +10,11 @@ package node
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/encoding"
 )
 
 // Request 请求数据
 type Request struct {
-	codec     encoding.Codec   // 编解码器
-	decryptor crypto.Decryptor // 消息解密器
-
+	node    *Node
 	gid     string   // 来源网关ID
 	nid     string   // 来源节点ID
 	cid     int64    // 连接ID
@@ -72,12 +68,12 @@ func (r *Request) Parse(v interface{}) (err error) {
 		return gob.NewDecoder(&buf).Decode(v)
 	}
 
-	if r.gid != "" && r.decryptor != nil {
-		msg, err = r.decryptor.Decrypt(msg)
+	if r.gid != "" && r.node.opts.decryptor != nil {
+		msg, err = r.node.opts.decryptor.Decrypt(msg)
 		if err != nil {
 			return
 		}
 	}
 
-	return r.codec.Unmarshal(msg, v)
+	return r.node.opts.codec.Unmarshal(msg, v)
 }

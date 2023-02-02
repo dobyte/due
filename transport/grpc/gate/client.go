@@ -2,10 +2,10 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/router"
+	ep "github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/session"
 	"github.com/dobyte/due/transport"
-	innerclient "github.com/dobyte/due/transport/grpc/internal/client"
+	cli "github.com/dobyte/due/transport/grpc/internal/client"
 	"github.com/dobyte/due/transport/grpc/internal/code"
 	"github.com/dobyte/due/transport/grpc/internal/pb"
 	"google.golang.org/grpc"
@@ -20,16 +20,16 @@ type client struct {
 	client pb.GateClient
 }
 
-func NewClient(ep *router.Endpoint, opts *innerclient.Options) (*client, error) {
-	cli, ok := clients.Load(ep.Address())
+func NewClient(ep *ep.Endpoint, opts *cli.Options) (*client, error) {
+	v, ok := clients.Load(ep.Address())
 	if ok {
-		return cli.(*client), nil
+		return v.(*client), nil
 	}
 
 	opts.Addr = ep.Address()
 	opts.IsSecure = ep.IsSecure()
 
-	conn, err := innerclient.Dial(opts)
+	conn, err := cli.Dial(opts)
 	if err != nil {
 		return nil, err
 	}
