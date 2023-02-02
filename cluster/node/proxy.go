@@ -62,24 +62,14 @@ func (p *Proxy) GetName() string {
 	return p.node.opts.name
 }
 
-// Router 获取路由器
+// Router 路由器
 func (p *Proxy) Router() *Router {
 	return p.node.router
 }
 
-// AddRouteHandler 添加路由处理器
-func (p *Proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	p.node.router.AddRouteHandler(route, stateful, handler, middlewares...)
-}
-
-// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
-func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
-	p.node.router.SetDefaultRouteHandler(handler)
-}
-
-// AddEventListener 添加事件监听器
-func (p *Proxy) AddEventListener(event cluster.Event, handler EventHandler) {
-	p.node.events.AddEventListener(event, handler)
+// Events 事件器
+func (p *Proxy) Events() *Events {
+	return p.node.events
 }
 
 // Publish 发布事件
