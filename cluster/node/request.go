@@ -8,7 +8,7 @@
 package node
 
 import (
-	"github.com/dobyte/due/encoding/msgpack"
+	"github.com/jinzhu/copier"
 )
 
 // Request 请求数据
@@ -60,12 +60,9 @@ func (r *Request) Data() interface{} {
 func (r *Request) Parse(v interface{}) error {
 	msg, ok := r.message.Data.([]byte)
 	if !ok {
-		buf, err := msgpack.Marshal(r.message.Data)
-		if err != nil {
-			return err
-		}
-
-		return msgpack.Unmarshal(buf, v)
+		return copier.CopyWithOption(v, r.message.Data, copier.Option{
+			DeepCopy: true,
+		})
 	}
 
 	if r.gid != "" && r.node.opts.decryptor != nil {
