@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"encoding/gob"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/internal/value"
 	"github.com/imdario/mergo"
@@ -10,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
@@ -24,15 +24,11 @@ type Reader interface {
 	Close()
 }
 
-func init() {
-	gob.Register(map[string]interface{}{})
-	gob.Register([]interface{}{})
-}
-
 type defaultReader struct {
 	opts   *options
 	ctx    context.Context
 	cancel context.CancelFunc
+	mu     sync.Mutex
 	values atomic.Value
 }
 
@@ -77,9 +73,7 @@ func (r *defaultReader) init() {
 		}
 	}
 
-	if err := r.store(values); err != nil {
-		log.Printf("store configure failed: %v", err)
-	}
+	r.values.Store(values)
 }
 
 // 监听配置源变化
@@ -115,17 +109,22 @@ func (r *defaultReader) watch() {
 					values[c.Name] = v
 				}
 
-				dst, err := r.copyValues()
-				if err != nil {
-					continue
-				}
+				func() {
+					r.mu.Lock()
+					defer r.mu.Unlock()
 
-				err = mergo.Merge(&dst, values, mergo.WithOverride)
-				if err != nil {
-					continue
-				}
+					dst, err := r.copyValues()
+					if err != nil {
+						return
+					}
 
-				_ = r.store(dst)
+					err = mergo.Merge(&dst, values, mergo.WithOverride)
+					if err != nil {
+						return
+					}
+
+					r.values.Store(dst)
+				}()
 			}
 		}()
 	}
@@ -231,6 +230,9 @@ NOTFOUND:
 
 // Set 设置配置值
 func (r *defaultReader) Set(pattern string, value interface{}) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	var (
 		keys = strings.Split(pattern, ".")
 		node interface{}
@@ -325,10 +327,6 @@ func (r *defaultReader) Set(pattern string, value interface{}) error {
 		}
 	}
 
-	return r.store(values)
-}
-
-func (r *defaultReader) store(values map[string]interface{}) error {
 	r.values.Store(values)
 
 	return nil
@@ -337,7 +335,9 @@ func (r *defaultReader) store(values map[string]interface{}) error {
 func (r *defaultReader) copyValues() (map[string]interface{}, error) {
 	dst := make(map[string]interface{})
 
-	err := copier.Copy(&dst, r.values.Load())
+	err := copier.CopyWithOption(&dst, r.values.Load(), copier.Option{
+		DeepCopy: true,
+	})
 	if err != nil {
 		return nil, err
 	}
