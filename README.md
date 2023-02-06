@@ -305,4 +305,4 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 
 ### 9.交流与讨论
 
-<img title="" src="file:///Users/fuxiao/Documents/Golang/dobyte/due/group_qrcode.jpeg" alt="架构图" width="175"><img title="" src="file:///Users/fuxiao/Documents/Golang/dobyte/due/personal_qrcode.jpeg" alt="架构图" width="177">
+<img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
