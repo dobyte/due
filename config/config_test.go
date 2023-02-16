@@ -24,8 +24,8 @@ func TestConfig(t *testing.T) {
 	//		t.Log(config.Get("wechat.1.db", 0))
 	//	case <-ticker2.C:
 	//		config.Close()
-	//		ticker1.Stop()
-	//		ticker2.Stop()
+	//		ticker1.Close()
+	//		ticker2.Close()
 	//		return
 	//	}
 	//}

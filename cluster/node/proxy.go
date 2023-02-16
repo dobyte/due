@@ -3,12 +3,9 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/internal/link"
-	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/task"
 )
 
 var (
@@ -70,36 +67,6 @@ func (p *Proxy) Router() *Router {
 // Events 事件器
 func (p *Proxy) Events() *Events {
 	return p.node.events
-}
-
-// Publish 发布事件
-func (p *Proxy) Publish(ctx context.Context, topic string, message interface{}) error {
-	if p.node.opts.eventbus == nil {
-		log.Warn("the eventbus component is not injected, and the publish operation will be ignored.")
-		return nil
-	}
-
-	return p.node.opts.eventbus.Publish(ctx, topic, message)
-}
-
-// Subscribe 订阅事件
-func (p *Proxy) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
-	if p.node.opts.eventbus == nil {
-		log.Warn("the eventbus component is not injected, and the subscribe operation will be ignored.")
-		return nil
-	}
-
-	return p.node.opts.eventbus.Subscribe(ctx, topic, handler)
-}
-
-// Unsubscribe 取消订阅
-func (p *Proxy) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
-	if p.node.opts.eventbus == nil {
-		log.Warn("the eventbus component is not injected, and the unsubscribe operation will be ignored.")
-		return nil
-	}
-
-	return p.node.opts.eventbus.Unsubscribe(ctx, topic, handler)
 }
 
 // BindGate 绑定网关
@@ -227,11 +194,6 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 // Disconnect 断开连接
 func (p *Proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 	return p.link.Disconnect(ctx, args)
-}
-
-// AddTask 添加任务到任务池
-func (p *Proxy) AddTask(fn func()) error {
-	return task.AddTask(fn)
 }
 
 // 启动监听

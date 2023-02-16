@@ -124,11 +124,11 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		//time.Sleep(5 * time.Second)
-		//watcher1.Stop()
+		//watcher1.Close()
 		//time.Sleep(5 * time.Second)
-		//watcher2.Stop()
+		//watcher2.Close()
 		//time.Sleep(5 * time.Second)
-		//reg.Stop()
+		//reg.Close()
 	}()
 
 	go func() {

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/task"
+	"runtime"
 
 	"os"
 	"os/signal"
@@ -28,7 +31,7 @@ func (c *Container) Add(components ...component.Component) {
 
 // Serve 启动容器
 func (c *Container) Serve() {
-	log.Debug(fmt.Sprintf("Welcome to the due framework %s, Learn more at https://github.com/dobyte/due", Version))
+	log.Debug(fmt.Sprintf("Welcome to the due framework %s, Learn more at %s", Version, Website))
 
 	for _, comp := range c.components {
 		comp.Init()
@@ -38,16 +41,28 @@ func (c *Container) Serve() {
 		comp.Start()
 	}
 
-	signal.Notify(c.sig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2)
+	switch runtime.GOOS {
+	case `windows`:
+		signal.Notify(c.sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
+	default:
+		signal.Notify(c.sig, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGKILL, syscall.SIGTERM)
+	}
 
 	sig := <-c.sig
 
 	log.Warnf("process got signal %v, container will close", sig)
 
 	signal.Stop(c.sig)
-	config.Close()
 
 	for _, comp := range c.components {
 		comp.Destroy()
 	}
+
+    if err := eventbus.Close(); err != nil {
+        log.Errorf("eventbus close failed: %v", err)
+    }
+
+    task.Release()
+
+    config.Close()
 }

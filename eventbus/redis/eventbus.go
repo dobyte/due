@@ -5,11 +5,12 @@ import (
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/task"
+	"github.com/dobyte/due/utils/xconv"
 	"github.com/go-redis/redis/v8"
 	"sync"
 )
 
-type EventBus struct {
+type Eventbus struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	opts   *options
@@ -19,7 +20,7 @@ type EventBus struct {
 	handlers map[string]map[*eventbus.EventHandler]struct{}
 }
 
-func NewEventBus(opts ...Option) *EventBus {
+func NewEventbus(opts ...Option) *Eventbus {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
@@ -39,18 +40,19 @@ func NewEventBus(opts ...Option) *EventBus {
 		})
 	}
 
-	eb := &EventBus{}
+	eb := &Eventbus{}
 	eb.ctx, eb.cancel = context.WithCancel(o.ctx)
 	eb.opts = o
 	eb.sub = eb.opts.client.Subscribe(eb.ctx)
 	eb.handlers = make(map[string]map[*eventbus.EventHandler]struct{})
+    go eb.watch()
 
 	return eb
 }
 
 // Publish 发布事件
-func (eb *EventBus) Publish(ctx context.Context, topic string, payload interface{}) error {
-	buf, err := eventbus.BuildPayload(topic, payload)
+func (eb *Eventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
+	buf, err := eventbus.PackData(topic, payload)
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,7 @@ func (eb *EventBus) Publish(ctx context.Context, topic string, payload interface
 }
 
 // Subscribe 订阅事件
-func (eb *EventBus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
+func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	eb.rw.Lock()
 	if _, ok := eb.handlers[topic]; !ok {
 		eb.handlers[topic] = make(map[*eventbus.EventHandler]struct{}, 1)
@@ -71,7 +73,7 @@ func (eb *EventBus) Subscribe(ctx context.Context, topic string, handler eventbu
 }
 
 // Unsubscribe 取消订阅
-func (eb *EventBus) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
+func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
 	eb.rw.Lock()
 	if handlers, ok := eb.handlers[topic]; ok {
 		if _, ok = handlers[&handler]; ok {
@@ -87,8 +89,8 @@ func (eb *EventBus) Unsubscribe(ctx context.Context, topic string, handler event
 	return eb.sub.Unsubscribe(ctx, eb.opts.prefix+":"+topic)
 }
 
-// Watch 监听事件
-func (eb *EventBus) Watch() {
+// watch 监听事件
+func (eb *Eventbus) watch() {
 	for {
 		iface, err := eb.sub.Receive(eb.ctx)
 		if err != nil {
@@ -99,7 +101,7 @@ func (eb *EventBus) Watch() {
 		case *redis.Subscription:
 			log.Debugf("channel subscribe succeeded, %s", v.Channel)
 		case *redis.Message:
-			event, err := eventbus.ParsePayload(v.Payload)
+			event, err := eventbus.UnpackData(xconv.Bytes(v.Payload))
 			if err != nil {
 				log.Errorf("invalid payload, %s", v.Payload)
 				continue
@@ -126,8 +128,8 @@ func (eb *EventBus) Watch() {
 	}
 }
 
-// Stop 停止监听
-func (eb *EventBus) Stop() error {
+// Close 停止监听
+func (eb *Eventbus) Close() error {
 	eb.cancel()
 	return eb.sub.Close()
 }

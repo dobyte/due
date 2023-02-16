@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var eb = redis.NewEventBus(
+var eb = redis.NewEventbus(
 	redis.WithAddrs("127.0.0.1:6379"),
 )
 
@@ -16,10 +16,8 @@ const (
 	paidTopic  = "paid"
 )
 
-func TestEventBus_Publish(t *testing.T) {
-	defer eb.Stop()
-
-	go eb.Watch()
+func TestEventbus_Publish(t *testing.T) {
+	defer eb.Close()
 
 	err := eb.Subscribe(context.Background(), loginTopic, func(payload *eventbus.Event) {
 		t.Log(payload)

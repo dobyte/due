@@ -5,7 +5,6 @@ import (
 	"github.com/dobyte/due/config"
 	"github.com/dobyte/due/crypto"
 	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/locate"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
@@ -41,7 +40,6 @@ type options struct {
 	transporter transport.Transporter // 消息传输器
 	encryptor   crypto.Encryptor      // 消息加密器
 	decryptor   crypto.Decryptor      // 消息解密器
-	eventbus    eventbus.EventBus     // 事件总线
 }
 
 func defaultOptions() *options {
@@ -129,9 +127,4 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 // WithDecryptor 设置消息解密器
 func WithDecryptor(decryptor crypto.Decryptor) Option {
 	return func(o *options) { o.decryptor = decryptor }
-}
-
-// WithEventBus 设置事件总线
-func WithEventBus(eventbus eventbus.EventBus) Option {
-	return func(o *options) { o.eventbus = eventbus }
 }

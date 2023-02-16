@@ -49,5 +49,7 @@ func Set(pattern string, value interface{}) error {
 
 // Close 关闭配置监听
 func Close() {
-	globalReader.Close()
+	if globalReader != nil {
+		globalReader.Close()
+	}
 }

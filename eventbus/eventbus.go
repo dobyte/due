@@ -4,17 +4,19 @@ import (
 	"context"
 	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/internal/value"
+	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/utils/xconv"
 	"github.com/dobyte/due/utils/xtime"
 	"github.com/dobyte/due/utils/xuuid"
+	"github.com/golang/glog"
 	"time"
 )
 
-type EventBus interface {
-	// Watch 监听事件
-	Watch()
-	// Stop 停止监听
-	Stop() error
+var globalEventbus Eventbus
+
+type Eventbus interface {
+	// Close 关闭事件总线
+	Close() error
 	// Publish 发布事件
 	Publish(ctx context.Context, topic string, message interface{}) error
 	// Subscribe 订阅事件
@@ -32,21 +34,21 @@ type Event struct {
 	Timestamp time.Time   // 事件时间
 }
 
-type packet struct {
+type data struct {
 	ID        string `json:"id"`        // 事件ID
 	Topic     string `json:"topic"`     // 事件主题
 	Payload   string `json:"payload"`   // 事件载荷
 	Timestamp int64  `json:"timestamp"` // 事件时间
 }
 
-// BuildPayload 构建
-func BuildPayload(topic string, payload interface{}) ([]byte, error) {
+// PackData 打包数据
+func PackData(topic string, payload interface{}) ([]byte, error) {
 	id, err := xuuid.UUID()
 	if err != nil {
 		return nil, err
 	}
 
-	return json.Marshal(&packet{
+	return json.Marshal(&data{
 		ID:        id,
 		Topic:     topic,
 		Payload:   xconv.String(payload),
@@ -54,19 +56,74 @@ func BuildPayload(topic string, payload interface{}) ([]byte, error) {
 	})
 }
 
-// ParsePayload 解析
-func ParsePayload(payload string) (*Event, error) {
-	p := &packet{}
+// UnpackData 解析
+func UnpackData(v []byte) (*Event, error) {
+	d := &data{}
 
-	err := json.Unmarshal(xconv.Bytes(payload), p)
+	err := json.Unmarshal(v, d)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Event{
-		ID:        p.ID,
-		Topic:     p.Topic,
-		Payload:   value.NewValue(p.Payload),
-		Timestamp: xtime.UnixNano(p.Timestamp),
+		ID:        d.ID,
+		Topic:     d.Topic,
+		Payload:   value.NewValue(d.Payload),
+		Timestamp: xtime.UnixNano(d.Timestamp),
 	}, nil
+}
+
+// SetEventbus 设置事件总线
+func SetEventbus(eventbus Eventbus) {
+	if globalEventbus != nil {
+		if err := globalEventbus.Close(); err != nil {
+			glog.Errorf("the old eventbus close failed: %v", err)
+		}
+	}
+
+	globalEventbus = eventbus
+}
+
+// GetEventbus 获取事件总线
+func GetEventbus() Eventbus {
+	return globalEventbus
+}
+
+// Publish 发布事件
+func Publish(ctx context.Context, topic string, message interface{}) error {
+	if globalEventbus == nil {
+		log.Warn("the eventbus component is not injected, and the publish operation will be ignored.")
+		return nil
+	}
+
+	return globalEventbus.Publish(ctx, topic, message)
+}
+
+// Subscribe 订阅事件
+func Subscribe(ctx context.Context, topic string, handler EventHandler) error {
+	if globalEventbus == nil {
+		log.Warn("the eventbus component is not injected, and the subscribe operation will be ignored.")
+		return nil
+	}
+
+	return globalEventbus.Subscribe(ctx, topic, handler)
+}
+
+// Unsubscribe 取消订阅
+func Unsubscribe(ctx context.Context, topic string, handler EventHandler) error {
+	if globalEventbus == nil {
+		log.Warn("the eventbus component is not injected, and the unsubscribe operation will be ignored.")
+		return nil
+	}
+
+	return globalEventbus.Unsubscribe(ctx, topic, handler)
+}
+
+// Close 关闭事件总线
+func Close() error {
+	if globalEventbus == nil {
+		return nil
+	}
+
+	return globalEventbus.Close()
 }
