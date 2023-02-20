@@ -112,39 +112,39 @@ go get github.com/dobyte/due/transport/grpc@latest
 package main
 
 import (
-	"github.com/dobyte/due"
-	"github.com/dobyte/due/cluster/gate"
-	"github.com/dobyte/due/locate/redis"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/mode"
-	"github.com/dobyte/due/network/ws"
-	"github.com/dobyte/due/registry/etcd"
-	"github.com/dobyte/due/transport/grpc"
+    "github.com/dobyte/due"
+    "github.com/dobyte/due/cluster/gate"
+    "github.com/dobyte/due/locate/redis"
+    "github.com/dobyte/due/config"
+    "github.com/dobyte/due/log"
+    "github.com/dobyte/due/mode"
+    "github.com/dobyte/due/network/ws"
+    "github.com/dobyte/due/registry/etcd"
+    "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-	// 设置模式
-	mode.SetMode(mode.DebugMode)
+    // 设置模式
+    mode.SetMode(mode.DebugMode)
 
-	// 监听配置
-	config.Watch()
-	defer config.Close()
+    // 监听配置
+    config.Watch()
+    defer config.Close()
 
-	// 创建容器
-	container := due.NewContainer()
-	// 创建网关组件
-	component := gate.NewGate(
-		gate.WithServer(ws.NewServer()),
-		gate.WithLocator(redis.NewLocator()),
-		gate.WithRegistry(etcd.NewRegistry()),
-		gate.WithTransporter(grpc.NewTransporter()),
-	)
+    // 创建容器
+    container := due.NewContainer()
+    // 创建网关组件
+    component := gate.NewGate(
+        gate.WithServer(ws.NewServer()),
+        gate.WithLocator(redis.NewLocator()),
+        gate.WithRegistry(etcd.NewRegistry()),
+        gate.WithTransporter(grpc.NewTransporter()),
+    )
 
-	// 添加网关组件
-	container.Add(component)
-	// 启动容器
-	container.Serve()
+    // 添加网关组件
+    container.Add(component)
+    // 启动容器
+    container.Serve()
 }
 ```
 
@@ -154,42 +154,42 @@ func main() {
 package main
 
 import (
-	"github.com/dobyte/due"
-	"github.com/dobyte/due/cluster/node"
-	"github.com/dobyte/due/locate/redis"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/mode"
-	"github.com/dobyte/due/registry/etcd"
-	"github.com/dobyte/due/transport/grpc"
+    "github.com/dobyte/due"
+    "github.com/dobyte/due/cluster/node"
+    "github.com/dobyte/due/locate/redis"
+    "github.com/dobyte/due/config"
+    "github.com/dobyte/due/log"
+    "github.com/dobyte/due/mode"
+    "github.com/dobyte/due/registry/etcd"
+    "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-	// 设置模式
-	mode.SetMode(mode.DebugMode)
+    // 设置模式
+    mode.SetMode(mode.DebugMode)
 
-	// 监听配置
-	config.Watch()
-	defer config.Close()
+    // 监听配置
+    config.Watch()
+    defer config.Close()
 
-	// 创建容器
-	container := due.NewContainer()
-	// 创建网关组件
-	component := node.NewNode(
-		node.WithLocator(redis.NewLocator()),
-		node.WithRegistry(etcd.NewRegistry()),
-		node.WithTransporter(grpc.NewTransporter()),
-	)
-	// 注册路由
-	component.Proxy().AddRouteHandler(1, false, greetHandler)
-	// 添加组件
-	container.Add(component)
-	// 启动服务器
-	container.Serve()
+    // 创建容器
+    container := due.NewContainer()
+    // 创建网关组件
+    component := node.NewNode(
+        node.WithLocator(redis.NewLocator()),
+        node.WithRegistry(etcd.NewRegistry()),
+        node.WithTransporter(grpc.NewTransporter()),
+    )
+    // 注册路由
+    component.Proxy().AddRouteHandler(1, false, greetHandler)
+    // 添加组件
+    container.Add(component)
+    // 启动服务器
+    container.Serve()
 }
 
 func greetHandler(r node.Request) {
-	_ = r.Response([]byte("hello world~~"))
+    _ = r.Response([]byte("hello world~~"))
 }
 ```
 
@@ -199,12 +199,12 @@ func greetHandler(r node.Request) {
 package main
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/mode"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/network/ws"
-	"github.com/dobyte/due/packet"
+    "github.com/dobyte/due/config"
+    "github.com/dobyte/due/log"
+    "github.com/dobyte/due/mode"
+    "github.com/dobyte/due/network"
+    "github.com/dobyte/due/network/ws"
+    "github.com/dobyte/due/packet"
 )
 
 var handlers map[int32]handlerFunc
@@ -212,92 +212,97 @@ var handlers map[int32]handlerFunc
 type handlerFunc func(conn network.Conn, buffer []byte)
 
 func init() {
-	handlers = map[int32]handlerFunc{
-		1: greetHandler,
-	}
+    handlers = map[int32]handlerFunc{
+        1: greetHandler,
+    }
 }
 
 func main() {
-	// 设置模式
-	mode.SetMode(mode.DebugMode)
+    // 设置模式
+    mode.SetMode(mode.DebugMode)
 
-	// 监听配置
-	config.Watch()
-	defer config.Close()
+    // 监听配置
+    config.Watch()
+    defer config.Close()
 
-	// 创建客户端
-	client := ws.NewClient()
-	// 监听连接
-	client.OnConnect(func(conn network.Conn) {
-		log.Infof("connection is opened")
-	})
-	// 监听断开连接
-	client.OnDisconnect(func(conn network.Conn) {
-		log.Infof("connection is closed")
-	})
-	// 监听收到消息
-	client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-		message, err := packet.Unpack(msg)
-		if err != nil {
-			log.Errorf("unpack message failed: %v", err)
-			return
-		}
+    // 创建客户端
+    client := ws.NewClient()
+    // 监听连接
+    client.OnConnect(func(conn network.Conn) {
+        log.Infof("connection is opened")
+    })
+    // 监听断开连接
+    client.OnDisconnect(func(conn network.Conn) {
+        log.Infof("connection is closed")
+    })
+    // 监听收到消息
+    client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
+        message, err := packet.Unpack(msg)
+        if err != nil {
+            log.Errorf("unpack message failed: %v", err)
+            return
+        }
 
-		handler, ok := handlers[message.Route]
-		if !ok {
-			log.Errorf("the route handler is not registered, route:%v", message.Route)
-			return
-		}
-		handler(conn, message.Buffer)
-	})
+        handler, ok := handlers[message.Route]
+        if !ok {
+            log.Errorf("the route handler is not registered, route:%v", message.Route)
+            return
+        }
+        handler(conn, message.Buffer)
+    })
 
-	conn, err := client.Dial()
-	if err != nil {
-		log.Fatalf("dial failed: %v", err)
-	}
+    conn, err := client.Dial()
+    if err != nil {
+        log.Fatalf("dial failed: %v", err)
+    }
 
-	if err = push(conn, 1, []byte("hello due~~")); err != nil {
-		log.Errorf("push message failed: %v", err)
-	}
+    if err = push(conn, 1, []byte("hello due~~")); err != nil {
+        log.Errorf("push message failed: %v", err)
+    }
 
-	select {}
+    select {}
 }
 
 func greetHandler(conn network.Conn, buffer []byte) {
-	log.Infof("received message from server: %s", string(buffer))
+    log.Infof("received message from server: %s", string(buffer))
 }
 
 func push(conn network.Conn, route int32, buffer []byte) error {
-	msg, err := packet.Pack(&packet.Message{
-		Seq:    1,
-		Route:  route,
-		Buffer: buffer,
-	})
-	if err != nil {
-		return err
-	}
+    msg, err := packet.Pack(&packet.Message{
+        Seq:    1,
+        Route:  route,
+        Buffer: buffer,
+    })
+    if err != nil {
+        return err
+    }
 
-	return conn.Push(msg)
+    return conn.Push(msg)
 }
 ```
 
 ### 7.支持组件
+
 1. 日志组件
-    * zap: github.com/dobyte/due/log/zap
-    * logrus: github.com/dobyte/due/log/logrus
-    * aliyun: github.com/dobyte/due/log/aliyun
-    * tencent: github.com/dobyte/due/log/zap
+   * zap: github.com/dobyte/due/log/zap
+   * logrus: github.com/dobyte/due/log/logrus
+   * aliyun: github.com/dobyte/due/log/aliyun
+   * tencent: github.com/dobyte/due/log/zap
 2. 网络组件
-    * ws: github.com/dobyte/due/network/ws
-    * tcp: github.com/dobyte/due/network/tcp
+   * ws: github.com/dobyte/due/network/ws
+   * tcp: github.com/dobyte/due/network/tcp
 3. 注册发现
-    * etcd: github.com/dobyte/due/registry/etcd
-    * consul: github.com/dobyte/due/registry/consul
+   * etcd: github.com/dobyte/due/registry/etcd
+   * consul: github.com/dobyte/due/registry/consul
 4. 传输组件
-    * grpc: github.com/dobyte/due/transporter/grpc
+   * grpc: github.com/dobyte/due/transporter/grpc
 5. 定位组件
-    * redis: github.com/dobyte/due/locate/redis
+   * redis: github.com/dobyte/due/locate/redis
 
 ### 8.详细示例
 
 更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
+
+### 9.交流与讨论
+
+<img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
