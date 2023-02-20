@@ -18,31 +18,31 @@ func (c *Context) Context() context.Context {
 }
 
 // BindGate 绑定网关
-func (c *Context) BindGate(ctx context.Context, uid int64) error {
-	return c.Proxy.BindGate(ctx, c.Request.gid, c.Request.cid, uid)
+func (c *Context) BindGate(uid int64) error {
+	return c.Proxy.BindGate(c.ctx, c.Request.GID, c.Request.CID, uid)
 }
 
 // UnbindGate 解绑网关
-func (c *Context) UnbindGate(ctx context.Context) error {
-	return c.Proxy.UnbindGate(ctx, c.Request.uid)
+func (c *Context) UnbindGate() error {
+	return c.Proxy.UnbindGate(c.ctx, c.Request.UID)
 }
 
 // BindNode 绑定节点
 func (c *Context) BindNode() error {
-	return c.Proxy.BindNode(c.ctx, c.Request.uid)
+	return c.Proxy.BindNode(c.ctx, c.Request.UID)
 }
 
 // UnbindNode 解绑节点
 func (c *Context) UnbindNode() error {
-	return c.Proxy.UnbindNode(c.ctx, c.Request.uid)
+	return c.Proxy.UnbindNode(c.ctx, c.Request.UID)
 }
 
 // GetIP 获取来自网关的连接IP地址
 func (c *Context) GetIP() (string, error) {
 	return c.Proxy.GetIP(c.ctx, &GetIPArgs{
-		GID:    c.Request.gid,
+		GID:    c.Request.GID,
 		Kind:   session.Conn,
-		Target: c.Request.cid,
+		Target: c.Request.CID,
 	})
 }
 
@@ -55,9 +55,9 @@ func (c *Context) Response(message interface{}) error {
 // Disconnect 关闭来自网关的连接
 func (c *Context) Disconnect(isForce ...bool) error {
 	args := &DisconnectArgs{
-		GID:    c.Request.gid,
+		GID:    c.Request.GID,
 		Kind:   session.Conn,
-		Target: c.Request.cid,
+		Target: c.Request.CID,
 	}
 
 	if len(isForce) > 0 {

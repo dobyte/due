@@ -6,7 +6,6 @@ import (
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/task"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xnet"
 	"sync/atomic"
@@ -25,6 +24,7 @@ type Node struct {
 	proxy    *Proxy
 	instance *registry.ServiceInstance
 	rpc      transport.Server
+	fnChan   chan func()
 }
 
 func NewNode(opts ...Option) *Node {
@@ -38,6 +38,7 @@ func NewNode(opts ...Option) *Node {
 	n.events = newEvents(n)
 	n.router = newRouter(n)
 	n.proxy = newProxy(n)
+	n.fnChan = make(chan func(), 4096)
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 
 	return n
@@ -79,8 +80,6 @@ func (n *Node) Start() {
 
 	n.registerServiceInstance()
 
-	n.startEventBus()
-
 	n.proxy.watch(n.ctx)
 
 	go n.dispatch()
@@ -94,15 +93,13 @@ func (n *Node) Destroy() {
 
 	n.stopRPCServer()
 
-	n.stopEventBus()
-
 	n.events.close()
 
 	n.router.close()
 
-	n.cancel()
+	close(n.fnChan)
 
-	task.Release()
+	n.cancel()
 }
 
 // Proxy 获取节点代理
@@ -114,18 +111,21 @@ func (n *Node) Proxy() *Proxy {
 func (n *Node) dispatch() {
 	for {
 		select {
-		case evt, ok := <-n.events.event():
+		case evt, ok := <-n.events.receive():
 			if !ok {
 				return
 			}
-
 			n.events.handle(evt)
-		case req, ok := <-n.router.receive():
+		case ctx, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
-
-			n.router.handle(req)
+			n.router.handle(ctx)
+		case handle, ok := <-n.fnChan:
+			if !ok {
+				return
+			}
+			handle()
 		}
 	}
 }
@@ -150,26 +150,6 @@ func (n *Node) startRPCServer() {
 func (n *Node) stopRPCServer() {
 	if err := n.rpc.Stop(); err != nil {
 		log.Errorf("the transport server stop failed: %v", err)
-	}
-}
-
-// 启动事件总线
-func (n *Node) startEventBus() {
-	if n.opts.eventbus == nil {
-		return
-	}
-
-	go n.opts.eventbus.Watch()
-}
-
-// 停止事件总线
-func (n *Node) stopEventBus() {
-	if n.opts.eventbus == nil {
-		return
-	}
-
-	if err := n.opts.eventbus.Stop(); err != nil {
-		log.Errorf("the eventbus stop failed: %v", err)
 	}
 }
 
@@ -211,31 +191,27 @@ func (n *Node) deregisterServiceInstance() {
 	}
 }
 
-// 添加路由处理器
-func (n *Node) addRouteHandler(route int32, stateful bool, handler RouteHandler) {
-	//if n.state == cluster.Shut {
-	//	//n.routes[route] = routeEntity{
-	//	//	route:    route,
-	//	//	stateful: stateful,
-	//	//	handler:  handler,
-	//	//}
-	//} else {
-	//	log.Warnf("the node server is working, can't add route handler")
-	//}
-}
-
-// 默认路由处理器
-func (n *Node) setDefaultRouteHandler(handler RouteHandler) {
-	//if n.state == cluster.Shut {
-	//	//n.defaultRouteHandler = handler
-	//} else {
-	//	log.Warnf("the node server is working, can't set default route handler")
-	//}
-}
-
 // 设置节点状态
 func (n *Node) setState(state cluster.State) {
+	if n.checkState(state) {
+		return
+	}
+
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)), unsafe.Pointer(&state))
+
+	if n.instance != nil {
+		n.instance.State = n.getState()
+		for i := 0; i < 3; i++ {
+			ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+			err := n.opts.registry.Register(ctx, n.instance)
+			cancel()
+			if err == nil {
+				break
+			}
+		}
+	}
+
+	return
 }
 
 // 获取节点状态
@@ -245,6 +221,11 @@ func (n *Node) getState() cluster.State {
 	} else {
 		return *state
 	}
+}
+
+// 检测节点状态
+func (n *Node) checkState(state cluster.State) bool {
+	return n.getState() == state
 }
 
 func (n *Node) debugPrint() {

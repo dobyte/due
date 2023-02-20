@@ -16,7 +16,7 @@ type Master struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	opts   *options
-	proxy  *proxy
+	proxy  *Proxy
 }
 
 func NewMaster(opts ...Option) *Master {
@@ -35,7 +35,7 @@ func NewMaster(opts ...Option) *Master {
 
 // Name 组件名称
 func (m *Master) Name() string {
-	return m.opts.id
+	return m.opts.name
 }
 
 // Init 初始化组件
@@ -70,7 +70,7 @@ func (m *Master) Destroy() {
 }
 
 // Proxy 获取管理服代理
-func (m *Master) Proxy() Proxy {
+func (m *Master) Proxy() *Proxy {
 	return m.proxy
 }
 

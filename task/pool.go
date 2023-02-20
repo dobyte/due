@@ -50,6 +50,9 @@ func (p *defaultPool) Release() {
 
 // SetPool 设置任务池
 func SetPool(pool Pool) {
+	if globalPool != nil {
+		globalPool.Release()
+	}
 	globalPool = pool
 }
 
@@ -60,12 +63,20 @@ func GetPool() Pool {
 
 // AddTask 添加任务
 func AddTask(task func()) error {
-	return globalPool.AddTask(task)
+	if globalPool != nil {
+		return globalPool.AddTask(task)
+	}
+
+	log.Warn("the task pool component is not injected, and the task will be executed in a blocking manner.")
+	task()
+	return nil
 }
 
 // Release 释放任务
 func Release() {
-	globalPool.Release()
+	if globalPool != nil {
+		globalPool.Release()
+	}
 }
 
 type logger struct {

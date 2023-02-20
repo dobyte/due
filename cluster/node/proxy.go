@@ -49,14 +49,24 @@ func newProxy(node *Node) *Proxy {
 	})}
 }
 
-// GetID 获取当前节点ID
-func (p *Proxy) GetID() string {
+// GetNodeID 获取当前节点ID
+func (p *Proxy) GetNodeID() string {
 	return p.node.opts.id
 }
 
-// GetName 获取当前节点名称
-func (p *Proxy) GetName() string {
+// GetNodeName 获取当前节点名称
+func (p *Proxy) GetNodeName() string {
 	return p.node.opts.name
+}
+
+// GetNodeState 获取当前节点状态
+func (p *Proxy) GetNodeState() cluster.State {
+	return p.node.getState()
+}
+
+// SetNodeState 设置当前节点状态
+func (p *Proxy) SetNodeState(state cluster.State) {
+	p.node.setState(state)
 }
 
 // Router 路由器
@@ -64,7 +74,7 @@ func (p *Proxy) Router() *Router {
 	return p.node.router
 }
 
-// Events 事件器
+// Events 事件分发器
 func (p *Proxy) Events() *Events {
 	return p.node.events
 }
@@ -82,7 +92,7 @@ func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 // BindNode 绑定节点
 // 单个用户只能被绑定到某一台节点服务器上，多次绑定会直接覆盖上次绑定
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// nid 为需要绑定的节点ID，默认绑定到当前节点上
+// NID 为需要绑定的节点ID，默认绑定到当前节点上
 func (p *Proxy) BindNode(ctx context.Context, uid int64, nid ...string) error {
 	if len(nid) == 0 || nid[0] == "" {
 		return p.link.BindNode(ctx, uid, p.node.opts.id)
@@ -94,7 +104,7 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nid ...string) error {
 // UnbindNode 解绑节点
 // 解绑时会对解绑节点ID进行校验，不匹配则解绑失败
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// nid 为需要解绑的节点ID，默认解绑当前节点
+// NID 为需要解绑的节点ID，默认解绑当前节点
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nid ...string) error {
 	if len(nid) == 0 || nid[0] == "" {
 		return p.link.UnbindNode(ctx, uid, p.node.opts.id)
@@ -145,7 +155,7 @@ func (p *Proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
-	if args.NID != p.GetID() {
+	if args.NID != p.GetNodeID() {
 		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID: args.NID,
 			UID: args.UID,
@@ -165,24 +175,24 @@ func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 // Response 响应消息
 func (p *Proxy) Response(ctx context.Context, req *Request, message interface{}) error {
 	switch {
-	case req.GID() != "":
+	case req.GID != "":
 		return p.link.Push(ctx, &link.PushArgs{
-			GID:    req.GID(),
+			GID:    req.GID,
 			Kind:   session.Conn,
-			Target: req.CID(),
+			Target: req.CID,
 			Message: &Message{
-				Seq:   req.Seq(),
-				Route: req.Route(),
+				Seq:   req.Message.Seq,
+				Route: req.Message.Route,
 				Data:  message,
 			},
 		})
-	case req.NID() != "":
+	case req.NID != "":
 		return p.link.Deliver(ctx, &link.DeliverArgs{
-			NID: req.NID(),
-			UID: req.UID(),
+			NID: req.NID,
+			UID: req.UID,
 			Message: &Message{
-				Seq:   req.Seq(),
-				Route: req.Route(),
+				Seq:   req.Message.Seq,
+				Route: req.Message.Route,
 				Data:  message,
 			},
 		})
@@ -194,6 +204,11 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 // Disconnect 断开连接
 func (p *Proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 	return p.link.Disconnect(ctx, args)
+}
+
+// Invoke 调用函数（线程安全）
+func (p *Proxy) Invoke(fn func()) {
+	p.node.fnChan <- fn
 }
 
 // 启动监听

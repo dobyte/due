@@ -45,6 +45,7 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{
 		ctx:     context.Background(),
+		name:    defaultName,
 		timeout: defaultTimeout,
 	}
 
