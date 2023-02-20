@@ -106,12 +106,12 @@ func Unix(sec, nsec int64) time.Time {
 
 // UnixMilli 时间戳（毫秒）转标准时间
 func UnixMilli(msec int64) time.Time {
-	return time.UnixMilli(msec).In(location)
+	return time.Unix(msec/1e3, (msec%1e3)*1e6).In(location)
 }
 
 // UnixMicro 时间戳（微秒）转标准时间
 func UnixMicro(usec int64) time.Time {
-	return time.UnixMicro(usec).In(location)
+	return time.Unix(usec/1e6, (usec%1e6)*1e3).In(location)
 }
 
 // UnixNano 时间戳（纳秒）转标准时间
