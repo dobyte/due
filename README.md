@@ -4,6 +4,7 @@
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
 
 ### 1.介绍
 
@@ -26,10 +27,17 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 网关：支持tcp、kcp、ws等协议的网关服务器。
 * 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
 * 注册：支持consul、etcd、k8s、nacos、servicecomb、zookeeper等多种服务注册中心。
-* 协议：支持json、protobuf等多种通信协议。
+* 协议：支持json、protobuf（gogo/protobuf）、msgpack等多种通信协议。
 * 配置：支持json、yaml、toml、xml等多种文件格式。
 * 通信：支持grpc、rpcx等多种高性能传输方案。
 * 重启：支持服务器的平滑重启。
+* 事件：支持redis、kafka、rabbitMQ等事件总线实现方案。
+
+> 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
+
+```bash
+go install github.com/gogo/protobuf/protoc-gen-gofast@latest
+```
 
 ### 4.协议
 
@@ -115,22 +123,13 @@ import (
     "github.com/dobyte/due"
     "github.com/dobyte/due/cluster/gate"
     "github.com/dobyte/due/locate/redis"
-    "github.com/dobyte/due/config"
     "github.com/dobyte/due/log"
-    "github.com/dobyte/due/mode"
     "github.com/dobyte/due/network/ws"
     "github.com/dobyte/due/registry/etcd"
     "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-    // 设置模式
-    mode.SetMode(mode.DebugMode)
-
-    // 监听配置
-    config.Watch()
-    defer config.Close()
-
     // 创建容器
     container := due.NewContainer()
     // 创建网关组件
@@ -157,39 +156,30 @@ import (
     "github.com/dobyte/due"
     "github.com/dobyte/due/cluster/node"
     "github.com/dobyte/due/locate/redis"
-    "github.com/dobyte/due/config"
     "github.com/dobyte/due/log"
-    "github.com/dobyte/due/mode"
     "github.com/dobyte/due/registry/etcd"
     "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-    // 设置模式
-    mode.SetMode(mode.DebugMode)
-
-    // 监听配置
-    config.Watch()
-    defer config.Close()
-
     // 创建容器
     container := due.NewContainer()
-    // 创建网关组件
-    component := node.NewNode(
+    // 创建节点组件
+    n := node.NewNode(
         node.WithLocator(redis.NewLocator()),
         node.WithRegistry(etcd.NewRegistry()),
         node.WithTransporter(grpc.NewTransporter()),
     )
     // 注册路由
-    component.Proxy().AddRouteHandler(1, false, greetHandler)
+    n.Proxy().Router().AddRouteHandler(1, false, greetHandler)
     // 添加组件
-    container.Add(component)
+    container.Add(n)
     // 启动服务器
     container.Serve()
 }
 
-func greetHandler(r node.Request) {
-    _ = r.Response([]byte("hello world~~"))
+func greetHandler(ctx *node.Context) {
+	_ = ctx.Response([]byte("hello world~~"))
 }
 ```
 
@@ -218,13 +208,6 @@ func init() {
 }
 
 func main() {
-    // 设置模式
-    mode.SetMode(mode.DebugMode)
-
-    // 监听配置
-    config.Watch()
-    defer config.Close()
-
     // 创建客户端
     client := ws.NewClient()
     // 监听连接
@@ -298,6 +281,8 @@ func push(conn network.Conn, route int32, buffer []byte) error {
    * grpc: github.com/dobyte/due/transporter/grpc
 5. 定位组件
    * redis: github.com/dobyte/due/locate/redis
+6. 事件总线
+   * redis: github.com/dobyte/due/eventbus/redis
 
 ### 8.详细示例
 
