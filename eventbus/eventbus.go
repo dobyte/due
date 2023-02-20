@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/utils/xconv"
 	"github.com/dobyte/due/utils/xtime"
 	"github.com/dobyte/due/utils/xuuid"
-	"github.com/golang/glog"
 	"time"
 )
 
@@ -77,7 +76,7 @@ func UnpackData(v []byte) (*Event, error) {
 func SetEventbus(eventbus Eventbus) {
 	if globalEventbus != nil {
 		if err := globalEventbus.Close(); err != nil {
-			glog.Errorf("the old eventbus close failed: %v", err)
+			log.Errorf("the old eventbus close failed: %v", err)
 		}
 	}
 
