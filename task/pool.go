@@ -62,14 +62,18 @@ func GetPool() Pool {
 }
 
 // AddTask 添加任务
-func AddTask(task func()) error {
-	if globalPool != nil {
-		return globalPool.AddTask(task)
+func AddTask(task func()) {
+	if globalPool == nil {
+		go task()
+		return
 	}
 
-	log.Warn("the task pool component is not injected, and the task will be executed in a blocking manner.")
-	task()
-	return nil
+	err := globalPool.AddTask(task)
+	if err != nil {
+		go task()
+		log.Warnf("add task to the task pool failed: %v", err)
+		return
+	}
 }
 
 // Release 释放任务

@@ -14,12 +14,12 @@ const (
 )
 
 const (
-	defaultAddrsKey      = "config.locate.redis.addrs"
-	defaultDBKey         = "config.locate.redis.db"
-	defaultMaxRetriesKey = "config.locate.redis.maxRetries"
-	defaultPrefixKey     = "config.locate.redis.prefix"
-	defaultUsernameKey   = "config.locate.redis.username"
-	defaultPasswordKey   = "config.locate.redis.password"
+	defaultAddrsKey      = "config.eventbus.redis.addrs"
+	defaultDBKey         = "config.eventbus.redis.db"
+	defaultMaxRetriesKey = "config.eventbus.redis.maxRetries"
+	defaultPrefixKey     = "config.eventbus.redis.prefix"
+	defaultUsernameKey   = "config.eventbus.redis.username"
+	defaultPasswordKey   = "config.eventbus.redis.password"
 )
 
 type Option func(o *options)
