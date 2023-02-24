@@ -189,6 +189,7 @@ func (c *clientConn) graceClose() (err error) {
 // 强制关闭
 func (c *clientConn) forceClose() error {
 	c.rw.Lock()
+	defer c.rw.Unlock()
 
 	if err := c.checkState(); err != nil {
 		return err
