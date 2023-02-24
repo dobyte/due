@@ -283,6 +283,7 @@ func push(conn network.Conn, route int32, buffer []byte) error {
    * redis: github.com/dobyte/due/locate/redis
 6. 事件总线
    * redis: github.com/dobyte/due/eventbus/redis
+   * nats: github.com/dobyte/due/eventbus/nats
 
 ### 8.详细示例
 
