@@ -368,14 +368,9 @@ timezone = "Local"
             delimiter = " "
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
-[alert]
-    # 启用的报警器
-    enabledAlerters = ["feishu", "email"]
-    # 飞书报警。通过飞书群聊机器人实现
-    [alert.feishu]
-        # 群聊机器人秘钥。
-        secret = ""
-        # 群聊机器人webhook
-        webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/231e12c0-97b9-4e81-a920-abc24bda286f"
-    # 企业微信报警。通过企业微信群聊机器人实现
-    [alert.work]
+[eventbus]
+    [eventbus.nats]
+        # 客户端连接地址，默认为nats://127.0.0.1:4222
+        url = "nats://127.0.0.1:4222"
+        # 客户端连接超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为2s
+        timeout = "2s"

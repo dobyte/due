@@ -43,7 +43,7 @@ func (c *consumer) remHandler(handler eventbus.EventHandler) int {
 func (c *consumer) dispatch(data []byte) {
 	event, err := eventbus.UnpackData(data)
 	if err != nil {
-		log.Error("invalid payload")
+		log.Error("invalid event data")
 		return
 	}
 

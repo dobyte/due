@@ -26,7 +26,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	eb.consumers = make(map[string]*consumer)
 
 	if o.conn == nil {
-		o.conn, eb.err = nats.Connect(o.url)
+		o.conn, eb.err = nats.Connect(o.url, nats.Timeout(o.timeout))
 	}
 
 	return eb
