@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/eventbus/nats"
 	"testing"
+	"time"
 )
 
 var eb = nats.NewEventbus()
@@ -50,5 +51,5 @@ func TestEventbus_Publish(t *testing.T) {
 
 	t.Log("publish success")
 
-	select {}
+	time.Sleep(5 * time.Second)
 }

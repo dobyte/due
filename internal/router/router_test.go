@@ -100,8 +100,13 @@ func TestRouter_ReplaceServices(t *testing.T) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+
 	for {
 		select {
+		case <-timer.C:
+			return
 		case <-ticker.C:
 			for i := 0; i < 6; i++ {
 				route, err := r.FindServiceRoute(2)

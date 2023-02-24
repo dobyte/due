@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/eventbus/redis"
 	"testing"
+	"time"
 )
 
 var eb = redis.NewEventbus(
@@ -52,5 +53,5 @@ func TestEventbus_Publish(t *testing.T) {
 
 	t.Log("publish success")
 
-	select {}
+	time.Sleep(5 * time.Second)
 }
