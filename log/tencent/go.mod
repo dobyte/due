@@ -3,7 +3,7 @@ module github.com/dobyte/due/log/tencent
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.5
+	github.com/dobyte/due v0.0.11
 	github.com/tencentcloud/tencentcloud-cls-sdk-go v1.0.2
 )
 
