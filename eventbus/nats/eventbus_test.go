@@ -4,52 +4,96 @@ import (
 	"context"
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/eventbus/nats"
+	"github.com/dobyte/due/eventbus/redis"
+	"log"
 	"testing"
 	"time"
 )
-
-var eb = nats.NewEventbus()
 
 const (
 	loginTopic = "login"
 	paidTopic  = "paid"
 )
 
-func TestEventbus_Publish(t *testing.T) {
+func loginEventHandler(event *eventbus.Event) {
+	log.Printf("%+v\n", event)
+}
+
+func paidEventHandler(event *eventbus.Event) {
+	log.Printf("%+v\n", event)
+}
+
+func TestEventbus_Client1_Subscribe(t *testing.T) {
+	var (
+		err error
+		eb  = nats.NewEventbus()
+		ctx = context.Background()
+	)
+
 	defer eb.Close()
 
-	fn := func(event *eventbus.Event) {
-		t.Log(event.Payload.String())
-	}
-
-	err := eb.Subscribe(context.Background(), loginTopic, fn)
+	err = eb.Subscribe(ctx, loginTopic, loginEventHandler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(context.Background(), loginTopic, fn)
+	err = eb.Subscribe(ctx, paidTopic, paidEventHandler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Unsubscribe(context.Background(), loginTopic, fn)
+	t.Log("subscribe success")
+
+	time.Sleep(30 * time.Second)
+}
+
+func TestEventbus_Client2_Subscribe(t *testing.T) {
+	var (
+		err error
+		eb  = nats.NewEventbus()
+		ctx = context.Background()
+	)
+
+	defer eb.Close()
+
+	err = eb.Subscribe(ctx, loginTopic, loginEventHandler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(context.Background(), loginTopic, func(event *eventbus.Event) {
-		t.Logf("%+v", event.Payload.String())
-	})
+	err = eb.Subscribe(ctx, paidTopic, paidEventHandler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Publish(context.Background(), loginTopic, "login")
+	err = eb.Unsubscribe(context.Background(), loginTopic, loginEventHandler)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("subscribe success")
+
+	time.Sleep(30 * time.Second)
+}
+
+func TestEventbus_Publish(t *testing.T) {
+	var (
+		err error
+		eb  = redis.NewEventbus()
+		ctx = context.Background()
+	)
+
+	defer eb.Close()
+
+	err = eb.Publish(ctx, loginTopic, "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = eb.Publish(ctx, paidTopic, "paid")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Log("publish success")
-
-	time.Sleep(5 * time.Second)
 }
