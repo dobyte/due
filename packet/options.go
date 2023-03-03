@@ -19,7 +19,7 @@ const (
 const (
 	defaultEndianKey        = "config.packet.endian"
 	defaultSeqBytesLenKey   = "config.packet.seqBytesLen"
-	defaultRouteBytesLenKey = "config.packet.seqBytesLen"
+	defaultRouteBytesLenKey = "config.packet.routeBytesLen"
 )
 
 type options struct {
