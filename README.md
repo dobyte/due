@@ -31,7 +31,7 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 配置：支持json、yaml、toml、xml等多种文件格式。
 * 通信：支持grpc、rpcx等多种高性能传输方案。
 * 重启：支持服务器的平滑重启。
-* 事件：支持redis、kafka、rabbitMQ等事件总线实现方案。
+* 事件：支持redis、nats、kafka、rabbitMQ等事件总线实现方案。
 
 > 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
 
@@ -284,6 +284,7 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 6. 事件总线
    * redis: github.com/dobyte/due/eventbus/redis
    * nats: github.com/dobyte/due/eventbus/nats
+   * kafka: github.com/dobyte/due/eventbus/kafka
 
 ### 8.详细示例
 

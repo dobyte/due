@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/dobyte/due/eventbus"
 	"sync"
@@ -101,12 +100,10 @@ func (eb *Eventbus) Subscribe(_ context.Context, topic string, handler eventbus.
 		return eb.err1
 	}
 
-	topic = eb.prefixTopic(topic)
-
 	eb.rw.Lock()
 	c, ok := eb.consumers[topic]
 	if !ok {
-		c = &consumer{}
+		c = &consumer{handlers: make(map[uintptr]eventbus.EventHandler)}
 		c.ctx, c.cancel = context.WithCancel(eb.ctx)
 		eb.consumers[topic] = c
 	}
@@ -201,12 +198,4 @@ func (eb *Eventbus) watch(c *consumer, topic string) error {
 	}
 
 	return nil
-}
-
-func (eb *Eventbus) prefixTopic(topic string) string {
-	if eb.opts.prefix == "" {
-		return topic
-	} else {
-		return fmt.Sprintf("%s_%s", eb.opts.prefix, topic)
-	}
 }
