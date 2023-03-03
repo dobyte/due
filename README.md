@@ -32,6 +32,7 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 通信：支持grpc、rpcx等多种高性能传输方案。
 * 重启：支持服务器的平滑重启。
 * 事件：支持redis、nats、kafka、rabbitMQ等事件总线实现方案。
+* 加密：支持rsa、ecc等多种加密方案。
 
 > 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
 
