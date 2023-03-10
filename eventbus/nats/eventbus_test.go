@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/eventbus/nats"
-	"github.com/dobyte/due/eventbus/redis"
 	"log"
 	"testing"
 	"time"
@@ -79,7 +78,7 @@ func TestEventbus_Client2_Subscribe(t *testing.T) {
 func TestEventbus_Publish(t *testing.T) {
 	var (
 		err error
-		eb  = redis.NewEventbus()
+		eb  = nats.NewEventbus()
 		ctx = context.Background()
 	)
 
@@ -91,6 +90,11 @@ func TestEventbus_Publish(t *testing.T) {
 	}
 
 	err = eb.Publish(ctx, paidTopic, "paid")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = eb.Publish(ctx, loginTopic, "login")
 	if err != nil {
 		t.Fatal(err)
 	}
