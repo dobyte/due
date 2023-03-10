@@ -94,5 +94,10 @@ func TestEventbus_Publish(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = eb.Publish(ctx, loginTopic, "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	t.Log("publish success")
 }

@@ -28,6 +28,9 @@ func TestNewClient(t *testing.T) {
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	defer conn.Close()
+
+	times := 0
 
 	for {
 		select {
@@ -36,10 +39,12 @@ func TestNewClient(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			goto OVER
+
+			times++
+
+			if times >= 5 {
+				return
+			}
 		}
 	}
-
-OVER:
-	select {}
 }

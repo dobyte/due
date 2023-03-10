@@ -186,13 +186,15 @@ func (eb *Eventbus) watch(c *consumer, topic string) error {
 		go func(cp sarama.PartitionConsumer) {
 			defer cp.AsyncClose()
 
-			select {
-			case <-c.ctx.Done():
-				return
-			case message := <-cp.Messages():
-				c.dispatch(message.Value)
-			case <-cp.Errors():
-				return
+			for {
+				select {
+				case <-c.ctx.Done():
+					return
+				case message := <-cp.Messages():
+					c.dispatch(message.Value)
+				case <-cp.Errors():
+					return
+				}
 			}
 		}(cp)
 	}
