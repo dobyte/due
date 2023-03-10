@@ -62,7 +62,9 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	return s.serve()
+	go s.serve()
+
+	return nil
 }
 
 // Stop 关闭服务器
@@ -94,7 +96,7 @@ func (s *server) init() error {
 }
 
 // 启动服务器
-func (s *server) serve() error {
+func (s *server) serve() {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
@@ -119,11 +121,16 @@ func (s *server) serve() error {
 		}
 	})
 
+	var err error
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
-		return http.ServeTLS(s.listener, nil, s.opts.certFile, s.opts.keyFile)
+		err = http.ServeTLS(s.listener, nil, s.opts.certFile, s.opts.keyFile)
+	} else {
+		err = http.Serve(s.listener, nil)
 	}
 
-	return http.Serve(s.listener, nil)
+	if err != nil {
+		log.Errorf("websocket server shutdown, err: %v", err)
+	}
 }
 
 // OnStart 监听服务器启动

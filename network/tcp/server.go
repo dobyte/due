@@ -56,7 +56,9 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	return s.serve()
+	go s.serve()
+
+	return nil
 }
 
 // Stop 关闭服务器
@@ -118,7 +120,7 @@ func (s *server) init() error {
 }
 
 // 等待连接
-func (s *server) serve() error {
+func (s *server) serve() {
 	var tempDelay time.Duration
 
 	for {
@@ -139,7 +141,8 @@ func (s *server) serve() error {
 				continue
 			}
 
-			return err
+			log.Errorf("tcp accept error: %v", err)
+			return
 		}
 
 		tempDelay = 0
