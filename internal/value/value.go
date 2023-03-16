@@ -1,7 +1,7 @@
 package value
 
 import (
-	"github.com/dobyte/due/encoding/msgpack"
+	"github.com/dobyte/due/encoding/json"
 	"github.com/dobyte/due/utils/xconv"
 	"time"
 )
@@ -225,12 +225,12 @@ func (v *value) Scan(pointer interface{}) error {
 	case *time.Duration:
 		*p = v.Duration()
 	default:
-		b, err := msgpack.Marshal(v.Value())
+		b, err := json.Marshal(v.Value())
 		if err != nil {
 			return err
 		}
 
-		return msgpack.Unmarshal(b, pointer)
+		return json.Unmarshal(b, pointer)
 	}
 
 	return nil
