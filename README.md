@@ -280,6 +280,7 @@ func push(conn network.Conn, route int32, buffer []byte) error {
    * consul: github.com/dobyte/due/registry/consul
 4. 传输组件
    * grpc: github.com/dobyte/due/transporter/grpc
+   * rpcx: github.com/dobyte/due/transporter/rpcx
 5. 定位组件
    * redis: github.com/dobyte/due/locate/redis
 6. 事件总线

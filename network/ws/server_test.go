@@ -8,7 +8,9 @@
 package ws_test
 
 import (
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network/ws"
@@ -34,8 +36,13 @@ func TestServer(t *testing.T) {
 			log.Errorf("push message failed: %v", err)
 		}
 	})
+	server.OnUpgrade(func(w http.ResponseWriter, r *http.Request) (allowed bool) {
+		return true
+	})
 
 	if err := server.Start(); err != nil {
 		log.Fatalf("start server failed: %v", err)
 	}
+
+	time.Sleep(30 * time.Second)
 }

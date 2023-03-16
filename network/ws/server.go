@@ -16,6 +16,14 @@ import (
 	"github.com/dobyte/due/network"
 )
 
+type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
+
+type Server interface {
+	network.Server
+	// OnUpgrade 监听HTTP请求升级
+	OnUpgrade(handler UpgradeHandler)
+}
+
 type server struct {
 	opts              *serverOptions            // 配置
 	listener          net.Listener              // 监听器
@@ -25,11 +33,12 @@ type server struct {
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
+	upgradeHandler    UpgradeHandler            // HTTP协议升级成WS协议hook函数
 }
 
-var _ network.Server = &server{}
+var _ Server = &server{}
 
-func NewServer(opts ...ServerOption) network.Server {
+func NewServer(opts ...ServerOption) Server {
 	o := defaultServerOptions()
 	for _, opt := range opts {
 		opt(o)
@@ -110,13 +119,18 @@ func (s *server) serve() {
 			return
 		}
 
+		if s.upgradeHandler != nil && !s.upgradeHandler(w, r) {
+			http.Error(w, "Forbidden", 403)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Errorf("websocket upgrade error: %v", err)
 			return
 		}
 
-		if err := s.connMgr.allocate(conn); err != nil {
+		if err = s.connMgr.allocate(conn); err != nil {
 			_ = conn.Close()
 		}
 	})
@@ -141,6 +155,11 @@ func (s *server) OnStart(handler network.StartHandler) {
 // OnStop 监听服务器关闭
 func (s *server) OnStop(handler network.CloseHandler) {
 	s.stopHandler = handler
+}
+
+// OnUpgrade 监听HTTP请求升级
+func (s *server) OnUpgrade(handler UpgradeHandler) {
+	s.upgradeHandler = handler
 }
 
 // OnConnect 监听连接打开
