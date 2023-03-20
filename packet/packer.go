@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrMessageIsNil  = errors.New("the message is nil")
-	ErrSeqOverflow   = errors.New("the message seq overflow")
-	ErrRouteOverflow = errors.New("the message route overflow")
+	ErrMessageIsNil   = errors.New("the message is nil")
+	ErrSeqOverflow    = errors.New("the message seq overflow")
+	ErrRouteOverflow  = errors.New("the message route overflow")
+	ErrInvalidMessage = errors.New("invalid message")
 )
 
 type Packer interface {
@@ -98,10 +99,16 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 
 // Unpack 解包消息
 func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
+	ln := len(data) - p.opts.seqBytesLen - p.opts.routeBytesLen
+
+	if ln < 0 {
+		return nil, ErrInvalidMessage
+	}
+
 	var (
 		err     error
 		reader  = bytes.NewReader(data)
-		message = &Message{Buffer: make([]byte, reader.Len()-p.opts.seqBytesLen-p.opts.routeBytesLen)}
+		message = &Message{Buffer: make([]byte, ln)}
 	)
 
 	switch p.opts.seqBytesLen {

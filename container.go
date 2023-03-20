@@ -33,15 +33,6 @@ func (c *Container) Add(components ...component.Component) {
 func (c *Container) Serve() {
 	log.Debug(fmt.Sprintf("Welcome to the due framework %s, Learn more at %s", Version, Website))
 
-	defer func() {
-		switch err := recover(); err.(type) {
-		case runtime.Error:
-			log.Panicf("due runtime error: %v", err)
-		default:
-			log.Panicf("due error: %v", err)
-		}
-	}()
-
 	for _, comp := range c.components {
 		comp.Init()
 	}

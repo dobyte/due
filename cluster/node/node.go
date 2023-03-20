@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/utils/xcall"
 	"github.com/dobyte/due/utils/xnet"
 	"sync/atomic"
 	"time"
@@ -115,17 +116,21 @@ func (n *Node) dispatch() {
 			if !ok {
 				return
 			}
-			n.events.handle(evt)
+			xcall.Call(func() {
+				n.events.handle(evt)
+			})
 		case ctx, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
-			n.router.handle(ctx)
+			xcall.Call(func() {
+				n.router.handle(ctx)
+			})
 		case handle, ok := <-n.fnChan:
 			if !ok {
 				return
 			}
-			handle()
+			xcall.Call(handle)
 		}
 	}
 }
