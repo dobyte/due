@@ -260,6 +260,8 @@ timezone = "Local"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # 默认消息类型，text | binary
+            msgType = "binary"
             # 最大消息长度（字节），默认1kb
             maxMsgLen = 1024
             # 握手超时时间（秒）
@@ -272,8 +274,6 @@ timezone = "Local"
         [network.tcp.server]
             # 服务器监听地址
             addr = ":3553"
-            # 默认消息类型，text | binary
-            msgType = "binary"
             # 最大消息长度（字节），默认1kb
             maxMsgLen = 1024
             # 服务器最大连接数
