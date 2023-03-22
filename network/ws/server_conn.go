@@ -64,13 +64,9 @@ func (c *serverConn) Send(msg []byte, msgType ...int) (err error) {
 		return
 	}
 
-	if len(msgType) == 0 {
-		msgType = append(msgType, TextMessage)
-	}
-
-	switch msgType[0] {
+	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
 	case TextMessage, BinaryMessage:
-		return c.conn.WriteMessage(msgType[0], msg)
+		return c.conn.WriteMessage(msgTyp, msg)
 	default:
 		return network.ErrIllegalMsgType
 	}
@@ -85,16 +81,26 @@ func (c *serverConn) Push(msg []byte, msgType ...int) (err error) {
 		return
 	}
 
-	if len(msgType) == 0 {
-		msgType = append(msgType, TextMessage)
-	}
-
-	switch msgType[0] {
+	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
 	case TextMessage, BinaryMessage:
-		c.chWrite <- chWrite{typ: dataPacket, msg: msg, msgType: msgType[0]}
+		c.chWrite <- chWrite{typ: dataPacket, msg: msg, msgType: msgTyp}
 		return
 	default:
 		return network.ErrIllegalMsgType
+	}
+}
+
+// 提取消息类型
+func (c *serverConn) extractMsgType(msgType ...int) int {
+	if len(msgType) != 0 {
+		return msgType[0]
+	}
+
+	switch c.connMgr.server.opts.msgType {
+	case textMessage:
+		return TextMessage
+	default:
+		return BinaryMessage
 	}
 }
 

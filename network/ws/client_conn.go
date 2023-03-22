@@ -74,13 +74,9 @@ func (c *clientConn) Send(msg []byte, msgType ...int) (err error) {
 		return
 	}
 
-	if len(msgType) == 0 {
-		msgType = append(msgType, TextMessage)
-	}
-
-	switch msgType[0] {
+	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
 	case TextMessage, BinaryMessage:
-		return c.conn.WriteMessage(msgType[0], msg)
+		return c.conn.WriteMessage(msgTyp, msg)
 	default:
 		return network.ErrIllegalMsgType
 	}
@@ -95,18 +91,28 @@ func (c *clientConn) Push(msg []byte, msgType ...int) error {
 		return err
 	}
 
-	if len(msgType) == 0 {
-		msgType = append(msgType, TextMessage)
-	}
-
-	switch msgType[0] {
+	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
 	case TextMessage, BinaryMessage:
-		c.chWrite <- chWrite{typ: dataPacket, msg: msg, msgType: msgType[0]}
+		c.chWrite <- chWrite{typ: dataPacket, msg: msg, msgType: msgTyp}
 	default:
 		return network.ErrIllegalMsgType
 	}
 
 	return nil
+}
+
+// 提取消息类型
+func (c *clientConn) extractMsgType(msgType ...int) int {
+	if len(msgType) != 0 {
+		return msgType[0]
+	}
+
+	switch c.client.opts.msgType {
+	case textMessage:
+		return TextMessage
+	default:
+		return BinaryMessage
+	}
 }
 
 // State 获取连接状态

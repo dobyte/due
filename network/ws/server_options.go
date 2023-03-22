@@ -15,6 +15,7 @@ const (
 	defaultServerHeartbeatCheck         = false
 	defaultServerHeartbeatCheckInterval = 10
 	defaultServerHandshakeTimeout       = 10
+	defaultServerMsgType                = binaryMessage
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 	defaultServerHeartbeatCheckKey         = "config.network.ws.server.heartbeatCheck"
 	defaultServerHeartbeatCheckIntervalKey = "config.network.ws.server.heartbeatCheckInterval"
 	defaultServerHandshakeTimeoutKey       = "config.network.ws.server.handshakeTimeout"
+	defaultServerMsgTypeKey                = "config.network.ws.server.msgType"
 )
 
 type ServerOption func(o *serverOptions)
@@ -41,6 +43,7 @@ type serverOptions struct {
 	certFile               string          // 证书文件
 	keyFile                string          // 秘钥文件
 	path                   string          // 路径，默认为"/"
+	msgType                string          // 默认消息类型，text | binary
 	checkOrigin            CheckOriginFunc // 跨域检测
 	enableHeartbeatCheck   bool            // 是否启用心跳检测
 	heartbeatCheckInterval time.Duration   // 心跳检测间隔时间，默认10s
@@ -72,6 +75,7 @@ func defaultServerOptions() *serverOptions {
 		checkOrigin:            checkOrigin,
 		keyFile:                config.Get(defaultServerKeyFileKey).String(),
 		certFile:               config.Get(defaultServerCertFileKey).String(),
+		msgType:                config.Get(defaultServerMsgTypeKey, defaultServerMsgType).String(),
 		enableHeartbeatCheck:   config.Get(defaultServerHeartbeatCheckKey, defaultServerHeartbeatCheck).Bool(),
 		heartbeatCheckInterval: config.Get(defaultServerHeartbeatCheckIntervalKey, defaultServerHeartbeatCheckInterval).Duration() * time.Second,
 		handshakeTimeout:       config.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
@@ -96,6 +100,11 @@ func WithServerPath(path string) ServerOption {
 // WithServerCredentials 设置证书和秘钥
 func WithServerCredentials(certFile, keyFile string) ServerOption {
 	return func(o *serverOptions) { o.keyFile, o.certFile = keyFile, certFile }
+}
+
+// WithServerMsgType 设置默认消息类型
+func WithServerMsgType(msgType string) ServerOption {
+	return func(o *serverOptions) { o.msgType = msgType }
 }
 
 // WithServerCheckOrigin 设置Websocket跨域检测函数

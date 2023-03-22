@@ -11,6 +11,7 @@ const (
 	defaultClientHandshakeTimeout  = 10
 	defaultClientHeartbeat         = false
 	defaultClientHeartbeatInterval = 10
+	defaultClientMsgType           = binaryMessage
 )
 
 const (
@@ -19,12 +20,14 @@ const (
 	defaultClientHandshakeTimeoutKey  = "config.network.ws.client.handshakeTimeout"
 	defaultClientHeartbeatKey         = "config.network.ws.client.heartbeat"
 	defaultClientHeartbeatIntervalKey = "config.network.ws.client.heartbeatInterval"
+	defaultClientMsgTypeKey           = "config.network.ws.client.msgType"
 )
 
 type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	url               string        // 拨号地址
+	msgType           string        // 默认消息类型，text | binary
 	maxMsgLen         int           // 最大消息长度（字节），默认1kb
 	handshakeTimeout  time.Duration // 握手超时时间
 	enableHeartbeat   bool          // 是否启用心跳，默认不启用
@@ -34,6 +37,7 @@ type clientOptions struct {
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
 		url:               config.Get(defaultClientDialUrlKey, defaultClientDialUrl).String(),
+		msgType:           config.Get(defaultClientMsgTypeKey, defaultClientMsgType).String(),
 		maxMsgLen:         config.Get(defaultClientMaxMsgLenKey, defaultClientMaxMsgLen).Int(),
 		handshakeTimeout:  config.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration() * time.Second,
 		enableHeartbeat:   config.Get(defaultClientHeartbeatKey, defaultClientHeartbeat).Bool(),
@@ -44,6 +48,11 @@ func defaultClientOptions() *clientOptions {
 // WithClientDialUrl 设置拨号链接
 func WithClientDialUrl(url string) ClientOption {
 	return func(o *clientOptions) { o.url = url }
+}
+
+// WithClientMsgType 设置默认消息类型
+func WithClientMsgType(msgType string) ClientOption {
+	return func(o *clientOptions) { o.msgType = msgType }
 }
 
 // WithClientMaxMsgLen 设置消息最大长度

@@ -239,6 +239,8 @@ timezone = "Local"
             addr = ":3553"
             # 客户端连接路径
             path = "/"
+            # 默认消息类型，text | binary
+            msgType = "binary"
             # 最大消息长度（字节），默认1kb
             maxMsgLen = 1024
             # 服务器最大连接数
@@ -270,6 +272,8 @@ timezone = "Local"
         [network.tcp.server]
             # 服务器监听地址
             addr = ":3553"
+            # 默认消息类型，text | binary
+            msgType = "binary"
             # 最大消息长度（字节），默认1kb
             maxMsgLen = 1024
             # 服务器最大连接数

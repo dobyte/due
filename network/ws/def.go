@@ -13,6 +13,11 @@ const (
 	BinaryMessage = websocket.BinaryMessage
 )
 
+const (
+	textMessage   = "text"
+	binaryMessage = "binary"
+)
+
 type chWrite struct {
 	typ     int
 	msg     []byte
