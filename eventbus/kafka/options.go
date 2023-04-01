@@ -23,7 +23,7 @@ type options struct {
 	ctx context.Context
 
 	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:6379"}
+	// 内建客户端配置，默认为[]string{"127.0.0.1:9092"}
 	addrs []string
 
 	// Kafka版本，默认为无版本

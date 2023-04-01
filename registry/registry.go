@@ -16,6 +16,13 @@ type Registry interface {
 	Services(ctx context.Context, serviceName string) ([]*ServiceInstance, error)
 }
 
+type Discovery interface {
+	// Watch 监听相同服务名的服务实例变化
+	Watch(ctx context.Context, serviceName string) (Watcher, error)
+	// Services 获取服务实例列表
+	Services(ctx context.Context, serviceName string) ([]*ServiceInstance, error)
+}
+
 type Watcher interface {
 	// Next 返回服务实例列表
 	Next() ([]*ServiceInstance, error)

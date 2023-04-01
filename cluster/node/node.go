@@ -141,12 +141,12 @@ func (n *Node) startRPCServer() {
 
 	n.rpc, err = n.opts.transporter.NewNodeServer(&provider{n})
 	if err != nil {
-		log.Fatalf("the transport server build failed: %v", err)
+		log.Fatalf("the rpc server create failed: %v", err)
 	}
 
 	go func() {
 		if err = n.rpc.Start(); err != nil {
-			log.Fatalf("the transport server startup failed: %v", err)
+			log.Fatalf("the rpc server start failed: %v", err)
 		}
 	}()
 }
@@ -154,7 +154,7 @@ func (n *Node) startRPCServer() {
 // 停止RPC服务器
 func (n *Node) stopRPCServer() {
 	if err := n.rpc.Stop(); err != nil {
-		log.Errorf("the transport server stop failed: %v", err)
+		log.Errorf("the rpc server stop failed: %v", err)
 	}
 }
 
@@ -182,7 +182,7 @@ func (n *Node) registerServiceInstance() {
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("the node service instance register failed: %v", err)
+		log.Fatalf("register service instance failed: %v", err)
 	}
 }
 
@@ -192,7 +192,7 @@ func (n *Node) deregisterServiceInstance() {
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Errorf("the node service instance deregister failed: %v", err)
+		log.Errorf("deregister service instance failed: %v", err)
 	}
 }
 
@@ -234,6 +234,6 @@ func (n *Node) checkState(state cluster.State) bool {
 }
 
 func (n *Node) debugPrint() {
-	log.Debugf("The node server startup successful")
-	log.Debugf("Transport server, listen: %s protocol: %s", xnet.FulfillAddr(n.rpc.Addr()), n.rpc.Scheme())
+	log.Debugf("the node server startup successful")
+	log.Debugf("the %s server listen on %s", n.rpc.Scheme(), xnet.FulfillAddr(n.rpc.Addr()))
 }

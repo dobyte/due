@@ -11,37 +11,25 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
-	"sync"
 )
 
-var clients sync.Map
-
-type client struct {
+type Client struct {
 	client pb.GateClient
 }
 
-func NewClient(ep *ep.Endpoint, opts *cli.Options) (*client, error) {
-	v, ok := clients.Load(ep.Address())
-	if ok {
-		return v.(*client), nil
-	}
+func NewClient(ep *ep.Endpoint, opts *cli.Options) (*Client, error) {
+	target := "direct://" + ep.Address()
 
-	opts.Addr = ep.Address()
-	opts.IsSecure = ep.IsSecure()
-
-	conn, err := cli.Dial(opts)
+	cc, err := cli.Dial(target, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	cc := &client{client: pb.NewGateClient(conn)}
-	clients.Store(ep.Address(), cc)
-
-	return cc, nil
+	return &Client{client: pb.NewGateClient(cc)}, nil
 }
 
 // Bind 绑定用户与连接
-func (c *client) Bind(ctx context.Context, cid, uid int64) (miss bool, err error) {
+func (c *Client) Bind(ctx context.Context, cid, uid int64) (miss bool, err error) {
 	_, err = c.client.Bind(ctx, &pb.BindRequest{
 		CID: cid,
 		UID: uid,
@@ -53,7 +41,7 @@ func (c *client) Bind(ctx context.Context, cid, uid int64) (miss bool, err error
 }
 
 // Unbind 解绑用户与连接
-func (c *client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
+func (c *Client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
 	_, err = c.client.Unbind(ctx, &pb.UnbindRequest{
 		UID: uid,
 	})
@@ -64,7 +52,7 @@ func (c *client) Unbind(ctx context.Context, uid int64) (miss bool, err error) {
 }
 
 // GetIP 获取客户端IP
-func (c *client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error) {
+func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error) {
 	reply, err := c.client.GetIP(ctx, &pb.GetIPRequest{
 		Kind:   int32(kind),
 		Target: target,
@@ -80,7 +68,7 @@ func (c *client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip
 }
 
 // Push 推送消息
-func (c *client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
 	_, err = c.client.Push(ctx, &pb.PushRequest{
 		Kind:   int32(kind),
 		Target: target,
@@ -97,7 +85,7 @@ func (c *client) Push(ctx context.Context, kind session.Kind, target int64, mess
 }
 
 // Multicast 推送组播消息
-func (c *client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
 	reply, err := c.client.Multicast(ctx, &pb.MulticastRequest{
 		Kind:    int32(kind),
 		Targets: targets,
@@ -115,7 +103,7 @@ func (c *client) Multicast(ctx context.Context, kind session.Kind, targets []int
 }
 
 // Broadcast 推送广播消息
-func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *transport.Message) (int64, error) {
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *transport.Message) (int64, error) {
 	reply, err := c.client.Broadcast(ctx, &pb.BroadcastRequest{
 		Kind: int32(kind),
 		Message: &pb.Message{
@@ -132,7 +120,7 @@ func (c *client) Broadcast(ctx context.Context, kind session.Kind, message *tran
 }
 
 // Disconnect 断开连接
-func (c *client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
+func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
 	_, err = c.client.Disconnect(ctx, &pb.DisconnectRequest{
 		Kind:    int32(kind),
 		Target:  target,

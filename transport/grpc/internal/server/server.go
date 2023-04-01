@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/utils/xnet"
 	"google.golang.org/grpc"
@@ -102,6 +103,13 @@ func (s *Server) Stop() error {
 }
 
 // RegisterService 注册服务
-func (s *Server) RegisterService(sd *grpc.ServiceDesc, ss interface{}) {
-	s.server.RegisterService(sd, ss)
+func (s *Server) RegisterService(desc, service interface{}) error {
+	sd, ok := desc.(*grpc.ServiceDesc)
+	if !ok {
+		return errors.New("invalid service desc")
+	}
+
+	s.server.RegisterService(sd, service)
+
+	return nil
 }

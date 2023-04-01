@@ -19,7 +19,7 @@ func (c *Context) Context() context.Context {
 
 // BindGate 绑定网关
 func (c *Context) BindGate(uid int64) error {
-	return c.Proxy.BindGate(c.ctx, c.Request.GID, c.Request.CID, uid)
+	return c.Proxy.BindGate(c.ctx, uid, c.Request.GID, c.Request.CID)
 }
 
 // UnbindGate 解绑网关

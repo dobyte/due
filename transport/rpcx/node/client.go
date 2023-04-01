@@ -32,7 +32,7 @@ func NewClient(ep *ep.Endpoint) (*client, error) {
 	option.CompressType = proto.Gzip
 
 	c := &client{client: cli.NewXClient(
-		servicePath,
+		ServicePath,
 		cli.Failtry,
 		cli.RandomSelect,
 		discovery,

@@ -29,8 +29,17 @@ type GateClient interface {
 	Broadcast(ctx context.Context, kind session.Kind, message *Message) (total int64, err error)
 }
 
+type ServiceClient interface {
+	// Call 调用服务方法
+	Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error
+	// Conn 获取连接
+	Conn() interface{}
+}
+
 type Message struct {
 	Seq    int32  // 序列号
 	Route  int32  // 路由
 	Buffer []byte // 消息内容
 }
+
+type NewServiceClientFunc func(target string) (ServiceClient, error)

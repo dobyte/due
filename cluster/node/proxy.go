@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/internal/link"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/transport"
 )
 
 var (
@@ -79,9 +80,17 @@ func (p *Proxy) Events() *Events {
 	return p.node.events
 }
 
+// NewServiceClient 新建微服务客户端
+// target参数可分为两种模式:
+// 直连模式: 	direct://127.0.0.1:8011
+// 服务发现模式: 	discovery://service_name
+func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
+	return p.node.opts.transporter.NewServiceClient(target)
+}
+
 // BindGate 绑定网关
-func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
-	return p.link.BindGate(ctx, gid, cid, uid)
+func (p *Proxy) BindGate(ctx context.Context, uid int64, gid string, cid int64) error {
+	return p.link.BindGate(ctx, uid, gid, cid)
 }
 
 // UnbindGate 解绑网关

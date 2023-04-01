@@ -84,7 +84,7 @@ func (g *Gate) Init() {
 func (g *Gate) Start() {
 	g.startNetworkServer()
 
-	g.startTransportServer()
+	g.startRPCServer()
 
 	g.registerServiceInstance()
 
@@ -99,7 +99,7 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
-	g.stopTransportServer()
+	g.stopRPCServer()
 
 	g.cancel()
 }
@@ -111,14 +111,14 @@ func (g *Gate) startNetworkServer() {
 	g.opts.server.OnReceive(g.handleReceive)
 
 	if err := g.opts.server.Start(); err != nil {
-		log.Fatalf("the gate server startup failed: %v", err)
+		log.Fatalf("the network server start failed: %v", err)
 	}
 }
 
 // 停止网关服务器
 func (g *Gate) stopNetworkServer() {
 	if err := g.opts.server.Stop(); err != nil {
-		log.Errorf("the gate server stop failed: %v", err)
+		log.Errorf("the network server stop failed: %v", err)
 	}
 }
 
@@ -162,30 +162,30 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
 	err = g.proxy.deliver(ctx, conn.ID(), conn.UID(), message)
 	cancel()
 	if err != nil {
-		log.Errorf("deliver message failed: %v", err)
+		log.Warnf("deliver message failed: %v", err)
 	}
 }
 
 // 启动RPC服务器
-func (g *Gate) startTransportServer() {
+func (g *Gate) startRPCServer() {
 	var err error
 
 	g.rpc, err = g.opts.transporter.NewGateServer(&provider{g})
 	if err != nil {
-		log.Fatalf("the transport server build failed: %v", err)
+		log.Fatalf("the rpc server create failed: %v", err)
 	}
 
 	go func() {
 		if err = g.rpc.Start(); err != nil {
-			log.Fatalf("the transport server startup failed: %v", err)
+			log.Fatalf("the rpc server start failed: %v", err)
 		}
 	}()
 }
 
 // 停止RPC服务器
-func (g *Gate) stopTransportServer() {
+func (g *Gate) stopRPCServer() {
 	if err := g.rpc.Stop(); err != nil {
-		log.Errorf("the transport server stop failed: %v", err)
+		log.Errorf("the rpc server stop failed: %v", err)
 	}
 }
 
@@ -204,7 +204,7 @@ func (g *Gate) registerServiceInstance() {
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("the gate service instance register failed: %v", err)
+		log.Fatalf("register service instance failed: %v", err)
 	}
 }
 
@@ -214,12 +214,12 @@ func (g *Gate) deregisterServiceInstance() {
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
 	if err != nil {
-		log.Errorf("the gate service instance deregister failed: %v", err)
+		log.Errorf("deregister service instance failed: %v", err)
 	}
 }
 
 func (g *Gate) debugPrint() {
-	log.Debugf("The gate server startup successful")
-	log.Debugf("Network server, listen: %s protocol: %s", xnet.FulfillAddr(g.opts.server.Addr()), g.opts.server.Protocol())
-	log.Debugf("Transport server, listen: %s protocol: %s", xnet.FulfillAddr(g.rpc.Addr()), g.rpc.Scheme())
+	log.Debugf("the gate server startup successful")
+	log.Debugf("the %s server listen on %s", g.opts.server.Protocol(), xnet.FulfillAddr(g.opts.server.Addr()))
+	log.Debugf("the %s server listen on %s", g.rpc.Scheme(), xnet.FulfillAddr(g.rpc.Addr()))
 }

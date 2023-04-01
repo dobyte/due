@@ -58,7 +58,7 @@ func NewLink(opts *Options) *Link {
 }
 
 // BindGate 绑定网关
-func (l *Link) BindGate(ctx context.Context, gid string, cid, uid int64) error {
+func (l *Link) BindGate(ctx context.Context, uid int64, gid string, cid int64) error {
 	client, err := l.getGateClientByGID(gid)
 	if err != nil {
 		return err

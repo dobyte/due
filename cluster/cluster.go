@@ -7,6 +7,7 @@ const (
 	Master Kind = "master" // 管理服
 	Gate   Kind = "gate"   // 网关服
 	Node   Kind = "node"   // 节点服
+	Mesh   Kind = "mesh"   // 微服务
 )
 
 // State 集群实例状态

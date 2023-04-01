@@ -10,37 +10,25 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
-	"sync"
 )
 
-var clients sync.Map
-
-type client struct {
+type Client struct {
 	client pb.NodeClient
 }
 
-func NewClient(ep *ep.Endpoint, opts *cli.Options) (*client, error) {
-	v, ok := clients.Load(ep.Address())
-	if ok {
-		return v.(*client), nil
-	}
+func NewClient(ep *ep.Endpoint, opts *cli.Options) (*Client, error) {
+	target := "direct://" + ep.Address()
 
-	opts.Addr = ep.Address()
-	opts.IsSecure = ep.IsSecure()
-
-	conn, err := cli.Dial(opts)
+	cc, err := cli.Dial(target, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	cc := &client{client: pb.NewNodeClient(conn)}
-	clients.Store(ep.Address(), cc)
-
-	return cc, nil
+	return &Client{client: pb.NewNodeClient(cc)}, nil
 }
 
 // Trigger 触发事件
-func (c *client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
+func (c *Client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
 	_, err = c.client.Trigger(ctx, &pb.TriggerRequest{
 		Event: int32(args.Event),
 		GID:   args.GID,
@@ -53,7 +41,7 @@ func (c *client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss
 }
 
 // Deliver 投递消息
-func (c *client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
+func (c *Client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
 	_, err = c.client.Deliver(ctx, &pb.DeliverRequest{
 		GID: args.GID,
 		NID: args.NID,

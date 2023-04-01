@@ -17,7 +17,10 @@ func NewServer(provider transport.NodeProvider, opts *server.Options) (*server.S
 		return nil, err
 	}
 
-	s.RegisterService(&pb.Node_ServiceDesc, &endpoint{provider: provider})
+	err = s.RegisterService(&pb.Node_ServiceDesc, &endpoint{provider: provider})
+	if err != nil {
+		return nil, err
+	}
 
 	return s, nil
 }

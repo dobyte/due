@@ -2,6 +2,7 @@ package rpcx
 
 import (
 	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/transport/rpcx/internal/server"
 )
 
 const (
@@ -15,21 +16,19 @@ const (
 type Option func(o *options)
 
 type options struct {
-	server struct {
-		addr string // 地址
-	}
+	server server.Options
 	client struct {
 	}
 }
 
 func defaultOptions() *options {
 	opts := &options{}
-	opts.server.addr = config.Get(defaultServerAddrKey, defaultServerAddr).String()
+	opts.server.Addr = config.Get(defaultServerAddrKey, defaultServerAddr).String()
 
 	return opts
 }
 
 // WithServerListenAddr 设置RPC服务器监听地址
 func WithServerListenAddr(addr string) Option {
-	return func(o *options) { o.server.addr = addr }
+	return func(o *options) { o.server.Addr = addr }
 }

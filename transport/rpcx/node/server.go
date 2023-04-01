@@ -3,13 +3,14 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/transport/rpcx/gate"
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
 	"github.com/dobyte/due/transport/rpcx/internal/server"
 )
 
 const (
-	servicePath          = "Node"
+	ServicePath          = "Node"
 	serviceTriggerMethod = "Trigger"
 	serviceDeliverMethod = "Deliver"
 )
@@ -20,7 +21,10 @@ func NewServer(provider transport.NodeProvider, opts *server.Options) (*server.S
 		return nil, err
 	}
 
-	s.RegisterService(servicePath, &endpoint{provider: provider})
+	err = s.RegisterSystemService(ServicePath, &endpoint{provider: provider}, []string{ServicePath, gate.ServicePath})
+	if err != nil {
+		return nil, err
+	}
 
 	return s, nil
 }

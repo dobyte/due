@@ -9,16 +9,18 @@ import (
 )
 
 type Server interface {
+	// Start 启动服务器
+	Start() error
+	// Stop 停止服务器
+	Stop() error
 	// Addr 监听地址
 	Addr() string
 	// Scheme 协议
 	Scheme() string
 	// Endpoint 服务端口
 	Endpoint() *endpoint.Endpoint
-	// Start 启动服务器
-	Start() error
-	// Stop 停止服务器
-	Stop() error
+	// RegisterService 注册服务
+	RegisterService(desc, service interface{}) error
 }
 
 type GateProvider interface {
