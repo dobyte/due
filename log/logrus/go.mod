@@ -3,7 +3,7 @@ module github.com/dobyte/due/log/logrus
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.17
+	github.com/dobyte/due v0.0.18
 	github.com/sirupsen/logrus v1.9.0
 )
 
