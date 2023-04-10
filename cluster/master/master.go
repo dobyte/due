@@ -75,5 +75,5 @@ func (m *Master) Proxy() *Proxy {
 }
 
 func (m *Master) debugPrint() {
-	log.Debugf("the master server startup successful")
+	log.Debugf("master server startup successful")
 }

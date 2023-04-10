@@ -38,6 +38,10 @@ func (e *Endpoint) Scheme() string {
 	return e.raw.Scheme
 }
 
+func (e *Endpoint) Target() string {
+	return "direct://" + e.raw.Host
+}
+
 func (e *Endpoint) Address() string {
 	return e.raw.Host
 }

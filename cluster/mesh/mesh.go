@@ -7,7 +7,6 @@ import (
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xnet"
 	"github.com/dobyte/due/utils/xuuid"
 	"golang.org/x/sync/errgroup"
 	"time"
@@ -76,6 +75,8 @@ func (m *Mesh) Init() {
 func (m *Mesh) Start() {
 	m.state = cluster.Work
 
+	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
+
 	m.startRPCServer()
 
 	m.registerServiceInstances()
@@ -105,7 +106,7 @@ func (m *Mesh) startRPCServer() {
 
 	m.rpc, err = m.opts.transporter.NewServiceServer()
 	if err != nil {
-		log.Fatalf("the rpc server create failed: %v", err)
+		log.Fatalf("rpc server create failed: %v", err)
 	}
 
 	for _, entity := range m.services {
@@ -117,7 +118,7 @@ func (m *Mesh) startRPCServer() {
 
 	go func() {
 		if err = m.rpc.Start(); err != nil {
-			log.Fatalf("the rpc server start failed: %v", err)
+			log.Fatalf("rpc server start failed: %v", err)
 		}
 	}()
 }
@@ -125,7 +126,7 @@ func (m *Mesh) startRPCServer() {
 // 停止RPC服务器
 func (m *Mesh) stopRPCServer() {
 	if err := m.rpc.Stop(); err != nil {
-		log.Errorf("the rpc server stop failed: %v", err)
+		log.Errorf("rpc server stop failed: %v", err)
 	}
 }
 
@@ -182,6 +183,6 @@ func (m *Mesh) deregisterServiceInstances() {
 }
 
 func (m *Mesh) debugPrint() {
-	log.Debugf("the mesh server startup successful")
-	log.Debugf("the %s server listen on %s", m.rpc.Scheme(), xnet.FulfillAddr(m.rpc.Addr()))
+	log.Debugf("mesh server startup successful")
+	log.Debugf("%s server listen on %s", m.rpc.Scheme(), m.rpc.Addr())
 }

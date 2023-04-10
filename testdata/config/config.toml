@@ -68,7 +68,7 @@ timezone = "Local"
         # GRPC服务器相关配置
         [transport.grpc.server]
             # 服务器监听地址
-            addr = ":8661"
+            addr = ":0"
             # 秘钥文件
             keyFile = ""
             # 证书文件
@@ -83,8 +83,18 @@ timezone = "Local"
     [transport.rpcx]
         # RPCX服务器相关配置
         [transport.rpcx.server]
-            # 服务器监听地址
-            addr = ":8661"
+            # 服务器监听地址，空或:0时系统将会随机端口号
+            addr = ":0"
+            # 秘钥文件
+            keyFile = ""
+            # 证书文件
+            certFile = ""
+        # RPCX服务器相关配置
+        [transport.rpcx.client]
+            # 证书文件
+            certFile = ""
+            # 证书域名
+            serverName = ""
 [packet]
     # 字节序，little | big
     endian = "big"

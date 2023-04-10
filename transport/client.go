@@ -32,8 +32,8 @@ type GateClient interface {
 type ServiceClient interface {
 	// Call 调用服务方法
 	Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error
-	// Conn 获取连接
-	Conn() interface{}
+	// Client 获取内部客户端
+	Client() interface{}
 }
 
 type Message struct {

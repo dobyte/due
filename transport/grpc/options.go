@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultServerAddr = ":8661" // 默认服务器地址
+	defaultServerAddr = ":0" // 默认服务器地址
 )
 
 const (
@@ -63,7 +63,7 @@ func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
 }
 
-// WithClientOptions 设置客户端选项
-func WithClientOptions(opts ...grpc.DialOption) Option {
-	return func(o *options) { o.client.ClientOpts = opts }
+// WithClientDialOptions 设置客户端拨号选项
+func WithClientDialOptions(opts ...grpc.DialOption) Option {
+	return func(o *options) { o.client.DialOpts = opts }
 }

@@ -2,66 +2,44 @@ package node
 
 import (
 	"context"
-	ep "github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
 	cli "github.com/smallnest/rpcx/client"
-	proto "github.com/smallnest/rpcx/protocol"
-	"sync"
 )
 
-var clients sync.Map
-
-type client struct {
-	client cli.XClient
+type Client struct {
+	cli *cli.OneClient
 }
 
-func NewClient(ep *ep.Endpoint) (*client, error) {
-	v, ok := clients.Load(ep.Address())
-	if ok {
-		return v.(*client), nil
-	}
-
-	discovery, err := cli.NewPeer2PeerDiscovery("tcp@"+ep.Address(), "")
-	if err != nil {
-		return nil, err
-	}
-
-	option := cli.DefaultOption
-	option.CompressType = proto.Gzip
-
-	c := &client{client: cli.NewXClient(
-		ServicePath,
-		cli.Failtry,
-		cli.RandomSelect,
-		discovery,
-		option,
-	)}
-	clients.Store(ep.Address(), c)
-
-	return c, nil
+func NewClient(cli *cli.OneClient) *Client {
+	return &Client{cli: cli}
 }
 
 // Trigger 触发事件
-func (c *client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
+func (c *Client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
 	req := &protocol.TriggerRequest{Event: args.Event, GID: args.GID, UID: args.UID}
 	reply := &protocol.TriggerReply{}
-	err = c.client.Call(ctx, serviceTriggerMethod, req, reply)
+	err = c.cli.Call(ctx, ServicePath, serviceTriggerMethod, req, reply)
 	miss = reply.Code == code.NotFoundSession
 
 	return
 }
 
 // Deliver 投递消息
-func (c *client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
-	req := &protocol.DeliverRequest{GID: args.GID, NID: args.NID, CID: args.CID, UID: args.UID, Message: &protocol.Message{
-		Seq:    args.Message.Seq,
-		Route:  args.Message.Route,
-		Buffer: args.Message.Buffer,
-	}}
+func (c *Client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
+	req := &protocol.DeliverRequest{
+		GID: args.GID,
+		NID: args.NID,
+		CID: args.CID,
+		UID: args.UID,
+		Message: &protocol.Message{
+			Seq:    args.Message.Seq,
+			Route:  args.Message.Route,
+			Buffer: args.Message.Buffer,
+		}}
 	reply := &protocol.DeliverReply{}
-	err = c.client.Call(ctx, serviceDeliverMethod, req, reply)
+	err = c.cli.Call(ctx, ServicePath, serviceDeliverMethod, req, reply)
 	miss = reply.Code == code.NotFoundSession
 
 	return

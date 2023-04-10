@@ -2,8 +2,9 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/utils/xnet"
+	xnet "github.com/dobyte/due/internal/net"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"net"
@@ -12,10 +13,11 @@ import (
 const scheme = "grpc"
 
 type Server struct {
-	addr     string
-	endpoint *endpoint.Endpoint
-	lis      net.Listener
-	server   *grpc.Server
+	listenAddr       string
+	exposeAddr       string
+	endpoint         *endpoint.Endpoint
+	server           *grpc.Server
+	disabledServices []string
 }
 
 type Options struct {
@@ -25,31 +27,14 @@ type Options struct {
 	ServerOpts []grpc.ServerOption
 }
 
-func NewServer(opts *Options) (*Server, error) {
-	host, port, err := net.SplitHostPort(opts.Addr)
+func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
+	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		addr       string
-		isSecure   = false
-		serverOpts = make([]grpc.ServerOption, 0, len(opts.ServerOpts)+1)
-		server     = &Server{}
-	)
-
-	if len(host) > 0 && (host != "0.0.0.0" && host != "[::]" && host != "::") {
-		server.addr = net.JoinHostPort(host, port)
-		addr = server.addr
-	} else {
-		server.addr = net.JoinHostPort("", port)
-		if ip, err := xnet.InternalIP(); err != nil {
-			return nil, err
-		} else {
-			addr = net.JoinHostPort(ip, port)
-		}
-	}
-
+	isSecure := false
+	serverOpts := make([]grpc.ServerOption, 0, len(opts.ServerOpts)+1)
 	serverOpts = append(serverOpts, opts.ServerOpts...)
 	if opts.CertFile != "" && opts.KeyFile != "" {
 		cred, err := credentials.NewServerTLSFromFile(opts.CertFile, opts.KeyFile)
@@ -60,20 +45,24 @@ func NewServer(opts *Options) (*Server, error) {
 		isSecure = true
 	}
 
-	server.server = grpc.NewServer(serverOpts...)
-	server.endpoint = endpoint.NewEndpoint(scheme, addr, isSecure)
+	s := &Server{}
+	s.listenAddr = listenAddr
+	s.exposeAddr = exposeAddr
+	s.server = grpc.NewServer(serverOpts...)
+	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
+	s.disabledServices = disabledServices
 
-	return server, nil
+	return s, nil
 }
 
 // Addr 监听地址
 func (s *Server) Addr() string {
-	return s.addr
+	return s.listenAddr
 }
 
 // Scheme 协议
 func (s *Server) Scheme() string {
-	return s.endpoint.Scheme()
+	return scheme
 }
 
 // Endpoint 获取服务端口
@@ -83,23 +72,23 @@ func (s *Server) Endpoint() *endpoint.Endpoint {
 
 // Start 启动服务器
 func (s *Server) Start() error {
-	addr, err := net.ResolveTCPAddr("tcp", s.addr)
+	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
 	if err != nil {
 		return err
 	}
 
-	s.lis, err = net.Listen(addr.Network(), addr.String())
+	listener, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		return err
 	}
 
-	return s.server.Serve(s.lis)
+	return s.server.Serve(listener)
 }
 
 // Stop 停止服务器
 func (s *Server) Stop() error {
 	s.server.Stop()
-	return s.lis.Close()
+	return nil
 }
 
 // RegisterService 注册服务
@@ -107,6 +96,12 @@ func (s *Server) RegisterService(desc, service interface{}) error {
 	sd, ok := desc.(*grpc.ServiceDesc)
 	if !ok {
 		return errors.New("invalid service desc")
+	}
+
+	for _, ds := range s.disabledServices {
+		if ds == sd.ServiceName {
+			return errors.New(fmt.Sprintf("unable to register %s service name", ds))
+		}
 	}
 
 	s.server.RegisterService(sd, service)

@@ -1,48 +1,41 @@
 package client
 
 import (
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport/grpc/internal/resolver/direct"
-	"github.com/dobyte/due/transport/grpc/internal/resolver/discovery"
+	"context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/resolver"
 )
 
 type Client struct {
-	conn grpc.ClientConnInterface
+	cc *grpc.ClientConn
 }
 
-type Options struct {
-	CertFile   string
-	ServerName string
-	Discovery  registry.Discovery
-	ClientOpts []grpc.DialOption
+func NewClient(cc *grpc.ClientConn) *Client {
+	return &Client{cc: cc}
 }
 
-func Dial(target string, opts *Options) (*grpc.ClientConn, error) {
-	var err error
-	var creds credentials.TransportCredentials
+// Call 调用服务方法
+func (c *Client) Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error {
+	path := ""
 
-	if opts.CertFile != "" && opts.ServerName != "" {
-		creds, err = credentials.NewClientTLSFromFile(opts.CertFile, opts.ServerName)
-		if err != nil {
-			return nil, err
+	if service != "" {
+		path += "/" + service
+	}
+
+	if method != "" {
+		path += "/" + method
+	}
+
+	options := make([]grpc.CallOption, 0, len(opts))
+	for _, opt := range opts {
+		if o, ok := opt.(grpc.CallOption); ok {
+			options = append(options, o)
 		}
-	} else {
-		creds = insecure.NewCredentials()
 	}
 
-	resolvers := make([]resolver.Builder, 0, 2)
-	resolvers = append(resolvers, direct.NewBuilder())
-	if opts.Discovery != nil {
-		resolvers = append(resolvers, discovery.NewBuilder(opts.Discovery))
-	}
+	return c.cc.Invoke(ctx, path, args, reply, options...)
+}
 
-	clientOpts := make([]grpc.DialOption, 0, len(opts.ClientOpts)+2)
-	clientOpts = append(clientOpts, grpc.WithTransportCredentials(creds))
-	clientOpts = append(clientOpts, grpc.WithResolvers(resolvers...))
-
-	return grpc.Dial(target, clientOpts...)
+// Client 获取GRPC客户端
+func (c *Client) Client() interface{} {
+	return c.cc
 }

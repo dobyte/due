@@ -1,10 +1,8 @@
 package discovery
 
 import (
-	"context"
 	"github.com/dobyte/due/registry"
 	"google.golang.org/grpc/resolver"
-	"time"
 )
 
 const scheme = "discovery"
@@ -20,18 +18,7 @@ func NewBuilder(dis registry.Discovery) *Builder {
 }
 
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	watcher, err := b.dis.Watch(ctx, target.URL.Host)
-	cancel()
-	if err != nil {
-		return nil, err
-	}
-
-	r := newResolver(watcher)
-
-	go r.watch(cc)
-
-	return r, nil
+	return newResolver(b.dis, target.URL.Host, cc)
 }
 
 func (b *Builder) Scheme() string {

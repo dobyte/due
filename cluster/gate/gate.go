@@ -11,7 +11,6 @@ import (
 	"context"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xnet"
 	"sync"
 	"time"
 
@@ -111,14 +110,14 @@ func (g *Gate) startNetworkServer() {
 	g.opts.server.OnReceive(g.handleReceive)
 
 	if err := g.opts.server.Start(); err != nil {
-		log.Fatalf("the network server start failed: %v", err)
+		log.Fatalf("network server start failed: %v", err)
 	}
 }
 
 // 停止网关服务器
 func (g *Gate) stopNetworkServer() {
 	if err := g.opts.server.Stop(); err != nil {
-		log.Errorf("the network server stop failed: %v", err)
+		log.Errorf("network server stop failed: %v", err)
 	}
 }
 
@@ -172,12 +171,12 @@ func (g *Gate) startRPCServer() {
 
 	g.rpc, err = g.opts.transporter.NewGateServer(&provider{g})
 	if err != nil {
-		log.Fatalf("the rpc server create failed: %v", err)
+		log.Fatalf("rpc server create failed: %v", err)
 	}
 
 	go func() {
 		if err = g.rpc.Start(); err != nil {
-			log.Fatalf("the rpc server start failed: %v", err)
+			log.Fatalf("rpc server start failed: %v", err)
 		}
 	}()
 }
@@ -185,7 +184,7 @@ func (g *Gate) startRPCServer() {
 // 停止RPC服务器
 func (g *Gate) stopRPCServer() {
 	if err := g.rpc.Stop(); err != nil {
-		log.Errorf("the rpc server stop failed: %v", err)
+		log.Errorf("rpc server stop failed: %v", err)
 	}
 }
 
@@ -219,7 +218,7 @@ func (g *Gate) deregisterServiceInstance() {
 }
 
 func (g *Gate) debugPrint() {
-	log.Debugf("the gate server startup successful")
-	log.Debugf("the %s server listen on %s", g.opts.server.Protocol(), xnet.FulfillAddr(g.opts.server.Addr()))
-	log.Debugf("the %s server listen on %s", g.rpc.Scheme(), xnet.FulfillAddr(g.rpc.Addr()))
+	log.Debugf("gate server startup successful")
+	log.Debugf("%s server listen on %s", g.opts.server.Protocol(), g.opts.server.Addr())
+	log.Debugf("%s server listen on %s", g.rpc.Scheme(), g.rpc.Addr())
 }

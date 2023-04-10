@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/transport"
 	"github.com/dobyte/due/utils/xcall"
-	"github.com/dobyte/due/utils/xnet"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -77,6 +76,8 @@ func (n *Node) Init() {
 func (n *Node) Start() {
 	n.setState(cluster.Work)
 
+	n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
+
 	n.startRPCServer()
 
 	n.registerServiceInstance()
@@ -141,12 +142,12 @@ func (n *Node) startRPCServer() {
 
 	n.rpc, err = n.opts.transporter.NewNodeServer(&provider{n})
 	if err != nil {
-		log.Fatalf("the rpc server create failed: %v", err)
+		log.Fatalf("rpc server create failed: %v", err)
 	}
 
 	go func() {
 		if err = n.rpc.Start(); err != nil {
-			log.Fatalf("the rpc server start failed: %v", err)
+			log.Fatalf("rpc server start failed: %v", err)
 		}
 	}()
 }
@@ -154,7 +155,7 @@ func (n *Node) startRPCServer() {
 // 停止RPC服务器
 func (n *Node) stopRPCServer() {
 	if err := n.rpc.Stop(); err != nil {
-		log.Errorf("the rpc server stop failed: %v", err)
+		log.Errorf("rpc server stop failed: %v", err)
 	}
 }
 
@@ -234,6 +235,6 @@ func (n *Node) checkState(state cluster.State) bool {
 }
 
 func (n *Node) debugPrint() {
-	log.Debugf("the node server startup successful")
-	log.Debugf("the %s server listen on %s", n.rpc.Scheme(), xnet.FulfillAddr(n.rpc.Addr()))
+	log.Debugf("node server startup successful")
+	log.Debugf("%s server listen on %s", n.rpc.Scheme(), n.rpc.Addr())
 }

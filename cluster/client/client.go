@@ -138,7 +138,7 @@ func (c *Client) handleReceive(_ network.Conn, data []byte, _ int) {
 	} else if c.defaultRouteHandler != nil {
 		c.defaultRouteHandler(&request{client: c, message: message})
 	} else {
-		log.Errorf("the route handler is not registered, route:%v", message.Route)
+		log.Errorf("route handler is not registered, route:%v", message.Route)
 	}
 }
 
@@ -161,7 +161,7 @@ func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 	if c.state == cluster.Shut {
 		c.routes[route] = handler
 	} else {
-		log.Warnf("the client is working, can't add route handler")
+		log.Warnf("client is working, can't add route handler")
 	}
 }
 
@@ -170,7 +170,7 @@ func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 	if c.state == cluster.Shut {
 		c.defaultRouteHandler = handler
 	} else {
-		log.Warnf("the client is working, can't set default route handler")
+		log.Warnf("client is working, can't set default route handler")
 	}
 }
 
@@ -179,6 +179,6 @@ func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 	if c.state == cluster.Shut {
 		c.events[event] = handler
 	} else {
-		log.Warnf("the client is working, can't add event handler")
+		log.Warnf("client is working, can't add event handler")
 	}
 }

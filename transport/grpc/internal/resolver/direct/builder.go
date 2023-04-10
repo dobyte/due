@@ -1,14 +1,12 @@
 package direct
 
 import (
-	"github.com/dobyte/due/registry"
 	"google.golang.org/grpc/resolver"
 )
 
 const scheme = "direct"
 
 type Builder struct {
-	dis registry.Discovery
 }
 
 var _ resolver.Builder = &Builder{}

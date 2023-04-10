@@ -105,7 +105,7 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, insKinds ...clus
 
 			switch v := iface.(type) {
 			case *redis.Subscription:
-				log.Debugf("channel subscribe succeeded, %s", v.Channel)
+				log.Debugf("redis channel subscribe succeeded, %s", v.Channel)
 			case *redis.Message:
 				event, err := unmarshal([]byte(v.Payload))
 				if err != nil {

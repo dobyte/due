@@ -2,9 +2,7 @@ package node
 
 import (
 	"context"
-	ep "github.com/dobyte/due/internal/endpoint"
 	"github.com/dobyte/due/transport"
-	cli "github.com/dobyte/due/transport/grpc/internal/client"
 	"github.com/dobyte/due/transport/grpc/internal/code"
 	"github.com/dobyte/due/transport/grpc/internal/pb"
 	"google.golang.org/grpc"
@@ -16,15 +14,8 @@ type Client struct {
 	client pb.NodeClient
 }
 
-func NewClient(ep *ep.Endpoint, opts *cli.Options) (*Client, error) {
-	target := "direct://" + ep.Address()
-
-	cc, err := cli.Dial(target, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Client{client: pb.NewNodeClient(cc)}, nil
+func NewClient(cc *grpc.ClientConn) *Client {
+	return &Client{client: pb.NewNodeClient(cc)}
 }
 
 // Trigger 触发事件

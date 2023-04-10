@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/gate"
 	"github.com/dobyte/due/transport/rpcx/internal/code"
 	"github.com/dobyte/due/transport/rpcx/internal/protocol"
 	"github.com/dobyte/due/transport/rpcx/internal/server"
@@ -21,7 +20,7 @@ func NewServer(provider transport.NodeProvider, opts *server.Options) (*server.S
 		return nil, err
 	}
 
-	err = s.RegisterSystemService(ServicePath, &endpoint{provider: provider}, []string{ServicePath, gate.ServicePath})
+	err = s.RegisterService(ServicePath, &endpoint{provider: provider})
 	if err != nil {
 		return nil, err
 	}

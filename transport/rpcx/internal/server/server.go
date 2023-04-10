@@ -1,62 +1,67 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/utils/xnet"
+	xnet "github.com/dobyte/due/internal/net"
 	"github.com/smallnest/rpcx/server"
-	"net"
 )
 
-const scheme = "grpc"
+const scheme = "rpcx"
 
 type Server struct {
-	addr             string
-	endpoint         *endpoint.Endpoint
-	lis              net.Listener
+	listenAddr       string
+	exposeAddr       string
 	server           *server.Server
-	excludedServices []string
+	endpoint         *endpoint.Endpoint
+	disabledServices []string
 }
 
 type Options struct {
-	Addr string
+	Addr       string
+	KeyFile    string
+	CertFile   string
+	ServerOpts []server.OptionFn
 }
 
-func NewServer(opts *Options) (*Server, error) {
-	host, port, err := net.SplitHostPort(opts.Addr)
+func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
+	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &Server{}
-	addr := ""
-	if len(host) > 0 && (host != "0.0.0.0" && host != "[::]" && host != "::") {
-		s.addr = net.JoinHostPort(host, port)
-		addr = s.addr
-	} else {
-		s.addr = net.JoinHostPort("", port)
-		if ip, err := xnet.InternalIP(); err != nil {
+	isSecure := false
+	serverOpts := make([]server.OptionFn, 0)
+	serverOpts = append(serverOpts, opts.ServerOpts...)
+	if opts.CertFile != "" && opts.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(opts.CertFile, opts.KeyFile)
+		if err != nil {
 			return nil, err
-		} else {
-			addr = net.JoinHostPort(ip, port)
 		}
+		serverOpts = append(serverOpts, server.WithTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}))
+		isSecure = true
 	}
 
+	s := &Server{}
+	s.listenAddr = listenAddr
+	s.exposeAddr = exposeAddr
 	s.server = server.NewServer()
-	s.endpoint = endpoint.NewEndpoint(scheme, addr, false)
+	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
+	s.disabledServices = disabledServices
 
 	return s, nil
 }
 
 // Addr 监听地址
 func (s *Server) Addr() string {
-	return s.addr
+	return s.listenAddr
 }
 
 // Scheme 协议
 func (s *Server) Scheme() string {
-	return s.endpoint.Scheme()
+	return scheme
 }
 
 // Endpoint 获取服务端口
@@ -66,7 +71,7 @@ func (s *Server) Endpoint() *endpoint.Endpoint {
 
 // Start 启动服务器
 func (s *Server) Start() error {
-	return s.server.Serve("tcp", s.addr)
+	return s.server.Serve("tcp", s.listenAddr)
 }
 
 // Stop 停止服务器
@@ -81,23 +86,11 @@ func (s *Server) RegisterService(desc, ss interface{}) error {
 		return errors.New("invalid service desc")
 	}
 
-	for _, es := range s.excludedServices {
-		if es == name {
-			return errors.New(fmt.Sprintf("unable to register %s service name", es))
+	for _, ds := range s.disabledServices {
+		if ds == name {
+			return errors.New(fmt.Sprintf("unable to register %s service name", ds))
 		}
 	}
 
 	return s.server.RegisterName(name, ss, "")
-}
-
-// RegisterSystemService 注册系统服务
-func (s *Server) RegisterSystemService(name string, service interface{}, es []string) error {
-	err := s.server.RegisterName(name, service, "")
-	if err != nil {
-		return err
-	}
-
-	s.excludedServices = es[:]
-
-	return nil
 }
