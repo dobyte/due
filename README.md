@@ -4,6 +4,7 @@
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dobyte/due)](https://goreportcard.com/report/github.com/dobyte/due)
 [![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
 
 ### 1.介绍
@@ -21,6 +22,7 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 平滑性：引入信号量，通过控制服务注册中心来实现优雅地重启。
 * 扩容性：通过优雅的路由分发机制，理论上可实现无限扩容。
 * 易调试：框架原生提供了tcp、kcp、ws等协议的客户端，方便开发者进行独立的调试全流程调试。
+* 可管理：提供完善的后台管理接口，方便开发者快速实现自定义的后台管理功能。
 
 ### 3.功能
 
@@ -29,10 +31,13 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 注册：支持consul、etcd、k8s、nacos、servicecomb、zookeeper等多种服务注册中心。
 * 协议：支持json、protobuf（gogo/protobuf）、msgpack等多种通信协议。
 * 配置：支持json、yaml、toml、xml等多种文件格式。
-* 通信：支持grpc、rpcx等多种高性能传输方案。
+* 通信：支持grpc、rpcx等多种高性能通信方案。
 * 重启：支持服务器的平滑重启。
 * 事件：支持redis、nats、kafka、rabbitMQ等事件总线实现方案。
 * 加密：支持rsa、ecc等多种加密方案。
+* 服务：支持grpc、rpcx等多种微服务解决方案。
+* 灵活：支持单体、分布式等多种架构方案。
+* 管理：提供master后台管理服相关接口支持。
 
 > 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
 
@@ -121,31 +126,30 @@ go get github.com/dobyte/due/transport/grpc@latest
 package main
 
 import (
-    "github.com/dobyte/due"
-    "github.com/dobyte/due/cluster/gate"
-    "github.com/dobyte/due/locate/redis"
-    "github.com/dobyte/due/log"
-    "github.com/dobyte/due/network/ws"
-    "github.com/dobyte/due/registry/etcd"
-    "github.com/dobyte/due/transport/grpc"
+   "github.com/dobyte/due"
+   cluster "github.com/dobyte/due/cluster/gate"
+   "github.com/dobyte/due/locate/redis"
+   "github.com/dobyte/due/network/ws"
+   "github.com/dobyte/due/registry/etcd"
+   "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-    // 创建容器
-    container := due.NewContainer()
-    // 创建网关组件
-    component := gate.NewGate(
-        gate.WithServer(ws.NewServer()),
-        gate.WithLocator(redis.NewLocator()),
-        gate.WithRegistry(etcd.NewRegistry()),
-        gate.WithTransporter(grpc.NewTransporter()),
-    )
-
-    // 添加网关组件
-    container.Add(component)
-    // 启动容器
-    container.Serve()
+   // 创建容器
+   container := due.NewContainer()
+   // 创建网关组件
+   gate := cluster.NewGate(
+      cluster.WithServer(ws.NewServer()),
+      cluster.WithLocator(redis.NewLocator()),
+      cluster.WithRegistry(etcd.NewRegistry()),
+      cluster.WithTransporter(grpc.NewTransporter()),
+   )
+   // 添加网关组件
+   container.Add(gate)
+   // 启动容器
+   container.Serve()
 }
+
 ```
 
 3.构建Node服务器
@@ -154,37 +158,102 @@ func main() {
 package main
 
 import (
-    "github.com/dobyte/due"
-    "github.com/dobyte/due/cluster/node"
-    "github.com/dobyte/due/locate/redis"
-    "github.com/dobyte/due/log"
-    "github.com/dobyte/due/registry/etcd"
-    "github.com/dobyte/due/transport/grpc"
+   "github.com/dobyte/due"
+   cluster "github.com/dobyte/due/cluster/node"
+   "github.com/dobyte/due/locate/redis"
+   "github.com/dobyte/due/registry/etcd"
+   "github.com/dobyte/due/transport/grpc"
 )
 
 func main() {
-    // 创建容器
-    container := due.NewContainer()
-    // 创建节点组件
-    n := node.NewNode(
-        node.WithLocator(redis.NewLocator()),
-        node.WithRegistry(etcd.NewRegistry()),
-        node.WithTransporter(grpc.NewTransporter()),
-    )
-    // 注册路由
-    n.Proxy().Router().AddRouteHandler(1, false, greetHandler)
-    // 添加组件
-    container.Add(n)
-    // 启动服务器
-    container.Serve()
+   // 创建容器
+   container := due.NewContainer()
+   // 创建节点组件
+   node := cluster.NewNode(
+      cluster.WithLocator(redis.NewLocator()),
+      cluster.WithRegistry(etcd.NewRegistry()),
+      cluster.WithTransporter(grpc.NewTransporter()),
+   )
+   // 注册路由
+   node.Proxy().Router().AddRouteHandler(1, false, greetHandler)
+   // 添加组件
+   container.Add(node)
+   // 启动服务器
+   container.Serve()
 }
 
-func greetHandler(ctx *node.Context) {
-	_ = ctx.Response([]byte("hello world~~"))
+func greetHandler(ctx *cluster.Context) {
+   _ = ctx.Response([]byte("hello world~~"))
 }
+
 ```
 
-4.构建客户端
+4.构建Mesh服务
+
+```go
+package main
+
+import (
+   "context"
+   "github.com/dobyte/due"
+   cluster "github.com/dobyte/due/cluster/mesh"
+   "github.com/dobyte/due/locate/redis"
+   "github.com/dobyte/due/log"
+   "github.com/dobyte/due/mode"
+   "github.com/dobyte/due/registry/consul"
+   "github.com/dobyte/due/transport/rpcx"
+)
+
+func main() {
+   // 开启调试模式
+   mode.SetMode(mode.DebugMode)
+   // 创建容器
+   container := due.NewContainer()
+   // 创建网格组件
+   mesh := cluster.NewMesh(
+      cluster.WithLocator(redis.NewLocator()),
+      cluster.WithRegistry(consul.NewRegistry()),
+      cluster.WithTransporter(rpcx.NewTransporter()),
+   )
+   // 初始化业务
+   NewWalletService(mesh.Proxy()).Init()
+   // 添加网格组件
+   container.Add(mesh)
+   // 启动容器
+   container.Serve()
+}
+
+// WalletService 钱包服务
+type WalletService struct {
+   proxy *cluster.Proxy
+}
+
+type IncrGoldRequest struct {
+   UID  int64
+   Gold int64
+}
+
+type IncrGoldReply struct {
+}
+
+func NewWalletService(proxy *cluster.Proxy) *WalletService {
+   return &WalletService{proxy: proxy}
+}
+
+func (w *WalletService) Init() {
+   w.proxy.AddServiceProvider("wallet", "Wallet", w)
+}
+
+func (w *WalletService) IncrGold(ctx context.Context, req *IncrGoldRequest, reply *IncrGoldReply) error {
+   log.Infof("incr %d gold success for uid: %d", req.Gold, req.UID)
+
+   return nil
+}
+
+```
+
+
+5.构建测试客户端
 
 ```go
 package main
