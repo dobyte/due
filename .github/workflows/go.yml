@@ -59,7 +59,7 @@ jobs:
         id: auto-commit-action
         with:
           commit_message: Apply Code Coverage Badge
-          skip_fetch: true
+          skip_fetch: false
           skip_checkout: true
           file_pattern: ./README.md
 
