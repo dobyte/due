@@ -44,7 +44,28 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: make test-coverage
+        run: |
+          go test -v -cover ./... -coverprofile coverage.out -coverpkg ./...
+          go tool cover -func coverage.out -o coverage.out  # Replaces coverage.out with the analysis of coverage.out
 
-      - name: Upload coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
+      - name: Go Coverage Badge
+        uses: tj-actions/coverage-badge-go@v1
+        if: ${{ runner.os == 'Linux' && matrix.go == '1.16' }} # Runs this on only one of the ci builds.
+        with:
+          green: 80
+          filename: coverage.out
+
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        id: auto-commit-action
+        with:
+          commit_message: Apply Code Coverage Badge
+          skip_fetch: true
+          skip_checkout: true
+          file_pattern: ./README.md
+
+      - name: Push Changes
+        if: steps.auto-commit-action.outputs.changes_detected == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.token }}
+          branch: main
