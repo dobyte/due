@@ -69,3 +69,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: main
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
