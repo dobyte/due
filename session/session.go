@@ -38,7 +38,6 @@ func (s *Session) Reset() {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	s.conn = nil
 	s.groups = nil
 }
 
