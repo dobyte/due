@@ -20,12 +20,14 @@ const defaultBuilder = "direct"
 
 type Builder struct {
 	err      error
-	opts     cli.Option
+	opts     *Options
+	dialOpts cli.Option
 	pools    sync.Map
 	builders map[string]resolver.Builder
 }
 
 type Options struct {
+	PoolSize   int
 	CertFile   string
 	ServerName string
 	Discovery  registry.Discovery
@@ -34,16 +36,17 @@ type Options struct {
 
 func NewBuilder(opts *Options) *Builder {
 	b := &Builder{}
+	b.opts = opts
 	b.builders = make(map[string]resolver.Builder)
-	b.opts = cli.DefaultOption
-	b.opts.CompressType = proto.Gzip
+	b.dialOpts = cli.DefaultOption
+	b.dialOpts.CompressType = proto.Gzip
 	b.RegisterBuilder(direct.NewBuilder())
 	if opts.Discovery != nil {
 		b.RegisterBuilder(discovery.NewBuilder(opts.Discovery))
 	}
 
 	if opts.CertFile != "" && opts.ServerName != "" {
-		b.opts.TLSConfig, b.err = newClientTLSFromFile(opts.CertFile, opts.ServerName)
+		b.dialOpts.TLSConfig, b.err = newClientTLSFromFile(opts.CertFile, opts.ServerName)
 	}
 
 	return b
@@ -104,7 +107,12 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 		return nil, err
 	}
 
-	pool := cli.NewOneClientPool(10, cli.Failtry, cli.RandomSelect, dis, b.opts)
+	size := b.opts.PoolSize
+	if size <= 0 {
+		size = 10
+	}
+
+	pool := cli.NewOneClientPool(size, cli.Failtry, cli.RandomSelect, dis, b.dialOpts)
 	b.pools.Store(target, pool)
 
 	return pool.Get(), nil

@@ -79,6 +79,8 @@ timezone = "Local"
             certFile = ""
             # 证书域名
             serverName = ""
+            # 连接池大小，默认为10
+            poolSize = 10
     # RPCX相关配置
     [transport.rpcx]
         # RPCX服务器相关配置
@@ -95,6 +97,8 @@ timezone = "Local"
             certFile = ""
             # 证书域名
             serverName = ""
+            # 连接池大小，默认为10
+            poolSize = 10
 [packet]
     # 字节序，little | big
     endian = "big"

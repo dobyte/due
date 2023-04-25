@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/consul
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.19
+	github.com/dobyte/due v0.0.20
 	github.com/hashicorp/consul/api v1.13.0
 )
 

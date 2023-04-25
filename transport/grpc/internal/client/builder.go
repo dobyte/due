@@ -8,14 +8,18 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
+	"sync"
 )
 
 type Builder struct {
 	err      error
+	opts     *Options
 	dialOpts []grpc.DialOption
+	pools    sync.Map
 }
 
 type Options struct {
+	PoolSize   int
 	CertFile   string
 	ServerName string
 	Discovery  registry.Discovery
@@ -23,7 +27,7 @@ type Options struct {
 }
 
 func NewBuilder(opts *Options) *Builder {
-	b := &Builder{}
+	b := &Builder{opts: opts}
 
 	var creds credentials.TransportCredentials
 	if opts.CertFile != "" && opts.ServerName != "" {
@@ -54,5 +58,22 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 		return nil, b.err
 	}
 
-	return grpc.Dial(target, b.dialOpts...)
+	val, ok := b.pools.Load(target)
+	if ok {
+		return val.(*Pool).Get(), nil
+	}
+
+	size := b.opts.PoolSize
+	if size <= 0 {
+		size = 10
+	}
+
+	pool, err := newPool(size, target, b.dialOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	b.pools.Store(target, pool)
+
+	return pool.Get(), nil
 }
