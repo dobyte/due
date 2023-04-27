@@ -361,7 +361,11 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 
 更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
 
-### 9.交流与讨论
+### 9.其他客户端
+
+[due-client-ts](https://github.com/dobyte/due-client-ts)
+
+### 10.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 
