@@ -29,7 +29,8 @@ type defaultReader struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.Mutex
-	values atomic.Value
+	idx    atomic.Int64
+	values [2]map[string]interface{}
 }
 
 var _ Reader = &defaultReader{}
@@ -73,7 +74,35 @@ func (r *defaultReader) init() {
 		}
 	}
 
-	r.values.Store(values)
+	r.store(values)
+}
+
+// 保存配置
+func (r *defaultReader) store(values map[string]interface{}) {
+	idx := r.idx.Add(1) % int64(len(r.values))
+	r.values[idx] = values
+}
+
+// 加载配置
+func (r *defaultReader) load() map[string]interface{} {
+	idx := r.idx.Load() % int64(len(r.values))
+	return r.values[idx]
+}
+
+// 拷贝配置
+func (r *defaultReader) copy() (map[string]interface{}, error) {
+	values := r.load()
+
+	dst := make(map[string]interface{})
+
+	err := copier.CopyWithOption(&dst, values, copier.Option{
+		DeepCopy: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return dst, nil
 }
 
 // 监听配置源变化
@@ -113,7 +142,7 @@ func (r *defaultReader) watch() {
 					r.mu.Lock()
 					defer r.mu.Unlock()
 
-					dst, err := r.copyValues()
+					dst, err := r.copy()
 					if err != nil {
 						return
 					}
@@ -123,7 +152,7 @@ func (r *defaultReader) watch() {
 						return
 					}
 
-					r.values.Store(dst)
+					r.store(dst)
 				}()
 			}
 		}()
@@ -138,15 +167,11 @@ func (r *defaultReader) Close() {
 // Has 是否存在配置
 func (r *defaultReader) Has(pattern string) bool {
 	var (
-		keys  = strings.Split(pattern, ".")
-		node  interface{}
-		found = true
+		keys   = strings.Split(pattern, ".")
+		node   interface{}
+		found  = true
+		values = r.load()
 	)
-
-	values, err := r.copyValues()
-	if err != nil {
-		return false
-	}
 
 	keys = reviseKeys(keys, values)
 	node = values
@@ -182,13 +207,13 @@ func (r *defaultReader) Has(pattern string) bool {
 // Get 获取配置值
 func (r *defaultReader) Get(pattern string, def ...interface{}) value.Value {
 	var (
-		keys  = strings.Split(pattern, ".")
-		node  interface{}
-		found = true
+		keys   = strings.Split(pattern, ".")
+		node   interface{}
+		found  = true
+		values = r.load()
 	)
 
-	values, err := r.copyValues()
-	if err != nil {
+	if values == nil {
 		goto NOTFOUND
 	}
 
@@ -230,15 +255,15 @@ NOTFOUND:
 
 // Set 设置配置值
 func (r *defaultReader) Set(pattern string, value interface{}) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	var (
 		keys = strings.Split(pattern, ".")
 		node interface{}
 	)
 
-	values, err := r.copyValues()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	values, err := r.copy()
 	if err != nil {
 		return err
 	}
@@ -327,22 +352,9 @@ func (r *defaultReader) Set(pattern string, value interface{}) error {
 		}
 	}
 
-	r.values.Store(values)
+	r.store(values)
 
 	return nil
-}
-
-func (r *defaultReader) copyValues() (map[string]interface{}, error) {
-	dst := make(map[string]interface{})
-
-	err := copier.CopyWithOption(&dst, r.values.Load(), copier.Option{
-		DeepCopy: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return dst, nil
 }
 
 func reviseKeys(keys []string, values map[string]interface{}) []string {
