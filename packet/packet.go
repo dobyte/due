@@ -17,6 +17,11 @@ func GetPacker() Packer {
 }
 
 // Pack 打包消息
+func Pack1(message *Message) ([]byte, error) {
+	return globalPacker.Pack1(message)
+}
+
+// Pack 打包消息
 func Pack(message *Message) ([]byte, error) {
 	return globalPacker.Pack(message)
 }

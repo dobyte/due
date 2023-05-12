@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"github.com/dobyte/due/errors"
 	"github.com/dobyte/due/log"
+	"sync"
 )
 
 var (
@@ -17,12 +18,14 @@ var (
 type Packer interface {
 	// Pack 打包消息
 	Pack(message *Message) ([]byte, error)
+	Pack1(message *Message) ([]byte, error)
 	// Unpack 解包消息
 	Unpack(data []byte) (*Message, error)
 }
 
 type defaultPacker struct {
 	opts *options
+	bufs sync.Pool
 }
 
 func NewPacker(opts ...Option) Packer {
@@ -39,7 +42,66 @@ func NewPacker(opts ...Option) Packer {
 		log.Fatalf("the route bytes length must be 1、2、4, and give %d", o.seqBytesLen)
 	}
 
-	return &defaultPacker{opts: o}
+	return &defaultPacker{opts: o, bufs: sync.Pool{New: func() interface{} {
+		buf := &bytes.Buffer{}
+		buf.Grow(5000 + o.seqBytesLen + o.routeBytesLen)
+		return buf
+	}}}
+}
+
+// Pack 打包消息
+func (p *defaultPacker) Pack1(message *Message) ([]byte, error) {
+	if message == nil {
+		return nil, ErrMessageIsNil
+	}
+
+	if p.opts.seqBytesLen > 0 {
+		if message.Seq > int32(1<<(8*p.opts.seqBytesLen-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytesLen-1)) {
+			return nil, ErrSeqOverflow
+		}
+	}
+
+	if message.Route > int32(1<<(8*p.opts.routeBytesLen-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytesLen-1)) {
+		return nil, ErrRouteOverflow
+	}
+
+	var (
+		buf = &bytes.Buffer{}
+		err error
+	)
+
+	buf.Grow(len(message.Buffer) + p.opts.seqBytesLen + p.opts.routeBytesLen)
+
+	switch p.opts.seqBytesLen {
+	case 1:
+		err = binary.Write(buf, p.opts.byteOrder, int8(message.Seq))
+	case 2:
+		err = binary.Write(buf, p.opts.byteOrder, int16(message.Seq))
+	case 4:
+		err = binary.Write(buf, p.opts.byteOrder, message.Seq)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	switch p.opts.routeBytesLen {
+	case 1:
+		err = binary.Write(buf, p.opts.byteOrder, int8(message.Route))
+	case 2:
+		err = binary.Write(buf, p.opts.byteOrder, int16(message.Route))
+	case 4:
+		err = binary.Write(buf, p.opts.byteOrder, message.Route)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, p.opts.byteOrder, message.Buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 // Pack 打包消息
@@ -59,19 +121,22 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 	}
 
 	var (
-		buf bytes.Buffer
+		//buf bytes.Buffer
 		err error
 	)
 
-	buf.Grow(len(message.Buffer) + p.opts.seqBytesLen + p.opts.routeBytesLen)
+	buf := p.bufs.Get().(*bytes.Buffer)
+	defer p.bufs.Put(buf)
+
+	//buf.Grow(len(message.Buffer) + p.opts.seqBytesLen + p.opts.routeBytesLen)
 
 	switch p.opts.seqBytesLen {
 	case 1:
-		err = binary.Write(&buf, p.opts.byteOrder, int8(message.Seq))
+		err = binary.Write(buf, p.opts.byteOrder, int8(message.Seq))
 	case 2:
-		err = binary.Write(&buf, p.opts.byteOrder, int16(message.Seq))
+		err = binary.Write(buf, p.opts.byteOrder, int16(message.Seq))
 	case 4:
-		err = binary.Write(&buf, p.opts.byteOrder, message.Seq)
+		err = binary.Write(buf, p.opts.byteOrder, message.Seq)
 	}
 	if err != nil {
 		return nil, err
@@ -79,17 +144,17 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 
 	switch p.opts.routeBytesLen {
 	case 1:
-		err = binary.Write(&buf, p.opts.byteOrder, int8(message.Route))
+		err = binary.Write(buf, p.opts.byteOrder, int8(message.Route))
 	case 2:
-		err = binary.Write(&buf, p.opts.byteOrder, int16(message.Route))
+		err = binary.Write(buf, p.opts.byteOrder, int16(message.Route))
 	case 4:
-		err = binary.Write(&buf, p.opts.byteOrder, message.Route)
+		err = binary.Write(buf, p.opts.byteOrder, message.Route)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(&buf, p.opts.byteOrder, message.Buffer)
+	err = binary.Write(buf, p.opts.byteOrder, message.Buffer)
 	if err != nil {
 		return nil, err
 	}

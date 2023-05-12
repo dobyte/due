@@ -24,3 +24,33 @@ func TestPacket(t *testing.T) {
 	t.Logf("route: %d", message.Route)
 	t.Logf("buffer: %s", string(message.Buffer))
 }
+
+func BenchmarkPack(b *testing.B) {
+	buffer := []byte("hello world")
+
+	for i := 0; i < b.N; i++ {
+		_, err := packet.Pack(&packet.Message{
+			Seq:    1,
+			Route:  1,
+			Buffer: buffer,
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPack1(b *testing.B) {
+	buffer := []byte("hello world")
+
+	for i := 0; i < b.N; i++ {
+		_, err := packet.Pack1(&packet.Message{
+			Seq:    1,
+			Route:  1,
+			Buffer: buffer,
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
