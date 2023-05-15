@@ -54,3 +54,39 @@ func BenchmarkPack1(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkUnpack(b *testing.B) {
+	buf, err := packet.Pack(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := packet.Unpack(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkUnpack1(b *testing.B) {
+	buf, err := packet.Pack(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := packet.Unpack1(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

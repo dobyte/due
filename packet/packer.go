@@ -21,11 +21,13 @@ type Packer interface {
 	Pack1(message *Message) ([]byte, error)
 	// Unpack 解包消息
 	Unpack(data []byte) (*Message, error)
+	Unpack1(data []byte) (*Message, error)
 }
 
 type defaultPacker struct {
-	opts *options
-	bufs sync.Pool
+	opts    *options
+	buffers sync.Pool
+	readers sync.Pool
 }
 
 func NewPacker(opts ...Option) Packer {
@@ -42,11 +44,17 @@ func NewPacker(opts ...Option) Packer {
 		log.Fatalf("the route bytes length must be 1、2、4, and give %d", o.seqBytesLen)
 	}
 
-	return &defaultPacker{opts: o, bufs: sync.Pool{New: func() interface{} {
-		buf := &bytes.Buffer{}
-		buf.Grow(5000 + o.seqBytesLen + o.routeBytesLen)
-		return buf
-	}}}
+	return &defaultPacker{
+		opts: o,
+		buffers: sync.Pool{New: func() interface{} {
+			buf := &bytes.Buffer{}
+			buf.Grow(5000 + o.seqBytesLen + o.routeBytesLen)
+			return buf
+		}},
+		readers: sync.Pool{New: func() interface{} {
+			return bytes.NewReader(nil)
+		}},
+	}
 }
 
 // Pack 打包消息
@@ -125,8 +133,11 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 		err error
 	)
 
-	buf := p.bufs.Get().(*bytes.Buffer)
-	defer p.bufs.Put(buf)
+	buf := p.buffers.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		p.buffers.Put(buf)
+	}()
 
 	//buf.Grow(len(message.Buffer) + p.opts.seqBytesLen + p.opts.routeBytesLen)
 
@@ -164,6 +175,84 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 
 // Unpack 解包消息
 func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
+	ln := len(data) - p.opts.seqBytesLen - p.opts.routeBytesLen
+
+	if ln < 0 {
+		return nil, ErrInvalidMessage
+	}
+
+	var (
+		err     error
+		message = &Message{Buffer: make([]byte, ln)}
+	)
+
+	reader := p.readers.Get().(*bytes.Reader)
+	reader.Reset(data)
+
+	switch p.opts.seqBytesLen {
+	case 1:
+		var seq int8
+		if err = binary.Read(reader, p.opts.byteOrder, &seq); err != nil {
+			return nil, err
+		} else {
+			message.Seq = int32(seq)
+		}
+	case 2:
+		var seq int16
+		if err = binary.Read(reader, p.opts.byteOrder, &seq); err != nil {
+			return nil, err
+		} else {
+			message.Seq = int32(seq)
+		}
+	case 4:
+		var seq int32
+		if err = binary.Read(reader, p.opts.byteOrder, &seq); err != nil {
+			return nil, err
+		} else {
+			message.Seq = seq
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	switch p.opts.routeBytesLen {
+	case 1:
+		var route int8
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return nil, err
+		} else {
+			message.Route = int32(route)
+		}
+	case 2:
+		var route int16
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return nil, err
+		} else {
+			message.Route = int32(route)
+		}
+	case 4:
+		var route int32
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return nil, err
+		} else {
+			message.Route = route
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Read(reader, p.opts.byteOrder, &message.Buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	return message, nil
+}
+
+// Unpack 解包消息
+func (p *defaultPacker) Unpack1(data []byte) (*Message, error) {
 	ln := len(data) - p.opts.seqBytesLen - p.opts.routeBytesLen
 
 	if ln < 0 {

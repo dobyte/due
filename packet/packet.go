@@ -27,6 +27,11 @@ func Pack(message *Message) ([]byte, error) {
 }
 
 // Unpack 解包消息
+func Unpack1(data []byte) (*Message, error) {
+	return globalPacker.Unpack1(data)
+}
+
+// Unpack 解包消息
 func Unpack(data []byte) (*Message, error) {
 	return globalPacker.Unpack(data)
 }
