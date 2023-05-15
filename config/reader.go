@@ -29,7 +29,7 @@ type defaultReader struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.Mutex
-	idx    atomic.Int64
+	idx    int64
 	values [2]map[string]interface{}
 }
 
@@ -79,13 +79,13 @@ func (r *defaultReader) init() {
 
 // 保存配置
 func (r *defaultReader) store(values map[string]interface{}) {
-	idx := r.idx.Add(1) % int64(len(r.values))
+	idx := atomic.AddInt64(&r.idx, 1) % int64(len(r.values))
 	r.values[idx] = values
 }
 
 // 加载配置
 func (r *defaultReader) load() map[string]interface{} {
-	idx := r.idx.Load() % int64(len(r.values))
+	idx := atomic.LoadInt64(&r.idx) % int64(len(r.values))
 	return r.values[idx]
 }
 

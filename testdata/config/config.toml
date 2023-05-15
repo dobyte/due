@@ -106,6 +106,8 @@ timezone = "Local"
     seqBytesLen = 2
     # 路由字节长度（字节）
     routeBytesLen = 2
+    # 消息字节长度（字节）
+    bufferBytesLen = 5000
 [log]
     # 日志输出文件
     file = "../../testdata/log/due.log"
