@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/etcd
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.20
+	github.com/dobyte/due v0.0.21
 	go.etcd.io/etcd/api/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
 )
