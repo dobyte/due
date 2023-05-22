@@ -148,6 +148,7 @@ func (s *server) serve() {
 		tempDelay = 0
 
 		if err = s.connMgr.allocate(conn); err != nil {
+			log.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
 		}
 	}

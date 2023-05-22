@@ -270,7 +270,6 @@ func (c *serverConn) cleanup() {
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
 
@@ -307,7 +306,7 @@ func (c *serverConn) write() {
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatCheckInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				log.Debugf("connection heartbeat timeout")
+				log.Debugf("connection heartbeat timeout: %d", c.id)
 				_ = c.Close(true)
 				return
 			}

@@ -246,7 +246,6 @@ func (c *serverConn) cleanup() {
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
 

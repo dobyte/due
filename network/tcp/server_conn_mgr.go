@@ -62,5 +62,6 @@ func (cm *serverConnMgr) recycle(conn *serverConn) {
 	defer cm.mu.Unlock()
 
 	delete(cm.conns, conn.conn)
+	conn.conn = nil
 	cm.pool.Put(conn)
 }
