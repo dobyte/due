@@ -3,7 +3,7 @@ module github.com/dobyte/due/transport/rpcx
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.21
+	github.com/dobyte/due v0.0.22
 	github.com/smallnest/rpcx v1.7.11
 )
 
