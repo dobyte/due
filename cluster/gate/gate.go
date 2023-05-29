@@ -10,17 +10,15 @@ package gate
 import (
 	"context"
 	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/transport"
-	"sync"
-	"time"
-
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/registry"
 	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/transport"
+	"time"
 
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/packet"
+	"github.com/dobyte/due/registry"
 )
 
 type Gate struct {
@@ -28,11 +26,10 @@ type Gate struct {
 	opts     *options
 	ctx      context.Context
 	cancel   context.CancelFunc
-	group    *session.Group
-	sessions sync.Pool
 	proxy    *proxy
 	instance *registry.ServiceInstance
 	rpc      transport.Server
+	session  *session.Session
 }
 
 func NewGate(opts ...Option) *Gate {
@@ -43,9 +40,8 @@ func NewGate(opts ...Option) *Gate {
 
 	g := &Gate{}
 	g.opts = o
-	g.group = session.NewGroup()
 	g.proxy = newProxy(g)
-	g.sessions.New = func() interface{} { return session.NewSession() }
+	g.session = session.NewSession()
 	g.ctx, g.cancel = context.WithCancel(o.ctx)
 
 	return g
@@ -123,30 +119,21 @@ func (g *Gate) stopNetworkServer() {
 
 // 处理连接打开
 func (g *Gate) handleConnect(conn network.Conn) {
-	s := g.sessions.Get().(*session.Session)
-	s.Init(conn)
-	g.group.AddSession(s)
+	g.session.AddConn(conn)
 }
 
 // 处理断开连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
-	s, err := g.group.RemSession(session.Conn, conn.ID())
-	if err != nil {
-		log.Errorf("session remove failed, gid: %d, cid: %d, uid: %d, err: %v", g.opts.id, s.CID(), s.UID(), err)
-		return
-	}
+	g.session.RemConn(conn)
 
-	if uid := conn.UID(); uid > 0 {
+	if cid, uid := conn.ID(), conn.UID(); uid > 0 {
 		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-		err = g.proxy.unbindGate(ctx, conn.ID(), uid)
+		err := g.proxy.unbindGate(ctx, cid, uid)
 		cancel()
 		if err != nil {
 			log.Errorf("user unbind failed, gid: %d, uid: %d, err: %v", g.opts.id, uid, err)
 		}
 	}
-
-	s.Reset()
-	g.sessions.Put(s)
 }
 
 // 处理接收到的消息
@@ -157,8 +144,9 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
 		return
 	}
 
+	cid, uid := conn.ID(), conn.UID()
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-	err = g.proxy.deliver(ctx, conn.ID(), conn.UID(), message)
+	err = g.proxy.deliver(ctx, cid, uid, message)
 	cancel()
 	if err != nil {
 		log.Warnf("deliver message failed: %v", err)

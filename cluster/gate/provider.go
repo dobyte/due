@@ -16,19 +16,17 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 		return ErrInvalidArgument
 	}
 
-	s, err := p.gate.group.GetSession(session.Conn, cid)
+	err := p.gate.session.Bind(cid, uid)
 	if err != nil {
 		return err
 	}
 
 	err = p.gate.proxy.bindGate(ctx, cid, uid)
 	if err != nil {
-		return err
+		_, _ = p.gate.session.Unbind(uid)
 	}
 
-	s.Bind(uid)
-
-	return nil
+	return err
 }
 
 // Unbind 解绑用户与网关间的关系
@@ -37,29 +35,22 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return ErrInvalidArgument
 	}
 
-	s, err := p.gate.group.GetSession(session.User, uid)
+	cid, err := p.gate.session.Unbind(uid)
 	if err != nil {
 		return err
 	}
 
-	err = p.gate.proxy.unbindGate(ctx, s.CID(), uid)
+	err = p.gate.proxy.unbindGate(ctx, cid, uid)
 	if err != nil {
 		return err
 	}
-
-	s.Unbind(uid)
 
 	return nil
 }
 
 // GetIP 获取客户端IP地址
 func (p *provider) GetIP(kind session.Kind, target int64) (string, error) {
-	s, err := p.gate.group.GetSession(kind, target)
-	if err != nil {
-		return "", err
-	}
-
-	return s.RemoteIP()
+	return p.gate.session.RemoteIP(kind, target)
 }
 
 // Push 发送消息
@@ -69,19 +60,21 @@ func (p *provider) Push(kind session.Kind, target int64, message *packet.Message
 		return err
 	}
 
-	return p.gate.group.Push(kind, target, msg)
+	return p.gate.session.Push(kind, target, msg)
 }
 
 // Multicast 推送组播消息
 func (p *provider) Multicast(kind session.Kind, targets []int64, message *packet.Message) (int64, error) {
+	if len(targets) == 0 {
+		return 0, nil
+	}
+
 	msg, err := packet.Pack(message)
 	if err != nil {
 		return 0, err
 	}
 
-	total, err := p.gate.group.Multicast(kind, targets, msg)
-
-	return int64(total), err
+	return p.gate.session.Multicast(kind, targets, msg)
 }
 
 // Broadcast 推送广播消息
@@ -91,17 +84,10 @@ func (p *provider) Broadcast(kind session.Kind, message *packet.Message) (int64,
 		return 0, err
 	}
 
-	total, err := p.gate.group.Broadcast(kind, msg)
-
-	return int64(total), err
+	return p.gate.session.Broadcast(kind, msg)
 }
 
 // Disconnect 断开连接
 func (p *provider) Disconnect(kind session.Kind, target int64, isForce bool) error {
-	s, err := p.gate.group.GetSession(kind, target)
-	if err != nil {
-		return err
-	}
-
-	return s.Close(isForce)
+	return p.gate.session.Close(kind, target, isForce)
 }
