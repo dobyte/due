@@ -95,12 +95,12 @@ func (s *Server) Stop() error {
 func (s *Server) RegisterService(desc, service interface{}) error {
 	sd, ok := desc.(*grpc.ServiceDesc)
 	if !ok {
-		return errors.New("invalid service desc")
+		return errors.New("invalid dispatcher desc")
 	}
 
 	for _, ds := range s.disabledServices {
 		if ds == sd.ServiceName {
-			return errors.New(fmt.Sprintf("unable to register %s service name", ds))
+			return errors.New(fmt.Sprintf("unable to register %s dispatcher name", ds))
 		}
 	}
 

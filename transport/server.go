@@ -29,22 +29,18 @@ type GateProvider interface {
 	// Unbind 解绑用户与网关间的关系
 	Unbind(ctx context.Context, uid int64) error
 	// GetIP 获取客户端IP地址
-	GetIP(kind session.Kind, target int64) (ip string, err error)
+	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, err error)
 	// Push 发送消息（异步）
-	Push(kind session.Kind, target int64, message *packet.Message) error
+	Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error
 	// Multicast 推送组播消息（异步）
-	Multicast(kind session.Kind, targets []int64, message *packet.Message) (total int64, err error)
+	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error)
 	// Broadcast 推送广播消息（异步）
-	Broadcast(kind session.Kind, message *packet.Message) (total int64, err error)
+	Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (total int64, err error)
 	// Disconnect 断开连接
-	Disconnect(kind session.Kind, target int64, isForce bool) error
+	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error
 }
 
 type NodeProvider interface {
-	// LocateNode 定位用户所在节点
-	LocateNode(ctx context.Context, uid int64) (nid string, miss bool, err error)
-	// CheckRouteStateful 检测某个路由是否为有状态路由
-	CheckRouteStateful(route int32) (stateful bool, exist bool)
 	// Trigger 触发事件
 	Trigger(ctx context.Context, args *TriggerArgs) (miss bool, err error)
 	// Deliver 投递消息

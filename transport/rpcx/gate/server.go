@@ -79,8 +79,8 @@ func (e *endpoint) Unbind(ctx context.Context, req *protocol.UnbindRequest, repl
 }
 
 // GetIP 获取客户端IP地址
-func (e *endpoint) GetIP(_ context.Context, req *protocol.GetIPRequest, reply *protocol.GetIPReply) error {
-	ip, err := e.provider.GetIP(req.Kind, req.Target)
+func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply *protocol.GetIPReply) error {
+	ip, err := e.provider.GetIP(ctx, req.Kind, req.Target)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -100,8 +100,8 @@ func (e *endpoint) GetIP(_ context.Context, req *protocol.GetIPRequest, reply *p
 }
 
 // Push 推送消息给连接
-func (e *endpoint) Push(_ context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
-	err := e.provider.Push(req.Kind, req.Target, &packet.Message{
+func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
+	err := e.provider.Push(ctx, req.Kind, req.Target, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -121,8 +121,8 @@ func (e *endpoint) Push(_ context.Context, req *protocol.PushRequest, reply *pro
 }
 
 // Multicast 推送组播消息
-func (e *endpoint) Multicast(_ context.Context, req *protocol.MulticastRequest, reply *protocol.MulticastReply) error {
-	total, err := e.provider.Multicast(req.Kind, req.Targets, &packet.Message{
+func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest, reply *protocol.MulticastReply) error {
+	total, err := e.provider.Multicast(ctx, req.Kind, req.Targets, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -142,8 +142,8 @@ func (e *endpoint) Multicast(_ context.Context, req *protocol.MulticastRequest, 
 }
 
 // Broadcast 推送广播消息
-func (e *endpoint) Broadcast(_ context.Context, req *protocol.BroadcastRequest, reply *protocol.BroadcastReply) error {
-	total, err := e.provider.Broadcast(req.Kind, &packet.Message{
+func (e *endpoint) Broadcast(ctx context.Context, req *protocol.BroadcastRequest, reply *protocol.BroadcastReply) error {
+	total, err := e.provider.Broadcast(ctx, req.Kind, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -163,8 +163,8 @@ func (e *endpoint) Broadcast(_ context.Context, req *protocol.BroadcastRequest, 
 }
 
 // Disconnect 断开连接
-func (e *endpoint) Disconnect(_ context.Context, req *protocol.DisconnectRequest, reply *protocol.DisconnectReply) error {
-	err := e.provider.Disconnect(req.Kind, req.Target, req.IsForce)
+func (e *endpoint) Disconnect(ctx context.Context, req *protocol.DisconnectRequest, reply *protocol.DisconnectReply) error {
+	err := e.provider.Disconnect(ctx, req.Kind, req.Target, req.IsForce)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:

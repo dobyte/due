@@ -17,7 +17,6 @@ import (
 	"github.com/dobyte/due/component"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/packet"
 	"github.com/dobyte/due/registry"
 )
 
@@ -120,37 +119,35 @@ func (g *Gate) stopNetworkServer() {
 // 处理连接打开
 func (g *Gate) handleConnect(conn network.Conn) {
 	g.session.AddConn(conn)
+
+	cid, uid := conn.ID(), conn.UID()
+	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
+	g.proxy.trigger(ctx, cluster.Connect, cid, uid)
+	cancel()
 }
 
 // 处理断开连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	g.session.RemConn(conn)
 
-	if cid, uid := conn.ID(), conn.UID(); uid > 0 {
+	if cid, uid := conn.ID(), conn.UID(); uid != 0 {
 		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-		err := g.proxy.unbindGate(ctx, cid, uid)
+		_ = g.proxy.unbindGate(ctx, cid, uid)
+		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
 		cancel()
-		if err != nil {
-			log.Errorf("user unbind failed, gid: %d, uid: %d, err: %v", g.opts.id, uid, err)
-		}
+	} else {
+		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
+		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
+		cancel()
 	}
 }
 
 // 处理接收到的消息
 func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
-	message, err := packet.Unpack(data)
-	if err != nil {
-		log.Errorf("unpack data to struct failed: %v", err)
-		return
-	}
-
 	cid, uid := conn.ID(), conn.UID()
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-	err = g.proxy.deliver(ctx, cid, uid, message)
+	g.proxy.deliver(ctx, cid, uid, data)
 	cancel()
-	if err != nil {
-		log.Warnf("deliver message failed: %v", err)
-	}
 }
 
 // 启动RPC服务器
@@ -191,7 +188,7 @@ func (g *Gate) registerServiceInstance() {
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register service instance failed: %v", err)
+		log.Fatalf("register dispatcher instance failed: %v", err)
 	}
 }
 
@@ -201,7 +198,7 @@ func (g *Gate) deregisterServiceInstance() {
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
 	if err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+		log.Errorf("deregister dispatcher instance failed: %v", err)
 	}
 }
 

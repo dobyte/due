@@ -1,15 +1,14 @@
-package router_test
+package dispatcher_test
 
 import (
 	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/internal/dispatcher"
 	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/internal/router"
 	"github.com/dobyte/due/registry"
 	"testing"
-	"time"
 )
 
-func TestRouter_ReplaceServices(t *testing.T) {
+func TestDispatcher_ReplaceServices(t *testing.T) {
 	var (
 		instance1 = &registry.ServiceInstance{
 			ID:       "xc",
@@ -57,6 +56,7 @@ func TestRouter_ReplaceServices(t *testing.T) {
 			Alias:    "gate-2",
 			State:    cluster.Work,
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8002", false).String(),
+			Events:   []cluster.Event{cluster.Disconnect},
 			Routes: []registry.Route{{
 				ID:       1,
 				Stateful: false,
@@ -67,61 +67,14 @@ func TestRouter_ReplaceServices(t *testing.T) {
 		}
 	)
 
-	r := router.NewRouter(router.RoundRobin)
+	d := dispatcher.NewDispatcher(dispatcher.RoundRobin)
 
-	err := r.AddService(instance1)
+	d.ReplaceServices(instance1, instance2, instance3)
+
+	event, err := d.FindEvent(cluster.Disconnect)
 	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = r.AddService(instance2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = r.AddService(instance3)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ep, err := r.FindServiceEndpoint("xc")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(ep.String())
-	t.Log()
-
-	go func() {
-		time.Sleep(3 * time.Second)
-		r.RemoveServices(instance3)
-	}()
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-timer.C:
-			return
-		case <-ticker.C:
-			for i := 0; i < 6; i++ {
-				route, err := r.FindServiceRoute(2)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				ep, err := route.FindEndpoint()
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				t.Log(ep.String())
-			}
-			t.Log()
-		}
+		t.Errorf("find event failed: %v", err)
+	} else {
+		t.Log(event.FindEndpoint())
 	}
 }

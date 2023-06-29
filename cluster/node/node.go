@@ -169,6 +169,11 @@ func (n *Node) registerServiceInstance() {
 		})
 	}
 
+	events := make([]cluster.Event, 0, len(n.events.events))
+	for event := range n.events.events {
+		events = append(events, event)
+	}
+
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
 		Name:     string(cluster.Node),
@@ -176,6 +181,7 @@ func (n *Node) registerServiceInstance() {
 		Alias:    n.opts.name,
 		State:    n.getState(),
 		Routes:   routes,
+		Events:   events,
 		Endpoint: n.rpc.Endpoint().String(),
 	}
 
@@ -183,7 +189,7 @@ func (n *Node) registerServiceInstance() {
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register service instance failed: %v", err)
+		log.Fatalf("register dispatcher instance failed: %v", err)
 	}
 }
 
@@ -193,7 +199,7 @@ func (n *Node) deregisterServiceInstance() {
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+		log.Errorf("deregister dispatcher instance failed: %v", err)
 	}
 }
 

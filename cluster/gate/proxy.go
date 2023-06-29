@@ -4,10 +4,9 @@ import (
 	"context"
 	"github.com/dobyte/due/cluster"
 	"github.com/dobyte/due/internal/link"
-	"github.com/dobyte/due/internal/router"
+	"github.com/dobyte/due/packet"
 
 	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/packet"
 )
 
 var (
@@ -41,14 +40,7 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	err = p.link.Trigger(ctx, &link.TriggerArgs{
-		Event: cluster.Reconnect,
-		CID:   cid,
-		UID:   uid,
-	})
-	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
-		log.Errorf("trigger event failed, gid: %s, uid: %d, event: %v, err: %v", p.gate.opts.id, uid, cluster.Reconnect, err)
-	}
+	p.trigger(ctx, cluster.Reconnect, cid, uid)
 
 	return nil
 }
@@ -57,28 +49,38 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	err := p.gate.opts.locator.Rem(ctx, uid, cluster.Gate, p.gate.opts.id)
 	if err != nil {
-		return err
+		log.Errorf("user unbind failed, gid: %d, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
 	}
 
-	err = p.link.Trigger(ctx, &link.TriggerArgs{
-		Event: cluster.Disconnect,
+	return err
+}
+
+// 触发事件
+func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
+	if err := p.link.Trigger(ctx, &link.TriggerArgs{
+		Event: event,
 		CID:   cid,
 		UID:   uid,
-	})
-	if err != nil && err != ErrNotFoundUserSource && err != router.ErrNotFoundEndpoint {
-		log.Errorf("trigger event failed, gid: %s, uid: %d, event: %v, err: %v", p.gate.opts.id, uid, cluster.Disconnect, err)
+	}); err != nil {
+		log.Warnf("trigger event failed, gid: %s, cid: %d, uid: %d, event: %v, err: %v", p.gate.opts.id, cid, uid, event, err)
 	}
-
-	return nil
 }
 
 // 投递消息
-func (p *proxy) deliver(ctx context.Context, cid, uid int64, message *packet.Message) error {
-	return p.link.Deliver(ctx, &link.DeliverArgs{
+func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
+	message, err := packet.Unpack(data)
+	if err != nil {
+		log.Errorf("unpack data to struct failed: %v", err)
+		return
+	}
+
+	if err = p.link.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,
 		UID:     uid,
 		Message: message,
-	})
+	}); err != nil {
+		log.Errorf("deliver message failed: %v", err)
+	}
 }
 
 // 启动监听

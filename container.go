@@ -7,10 +7,11 @@ import (
 	"github.com/dobyte/due/eventbus"
 	"github.com/dobyte/due/log"
 	"github.com/dobyte/due/task"
-	"runtime"
-
+	"github.com/dobyte/due/utils/xfile"
 	"os"
 	"os/signal"
+	"runtime"
+	"strconv"
 	"syscall"
 )
 
@@ -41,6 +42,8 @@ func (c *Container) Serve() {
 		comp.Start()
 	}
 
+	c.doSavePID()
+
 	switch runtime.GOOS {
 	case `windows`:
 		signal.Notify(c.sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
@@ -65,4 +68,16 @@ func (c *Container) Serve() {
 	task.Release()
 
 	config.Close()
+}
+
+func (c *Container) doSavePID() {
+	filename := config.Get("config.pid").String()
+	if filename == "" {
+		return
+	}
+
+	err := xfile.WriteFile(filename, []byte(strconv.Itoa(syscall.Getpid())))
+	if err != nil {
+		log.Fatalf("pid save failed: %v", err)
+	}
 }

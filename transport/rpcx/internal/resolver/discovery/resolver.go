@@ -123,7 +123,7 @@ func (r *Resolver) Close() {
 	r.cancel()
 
 	if err := r.watcher.Stop(); err != nil {
-		log.Errorf("service watcher stop failed: %v", err)
+		log.Errorf("dispatcher watcher stop failed: %v", err)
 	}
 }
 

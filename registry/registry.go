@@ -41,6 +41,8 @@ type ServiceInstance struct {
 	Alias string `json:"alias"`
 	// 服务实例状态
 	State cluster.State `json:"state"`
+	// 服务事件集合
+	Events []cluster.Event `json:"events"`
 	// 服务路由ID
 	Routes []Route `json:"routes"`
 	// 服务器实体暴露端口

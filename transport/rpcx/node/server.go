@@ -37,6 +37,7 @@ func (e *endpoint) Trigger(ctx context.Context, req *protocol.TriggerRequest, re
 	miss, err := e.provider.Trigger(ctx, &transport.TriggerArgs{
 		Event: req.Event,
 		GID:   req.GID,
+		CID:   req.CID,
 		UID:   req.UID,
 	})
 	if err != nil {

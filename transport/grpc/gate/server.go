@@ -63,8 +63,8 @@ func (e *endpoint) Unbind(ctx context.Context, req *pb.UnbindRequest) (*pb.Unbin
 }
 
 // GetIP 获取客户端IP地址
-func (e *endpoint) GetIP(_ context.Context, req *pb.GetIPRequest) (*pb.GetIPReply, error) {
-	ip, err := e.provider.GetIP(session.Kind(req.Kind), req.Target)
+func (e *endpoint) GetIP(ctx context.Context, req *pb.GetIPRequest) (*pb.GetIPReply, error) {
+	ip, err := e.provider.GetIP(ctx, session.Kind(req.Kind), req.Target)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -80,8 +80,8 @@ func (e *endpoint) GetIP(_ context.Context, req *pb.GetIPRequest) (*pb.GetIPRepl
 }
 
 // Push 推送消息给连接
-func (e *endpoint) Push(_ context.Context, req *pb.PushRequest) (*pb.PushReply, error) {
-	err := e.provider.Push(session.Kind(req.Kind), req.Target, &packet.Message{
+func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply, error) {
+	err := e.provider.Push(ctx, session.Kind(req.Kind), req.Target, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -101,8 +101,8 @@ func (e *endpoint) Push(_ context.Context, req *pb.PushRequest) (*pb.PushReply, 
 }
 
 // Multicast 推送组播消息
-func (e *endpoint) Multicast(_ context.Context, req *pb.MulticastRequest) (*pb.MulticastReply, error) {
-	total, err := e.provider.Multicast(session.Kind(req.Kind), req.Targets, &packet.Message{
+func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb.MulticastReply, error) {
+	total, err := e.provider.Multicast(ctx, session.Kind(req.Kind), req.Targets, &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -120,8 +120,8 @@ func (e *endpoint) Multicast(_ context.Context, req *pb.MulticastRequest) (*pb.M
 }
 
 // Broadcast 推送广播消息
-func (e *endpoint) Broadcast(_ context.Context, req *pb.BroadcastRequest) (*pb.BroadcastReply, error) {
-	total, err := e.provider.Broadcast(session.Kind(req.Kind), &packet.Message{
+func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb.BroadcastReply, error) {
+	total, err := e.provider.Broadcast(ctx, session.Kind(req.Kind), &packet.Message{
 		Seq:    req.Message.Seq,
 		Route:  req.Message.Route,
 		Buffer: req.Message.Buffer,
@@ -139,8 +139,8 @@ func (e *endpoint) Broadcast(_ context.Context, req *pb.BroadcastRequest) (*pb.B
 }
 
 // Disconnect 断开连接
-func (e *endpoint) Disconnect(_ context.Context, req *pb.DisconnectRequest) (*pb.DisconnectReply, error) {
-	err := e.provider.Disconnect(session.Kind(req.Kind), req.Target, req.IsForce)
+func (e *endpoint) Disconnect(ctx context.Context, req *pb.DisconnectRequest) (*pb.DisconnectReply, error) {
+	err := e.provider.Disconnect(ctx, session.Kind(req.Kind), req.Target, req.IsForce)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:

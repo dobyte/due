@@ -16,7 +16,8 @@ service Node {
 message TriggerRequest {
   int32 Event = 1; // 事件
   string GID = 2; // 网关ID
-  int64 UID = 3; // 用户ID
+  int64 CID = 3; // 连接ID
+  int64 UID = 4; // 用户ID
 }
 
 message TriggerReply {

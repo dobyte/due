@@ -74,6 +74,10 @@ func (s *Session) Bind(cid, uid int64) error {
 		delete(s.users, oldUID)
 	}
 
+	if oldConn, ok := s.users[uid]; ok {
+		oldConn.Unbind()
+	}
+
 	conn.Bind(uid)
 	s.users[uid] = conn
 
