@@ -18,7 +18,7 @@ func NewClient(cli *cli.OneClient) *Client {
 
 // Trigger 触发事件
 func (c *Client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss bool, err error) {
-	req := &protocol.TriggerRequest{Event: args.Event, GID: args.GID, UID: args.UID}
+	req := &protocol.TriggerRequest{Event: args.Event, GID: args.GID, CID: args.CID, UID: args.UID}
 	reply := &protocol.TriggerReply{}
 	err = c.cli.Call(ctx, ServicePath, serviceTriggerMethod, req, reply)
 	miss = reply.Code == code.NotFoundSession

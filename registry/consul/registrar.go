@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	checkIDFormat     = "service:%s"
+	checkIDFormat     = "dispatcher:%s"
 	checkUpdateOutput = "passed"
 	metaFieldKind     = "kind"
 	metaFieldAlias    = "alias"
@@ -60,6 +60,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration := &api.AgentServiceRegistration{
 		ID:      ins.ID,
 		Name:    ins.Name,
+		Tags:    make([]string, 0, len(ins.Events)),
 		Meta:    make(map[string]string, len(ins.Routes)+3),
 		Address: host,
 		Port:    port,
@@ -74,6 +75,10 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration.Meta[metaFieldState] = string(ins.State)
 	for _, route := range ins.Routes {
 		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.FormatBool(route.Stateful)
+	}
+
+	for _, event := range ins.Events {
+		registration.Tags = append(registration.Tags, strconv.Itoa(int(event)))
 	}
 
 	if r.registry.opts.enableHealthCheck {

@@ -174,6 +174,15 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			}
 		}
 
+		for _, v := range entry.Service.Tags {
+			event, err := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+
+			ins.Events = append(ins.Events, cluster.Event(event))
+		}
+
 		services = append(services, ins)
 	}
 

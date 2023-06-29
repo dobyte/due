@@ -112,7 +112,7 @@ func (m *Mesh) startRPCServer() {
 	for _, entity := range m.services {
 		err = m.rpc.RegisterService(entity.desc, entity.provider)
 		if err != nil {
-			log.Fatalf("register service failed: %v", err)
+			log.Fatalf("register dispatcher failed: %v", err)
 		}
 	}
 
@@ -137,7 +137,7 @@ func (m *Mesh) registerServiceInstances() {
 	for _, entity := range m.services {
 		id, err := xuuid.UUID()
 		if err != nil {
-			log.Fatalf("generate service id failed: %v", err)
+			log.Fatalf("generate dispatcher id failed: %v", err)
 		}
 
 		m.instances = append(m.instances, &registry.ServiceInstance{
@@ -161,7 +161,7 @@ func (m *Mesh) registerServiceInstances() {
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Fatalf("register service instance failed: %v", err)
+		log.Fatalf("register dispatcher instance failed: %v", err)
 	}
 }
 
@@ -178,7 +178,7 @@ func (m *Mesh) deregisterServiceInstances() {
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+		log.Errorf("deregister dispatcher instance failed: %v", err)
 	}
 }
 

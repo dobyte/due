@@ -34,6 +34,7 @@ type endpoint struct {
 func (e *endpoint) Trigger(ctx context.Context, req *pb.TriggerRequest) (*pb.TriggerReply, error) {
 	miss, err := e.provider.Trigger(ctx, &transport.TriggerArgs{
 		GID:   req.GID,
+		CID:   req.CID,
 		UID:   req.UID,
 		Event: cluster.Event(req.Event),
 	})

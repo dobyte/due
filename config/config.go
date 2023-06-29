@@ -1,12 +1,13 @@
 package config
 
 import (
-	"flag"
 	"github.com/dobyte/due/env"
+	"github.com/dobyte/due/flag"
 	"github.com/dobyte/due/internal/value"
 )
 
 const (
+	dueConfigArgName  = "config"
 	dueConfigEnvName  = "DUE_CONFIG"
 	defaultConfigPath = "./config"
 )
@@ -14,8 +15,8 @@ const (
 var globalReader Reader
 
 func init() {
-	def := flag.String("config", defaultConfigPath, "Specify the configuration file path")
-	path := env.Get(dueConfigEnvName, *def).String()
+	path := flag.String(dueConfigArgName, defaultConfigPath)
+	path = env.Get(dueConfigEnvName, path).String()
 	SetReader(NewReader(WithSources(NewSource(path))))
 }
 

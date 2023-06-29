@@ -100,6 +100,6 @@ func (r *Resolver) Close() {
 	r.cancel()
 	err := r.watcher.Stop()
 	if err != nil {
-		log.Errorf("service watcher stop failed: %v", err)
+		log.Errorf("dispatcher watcher stop failed: %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 type TriggerRequest struct {
 	Event cluster.Event
 	GID   string
+	CID   int64
 	UID   int64
 }
 

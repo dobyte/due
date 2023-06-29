@@ -23,6 +23,7 @@ func (c *Client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss
 	_, err = c.client.Trigger(ctx, &pb.TriggerRequest{
 		Event: int32(args.Event),
 		GID:   args.GID,
+		CID:   args.CID,
 		UID:   args.UID,
 	})
 

@@ -127,9 +127,19 @@ func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 	return p.link.LocateGate(ctx, uid)
 }
 
+// AskGate 检测用户是否在给定的网关上
+func (p *Proxy) AskGate(ctx context.Context, uid int64, gid string) (string, bool, error) {
+	return p.link.AskGate(ctx, uid, gid)
+}
+
 // LocateNode 定位用户所在节点
 func (p *Proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
 	return p.link.LocateNode(ctx, uid)
+}
+
+// AskNode 检测用户是否在给定的节点上
+func (p *Proxy) AskNode(ctx context.Context, uid int64, nid string) (string, bool, error) {
+	return p.link.AskNode(ctx, uid, nid)
 }
 
 // FetchGateList 拉取网关列表
