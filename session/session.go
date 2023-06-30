@@ -71,6 +71,9 @@ func (s *Session) Bind(cid, uid int64) error {
 	}
 
 	if oldUID := conn.UID(); oldUID != 0 {
+		if uid == oldUID {
+			return nil
+		}
 		delete(s.users, oldUID)
 	}
 

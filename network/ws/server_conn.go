@@ -170,6 +170,7 @@ func (c *serverConn) init(conn *websocket.Conn, cm *connMgr) {
 	c.chWrite = make(chan chWrite, 1024)
 	c.done = make(chan struct{})
 	c.lastHeartbeatTime = xtime.Now().Unix()
+	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
 	if c.connMgr.server.connectHandler != nil {
