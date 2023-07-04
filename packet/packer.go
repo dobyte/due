@@ -77,13 +77,10 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 
 	var (
 		err error
-		buf = p.buffers.Get().(*bytes.Buffer)
+		buf = bytes.NewBuffer(nil)
 	)
 
-	defer func() {
-		buf.Reset()
-		p.buffers.Put(buf)
-	}()
+	buf.Grow(p.opts.seqBytesLen + p.opts.routeBytesLen + len(message.Buffer))
 
 	switch p.opts.seqBytesLen {
 	case 1:
