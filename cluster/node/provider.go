@@ -20,7 +20,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 			return false, ErrInvalidArgument
 		}
 
-		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.id)
+		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
 		if err != nil {
 			return false, err
 		}
@@ -30,7 +30,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		}
 	case cluster.Disconnect:
 		if args.UID > 0 {
-			_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.id)
+			_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
 			if err != nil {
 				return false, err
 			}
@@ -60,7 +60,7 @@ func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bo
 			return false, ErrInvalidArgument
 		}
 
-		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.id)
+		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
 		if err != nil {
 			return false, err
 		}

@@ -62,8 +62,8 @@ func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 }
 
 // LocateNode 定位用户所在节点
-func (p *Proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
-	return p.link.LocateNode(ctx, uid)
+func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	return p.link.LocateNode(ctx, uid, name)
 }
 
 // FetchGateList 拉取网关列表
