@@ -1,8 +1,8 @@
 package session
 
 import (
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/network"
 	"net"
 	"sync"
 )
@@ -181,7 +181,7 @@ func (s *Session) Close(kind Kind, target int64, isForce ...bool) error {
 }
 
 // Send 发送消息（同步）
-func (s *Session) Send(kind Kind, target int64, msg []byte, msgType ...int) error {
+func (s *Session) Send(kind Kind, target int64, msg []byte) error {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -190,11 +190,11 @@ func (s *Session) Send(kind Kind, target int64, msg []byte, msgType ...int) erro
 		return err
 	}
 
-	return conn.Send(msg, msgType...)
+	return conn.Send(msg)
 }
 
 // Push 推送消息（异步）
-func (s *Session) Push(kind Kind, target int64, msg []byte, msgType ...int) error {
+func (s *Session) Push(kind Kind, target int64, msg []byte) error {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -203,11 +203,11 @@ func (s *Session) Push(kind Kind, target int64, msg []byte, msgType ...int) erro
 		return err
 	}
 
-	return conn.Push(msg, msgType...)
+	return conn.Push(msg)
 }
 
 // Multicast 推送组播消息（异步）
-func (s *Session) Multicast(kind Kind, targets []int64, msg []byte, msgType ...int) (n int64, err error) {
+func (s *Session) Multicast(kind Kind, targets []int64, msg []byte) (n int64, err error) {
 	if len(targets) == 0 {
 		return
 	}
@@ -231,7 +231,7 @@ func (s *Session) Multicast(kind Kind, targets []int64, msg []byte, msgType ...i
 		if !ok {
 			continue
 		}
-		if conn.Push(msg, msgType...) == nil {
+		if conn.Push(msg) == nil {
 			n++
 		}
 	}
@@ -240,7 +240,7 @@ func (s *Session) Multicast(kind Kind, targets []int64, msg []byte, msgType ...i
 }
 
 // Broadcast 推送广播消息（异步）
-func (s *Session) Broadcast(kind Kind, msg []byte, msgType ...int) (n int64, err error) {
+func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -256,12 +256,27 @@ func (s *Session) Broadcast(kind Kind, msg []byte, msgType ...int) (n int64, err
 	}
 
 	for _, conn := range conns {
-		if conn.Push(msg, msgType...) == nil {
+		if conn.Push(msg) == nil {
 			n++
 		}
 	}
 
 	return
+}
+
+// Stat 统计会话总数
+func (s *Session) Stat(kind Kind) (int64, error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
+	switch kind {
+	case Conn:
+		return int64(len(s.conns)), nil
+	case User:
+		return int64(len(s.users)), nil
+	default:
+		return 0, ErrInvalidSessionKind
+	}
 }
 
 // 获取会话

@@ -8,16 +8,11 @@
 package zap_test
 
 import (
+	"github.com/dobyte/due/log/zap/v2"
 	"testing"
-
-	"github.com/dobyte/due/log/zap"
 )
 
-var logger *zap.Logger
-
-func init() {
-	logger = zap.NewLogger()
-}
+var logger = zap.NewLogger()
 
 func TestNewLogger(t *testing.T) {
 	logger.Info("info")

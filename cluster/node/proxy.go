@@ -2,11 +2,11 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/link"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/link"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport"
 )
 
 var (
@@ -99,26 +99,24 @@ func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 }
 
 // BindNode 绑定节点
-// 单个用户只能被绑定到某一台节点服务器上，多次绑定会直接覆盖上次绑定
-// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// NID 为需要绑定的节点ID，默认绑定到当前节点上
-func (p *Proxy) BindNode(ctx context.Context, uid int64, nid ...string) error {
-	if len(nid) == 0 || nid[0] == "" {
-		return p.link.BindNode(ctx, uid, p.node.opts.id)
+// 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
+// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
+func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
+	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
+		return p.link.BindNode(ctx, uid, nameAndNID[0], nameAndNID[1])
 	} else {
-		return p.link.BindNode(ctx, uid, nid[0])
+		return p.link.BindNode(ctx, uid, p.node.opts.name, p.node.opts.id)
 	}
 }
 
 // UnbindNode 解绑节点
-// 解绑时会对解绑节点ID进行校验，不匹配则解绑失败
-// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// NID 为需要解绑的节点ID，默认解绑当前节点
-func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nid ...string) error {
-	if len(nid) == 0 || nid[0] == "" {
-		return p.link.UnbindNode(ctx, uid, p.node.opts.id)
+// 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
+// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
+func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
+	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
+		return p.link.UnbindNode(ctx, uid, nameAndNID[0], nameAndNID[1])
 	} else {
-		return p.link.UnbindNode(ctx, uid, nid[0])
+		return p.link.UnbindNode(ctx, uid, p.node.opts.name, p.node.opts.id)
 	}
 }
 
@@ -133,13 +131,13 @@ func (p *Proxy) AskGate(ctx context.Context, uid int64, gid string) (string, boo
 }
 
 // LocateNode 定位用户所在节点
-func (p *Proxy) LocateNode(ctx context.Context, uid int64) (string, error) {
-	return p.link.LocateNode(ctx, uid)
+func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	return p.link.LocateNode(ctx, uid, name)
 }
 
 // AskNode 检测用户是否在给定的节点上
-func (p *Proxy) AskNode(ctx context.Context, uid int64, nid string) (string, bool, error) {
-	return p.link.AskNode(ctx, uid, nid)
+func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
+	return p.link.AskNode(ctx, uid, name, nid)
 }
 
 // FetchGateList 拉取网关列表
@@ -218,6 +216,11 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 	}
 
 	return nil
+}
+
+// Stat 统计会话总数
+func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.link.Stat(ctx, kind)
 }
 
 // Disconnect 断开连接

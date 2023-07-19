@@ -2,12 +2,12 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xcall"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -53,6 +53,10 @@ func (n *Node) Name() string {
 func (n *Node) Init() {
 	if n.opts.id == "" {
 		log.Fatal("instance id can not be empty")
+	}
+
+	if n.opts.name == "" {
+		log.Fatal("instance name can not be empty")
 	}
 
 	if n.opts.codec == nil {

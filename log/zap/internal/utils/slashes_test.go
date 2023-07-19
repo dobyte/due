@@ -8,9 +8,8 @@
 package utils_test
 
 import (
+	"github.com/dobyte/due/log/zap/v2/internal/utils"
 	"testing"
-
-	"github.com/dobyte/due/log/zap/internal/utils"
 )
 
 func TestAddslashes(t *testing.T) {

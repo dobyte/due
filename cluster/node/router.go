@@ -2,8 +2,8 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/log"
 	"sync"
 )
 

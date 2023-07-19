@@ -1,10 +1,7 @@
-module github.com/dobyte/due/log/logrus
+module github.com/dobyte/due/log/logrus/v2
 
-go 1.16
+go 1.20
 
 require (
-	github.com/dobyte/due v0.0.24
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 )
-
-replace github.com/dobyte/due => ./../../

@@ -8,16 +8,11 @@
 package logrus_test
 
 import (
+	"github.com/dobyte/due/log/logrus/v2"
 	"testing"
-
-	"github.com/dobyte/due/log/logrus"
 )
 
-var logger *logrus.Logger
-
-func init() {
-	logger = logrus.NewLogger()
-}
+var logger = logrus.NewLogger()
 
 func TestNewLogger(t *testing.T) {
 	logger.Warn(`log: warn`)

@@ -2,7 +2,7 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/packet"
+	"github.com/dobyte/due/v2/packet"
 )
 
 type Request interface {
@@ -59,8 +59,8 @@ func (r *request) Data() interface{} {
 func (r *request) Parse(v interface{}) (err error) {
 	buffer := r.message.Buffer
 
-	if r.client.opts.decryptor != nil {
-		buffer, err = r.client.opts.decryptor.Decrypt(buffer)
+	if r.client.opts.encryptor != nil {
+		buffer, err = r.client.opts.encryptor.Decrypt(buffer)
 		if err != nil {
 			return
 		}

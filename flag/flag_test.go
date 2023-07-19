@@ -1,7 +1,7 @@
 package flag_test
 
 import (
-	"github.com/dobyte/due/flag"
+	"github.com/dobyte/due/v2/flag"
 	"testing"
 )
 

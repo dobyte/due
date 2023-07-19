@@ -2,11 +2,11 @@ package redis
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/log"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
 	"sort"
@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	userLocationsKey = "%s:locate:user:%d:locations" // hash
-	channelEventKey  = "%s:locate:channel:%v:event"  // channel
+	userGateKey     = "%s:locate:user:%d:gate"     // string
+	userNodeKey     = "%s:locate:user:%d:node"     // hash
+	clusterEventKey = "%s:locate:cluster:%s:event" // channel
 )
 
 var _ locate.Locator = &Locator{}
@@ -56,11 +57,11 @@ func NewLocator(opts ...Option) *Locator {
 	return l
 }
 
-// Get 获取用户定位
-func (l *Locator) Get(ctx context.Context, uid int64, insKind cluster.Kind) (string, error) {
-	key := fmt.Sprintf(userLocationsKey, l.opts.prefix, uid)
-	val, err, _ := l.sfg.Do(key+string(insKind), func() (interface{}, error) {
-		val, err := l.opts.client.HGet(ctx, key, string(insKind)).Result()
+// LocateGate 定位用户所在网关
+func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
+	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
+	val, err, _ := l.sfg.Do(key, func() (interface{}, error) {
+		val, err := l.opts.client.Get(ctx, key).Result()
 		if err != nil && err != redis.Nil {
 			return "", err
 		}
@@ -74,15 +75,33 @@ func (l *Locator) Get(ctx context.Context, uid int64, insKind cluster.Kind) (str
 	return val.(string), nil
 }
 
-// Set 设置用户定位
-func (l *Locator) Set(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error {
-	key := fmt.Sprintf(userLocationsKey, l.opts.prefix, uid)
-	err := l.opts.client.HSet(ctx, key, string(insKind), insID).Err()
+// LocateNode 定位用户所在节点
+func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
+	val, err, _ := l.sfg.Do(key+name, func() (interface{}, error) {
+		val, err := l.opts.client.HGet(ctx, key, name).Result()
+		if err != nil && err != redis.Nil {
+			return "", err
+		}
+
+		return val, nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return val.(string), nil
+}
+
+// BindGate 绑定网关
+func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
+	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
+	err := l.opts.client.Set(ctx, key, gid, redis.KeepTTL).Err()
 	if err != nil {
 		return err
 	}
 
-	err = l.publish(ctx, uid, insKind, insID, locate.SetLocation)
+	err = l.publish(ctx, locate.BindGate, uid, gid)
 	if err != nil {
 		log.Errorf("location event publish failed: %v", err)
 	}
@@ -90,24 +109,40 @@ func (l *Locator) Set(ctx context.Context, uid int64, insKind cluster.Kind, insI
 	return nil
 }
 
-// Rem 移除用户定位
-func (l *Locator) Rem(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error {
-	oldInsID, err := l.Get(ctx, uid, insKind)
+// BindNode 绑定节点
+func (l *Locator) BindNode(ctx context.Context, uid int64, name, nid string) error {
+	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
+	err := l.opts.client.HSet(ctx, key, name, nid).Err()
 	if err != nil {
 		return err
 	}
 
-	if oldInsID == "" || oldInsID != insID {
+	err = l.publish(ctx, locate.BindNode, uid, nid, name)
+	if err != nil {
+		log.Errorf("location event publish failed: %v", err)
+	}
+
+	return nil
+}
+
+// UnbindGate 解绑网关
+func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
+	oldGID, err := l.LocateGate(ctx, uid)
+	if err != nil {
+		return err
+	}
+
+	if oldGID == "" || oldGID != gid {
 		return nil
 	}
 
-	key := fmt.Sprintf(userLocationsKey, l.opts.prefix, uid)
-	err = l.opts.client.HDel(ctx, key, string(insKind)).Err()
+	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
+	err = l.opts.client.Del(ctx, key).Err()
 	if err != nil {
 		return err
 	}
 
-	err = l.publish(ctx, uid, insKind, insID, locate.RemLocation)
+	err = l.publish(ctx, locate.UnbindGate, uid, gid)
 	if err != nil {
 		log.Errorf("location event publish failed: %v", err)
 	}
@@ -115,29 +150,68 @@ func (l *Locator) Rem(ctx context.Context, uid int64, insKind cluster.Kind, insI
 	return nil
 }
 
-func (l *Locator) publish(ctx context.Context, uid int64, insKind cluster.Kind, insID string, eventType locate.EventType) error {
+// UnbindNode 解绑节点
+func (l *Locator) UnbindNode(ctx context.Context, uid int64, name string, nid string) error {
+	oldNID, err := l.LocateNode(ctx, uid, name)
+	if err != nil {
+		return err
+	}
+
+	if oldNID == "" || oldNID != nid {
+		return nil
+	}
+
+	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
+	err = l.opts.client.Del(ctx, key).Err()
+	if err != nil {
+		return err
+	}
+
+	err = l.publish(ctx, locate.UnbindNode, uid, nid, name)
+	if err != nil {
+		log.Errorf("location event publish failed: %v", err)
+	}
+
+	return nil
+}
+
+func (l *Locator) publish(ctx context.Context, typ locate.EventType, uid int64, insID string, insName ...string) error {
+	var (
+		kind cluster.Kind
+		name string
+	)
+	switch typ {
+	case locate.BindGate, locate.UnbindGate:
+		kind = cluster.Gate
+	case locate.BindNode, locate.UnbindNode:
+		kind = cluster.Node
+	}
+
+	if len(insName) > 0 {
+		name = insName[0]
+	}
+
 	msg, err := marshal(&locate.Event{
 		UID:     uid,
-		Type:    eventType,
+		Type:    typ,
 		InsID:   insID,
-		InsKind: insKind,
+		InsKind: kind,
+		InsName: name,
 	})
 	if err != nil {
 		return err
 	}
 
-	channel := fmt.Sprintf(channelEventKey, l.opts.prefix, string(insKind))
-
-	return l.opts.client.Publish(ctx, channel, msg).Err()
+	return l.opts.client.Publish(ctx, fmt.Sprintf(clusterEventKey, l.opts.prefix, kind), msg).Err()
 }
 
-func (l *Locator) toUniqueKey(insKinds ...cluster.Kind) string {
-	sort.Slice(insKinds, func(i, j int) bool {
-		return insKinds[i] < insKinds[j]
+func (l *Locator) toUniqueKey(kinds ...cluster.Kind) string {
+	sort.Slice(kinds, func(i, j int) bool {
+		return kinds[i] < kinds[j]
 	})
 
-	keys := make([]string, 0, len(insKinds))
-	for _, insKind := range insKinds {
+	keys := make([]string, 0, len(kinds))
+	for _, insKind := range kinds {
 		keys = append(keys, string(insKind))
 	}
 
@@ -145,15 +219,15 @@ func (l *Locator) toUniqueKey(insKinds ...cluster.Kind) string {
 }
 
 // Watch 监听用户定位变化
-func (l *Locator) Watch(ctx context.Context, insKinds ...cluster.Kind) (locate.Watcher, error) {
-	key := l.toUniqueKey(insKinds...)
+func (l *Locator) Watch(ctx context.Context, kinds ...cluster.Kind) (locate.Watcher, error) {
+	key := l.toUniqueKey(kinds...)
 
 	v, ok := l.watchers.Load(key)
 	if ok {
 		return v.(*watcherMgr).fork(), nil
 	}
 
-	w, err := newWatcherMgr(ctx, l, key, insKinds...)
+	w, err := newWatcherMgr(ctx, l, key, kinds...)
 	if err != nil {
 		return nil, err
 	}

@@ -1,11 +1,11 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
 	"sync"
 )
 
@@ -105,7 +105,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 		for _, item := range service.Routes {
 			route, ok := routes[item.ID]
 			if !ok {
-				route = newRoute(d, item.ID, item.Stateful)
+				route = newRoute(d, item.ID, service.Name, item.Stateful)
 				routes[item.ID] = route
 			}
 			route.addEndpoint(service.ID, ep)

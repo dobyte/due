@@ -9,18 +9,24 @@ package locate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/v2/cluster"
 )
 
 type Locator interface {
-	// Get 获取用户定位
-	Get(ctx context.Context, uid int64, insKind cluster.Kind) (string, error)
-	// Set 设置用户定位
-	Set(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error
-	// Rem 移除用户定位
-	Rem(ctx context.Context, uid int64, insKind cluster.Kind, insID string) error
 	// Watch 监听用户定位变化
-	Watch(ctx context.Context, insKinds ...cluster.Kind) (Watcher, error)
+	Watch(ctx context.Context, kinds ...cluster.Kind) (Watcher, error)
+	// BindGate 绑定网关
+	BindGate(ctx context.Context, uid int64, gid string) error
+	// BindNode 绑定节点
+	BindNode(ctx context.Context, uid int64, name, nid string) error
+	// UnbindGate 解绑网关
+	UnbindGate(ctx context.Context, uid int64, gid string) error
+	// UnbindNode 解绑节点
+	UnbindNode(ctx context.Context, uid int64, name string, nid string) error
+	// LocateGate 定位用户所在网关
+	LocateGate(ctx context.Context, uid int64) (string, error)
+	// LocateNode 定位用户所在节点
+	LocateNode(ctx context.Context, uid int64, name string) (string, error)
 }
 
 type Watcher interface {
@@ -39,11 +45,15 @@ type Event struct {
 	InsID string `json:"ins_id"`
 	// 实例类型
 	InsKind cluster.Kind `json:"ins_kind"`
+	// 实例名称
+	InsName string `json:"ins_name"`
 }
 
 type EventType int
 
 const (
-	SetLocation EventType = iota // 设置定位
-	RemLocation                  // 移除定位
+	BindGate   EventType = iota + 1 // 绑定网关
+	BindNode                        // 绑定节点
+	UnbindGate                      // 解绑网关
+	UnbindNode                      // 解绑节点
 )

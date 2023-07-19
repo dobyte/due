@@ -1,7 +1,7 @@
 package xrand_test
 
 import (
-	"github.com/dobyte/due/utils/xrand"
+	"github.com/dobyte/due/v2/utils/xrand"
 	"testing"
 )
 

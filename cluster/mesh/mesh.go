@@ -2,12 +2,12 @@ package mesh
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"golang.org/x/sync/errgroup"
 	"time"
 )

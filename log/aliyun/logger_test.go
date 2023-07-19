@@ -8,16 +8,11 @@
 package aliyun_test
 
 import (
+	"github.com/dobyte/due/log/aliyun/v2"
 	"testing"
-
-	"github.com/dobyte/due/log/aliyun"
 )
 
-var logger *aliyun.Logger
-
-func init() {
-	logger = aliyun.NewLogger()
-}
+var logger = aliyun.NewLogger()
 
 func TestNewLogger(t *testing.T) {
 	defer logger.Close()

@@ -2,11 +2,11 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/packet"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"sync"
 )
 
@@ -125,7 +125,7 @@ func (c *Client) handleDisconnect(_ network.Conn) {
 }
 
 // 处理接收到的消息
-func (c *Client) handleReceive(_ network.Conn, data []byte, _ int) {
+func (c *Client) handleReceive(_ network.Conn, data []byte) {
 	message, err := packet.Unpack(data)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)

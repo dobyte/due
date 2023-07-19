@@ -1,7 +1,8 @@
 package protocol
 
 import (
-	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/packet"
 )
 
 type TriggerRequest struct {
@@ -20,7 +21,7 @@ type DeliverRequest struct {
 	NID     string
 	CID     int64
 	UID     int64
-	Message *Message
+	Message *packet.Message
 }
 
 type DeliverReply struct {

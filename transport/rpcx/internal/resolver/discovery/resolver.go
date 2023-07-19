@@ -2,9 +2,9 @@ package discovery
 
 import (
 	"context"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
 	"sync"
 	"time"

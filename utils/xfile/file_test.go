@@ -1,7 +1,7 @@
 package xfile_test
 
 import (
-	"github.com/dobyte/due/utils/xfile"
+	"github.com/dobyte/due/v2/utils/xfile"
 	"testing"
 )
 

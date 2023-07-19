@@ -9,13 +9,11 @@ package encoder
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
-
+	"github.com/dobyte/due/log/zap/v2/internal/utils"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/dobyte/due/log/zap/internal/utils"
+	"path/filepath"
+	"strings"
 )
 
 const (

@@ -73,5 +73,5 @@ func Panic(a ...interface{}) {
 
 // Panicf 打印Panic模板日志
 func Panicf(format string, a ...interface{}) {
-	GetLogger().Panicf(format, a...)
+	globalLogger.Panicf(format, a...)
 }

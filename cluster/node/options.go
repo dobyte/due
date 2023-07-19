@@ -2,13 +2,13 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"time"
 )
 
@@ -19,19 +19,17 @@ const (
 )
 
 const (
-	defaultIDKey        = "config.cluster.node.id"
-	defaultNameKey      = "config.cluster.node.name"
-	defaultCodecKey     = "config.cluster.node.codec"
-	defaultTimeoutKey   = "config.cluster.node.timeout"
-	defaultEncryptorKey = "config.cluster.node.encryptor"
-	defaultDecryptorKey = "config.cluster.node.decryptor"
+	defaultIDKey      = "config.cluster.node.id"
+	defaultNameKey    = "config.cluster.node.name"
+	defaultCodecKey   = "config.cluster.node.codec"
+	defaultTimeoutKey = "config.cluster.node.timeout"
 )
 
 type Option func(o *options)
 
 type options struct {
 	id          string                // 实例ID
-	name        string                // 实例名称
+	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
 	ctx         context.Context       // 上下文
 	codec       encoding.Codec        // 编解码器
 	timeout     time.Duration         // RPC调用超时时间
@@ -39,7 +37,6 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
 	encryptor   crypto.Encryptor      // 消息加密器
-	decryptor   crypto.Decryptor      // 消息解密器
 }
 
 func defaultOptions() *options {
@@ -66,14 +63,6 @@ func defaultOptions() *options {
 
 	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	if encryptor := config.Get(defaultEncryptorKey).String(); encryptor != "" {
-		opts.encryptor = crypto.InvokeEncryptor(encryptor)
-	}
-
-	if decryptor := config.Get(defaultDecryptorKey).String(); decryptor != "" {
-		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts
@@ -122,9 +111,4 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
-}
-
-// WithDecryptor 设置消息解密器
-func WithDecryptor(decryptor crypto.Decryptor) Option {
-	return func(o *options) { o.decryptor = decryptor }
 }

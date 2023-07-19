@@ -2,13 +2,12 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster/gate"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/internal/code"
-	"github.com/dobyte/due/transport/rpcx/internal/protocol"
-	"github.com/dobyte/due/transport/rpcx/internal/server"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
+	"github.com/dobyte/due/v2/cluster/gate"
+	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport"
 )
 
 const (
@@ -19,6 +18,7 @@ const (
 	serviceMethodPush       = "Push"
 	serviceMethodMulticast  = "Multicast"
 	serviceMethodBroadcast  = "Broadcast"
+	serviceMethodStat       = "Stat"
 	serviceMethodDisconnect = "Disconnect"
 )
 
@@ -101,11 +101,7 @@ func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply 
 
 // Push 推送消息给连接
 func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
-	err := e.provider.Push(ctx, req.Kind, req.Target, &packet.Message{
-		Seq:    req.Message.Seq,
-		Route:  req.Message.Route,
-		Buffer: req.Message.Buffer,
-	})
+	err := e.provider.Push(ctx, req.Kind, req.Target, req.Message)
 	if err != nil {
 		switch err {
 		case session.ErrNotFoundSession:
@@ -122,11 +118,7 @@ func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *p
 
 // Multicast 推送组播消息
 func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest, reply *protocol.MulticastReply) error {
-	total, err := e.provider.Multicast(ctx, req.Kind, req.Targets, &packet.Message{
-		Seq:    req.Message.Seq,
-		Route:  req.Message.Route,
-		Buffer: req.Message.Buffer,
-	})
+	total, err := e.provider.Multicast(ctx, req.Kind, req.Targets, req.Message)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:
@@ -143,11 +135,24 @@ func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest
 
 // Broadcast 推送广播消息
 func (e *endpoint) Broadcast(ctx context.Context, req *protocol.BroadcastRequest, reply *protocol.BroadcastReply) error {
-	total, err := e.provider.Broadcast(ctx, req.Kind, &packet.Message{
-		Seq:    req.Message.Seq,
-		Route:  req.Message.Route,
-		Buffer: req.Message.Buffer,
-	})
+	total, err := e.provider.Broadcast(ctx, req.Kind, req.Message)
+	if err != nil {
+		switch err {
+		case session.ErrInvalidSessionKind:
+			reply.Code = code.InvalidArgument
+		default:
+			reply.Code = code.Internal
+		}
+	}
+
+	reply.Total = total
+
+	return err
+}
+
+// Stat 统计会话总数
+func (e *endpoint) Stat(ctx context.Context, req *protocol.StatRequest, reply *protocol.StatReply) error {
+	total, err := e.provider.Stat(ctx, req.Kind)
 	if err != nil {
 		switch err {
 		case session.ErrInvalidSessionKind:

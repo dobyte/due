@@ -2,11 +2,11 @@ package config
 
 import (
 	"context"
-	"encoding/json"
-	"encoding/xml"
-	"github.com/BurntSushi/toml"
-	"github.com/dobyte/due/errors"
-	"gopkg.in/yaml.v3"
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/encoding/toml"
+	"github.com/dobyte/due/v2/encoding/xml"
+	"github.com/dobyte/due/v2/encoding/yaml"
+	"github.com/dobyte/due/v2/errors"
 	"strings"
 )
 

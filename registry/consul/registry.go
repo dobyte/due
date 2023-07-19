@@ -2,16 +2,14 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/hashicorp/consul/api"
 	"net"
 	"net/url"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/hashicorp/consul/api"
-
-	"github.com/dobyte/due/registry"
 )
 
 var _ registry.Registry = &Registry{}

@@ -2,7 +2,7 @@ package xconv_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"testing"
 )
 

@@ -1,9 +1,9 @@
 package client
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/packet"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/packet"
 )
 
 var (
@@ -12,8 +12,8 @@ var (
 )
 
 type Proxy interface {
-	// GetID 获取当前节点ID
-	GetID() string
+	// GetClientID 获取客户端ID
+	GetClientID() string
 	// AddRouteHandler 添加路由处理器
 	AddRouteHandler(route int32, handler RouteHandler)
 	// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
@@ -42,8 +42,8 @@ func newProxy(client *Client) *proxy {
 	return &proxy{client: client}
 }
 
-// GetID 获取当前节点ID
-func (p *proxy) GetID() string {
+// GetClientID 获取客户端ID
+func (p *proxy) GetClientID() string {
 	return p.client.opts.id
 }
 

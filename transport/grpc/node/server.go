@@ -2,11 +2,12 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/grpc/internal/code"
-	"github.com/dobyte/due/transport/grpc/internal/pb"
-	"github.com/dobyte/due/transport/grpc/internal/server"
+	"github.com/dobyte/due/transport/grpc/v2/internal/code"
+	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
+	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/transport"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -56,7 +57,7 @@ func (e *endpoint) Deliver(ctx context.Context, req *pb.DeliverRequest) (*pb.Del
 		NID: req.NID,
 		CID: req.CID,
 		UID: req.UID,
-		Message: &transport.Message{
+		Message: &packet.Message{
 			Seq:    req.Message.Seq,
 			Route:  req.Message.Route,
 			Buffer: req.Message.Buffer,

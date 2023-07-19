@@ -9,12 +9,11 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/client/v3"
 	"sync"
-
-	"github.com/dobyte/due/registry"
 )
 
 var _ registry.Registry = &Registry{}

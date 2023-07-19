@@ -3,8 +3,8 @@ package server
 import (
 	"errors"
 	"fmt"
-	"github.com/dobyte/due/internal/endpoint"
-	xnet "github.com/dobyte/due/internal/net"
+	"github.com/dobyte/due/v2/core/endpoint"
+	xnet "github.com/dobyte/due/v2/core/net"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"net"

@@ -8,7 +8,7 @@
 package network
 
 import (
-	"errors"
+	"github.com/dobyte/due/v2/errors"
 	"net"
 )
 
@@ -21,7 +21,6 @@ const (
 var (
 	ErrConnectionHanged  = errors.New("connection is hanged")
 	ErrConnectionClosed  = errors.New("connection is closed")
-	ErrIllegalMsgType    = errors.New("illegal message type")
 	ErrTooManyConnection = errors.New("too many connection")
 )
 
@@ -38,9 +37,9 @@ type (
 		// Unbind 解绑用户ID
 		Unbind()
 		// Send 发送消息（同步）
-		Send(msg []byte, msgType ...int) error
+		Send(msg []byte) error
 		// Push 发送消息（异步）
-		Push(msg []byte, msgType ...int) error
+		Push(msg []byte) error
 		// State 获取连接状态
 		State() ConnState
 		// Close 关闭连接

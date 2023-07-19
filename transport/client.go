@@ -2,7 +2,8 @@ package transport
 
 import (
 	"context"
-	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
 )
 
 type NodeClient interface {
@@ -19,14 +20,16 @@ type GateClient interface {
 	Unbind(ctx context.Context, uid int64) (miss bool, err error)
 	// GetIP 获取客户端IP
 	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error)
+	// Push 推送消息
+	Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) (miss bool, err error)
+	// Multicast 推送组播消息
+	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error)
+	// Broadcast 推送广播消息
+	Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (total int64, err error)
+	// Stat 统计会话总数
+	Stat(ctx context.Context, kind session.Kind) (total int64, err error)
 	// Disconnect 断开连接
 	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error)
-	// Push 推送消息
-	Push(ctx context.Context, kind session.Kind, target int64, message *Message) (miss bool, err error)
-	// Multicast 推送组播消息
-	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *Message) (total int64, err error)
-	// Broadcast 推送广播消息
-	Broadcast(ctx context.Context, kind session.Kind, message *Message) (total int64, err error)
 }
 
 type ServiceClient interface {
@@ -34,12 +37,6 @@ type ServiceClient interface {
 	Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error
 	// Client 获取内部客户端
 	Client() interface{}
-}
-
-type Message struct {
-	Seq    int32  // 序列号
-	Route  int32  // 路由
-	Buffer []byte // 消息内容
 }
 
 type NewServiceClientFunc func(target string) (ServiceClient, error)

@@ -2,8 +2,8 @@ package config
 
 import (
 	"context"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/value"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/value"
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
 	"log"

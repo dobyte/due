@@ -8,14 +8,12 @@
 package ws_test
 
 import (
+	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"net/http"
 	"testing"
-	"time"
-
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network/ws"
-
-	"github.com/dobyte/due/network"
 )
 
 func TestServer(t *testing.T) {
@@ -29,10 +27,22 @@ func TestServer(t *testing.T) {
 	server.OnDisconnect(func(conn network.Conn) {
 		log.Infof("connection is closed, connection id: %d", conn.ID())
 	})
-	server.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-		log.Infof("receive msg from client, connection id: %d, msg: %s", conn.ID(), string(msg))
+	server.OnReceive(func(conn network.Conn, msg []byte) {
+		message, err := packet.Unpack(msg)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
-		if err := conn.Push([]byte("I'm fine~~")); err != nil {
+		t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+
+		msg, err = packet.Pack(&packet.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: []byte("I'm fine~~"),
+		})
+
+		if err = conn.Push(msg); err != nil {
 			log.Errorf("push message failed: %v", err)
 		}
 	})
@@ -44,5 +54,5 @@ func TestServer(t *testing.T) {
 		log.Fatalf("start server failed: %v", err)
 	}
 
-	time.Sleep(30 * time.Second)
+	select {}
 }

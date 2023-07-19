@@ -2,12 +2,12 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/grpc/internal/code"
-	"github.com/dobyte/due/transport/grpc/internal/pb"
-	"github.com/dobyte/due/transport/grpc/internal/server"
+	"github.com/dobyte/due/transport/grpc/v2/internal/code"
+	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
+	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -18,7 +18,7 @@ func NewServer(provider transport.GateProvider, opts *server.Options) (*server.S
 		return nil, err
 	}
 
-	s.RegisterService(&pb.Gate_ServiceDesc, &endpoint{provider: provider})
+	_ = s.RegisterService(&pb.Gate_ServiceDesc, &endpoint{provider: provider})
 
 	return s, nil
 }
@@ -136,6 +136,21 @@ func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb
 	}
 
 	return &pb.BroadcastReply{Total: total}, nil
+}
+
+// Stat 统计会话总数
+func (e *endpoint) Stat(ctx context.Context, req *pb.StatRequest) (*pb.StatReply, error) {
+	total, err := e.provider.Stat(ctx, session.Kind(req.Kind))
+	if err != nil {
+		switch err {
+		case session.ErrInvalidSessionKind:
+			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
+		default:
+			return nil, status.New(codes.Internal, err.Error()).Err()
+		}
+	}
+
+	return &pb.StatReply{Total: total}, nil
 }
 
 // Disconnect 断开连接

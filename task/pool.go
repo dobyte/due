@@ -1,7 +1,7 @@
 package task
 
 import (
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/log"
 	"github.com/panjf2000/ants/v2"
 )
 

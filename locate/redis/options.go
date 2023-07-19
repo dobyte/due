@@ -2,7 +2,7 @@ package redis
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/v2/config"
 	"github.com/go-redis/redis/v8"
 )
 

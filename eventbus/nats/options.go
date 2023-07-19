@@ -1,7 +1,7 @@
 package nats
 
 import (
-	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/v2/config"
 	"github.com/nats-io/nats.go"
 	"time"
 )

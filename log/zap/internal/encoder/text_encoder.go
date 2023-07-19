@@ -9,12 +9,11 @@ package encoder
 
 import (
 	"fmt"
+	"go.uber.org/zap/buffer"
+	"go.uber.org/zap/zapcore"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"go.uber.org/zap/buffer"
-	"go.uber.org/zap/zapcore"
 )
 
 type TextEncoder struct {

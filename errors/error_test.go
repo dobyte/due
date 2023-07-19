@@ -2,8 +2,8 @@ package errors_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/code"
-	"github.com/dobyte/due/errors"
+	"github.com/dobyte/due/v2/code"
+	"github.com/dobyte/due/v2/errors"
 	"testing"
 )
 

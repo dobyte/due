@@ -1,12 +1,9 @@
-module github.com/dobyte/due/transport/grpc
+module github.com/dobyte/due/transport/grpc/v2
 
-go 1.16
+go 1.20
 
 require (
-	github.com/dobyte/due v0.0.24
 	github.com/golang/protobuf v1.5.2
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1 // indirect
 )
-
-replace github.com/dobyte/due => ./../../

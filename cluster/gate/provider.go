@@ -2,9 +2,8 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
 )
 
 type provider struct {
@@ -41,12 +40,7 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return err
 	}
 
-	err = p.gate.proxy.unbindGate(ctx, cid, uid)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.gate.proxy.unbindGate(ctx, cid, uid)
 }
 
 // GetIP 获取客户端IP地址
@@ -63,7 +57,7 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, me
 
 	err = p.gate.session.Push(kind, target, msg)
 	if kind == session.User && err == session.ErrNotFoundSession {
-		err = p.gate.opts.locator.Rem(ctx, target, cluster.Gate, p.gate.opts.id)
+		err = p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id)
 		if err != nil {
 			return err
 		}
@@ -94,6 +88,11 @@ func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message *pa
 	}
 
 	return p.gate.session.Broadcast(kind, msg)
+}
+
+// Stat 统计会话总数
+func (p *provider) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.gate.session.Stat(kind)
 }
 
 // Disconnect 断开连接

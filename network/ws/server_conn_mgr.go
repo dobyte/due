@@ -8,10 +8,9 @@
 package ws
 
 import (
-	"github.com/dobyte/due/network"
-	"sync"
-
+	"github.com/dobyte/due/v2/network"
 	"github.com/gorilla/websocket"
+	"sync"
 )
 
 type connMgr struct {

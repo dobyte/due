@@ -2,10 +2,10 @@ package transport
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/session"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
 )
 
 type Server interface {
@@ -36,6 +36,8 @@ type GateProvider interface {
 	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error)
 	// Broadcast 推送广播消息（异步）
 	Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (total int64, err error)
+	// Stat 统计会话总数
+	Stat(ctx context.Context, kind session.Kind) (total int64, err error)
 	// Disconnect 断开连接
 	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error
 }
@@ -52,7 +54,7 @@ type DeliverArgs struct {
 	NID     string
 	CID     int64
 	UID     int64
-	Message *Message
+	Message *packet.Message
 }
 
 type TriggerArgs struct {

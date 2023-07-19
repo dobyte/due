@@ -1,7 +1,7 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/v2/cluster"
 )
 
 type Event struct {

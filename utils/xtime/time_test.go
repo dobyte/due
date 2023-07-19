@@ -1,7 +1,7 @@
 package xtime_test
 
 import (
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"testing"
 )
 

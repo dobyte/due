@@ -1,7 +1,3 @@
-module github.com/dobyte/due/network/tcp
+module github.com/dobyte/due/network/tcp/v2
 
-go 1.16
-
-require github.com/dobyte/due v0.0.24
-
-replace github.com/dobyte/due => ../../
+go 1.20

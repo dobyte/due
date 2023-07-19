@@ -8,11 +8,10 @@
 package zap
 
 import (
-	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/log"
 	"strings"
 	"time"
-
-	"github.com/dobyte/due/log"
 )
 
 const (

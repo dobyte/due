@@ -8,11 +8,10 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
 	"net"
 	"time"
-
-	"github.com/dobyte/due/network"
 )
 
 type server struct {
@@ -126,7 +125,7 @@ func (s *server) serve() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Temporary() {
+			if e, ok := err.(net.Error); ok && e.Timeout() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
 				} else {

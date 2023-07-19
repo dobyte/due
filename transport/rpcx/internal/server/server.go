@@ -3,9 +3,9 @@ package server
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/endpoint"
-	xnet "github.com/dobyte/due/internal/net"
+	"github.com/dobyte/due/v2/core/endpoint"
+	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/smallnest/rpcx/server"
 )
 

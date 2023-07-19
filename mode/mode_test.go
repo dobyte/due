@@ -4,7 +4,7 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/dobyte/due/mode"
+	"github.com/dobyte/due/v2/mode"
 )
 
 func TestGetMode(t *testing.T) {

@@ -1,8 +1,8 @@
 package transport
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/registry"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/registry"
 )
 
 type Transporter interface {

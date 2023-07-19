@@ -1,7 +1,7 @@
 package log_test
 
 import (
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/log"
 	"testing"
 )
 

@@ -2,18 +2,18 @@ package link
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/dispatcher"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/dispatcher"
+	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport"
 	"golang.org/x/sync/errgroup"
 	"sync"
 	"sync/atomic"
@@ -32,10 +32,11 @@ var (
 
 type Link struct {
 	opts           *Options
-	gateDispatcher *dispatcher.Dispatcher // 网关分发器
-	nodeDispatcher *dispatcher.Dispatcher // 节点分发器
-	gateSource     sync.Map               // 用户来源网关
-	nodeSource     sync.Map               // 用户来源节点
+	gateDispatcher *dispatcher.Dispatcher      // 网关分发器
+	nodeDispatcher *dispatcher.Dispatcher      // 节点分发器
+	gateSource     sync.Map                    // 用户来源网关
+	rw             sync.RWMutex                // 锁
+	nodeSources    map[int64]map[string]string // 用户来源节点
 }
 
 type Options struct {
@@ -90,33 +91,85 @@ func (l *Link) UnbindGate(ctx context.Context, uid int64) error {
 }
 
 // BindNode 绑定节点
-// 单个用户只能被绑定到某一台节点服务器上，多次绑定会直接覆盖上次绑定
-// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// nid 为需要绑定的节点ID
-func (l *Link) BindNode(ctx context.Context, uid int64, nid string) error {
-	err := l.opts.Locator.Set(ctx, uid, cluster.Node, nid)
+// 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
+// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
+func (l *Link) BindNode(ctx context.Context, uid int64, name, nid string) error {
+	err := l.opts.Locator.BindNode(ctx, uid, name, nid)
 	if err != nil {
 		return err
 	}
 
-	l.nodeSource.Store(uid, nid)
+	l.saveNodeSource(uid, name, nid)
 
 	return nil
 }
 
 // UnbindNode 解绑节点
-// 解绑时会对解绑节点ID进行校验，不匹配则解绑失败
-// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上
-// nid 为需要解绑的节点ID
-func (l *Link) UnbindNode(ctx context.Context, uid int64, nid string) error {
-	err := l.opts.Locator.Rem(ctx, uid, cluster.Node, nid)
+// 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
+// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
+func (l *Link) UnbindNode(ctx context.Context, uid int64, name, nid string) error {
+	err := l.opts.Locator.UnbindNode(ctx, uid, name, nid)
 	if err != nil {
 		return err
 	}
 
-	l.nodeSource.Delete(uid)
+	l.deleteNodeSource(uid, name, nid)
 
 	return nil
+}
+
+// 保存用户节点来源
+func (l *Link) saveNodeSource(uid int64, name, nid string) {
+	l.rw.Lock()
+	defer l.rw.Unlock()
+
+	sources, ok := l.nodeSources[uid]
+	if !ok {
+		sources = make(map[string]string)
+		l.nodeSources[uid] = sources
+	}
+	sources[name] = nid
+}
+
+// 删除用户节点来源
+func (l *Link) deleteNodeSource(uid int64, name, nid string) {
+	l.rw.Lock()
+	defer l.rw.Unlock()
+
+	sources, ok := l.nodeSources[uid]
+	if !ok {
+		return
+	}
+
+	oldNID, ok := sources[name]
+	if !ok {
+		return
+	}
+
+	// ignore mismatched NID
+	if oldNID != nid {
+		return
+	}
+
+	if len(sources) == 1 {
+		delete(l.nodeSources, uid)
+	} else {
+		delete(sources, name)
+	}
+}
+
+// 加载用户节点来源
+func (l *Link) loadNodeSource(uid int64, name string) (string, bool) {
+	l.rw.RLock()
+	defer l.rw.RUnlock()
+
+	if source, ok := l.nodeSources[uid]; ok {
+		if nid, ok := source[name]; ok {
+			return nid, true
+		}
+	}
+
+	return "", false
 }
 
 // LocateGate 定位用户所在网关
@@ -127,7 +180,7 @@ func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
 		}
 	}
 
-	gid, err := l.opts.Locator.Get(ctx, uid, cluster.Gate)
+	gid, err := l.opts.Locator.LocateGate(ctx, uid)
 	if err != nil {
 		return "", err
 	}
@@ -146,19 +199,15 @@ func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
 // AskGate 检测用户是否在给定的网关上
 func (l *Link) AskGate(ctx context.Context, uid int64, gid string) (string, bool, error) {
 	if val, ok := l.gateSource.Load(uid); ok {
-		if val.(string) == gid {
-			return gid, true, nil
-		}
+		return val.(string), val.(string) == gid, nil
 	}
 
-	insID, err := l.opts.Locator.Get(ctx, uid, cluster.Gate)
+	insID, err := l.opts.Locator.LocateGate(ctx, uid)
 	if err != nil {
 		return "", false, err
 	}
 
 	if insID == "" {
-		l.gateSource.Delete(uid)
-
 		return "", false, ErrNotFoundUserSource
 	}
 
@@ -168,49 +217,42 @@ func (l *Link) AskGate(ctx context.Context, uid int64, gid string) (string, bool
 }
 
 // LocateNode 定位用户所在节点
-func (l *Link) LocateNode(ctx context.Context, uid int64) (string, error) {
-	if val, ok := l.nodeSource.Load(uid); ok {
-		if nid := val.(string); nid != "" {
-			return nid, nil
-		}
+func (l *Link) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	nid, ok := l.loadNodeSource(uid, name)
+	if ok {
+		return nid, nil
 	}
 
-	nid, err := l.opts.Locator.Get(ctx, uid, cluster.Node)
+	nid, err := l.opts.Locator.LocateNode(ctx, uid, name)
 	if err != nil {
 		return "", err
 	}
 
 	if nid == "" {
-		l.nodeSource.Delete(uid)
-
 		return "", ErrNotFoundUserSource
 	}
 
-	l.nodeSource.Store(uid, nid)
+	l.saveNodeSource(uid, name, nid)
 
 	return nid, nil
 }
 
 // AskNode 检测用户是否在给定的节点上
-func (l *Link) AskNode(ctx context.Context, uid int64, nid string) (string, bool, error) {
-	if val, ok := l.nodeSource.Load(uid); ok {
-		if val.(string) == nid {
-			return nid, true, nil
-		}
+func (l *Link) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
+	if insID, ok := l.loadNodeSource(uid, name); ok {
+		return insID, insID == nid, nil
 	}
 
-	insID, err := l.opts.Locator.Get(ctx, uid, cluster.Node)
+	insID, err := l.opts.Locator.LocateNode(ctx, uid, name)
 	if err != nil {
 		return "", false, err
 	}
 
 	if insID == "" {
-		l.nodeSource.Delete(uid)
-
 		return "", false, ErrNotFoundUserSource
 	}
 
-	l.nodeSource.Store(uid, insID)
+	l.saveNodeSource(uid, name, insID)
 
 	return insID, insID == nid, nil
 }
@@ -309,7 +351,7 @@ func (l *Link) directPush(ctx context.Context, args *PushArgs) error {
 		return err
 	}
 
-	_, err = client.Push(ctx, args.Kind, args.Target, &transport.Message{
+	_, err = client.Push(ctx, args.Kind, args.Target, &packet.Message{
 		Seq:    args.Message.Seq,
 		Route:  args.Message.Route,
 		Buffer: buffer,
@@ -325,7 +367,7 @@ func (l *Link) indirectPush(ctx context.Context, args *PushArgs) error {
 	}
 
 	_, err = l.doGateRPC(ctx, args.Target, func(client transport.GateClient) (bool, interface{}, error) {
-		miss, err := client.Push(ctx, session.User, args.Target, &transport.Message{
+		miss, err := client.Push(ctx, session.User, args.Target, &packet.Message{
 			Seq:    args.Message.Seq,
 			Route:  args.Message.Route,
 			Buffer: buffer,
@@ -368,7 +410,7 @@ func (l *Link) directMulticast(ctx context.Context, args *MulticastArgs) (int64,
 		return 0, err
 	}
 
-	return client.Multicast(ctx, args.Kind, args.Targets, &transport.Message{
+	return client.Multicast(ctx, args.Kind, args.Targets, &packet.Message{
 		Seq:    args.Message.Seq,
 		Route:  args.Message.Route,
 		Buffer: buffer,
@@ -382,17 +424,19 @@ func (l *Link) indirectMulticast(ctx context.Context, args *MulticastArgs) (int6
 		return 0, err
 	}
 
+	message := &packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	}
+
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
 				_, err := l.doGateRPC(ctx, target, func(client transport.GateClient) (bool, interface{}, error) {
-					miss, err := client.Push(ctx, session.User, target, &transport.Message{
-						Seq:    args.Message.Seq,
-						Route:  args.Message.Route,
-						Buffer: buffer,
-					})
+					miss, err := client.Push(ctx, session.User, target, message)
 					return miss, nil, err
 				})
 				if err != nil {
@@ -421,6 +465,12 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 		return 0, err
 	}
 
+	message := &packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	}
+
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
 	l.gateDispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
@@ -430,11 +480,7 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 				return err
 			}
 
-			n, err := client.Broadcast(ctx, args.Kind, &transport.Message{
-				Seq:    args.Message.Seq,
-				Route:  args.Message.Route,
-				Buffer: buffer,
-			})
+			n, err := client.Broadcast(ctx, args.Kind, message)
 			if err != nil {
 				return err
 			}
@@ -448,6 +494,39 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 	})
 
 	err = eg.Wait()
+
+	if total > 0 {
+		return total, nil
+	}
+
+	return total, err
+}
+
+// Stat 统计会话总数
+func (l *Link) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	total := int64(0)
+	eg, ctx := errgroup.WithContext(ctx)
+	l.gateDispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			client, err := l.opts.Transporter.NewGateClient(ep)
+			if err != nil {
+				return err
+			}
+
+			n, err := client.Stat(ctx, kind)
+			if err != nil {
+				return err
+			}
+
+			atomic.AddInt64(&total, n)
+
+			return nil
+		})
+
+		return true
+	})
+
+	err := eg.Wait()
 
 	if total > 0 {
 		return total, nil
@@ -504,7 +583,7 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 
 	switch msg := args.Message.(type) {
 	case *packet.Message:
-		arguments.Message = &transport.Message{
+		arguments.Message = &packet.Message{
 			Seq:    msg.Seq,
 			Route:  msg.Route,
 			Buffer: msg.Buffer,
@@ -514,7 +593,7 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 		if err != nil {
 			return err
 		}
-		arguments.Message = &transport.Message{
+		arguments.Message = &packet.Message{
 			Seq:    msg.Seq,
 			Route:  msg.Route,
 			Buffer: buffer,
@@ -542,105 +621,34 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 
 // Trigger 触发事件
 func (l *Link) Trigger(ctx context.Context, args *TriggerArgs) error {
-	switch args.Event {
-	case cluster.Connect:
-		return l.doTrigger(ctx, args)
-	case cluster.Disconnect:
-		if args.UID == 0 {
-			return l.doTrigger(ctx, args)
-		}
-	case cluster.Reconnect:
-		if args.UID == 0 {
-			return ErrInvalidArgument
-		}
-	}
-
-	var (
-		err       error
-		nid       string
-		prev      string
-		miss      bool
-		client    transport.NodeClient
-		ep        *endpoint.Endpoint
-		arguments = &transport.TriggerArgs{
-			Event: args.Event,
-			GID:   l.opts.GID,
-			CID:   args.CID,
-			UID:   args.UID,
-		}
-	)
-
-	for i := 0; i < 2; i++ {
-		if nid, err = l.LocateNode(ctx, args.UID); err != nil {
-			if args.Event == cluster.Disconnect && err == ErrNotFoundUserSource {
-				return l.doTrigger(ctx, args)
-			}
-			return err
-		}
-
-		if nid == prev {
-			return err
-		}
-
-		prev = nid
-
-		if ep, err = l.nodeDispatcher.FindEndpoint(nid); err != nil {
-			if args.Event == cluster.Disconnect && err == dispatcher.ErrNotFoundEndpoint {
-				return l.doTrigger(ctx, args)
-			}
-			return err
-		}
-
-		client, err = l.opts.Transporter.NewNodeClient(ep)
-		if err != nil {
-			return err
-		}
-
-		miss, err = client.Trigger(ctx, arguments)
-		if miss {
-			l.nodeSource.Delete(args.UID)
-			continue
-		}
-
-		break
-	}
-
-	return err
-}
-
-// 触发事件
-func (l *Link) doTrigger(ctx context.Context, args *TriggerArgs) error {
 	event, err := l.nodeDispatcher.FindEvent(args.Event)
 	if err != nil {
-		if err == dispatcher.ErrNotFoundEvent {
-			return nil
-		}
-
 		return err
 	}
 
-	ep, err := event.FindEndpoint()
-	if err != nil {
-		if err == dispatcher.ErrNotFoundEndpoint {
-			return nil
-		}
-
-		return err
-	}
-
-	client, err := l.opts.Transporter.NewNodeClient(ep)
-	if err != nil {
-		return err
-	}
-
-	_, err = client.Trigger(ctx, &transport.TriggerArgs{
+	arguments := &transport.TriggerArgs{
 		Event: args.Event,
 		GID:   l.opts.GID,
 		CID:   args.CID,
 		UID:   args.UID,
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+	event.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			client, err := l.opts.Transporter.NewNodeClient(ep)
+			if err != nil {
+				return err
+			}
+
+			_, err = client.Trigger(ctx, arguments)
+			return err
+		})
+
+		return true
 	})
 
-	return err
+	return eg.Wait()
 }
 
 // 执行网关RPC调用
@@ -701,7 +709,7 @@ func (l *Link) doNodeRPC(ctx context.Context, routeID int32, uid int64, fn func(
 
 	for i := 0; i < 2; i++ {
 		if route.Stateful() {
-			if nid, err = l.LocateNode(ctx, uid); err != nil {
+			if nid, err = l.LocateNode(ctx, uid, route.Group()); err != nil {
 				return nil, err
 			}
 			if nid == prev {
@@ -722,7 +730,9 @@ func (l *Link) doNodeRPC(ctx context.Context, routeID int32, uid int64, fn func(
 
 		continued, reply, err = fn(ctx, client)
 		if continued {
-			l.nodeSource.Delete(uid)
+			if route.Stateful() {
+				l.deleteNodeSource(uid, route.Group(), prev)
+			}
 			continue
 		}
 
@@ -844,23 +854,15 @@ func (l *Link) WatchUserLocate(ctx context.Context, kinds ...cluster.Kind) {
 				continue
 			}
 			for _, event := range events {
-				var source *sync.Map
-				switch event.InsKind {
-				case cluster.Gate:
-					source = &l.gateSource
-				case cluster.Node:
-					source = &l.nodeSource
-				}
-
-				if source == nil {
-					continue
-				}
-
 				switch event.Type {
-				case locate.SetLocation:
-					source.Store(event.UID, event.InsID)
-				case locate.RemLocation:
-					source.Delete(event.UID)
+				case locate.BindGate:
+					l.gateSource.Store(event.UID, event.InsID)
+				case locate.BindNode:
+					l.saveNodeSource(event.UID, event.InsName, event.InsID)
+				case locate.UnbindGate:
+					l.gateSource.Delete(event.UID)
+				case locate.UnbindNode:
+					l.deleteNodeSource(event.UID, event.InsName, event.InsID)
 				}
 			}
 		}

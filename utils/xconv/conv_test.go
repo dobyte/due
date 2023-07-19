@@ -1,8 +1,8 @@
 package xconv_test
 
 import (
-	"github.com/dobyte/due/utils/xconv"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"math"
 	"math/cmplx"
 	"testing"

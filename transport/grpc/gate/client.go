@@ -2,10 +2,10 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/grpc/internal/code"
-	"github.com/dobyte/due/transport/grpc/internal/pb"
+	"github.com/dobyte/due/transport/grpc/v2/internal/code"
+	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
@@ -59,7 +59,7 @@ func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip
 }
 
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) (miss bool, err error) {
 	_, err = c.client.Push(ctx, &pb.PushRequest{
 		Kind:   int32(kind),
 		Target: target,
@@ -76,7 +76,7 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 }
 
 // Multicast 推送组播消息
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *transport.Message) (int64, error) {
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (int64, error) {
 	reply, err := c.client.Multicast(ctx, &pb.MulticastRequest{
 		Kind:    int32(kind),
 		Targets: targets,
@@ -94,7 +94,7 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 }
 
 // Broadcast 推送广播消息
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *transport.Message) (int64, error) {
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (int64, error) {
 	reply, err := c.client.Broadcast(ctx, &pb.BroadcastRequest{
 		Kind: int32(kind),
 		Message: &pb.Message{
@@ -103,6 +103,18 @@ func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *tran
 			Buffer: message.Buffer,
 		},
 	}, grpc.UseCompressor(gzip.Name))
+	if err != nil {
+		return 0, err
+	}
+
+	return reply.Total, nil
+}
+
+// Stat 统计会话总数
+func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	reply, err := c.client.Stat(ctx, &pb.StatRequest{
+		Kind: int32(kind),
+	})
 	if err != nil {
 		return 0, err
 	}

@@ -2,7 +2,7 @@ package packet
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/v2/config"
 	"strings"
 )
 
@@ -12,44 +12,54 @@ const (
 )
 
 const (
-	defaultSeqBytesLen    = 2
-	defaultRouteBytesLen  = 2
-	defaultBufferBytesLen = 5000
+	defaultLenBytes     = 4
+	defaultRouteBytes   = 2
+	defaultSeqBytes     = 2
+	defaultMessageBytes = 5000
 )
 
 const (
-	defaultEndianKey         = "config.packet.endian"
-	defaultSeqBytesLenKey    = "config.packet.seqBytesLen"
-	defaultRouteBytesLenKey  = "config.packet.routeBytesLen"
-	defaultBufferBytesLenKey = "config.packet.bufferBytesLen"
+	defaultEndianKey       = "config.packet.byteOrder"
+	defaultLenBytesKey     = "config.packet.lenBytes"
+	defaultRouteBytesKey   = "config.packet.routeBytes"
+	defaultSeqBytesKey     = "config.packet.seqBytes"
+	defaultMessageBytesKey = "config.packet.bufferBytes"
 )
 
+// -------------------------------
+// | len | route | seq | message |
+// -------------------------------
 type options struct {
 	// 字节序
 	// 默认为binary.LittleEndian
 	byteOrder binary.ByteOrder
 
-	// 序列号字节长度（字节），长度为0时不开启序列号编码
-	// 默认为2字节，最大值为65535
-	seqBytesLen int
+	// 包长度字节数
+	// 默认为4字节
+	lenBytes int
 
-	// 路由字节长度（字节）
-	// 默认为2字节，最大值为65535
-	routeBytesLen int
+	// 路由字节数
+	// 默认为2字节
+	routeBytes int
 
-	// 消息字节长度（字节）
+	// 序列号字节数，长度为0时不开启序列号编码
+	// 默认为2字节
+	seqBytes int
+
+	// 消息字节数
 	// 默认为5000字节
-	bufferBytesLen int
+	bufferBytes int
 }
 
 type Option func(o *options)
 
 func defaultOptions() *options {
 	opts := &options{
-		byteOrder:      binary.LittleEndian,
-		seqBytesLen:    config.Get(defaultSeqBytesLenKey, defaultSeqBytesLen).Int(),
-		routeBytesLen:  config.Get(defaultRouteBytesLenKey, defaultRouteBytesLen).Int(),
-		bufferBytesLen: config.Get(defaultBufferBytesLenKey, defaultBufferBytesLen).Int(),
+		byteOrder:   binary.LittleEndian,
+		lenBytes:    config.Get(defaultLenBytesKey, defaultLenBytes).Int(),
+		routeBytes:  config.Get(defaultRouteBytesKey, defaultRouteBytes).Int(),
+		seqBytes:    config.Get(defaultSeqBytesKey, defaultSeqBytes).Int(),
+		bufferBytes: config.Get(defaultMessageBytesKey, defaultMessageBytes).Int(),
 	}
 
 	endian := config.Get(defaultEndianKey).String()
@@ -68,17 +78,22 @@ func WithByteOrder(byteOrder binary.ByteOrder) Option {
 	return func(o *options) { o.byteOrder = byteOrder }
 }
 
-// WithSeqBytesLen 设置序列号字节长度
-func WithSeqBytesLen(seqBytesLen int) Option {
-	return func(o *options) { o.seqBytesLen = seqBytesLen }
+// WithLenBytes 设置包长度字节数
+func WithLenBytes(lenBytes int) Option {
+	return func(o *options) { o.lenBytes = lenBytes }
 }
 
-// WithRouteBytesLen 设置路由字节长度
-func WithRouteBytesLen(routeBytesLen int) Option {
-	return func(o *options) { o.routeBytesLen = routeBytesLen }
+// WithRouteBytes 设置路由字节数
+func WithRouteBytes(routeBytes int) Option {
+	return func(o *options) { o.routeBytes = routeBytes }
 }
 
-// WithBufferBytesLen 设置消息字节长度
-func WithBufferBytesLen(bufferBytesLen int) Option {
-	return func(o *options) { o.bufferBytesLen = bufferBytesLen }
+// WithSeqBytes 设置序列号字节数
+func WithSeqBytes(seqBytes int) Option {
+	return func(o *options) { o.seqBytes = seqBytes }
+}
+
+// WithMessageBytes 设置消息字节数
+func WithMessageBytes(messageBytes int) Option {
+	return func(o *options) { o.bufferBytes = messageBytes }
 }

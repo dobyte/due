@@ -8,16 +8,11 @@
 package tencent_test
 
 import (
+	"github.com/dobyte/due/log/tencent/v2"
 	"testing"
-
-	"github.com/dobyte/due/log/tencent"
 )
 
-var logger *tencent.Logger
-
-func init() {
-	logger = tencent.NewLogger()
-}
+var logger = tencent.NewLogger()
 
 func TestNewLogger(t *testing.T) {
 	defer logger.Close()

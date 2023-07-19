@@ -1,7 +1,7 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
+	"github.com/dobyte/due/v2/core/endpoint"
 	"sync/atomic"
 )
 
@@ -31,6 +31,15 @@ func (a *abstract) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 	}
 
 	return a.directDispatch(insID[0])
+}
+
+// IterateEndpoint 迭代服务端口
+func (a *abstract) IterateEndpoint(fn func(insID string, ep *endpoint.Endpoint) bool) {
+	for _, se := range a.endpointArr {
+		if fn(se.insID, se.endpoint) == false {
+			break
+		}
+	}
 }
 
 // 添加服务端点

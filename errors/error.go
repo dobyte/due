@@ -2,8 +2,8 @@ package errors
 
 import (
 	"fmt"
-	"github.com/dobyte/due/code"
-	"github.com/dobyte/due/internal/stack"
+	"github.com/dobyte/due/v2/code"
+	"github.com/dobyte/due/v2/core/stack"
 	"io"
 )
 
@@ -31,6 +31,30 @@ type Error interface {
 // code : 错误码
 // error: 原生错误
 func NewError(args ...interface{}) error {
+	e := &defaultError{
+		code: code.Nil,
+	}
+
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case error:
+			e.err = v
+		case string:
+			e.text = v
+		case code.Code:
+			e.code = v
+		}
+	}
+
+	return e
+}
+
+// NewErrorWithStack 新建一个带堆栈的错误
+// 可传入一下参数：
+// text : 文本字符串
+// code : 错误码
+// error: 原生错误
+func NewErrorWithStack(args ...interface{}) error {
 	e := &defaultError{
 		code:  code.Nil,
 		stack: stack.Callers(1, stack.Full),

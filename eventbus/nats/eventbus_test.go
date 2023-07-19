@@ -2,8 +2,8 @@ package nats_test
 
 import (
 	"context"
-	"github.com/dobyte/due/eventbus"
-	"github.com/dobyte/due/eventbus/nats"
+	"github.com/dobyte/due/eventbus/nats/v2"
+	"github.com/dobyte/due/v2/eventbus"
 	"log"
 	"testing"
 	"time"

@@ -1,11 +1,11 @@
 package tcp_test
 
 import (
+	"github.com/dobyte/due/network/tcp/v2"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"testing"
 	"time"
-
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/network/tcp"
 )
 
 func TestNewClient(t *testing.T) {
@@ -17,8 +17,14 @@ func TestNewClient(t *testing.T) {
 	client.OnDisconnect(func(conn network.Conn) {
 		t.Log("connection is closed")
 	})
-	client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-		t.Logf("receive msg from server, msg: %s", string(msg))
+	client.OnReceive(func(conn network.Conn, msg []byte) {
+		message, err := packet.Unpack(msg)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 	})
 
 	conn, err := client.Dial()
@@ -31,11 +37,16 @@ func TestNewClient(t *testing.T) {
 	defer conn.Close()
 
 	times := 0
+	msg, _ := packet.Pack(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte("hello server~~"),
+	})
 
 	for {
 		select {
 		case <-ticker.C:
-			if err = conn.Push([]byte("hello server~~")); err != nil {
+			if err = conn.Push(msg); err != nil {
 				t.Error(err)
 				return
 			}

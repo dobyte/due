@@ -1,6 +1,9 @@
 package protocol
 
-import "github.com/dobyte/due/session"
+import (
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
+)
 
 type BindRequest struct {
 	CID int64
@@ -32,7 +35,7 @@ type GetIPReply struct {
 type PushRequest struct {
 	Kind    session.Kind
 	Target  int64
-	Message *Message
+	Message *packet.Message
 }
 
 type PushReply struct {
@@ -42,7 +45,7 @@ type PushReply struct {
 type MulticastRequest struct {
 	Kind    session.Kind
 	Targets []int64
-	Message *Message
+	Message *packet.Message
 }
 
 type MulticastReply struct {
@@ -52,10 +55,19 @@ type MulticastReply struct {
 
 type BroadcastRequest struct {
 	Kind    session.Kind
-	Message *Message
+	Message *packet.Message
 }
 
 type BroadcastReply struct {
+	Code  int
+	Total int64
+}
+
+type StatRequest struct {
+	Kind session.Kind
+}
+
+type StatReply struct {
 	Code  int
 	Total int64
 }

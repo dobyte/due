@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"github.com/dobyte/due/v2/errors"
+	"math/big"
 )
 
 type Signer struct {
 	err        error
 	opts       *signerOptions
+	publicKey  *ecdsa.PublicKey
 	privateKey *ecdsa.PrivateKey
 }
-
-var DefaultSigner = NewSigner()
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
@@ -20,10 +21,10 @@ func NewSigner(opts ...SignerOption) *Signer {
 		opt(o)
 	}
 
-	d := &Signer{opts: o}
-	d.privateKey, d.err = parseECDSAPrivateKey(d.opts.privateKey)
+	s := &Signer{opts: o}
+	s.init()
 
-	return d
+	return s
 }
 
 // Name 名称
@@ -64,7 +65,36 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// Sign 签名
-func Sign(data []byte) ([]byte, error) {
-	return DefaultSigner.Sign(data)
+// Verify 验签
+func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
+	delimiter := []byte(s.opts.delimiter)
+	segments := bytes.Split(signature, delimiter)
+
+	if len(segments) != 2 {
+		return false, errors.New("invalid signature")
+	}
+
+	rs := new(big.Int)
+	ss := new(big.Int)
+
+	if err := rs.UnmarshalText(segments[0]); err != nil {
+		return false, err
+	}
+
+	if err := ss.UnmarshalText(segments[1]); err != nil {
+		return false, err
+	}
+
+	hashed := s.opts.hash.Sum(data)
+
+	return ecdsa.Verify(s.publicKey, hashed[:], rs, ss), nil
+}
+
+func (s *Signer) init() {
+	s.publicKey, s.err = parseECDSAPublicKey(s.opts.publicKey)
+	if s.err != nil {
+		return
+	}
+
+	s.privateKey, s.err = parseECDSAPrivateKey(s.opts.privateKey)
 }

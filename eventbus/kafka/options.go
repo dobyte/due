@@ -2,8 +2,8 @@ package kafka
 
 import (
 	"context"
-	"github.com/Shopify/sarama"
-	"github.com/dobyte/due/config"
+	"github.com/IBM/sarama"
+	"github.com/dobyte/due/v2/config"
 )
 
 const (

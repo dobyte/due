@@ -8,7 +8,7 @@
 package xnet
 
 import (
-	innernet "github.com/dobyte/due/internal/net"
+	innernet "github.com/dobyte/due/core/net"
 	"net"
 )
 

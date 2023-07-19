@@ -1,11 +1,12 @@
 package mode
 
 import (
-	"flag"
-	"github.com/dobyte/due/env"
+	"github.com/dobyte/due/v2/env"
+	"github.com/dobyte/due/v2/flag"
 )
 
 const (
+	dueModeArgName = "mode"
 	dueModeEnvName = "DUE_MODE"
 )
 
@@ -21,8 +22,8 @@ const (
 var dueMode string
 
 func init() {
-	def := flag.String("mode", DebugMode, "Specify the project run mode")
-	mode := env.Get(dueModeEnvName, *def).String()
+	mode := flag.String(dueModeArgName, DebugMode)
+	mode = env.Get(dueModeEnvName, mode).String()
 	SetMode(mode)
 }
 

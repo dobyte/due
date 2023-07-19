@@ -1,12 +1,14 @@
 package ws
 
 import (
-	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/v2/network"
 	"github.com/gorilla/websocket"
+	"sync/atomic"
 )
 
 type client struct {
 	opts              *clientOptions            // 配置
+	id                int64                     // 连接ID
 	dialer            *websocket.Dialer         // 拨号器
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
@@ -33,7 +35,7 @@ func (c *client) Dial() (network.Conn, error) {
 		return nil, err
 	}
 
-	return newClientConn(c, conn), nil
+	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
 }
 
 // OnConnect 监听连接打开

@@ -8,14 +8,13 @@
 package logrus
 
 import (
+	"github.com/dobyte/due/log/logrus/v2/internal/formatter"
+	"github.com/dobyte/due/log/logrus/v2/internal/hook"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/sirupsen/logrus"
 	"io"
 	"os"
-
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/log/logrus/internal/formatter"
-	"github.com/dobyte/due/log/logrus/internal/hook"
-	"github.com/dobyte/due/mode"
 )
 
 var _ log.Logger = NewLogger()

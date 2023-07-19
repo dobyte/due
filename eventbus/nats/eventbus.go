@@ -2,7 +2,7 @@ package nats
 
 import (
 	"context"
-	"github.com/dobyte/due/eventbus"
+	"github.com/dobyte/due/v2/eventbus"
 	"github.com/nats-io/nats.go"
 	"sync"
 )

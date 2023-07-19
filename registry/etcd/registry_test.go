@@ -10,13 +10,12 @@ package etcd_test
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/cluster"
+	"github.com/dobyte/due/registry/etcd/v2"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/registry"
 	"testing"
 	"time"
-
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/registry/etcd"
-	"github.com/dobyte/due/utils/xnet"
 )
 
 const (
@@ -27,7 +26,7 @@ const (
 var reg = etcd.NewRegistry()
 
 func TestRegistry_Register1(t *testing.T) {
-	host, err := xnet.ExternalIP()
+	host, err := net.ExternalIP()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +72,7 @@ func TestRegistry_Register1(t *testing.T) {
 }
 
 func TestRegistry_Register2(t *testing.T) {
-	host, err := xnet.ExternalIP()
+	host, err := net.ExternalIP()
 	if err != nil {
 		t.Fatal(err)
 	}

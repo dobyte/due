@@ -1,14 +1,14 @@
 package grpc
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/grpc/gate"
-	"github.com/dobyte/due/transport/grpc/internal/client"
-	"github.com/dobyte/due/transport/grpc/internal/pb"
-	"github.com/dobyte/due/transport/grpc/internal/server"
-	"github.com/dobyte/due/transport/grpc/node"
+	"github.com/dobyte/due/transport/grpc/v2/gate"
+	"github.com/dobyte/due/transport/grpc/v2/internal/client"
+	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
+	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/transport/grpc/v2/node"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/transport"
 	"sync"
 )
 

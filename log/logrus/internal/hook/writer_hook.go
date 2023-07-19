@@ -8,10 +8,9 @@
 package hook
 
 import (
+	"github.com/sirupsen/logrus"
 	"io"
 	"sync"
-
-	"github.com/sirupsen/logrus"
 )
 
 var _ logrus.Hook = NewWriterHook(nil)

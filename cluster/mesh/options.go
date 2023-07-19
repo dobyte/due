@@ -2,12 +2,12 @@ package mesh
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/transport"
 	"time"
 )
 
@@ -18,11 +18,9 @@ const (
 )
 
 const (
-	defaultNameKey      = "config.cluster.mesh.name"
-	defaultCodecKey     = "config.cluster.mesh.codec"
-	defaultTimeoutKey   = "config.cluster.mesh.timeout"
-	defaultEncryptorKey = "config.cluster.mesh.encryptor"
-	defaultDecryptorKey = "config.cluster.mesh.decryptor"
+	defaultNameKey    = "config.cluster.mesh.name"
+	defaultCodecKey   = "config.cluster.mesh.codec"
+	defaultTimeoutKey = "config.cluster.mesh.timeout"
 )
 
 type Option func(o *options)
@@ -36,7 +34,6 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
 	encryptor   crypto.Encryptor      // 消息加密器
-	decryptor   crypto.Decryptor      // 消息解密器
 }
 
 func defaultOptions() *options {
@@ -57,14 +54,6 @@ func defaultOptions() *options {
 
 	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	if encryptor := config.Get(defaultEncryptorKey).String(); encryptor != "" {
-		opts.encryptor = crypto.InvokeEncryptor(encryptor)
-	}
-
-	if decryptor := config.Get(defaultDecryptorKey).String(); decryptor != "" {
-		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts
@@ -108,9 +97,4 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
-}
-
-// WithDecryptor 设置消息解密器
-func WithDecryptor(decryptor crypto.Decryptor) Option {
-	return func(o *options) { o.decryptor = decryptor }
 }

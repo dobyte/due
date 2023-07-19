@@ -28,7 +28,7 @@ func (codec) Name() string {
 func (codec) Marshal(v interface{}) ([]byte, error) {
 	msg, ok := v.(proto.Message)
 	if !ok {
-		return nil, errors.New("can't marshal a value that not implements proto.Message interface")
+		return nil, errors.New("can't marshal a value that not implements proto.Buffer interface")
 	}
 
 	return proto.Marshal(msg)
@@ -38,7 +38,7 @@ func (codec) Marshal(v interface{}) ([]byte, error) {
 func (codec) Unmarshal(data []byte, v interface{}) error {
 	msg, ok := v.(proto.Message)
 	if !ok {
-		return errors.New("can't unmarshal to a value that not implements proto.Message")
+		return errors.New("can't unmarshal to a value that not implements proto.Buffer")
 	}
 
 	return proto.Unmarshal(data, msg)

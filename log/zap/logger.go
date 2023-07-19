@@ -8,13 +8,12 @@
 package zap
 
 import (
+	"github.com/dobyte/due/log/zap/v2/internal/encoder"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"os"
-
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/log/zap/internal/encoder"
-	"github.com/dobyte/due/mode"
 )
 
 var _ log.Logger = NewLogger()

@@ -2,10 +2,10 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/internal/code"
-	"github.com/dobyte/due/transport/rpcx/internal/protocol"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
 	cli "github.com/smallnest/rpcx/client"
 )
 
@@ -45,22 +45,9 @@ func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (ip
 	return
 }
 
-// Disconnect 断开连接
-func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
-	req := &protocol.DisconnectRequest{Kind: kind, Target: target, IsForce: isForce}
-	reply := &protocol.DisconnectReply{}
-	err = c.cli.Call(ctx, ServicePath, serviceMethodDisconnect, req, reply)
-	miss = reply.Code == code.NotFoundSession
-	return
-}
-
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
-	req := &protocol.PushRequest{Kind: kind, Target: target, Message: &protocol.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: message.Buffer,
-	}}
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) (miss bool, err error) {
+	req := &protocol.PushRequest{Kind: kind, Target: target, Message: message}
 	reply := &protocol.PushReply{}
 	err = c.cli.Call(ctx, ServicePath, serviceMethodPush, req, reply)
 	miss = reply.Code == code.NotFoundSession
@@ -68,12 +55,8 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 }
 
 // Multicast 推送组播消息
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *transport.Message) (total int64, err error) {
-	req := &protocol.MulticastRequest{Kind: kind, Targets: targets, Message: &protocol.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: message.Buffer,
-	}}
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error) {
+	req := &protocol.MulticastRequest{Kind: kind, Targets: targets, Message: message}
 	reply := &protocol.MulticastReply{}
 	err = c.cli.Call(ctx, ServicePath, serviceMethodMulticast, req, reply)
 	total = reply.Total
@@ -81,14 +64,28 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 }
 
 // Broadcast 推送广播消息
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *transport.Message) (total int64, err error) {
-	req := &protocol.BroadcastRequest{Kind: kind, Message: &protocol.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: message.Buffer,
-	}}
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (total int64, err error) {
+	req := &protocol.BroadcastRequest{Kind: kind, Message: message}
 	reply := &protocol.BroadcastReply{}
 	err = c.cli.Call(ctx, ServicePath, serviceMethodBroadcast, req, reply)
 	total = reply.Total
+	return
+}
+
+// Stat 推送广播消息
+func (c *Client) Stat(ctx context.Context, kind session.Kind) (total int64, err error) {
+	req := &protocol.StatRequest{Kind: kind}
+	reply := &protocol.StatReply{}
+	err = c.cli.Call(ctx, ServicePath, serviceMethodStat, req, reply)
+	total = reply.Total
+	return
+}
+
+// Disconnect 断开连接
+func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (miss bool, err error) {
+	req := &protocol.DisconnectRequest{Kind: kind, Target: target, IsForce: isForce}
+	reply := &protocol.DisconnectReply{}
+	err = c.cli.Call(ctx, ServicePath, serviceMethodDisconnect, req, reply)
+	miss = reply.Code == code.NotFoundSession
 	return
 }

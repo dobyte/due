@@ -2,7 +2,7 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
+	"github.com/dobyte/due/v2/config"
 	"github.com/hashicorp/consul/api"
 )
 

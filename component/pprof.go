@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/log"
 	"net/http"
 )
 

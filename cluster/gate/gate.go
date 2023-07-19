@@ -9,15 +9,14 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport"
 	"time"
-
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/registry"
 )
 
 type Gate struct {
@@ -143,7 +142,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 }
 
 // 处理接收到的消息
-func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
+func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 	cid, uid := conn.ID(), conn.UID()
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
 	g.proxy.deliver(ctx, cid, uid, data)

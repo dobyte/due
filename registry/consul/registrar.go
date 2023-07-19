@@ -3,8 +3,8 @@ package consul
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
 	"github.com/hashicorp/consul/api"
 	"net"
 	"net/url"
@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	checkIDFormat     = "dispatcher:%s"
+	checkIDFormat     = "service:%s"
 	checkUpdateOutput = "passed"
 	metaFieldKind     = "kind"
 	metaFieldAlias    = "alias"

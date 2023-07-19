@@ -1,5 +1,9 @@
 package packet
 
+import (
+	"net"
+)
+
 var globalPacker Packer
 
 func init() {
@@ -24,4 +28,14 @@ func Pack(message *Message) ([]byte, error) {
 // Unpack 解包消息
 func Unpack(data []byte) (*Message, error) {
 	return globalPacker.Unpack(data)
+}
+
+// Read 读取数据包
+func Read(conn net.Conn) (len int, buffer []byte, err error) {
+	return globalPacker.Read(conn)
+}
+
+// Parse 解析数据包
+func Parse(data []byte) (len int, route int32, buffer []byte, err error) {
+	return globalPacker.Parse(data)
 }

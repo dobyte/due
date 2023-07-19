@@ -1,9 +1,7 @@
 package crypto
 
 import (
-	"github.com/dobyte/due/crypto/ecc"
-	"github.com/dobyte/due/crypto/rsa"
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/log"
 )
 
 type Encryptor interface {
@@ -11,14 +9,11 @@ type Encryptor interface {
 	Name() string
 	// Encrypt 加密
 	Encrypt(data []byte) ([]byte, error)
+	// Decrypt 解密
+	Decrypt(data []byte) ([]byte, error)
 }
 
 var encryptors = make(map[string]Encryptor)
-
-func init() {
-	RegisterEncryptor(ecc.DefaultEncryptor)
-	RegisterEncryptor(rsa.DefaultEncryptor)
-}
 
 // RegisterEncryptor 注册加密器
 func RegisterEncryptor(encryptor Encryptor) {

@@ -10,11 +10,10 @@ package formatter
 import (
 	"bytes"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (

@@ -48,10 +48,6 @@ timezone = "Local"
         name = "mesh"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 加密器。可选：rsa | ecc
-        encryptor = "ecc"
-        # 解密器。可选：rsa | ecc
-        decryptor = "ecc"
     # 集群客户端配置，常用于调试使用
     [cluster.client]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
@@ -60,10 +56,6 @@ timezone = "Local"
         name = "client"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 加密器。可选：rsa | ecc
-        encryptor = "ecc"
-        # 解密器。可选：rsa | ecc
-        decryptor = "ecc"
 [transport]
     # GRPC相关配置
     [transport.grpc]
@@ -101,15 +93,22 @@ timezone = "Local"
             serverName = ""
             # 连接池大小，默认为10
             poolSize = 10
+
+# 框架默认打包器统一采用以下的打包格式，自定义打包器可自行定义打包规则
+# -------------------------------
+# | len | route | seq | message |
+# -------------------------------
 [packet]
-    # 字节序，little | big
-    endian = "big"
-    # 序列号字节长度（字节）
-    seqBytesLen = 2
-    # 路由字节长度（字节）
-    routeBytesLen = 2
-    # 消息字节长度（字节）
-    bufferBytesLen = 5000
+    # 字节序，默认为little。可选：little | big
+    byteOrder = "little"
+    # 包长度字节数，默认为4字节
+    lenBytes = 4
+    # 路由字节数，默认为2字节
+    routeBytes = 2
+    # 序列号字节数，默认为2字节
+    seqBytes = 2
+    # 消息字节数，默认为5000字节
+    messageBytes = 5000
 [log]
     # 日志输出文件
     file = "../../testdata/log/due.log"
@@ -267,10 +266,6 @@ timezone = "Local"
             addr = ":3553"
             # 客户端连接路径
             path = "/"
-            # 默认消息类型，text | binary
-            msgType = "binary"
-            # 最大消息长度（字节），默认1kb
-            maxMsgLen = 1024
             # 服务器最大连接数
             maxConnNum = 5000
             # 秘钥文件
@@ -279,45 +274,29 @@ timezone = "Local"
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
-            # 是否启用心跳检测，默认不启用
-            heartbeatCheck = true
-            # 心跳检测间隔时间（秒），默认为10秒
-            heartbeatCheckInterval = 10
+            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
+            heartbeatInterval = 10
             # 握手超时时间（秒），默认10秒
             handshakeTimeout = 10
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
-            # 默认消息类型，text | binary
-            msgType = "binary"
-            # 最大消息长度（字节），默认1kb
-            maxMsgLen = 1024
             # 握手超时时间（秒）
             handshakeTimeout = 10
-            # 是否启用心跳，默认不启用
-            heartbeat = false
-            # 心跳间隔时间（秒），默认为10秒
+            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 10
     [network.tcp]
         [network.tcp.server]
             # 服务器监听地址
             addr = ":3553"
-            # 最大消息长度（字节），默认1kb
-            maxMsgLen = 1024
             # 服务器最大连接数
             maxConnNum = 5000
-            # 是否启用心跳检测，默认不启用
-            heartbeatCheck = true
-            # 心跳检测间隔时间（秒），默认为10秒
-            heartbeatCheckInterval = 10
+            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
+            heartbeatInterval = 10
         [network.tcp.client]
             # 拨号地址
             addr = "127.0.0.1:3553"
-            # 最大消息长度（字节），默认1kb
-            maxMsgLen = 1024
-            # 是否启用心跳，默认不启用
-            heartbeat = true
-            # 心跳间隔时间（秒），默认为10秒
+            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 10
 [locate]
     [locate.redis]

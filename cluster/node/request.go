@@ -30,8 +30,8 @@ func (r *Request) Parse(v interface{}) error {
 		})
 	}
 
-	if r.GID != "" && r.node.opts.decryptor != nil {
-		data, err := r.node.opts.decryptor.Decrypt(msg)
+	if r.GID != "" && r.node.opts.encryptor != nil {
+		data, err := r.node.opts.encryptor.Decrypt(msg)
 		if err != nil {
 			return err
 		}

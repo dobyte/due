@@ -2,9 +2,9 @@ package kafka
 
 import (
 	"context"
-	"github.com/dobyte/due/eventbus"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/task"
+	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/task"
 	"reflect"
 	"sync"
 )

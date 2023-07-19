@@ -2,8 +2,8 @@ package kafka
 
 import (
 	"context"
-	"github.com/Shopify/sarama"
-	"github.com/dobyte/due/eventbus"
+	"github.com/IBM/sarama"
+	"github.com/dobyte/due/v2/eventbus"
 	"sync"
 )
 

@@ -1,18 +1,19 @@
 package rsa
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto/hash"
-	"github.com/dobyte/due/utils/xconv"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/hash"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"strings"
 )
 
 const (
-	defaultEncryptorHashKey      = "config.crypto.rsa.encryptor.hash"
-	defaultEncryptorPaddingKey   = "config.crypto.rsa.encryptor.padding"
-	defaultEncryptorLabelKey     = "config.crypto.rsa.encryptor.label"
-	defaultEncryptorBlockSizeKey = "config.crypto.rsa.encryptor.blockSize"
-	defaultEncryptorPublicKeyKey = "config.crypto.rsa.encryptor.publicKey"
+	defaultEncryptorHashKey       = "config.crypto.rsa.encryptor.hash"
+	defaultEncryptorPaddingKey    = "config.crypto.rsa.encryptor.padding"
+	defaultEncryptorLabelKey      = "config.crypto.rsa.encryptor.label"
+	defaultEncryptorBlockSizeKey  = "config.crypto.rsa.encryptor.blockSize"
+	defaultEncryptorPublicKeyKey  = "config.crypto.rsa.encryptor.publicKey"
+	defaultEncryptorPrivateKeyKey = "config.crypto.rsa.encryptor.privateKey"
 )
 
 type EncryptorOption func(o *encryptorOptions)
@@ -36,15 +37,19 @@ type encryptorOptions struct {
 
 	// 公钥。可设置文件路径或公钥串
 	publicKey string
+
+	// 私钥。可设置文件路径或私钥串
+	privateKey string
 }
 
 func defaultEncryptorOptions() *encryptorOptions {
 	return &encryptorOptions{
-		hash:      hash.Hash(strings.ToLower(config.Get(defaultEncryptorHashKey).String())),
-		padding:   EncryptPadding(strings.ToUpper(config.Get(defaultEncryptorPaddingKey).String())),
-		label:     config.Get(defaultEncryptorLabelKey).Bytes(),
-		blockSize: config.Get(defaultEncryptorBlockSizeKey).Int(),
-		publicKey: config.Get(defaultEncryptorPublicKeyKey).String(),
+		hash:       hash.Hash(strings.ToLower(config.Get(defaultEncryptorHashKey).String())),
+		padding:    EncryptPadding(strings.ToUpper(config.Get(defaultEncryptorPaddingKey).String())),
+		label:      config.Get(defaultEncryptorLabelKey).Bytes(),
+		blockSize:  config.Get(defaultEncryptorBlockSizeKey).Int(),
+		publicKey:  config.Get(defaultEncryptorPublicKeyKey).String(),
+		privateKey: config.Get(defaultEncryptorPrivateKeyKey).String(),
 	}
 }
 
@@ -71,4 +76,9 @@ func WithEncryptorBlockSize(blockSize int) EncryptorOption {
 // WithEncryptorPublicKey 设置加密公钥
 func WithEncryptorPublicKey(publicKey string) EncryptorOption {
 	return func(o *encryptorOptions) { o.publicKey = publicKey }
+}
+
+// WithEncryptorPrivateKey 设置解密私钥
+func WithEncryptorPrivateKey(privateKey string) EncryptorOption {
+	return func(o *encryptorOptions) { o.privateKey = privateKey }
 }

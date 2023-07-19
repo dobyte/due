@@ -6,12 +6,11 @@ import (
 )
 
 type Encryptor struct {
-	err       error
-	opts      *encryptorOptions
-	publicKey *ecies.PublicKey
+	err        error
+	opts       *encryptorOptions
+	publicKey  *ecies.PublicKey
+	privateKey *ecies.PrivateKey
 }
-
-var DefaultEncryptor = NewEncryptor()
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
@@ -20,7 +19,7 @@ func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	}
 
 	e := &Encryptor{opts: o}
-	e.publicKey, e.err = parseECIESPublicKey(e.opts.publicKey)
+	e.init()
 
 	return e
 }
@@ -39,7 +38,20 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 	return ecies.Encrypt(rand.Reader, e.publicKey, data, e.opts.s1, e.opts.s2)
 }
 
-// Encrypt 加密
-func Encrypt(data []byte) ([]byte, error) {
-	return DefaultEncryptor.Encrypt(data)
+// Decrypt 解密
+func (e *Encryptor) Decrypt(ciphertext []byte) ([]byte, error) {
+	if e.err != nil {
+		return nil, e.err
+	}
+
+	return e.privateKey.Decrypt(ciphertext, e.opts.s1, e.opts.s2)
+}
+
+func (e *Encryptor) init() {
+	e.publicKey, e.err = parseECIESPublicKey(e.opts.publicKey)
+	if e.err != nil {
+		return
+	}
+
+	e.privateKey, e.err = parseECIESPrivateKey(e.opts.privateKey)
 }

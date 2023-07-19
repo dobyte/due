@@ -2,9 +2,9 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/grpc/internal/code"
-	"github.com/dobyte/due/transport/grpc/internal/pb"
+	"github.com/dobyte/due/transport/grpc/v2/internal/code"
+	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
+	"github.com/dobyte/due/v2/transport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"

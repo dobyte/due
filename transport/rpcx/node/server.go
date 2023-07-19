@@ -2,10 +2,10 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/internal/code"
-	"github.com/dobyte/due/transport/rpcx/internal/protocol"
-	"github.com/dobyte/due/transport/rpcx/internal/server"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
+	"github.com/dobyte/due/v2/transport"
 )
 
 const (
@@ -54,15 +54,11 @@ func (e *endpoint) Trigger(ctx context.Context, req *protocol.TriggerRequest, re
 // Deliver 投递消息
 func (e *endpoint) Deliver(ctx context.Context, req *protocol.DeliverRequest, reply *protocol.DeliverReply) error {
 	miss, err := e.provider.Deliver(ctx, &transport.DeliverArgs{
-		GID: req.GID,
-		NID: req.NID,
-		CID: req.CID,
-		UID: req.UID,
-		Message: &transport.Message{
-			Seq:    req.Message.Seq,
-			Route:  req.Message.Route,
-			Buffer: req.Message.Buffer,
-		},
+		GID:     req.GID,
+		NID:     req.NID,
+		CID:     req.CID,
+		UID:     req.UID,
+		Message: req.Message,
 	})
 	if err != nil {
 		if miss {

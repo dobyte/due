@@ -2,16 +2,11 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto"
-	_ "github.com/dobyte/due/crypto/ecc"
-	_ "github.com/dobyte/due/crypto/rsa"
-	"github.com/dobyte/due/encoding"
-	_ "github.com/dobyte/due/encoding/json"
-	_ "github.com/dobyte/due/encoding/proto"
-	_ "github.com/dobyte/due/encoding/xml"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"time"
 )
 
@@ -22,12 +17,10 @@ const (
 )
 
 const (
-	defaultIDKey        = "config.cluster.client.id"
-	defaultNameKey      = "config.cluster.client.name"
-	defaultCodecKey     = "config.cluster.client.codec"
-	defaultTimeoutKey   = "config.cluster.client.timeout"
-	defaultEncryptorKey = "config.cluster.client.encryptor"
-	defaultDecryptorKey = "config.cluster.client.decryptor"
+	defaultIDKey      = "config.cluster.client.id"
+	defaultNameKey    = "config.cluster.client.name"
+	defaultCodecKey   = "config.cluster.client.codec"
+	defaultTimeoutKey = "config.cluster.client.timeout"
 )
 
 type Option func(o *options)
@@ -40,7 +33,6 @@ type options struct {
 	client    network.Client   // 网络客户端
 	timeout   time.Duration    // RPC调用超时时间
 	encryptor crypto.Encryptor // 消息加密器
-	decryptor crypto.Decryptor // 消息解密器
 }
 
 func defaultOptions() *options {
@@ -67,14 +59,6 @@ func defaultOptions() *options {
 
 	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
-	}
-
-	if encryptor := config.Get(defaultEncryptorKey).String(); encryptor != "" {
-		opts.encryptor = crypto.InvokeEncryptor(encryptor)
-	}
-
-	if decryptor := config.Get(defaultDecryptorKey).String(); decryptor != "" {
-		opts.decryptor = crypto.InvokeDecryptor(decryptor)
 	}
 
 	return opts
@@ -113,9 +97,4 @@ func WithTimeout(timeout time.Duration) Option {
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
-}
-
-// WithDecryptor 设置消息解密器
-func WithDecryptor(decryptor crypto.Decryptor) Option {
-	return func(o *options) { o.decryptor = decryptor }
 }

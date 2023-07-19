@@ -1,10 +1,10 @@
 package rpcx
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport/rpcx/internal/client"
-	"github.com/dobyte/due/transport/rpcx/internal/server"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/registry"
 )
 
 const (

@@ -8,7 +8,7 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/network"
+	"github.com/dobyte/due/v2/network"
 	"net"
 	"sync"
 )
@@ -35,7 +35,7 @@ func (cm *serverConnMgr) close() {
 	defer cm.mu.Unlock()
 
 	for _, conn := range cm.conns {
-		_ = conn.Close(false)
+		_ = conn.graceClose()
 	}
 }
 

@@ -3,18 +3,16 @@ package rsa
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"github.com/dobyte/due/v2/errors"
 	"math"
-
-	"github.com/dobyte/due/errors"
 )
 
 type Encryptor struct {
-	err       error
-	opts      *encryptorOptions
-	publicKey *rsa.PublicKey
+	err        error
+	opts       *encryptorOptions
+	publicKey  *rsa.PublicKey
+	privateKey *rsa.PrivateKey
 }
-
-var DefaultEncryptor = NewEncryptor()
 
 func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	o := defaultEncryptorOptions()
@@ -71,8 +69,51 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+// Decrypt 解密
+func (e *Encryptor) Decrypt(ciphertext []byte) ([]byte, error) {
+	if e.err != nil {
+		return nil, e.err
+	}
+
+	var (
+		err   error
+		black []byte
+		start int
+		end   int
+		total = int(math.Ceil(float64(len(ciphertext)) / float64(e.privateKey.Size())))
+		data  = make([]byte, 0, len(ciphertext))
+		h     = e.opts.hash.New()
+	)
+
+	for i := 0; i < total; i++ {
+		start = i * e.privateKey.Size()
+		end = (i + 1) * e.privateKey.Size()
+		if end > len(ciphertext) {
+			end = len(ciphertext)
+		}
+
+		switch e.opts.padding {
+		case OAEP:
+			black, err = rsa.DecryptOAEP(h, rand.Reader, e.privateKey, ciphertext[start:end], e.opts.label)
+		default:
+			black, err = rsa.DecryptPKCS1v15(rand.Reader, e.privateKey, ciphertext[start:end])
+		}
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, black...)
+	}
+
+	return data, nil
+}
+
 func (e *Encryptor) init() {
 	e.publicKey, e.err = parsePublicKey(e.opts.publicKey)
+	if e.err != nil {
+		return
+	}
+
+	e.privateKey, e.err = parsePrivateKey(e.opts.privateKey)
 	if e.err != nil {
 		return
 	}
@@ -90,9 +131,4 @@ func (e *Encryptor) init() {
 	} else if e.opts.blockSize > blockSize {
 		e.err = errors.New("block message too long for RSA public key size")
 	}
-}
-
-// Encrypt 加密
-func Encrypt(data []byte) ([]byte, error) {
-	return DefaultEncryptor.Encrypt(data)
 }

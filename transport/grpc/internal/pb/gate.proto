@@ -13,14 +13,16 @@ service Gate {
   rpc Unbind(UnbindRequest) returns (UnbindReply) {}
   // 获取客户端IP
   rpc GetIP(GetIPRequest) returns (GetIPReply) {}
-  // 断开连接
-  rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
   // 推送消息
   rpc Push(PushRequest) returns (PushReply) {}
   // 推送组播消息
   rpc Multicast(MulticastRequest) returns (MulticastReply) {}
   // 推送广播消息
   rpc Broadcast(BroadcastRequest) returns (BroadcastReply) {}
+  // 推送广播消息
+  rpc Stat(StatRequest) returns (StatReply) {}
+  // 断开连接
+  rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
 }
 
 message BindRequest {
@@ -81,4 +83,12 @@ message BroadcastRequest {
 
 message BroadcastReply {
   int64 Total = 1; // 广播数量
+}
+
+message StatRequest {
+  int32 Kind = 1; // 推送类型 1：CID 2：UID
+}
+
+message StatReply {
+  int64 Total = 1; // 会话数量
 }

@@ -10,10 +10,9 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
-
-	"github.com/dobyte/due/registry"
 )
 
 type heartbeat struct {

@@ -8,15 +8,15 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/utils/xnet"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xnet"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
 )
 
 type serverConn struct {
@@ -54,7 +54,7 @@ func (c *serverConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *serverConn) Send(msg []byte, msgType ...int) (err error) {
+func (c *serverConn) Send(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -68,7 +68,7 @@ func (c *serverConn) Send(msg []byte, msgType ...int) (err error) {
 }
 
 // Push 发送消息（异步）
-func (c *serverConn) Push(msg []byte, msgType ...int) (err error) {
+func (c *serverConn) Push(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -156,7 +156,7 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 	c.id = cm.id
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 1024)
+	c.chWrite = make(chan chWrite, 10240)
 	c.done = make(chan struct{})
 	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt64(&c.uid, 0)
@@ -174,17 +174,18 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 // 读取消息
 func (c *serverConn) read() {
 	for {
-		msg, err := readMsgFromConn(c.conn, c.connMgr.server.opts.maxMsgLen)
+		size, msg, err := packet.Read(c.conn)
 		if err != nil {
-			if err == errMsgSizeTooLarge {
-				log.Warnf("the msg size too large, has been ignored")
-				continue
+			if err != packet.ErrConnectionClosed {
+				log.Warnf("read message failed: %v", err)
 			}
 			c.cleanup()
 			break
 		}
 
-		atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+		if c.connMgr.server.opts.heartbeatInterval > 0 {
+			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+		}
 
 		switch c.State() {
 		case network.ConnHanged:
@@ -194,12 +195,12 @@ func (c *serverConn) read() {
 		}
 
 		// ignore heartbeat packet
-		if len(msg) == 0 {
+		if size == 0 {
 			continue
 		}
 
 		if c.connMgr.server.receiveHandler != nil {
-			c.connMgr.server.receiveHandler(c, msg, 0)
+			c.connMgr.server.receiveHandler(c, msg)
 		}
 	}
 }
@@ -257,9 +258,14 @@ func (c *serverConn) cleanup() {
 
 // 写入消息
 func (c *serverConn) write() {
-	var ticker *time.Ticker
-	if c.connMgr.server.opts.enableHeartbeatCheck {
-		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatCheckInterval)
+	var (
+		ticker    *time.Ticker
+		heartbeat []byte
+	)
+
+	if c.connMgr.server.opts.heartbeatInterval > 0 {
+		heartbeat, _ = packet.Pack(nil)
+		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
 		ticker = &time.Ticker{C: make(chan time.Time, 1)}
@@ -277,21 +283,17 @@ func (c *serverConn) write() {
 				return
 			}
 
-			buf, err := pack(write.msg)
-			if err != nil {
-				log.Errorf("packet message error: %v", err)
-				continue
-			}
-
-			if err = c.doWrite(buf); err != nil {
+			if err := c.doWrite(write.msg); err != nil {
 				log.Errorf("write message error: %v", err)
 			}
 		case <-ticker.C:
-			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatCheckInterval).Unix()
+			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Debugf("connection heartbeat timeout")
-				_ = c.Close(true)
+				_ = c.forceClose()
 				return
+			} else {
+				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
 			}
 		}
 	}

@@ -1,9 +1,9 @@
 package config
 
 import (
-	"github.com/dobyte/due/env"
-	"github.com/dobyte/due/flag"
-	"github.com/dobyte/due/internal/value"
+	"github.com/dobyte/due/v2/env"
+	"github.com/dobyte/due/v2/flag"
+	"github.com/dobyte/due/v2/internal/value"
 )
 
 const (

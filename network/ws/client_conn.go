@@ -1,9 +1,11 @@
 package ws
 
 import (
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/utils/xnet"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xnet"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
 	"net"
 	"sync"
@@ -12,26 +14,28 @@ import (
 )
 
 type clientConn struct {
-	rw      sync.RWMutex    // 锁
-	id      int64           // 连接ID
-	uid     int64           // 用户ID
-	conn    *websocket.Conn // TCP源连接
-	state   int32           // 连接状态
-	client  *client         // 客户端
-	chWrite chan chWrite    // 写入队列
-	done    chan struct{}   // 写入完成信号
+	rw                sync.RWMutex    // 锁
+	id                int64           // 连接ID
+	uid               int64           // 用户ID
+	conn              *websocket.Conn // TCP源连接
+	state             int32           // 连接状态
+	client            *client         // 客户端
+	chWrite           chan chWrite    // 写入队列
+	lastHeartbeatTime int64           // 上次心跳时间
+	done              chan struct{}   // 写入完成信号
 }
 
 var _ network.Conn = &clientConn{}
 
-func newClientConn(client *client, conn *websocket.Conn) network.Conn {
+func newClientConn(client *client, id int64, conn *websocket.Conn) network.Conn {
 	c := &clientConn{
-		id:      1,
-		conn:    conn,
-		state:   int32(network.ConnOpened),
-		client:  client,
-		chWrite: make(chan chWrite, 1024),
-		done:    make(chan struct{}),
+		id:                id,
+		conn:              conn,
+		state:             int32(network.ConnOpened),
+		client:            client,
+		chWrite:           make(chan chWrite, 10240),
+		lastHeartbeatTime: xtime.Now().Unix(),
+		done:              make(chan struct{}),
 	}
 
 	if c.client.connectHandler != nil {
@@ -66,7 +70,7 @@ func (c *clientConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *clientConn) Send(msg []byte, msgType ...int) (err error) {
+func (c *clientConn) Send(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -74,16 +78,11 @@ func (c *clientConn) Send(msg []byte, msgType ...int) (err error) {
 		return
 	}
 
-	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
-	case TextMessage, BinaryMessage:
-		return c.conn.WriteMessage(msgTyp, msg)
-	default:
-		return network.ErrIllegalMsgType
-	}
+	return c.conn.WriteMessage(websocket.BinaryMessage, msg)
 }
 
 // Push 发送消息（异步）
-func (c *clientConn) Push(msg []byte, msgType ...int) error {
+func (c *clientConn) Push(msg []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -91,28 +90,9 @@ func (c *clientConn) Push(msg []byte, msgType ...int) error {
 		return err
 	}
 
-	switch msgTyp := c.extractMsgType(msgType...); msgTyp {
-	case TextMessage, BinaryMessage:
-		c.chWrite <- chWrite{typ: dataPacket, msg: msg, msgType: msgTyp}
-	default:
-		return network.ErrIllegalMsgType
-	}
+	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
 
 	return nil
-}
-
-// 提取消息类型
-func (c *clientConn) extractMsgType(msgType ...int) int {
-	if len(msgType) != 0 {
-		return msgType[0]
-	}
-
-	switch c.client.opts.msgType {
-	case textMessage:
-		return TextMessage
-	default:
-		return BinaryMessage
-	}
 }
 
 // State 获取连接状态
@@ -239,15 +219,27 @@ func (c *clientConn) cleanup() {
 // 读取消息
 func (c *clientConn) read() {
 	for {
-		msgType, buf, err := c.conn.ReadMessage()
+		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
+			if e, ok := err.(*websocket.CloseError); !ok {
+				log.Warnf("read message failed: %v", e)
+			}
 			c.cleanup()
 			return
 		}
 
-		if len(buf) > c.client.opts.maxMsgLen {
-			log.Warnf("the msg size too large, has been ignored")
+		if msgType != websocket.BinaryMessage {
 			continue
+		}
+
+		size, _, _, err := packet.Parse(msg)
+		if err != nil {
+			log.Warnf("parse message failed: %v", err)
+			continue
+		}
+
+		if c.client.opts.heartbeatInterval > 0 {
+			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 		}
 
 		switch c.State() {
@@ -257,16 +249,26 @@ func (c *clientConn) read() {
 			return
 		}
 
+		// ignore heartbeat packet
+		if size == 0 {
+			continue
+		}
+
 		if c.client.receiveHandler != nil {
-			c.client.receiveHandler(c, buf, msgType)
+			c.client.receiveHandler(c, msg)
 		}
 	}
 }
 
 // 写入消息
 func (c *clientConn) write() {
-	var ticker *time.Ticker
-	if c.client.opts.enableHeartbeat {
+	var (
+		ticker    *time.Ticker
+		heartbeat []byte
+	)
+
+	if c.client.opts.heartbeatInterval > 0 {
+		heartbeat, _ = packet.Pack(nil)
 		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
@@ -275,8 +277,6 @@ func (c *clientConn) write() {
 
 	for {
 		select {
-		case <-ticker.C:
-			c.chWrite <- chWrite{typ: heartbeatPacket, msgType: BinaryMessage}
 		case write, ok := <-c.chWrite:
 			if !ok {
 				return
@@ -287,14 +287,23 @@ func (c *clientConn) write() {
 				return
 			}
 
-			if err := c.doWrite(&write); err != nil {
+			if err := c.doWrite(write.msg); err != nil {
 				log.Errorf("write message error: %v", err)
+			}
+		case <-ticker.C:
+			deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).Unix()
+			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+				log.Debugf("connection heartbeat timeout: %d", c.id)
+				_ = c.forceClose()
+				return
+			} else {
+				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
 			}
 		}
 	}
 }
 
-func (c *clientConn) doWrite(write *chWrite) error {
+func (c *clientConn) doWrite(buf []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -302,5 +311,5 @@ func (c *clientConn) doWrite(write *chWrite) error {
 		return nil
 	}
 
-	return c.conn.WriteMessage(write.msgType, write.msg)
+	return c.conn.WriteMessage(websocket.BinaryMessage, buf)
 }

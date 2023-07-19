@@ -2,11 +2,10 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/link"
-	"github.com/dobyte/due/packet"
-
-	"github.com/dobyte/due/log"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/link"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/packet"
 )
 
 var (
@@ -35,7 +34,7 @@ func newProxy(gate *Gate) *proxy {
 
 // 绑定用户与网关间的关系
 func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
-	err := p.gate.opts.locator.Set(ctx, uid, cluster.Gate, p.gate.opts.id)
+	err := p.gate.opts.locator.BindGate(ctx, uid, p.gate.opts.id)
 	if err != nil {
 		return err
 	}
@@ -47,7 +46,7 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 
 // 解绑用户与网关间的关系
 func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
-	err := p.gate.opts.locator.Rem(ctx, uid, cluster.Gate, p.gate.opts.id)
+	err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id)
 	if err != nil {
 		log.Errorf("user unbind failed, gid: %d, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
 	}

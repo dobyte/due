@@ -2,9 +2,9 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/internal/code"
-	"github.com/dobyte/due/transport/rpcx/internal/protocol"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
+	"github.com/dobyte/due/v2/transport"
 	cli "github.com/smallnest/rpcx/client"
 )
 
@@ -28,16 +28,7 @@ func (c *Client) Trigger(ctx context.Context, args *transport.TriggerArgs) (miss
 
 // Deliver 投递消息
 func (c *Client) Deliver(ctx context.Context, args *transport.DeliverArgs) (miss bool, err error) {
-	req := &protocol.DeliverRequest{
-		GID: args.GID,
-		NID: args.NID,
-		CID: args.CID,
-		UID: args.UID,
-		Message: &protocol.Message{
-			Seq:    args.Message.Seq,
-			Route:  args.Message.Route,
-			Buffer: args.Message.Buffer,
-		}}
+	req := &protocol.DeliverRequest{GID: args.GID, NID: args.NID, CID: args.CID, UID: args.UID, Message: args.Message}
 	reply := &protocol.DeliverReply{}
 	err = c.cli.Call(ctx, ServicePath, serviceDeliverMethod, req, reply)
 	miss = reply.Code == code.NotFoundSession

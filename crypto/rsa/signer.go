@@ -8,10 +8,9 @@ import (
 type Signer struct {
 	err        error
 	opts       *signerOptions
+	publicKey  *rsa.PublicKey
 	privateKey *rsa.PrivateKey
 }
-
-var DefaultSigner = NewSigner()
 
 func NewSigner(opts ...SignerOption) *Signer {
 	o := defaultSignerOptions()
@@ -19,10 +18,10 @@ func NewSigner(opts ...SignerOption) *Signer {
 		opt(o)
 	}
 
-	d := &Signer{opts: o}
-	d.privateKey, d.err = parsePrivateKey(d.opts.privateKey)
+	s := &Signer{opts: o}
+	s.init()
 
-	return d
+	return s
 }
 
 // Name 名称
@@ -50,7 +49,40 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 	}
 }
 
-// Sign 签名
-func Sign(data []byte) ([]byte, error) {
-	return DefaultSigner.Sign(data)
+// Verify 验签
+func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+
+	var (
+		err    error
+		hash   = s.opts.hash.Hash()
+		hashed = s.opts.hash.Sum(data)
+	)
+
+	switch s.opts.padding {
+	case PKCS:
+		err = rsa.VerifyPKCS1v15(s.publicKey, hash, hashed[:], signature)
+	default:
+		err = rsa.VerifyPSS(s.publicKey, hash, hashed[:], signature, &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hash,
+		})
+	}
+
+	if err == rsa.ErrVerification {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+func (s *Signer) init() {
+	s.publicKey, s.err = parsePublicKey(s.opts.publicKey)
+	if s.err != nil {
+		return
+	}
+
+	s.privateKey, s.err = parsePrivateKey(s.opts.privateKey)
 }
