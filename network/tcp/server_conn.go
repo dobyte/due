@@ -179,8 +179,8 @@ func (c *serverConn) read() {
 			if err != packet.ErrConnectionClosed {
 				log.Warnf("read message failed: %v", err)
 			}
-			c.cleanup()
-			break
+			c.forceClose()
+			return
 		}
 
 		if c.connMgr.server.opts.heartbeatInterval > 0 {
@@ -207,53 +207,44 @@ func (c *serverConn) read() {
 
 // 优雅关闭
 func (c *serverConn) graceClose() (err error) {
-	c.rw.Lock()
-
 	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
 		return
 	}
 
+	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
 	c.chWrite <- chWrite{typ: closeSig}
 	c.rw.Unlock()
 
 	<-c.done
 
-	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	err = c.conn.Close()
-	c.rw.Unlock()
-
-	return
+	return c.cleanup()
 }
 
 // 强制关闭
-func (c *serverConn) forceClose() error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
-	if err := c.checkState(); err != nil {
-		return err
+func (c *serverConn) forceClose() (err error) {
+	if err = c.checkState(); err != nil {
+		return
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-
-	return c.conn.Close()
+	return c.cleanup()
 }
 
 // 清理连接
-func (c *serverConn) cleanup() {
+func (c *serverConn) cleanup() (err error) {
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
+	err = c.conn.Close()
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
+
+	return
 }
 
 // 写入消息
