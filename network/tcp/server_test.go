@@ -12,7 +12,6 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"testing"
-	"time"
 )
 
 func TestServer(t *testing.T) {
@@ -27,17 +26,17 @@ func TestServer(t *testing.T) {
 		t.Logf("connection is closed, connection id: %d", conn.ID())
 	})
 	server.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
-		if err != nil {
-			t.Error(err)
-			return
-		}
+		//message, err := packet.Unpack(msg)
+		//if err != nil {
+		//	t.Error(err)
+		//	return
+		//}
+		//
+		//t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 
-		t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-
-		msg, err = packet.Pack(&packet.Message{
-			Seq:    message.Seq,
-			Route:  message.Route,
+		msg, err := packet.Pack(&packet.Message{
+			Seq:    1,
+			Route:  1,
 			Buffer: []byte("I'm fine~~"),
 		})
 		if err != nil {
@@ -45,14 +44,20 @@ func TestServer(t *testing.T) {
 			return
 		}
 
-		if err = conn.Push(msg); err != nil {
-			t.Error(err)
-		}
+		go func() {
+			if err = conn.Push(msg); err != nil {
+				t.Error(err)
+			}
+		}()
+
+		go func() {
+			conn.Close(true)
+		}()
 	})
 
 	if err := server.Start(); err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(30 * time.Second)
+	select {}
 }

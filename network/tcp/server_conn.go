@@ -8,6 +8,7 @@
 package tcp
 
 import (
+	"fmt"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -55,9 +56,6 @@ func (c *serverConn) Unbind() {
 
 // Send 发送消息（同步）
 func (c *serverConn) Send(msg []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err = c.checkState(); err != nil {
 		return
 	}
@@ -107,9 +105,6 @@ func (c *serverConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *serverConn) LocalAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
@@ -129,9 +124,6 @@ func (c *serverConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
@@ -173,12 +165,20 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 
 // 读取消息
 func (c *serverConn) read() {
+	defer fmt.Println("close")
 	for {
-		size, msg, err := packet.Read(c.conn)
+		//size, msg, err := packet.Read(c.conn)
+		//if err != nil {
+		//	fmt.Println(2222)
+		//	if err != packet.ErrConnectionClosed {
+		//		log.Warnf("read message failed: %v", err)
+		//	}
+		//	c.forceClose()
+		//	return
+		//}
+		msg := make([]byte, 22)
+		_, err := c.conn.Read(msg[:])
 		if err != nil {
-			if err != packet.ErrConnectionClosed {
-				log.Warnf("read message failed: %v", err)
-			}
 			c.forceClose()
 			return
 		}
@@ -195,9 +195,9 @@ func (c *serverConn) read() {
 		}
 
 		// ignore heartbeat packet
-		if size == 0 {
-			continue
-		}
+		//if size == 0 {
+		//	continue
+		//}
 
 		if c.connMgr.server.receiveHandler != nil {
 			c.connMgr.server.receiveHandler(c, msg)
@@ -207,32 +207,42 @@ func (c *serverConn) read() {
 
 // 优雅关闭
 func (c *serverConn) graceClose() (err error) {
+	c.rw.Lock()
 	if err = c.checkState(); err != nil {
+		c.rw.Unlock()
 		return
 	}
 
-	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
 	c.chWrite <- chWrite{typ: closeSig}
 	c.rw.Unlock()
 
 	<-c.done
 
-	return c.cleanup()
+	c.rw.Lock()
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	close(c.chWrite)
+	close(c.done)
+	err = c.conn.Close()
+	c.connMgr.recycle(c)
+	c.rw.Unlock()
+
+	if c.connMgr.server.disconnectHandler != nil {
+		c.connMgr.server.disconnectHandler(c)
+	}
+
+	return
 }
 
 // 强制关闭
 func (c *serverConn) forceClose() (err error) {
+	c.rw.Lock()
+
 	if err = c.checkState(); err != nil {
+		c.rw.Unlock()
 		return
 	}
 
-	return c.cleanup()
-}
-
-// 清理连接
-func (c *serverConn) cleanup() (err error) {
-	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)

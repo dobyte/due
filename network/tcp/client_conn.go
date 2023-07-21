@@ -209,7 +209,6 @@ func (c *clientConn) cleanup() {
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.done)
-	c.conn = nil
 	c.rw.Unlock()
 
 	if c.client.disconnectHandler != nil {
@@ -273,14 +272,23 @@ func (c *clientConn) write() {
 				return
 			}
 
+			c.rw.RLock()
 			if write.typ == closeSig {
 				c.done <- struct{}{}
+				c.rw.RUnlock()
 				return
 			}
 
-			if err := c.doWrite(write.msg); err != nil {
+			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+				c.rw.RUnlock()
+				return
+			}
+
+			if _, err := c.conn.Write(write.msg); err != nil {
 				log.Errorf("write message error: %v", err)
 			}
+
+			c.rw.RUnlock()
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
@@ -292,17 +300,4 @@ func (c *clientConn) write() {
 			}
 		}
 	}
-}
-
-func (c *clientConn) doWrite(buf []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-		return
-	}
-
-	_, err = c.conn.Write(buf)
-
-	return
 }

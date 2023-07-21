@@ -144,6 +144,10 @@ func (s *server) serve() {
 			return
 		}
 
+		if conn == nil {
+			continue
+		}
+
 		tempDelay = 0
 
 		if err = s.connMgr.allocate(conn); err != nil {

@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"io"
@@ -274,8 +275,8 @@ func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 }
 
 // Read 读取数据包
-func (p *defaultPacker) Read(conn net.Conn) (len int, buffer []byte, err error) {
-	lenBuf := make([]byte, p.opts.lenBytes)
+func (p *defaultPacker) Read(conn net.Conn) (size int, buffer []byte, err error) {
+	lenBuf := make([]byte, 4)
 	if _, err = io.ReadFull(conn, lenBuf); err != nil {
 		if isClosedConnError(err) {
 			err = ErrConnectionClosed
@@ -290,40 +291,62 @@ func (p *defaultPacker) Read(conn net.Conn) (len int, buffer []byte, err error) 
 		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		len = int(l)
+		size = int(l)
 	case 2:
 		var l int16
 		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		len = int(l)
+		size = int(l)
 	case 4:
 		var l int32
 		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		len = int(l)
+		size = int(l)
 	case 8:
 		var l int64
 		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		len = int(l)
+		size = int(l)
 	}
 
-	if len == 0 {
+	if size == 0 {
 		return
 	}
 
-	if len < p.opts.lenBytes+p.opts.routeBytes+p.opts.seqBytes {
-		len, err = 0, ErrInvalidMessage
+	if size < p.opts.lenBytes+p.opts.routeBytes+p.opts.seqBytes {
+		size, err = 0, ErrInvalidMessage
 		return
 	}
 
-	buffer = make([]byte, len)
-	copy(buffer, lenBuf)
-	_, err = io.ReadFull(conn, buffer[p.opts.lenBytes:])
+	if size == p.opts.lenBytes {
+		return
+	}
+	fmt.Println(size, p.opts.lenBytes)
 
+	//buffers := make([]byte, size)
+	//copy(buffers, lenBuf)
+	//fmt.Println(buffer)
+	//
+	//if _, err = io.ReadFull(conn, buffers[p.opts.lenBytes:]); err != nil {
+	//	if isClosedConnError(err) {
+	//		err = ErrConnectionClosed
+	//	}
+	//}
+	//
+	//fmt.Println(buffers)
+	//fmt.Println()
+
+	//buffers := make([]byte, 18)
+	//if _, err = io.ReadFull(conn, buffers); err != nil {
+	//	if isClosedConnError(err) {
+	//		err = ErrConnectionClosed
+	//	}
+	//}
+
+	//return size, buffers, nil
 	return
 }
 
