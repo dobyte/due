@@ -3,7 +3,6 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"io"
@@ -29,7 +28,7 @@ type Packer interface {
 	// Unpack 解包
 	Unpack(data []byte) (*Message, error)
 	// Read 读取数据包
-	Read(conn net.Conn) (len int, buffer []byte, err error)
+	Read(conn net.Conn) (isHeartbeat bool, buffer []byte, err error)
 	// Parse 解析数据包
 	Parse(data []byte) (len int, route int32, buffer []byte, err error)
 }
@@ -88,13 +87,13 @@ func (p *defaultPacker) doPackHeartbeat() ([]byte, error) {
 
 	switch p.opts.lenBytes {
 	case 1:
-		err = binary.Write(buf, p.opts.byteOrder, int8(0))
+		err = binary.Write(buf, p.opts.byteOrder, int8(p.opts.lenBytes))
 	case 2:
-		err = binary.Write(buf, p.opts.byteOrder, int16(0))
+		err = binary.Write(buf, p.opts.byteOrder, int16(p.opts.lenBytes))
 	case 4:
-		err = binary.Write(buf, p.opts.byteOrder, int32(0))
+		err = binary.Write(buf, p.opts.byteOrder, int32(p.opts.lenBytes))
 	case 8:
-		err = binary.Write(buf, p.opts.byteOrder, int64(0))
+		err = binary.Write(buf, p.opts.byteOrder, int64(p.opts.lenBytes))
 	}
 	if err != nil {
 		return nil, err
@@ -275,78 +274,62 @@ func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 }
 
 // Read 读取数据包
-func (p *defaultPacker) Read(conn net.Conn) (size int, buffer []byte, err error) {
-	lenBuf := make([]byte, 4)
-	if _, err = io.ReadFull(conn, lenBuf); err != nil {
+func (p *defaultPacker) Read(conn net.Conn) (isHeartbeat bool, buffer []byte, err error) {
+	lenBytes := make([]byte, p.opts.lenBytes)
+	if _, err = io.ReadFull(conn, lenBytes); err != nil {
 		if isClosedConnError(err) {
 			err = ErrConnectionClosed
 		}
 		return
 	}
 
-	buf := bytes.NewBuffer(lenBuf)
+	lenVal := 0
+	lenBuf := bytes.NewBuffer(lenBytes)
 	switch p.opts.lenBytes {
 	case 1:
 		var l int8
-		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
+		if err = binary.Read(lenBuf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		size = int(l)
+		lenVal = int(l)
 	case 2:
 		var l int16
-		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
+		if err = binary.Read(lenBuf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		size = int(l)
+		lenVal = int(l)
 	case 4:
 		var l int32
-		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
+		if err = binary.Read(lenBuf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		size = int(l)
+		lenVal = int(l)
 	case 8:
 		var l int64
-		if err = binary.Read(buf, p.opts.byteOrder, &l); err != nil {
+		if err = binary.Read(lenBuf, p.opts.byteOrder, &l); err != nil {
 			return
 		}
-		size = int(l)
+		lenVal = int(l)
 	}
 
-	if size == 0 {
+	if lenVal == p.opts.lenBytes {
+		isHeartbeat = true
 		return
 	}
 
-	if size < p.opts.lenBytes+p.opts.routeBytes+p.opts.seqBytes {
-		size, err = 0, ErrInvalidMessage
+	if lenVal < p.opts.lenBytes+p.opts.routeBytes+p.opts.seqBytes {
+		err = ErrInvalidMessage
 		return
 	}
 
-	if size == p.opts.lenBytes {
-		return
+	buffer = make([]byte, lenVal)
+	copy(buffer, lenBytes)
+	if _, err = io.ReadFull(conn, buffer[p.opts.lenBytes:]); err != nil {
+		if isClosedConnError(err) {
+			err = ErrConnectionClosed
+		}
 	}
-	fmt.Println(size, p.opts.lenBytes)
 
-	//buffers := make([]byte, size)
-	//copy(buffers, lenBuf)
-	//fmt.Println(buffer)
-	//
-	//if _, err = io.ReadFull(conn, buffers[p.opts.lenBytes:]); err != nil {
-	//	if isClosedConnError(err) {
-	//		err = ErrConnectionClosed
-	//	}
-	//}
-	//
-	//fmt.Println(buffers)
-	//fmt.Println()
-
-	//buffers := make([]byte, 18)
-	//if _, err = io.ReadFull(conn, buffers); err != nil {
-	//	if isClosedConnError(err) {
-	//		err = ErrConnectionClosed
-	//	}
-	//}
-
-	//return size, buffers, nil
 	return
 }
 

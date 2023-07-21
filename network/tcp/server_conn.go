@@ -8,7 +8,6 @@
 package tcp
 
 import (
-	"fmt"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -30,6 +29,7 @@ type serverConn struct {
 	chWrite           chan chWrite   // 写入队列
 	lastHeartbeatTime int64          // 上次心跳时间
 	done              chan struct{}  // 写入完成信号
+	close             chan struct{}  // 关闭信号
 }
 
 var _ network.Conn = &serverConn{}
@@ -56,6 +56,9 @@ func (c *serverConn) Unbind() {
 
 // Send 发送消息（同步）
 func (c *serverConn) Send(msg []byte) (err error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if err = c.checkState(); err != nil {
 		return
 	}
@@ -89,7 +92,7 @@ func (c *serverConn) Close(isForce ...bool) error {
 	if len(isForce) > 0 && isForce[0] {
 		return c.forceClose()
 	} else {
-		return c.graceClose()
+		return c.graceClose(true)
 	}
 }
 
@@ -105,6 +108,9 @@ func (c *serverConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *serverConn) LocalAddr() (net.Addr, error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
@@ -124,6 +130,9 @@ func (c *serverConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
@@ -148,65 +157,63 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 	c.id = cm.id
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 10240)
+	c.chWrite = make(chan chWrite, 1024)
 	c.done = make(chan struct{})
+	c.close = make(chan struct{})
 	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
-	if c.connMgr.server.connectHandler != nil {
-		c.connMgr.server.connectHandler(c)
-	}
-
 	go c.read()
 
 	go c.write()
+
+	if c.connMgr.server.connectHandler != nil {
+		c.connMgr.server.connectHandler(c)
+	}
 }
 
 // 读取消息
 func (c *serverConn) read() {
-	defer fmt.Println("close")
 	for {
-		//size, msg, err := packet.Read(c.conn)
-		//if err != nil {
-		//	fmt.Println(2222)
-		//	if err != packet.ErrConnectionClosed {
-		//		log.Warnf("read message failed: %v", err)
-		//	}
-		//	c.forceClose()
-		//	return
-		//}
-		msg := make([]byte, 22)
-		_, err := c.conn.Read(msg[:])
-		if err != nil {
-			c.forceClose()
+		select {
+		case <-c.close:
 			return
-		}
+		default:
+			isHeartbeat, msg, err := packet.Read(c.conn)
+			if err != nil {
+				if err != packet.ErrConnectionClosed {
+					log.Warnf("read message failed: %v", err)
+				}
+				c.forceClose()
+				return
+			}
 
-		if c.connMgr.server.opts.heartbeatInterval > 0 {
-			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
-		}
+			if c.connMgr.server.opts.heartbeatInterval > 0 {
+				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+			}
 
-		switch c.State() {
-		case network.ConnHanged:
-			continue
-		case network.ConnClosed:
-			return
-		}
+			switch c.State() {
+			case network.ConnHanged:
+				continue
+			case network.ConnClosed:
+				return
+			}
 
-		// ignore heartbeat packet
-		//if size == 0 {
-		//	continue
-		//}
+			// ignore heartbeat packet
+			if isHeartbeat {
+				continue
+			}
 
-		if c.connMgr.server.receiveHandler != nil {
-			c.connMgr.server.receiveHandler(c, msg)
+			if c.connMgr.server.receiveHandler != nil {
+				c.connMgr.server.receiveHandler(c, msg)
+			}
 		}
 	}
 }
 
 // 优雅关闭
-func (c *serverConn) graceClose() (err error) {
+func (c *serverConn) graceClose(needRecycle bool) (err error) {
 	c.rw.Lock()
 	if err = c.checkState(); err != nil {
 		c.rw.Unlock()
@@ -222,9 +229,13 @@ func (c *serverConn) graceClose() (err error) {
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
-	c.connMgr.recycle(c)
+	c.conn.Close()
+	c.conn = nil
+	if needRecycle {
+		c.connMgr.recycle(c)
+	}
 	c.rw.Unlock()
 
 	if c.connMgr.server.disconnectHandler != nil {
@@ -245,8 +256,10 @@ func (c *serverConn) forceClose() (err error) {
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	c.conn.Close()
+	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
 
@@ -279,14 +292,23 @@ func (c *serverConn) write() {
 				return
 			}
 
+			c.rw.RLock()
 			if write.typ == closeSig {
 				c.done <- struct{}{}
+				c.rw.RUnlock()
 				return
 			}
 
-			if err := c.doWrite(write.msg); err != nil {
+			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+				c.rw.RUnlock()
+				return
+			}
+
+			if _, err := c.conn.Write(write.msg); err != nil {
 				log.Errorf("write message error: %v", err)
 			}
+
+			c.rw.RUnlock()
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
@@ -294,21 +316,10 @@ func (c *serverConn) write() {
 				_ = c.forceClose()
 				return
 			} else {
+				c.rw.RLock()
 				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
+				c.rw.RUnlock()
 			}
 		}
 	}
-}
-
-func (c *serverConn) doWrite(buf []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-		return
-	}
-
-	_, err = c.conn.Write(buf)
-
-	return
 }

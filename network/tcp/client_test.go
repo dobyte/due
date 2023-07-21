@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	for i := 0; i < 400; i++ {
+	for i := 0; i < 1000000; i++ {
 		client := tcp.NewClient()
 
 		client.OnConnect(func(conn network.Conn) {
@@ -40,8 +40,9 @@ func TestNewClient(t *testing.T) {
 			Buffer: []byte("hello server~~"),
 		})
 
-		conn.Push(msg)
-		conn.Close()
+		conn.Send(msg)
+		conn.Close(true)
+		time.Sleep(time.Millisecond)
 	}
 }
 

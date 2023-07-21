@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/log"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 var _ Component = &pprof{}

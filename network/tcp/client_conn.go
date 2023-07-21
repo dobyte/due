@@ -22,6 +22,7 @@ type clientConn struct {
 	chWrite           chan chWrite  // 写入队列
 	lastHeartbeatTime int64         // 上次心跳时间
 	done              chan struct{} // 写入完成信号
+	close             chan struct{} // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
@@ -35,15 +36,16 @@ func newClientConn(client *client, id int64, conn net.Conn) network.Conn {
 		chWrite:           make(chan chWrite, 10240),
 		lastHeartbeatTime: xtime.Now().Unix(),
 		done:              make(chan struct{}),
-	}
-
-	if c.client.connectHandler != nil {
-		c.client.connectHandler(c)
+		close:             make(chan struct{}),
 	}
 
 	go c.read()
 
 	go c.write()
+
+	if c.client.connectHandler != nil {
+		c.client.connectHandler(c)
+	}
 
 	return c
 }
@@ -183,69 +185,79 @@ func (c *clientConn) graceClose() (err error) {
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	err = c.conn.Close()
-	c.rw.Unlock()
-
-	return
-}
-
-// 强制关闭
-func (c *clientConn) forceClose() error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-
-	return c.conn.Close()
-}
-
-// 清理连接
-func (c *clientConn) cleanup() {
-	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
+	close(c.close)
 	close(c.done)
+	c.conn.Close()
+	c.conn = nil
 	c.rw.Unlock()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
+
+	return
+}
+
+// 强制关闭
+func (c *clientConn) forceClose() (err error) {
+	c.rw.Lock()
+
+	if err = c.checkState(); err != nil {
+		c.rw.Unlock()
+		return
+	}
+
+	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	close(c.chWrite)
+	close(c.close)
+	close(c.done)
+	c.conn.Close()
+	c.conn = nil
+	c.rw.Unlock()
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
+
+	return
 }
 
 // 读取消息
 func (c *clientConn) read() {
 	for {
-		size, msg, err := packet.Read(c.conn)
-		if err != nil {
-			if err != packet.ErrConnectionClosed {
-				log.Warnf("read message failed: %v", err)
+		select {
+		case <-c.close:
+			return
+		default:
+			isHeartbeat, msg, err := packet.Read(c.conn)
+			if err != nil {
+				if err != packet.ErrConnectionClosed {
+					log.Warnf("read message failed: %v", err)
+				}
+				c.forceClose()
+				return
 			}
-			c.cleanup()
-			return
-		}
 
-		if c.client.opts.heartbeatInterval > 0 {
-			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
-		}
+			if c.client.opts.heartbeatInterval > 0 {
+				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+			}
 
-		switch c.State() {
-		case network.ConnHanged:
-			continue
-		case network.ConnClosed:
-			return
-		}
+			switch c.State() {
+			case network.ConnHanged:
+				continue
+			case network.ConnClosed:
+				return
+			}
 
-		// ignore heartbeat packet
-		if size == 0 {
-			continue
-		}
+			// ignore heartbeat packet
+			if isHeartbeat {
+				continue
+			}
 
-		if c.client.receiveHandler != nil {
-			c.client.receiveHandler(c, msg)
+			if c.client.receiveHandler != nil {
+				c.client.receiveHandler(c, msg)
+			}
 		}
 	}
 }
@@ -296,7 +308,9 @@ func (c *clientConn) write() {
 				_ = c.forceClose()
 				return
 			} else {
+				c.rw.RLock()
 				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
+				c.rw.RUnlock()
 			}
 		}
 	}

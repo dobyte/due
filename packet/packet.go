@@ -31,7 +31,7 @@ func Unpack(data []byte) (*Message, error) {
 }
 
 // Read 读取数据包
-func Read(conn net.Conn) (len int, buffer []byte, err error) {
+func Read(conn net.Conn) (isHeartbeat bool, buffer []byte, err error) {
 	return globalPacker.Read(conn)
 }
 

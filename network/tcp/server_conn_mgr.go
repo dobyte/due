@@ -14,17 +14,17 @@ import (
 )
 
 type serverConnMgr struct {
-	mu     sync.Mutex               // 连接锁
-	id     int64                    // 连接ID
-	pool   sync.Pool                // 连接池
-	conns  map[net.Conn]*serverConn // 连接集合
-	server *server                  // 服务器
+	mu     sync.Mutex            // 连接锁
+	id     int64                 // 连接ID
+	pool   sync.Pool             // 连接池
+	conns  map[int64]*serverConn // 连接集合
+	server *server               // 服务器
 }
 
 func newConnMgr(server *server) *serverConnMgr {
 	return &serverConnMgr{
 		server: server,
-		conns:  make(map[net.Conn]*serverConn),
+		conns:  make(map[int64]*serverConn),
 		pool:   sync.Pool{New: func() interface{} { return &serverConn{} }},
 	}
 }
@@ -35,8 +35,10 @@ func (cm *serverConnMgr) close() {
 	defer cm.mu.Unlock()
 
 	for _, conn := range cm.conns {
-		_ = conn.graceClose()
+		_ = conn.graceClose(false)
 	}
+
+	cm.conns = nil
 }
 
 // 分配连接
@@ -51,7 +53,7 @@ func (cm *serverConnMgr) allocate(c net.Conn) error {
 	cm.id++
 	conn := cm.pool.Get().(*serverConn)
 	conn.init(c, cm)
-	cm.conns[c] = conn
+	cm.conns[conn.id] = conn
 
 	return nil
 }
@@ -61,7 +63,6 @@ func (cm *serverConnMgr) recycle(conn *serverConn) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	delete(cm.conns, conn.conn)
-	conn.conn = nil
+	delete(cm.conns, conn.id)
 	cm.pool.Put(conn)
 }
