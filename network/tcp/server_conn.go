@@ -150,8 +150,8 @@ func (c *serverConn) checkState() error {
 }
 
 // 初始化连接
-func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
-	c.id = cm.id
+func (c *serverConn) init(id int64, conn net.Conn, cm *serverConnMgr) {
+	c.id = id
 	c.conn = conn
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 1024)
@@ -171,7 +171,7 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 }
 
 // 优雅关闭
-func (c *serverConn) graceClose(needRecycle bool) (err error) {
+func (c *serverConn) graceClose(isNeedRecycle bool) (err error) {
 	c.rw.Lock()
 	if err = c.checkState(); err != nil {
 		c.rw.Unlock()
@@ -191,7 +191,7 @@ func (c *serverConn) graceClose(needRecycle bool) (err error) {
 	close(c.done)
 	c.conn.Close()
 	c.conn = nil
-	if needRecycle {
+	if isNeedRecycle {
 		c.connMgr.recycle(c)
 	}
 	c.rw.Unlock()
@@ -304,7 +304,7 @@ func (c *serverConn) write() {
 			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Debugf("connection heartbeat timeout")
-				_ = c.forceClose()
+				c.forceClose()
 				return
 			} else {
 				c.rw.RLock()

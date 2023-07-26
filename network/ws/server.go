@@ -15,6 +15,8 @@ import (
 	"net/http"
 )
 
+const protocol = "websocket"
+
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
 
 type Server interface {
@@ -57,7 +59,7 @@ func (s *server) Addr() string {
 
 // Protocol 协议
 func (s *server) Protocol() string {
-	return "websocket"
+	return protocol
 }
 
 // Start 启动服务器
@@ -114,12 +116,12 @@ func (s *server) serve() {
 
 	http.HandleFunc(s.opts.path, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
 
 		if s.upgradeHandler != nil && !s.upgradeHandler(w, r) {
-			http.Error(w, "Forbidden", 403)
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 

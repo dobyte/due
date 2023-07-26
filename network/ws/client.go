@@ -35,7 +35,7 @@ func (c *client) Dial() (network.Conn, error) {
 		return nil, err
 	}
 
-	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
+	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
 }
 
 // OnConnect 监听连接打开

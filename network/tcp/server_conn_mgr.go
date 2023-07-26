@@ -44,16 +44,19 @@ func (cm *serverConnMgr) close() {
 // 分配连接
 func (cm *serverConnMgr) allocate(c net.Conn) error {
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
+		cm.mu.Unlock()
 		return network.ErrTooManyConnection
 	}
 
 	cm.id++
+	id := cm.id
 	conn := cm.pool.Get().(*serverConn)
-	conn.init(c, cm)
-	cm.conns[conn.id] = conn
+	cm.conns[id] = conn
+	cm.mu.Unlock()
+
+	conn.init(id, c, cm)
 
 	return nil
 }

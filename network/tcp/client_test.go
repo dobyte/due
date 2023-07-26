@@ -44,7 +44,7 @@ func TestClient_Dial(t *testing.T) {
 		Buffer: []byte("hello server~~"),
 	})
 
-	if err = conn.Send(msg); err != nil {
+	if err = conn.Push(msg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,7 +171,7 @@ func Test_Benchmark(t *testing.T) {
 						return
 					}
 
-					if err = conn.Send(msg); err != nil {
+					if err = conn.Push(msg); err != nil {
 						t.Error(err)
 						return
 					}
@@ -193,6 +193,7 @@ func Test_Benchmark(t *testing.T) {
 
 	totalTime := float64(time.Now().UnixNano()-startTime) / float64(time.Second)
 
+	fmt.Printf("server               : %s\n", "tcp")
 	fmt.Printf("concurrency          : %d\n", concurrency)
 	fmt.Printf("latency              : %fs\n", totalTime)
 	fmt.Printf("sent     requests    : %d\n", totalSent)

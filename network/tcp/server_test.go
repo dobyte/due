@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 			return
 		}
 
-		if err = conn.Send(msg); err != nil {
+		if err = conn.Push(msg); err != nil {
 			t.Error(err)
 		}
 	})
@@ -104,7 +104,7 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		if err = conn.Send(msg); err != nil {
+		if err = conn.Push(msg); err != nil {
 			t.Error(err)
 		}
 	})

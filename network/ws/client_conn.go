@@ -3,7 +3,6 @@ package ws
 import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
@@ -23,28 +22,30 @@ type clientConn struct {
 	chWrite           chan chWrite    // 写入队列
 	lastHeartbeatTime int64           // 上次心跳时间
 	done              chan struct{}   // 写入完成信号
+	close             chan struct{}   // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
 
-func newClientConn(client *client, id int64, conn *websocket.Conn) network.Conn {
+func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
 	c := &clientConn{
 		id:                id,
 		conn:              conn,
 		state:             int32(network.ConnOpened),
 		client:            client,
-		chWrite:           make(chan chWrite, 10240),
+		chWrite:           make(chan chWrite, 4096),
 		lastHeartbeatTime: xtime.Now().Unix(),
 		done:              make(chan struct{}),
-	}
-
-	if c.client.connectHandler != nil {
-		c.client.connectHandler(c)
+		close:             make(chan struct{}),
 	}
 
 	go c.read()
 
 	go c.write()
+
+	if c.client.connectHandler != nil {
+		c.client.connectHandler(c)
+	}
 
 	return c
 }
@@ -69,10 +70,12 @@ func (c *clientConn) Unbind() {
 	atomic.StoreInt64(&c.uid, 0)
 }
 
-// Send 发送消息（同步）
+// Send 发送消息（异步）
+// 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
+// 建议使用Push方法替代Send
 func (c *clientConn) Send(msg []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
+	c.rw.Lock()
+	defer c.rw.Unlock()
 
 	if err = c.checkState(); err != nil {
 		return
@@ -82,17 +85,17 @@ func (c *clientConn) Send(msg []byte) (err error) {
 }
 
 // Push 发送消息（异步）
-func (c *clientConn) Push(msg []byte) error {
+func (c *clientConn) Push(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err := c.checkState(); err != nil {
-		return err
+	if err = c.checkState(); err != nil {
+		return
 	}
 
 	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return nil
+	return
 }
 
 // State 获取连接状态
@@ -182,24 +185,42 @@ func (c *clientConn) graceClose() (err error) {
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	err = c.conn.Close()
+	close(c.chWrite)
+	close(c.close)
+	close(c.done)
+	c.conn.Close()
+	c.conn = nil
 	c.rw.Unlock()
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
 
 	return
 }
 
 // 强制关闭
-func (c *clientConn) forceClose() error {
+func (c *clientConn) forceClose() (err error) {
 	c.rw.Lock()
-	defer c.rw.Unlock()
 
-	if err := c.checkState(); err != nil {
-		return err
+	if err = c.checkState(); err != nil {
+		c.rw.Unlock()
+		return
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	close(c.chWrite)
+	close(c.close)
+	close(c.done)
+	c.conn.Close()
+	c.conn = nil
+	c.rw.Unlock()
 
-	return c.conn.Close()
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
+
+	return
 }
 
 // 清理连接
@@ -219,56 +240,51 @@ func (c *clientConn) cleanup() {
 // 读取消息
 func (c *clientConn) read() {
 	for {
-		msgType, msg, err := c.conn.ReadMessage()
-		if err != nil {
-			if e, ok := err.(*websocket.CloseError); !ok {
-				log.Warnf("read message failed: %v", e)
+		select {
+		case <-c.close:
+			return
+		default:
+			msgType, msg, err := c.conn.ReadMessage()
+			if err != nil {
+				if _, ok := err.(*websocket.CloseError); !ok {
+					log.Warnf("read message failed: %v", err)
+				}
+				c.forceClose()
+				return
 			}
-			c.cleanup()
-			return
-		}
 
-		if msgType != websocket.BinaryMessage {
-			continue
-		}
+			if msgType != websocket.BinaryMessage {
+				continue
+			}
 
-		size, _, _, err := packet.Parse(msg)
-		if err != nil {
-			log.Warnf("parse message failed: %v", err)
-			continue
-		}
+			if c.client.opts.heartbeatInterval > 0 {
+				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+			}
 
-		if c.client.opts.heartbeatInterval > 0 {
-			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
-		}
+			switch c.State() {
+			case network.ConnHanged:
+				continue
+			case network.ConnClosed:
+				return
+			}
 
-		switch c.State() {
-		case network.ConnHanged:
-			continue
-		case network.ConnClosed:
-			return
-		}
+			// ignore heartbeat packet
+			if len(msg) == 0 {
+				continue
+			}
 
-		// ignore heartbeat packet
-		if size == 0 {
-			continue
-		}
-
-		if c.client.receiveHandler != nil {
-			c.client.receiveHandler(c, msg)
+			if c.client.receiveHandler != nil {
+				c.client.receiveHandler(c, msg)
+			}
 		}
 	}
 }
 
 // 写入消息
 func (c *clientConn) write() {
-	var (
-		ticker    *time.Ticker
-		heartbeat []byte
-	)
+	var ticker *time.Ticker
 
 	if c.client.opts.heartbeatInterval > 0 {
-		heartbeat, _ = packet.Pack(nil)
 		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
@@ -277,39 +293,49 @@ func (c *clientConn) write() {
 
 	for {
 		select {
-		case write, ok := <-c.chWrite:
+		case r, ok := <-c.chWrite:
 			if !ok {
 				return
 			}
 
-			if write.typ == closeSig {
+			c.rw.RLock()
+			if r.typ == closeSig {
 				c.done <- struct{}{}
+				c.rw.RUnlock()
 				return
 			}
 
-			if err := c.doWrite(write.msg); err != nil {
+			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+				c.rw.RUnlock()
+				return
+			}
+
+			err := c.conn.WriteMessage(websocket.BinaryMessage, r.msg)
+			c.rw.RUnlock()
+
+			if err != nil {
 				log.Errorf("write message error: %v", err)
 			}
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Debugf("connection heartbeat timeout: %d", c.id)
-				_ = c.forceClose()
+				c.forceClose()
 				return
 			} else {
-				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
+				// send heartbeat packet
+				c.rw.RLock()
+
+				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+					c.rw.RUnlock()
+					return
+				}
+
+				// Connections support one concurrent writer.
+				c.chWrite <- chWrite{typ: dataPacket}
+
+				c.rw.RUnlock()
 			}
 		}
 	}
-}
-
-func (c *clientConn) doWrite(buf []byte) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-		return nil
-	}
-
-	return c.conn.WriteMessage(websocket.BinaryMessage, buf)
 }

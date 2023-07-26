@@ -32,7 +32,7 @@ func newClientConn(client *client, id int64, conn net.Conn) network.Conn {
 		conn:              conn,
 		state:             int32(network.ConnOpened),
 		client:            client,
-		chWrite:           make(chan chWrite, 10240),
+		chWrite:           make(chan chWrite, 1024),
 		lastHeartbeatTime: xtime.Now().Unix(),
 		done:              make(chan struct{}),
 		close:             make(chan struct{}),

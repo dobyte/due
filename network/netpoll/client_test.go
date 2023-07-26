@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestNewClient(t *testing.T) {
+func TestClient_Dial(t *testing.T) {
 	client := netpoll.NewClient()
 
 	client.OnConnect(func(conn network.Conn) {
@@ -21,7 +21,6 @@ func TestNewClient(t *testing.T) {
 		t.Log("connection is closed")
 	})
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		fmt.Println(msg)
 		message, err := packet.Unpack(msg)
 		if err != nil {
 			t.Error(err)
@@ -44,7 +43,7 @@ func TestNewClient(t *testing.T) {
 		Buffer: []byte("hello server~~"),
 	})
 
-	if err = conn.Send(msg); err != nil {
+	if err = conn.Push(msg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,6 +192,7 @@ func TestClient_Benchmark(t *testing.T) {
 
 	totalTime := float64(time.Now().UnixNano()-startTime) / float64(time.Second)
 
+	fmt.Printf("server               : %s\n", "netpoll-tcp")
 	fmt.Printf("concurrency          : %d\n", concurrency)
 	fmt.Printf("latency              : %fs\n", totalTime)
 	fmt.Printf("sent     requests    : %d\n", totalSent)
