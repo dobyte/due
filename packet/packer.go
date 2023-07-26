@@ -8,12 +8,10 @@ import (
 )
 
 var (
-	ErrLenOverflow      = errors.New("len overflow")
-	ErrSeqOverflow      = errors.New("seq overflow")
-	ErrRouteOverflow    = errors.New("route overflow")
-	ErrInvalidMessage   = errors.New("invalid message")
-	ErrBufferTooLarge   = errors.New("buffer too large")
-	ErrConnectionClosed = errors.New("connection is closed")
+	ErrSeqOverflow    = errors.New("seq overflow")
+	ErrRouteOverflow  = errors.New("route overflow")
+	ErrInvalidMessage = errors.New("invalid message")
+	ErrBufferTooLarge = errors.New("buffer too large")
 )
 
 type Packer interface {
