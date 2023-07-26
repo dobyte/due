@@ -1,9 +1,8 @@
-package tcp_test
+package netpoll_test
 
 import (
 	"fmt"
 	"github.com/dobyte/due/network/netpoll/v2"
-	"github.com/dobyte/due/network/tcp/v2"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"sync"
@@ -12,7 +11,7 @@ import (
 	"time"
 )
 
-func TestClient_Dial(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	client := netpoll.NewClient()
 
 	client.OnConnect(func(conn network.Conn) {
@@ -22,6 +21,7 @@ func TestClient_Dial(t *testing.T) {
 		t.Log("connection is closed")
 	})
 	client.OnReceive(func(conn network.Conn, msg []byte) {
+		fmt.Println(msg)
 		message, err := packet.Unpack(msg)
 		if err != nil {
 			t.Error(err)
@@ -57,7 +57,7 @@ func TestNewClient_Dial(t *testing.T) {
 		wg.Add(1)
 
 		go func() {
-			client := tcp.NewClient()
+			client := netpoll.NewClient()
 			client.OnConnect(func(conn network.Conn) {
 				t.Log("connection is opened")
 			})
@@ -113,7 +113,7 @@ func TestNewClient_Dial(t *testing.T) {
 	wg.Wait()
 }
 
-func Test_Benchmark(t *testing.T) {
+func TestClient_Benchmark(t *testing.T) {
 	// 并发数
 	concurrency := 1000
 	// 消息量
@@ -134,7 +134,7 @@ func Test_Benchmark(t *testing.T) {
 	}
 
 	wg := sync.WaitGroup{}
-	client := tcp.NewClient()
+	client := netpoll.NewClient()
 	client.OnReceive(func(conn network.Conn, msg []byte) {
 		atomic.AddInt64(&totalRecv, 1)
 

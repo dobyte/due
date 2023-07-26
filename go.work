@@ -13,6 +13,8 @@ use (
 	./eventbus/redis
 	./network/tcp
 	./network/ws
+	./network/websocket
+	./network/netpoll
 	./locate/redis
 	./log/zap
 	./log/tencent

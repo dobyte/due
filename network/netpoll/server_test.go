@@ -1,14 +1,7 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/11 11:31 上午
- * @Desc: TODO
- */
-
-package tcp_test
+package netpoll_test
 
 import (
-	"github.com/dobyte/due/network/tcp/v2"
+	"github.com/dobyte/due/network/netpoll/v2"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -32,7 +25,7 @@ func setLimit() {
 func TestServer(t *testing.T) {
 	setLimit()
 
-	server := tcp.NewServer()
+	server := netpoll.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
@@ -57,8 +50,7 @@ func TestServer(t *testing.T) {
 			Buffer: []byte("I'm fine~~"),
 		})
 		if err != nil {
-			t.Error(err)
-			return
+			t.Fatal(err)
 		}
 
 		if err = conn.Send(msg); err != nil {
@@ -83,7 +75,7 @@ func TestServer(t *testing.T) {
 func TestServer_Benchmark(t *testing.T) {
 	setLimit()
 
-	server := tcp.NewServer()
+	server := netpoll.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
@@ -100,8 +92,7 @@ func TestServer_Benchmark(t *testing.T) {
 			Buffer: []byte("I'm fine~~"),
 		})
 		if err != nil {
-			t.Error(err)
-			return
+			t.Fatal(err)
 		}
 
 		if err = conn.Send(msg); err != nil {

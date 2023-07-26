@@ -3,7 +3,6 @@ package tcp
 import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
@@ -79,9 +78,7 @@ func (c *clientConn) Send(msg []byte) (err error) {
 		return
 	}
 
-	_, err = c.conn.Write(msg)
-
-	return
+	return write(c.conn, msg)
 }
 
 // Push 发送消息（异步）
@@ -230,11 +227,8 @@ func (c *clientConn) read() {
 		case <-c.close:
 			return
 		default:
-			isHeartbeat, msg, err := packet.Read(c.conn)
+			msg, err := read(c.conn)
 			if err != nil {
-				if err != packet.ErrConnectionClosed {
-					log.Warnf("read message failed: %v", err)
-				}
 				c.forceClose()
 				return
 			}
@@ -251,7 +245,7 @@ func (c *clientConn) read() {
 			}
 
 			// ignore heartbeat packet
-			if isHeartbeat {
+			if len(msg) == 0 {
 				continue
 			}
 
@@ -264,13 +258,9 @@ func (c *clientConn) read() {
 
 // 写入消息
 func (c *clientConn) write() {
-	var (
-		ticker    *time.Ticker
-		heartbeat []byte
-	)
+	var ticker *time.Ticker
 
 	if c.client.opts.heartbeatInterval > 0 {
-		heartbeat, _ = packet.Pack(nil)
 		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
@@ -279,13 +269,13 @@ func (c *clientConn) write() {
 
 	for {
 		select {
-		case write, ok := <-c.chWrite:
+		case r, ok := <-c.chWrite:
 			if !ok {
 				return
 			}
 
 			c.rw.RLock()
-			if write.typ == closeSig {
+			if r.typ == closeSig {
 				c.done <- struct{}{}
 				c.rw.RUnlock()
 				return
@@ -296,21 +286,33 @@ func (c *clientConn) write() {
 				return
 			}
 
-			if _, err := c.conn.Write(write.msg); err != nil {
+			err := write(c.conn, r.msg)
+			c.rw.RUnlock()
+
+			if err != nil {
 				log.Errorf("write message error: %v", err)
 			}
-
-			c.rw.RUnlock()
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				log.Debugf("connection heartbeat timeout")
-				_ = c.forceClose()
+				c.forceClose()
 				return
 			} else {
 				c.rw.RLock()
-				c.chWrite <- chWrite{typ: heartbeatPacket, msg: heartbeat}
+
+				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+					c.rw.RUnlock()
+					return
+				}
+
+				// send heartbeat packet
+				err := write(c.conn, nil)
 				c.rw.RUnlock()
+
+				if err != nil {
+					log.Errorf("send heartbeat packet failed: %v", err)
+				}
 			}
 		}
 	}

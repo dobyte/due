@@ -3,7 +3,6 @@ package packet
 import (
 	"encoding/binary"
 	"github.com/dobyte/due/v2/config"
-	"strings"
 )
 
 const (
@@ -55,20 +54,20 @@ type Option func(o *options)
 
 func defaultOptions() *options {
 	opts := &options{
-		byteOrder:   binary.LittleEndian,
+		byteOrder:   binary.BigEndian,
 		lenBytes:    config.Get(defaultLenBytesKey, defaultLenBytes).Int(),
 		routeBytes:  config.Get(defaultRouteBytesKey, defaultRouteBytes).Int(),
 		seqBytes:    config.Get(defaultSeqBytesKey, defaultSeqBytes).Int(),
 		bufferBytes: config.Get(defaultMessageBytesKey, defaultMessageBytes).Int(),
 	}
 
-	endian := config.Get(defaultEndianKey).String()
-	switch strings.ToLower(endian) {
-	case littleEndian:
-		opts.byteOrder = binary.LittleEndian
-	case bigEndian:
-		opts.byteOrder = binary.BigEndian
-	}
+	//endian := config.Get(defaultEndianKey).String()
+	//switch strings.ToLower(endian) {
+	//case littleEndian:
+	//	opts.byteOrder = binary.LittleEndian
+	//case bigEndian:
+	//	opts.byteOrder = binary.BigEndian
+	//}
 
 	return opts
 }

@@ -87,13 +87,13 @@ func (p *defaultPacker) doPackHeartbeat() ([]byte, error) {
 
 	switch p.opts.lenBytes {
 	case 1:
-		err = binary.Write(buf, p.opts.byteOrder, int8(p.opts.lenBytes))
+		err = binary.Write(buf, p.opts.byteOrder, int8(0))
 	case 2:
-		err = binary.Write(buf, p.opts.byteOrder, int16(p.opts.lenBytes))
+		err = binary.Write(buf, p.opts.byteOrder, int16(0))
 	case 4:
-		err = binary.Write(buf, p.opts.byteOrder, int32(p.opts.lenBytes))
+		err = binary.Write(buf, p.opts.byteOrder, int32(0))
 	case 8:
-		err = binary.Write(buf, p.opts.byteOrder, int64(p.opts.lenBytes))
+		err = binary.Write(buf, p.opts.byteOrder, int64(0))
 	}
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (p *defaultPacker) doPackMessage(message *Message) ([]byte, error) {
 		return nil, ErrBufferTooLarge
 	}
 
-	ln := p.opts.lenBytes + p.opts.routeBytes + p.opts.routeBytes + len(message.Buffer)
+	ln := p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer)
 
 	if ln > 1<<(8*p.opts.lenBytes-1)-1 || ln < -1<<(8*p.opts.lenBytes-1) {
 		return nil, ErrLenOverflow
@@ -130,20 +130,6 @@ func (p *defaultPacker) doPackMessage(message *Message) ([]byte, error) {
 	)
 
 	buf.Grow(ln)
-
-	switch p.opts.lenBytes {
-	case 1:
-		err = binary.Write(buf, p.opts.byteOrder, int8(ln))
-	case 2:
-		err = binary.Write(buf, p.opts.byteOrder, int16(ln))
-	case 4:
-		err = binary.Write(buf, p.opts.byteOrder, int32(ln))
-	case 8:
-		err = binary.Write(buf, p.opts.byteOrder, int64(ln))
-	}
-	if err != nil {
-		return nil, err
-	}
 
 	switch p.opts.routeBytes {
 	case 1:
@@ -181,41 +167,15 @@ func (p *defaultPacker) doPackMessage(message *Message) ([]byte, error) {
 func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 	var (
 		err    error
-		ln     int64
+		ln     = len(data) - p.opts.routeBytes - p.opts.seqBytes
 		reader = bytes.NewReader(data)
 	)
 
-	switch p.opts.lenBytes {
-	case 1:
-		var l int8
-		if err = binary.Read(reader, p.opts.byteOrder, &l); err != nil {
-			return nil, err
-		}
-		ln = int64(l)
-	case 2:
-		var l int16
-		if err = binary.Read(reader, p.opts.byteOrder, &l); err != nil {
-			return nil, err
-		}
-		ln = int64(l)
-	case 4:
-		var l int32
-		if err = binary.Read(reader, p.opts.byteOrder, &l); err != nil {
-			return nil, err
-		}
-		ln = int64(l)
-	case 8:
-		if err = binary.Read(reader, p.opts.byteOrder, &ln); err != nil {
-			return nil, err
-		}
-	}
-
-	bufLen := ln - int64(p.opts.lenBytes+p.opts.routeBytes+p.opts.seqBytes)
-	if bufLen < 0 {
+	if ln < 0 {
 		return nil, ErrInvalidMessage
 	}
 
-	message := &Message{Buffer: make([]byte, bufLen)}
+	message := &Message{Buffer: make([]byte, ln)}
 
 	switch p.opts.routeBytes {
 	case 1:
