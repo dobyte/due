@@ -33,10 +33,6 @@ func NewPacker(opts ...Option) Packer {
 		opt(o)
 	}
 
-	if o.lenBytes != 1 && o.lenBytes != 2 && o.lenBytes != 4 && o.lenBytes != 8 {
-		log.Fatalf("the number of len bytes must be 1、2、4、8, and give %d", o.lenBytes)
-	}
-
 	if o.routeBytes != 1 && o.routeBytes != 2 && o.routeBytes != 4 {
 		log.Fatalf("the number of route bytes must be 1、2、4, and give %d", o.routeBytes)
 	}
@@ -47,11 +43,6 @@ func NewPacker(opts ...Option) Packer {
 
 	if o.bufferBytes < 0 {
 		log.Fatalf("the number of buffer bytes must be greater than or equal to 0, and give %d", o.bufferBytes)
-	}
-
-	maxLen := o.lenBytes + o.routeBytes + o.seqBytes + o.bufferBytes
-	if maxLen > 1<<(8*o.lenBytes-1)-1 || maxLen < -1<<(8*o.lenBytes-1) {
-		log.Fatalf("the number of bytes in the packet length cannot accommodate the entire packet data length")
 	}
 
 	return &defaultPacker{opts: o}
