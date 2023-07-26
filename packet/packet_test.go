@@ -25,15 +25,6 @@ func TestPacket(t *testing.T) {
 	t.Logf("seq: %d", message.Seq)
 	t.Logf("route: %d", message.Route)
 	t.Logf("buffer: %s", string(message.Buffer))
-
-	size, route, data, err := packet.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("size: %d", size)
-	t.Logf("route: %d", route)
-	t.Logf("data: %d", data)
 }
 
 func BenchmarkPack(b *testing.B) {

@@ -95,14 +95,12 @@ timezone = "Local"
             poolSize = 10
 
 # 框架默认打包器统一采用以下的打包格式，自定义打包器可自行定义打包规则
-# -------------------------------
-# | len | route | seq | message |
-# -------------------------------
+# -------------------------
+# | route | seq | message |
+# -------------------------
 [packet]
-    # 字节序，默认为little。可选：little | big
-    byteOrder = "little"
-    # 包长度字节数，默认为4字节
-    lenBytes = 4
+    # 字节序，默认为big。可选：little | big
+    byteOrder = "big"
     # 路由字节数，默认为2字节
     routeBytes = 2
     # 序列号字节数，默认为2字节
