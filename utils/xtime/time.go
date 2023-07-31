@@ -2,7 +2,7 @@ package xtime
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"math"
 	"time"
 )
@@ -47,7 +47,7 @@ type TransformRule struct {
 }
 
 func init() {
-	timezone := config.Get("config.timezone", "Local").String()
+	timezone := etc.Get("etc.timezone", "Local").String()
 	if loc, err := time.LoadLocation(timezone); err != nil {
 		location = time.Local
 	} else {

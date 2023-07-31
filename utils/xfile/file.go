@@ -3,7 +3,6 @@ package xfile
 import (
 	"github.com/dobyte/due/v2/utils/xpath"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -19,5 +18,5 @@ func WriteFile(file string, data []byte) error {
 		}
 	}
 
-	return ioutil.WriteFile(file, data, fs.ModePerm)
+	return os.WriteFile(file, data, fs.ModePerm)
 }

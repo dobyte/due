@@ -15,6 +15,7 @@ use (
 	./network/ws
 	./network/websocket
 	./network/netpoll
+	./config/etcd
 	./locate/redis
 	./log/zap
 	./log/tencent

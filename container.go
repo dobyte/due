@@ -3,7 +3,7 @@ package due
 import (
 	"fmt"
 	"github.com/dobyte/due/v2/component"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
@@ -67,11 +67,11 @@ func (c *Container) Serve() {
 
 	task.Release()
 
-	config.Close()
+	etc.Close()
 }
 
 func (c *Container) doSavePID() {
-	filename := config.Get("config.pid").String()
+	filename := etc.Get("etc.pid").String()
 	if filename == "" {
 		return
 	}

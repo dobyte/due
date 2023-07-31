@@ -1,7 +1,7 @@
 package log
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"strings"
 	"time"
 )
@@ -64,17 +64,17 @@ func defaultOptions() *options {
 		classifiedStorage: defaultClassifiedStorage,
 	}
 
-	file := config.Get(defaultFileKey).String()
+	file := etc.Get(defaultFileKey).String()
 	if file != "" {
 		opts.file = file
 	}
 
-	level := config.Get(defaultLevelKey).String()
+	level := etc.Get(defaultLevelKey).String()
 	if lvl := ParseLevel(level); lvl != NoneLevel {
 		opts.level = lvl
 	}
 
-	format := config.Get(defaultFormatKey).String()
+	format := etc.Get(defaultFormatKey).String()
 	switch strings.ToLower(format) {
 	case JsonFormat.String():
 		opts.format = JsonFormat
@@ -82,27 +82,27 @@ func defaultOptions() *options {
 		opts.format = TextFormat
 	}
 
-	timeFormat := config.Get(defaultTimeFormatKey).String()
+	timeFormat := etc.Get(defaultTimeFormatKey).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get(defaultStackLevelKey).String()
+	stackLevel := etc.Get(defaultStackLevelKey).String()
 	if lvl := ParseLevel(stackLevel); lvl != NoneLevel {
 		opts.stackLevel = lvl
 	}
 
-	fileMaxAge := config.Get(defaultFileMaxAgeKey).Duration()
+	fileMaxAge := etc.Get(defaultFileMaxAgeKey).Duration()
 	if fileMaxAge > 0 {
 		opts.fileMaxAge = fileMaxAge
 	}
 
-	fileMaxSize := config.Get(defaultFileMaxSizeKey).Int64()
+	fileMaxSize := etc.Get(defaultFileMaxSizeKey).Int64()
 	if fileMaxSize > 0 {
 		opts.fileMaxSize = fileMaxSize
 	}
 
-	fileCutRule := config.Get(defaultFileCutRuleKey).String()
+	fileCutRule := etc.Get(defaultFileCutRuleKey).String()
 	switch strings.ToLower(fileCutRule) {
 	case CutByYear.String():
 		opts.fileCutRule = CutByYear
@@ -118,9 +118,9 @@ func defaultOptions() *options {
 		opts.fileCutRule = CutBySecond
 	}
 
-	opts.stdout = config.Get(defaultStdoutKey, defaultStdout).Bool()
-	opts.callerFullPath = config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()
-	opts.classifiedStorage = config.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()
+	opts.stdout = etc.Get(defaultStdoutKey, defaultStdout).Bool()
+	opts.callerFullPath = etc.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()
+	opts.classifiedStorage = etc.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()
 
 	return opts
 }

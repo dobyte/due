@@ -1,7 +1,8 @@
-package config
+package core
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/fsnotify/fsnotify"
 	"io/fs"
 	"os"
@@ -9,27 +10,20 @@ import (
 	"strings"
 )
 
-type Watcher interface {
-	// Next 返回服务实例列表
-	Next() ([]*Configuration, error)
-	// Stop 停止监听
-	Stop() error
-}
-
-type defaultWatcher struct {
+type watcher struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
-	source  *defaultSource
+	source  *Source
 	watcher *fsnotify.Watcher
 }
 
-func newWatcher(ctx context.Context, source *defaultSource) (Watcher, error) {
+func newWatcher(ctx context.Context, source *Source) (configurator.Watcher, error) {
 	info, err := os.Stat(source.path)
 	if err != nil {
 		return nil, err
 	}
 
-	watcher, err := fsnotify.NewWatcher()
+	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
 	}
@@ -44,36 +38,36 @@ func newWatcher(ctx context.Context, source *defaultSource) (Watcher, error) {
 				return nil
 			}
 
-			return watcher.Add(path)
+			return fsWatcher.Add(path)
 		})
 	} else {
-		err = watcher.Add(source.path)
+		err = fsWatcher.Add(source.path)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	w := &defaultWatcher{}
+	w := &watcher{}
 	w.source = source
-	w.watcher = watcher
+	w.watcher = fsWatcher
 	w.ctx, w.cancel = context.WithCancel(ctx)
 
 	return w, nil
 }
 
 // Next 返回服务实例列表
-func (w *defaultWatcher) Next() ([]*Configuration, error) {
+func (w *watcher) Next() ([]*configurator.Configuration, error) {
 	select {
 	case event, ok := <-w.watcher.Events:
 		if !ok {
 			return nil, nil
 		}
-		if event.Has(fsnotify.Write) {
+		if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 			c, err := w.source.loadFile(event.Name)
 			if err != nil {
 				return nil, err
 			}
-			return []*Configuration{c}, nil
+			return []*configurator.Configuration{c}, nil
 		}
 	case err := <-w.watcher.Errors:
 		return nil, err
@@ -85,7 +79,7 @@ func (w *defaultWatcher) Next() ([]*Configuration, error) {
 }
 
 // Stop 停止监听
-func (w *defaultWatcher) Stop() error {
+func (w *watcher) Stop() error {
 	w.cancel()
 	return w.watcher.Close()
 }

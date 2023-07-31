@@ -4,7 +4,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const Name = "yaml"
+const (
+	Name      = "yaml"
+	ShortName = "yml"
+)
 
 var DefaultCodec = &codec{}
 

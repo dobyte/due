@@ -3,6 +3,7 @@ package master
 import (
 	"context"
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/locate"
@@ -19,25 +20,25 @@ const (
 )
 
 const (
-	defaultIDKey        = "config.cluster.master.id"
-	defaultNameKey      = "config.cluster.master.name"
-	defaultCodecKey     = "config.cluster.master.codec"
-	defaultTimeoutKey   = "config.cluster.master.timeout"
-	defaultEncryptorKey = "config.cluster.master.encryptor"
+	defaultIDKey      = "config.cluster.master.id"
+	defaultNameKey    = "config.cluster.master.name"
+	defaultCodecKey   = "config.cluster.master.codec"
+	defaultTimeoutKey = "config.cluster.master.timeout"
 )
 
 type Option func(o *options)
 
 type options struct {
-	id          string                // 实例ID
-	name        string                // 实例名称
-	ctx         context.Context       // 上下文
-	codec       encoding.Codec        // 编解码器
-	timeout     time.Duration         // RPC调用超时时间
-	locator     locate.Locator        // 用户定位器
-	registry    registry.Registry     // 服务注册器
-	transporter transport.Transporter // 消息传输器
-	encryptor   crypto.Encryptor      // 消息加密器
+	id           string                    // 实例ID
+	name         string                    // 实例名称
+	ctx          context.Context           // 上下文
+	codec        encoding.Codec            // 编解码器
+	timeout      time.Duration             // RPC调用超时时间
+	locator      locate.Locator            // 用户定位器
+	registry     registry.Registry         // 服务注册器
+	transporter  transport.Transporter     // 消息传输器
+	encryptor    crypto.Encryptor          // 消息加密器
+	configurator configurator.Configurator // 配置器
 }
 
 func defaultOptions() *options {

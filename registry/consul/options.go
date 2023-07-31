@@ -2,7 +2,7 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/hashicorp/consul/api"
 )
 
@@ -17,13 +17,13 @@ const (
 )
 
 const (
-	defaultAddrKey                           = "config.registry.consul.addr"
-	defaultHealthCheckKey                    = "config.registry.consul.healthCheck"
-	defaultHealthCheckIntervalKey            = "config.registry.consul.healthCheckInterval"
-	defaultHealthCheckTimeoutKey             = "config.registry.consul.healthCheckTimeout"
-	defaultHeartbeatCheckKey                 = "config.registry.consul.heartbeatCheck"
-	defaultHeartbeatCheckIntervalKey         = "config.registry.consul.heartbeatCheckInterval"
-	defaultDeregisterCriticalServiceAfterKey = "config.registry.consul.deregisterCriticalServiceAfter"
+	defaultAddrKey                           = "etc.registry.consul.addr"
+	defaultHealthCheckKey                    = "etc.registry.consul.healthCheck"
+	defaultHealthCheckIntervalKey            = "etc.registry.consul.healthCheckInterval"
+	defaultHealthCheckTimeoutKey             = "etc.registry.consul.healthCheckTimeout"
+	defaultHeartbeatCheckKey                 = "etc.registry.consul.heartbeatCheck"
+	defaultHeartbeatCheckIntervalKey         = "etc.registry.consul.heartbeatCheckInterval"
+	defaultDeregisterCriticalServiceAfterKey = "etc.registry.consul.deregisterCriticalServiceAfter"
 )
 
 type Option func(o *options)
@@ -69,13 +69,13 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:                            context.Background(),
-		addr:                           config.Get(defaultAddrKey, defaultAddr).String(),
-		enableHealthCheck:              config.Get(defaultHealthCheckKey, defaultHealthCheck).Bool(),
-		healthCheckInterval:            config.Get(defaultHealthCheckIntervalKey, defaultHealthCheckInterval).Int(),
-		healthCheckTimeout:             config.Get(defaultHealthCheckTimeoutKey, defaultHealthCheckTimeout).Int(),
-		enableHeartbeatCheck:           config.Get(defaultHeartbeatCheckKey, defaultHeartbeatCheck).Bool(),
-		heartbeatCheckInterval:         config.Get(defaultHeartbeatCheckIntervalKey, defaultHeartbeatCheckInterval).Int(),
-		deregisterCriticalServiceAfter: config.Get(defaultDeregisterCriticalServiceAfterKey, defaultDeregisterCriticalServiceAfter).Int(),
+		addr:                           etc.Get(defaultAddrKey, defaultAddr).String(),
+		enableHealthCheck:              etc.Get(defaultHealthCheckKey, defaultHealthCheck).Bool(),
+		healthCheckInterval:            etc.Get(defaultHealthCheckIntervalKey, defaultHealthCheckInterval).Int(),
+		healthCheckTimeout:             etc.Get(defaultHealthCheckTimeoutKey, defaultHealthCheckTimeout).Int(),
+		enableHeartbeatCheck:           etc.Get(defaultHeartbeatCheckKey, defaultHeartbeatCheck).Bool(),
+		heartbeatCheckInterval:         etc.Get(defaultHeartbeatCheckIntervalKey, defaultHeartbeatCheckInterval).Int(),
+		deregisterCriticalServiceAfter: etc.Get(defaultDeregisterCriticalServiceAfterKey, defaultDeregisterCriticalServiceAfter).Int(),
 	}
 }
 

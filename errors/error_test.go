@@ -10,7 +10,7 @@ import (
 func TestNew(t *testing.T) {
 	innerErr := errors.NewError(
 		"db error",
-		code.NewCode(2, "internal error", ""),
+		code.NewCode(2, "core error", ""),
 		errors.New("std not found"),
 	)
 

@@ -1,50 +1,99 @@
-package config
+package configurator
 
 import (
 	"context"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/value"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
 	"log"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
 
-type Reader interface {
+var (
+	ErrInvalidDecoder        = errors.New("invalid decoder")
+	ErrNoOperationPermission = errors.New("no operation permission")
+	ErrInvalidConfigContent  = errors.New("invalid config content")
+	ErrNotFoundConfigSource  = errors.New("not found config source")
+)
+
+type Configurator interface {
 	// Has 是否存在配置
 	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
+	// Load 加载配置项
+	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
+	// Store 保存配置项
+	Store(ctx context.Context, source string, file string, content interface{}) error
 	// Close 关闭配置监听
 	Close()
 }
 
-type defaultReader struct {
-	opts   *options
-	ctx    context.Context
-	cancel context.CancelFunc
-	mu     sync.Mutex
-	idx    int64
-	values [2]map[string]interface{}
+type Source interface {
+	// Name 配置源名称
+	Name() string
+	// Load 加载配置项
+	Load(ctx context.Context, file ...string) ([]*Configuration, error)
+	// Store 保存配置项
+	Store(ctx context.Context, file string, content []byte) error
+	// Watch 监听配置项
+	Watch(ctx context.Context) (Watcher, error)
 }
 
-var _ Reader = &defaultReader{}
+type Watcher interface {
+	// Next 返回服务实例列表
+	Next() ([]*Configuration, error)
+	// Stop 停止监听
+	Stop() error
+}
 
-func NewReader(opts ...Option) Reader {
-	o := &options{
-		ctx:     context.Background(),
-		decoder: defaultDecoder,
+// Configuration 配置项
+type Configuration struct {
+	decoder  Decoder // 解码器
+	Path     string  // 文件路径
+	File     string  // 文件名称
+	Name     string  // 文件名称
+	Format   string  // 文件格式
+	Content  []byte  // 文件内容
+	FullPath string  // 文件全路径
+}
+
+// Decode 解码
+func (c *Configuration) Decode() (interface{}, error) {
+	if c.decoder == nil {
+		return nil, ErrInvalidDecoder
 	}
+
+	return c.decoder(c.Format, c.Content)
+}
+
+type defaultConfigurator struct {
+	opts    *options
+	ctx     context.Context
+	cancel  context.CancelFunc
+	sources map[string]Source
+	mu      sync.Mutex
+	idx     int64
+	values  [2]map[string]interface{}
+}
+
+var _ Configurator = &defaultConfigurator{}
+
+func NewConfigurator(opts ...Option) Configurator {
+	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	r := &defaultReader{}
+	r := &defaultConfigurator{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 	r.init()
@@ -54,44 +103,53 @@ func NewReader(opts ...Option) Reader {
 }
 
 // 初始化配置源
-func (r *defaultReader) init() {
+func (c *defaultConfigurator) init() {
+	c.sources = make(map[string]Source, len(c.opts.sources))
+	for _, s := range c.opts.sources {
+		c.sources[s.Name()] = s
+	}
+
 	values := make(map[string]interface{})
-	for _, s := range r.opts.sources {
-		cs, err := s.Load()
+	for _, s := range c.opts.sources {
+		cs, err := s.Load(c.ctx)
 		if err != nil {
 			log.Printf("load configure failed: %v", err)
 			continue
 		}
 
-		for _, c := range cs {
-			v, err := r.opts.decoder(c)
+		for _, cc := range cs {
+			if len(cc.Content) == 0 {
+				continue
+			}
+
+			v, err := c.opts.decoder(cc.Format, cc.Content)
 			if err != nil {
 				log.Printf("decode configure failed: %v", err)
 				continue
 			}
 
-			values[c.Name] = v
+			values[cc.Name] = v
 		}
 	}
 
-	r.store(values)
+	c.store(values)
 }
 
 // 保存配置
-func (r *defaultReader) store(values map[string]interface{}) {
-	idx := atomic.AddInt64(&r.idx, 1) % int64(len(r.values))
-	r.values[idx] = values
+func (c *defaultConfigurator) store(values map[string]interface{}) {
+	idx := atomic.AddInt64(&c.idx, 1) % int64(len(c.values))
+	c.values[idx] = values
 }
 
 // 加载配置
-func (r *defaultReader) load() map[string]interface{} {
-	idx := atomic.LoadInt64(&r.idx) % int64(len(r.values))
-	return r.values[idx]
+func (c *defaultConfigurator) load() map[string]interface{} {
+	idx := atomic.LoadInt64(&c.idx) % int64(len(c.values))
+	return c.values[idx]
 }
 
 // 拷贝配置
-func (r *defaultReader) copy() (map[string]interface{}, error) {
-	values := r.load()
+func (c *defaultConfigurator) copy() (map[string]interface{}, error) {
+	values := c.load()
 
 	dst := make(map[string]interface{})
 
@@ -106,9 +164,9 @@ func (r *defaultReader) copy() (map[string]interface{}, error) {
 }
 
 // 监听配置源变化
-func (r *defaultReader) watch() {
-	for _, s := range r.opts.sources {
-		watcher, err := s.Watch(r.ctx)
+func (c *defaultConfigurator) watch() {
+	for _, s := range c.opts.sources {
+		watcher, err := s.Watch(c.ctx)
 		if err != nil {
 			log.Printf("watching configure change failed: %v", err)
 			continue
@@ -119,7 +177,7 @@ func (r *defaultReader) watch() {
 
 			for {
 				select {
-				case <-r.ctx.Done():
+				case <-c.ctx.Done():
 					return
 				default:
 					// exec watch
@@ -130,19 +188,23 @@ func (r *defaultReader) watch() {
 				}
 
 				values := make(map[string]interface{})
-				for _, c := range cs {
-					v, err := r.opts.decoder(c)
+				for _, cc := range cs {
+					if len(cc.Content) == 0 {
+						continue
+					}
+
+					v, err := c.opts.decoder(cc.Format, cc.Content)
 					if err != nil {
 						continue
 					}
-					values[c.Name] = v
+					values[cc.Name] = v
 				}
 
 				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
+					c.mu.Lock()
+					defer c.mu.Unlock()
 
-					dst, err := r.copy()
+					dst, err := c.copy()
 					if err != nil {
 						return
 					}
@@ -152,7 +214,7 @@ func (r *defaultReader) watch() {
 						return
 					}
 
-					r.store(dst)
+					c.store(dst)
 				}()
 			}
 		}()
@@ -160,17 +222,17 @@ func (r *defaultReader) watch() {
 }
 
 // Close 关闭配置监听
-func (r *defaultReader) Close() {
-	r.cancel()
+func (c *defaultConfigurator) Close() {
+	c.cancel()
 }
 
 // Has 是否存在配置
-func (r *defaultReader) Has(pattern string) bool {
+func (c *defaultConfigurator) Has(pattern string) bool {
 	var (
 		keys   = strings.Split(pattern, ".")
 		node   interface{}
 		found  = true
-		values = r.load()
+		values = c.load()
 	)
 
 	keys = reviseKeys(keys, values)
@@ -205,12 +267,12 @@ func (r *defaultReader) Has(pattern string) bool {
 }
 
 // Get 获取配置值
-func (r *defaultReader) Get(pattern string, def ...interface{}) value.Value {
+func (c *defaultConfigurator) Get(pattern string, def ...interface{}) value.Value {
 	var (
 		keys   = strings.Split(pattern, ".")
 		node   interface{}
 		found  = true
-		values = r.load()
+		values = c.load()
 	)
 
 	if values == nil {
@@ -254,16 +316,16 @@ NOTFOUND:
 }
 
 // Set 设置配置值
-func (r *defaultReader) Set(pattern string, value interface{}) error {
+func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 	var (
 		keys = strings.Split(pattern, ".")
 		node interface{}
 	)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	values, err := r.copy()
+	values, err := c.copy()
 	if err != nil {
 		return err
 	}
@@ -352,9 +414,60 @@ func (r *defaultReader) Set(pattern string, value interface{}) error {
 		}
 	}
 
-	r.store(values)
+	c.store(values)
 
 	return nil
+}
+
+// Load 加载配置项
+func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
+	s, ok := c.sources[source]
+	if !ok {
+		return nil, ErrNotFoundConfigSource
+	}
+
+	configs, err := s.Load(ctx, file...)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, cc := range configs {
+		cc.decoder = c.opts.decoder
+	}
+
+	return configs, nil
+}
+
+// Store 保存配置项
+func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content interface{}) error {
+	if content == nil {
+		return ErrInvalidConfigContent
+	}
+
+	s, ok := c.sources[source]
+	if !ok {
+		return ErrNotFoundConfigSource
+	}
+
+	var (
+		val    []byte
+		err    error
+		format = strings.TrimPrefix(filepath.Ext(file), ".")
+	)
+
+	switch content.(type) {
+	case map[string]interface{}:
+		val, err = c.opts.encoder(format, content)
+	case []interface{}:
+		val, err = c.opts.encoder(format, content)
+	default:
+		val = xconv.Bytes(content)
+	}
+	if err != nil {
+		return err
+	}
+
+	return s.Store(ctx, file, val)
 }
 
 func reviseKeys(keys []string, values map[string]interface{}) []string {

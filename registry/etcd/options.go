@@ -9,7 +9,7 @@ package etcd
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
 )
@@ -24,12 +24,12 @@ const (
 )
 
 const (
-	defaultAddrsKey         = "config.registry.etcd.addrs"
-	defaultDialTimeoutKey   = "config.registry.etcd.dialTimeout"
-	defaultNamespaceKey     = "config.registry.etcd.namespace"
-	defaultTimeoutKey       = "config.registry.etcd.timeout"
-	defaultRetryTimesKey    = "config.registry.etcd.retryTimes"
-	defaultRetryIntervalKey = "config.registry.etcd.retryInterval"
+	defaultAddrsKey         = "etc.registry.etcd.addrs"
+	defaultDialTimeoutKey   = "etc.registry.etcd.dialTimeout"
+	defaultNamespaceKey     = "etc.registry.etcd.namespace"
+	defaultTimeoutKey       = "etc.registry.etcd.timeout"
+	defaultRetryTimesKey    = "etc.registry.etcd.retryTimes"
+	defaultRetryIntervalKey = "etc.registry.etcd.retryInterval"
 )
 
 type Option func(o *options)
@@ -71,12 +71,12 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:           context.Background(),
-		addrs:         config.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		dialTimeout:   config.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
-		namespace:     config.Get(defaultNamespaceKey, defaultNamespace).String(),
-		timeout:       config.Get(defaultTimeoutKey, defaultTimeout).Duration() * time.Second,
-		retryTimes:    config.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
-		retryInterval: config.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration() * time.Second,
+		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		dialTimeout:   etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
+		namespace:     etc.Get(defaultNamespaceKey, defaultNamespace).String(),
+		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration() * time.Second,
+		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
+		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration() * time.Second,
 	}
 }
 

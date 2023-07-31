@@ -110,7 +110,17 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 			select {
 			case <-w.ctx.Done():
 				return
-			case res := <-w.chWatch:
+			case res, ok := <-w.chWatch:
+				if !ok {
+					if err = w.ctx.Err(); err != nil {
+						return
+					}
+				}
+
+				if res.Err() != nil {
+					return
+				}
+
 				for _, ev := range res.Events {
 					switch ev.Type {
 					case mvccpb.PUT:

@@ -98,6 +98,26 @@ tcp心跳包格式：
 1. ws协议心跳包默认为空bytes。
 2. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，包长度固定为0。
 
+
+### 5.配置中心（v2）
+
+1.功能介绍
+
+config配置中心定位区别于etc系统配置。配置中心主要应用于项目业务层，为开发者提供完善的读取、设置、修改、热更新等功能。
+
+2.配置组件
+   * [file](config/file/README.md)
+   * [etcd](config/etcd/README.md)
+   * consul
+
+### 6.注册中心（v2）
+
+1.功能介绍
+
+2.相关组件
+   * [consul](registry/consul/README.md)
+   * [etcd](registry/etcd/README.md)
+
 ### 6.快速开始
 
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~

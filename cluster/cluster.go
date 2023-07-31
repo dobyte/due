@@ -10,6 +10,10 @@ const (
 	Mesh   Kind = "mesh"   // 微服务
 )
 
+func (k Kind) String() string {
+	return string(k)
+}
+
 // State 集群实例状态
 type State string
 
