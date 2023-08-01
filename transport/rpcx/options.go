@@ -3,7 +3,7 @@ package rpcx
 import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
 )
 
@@ -13,12 +13,12 @@ const (
 )
 
 const (
-	defaultServerAddrKey       = "config.transport.rpcx.server.addr"
-	defaultServerKeyFileKey    = "config.transport.rpcx.server.keyFile"
-	defaultServerCertFileKey   = "config.transport.rpcx.server.certFile"
-	defaultClientPoolSizeKey   = "config.transport.rpcx.client.poolSize"
-	defaultClientCertFileKey   = "config.transport.rpcx.client.certFile"
-	defaultClientServerNameKey = "config.transport.rpcx.client.serverName"
+	defaultServerAddrKey       = "etc.transport.rpcx.server.addr"
+	defaultServerKeyFileKey    = "etc.transport.rpcx.server.keyFile"
+	defaultServerCertFileKey   = "etc.transport.rpcx.server.certFile"
+	defaultClientPoolSizeKey   = "etc.transport.rpcx.client.poolSize"
+	defaultClientCertFileKey   = "etc.transport.rpcx.client.certFile"
+	defaultClientServerNameKey = "etc.transport.rpcx.client.serverName"
 )
 
 type Option func(o *options)
@@ -30,12 +30,12 @@ type options struct {
 
 func defaultOptions() *options {
 	opts := &options{}
-	opts.server.Addr = config.Get(defaultServerAddrKey, defaultServerAddr).String()
-	opts.server.KeyFile = config.Get(defaultServerKeyFileKey).String()
-	opts.server.CertFile = config.Get(defaultServerCertFileKey).String()
-	opts.client.PoolSize = config.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
-	opts.client.CertFile = config.Get(defaultClientCertFileKey).String()
-	opts.client.ServerName = config.Get(defaultClientServerNameKey).String()
+	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
+	opts.server.KeyFile = etc.Get(defaultServerKeyFileKey).String()
+	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
+	opts.client.PoolSize = etc.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
+	opts.client.CertFile = etc.Get(defaultClientCertFileKey).String()
+	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
 
 	return opts
 }

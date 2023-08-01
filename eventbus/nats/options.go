@@ -1,7 +1,7 @@
 package nats
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/nats-io/nats.go"
 	"time"
 )
@@ -12,8 +12,8 @@ const (
 )
 
 const (
-	defaultUrlKey     = "config.eventbus.nats.url"
-	defaultTimeoutKey = "config.eventbus.nats.timeout"
+	defaultUrlKey     = "etc.eventbus.nats.url"
+	defaultTimeoutKey = "etc.eventbus.nats.timeout"
 )
 
 type Option func(o *options)
@@ -34,8 +34,8 @@ type options struct {
 
 func defaultOptions() *options {
 	return &options{
-		url:     config.Get(defaultUrlKey, defaultUrl).String(),
-		timeout: config.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		url:     etc.Get(defaultUrlKey, defaultUrl).String(),
+		timeout: etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 	}
 }
 

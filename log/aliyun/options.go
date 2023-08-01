@@ -8,7 +8,7 @@
 package aliyun
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 )
 
@@ -21,28 +21,28 @@ const (
 )
 
 const (
-	defaultLevelKey          = "config.log.level"
-	defaultTimeFormatKey     = "config.log.timeFormat"
-	defaultStackLevelKey     = "config.log.stackLevel"
-	defaultStdoutKey         = "config.log.stdout"
-	defaultSyncoutKey        = "config.log.syncout"
-	defaultCallerFullPathKey = "config.log.callerFullPath"
+	defaultLevelKey          = "etc.log.level"
+	defaultTimeFormatKey     = "etc.log.timeFormat"
+	defaultStackLevelKey     = "etc.log.stackLevel"
+	defaultStdoutKey         = "etc.log.stdout"
+	defaultSyncoutKey        = "etc.log.syncout"
+	defaultCallerFullPathKey = "etc.log.callerFullPath"
 )
 
 const (
-	aliyunEndpointKey        = "config.log.aliyun.endpoint"
-	aliyunAccessKeyIDKey     = "config.log.aliyun.accessKeyID"
-	aliyunAccessKeySecretKey = "config.log.aliyun.accessKeySecret"
-	aliyunProjectKey         = "config.log.aliyun.project"
-	aliyunLogstoreKey        = "config.log.aliyun.logstore"
-	aliyunTopicKey           = "config.log.aliyun.topic"
-	aliyunSourceKey          = "config.log.aliyun.source"
-	aliyunLevelKey           = "config.log.aliyun.level"
-	aliyunTimeFormatKey      = "config.log.aliyun.timeFormat"
-	aliyunStackLevelKey      = "config.log.aliyun.stackLevel"
-	aliyunStdoutKey          = "config.log.aliyun.stdout"
-	aliyunSyncoutKey         = "config.log.aliyun.syncout"
-	aliyunCallerFullPathKey  = "config.log.aliyun.callerFullPath"
+	aliyunEndpointKey        = "etc.log.aliyun.endpoint"
+	aliyunAccessKeyIDKey     = "etc.log.aliyun.accessKeyID"
+	aliyunAccessKeySecretKey = "etc.log.aliyun.accessKeySecret"
+	aliyunProjectKey         = "etc.log.aliyun.project"
+	aliyunLogstoreKey        = "etc.log.aliyun.logstore"
+	aliyunTopicKey           = "etc.log.aliyun.topic"
+	aliyunSourceKey          = "etc.log.aliyun.source"
+	aliyunLevelKey           = "etc.log.aliyun.level"
+	aliyunTimeFormatKey      = "etc.log.aliyun.timeFormat"
+	aliyunStackLevelKey      = "etc.log.aliyun.stackLevel"
+	aliyunStdoutKey          = "etc.log.aliyun.stdout"
+	aliyunSyncoutKey         = "etc.log.aliyun.syncout"
+	aliyunCallerFullPathKey  = "etc.log.aliyun.callerFullPath"
 )
 
 type Option func(o *options)
@@ -74,31 +74,31 @@ func defaultOptions() *options {
 		callerFullPath: defaultCallerFullPath,
 	}
 
-	level := config.Get(aliyunLevelKey, config.Get(defaultLevelKey).String()).String()
+	level := etc.Get(aliyunLevelKey, etc.Get(defaultLevelKey).String()).String()
 	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
 		opts.level = lvl
 	}
 
-	timeFormat := config.Get(aliyunTimeFormatKey, config.Get(defaultTimeFormatKey).String()).String()
+	timeFormat := etc.Get(aliyunTimeFormatKey, etc.Get(defaultTimeFormatKey).String()).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get(aliyunStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
+	stackLevel := etc.Get(aliyunStackLevelKey, etc.Get(defaultStackLevelKey).String()).String()
 	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
-	opts.stdout = config.Get(aliyunStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
-	opts.syncout = config.Get(aliyunSyncoutKey, config.Get(defaultSyncoutKey, defaultSyncout).Bool()).Bool()
-	opts.callerFullPath = config.Get(aliyunCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
-	opts.endpoint = config.Get(aliyunEndpointKey).String()
-	opts.accessKeyID = config.Get(aliyunAccessKeyIDKey).String()
-	opts.accessKeySecret = config.Get(aliyunAccessKeySecretKey).String()
-	opts.project = config.Get(aliyunProjectKey).String()
-	opts.logstore = config.Get(aliyunLogstoreKey).String()
-	opts.topic = config.Get(aliyunTopicKey).String()
-	opts.source = config.Get(aliyunSourceKey).String()
+	opts.stdout = etc.Get(aliyunStdoutKey, etc.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
+	opts.syncout = etc.Get(aliyunSyncoutKey, etc.Get(defaultSyncoutKey, defaultSyncout).Bool()).Bool()
+	opts.callerFullPath = etc.Get(aliyunCallerFullPathKey, etc.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.endpoint = etc.Get(aliyunEndpointKey).String()
+	opts.accessKeyID = etc.Get(aliyunAccessKeyIDKey).String()
+	opts.accessKeySecret = etc.Get(aliyunAccessKeySecretKey).String()
+	opts.project = etc.Get(aliyunProjectKey).String()
+	opts.logstore = etc.Get(aliyunLogstoreKey).String()
+	opts.topic = etc.Get(aliyunTopicKey).String()
+	opts.source = etc.Get(aliyunSourceKey).String()
 
 	return opts
 }

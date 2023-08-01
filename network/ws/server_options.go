@@ -7,38 +7,51 @@ import (
 )
 
 const (
-	defaultServerAddr              = ":3553"
-	defaultServerPath              = "/"
-	defaultServerMaxConnNum        = 5000
-	defaultServerCheckOrigin       = "*"
-	defaultServerHeartbeatInterval = 10
-	defaultServerHandshakeTimeout  = 10
+	defaultServerAddr                    = ":3553"
+	defaultServerPath                    = "/"
+	defaultServerMaxConnNum              = 5000
+	defaultServerCheckOrigin             = "*"
+	defaultServerHeartbeatInterval       = 10
+	defaultServerHandshakeTimeout        = 10
+	defaultServerHeartbeatMechanism      = ResponsiveHeartbeat
+	defaultServerHeartbeatWithServerTime = true
 )
 
 const (
-	defaultServerAddrKey              = "etc.network.ws.server.addr"
-	defaultServerPathKey              = "etc.network.ws.server.path"
-	defaultServerMaxConnNumKey        = "etc.network.ws.server.maxConnNum"
-	defaultServerCheckOriginsKey      = "etc.network.ws.server.origins"
-	defaultServerKeyFileKey           = "etc.network.ws.server.keyFile"
-	defaultServerCertFileKey          = "etc.network.ws.server.certFile"
-	defaultServerHeartbeatIntervalKey = "etc.network.ws.server.heartbeatInterval"
-	defaultServerHandshakeTimeoutKey  = "etc.network.ws.server.handshakeTimeout"
+	defaultServerAddrKey                    = "etc.network.ws.server.addr"
+	defaultServerPathKey                    = "etc.network.ws.server.path"
+	defaultServerMaxConnNumKey              = "etc.network.ws.server.maxConnNum"
+	defaultServerCheckOriginsKey            = "etc.network.ws.server.origins"
+	defaultServerKeyFileKey                 = "etc.network.ws.server.keyFile"
+	defaultServerCertFileKey                = "etc.network.ws.server.certFile"
+	defaultServerHandshakeTimeoutKey        = "etc.network.ws.server.handshakeTimeout"
+	defaultServerHeartbeatIntervalKey       = "etc.network.ws.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey      = "etc.network.ws.server.heartbeatMechanism"
+	defaultServerHeartbeatWithServerTimeKey = "etc.network.ws.server.heartbeatWithServerTime"
 )
+
+const (
+	ResponsiveHeartbeat HeartbeatMechanism = "responsive" // 响应式心跳，
+	TickHeartbeat       HeartbeatMechanism = "tick"       // 主动定时心跳
+)
+
+type HeartbeatMechanism string
 
 type ServerOption func(o *serverOptions)
 
 type CheckOriginFunc func(r *http.Request) bool
 
 type serverOptions struct {
-	addr              string          // 监听地址
-	maxConnNum        int             // 最大连接数
-	certFile          string          // 证书文件
-	keyFile           string          // 秘钥文件
-	path              string          // 路径，默认为"/"
-	checkOrigin       CheckOriginFunc // 跨域检测
-	heartbeatInterval time.Duration   // 心跳检测间隔时间，默认10s
-	handshakeTimeout  time.Duration   // 握手超时时间，默认10s
+	addr                    string             // 监听地址
+	maxConnNum              int                // 最大连接数
+	certFile                string             // 证书文件
+	keyFile                 string             // 秘钥文件
+	path                    string             // 路径，默认为"/"
+	checkOrigin             CheckOriginFunc    // 跨域检测
+	handshakeTimeout        time.Duration      // 握手超时时间，默认10s
+	heartbeatInterval       time.Duration      // 心跳间隔时间，默认10s
+	heartbeatMechanism      HeartbeatMechanism // 心跳机制，默认responsive
+	heartbeatWithServerTime bool               // 下行心跳是否携带服务器时间，默认为true
 }
 
 func defaultServerOptions() *serverOptions {
@@ -59,14 +72,16 @@ func defaultServerOptions() *serverOptions {
 	}
 
 	return &serverOptions{
-		addr:              etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		maxConnNum:        etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		path:              etc.Get(defaultServerPathKey, defaultServerPath).String(),
-		checkOrigin:       checkOrigin,
-		keyFile:           etc.Get(defaultServerKeyFileKey).String(),
-		certFile:          etc.Get(defaultServerCertFileKey).String(),
-		heartbeatInterval: etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
-		handshakeTimeout:  etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
+		addr:                    etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxConnNum:              etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
+		path:                    etc.Get(defaultServerPathKey, defaultServerPath).String(),
+		checkOrigin:             checkOrigin,
+		keyFile:                 etc.Get(defaultServerKeyFileKey).String(),
+		certFile:                etc.Get(defaultServerCertFileKey).String(),
+		handshakeTimeout:        etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
+		heartbeatInterval:       etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
+		heartbeatMechanism:      HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
+		heartbeatWithServerTime: etc.Get(defaultServerHeartbeatWithServerTimeKey, defaultServerHeartbeatWithServerTime).Bool(),
 	}
 }
 
@@ -95,12 +110,22 @@ func WithServerCheckOrigin(checkOrigin CheckOriginFunc) ServerOption {
 	return func(o *serverOptions) { o.checkOrigin = checkOrigin }
 }
 
+// WithServerHandshakeTimeout 设置握手超时时间
+func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) { o.handshakeTimeout = handshakeTimeout }
+}
+
 // WithServerHeartbeatInterval 设置心跳检测间隔时间
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) { o.heartbeatInterval = heartbeatInterval }
 }
 
-// WithServerHandshakeTimeout 设置握手超时时间
-func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
-	return func(o *serverOptions) { o.handshakeTimeout = handshakeTimeout }
+// WithServerHeartbeatMechanism 设置心跳机制
+func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
+	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+}
+
+// WithServerHeartbeatWithServerTime 设置下行心跳是否携带服务器时间
+func WithServerHeartbeatWithServerTime(heartbeatWithServerTime bool) ServerOption {
+	return func(o *serverOptions) { o.heartbeatWithServerTime = heartbeatWithServerTime }
 }

@@ -2,7 +2,7 @@ package redis
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -14,12 +14,12 @@ const (
 )
 
 const (
-	defaultAddrsKey      = "config.locate.redis.addrs"
-	defaultDBKey         = "config.locate.redis.db"
-	defaultMaxRetriesKey = "config.locate.redis.maxRetries"
-	defaultPrefixKey     = "config.locate.redis.prefix"
-	defaultUsernameKey   = "config.locate.redis.username"
-	defaultPasswordKey   = "config.locate.redis.password"
+	defaultAddrsKey      = "etc.locate.redis.addrs"
+	defaultDBKey         = "etc.locate.redis.db"
+	defaultMaxRetriesKey = "etc.locate.redis.maxRetries"
+	defaultPrefixKey     = "etc.locate.redis.prefix"
+	defaultUsernameKey   = "etc.locate.redis.username"
+	defaultPasswordKey   = "etc.locate.redis.password"
 )
 
 type Option func(o *options)
@@ -59,12 +59,12 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:        context.Background(),
-		addrs:      config.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		db:         config.Get(defaultDBKey, defaultDB).Int(),
-		maxRetries: config.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
-		prefix:     config.Get(defaultPrefixKey, defaultPrefix).String(),
-		username:   config.Get(defaultUsernameKey).String(),
-		password:   config.Get(defaultPasswordKey).String(),
+		addrs:      etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		db:         etc.Get(defaultDBKey, defaultDB).Int(),
+		maxRetries: etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
+		prefix:     etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		username:   etc.Get(defaultUsernameKey).String(),
+		password:   etc.Get(defaultPasswordKey).String(),
 	}
 }
 

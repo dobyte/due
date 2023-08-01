@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"github.com/IBM/sarama"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 )
 
 const (
@@ -12,9 +12,9 @@ const (
 )
 
 const (
-	defaultAddrsKey   = "config.eventbus.kafka.addrs"
-	defaultPrefixKey  = "config.eventbus.kafka.prefix"
-	defaultVersionKey = "config.eventbus.kafka.version"
+	defaultAddrsKey   = "etc.eventbus.kafka.addrs"
+	defaultPrefixKey  = "etc.eventbus.kafka.prefix"
+	defaultVersionKey = "etc.eventbus.kafka.version"
 )
 
 type Option func(o *options)
@@ -41,9 +41,9 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:     context.Background(),
-		addrs:   config.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		prefix:  config.Get(defaultPrefixKey, defaultPrefix).String(),
-		version: config.Get(defaultVersionKey).String(),
+		addrs:   etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		prefix:  etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		version: etc.Get(defaultVersionKey).String(),
 	}
 }
 

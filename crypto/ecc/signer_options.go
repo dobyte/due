@@ -1,16 +1,16 @@
 package ecc
 
 import (
-	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/hash"
+	"github.com/dobyte/due/v2/etc"
 	"strings"
 )
 
 const (
-	defaultSignerHashKey       = "config.crypto.rsa.signer.hash"
-	defaultSignerDelimiterKey  = "config.crypto.rsa.signer.delimiter"
-	defaultSignerPublicKeyKey  = "config.crypto.rsa.signer.publicKey"
-	defaultSignerPrivateKeyKey = "config.crypto.rsa.signer.privateKey"
+	defaultSignerHashKey       = "etc.crypto.rsa.signer.hash"
+	defaultSignerDelimiterKey  = "etc.crypto.rsa.signer.delimiter"
+	defaultSignerPublicKeyKey  = "etc.crypto.rsa.signer.publicKey"
+	defaultSignerPrivateKeyKey = "etc.crypto.rsa.signer.privateKey"
 )
 
 type SignerOption func(o *signerOptions)
@@ -32,10 +32,10 @@ type signerOptions struct {
 
 func defaultSignerOptions() *signerOptions {
 	return &signerOptions{
-		hash:       hash.Hash(strings.ToLower(config.Get(defaultSignerHashKey).String())),
-		delimiter:  config.Get(defaultSignerDelimiterKey, " ").String(),
-		publicKey:  config.Get(defaultSignerPublicKeyKey).String(),
-		privateKey: config.Get(defaultSignerPrivateKeyKey).String(),
+		hash:       hash.Hash(strings.ToLower(etc.Get(defaultSignerHashKey).String())),
+		delimiter:  etc.Get(defaultSignerDelimiterKey, " ").String(),
+		publicKey:  etc.Get(defaultSignerPublicKeyKey).String(),
+		privateKey: etc.Get(defaultSignerPrivateKeyKey).String(),
 	}
 }
 

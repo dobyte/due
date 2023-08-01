@@ -55,7 +55,7 @@ func TestClient_Dial(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(1 * time.Second)
+	select {}
 }
 
 func TestNewClient(t *testing.T) {

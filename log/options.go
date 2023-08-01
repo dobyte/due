@@ -20,17 +20,17 @@ const (
 )
 
 const (
-	defaultFileKey              = "config.log.file"
-	defaultLevelKey             = "config.log.level"
-	defaultFormatKey            = "config.log.format"
-	defaultTimeFormatKey        = "config.log.timeFormat"
-	defaultStackLevelKey        = "config.log.stackLevel"
-	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
-	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
-	defaultFileCutRuleKey       = "config.log.fileCutRule"
-	defaultStdoutKey            = "config.log.stdout"
-	defaultCallerFullPathKey    = "config.log.callerFullPath"
-	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+	defaultFileKey              = "etc.log.file"
+	defaultLevelKey             = "etc.log.level"
+	defaultFormatKey            = "etc.log.format"
+	defaultTimeFormatKey        = "etc.log.timeFormat"
+	defaultStackLevelKey        = "etc.log.stackLevel"
+	defaultFileMaxAgeKey        = "etc.log.fileMaxAge"
+	defaultFileMaxSizeKey       = "etc.log.fileMaxSize"
+	defaultFileCutRuleKey       = "etc.log.fileCutRule"
+	defaultStdoutKey            = "etc.log.stdout"
+	defaultCallerFullPathKey    = "etc.log.callerFullPath"
+	defaultClassifiedStorageKey = "etc.log.classifiedStorage"
 )
 
 type options struct {

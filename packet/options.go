@@ -2,7 +2,7 @@ package packet
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"strings"
 )
 
@@ -18,10 +18,10 @@ const (
 )
 
 const (
-	defaultEndianKey       = "config.packet.byteOrder"
-	defaultRouteBytesKey   = "config.packet.routeBytes"
-	defaultSeqBytesKey     = "config.packet.seqBytes"
-	defaultMessageBytesKey = "config.packet.bufferBytes"
+	defaultEndianKey       = "etc.packet.byteOrder"
+	defaultRouteBytesKey   = "etc.packet.routeBytes"
+	defaultSeqBytesKey     = "etc.packet.seqBytes"
+	defaultMessageBytesKey = "etc.packet.bufferBytes"
 )
 
 // -------------------------
@@ -50,12 +50,12 @@ type Option func(o *options)
 func defaultOptions() *options {
 	opts := &options{
 		byteOrder:   binary.BigEndian,
-		routeBytes:  config.Get(defaultRouteBytesKey, defaultRouteBytes).Int(),
-		seqBytes:    config.Get(defaultSeqBytesKey, defaultSeqBytes).Int(),
-		bufferBytes: config.Get(defaultMessageBytesKey, defaultMessageBytes).Int(),
+		routeBytes:  etc.Get(defaultRouteBytesKey, defaultRouteBytes).Int(),
+		seqBytes:    etc.Get(defaultSeqBytesKey, defaultSeqBytes).Int(),
+		bufferBytes: etc.Get(defaultMessageBytesKey, defaultMessageBytes).Int(),
 	}
 
-	endian := config.Get(defaultEndianKey, bigEndian).String()
+	endian := etc.Get(defaultEndianKey, bigEndian).String()
 	switch strings.ToLower(endian) {
 	case littleEndian:
 		opts.byteOrder = binary.LittleEndian

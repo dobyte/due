@@ -1,19 +1,19 @@
 package rsa
 
 import (
-	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/hash"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"strings"
 )
 
 const (
-	defaultEncryptorHashKey       = "config.crypto.rsa.encryptor.hash"
-	defaultEncryptorPaddingKey    = "config.crypto.rsa.encryptor.padding"
-	defaultEncryptorLabelKey      = "config.crypto.rsa.encryptor.label"
-	defaultEncryptorBlockSizeKey  = "config.crypto.rsa.encryptor.blockSize"
-	defaultEncryptorPublicKeyKey  = "config.crypto.rsa.encryptor.publicKey"
-	defaultEncryptorPrivateKeyKey = "config.crypto.rsa.encryptor.privateKey"
+	defaultEncryptorHashKey       = "etc.crypto.rsa.encryptor.hash"
+	defaultEncryptorPaddingKey    = "etc.crypto.rsa.encryptor.padding"
+	defaultEncryptorLabelKey      = "etc.crypto.rsa.encryptor.label"
+	defaultEncryptorBlockSizeKey  = "etc.crypto.rsa.encryptor.blockSize"
+	defaultEncryptorPublicKeyKey  = "etc.crypto.rsa.encryptor.publicKey"
+	defaultEncryptorPrivateKeyKey = "etc.crypto.rsa.encryptor.privateKey"
 )
 
 type EncryptorOption func(o *encryptorOptions)
@@ -44,12 +44,12 @@ type encryptorOptions struct {
 
 func defaultEncryptorOptions() *encryptorOptions {
 	return &encryptorOptions{
-		hash:       hash.Hash(strings.ToLower(config.Get(defaultEncryptorHashKey).String())),
-		padding:    EncryptPadding(strings.ToUpper(config.Get(defaultEncryptorPaddingKey).String())),
-		label:      config.Get(defaultEncryptorLabelKey).Bytes(),
-		blockSize:  config.Get(defaultEncryptorBlockSizeKey).Int(),
-		publicKey:  config.Get(defaultEncryptorPublicKeyKey).String(),
-		privateKey: config.Get(defaultEncryptorPrivateKeyKey).String(),
+		hash:       hash.Hash(strings.ToLower(etc.Get(defaultEncryptorHashKey).String())),
+		padding:    EncryptPadding(strings.ToUpper(etc.Get(defaultEncryptorPaddingKey).String())),
+		label:      etc.Get(defaultEncryptorLabelKey).Bytes(),
+		blockSize:  etc.Get(defaultEncryptorBlockSizeKey).Int(),
+		publicKey:  etc.Get(defaultEncryptorPublicKeyKey).String(),
+		privateKey: etc.Get(defaultEncryptorPrivateKeyKey).String(),
 	}
 }
 

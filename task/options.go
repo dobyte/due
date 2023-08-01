@@ -1,6 +1,8 @@
 package task
 
-import "github.com/dobyte/due/v2/config"
+import (
+	"github.com/dobyte/due/v2/etc"
+)
 
 const (
 	defaultSize         = 100000 // 默认任务池大小
@@ -9,9 +11,9 @@ const (
 )
 
 const (
-	defaultSizeKey         = "config.taskPool.size"         // 任务池大小
-	defaultNonblockingKey  = "config.taskPool.nonblocking"  // 是否非阻塞
-	defaultDisablePurgeKey = "config.taskPool.disablePurge" // 是否禁用清除
+	defaultSizeKey         = "etc.taskPool.size"         // 任务池大小
+	defaultNonblockingKey  = "etc.taskPool.nonblocking"  // 是否非阻塞
+	defaultDisablePurgeKey = "etc.taskPool.disablePurge" // 是否禁用清除
 )
 
 type options struct {
@@ -29,12 +31,12 @@ func defaultOptions() *options {
 		disablePurge: defaultDisablePurge,
 	}
 
-	if size := config.Get(defaultSizeKey).Int(); size > 0 {
+	if size := etc.Get(defaultSizeKey).Int(); size > 0 {
 		opts.size = size
 	}
 
-	opts.nonblocking = config.Get(defaultNonblockingKey, defaultNonblocking).Bool()
-	opts.disablePurge = config.Get(defaultDisablePurgeKey, defaultDisablePurge).Bool()
+	opts.nonblocking = etc.Get(defaultNonblockingKey, defaultNonblocking).Bool()
+	opts.disablePurge = etc.Get(defaultDisablePurgeKey, defaultDisablePurge).Bool()
 
 	return opts
 }

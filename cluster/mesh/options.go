@@ -2,9 +2,9 @@ package mesh
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
@@ -18,9 +18,9 @@ const (
 )
 
 const (
-	defaultNameKey    = "config.cluster.mesh.name"
-	defaultCodecKey   = "config.cluster.mesh.codec"
-	defaultTimeoutKey = "config.cluster.mesh.timeout"
+	defaultNameKey    = "etc.cluster.mesh.name"
+	defaultCodecKey   = "etc.cluster.mesh.codec"
+	defaultTimeoutKey = "etc.cluster.mesh.timeout"
 )
 
 type Option func(o *options)
@@ -44,15 +44,15 @@ func defaultOptions() *options {
 		timeout: defaultTimeout,
 	}
 
-	if name := config.Get(defaultNameKey).String(); name != "" {
+	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
 
-	if codec := config.Get(defaultCodecKey).String(); codec != "" {
+	if codec := etc.Get(defaultCodecKey).String(); codec != "" {
 		opts.codec = encoding.Invoke(codec)
 	}
 
-	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
+	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
 	}
 

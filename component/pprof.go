@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"net/http"
 	_ "net/http/pprof"
@@ -22,7 +22,7 @@ func (*pprof) Name() string {
 }
 
 func (*pprof) Start() {
-	if addr := config.Get("config.pprof.addr").String(); addr != "" {
+	if addr := etc.Get("config.pprof.addr").String(); addr != "" {
 		go func() {
 			err := http.ListenAndServe(addr, nil)
 			if err != nil {

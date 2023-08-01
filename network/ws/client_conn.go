@@ -74,6 +74,8 @@ func (c *clientConn) Unbind() {
 // 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
 // 建议使用Push方法替代Send
 func (c *clientConn) Send(msg []byte) (err error) {
+	msg = packMessage(msg)
+
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
@@ -86,6 +88,8 @@ func (c *clientConn) Send(msg []byte) (err error) {
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
+	msg = packMessage(msg)
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -268,8 +272,14 @@ func (c *clientConn) read() {
 				return
 			}
 
+			isHeartbeat, msg, err := parsePacket(msg)
+			if err != nil {
+				log.Errorf("parse message failed: %v", err)
+				continue
+			}
+
 			// ignore heartbeat packet
-			if len(msg) == 0 {
+			if isHeartbeat {
 				continue
 			}
 
@@ -310,6 +320,10 @@ func (c *clientConn) write() {
 				return
 			}
 
+			if r.typ == heartbeatPacket {
+				r.msg = packHeartbeat(false)
+			}
+
 			err := c.conn.WriteMessage(websocket.BinaryMessage, r.msg)
 			c.rw.RUnlock()
 
@@ -332,7 +346,7 @@ func (c *clientConn) write() {
 				}
 
 				// Connections support one concurrent writer.
-				c.chWrite <- chWrite{typ: dataPacket}
+				c.chWrite <- chWrite{typ: heartbeatPacket}
 
 				c.rw.RUnlock()
 			}

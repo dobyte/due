@@ -9,7 +9,7 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xuuid"
@@ -25,9 +25,9 @@ const (
 )
 
 const (
-	defaultIDKey      = "config.cluster.gate.id"
-	defaultNameKey    = "config.cluster.gate.name"
-	defaultTimeoutKey = "config.cluster.gate.timeout"
+	defaultIDKey      = "etc.cluster.gate.id"
+	defaultNameKey    = "etc.cluster.gate.name"
+	defaultTimeoutKey = "etc.cluster.gate.timeout"
 )
 
 type Option func(o *options)
@@ -50,17 +50,17 @@ func defaultOptions() *options {
 		timeout: defaultTimeout,
 	}
 
-	if id := config.Get(defaultIDKey).String(); id != "" {
+	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
 	} else if id, err := xuuid.UUID(); err == nil {
 		opts.id = id
 	}
 
-	if name := config.Get(defaultNameKey).String(); name != "" {
+	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
 
-	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
+	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
 	}
 

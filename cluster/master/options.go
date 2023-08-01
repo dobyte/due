@@ -2,10 +2,10 @@ package master
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
@@ -20,10 +20,10 @@ const (
 )
 
 const (
-	defaultIDKey      = "config.cluster.master.id"
-	defaultNameKey    = "config.cluster.master.name"
-	defaultCodecKey   = "config.cluster.master.codec"
-	defaultTimeoutKey = "config.cluster.master.timeout"
+	defaultIDKey      = "etc.cluster.master.id"
+	defaultNameKey    = "etc.cluster.master.name"
+	defaultCodecKey   = "etc.cluster.master.codec"
+	defaultTimeoutKey = "etc.cluster.master.timeout"
 )
 
 type Option func(o *options)
@@ -48,23 +48,23 @@ func defaultOptions() *options {
 		timeout: defaultTimeout,
 	}
 
-	if id := config.Get(defaultIDKey).String(); id != "" {
+	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
 	} else if id, err := xuuid.UUID(); err == nil {
 		opts.id = id
 	}
 
-	if name := config.Get(defaultNameKey).String(); name != "" {
+	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
 
-	if codec := config.Get(defaultCodecKey).String(); codec != "" {
+	if codec := etc.Get(defaultCodecKey).String(); codec != "" {
 		opts.codec = encoding.Invoke(codec)
 	} else {
 		opts.codec = encoding.Invoke(defaultCodec)
 	}
 
-	if timeout := config.Get(defaultTimeoutKey).Int64(); timeout > 0 {
+	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
 		opts.timeout = time.Duration(timeout) * time.Second
 	}
 

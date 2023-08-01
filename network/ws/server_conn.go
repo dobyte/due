@@ -58,6 +58,8 @@ func (c *serverConn) Unbind() {
 // 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
 // 建议使用Push方法替代Send
 func (c *serverConn) Send(msg []byte) error {
+	msg = packMessage(msg)
+
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
@@ -70,6 +72,8 @@ func (c *serverConn) Send(msg []byte) error {
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) error {
+	msg = packMessage(msg)
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -263,8 +267,19 @@ func (c *serverConn) read() {
 				return
 			}
 
+			isHeartbeat, msg, err := parsePacket(msg)
+			if err != nil {
+				log.Errorf("parse message failed: %v", err)
+				continue
+			}
+
 			// ignore heartbeat packet
-			if len(msg) == 0 {
+			if isHeartbeat {
+				// responsive heartbeat
+				if c.connMgr.server.opts.heartbeatMechanism == ResponsiveHeartbeat {
+					c.chWrite <- chWrite{typ: heartbeatPacket}
+				}
+
 				continue
 			}
 
@@ -306,6 +321,10 @@ func (c *serverConn) write() {
 				return
 			}
 
+			if r.typ == heartbeatPacket {
+				r.msg = packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)
+			}
+
 			err := c.conn.WriteMessage(websocket.BinaryMessage, r.msg)
 			c.rw.RUnlock()
 
@@ -319,18 +338,20 @@ func (c *serverConn) write() {
 				c.forceClose()
 				return
 			} else {
-				// send heartbeat packet
-				c.rw.RLock()
+				if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
+					// send heartbeat packet
+					c.rw.RLock()
 
-				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+					if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
+						c.rw.RUnlock()
+						return
+					}
+
+					// Connections support one concurrent writer.
+					c.chWrite <- chWrite{typ: heartbeatPacket}
+
 					c.rw.RUnlock()
-					return
 				}
-
-				// Connections support one concurrent writer.
-				c.chWrite <- chWrite{typ: dataPacket}
-
-				c.rw.RUnlock()
 			}
 		}
 	}

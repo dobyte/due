@@ -8,7 +8,7 @@
 package tencent
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 )
 
@@ -21,25 +21,25 @@ const (
 )
 
 const (
-	defaultLevelKey          = "config.log.level"
-	defaultTimeFormatKey     = "config.log.timeFormat"
-	defaultStackLevelKey     = "config.log.stackLevel"
-	defaultStdoutKey         = "config.log.stdout"
-	defaultSyncoutKey        = "config.log.syncout"
-	defaultCallerFullPathKey = "config.log.callerFullPath"
+	defaultLevelKey          = "etc.log.level"
+	defaultTimeFormatKey     = "etc.log.timeFormat"
+	defaultStackLevelKey     = "etc.log.stackLevel"
+	defaultStdoutKey         = "etc.log.stdout"
+	defaultSyncoutKey        = "etc.log.syncout"
+	defaultCallerFullPathKey = "etc.log.callerFullPath"
 )
 
 const (
-	tencentEndpointKey        = "config.log.tencent.endpoint"
-	tencentAccessKeyIDKey     = "config.log.tencent.accessKeyID"
-	tencentAccessKeySecretKey = "config.log.tencent.accessKeySecret"
-	tencentTopicIDKey         = "config.log.tencent.topicID"
-	tencentLevelKey           = "config.log.tencent.level"
-	tencentTimeFormatKey      = "config.log.tencent.timeFormat"
-	tencentStackLevelKey      = "config.log.tencent.stackLevel"
-	tencentStdoutKey          = "config.log.tencent.stdout"
-	tencentSyncoutKey         = "config.log.tencent.syncout"
-	tencentCallerFullPathKey  = "config.log.tencent.callerFullPath"
+	tencentEndpointKey        = "etc.log.tencent.endpoint"
+	tencentAccessKeyIDKey     = "etc.log.tencent.accessKeyID"
+	tencentAccessKeySecretKey = "etc.log.tencent.accessKeySecret"
+	tencentTopicIDKey         = "etc.log.tencent.topicID"
+	tencentLevelKey           = "etc.log.tencent.level"
+	tencentTimeFormatKey      = "etc.log.tencent.timeFormat"
+	tencentStackLevelKey      = "etc.log.tencent.stackLevel"
+	tencentStdoutKey          = "etc.log.tencent.stdout"
+	tencentSyncoutKey         = "etc.log.tencent.syncout"
+	tencentCallerFullPathKey  = "etc.log.tencent.callerFullPath"
 )
 
 type Option func(o *options)
@@ -68,28 +68,28 @@ func defaultOptions() *options {
 		callerFullPath: defaultCallerFullPath,
 	}
 
-	level := config.Get(tencentLevelKey, config.Get(defaultLevelKey).String()).String()
+	level := etc.Get(tencentLevelKey, etc.Get(defaultLevelKey).String()).String()
 	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
 		opts.level = lvl
 	}
 
-	timeFormat := config.Get(tencentTimeFormatKey, config.Get(defaultTimeFormatKey).String()).String()
+	timeFormat := etc.Get(tencentTimeFormatKey, etc.Get(defaultTimeFormatKey).String()).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get(tencentStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
+	stackLevel := etc.Get(tencentStackLevelKey, etc.Get(defaultStackLevelKey).String()).String()
 	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
-	opts.stdout = config.Get(tencentStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
-	opts.syncout = config.Get(tencentSyncoutKey, config.Get(defaultSyncoutKey, defaultSyncout).Bool()).Bool()
-	opts.callerFullPath = config.Get(tencentCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
-	opts.endpoint = config.Get(tencentEndpointKey).String()
-	opts.accessKeyID = config.Get(tencentAccessKeyIDKey).String()
-	opts.accessKeySecret = config.Get(tencentAccessKeySecretKey).String()
-	opts.topicID = config.Get(tencentTopicIDKey).String()
+	opts.stdout = etc.Get(tencentStdoutKey, etc.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
+	opts.syncout = etc.Get(tencentSyncoutKey, etc.Get(defaultSyncoutKey, defaultSyncout).Bool()).Bool()
+	opts.callerFullPath = etc.Get(tencentCallerFullPathKey, etc.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.endpoint = etc.Get(tencentEndpointKey).String()
+	opts.accessKeyID = etc.Get(tencentAccessKeyIDKey).String()
+	opts.accessKeySecret = etc.Get(tencentAccessKeySecretKey).String()
+	opts.topicID = etc.Get(tencentTopicIDKey).String()
 
 	return opts
 }

@@ -8,7 +8,7 @@
 package logrus
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"strings"
 	"time"
@@ -28,31 +28,31 @@ const (
 )
 
 const (
-	defaultFileKey              = "config.log.file"
-	defaultLevelKey             = "config.log.level"
-	defaultFormatKey            = "config.log.format"
-	defaultTimeFormatKey        = "config.log.timeFormat"
-	defaultStackLevelKey        = "config.log.stackLevel"
-	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
-	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
-	defaultFileCutRuleKey       = "config.log.fileCutRule"
-	defaultStdoutKey            = "config.log.stdout"
-	defaultCallerFullPathKey    = "config.log.callerFullPath"
-	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+	defaultFileKey              = "etc.log.file"
+	defaultLevelKey             = "etc.log.level"
+	defaultFormatKey            = "etc.log.format"
+	defaultTimeFormatKey        = "etc.log.timeFormat"
+	defaultStackLevelKey        = "etc.log.stackLevel"
+	defaultFileMaxAgeKey        = "etc.log.fileMaxAge"
+	defaultFileMaxSizeKey       = "etc.log.fileMaxSize"
+	defaultFileCutRuleKey       = "etc.log.fileCutRule"
+	defaultStdoutKey            = "etc.log.stdout"
+	defaultCallerFullPathKey    = "etc.log.callerFullPath"
+	defaultClassifiedStorageKey = "etc.log.classifiedStorage"
 )
 
 const (
-	logrusFileKey              = "config.log.logrus.file"
-	logrusLevelKey             = "config.log.logrus.level"
-	logrusFormatKey            = "config.log.logrus.format"
-	logrusTimeFormatKey        = "config.log.logrus.timeFormat"
-	logrusStackLevelKey        = "config.log.logrus.stackLevel"
-	logrusFileMaxAgeKey        = "config.log.logrus.fileMaxAge"
-	logrusFileMaxSizeKey       = "config.log.logrus.fileMaxSize"
-	logrusFileCutRuleKey       = "config.log.logrus.fileCutRule"
-	logrusStdoutKey            = "config.log.logrus.stdout"
-	logrusCallerFullPathKey    = "config.log.logrus.callerFullPath"
-	logrusClassifiedStorageKey = "config.log.logrus.classifiedStorage"
+	logrusFileKey              = "etc.log.logrus.file"
+	logrusLevelKey             = "etc.log.logrus.level"
+	logrusFormatKey            = "etc.log.logrus.format"
+	logrusTimeFormatKey        = "etc.log.logrus.timeFormat"
+	logrusStackLevelKey        = "etc.log.logrus.stackLevel"
+	logrusFileMaxAgeKey        = "etc.log.logrus.fileMaxAge"
+	logrusFileMaxSizeKey       = "etc.log.logrus.fileMaxSize"
+	logrusFileCutRuleKey       = "etc.log.logrus.fileCutRule"
+	logrusStdoutKey            = "etc.log.logrus.stdout"
+	logrusCallerFullPathKey    = "etc.log.logrus.callerFullPath"
+	logrusClassifiedStorageKey = "etc.log.logrus.classifiedStorage"
 )
 
 type options struct {
@@ -86,17 +86,17 @@ func defaultOptions() *options {
 		classifiedStorage: defaultClassifiedStorage,
 	}
 
-	file := config.Get(logrusFileKey, config.Get(defaultFileKey).String()).String()
+	file := etc.Get(logrusFileKey, etc.Get(defaultFileKey).String()).String()
 	if file != "" {
 		opts.file = file
 	}
 
-	level := config.Get(logrusLevelKey, config.Get(defaultLevelKey).String()).String()
+	level := etc.Get(logrusLevelKey, etc.Get(defaultLevelKey).String()).String()
 	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
 		opts.level = lvl
 	}
 
-	format := config.Get(logrusFormatKey, config.Get(defaultFormatKey).String()).String()
+	format := etc.Get(logrusFormatKey, etc.Get(defaultFormatKey).String()).String()
 	switch strings.ToLower(format) {
 	case log.JsonFormat.String():
 		opts.format = log.JsonFormat
@@ -104,27 +104,27 @@ func defaultOptions() *options {
 		opts.format = log.TextFormat
 	}
 
-	timeFormat := config.Get(logrusTimeFormatKey, config.Get(defaultTimeFormatKey).String()).String()
+	timeFormat := etc.Get(logrusTimeFormatKey, etc.Get(defaultTimeFormatKey).String()).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get(logrusStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
+	stackLevel := etc.Get(logrusStackLevelKey, etc.Get(defaultStackLevelKey).String()).String()
 	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
-	fileMaxAge := config.Get(logrusFileMaxAgeKey, config.Get(defaultFileMaxAgeKey).Duration()).Duration()
+	fileMaxAge := etc.Get(logrusFileMaxAgeKey, etc.Get(defaultFileMaxAgeKey).Duration()).Duration()
 	if fileMaxAge > 0 {
 		opts.fileMaxAge = fileMaxAge
 	}
 
-	fileMaxSize := config.Get(logrusFileMaxSizeKey, config.Get(defaultFileMaxSizeKey).Int64()).Int64()
+	fileMaxSize := etc.Get(logrusFileMaxSizeKey, etc.Get(defaultFileMaxSizeKey).Int64()).Int64()
 	if fileMaxSize > 0 {
 		opts.fileMaxSize = fileMaxSize
 	}
 
-	fileCutRule := config.Get(logrusFileCutRuleKey, config.Get(defaultFileCutRuleKey).String()).String()
+	fileCutRule := etc.Get(logrusFileCutRuleKey, etc.Get(defaultFileCutRuleKey).String()).String()
 	switch strings.ToLower(fileCutRule) {
 	case log.CutByYear.String():
 		opts.fileCutRule = log.CutByYear
@@ -140,9 +140,9 @@ func defaultOptions() *options {
 		opts.fileCutRule = log.CutBySecond
 	}
 
-	opts.stdout = config.Get(logrusStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
-	opts.callerFullPath = config.Get(logrusCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
-	opts.classifiedStorage = config.Get(logrusClassifiedStorageKey, config.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()).Bool()
+	opts.stdout = etc.Get(logrusStdoutKey, etc.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
+	opts.callerFullPath = etc.Get(logrusCallerFullPathKey, etc.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.classifiedStorage = etc.Get(logrusClassifiedStorageKey, etc.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()).Bool()
 
 	return opts
 }

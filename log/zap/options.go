@@ -8,7 +8,7 @@
 package zap
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"strings"
 	"time"
@@ -28,31 +28,31 @@ const (
 )
 
 const (
-	defaultFileKey              = "config.log.file"
-	defaultLevelKey             = "config.log.level"
-	defaultFormatKey            = "config.log.format"
-	defaultTimeFormatKey        = "config.log.timeFormat"
-	defaultStackLevelKey        = "config.log.stackLevel"
-	defaultFileMaxAgeKey        = "config.log.fileMaxAge"
-	defaultFileMaxSizeKey       = "config.log.fileMaxSize"
-	defaultFileCutRuleKey       = "config.log.fileCutRule"
-	defaultStdoutKey            = "config.log.stdout"
-	defaultCallerFullPathKey    = "config.log.callerFullPath"
-	defaultClassifiedStorageKey = "config.log.classifiedStorage"
+	defaultFileKey              = "etc.log.file"
+	defaultLevelKey             = "etc.log.level"
+	defaultFormatKey            = "etc.log.format"
+	defaultTimeFormatKey        = "etc.log.timeFormat"
+	defaultStackLevelKey        = "etc.log.stackLevel"
+	defaultFileMaxAgeKey        = "etc.log.fileMaxAge"
+	defaultFileMaxSizeKey       = "etc.log.fileMaxSize"
+	defaultFileCutRuleKey       = "etc.log.fileCutRule"
+	defaultStdoutKey            = "etc.log.stdout"
+	defaultCallerFullPathKey    = "etc.log.callerFullPath"
+	defaultClassifiedStorageKey = "etc.log.classifiedStorage"
 )
 
 const (
-	zapFileKey              = "config.log.zap.file"
-	zapLevelKey             = "config.log.zap.level"
-	zapFormatKey            = "config.log.zap.format"
-	zapTimeFormatKey        = "config.log.zap.timeFormat"
-	zapStackLevelKey        = "config.log.zap.stackLevel"
-	zapFileMaxAgeKey        = "config.log.zap.fileMaxAge"
-	zapFileMaxSizeKey       = "config.log.zap.fileMaxSize"
-	zapFileCutRuleKey       = "config.log.zap.fileCutRule"
-	zapStdoutKey            = "config.log.zap.stdout"
-	zapCallerFullPathKey    = "config.log.zap.callerFullPath"
-	zapClassifiedStorageKey = "config.log.zap.classifiedStorage"
+	zapFileKey              = "etc.log.zap.file"
+	zapLevelKey             = "etc.log.zap.level"
+	zapFormatKey            = "etc.log.zap.format"
+	zapTimeFormatKey        = "etc.log.zap.timeFormat"
+	zapStackLevelKey        = "etc.log.zap.stackLevel"
+	zapFileMaxAgeKey        = "etc.log.zap.fileMaxAge"
+	zapFileMaxSizeKey       = "etc.log.zap.fileMaxSize"
+	zapFileCutRuleKey       = "etc.log.zap.fileCutRule"
+	zapStdoutKey            = "etc.log.zap.stdout"
+	zapCallerFullPathKey    = "etc.log.zap.callerFullPath"
+	zapClassifiedStorageKey = "etc.log.zap.classifiedStorage"
 )
 
 type options struct {
@@ -86,17 +86,17 @@ func defaultOptions() *options {
 		classifiedStorage: defaultClassifiedStorage,
 	}
 
-	file := config.Get(zapFileKey, config.Get(defaultFileKey).String()).String()
+	file := etc.Get(zapFileKey, etc.Get(defaultFileKey).String()).String()
 	if file != "" {
 		opts.file = file
 	}
 
-	level := config.Get(zapLevelKey, config.Get(defaultLevelKey).String()).String()
+	level := etc.Get(zapLevelKey, etc.Get(defaultLevelKey).String()).String()
 	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
 		opts.level = lvl
 	}
 
-	format := config.Get(zapFormatKey, config.Get(defaultFormatKey).String()).String()
+	format := etc.Get(zapFormatKey, etc.Get(defaultFormatKey).String()).String()
 	switch strings.ToLower(format) {
 	case log.JsonFormat.String():
 		opts.format = log.JsonFormat
@@ -104,27 +104,27 @@ func defaultOptions() *options {
 		opts.format = log.TextFormat
 	}
 
-	timeFormat := config.Get(zapTimeFormatKey, config.Get(defaultTimeFormatKey).String()).String()
+	timeFormat := etc.Get(zapTimeFormatKey, etc.Get(defaultTimeFormatKey).String()).String()
 	if timeFormat != "" {
 		opts.timeFormat = timeFormat
 	}
 
-	stackLevel := config.Get(zapStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
+	stackLevel := etc.Get(zapStackLevelKey, etc.Get(defaultStackLevelKey).String()).String()
 	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
-	fileMaxAge := config.Get(zapFileMaxAgeKey, config.Get(defaultFileMaxAgeKey).Duration()).Duration()
+	fileMaxAge := etc.Get(zapFileMaxAgeKey, etc.Get(defaultFileMaxAgeKey).Duration()).Duration()
 	if fileMaxAge > 0 {
 		opts.fileMaxAge = fileMaxAge
 	}
 
-	fileMaxSize := config.Get(zapFileMaxSizeKey, config.Get(defaultFileMaxSizeKey).Int64()).Int64()
+	fileMaxSize := etc.Get(zapFileMaxSizeKey, etc.Get(defaultFileMaxSizeKey).Int64()).Int64()
 	if fileMaxSize > 0 {
 		opts.fileMaxSize = fileMaxSize
 	}
 
-	fileCutRule := config.Get(zapFileCutRuleKey, config.Get(defaultFileCutRuleKey).String()).String()
+	fileCutRule := etc.Get(zapFileCutRuleKey, etc.Get(defaultFileCutRuleKey).String()).String()
 	switch strings.ToLower(fileCutRule) {
 	case log.CutByYear.String():
 		opts.fileCutRule = log.CutByYear
@@ -140,9 +140,9 @@ func defaultOptions() *options {
 		opts.fileCutRule = log.CutBySecond
 	}
 
-	opts.stdout = config.Get(zapStdoutKey, config.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
-	opts.callerFullPath = config.Get(zapCallerFullPathKey, config.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
-	opts.classifiedStorage = config.Get(zapClassifiedStorageKey, config.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()).Bool()
+	opts.stdout = etc.Get(zapStdoutKey, etc.Get(defaultStdoutKey, defaultStdout).Bool()).Bool()
+	opts.callerFullPath = etc.Get(zapCallerFullPathKey, etc.Get(defaultCallerFullPathKey, defaultCallerFullPath).Bool()).Bool()
+	opts.classifiedStorage = etc.Get(zapClassifiedStorageKey, etc.Get(defaultClassifiedStorageKey, defaultClassifiedStorage).Bool()).Bool()
 
 	return opts
 }

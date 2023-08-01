@@ -1,15 +1,15 @@
 package ecc
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
-	defaultEncryptorShareInfo1Key = "config.crypto.ecc.encryptor.s1"
-	defaultEncryptorShareInfo2Key = "config.crypto.ecc.encryptor.s2"
-	defaultEncryptorPublicKeyKey  = "config.crypto.ecc.encryptor.publicKey"
-	defaultEncryptorPrivateKeyKey = "config.crypto.ecc.encryptor.privateKey"
+	defaultEncryptorShareInfo1Key = "etc.crypto.ecc.encryptor.s1"
+	defaultEncryptorShareInfo2Key = "etc.crypto.ecc.encryptor.s2"
+	defaultEncryptorPublicKeyKey  = "etc.crypto.ecc.encryptor.publicKey"
+	defaultEncryptorPrivateKeyKey = "etc.crypto.ecc.encryptor.privateKey"
 )
 
 type EncryptorOption func(o *encryptorOptions)
@@ -32,10 +32,10 @@ type encryptorOptions struct {
 
 func defaultEncryptorOptions() *encryptorOptions {
 	return &encryptorOptions{
-		s1:         config.Get(defaultEncryptorShareInfo1Key).Bytes(),
-		s2:         config.Get(defaultEncryptorShareInfo2Key).Bytes(),
-		publicKey:  config.Get(defaultEncryptorPublicKeyKey).String(),
-		privateKey: config.Get(defaultEncryptorPrivateKeyKey).String(),
+		s1:         etc.Get(defaultEncryptorShareInfo1Key).Bytes(),
+		s2:         etc.Get(defaultEncryptorShareInfo2Key).Bytes(),
+		publicKey:  etc.Get(defaultEncryptorPublicKeyKey).String(),
+		privateKey: etc.Get(defaultEncryptorPrivateKeyKey).String(),
 	}
 }
 
