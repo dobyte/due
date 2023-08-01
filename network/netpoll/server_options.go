@@ -1,7 +1,7 @@
 package netpoll
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"time"
 )
 
@@ -12,9 +12,9 @@ const (
 )
 
 const (
-	defaultServerAddrKey              = "config.network.tcp.server.addr"
-	defaultServerMaxConnNumKey        = "config.network.tcp.server.maxConnNum"
-	defaultServerHeartbeatIntervalKey = "config.network.tcp.server.heartbeatInterval"
+	defaultServerAddrKey              = "etc.network.tcp.server.addr"
+	defaultServerMaxConnNumKey        = "etc.network.tcp.server.maxConnNum"
+	defaultServerHeartbeatIntervalKey = "etc.network.tcp.server.heartbeatInterval"
 )
 
 type ServerOption func(o *serverOptions)
@@ -27,9 +27,9 @@ type serverOptions struct {
 
 func defaultServerOptions() *serverOptions {
 	return &serverOptions{
-		addr:              config.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		maxConnNum:        config.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		heartbeatInterval: config.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
+		addr:              etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxConnNum:        etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
+		heartbeatInterval: etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
 	}
 }
 

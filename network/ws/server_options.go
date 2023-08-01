@@ -1,7 +1,7 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"net/http"
 	"time"
 )
@@ -16,14 +16,14 @@ const (
 )
 
 const (
-	defaultServerAddrKey              = "config.network.ws.server.addr"
-	defaultServerPathKey              = "config.network.ws.server.path"
-	defaultServerMaxConnNumKey        = "config.network.ws.server.maxConnNum"
-	defaultServerCheckOriginsKey      = "config.network.ws.server.origins"
-	defaultServerKeyFileKey           = "config.network.ws.server.keyFile"
-	defaultServerCertFileKey          = "config.network.ws.server.certFile"
-	defaultServerHeartbeatIntervalKey = "config.network.ws.server.heartbeatInterval"
-	defaultServerHandshakeTimeoutKey  = "config.network.ws.server.handshakeTimeout"
+	defaultServerAddrKey              = "etc.network.ws.server.addr"
+	defaultServerPathKey              = "etc.network.ws.server.path"
+	defaultServerMaxConnNumKey        = "etc.network.ws.server.maxConnNum"
+	defaultServerCheckOriginsKey      = "etc.network.ws.server.origins"
+	defaultServerKeyFileKey           = "etc.network.ws.server.keyFile"
+	defaultServerCertFileKey          = "etc.network.ws.server.certFile"
+	defaultServerHeartbeatIntervalKey = "etc.network.ws.server.heartbeatInterval"
+	defaultServerHandshakeTimeoutKey  = "etc.network.ws.server.handshakeTimeout"
 )
 
 type ServerOption func(o *serverOptions)
@@ -42,7 +42,7 @@ type serverOptions struct {
 }
 
 func defaultServerOptions() *serverOptions {
-	origins := config.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
+	origins := etc.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
 	checkOrigin := func(r *http.Request) bool {
 		if len(origins) == 0 {
 			return false
@@ -59,14 +59,14 @@ func defaultServerOptions() *serverOptions {
 	}
 
 	return &serverOptions{
-		addr:              config.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		maxConnNum:        config.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		path:              config.Get(defaultServerPathKey, defaultServerPath).String(),
+		addr:              etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxConnNum:        etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
+		path:              etc.Get(defaultServerPathKey, defaultServerPath).String(),
 		checkOrigin:       checkOrigin,
-		keyFile:           config.Get(defaultServerKeyFileKey).String(),
-		certFile:          config.Get(defaultServerCertFileKey).String(),
-		heartbeatInterval: config.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
-		handshakeTimeout:  config.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
+		keyFile:           etc.Get(defaultServerKeyFileKey).String(),
+		certFile:          etc.Get(defaultServerCertFileKey).String(),
+		heartbeatInterval: etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
+		handshakeTimeout:  etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
 	}
 }
 

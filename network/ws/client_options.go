@@ -1,7 +1,7 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"time"
 )
 
@@ -12,9 +12,9 @@ const (
 )
 
 const (
-	defaultClientDialUrlKey           = "config.network.ws.client.url"
-	defaultClientHandshakeTimeoutKey  = "config.network.ws.client.handshakeTimeout"
-	defaultClientHeartbeatIntervalKey = "config.network.ws.client.heartbeatInterval"
+	defaultClientDialUrlKey           = "etc.network.ws.client.url"
+	defaultClientHandshakeTimeoutKey  = "etc.network.ws.client.handshakeTimeout"
+	defaultClientHeartbeatIntervalKey = "etc.network.ws.client.heartbeatInterval"
 )
 
 type ClientOption func(o *clientOptions)
@@ -28,9 +28,9 @@ type clientOptions struct {
 
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
-		url:               config.Get(defaultClientDialUrlKey, defaultClientDialUrl).String(),
-		handshakeTimeout:  config.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration() * time.Second,
-		heartbeatInterval: config.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
+		url:               etc.Get(defaultClientDialUrlKey, defaultClientDialUrl).String(),
+		handshakeTimeout:  etc.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration() * time.Second,
+		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
 	}
 }
 

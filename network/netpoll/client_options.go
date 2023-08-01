@@ -1,7 +1,7 @@
 package netpoll
 
 import (
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/etc"
 	"time"
 )
 
@@ -11,8 +11,8 @@ const (
 )
 
 const (
-	defaultClientDialAddrKey          = "config.network.tcp.client.addr"
-	defaultClientHeartbeatIntervalKey = "config.network.tcp.client.heartbeatInterval"
+	defaultClientDialAddrKey          = "etc.network.tcp.client.addr"
+	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
 )
 
 type ClientOption func(o *clientOptions)
@@ -24,8 +24,8 @@ type clientOptions struct {
 
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
-		addr:              config.Get(defaultClientDialAddrKey, defaultClientDialAddr).String(),
-		heartbeatInterval: config.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
+		addr:              etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String(),
+		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
 	}
 }
 
