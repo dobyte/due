@@ -38,6 +38,7 @@ type options struct {
 	registry     registry.Registry         // 服务注册器
 	transporter  transport.Transporter     // 消息传输器
 	encryptor    crypto.Encryptor          // 消息加密器
+	configSource configurator.Source       // 配置源
 	configurator configurator.Configurator // 配置器
 }
 
@@ -114,4 +115,11 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
+}
+
+// WithConfigSource 设置配置源
+func WithConfigSource(configSource configurator.Source) Option {
+	return func(o *options) {
+		o.configSource, o.configurator = configSource, configurator.NewConfigurator(configurator.WithSources(configSource))
+	}
 }

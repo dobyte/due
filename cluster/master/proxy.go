@@ -3,6 +3,8 @@ package master
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
@@ -17,6 +19,7 @@ var (
 	ErrInvalidSessionKind = link.ErrInvalidSessionKind
 	ErrNotFoundUserSource = link.ErrNotFoundUserSource
 	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
+	ErrConfigSourceNotSet = errors.New("configuration source not set")
 )
 
 type (
@@ -46,6 +49,24 @@ func (p *Proxy) GetMasterID() string {
 // GetMasterName 获取当前管理节点名称
 func (p *Proxy) GetMasterName() string {
 	return p.master.opts.name
+}
+
+// LoadConfig 加载配置
+func (p *Proxy) LoadConfig(ctx context.Context, file string) ([]*configurator.Configuration, error) {
+	if p.master.opts.configurator != nil {
+		return p.master.opts.configurator.Load(ctx, p.master.opts.configSource.Name(), file)
+	}
+
+	return nil, ErrConfigSourceNotSet
+}
+
+// StoreConfig 保存配置
+func (p *Proxy) StoreConfig(ctx context.Context, file string, content interface{}) error {
+	if p.master.opts.configurator != nil {
+		return p.master.opts.configurator.Store(ctx, p.master.opts.configSource.Name(), file, content)
+	}
+
+	return ErrConfigSourceNotSet
 }
 
 // NewServiceClient 新建微服务客户端
@@ -116,6 +137,11 @@ func (p *Proxy) Deliver(ctx context.Context, uid int64, message *Message) error 
 		UID:     uid,
 		Message: message,
 	})
+}
+
+// Stat 统计会话总数
+func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.link.Stat(ctx, kind)
 }
 
 // Disconnect 断开连接

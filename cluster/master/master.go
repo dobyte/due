@@ -62,6 +62,10 @@ func (m *Master) Start() {
 // Destroy 销毁组件
 func (m *Master) Destroy() {
 	m.cancel()
+
+	if m.opts.configurator != nil {
+		m.opts.configurator.Close()
+	}
 }
 
 // Proxy 获取管理服代理

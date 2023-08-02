@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -117,6 +118,11 @@ func (p *Proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, erro
 // Broadcast 推送广播消息
 func (p *Proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
 	return p.link.Broadcast(ctx, args)
+}
+
+// Stat 统计会话总数
+func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.link.Stat(ctx, kind)
 }
 
 // Disconnect 断开连接
