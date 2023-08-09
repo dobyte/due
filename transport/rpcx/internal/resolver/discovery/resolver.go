@@ -112,7 +112,7 @@ func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 
 // Clone clone a new resolver
 func (r *Resolver) Clone(servicePath string) (cli.ServiceDiscovery, error) {
-	return newResolver(r.dis, servicePath)
+	return r, nil
 }
 
 func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
