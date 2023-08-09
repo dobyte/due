@@ -2,7 +2,7 @@ package errors_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/code"
+	"github.com/dobyte/due/v2/codes"
 	"github.com/dobyte/due/v2/errors"
 	"testing"
 )
@@ -10,19 +10,19 @@ import (
 func TestNew(t *testing.T) {
 	innerErr := errors.NewError(
 		"db error",
-		code.NewCode(2, "core error", ""),
+		codes.NewCode(2, "core error"),
 		errors.New("std not found"),
 	)
 
 	err := errors.NewError(
 		//"not found",
-		code.NewCode(1, "not found", ""),
+		codes.NewCode(1, "not found"),
 		innerErr,
 	)
 
 	t.Log(err)
-	t.Log(err.(errors.Error).Code())
-	t.Log(err.(errors.Error).Next())
-	t.Log(err.(errors.Error).Cause())
+	t.Log(err.Code())
+	t.Log(err.Next())
+	t.Log(err.Cause())
 	fmt.Println(fmt.Sprintf("%+v", err))
 }
