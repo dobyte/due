@@ -276,7 +276,7 @@ func (c *serverConn) read() {
 			// ignore heartbeat packet
 			if isHeartbeat {
 				// responsive heartbeat
-				if c.connMgr.server.opts.heartbeatMechanism == ResponsiveHeartbeat {
+				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
 					c.chWrite <- chWrite{typ: heartbeatPacket}
 				}
 

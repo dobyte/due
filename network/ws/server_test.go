@@ -13,24 +13,10 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"net/http"
-	"syscall"
 	"testing"
 )
 
-func setLimit() {
-	var rLimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
-		panic(err)
-	}
-	rLimit.Cur = rLimit.Max
-	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
-		panic(err)
-	}
-}
-
 func TestServer(t *testing.T) {
-	setLimit()
-
 	server := ws.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
@@ -82,8 +68,6 @@ func TestServer(t *testing.T) {
 }
 
 func TestServer_Benchmark(t *testing.T) {
-	setLimit()
-
 	server := ws.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")

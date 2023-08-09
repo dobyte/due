@@ -11,9 +11,9 @@ const (
 	defaultServerPath                    = "/"
 	defaultServerMaxConnNum              = 5000
 	defaultServerCheckOrigin             = "*"
-	defaultServerHeartbeatInterval       = 10
 	defaultServerHandshakeTimeout        = 10
-	defaultServerHeartbeatMechanism      = ResponsiveHeartbeat
+	defaultServerHeartbeatInterval       = 10
+	defaultServerHeartbeatMechanism      = RespHeartbeat
 	defaultServerHeartbeatWithServerTime = true
 )
 
@@ -31,8 +31,8 @@ const (
 )
 
 const (
-	ResponsiveHeartbeat HeartbeatMechanism = "responsive" // 响应式心跳，
-	TickHeartbeat       HeartbeatMechanism = "tick"       // 主动定时心跳
+	RespHeartbeat HeartbeatMechanism = "resp" // 响应式心跳
+	TickHeartbeat HeartbeatMechanism = "tick" // 主动定时心跳
 )
 
 type HeartbeatMechanism string
