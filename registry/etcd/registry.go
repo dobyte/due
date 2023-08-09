@@ -122,8 +122,8 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	}
 }
 
-// Stop 停止注册服务
-func (r *Registry) Stop() error {
+// Close 关闭服务注册发现
+func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
 	}

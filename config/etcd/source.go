@@ -108,3 +108,16 @@ func (s *Source) Watch(ctx context.Context) (configurator.Watcher, error) {
 
 	return newWatcher(ctx, s)
 }
+
+// Close 关闭资源
+func (s *Source) Close() error {
+	if s.err != nil {
+		return s.err
+	}
+
+	if s.builtin {
+		return s.opts.client.Close()
+	}
+
+	return nil
+}
