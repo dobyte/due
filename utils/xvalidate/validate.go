@@ -1,0 +1,97 @@
+package xvalidate
+
+import (
+	"regexp"
+	"unicode/utf8"
+)
+
+// IsTelephone 检测是否是电话号码
+func IsTelephone(telephone string) bool {
+	matched, err := regexp.MatchString(`^((\d{3,4})|\d{3,4}-)?\d{7,8}$`, telephone)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsMobile 检测是否是手机号（国内）
+func IsMobile(mobile string) bool {
+	matched, err := regexp.MatchString(`^13[\d]{9}$|^14[5,7]{1}\d{8}$|^15[^4]{1}\d{8}$|^16[\d]{9}$|^17[0,2,3,5,6,7,8]{1}\d{8}$|^18[\d]{9}$|^19[\d]{9}$`, mobile)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsEmail 检测是否是邮箱
+func IsEmail(email string) bool {
+	matched, err := regexp.MatchString(`^[a-zA-Z0-9_\-\.]+@[a-zA-Z0-9_\-]+(\.[a-zA-Z0-9_\-]+)+$`, email)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsUrl 检测是否是URL
+func IsUrl(url string) bool {
+	matched, err := regexp.MatchString(`(?i)(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]`, url)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsQQ 是否是QQ号
+func IsQQ(qq string) bool {
+	matched, err := regexp.MatchString(`^[1-9][0-9]{4,}$`, qq)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsDigit 检测是否是数值（正负整数、正负浮点数）
+func IsDigit(digit string) bool {
+	matched, err := regexp.MatchString(`^-?[1-9]\d*(.\d)*$`, digit)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsNumber 检测是否是数字
+func IsNumber(number string) bool {
+	matched, err := regexp.MatchString(`^\d+$`, number)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// Between 检测字符串长度是否在设置的范围之间
+func Between(s string, min, max int) bool {
+	n := utf8.RuneCountInString(s)
+	return n >= min && n <= max
+}
+
+// Length 检测字符串长度是否等于固定长度
+func Length(s string, n int) bool {
+	return utf8.RuneCountInString(s) == n
+}
+
+// MinLength 检测字符串的最小长度
+func MinLength(s string, n int) bool {
+	return utf8.RuneCountInString(s) >= n
+}
+
+// MaxLength 检测字符串的最大长度
+func MaxLength(s string, n int) bool {
+	return utf8.RuneCountInString(s) <= n
+}

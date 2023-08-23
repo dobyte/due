@@ -2,7 +2,9 @@ package gate
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/dispatcher"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
@@ -60,13 +62,14 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 		Event: event,
 		CID:   cid,
 		UID:   uid,
-	}); err != nil {
+	}); err != nil && err != dispatcher.ErrNotFoundEvent {
 		log.Warnf("trigger event failed, gid: %s, cid: %d, uid: %d, event: %v, err: %v", p.gate.opts.id, cid, uid, event, err)
 	}
 }
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
+	fmt.Println(data)
 	message, err := packet.Unpack(data)
 	if err != nil {
 		log.Errorf("unpack data to struct failed: %v", err)

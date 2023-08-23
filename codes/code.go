@@ -15,6 +15,8 @@ var (
 	DeadlineExceeded = NewCode(4, "deadline exceeded")
 	NotFound         = NewCode(5, "not found")
 	InternalError    = NewCode(6, "internal error")
+	Unauthorized     = NewCode(7, "unauthorized")
+	Illegal          = NewCode(8, "illegal")
 
 	NotLocatedUser = NewCode(3, "not located user")
 )

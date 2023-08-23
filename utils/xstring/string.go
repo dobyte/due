@@ -16,3 +16,8 @@ func FirstLetterIsLower(s string) bool {
 	r, _ := utf8.DecodeRuneInString(s)
 	return r != utf8.RuneError && unicode.IsLower(r)
 }
+
+// Length 获取字符串长度
+func Length(s string) int {
+	return utf8.RuneCountInString(s)
+}

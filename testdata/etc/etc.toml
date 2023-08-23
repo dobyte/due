@@ -126,7 +126,7 @@ timezone = "Local"
     # 序列号字节数，默认为2字节
     seqBytes = 2
     # 消息字节数，默认为5000字节
-    messageBytes = 5000
+    bufferBytes = 5000
 [log]
     # 日志输出文件
     file = "../../testdata/log/due.log"

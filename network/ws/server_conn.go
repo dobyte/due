@@ -8,6 +8,7 @@
 package ws
 
 import (
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xnet"
@@ -245,8 +246,10 @@ func (c *serverConn) read() {
 		default:
 			msgType, msg, err := c.conn.ReadMessage()
 			if err != nil {
-				if _, ok := err.(*websocket.CloseError); !ok {
-					log.Warnf("read message failed: %d %v", c.id, err)
+				if !errors.Is(err, net.ErrClosed) {
+					if _, ok := err.(*websocket.CloseError); !ok {
+						log.Warnf("read message failed: %d %v", c.id, err)
+					}
 				}
 				c.forceClose()
 				return
@@ -329,12 +332,16 @@ func (c *serverConn) write() {
 			c.rw.RUnlock()
 
 			if err != nil {
-				log.Errorf("write message error: %v", err)
+				if !errors.Is(err, net.ErrClosed) {
+					if _, ok := err.(*websocket.CloseError); !ok {
+						log.Errorf("write message error: %v", err)
+					}
+				}
 			}
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				log.Debugf("connection heartbeat timeout: %d", c.id)
+				log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 				c.forceClose()
 				return
 			} else {

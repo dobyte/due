@@ -12,16 +12,16 @@ const (
 )
 
 const (
-	defaultRouteBytes   = 2
-	defaultSeqBytes     = 2
-	defaultMessageBytes = 5000
+	defaultRouteBytes  = 2
+	defaultSeqBytes    = 2
+	defaultBufferBytes = 5000
 )
 
 const (
-	defaultEndianKey       = "etc.packet.byteOrder"
-	defaultRouteBytesKey   = "etc.packet.routeBytes"
-	defaultSeqBytesKey     = "etc.packet.seqBytes"
-	defaultMessageBytesKey = "etc.packet.bufferBytes"
+	defaultEndianKey      = "etc.packet.byteOrder"
+	defaultRouteBytesKey  = "etc.packet.routeBytes"
+	defaultSeqBytesKey    = "etc.packet.seqBytes"
+	defaultBufferBytesKey = "etc.packet.bufferBytes"
 )
 
 // -------------------------
@@ -52,7 +52,7 @@ func defaultOptions() *options {
 		byteOrder:   binary.BigEndian,
 		routeBytes:  etc.Get(defaultRouteBytesKey, defaultRouteBytes).Int(),
 		seqBytes:    etc.Get(defaultSeqBytesKey, defaultSeqBytes).Int(),
-		bufferBytes: etc.Get(defaultMessageBytesKey, defaultMessageBytes).Int(),
+		bufferBytes: etc.Get(defaultBufferBytesKey, defaultBufferBytes).Int(),
 	}
 
 	endian := etc.Get(defaultEndianKey, bigEndian).String()
@@ -81,7 +81,7 @@ func WithSeqBytes(seqBytes int) Option {
 	return func(o *options) { o.seqBytes = seqBytes }
 }
 
-// WithMessageBytes 设置消息字节数
-func WithMessageBytes(messageBytes int) Option {
-	return func(o *options) { o.bufferBytes = messageBytes }
+// WithBufferBytes 设置消息字节数
+func WithBufferBytes(bufferBytes int) Option {
+	return func(o *options) { o.bufferBytes = bufferBytes }
 }
