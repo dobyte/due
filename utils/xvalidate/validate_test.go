@@ -25,6 +25,18 @@ func TestIsEmail(t *testing.T) {
 	t.Log(xvalidate.IsEmail("yuebanfuxiao"))
 }
 
+func TestIsAccount(t *testing.T) {
+	t.Log(xvalidate.IsAccount("0abc", 4, 8))
+	t.Log(xvalidate.IsAccount("abc0", 4, 8))
+	t.Log(xvalidate.IsAccount("ab0", 4, 8))
+	t.Log(xvalidate.IsAccount("ab.cd", 4, 8))
+	t.Log(xvalidate.IsAccount("ab_cd", 4, 8))
+	t.Log(xvalidate.IsAccount("ab cd", 4, 8))
+	t.Log(xvalidate.IsAccount("ab-cd", 4, 8))
+	t.Log(xvalidate.IsAccount("abcdefghi", 4, 8))
+	t.Log(xvalidate.IsAccount("abcdefghif", 4, 8))
+}
+
 func TestIsUrl(t *testing.T) {
 	t.Log(xvalidate.IsUrl("http://www.baidu.com"))
 	t.Log(xvalidate.IsUrl("HTTP://WWW.BAIDU.COM"))

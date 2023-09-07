@@ -1,6 +1,8 @@
 package xvalidate
 
 import (
+	"fmt"
+	"reflect"
 	"regexp"
 	"unicode/utf8"
 )
@@ -18,6 +20,16 @@ func IsTelephone(telephone string) bool {
 // IsMobile 检测是否是手机号（国内）
 func IsMobile(mobile string) bool {
 	matched, err := regexp.MatchString(`^13[\d]{9}$|^14[5,7]{1}\d{8}$|^15[^4]{1}\d{8}$|^16[\d]{9}$|^17[0,2,3,5,6,7,8]{1}\d{8}$|^18[\d]{9}$|^19[\d]{9}$`, mobile)
+	if err != nil {
+		return false
+	}
+
+	return matched
+}
+
+// IsAccount 检测是否是账号
+func IsAccount(account string, min int, max int) bool {
+	matched, err := regexp.MatchString(fmt.Sprintf(`^[a-zA-Z]{1}[a-zA-Z0-9_\-\.]{%d,%d}$`, min-1, max-1), account)
 	if err != nil {
 		return false
 	}
@@ -66,13 +78,34 @@ func IsDigit(digit string) bool {
 }
 
 // IsNumber 检测是否是数字
-func IsNumber(number string) bool {
-	matched, err := regexp.MatchString(`^\d+$`, number)
+func IsNumber(number string, langths ...int) bool {
+	var pattern string
+	switch len(langths) {
+	case 0:
+		pattern = `^\d+$`
+	case 1:
+		pattern = fmt.Sprintf(`^\d{%d}$`, langths[0])
+	default:
+		pattern = fmt.Sprintf(`^\d{%d,%d}$`, langths[0], langths[1])
+	}
+
+	matched, err := regexp.MatchString(pattern, number)
 	if err != nil {
 		return false
 	}
 
 	return matched
+}
+
+// In 检测是值是否在给定的集合中
+func In(v interface{}, set ...interface{}) bool {
+	for _, item := range set {
+		if reflect.DeepEqual(v, item) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Between 检测字符串长度是否在设置的范围之间

@@ -2,7 +2,6 @@ package gate
 
 import (
 	"context"
-	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/dispatcher"
 	"github.com/dobyte/due/v2/internal/link"
@@ -69,7 +68,6 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
-	fmt.Println(data)
 	message, err := packet.Unpack(data)
 	if err != nil {
 		log.Errorf("unpack data to struct failed: %v", err)
@@ -81,7 +79,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		UID:     uid,
 		Message: message,
 	}); err != nil {
-		log.Errorf("deliver message failed: %v", err)
+		log.Errorf("deliver message failed, cid = %d uid = %d route = %d err = %v", cid, uid, message.Route, err)
 	}
 }
 
