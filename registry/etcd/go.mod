@@ -3,9 +3,9 @@ module github.com/symsimmy/due/registry/etcd
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.24
+	github.com/symsimmy/due v0.0.4
 	go.etcd.io/etcd/api/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
 )
 
-replace github.com/dobyte/due => ../../
+replace github.com/symsimmy/due => ../../

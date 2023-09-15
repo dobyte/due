@@ -3,8 +3,8 @@ module github.com/symsimmy/due/log/zap
 go 1.16
 
 require (
-	github.com/dobyte/due v0.0.24
+	github.com/symsimmy/due v0.0.4
 	go.uber.org/zap v1.22.0
 )
 
-replace github.com/dobyte/due => ./../../
+replace github.com/symsimmy/due => ./../../
