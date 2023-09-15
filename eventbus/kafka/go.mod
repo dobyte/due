@@ -1,4 +1,4 @@
-module github.com/dobyte/due/eventbus/kafka
+module github.com/symsimmy/due/eventbus/kafka
 
 go 1.16
 

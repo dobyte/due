@@ -1,4 +1,4 @@
-module github.com/dobyte/due/eventbus/redis
+module github.com/symsimmy/due/eventbus/redis
 
 go 1.16
 

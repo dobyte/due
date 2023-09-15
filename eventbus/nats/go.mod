@@ -1,4 +1,4 @@
-module github.com/dobyte/due/eventbus/nats
+module github.com/symsimmy/due/eventbus/nats
 
 go 1.16
 

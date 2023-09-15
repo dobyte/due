@@ -1,4 +1,4 @@
-module github.com/dobyte/due/locate/redis
+module github.com/symsimmy/due/locate/redis
 
 go 1.16
 

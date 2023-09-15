@@ -1,4 +1,4 @@
-module github.com/dobyte/due/log/zap
+module github.com/symsimmy/due/log/zap
 
 go 1.16
 

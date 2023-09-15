@@ -1,4 +1,4 @@
-module github.com/dobyte/due/registry/etcd
+module github.com/symsimmy/due/registry/etcd
 
 go 1.16
 

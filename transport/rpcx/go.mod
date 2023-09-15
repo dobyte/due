@@ -1,4 +1,4 @@
-module github.com/dobyte/due/transport/rpcx
+module github.com/symsimmy/due/transport/rpcx
 
 go 1.16
 

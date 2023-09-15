@@ -1,4 +1,4 @@
-module github.com/dobyte/due/network/tcp
+module github.com/symsimmy/due/network/tcp
 
 go 1.16
 

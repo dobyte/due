@@ -1,4 +1,4 @@
-module github.com/dobyte/due/log/aliyun
+module github.com/symsimmy/due/log/aliyun
 
 go 1.16
 

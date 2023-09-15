@@ -1,4 +1,4 @@
-module github.com/dobyte/due/log/tencent
+module github.com/symsimmy/due/log/tencent
 
 go 1.16
 

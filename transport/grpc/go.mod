@@ -1,4 +1,4 @@
-module github.com/dobyte/due/transport/grpc
+module github.com/symsimmy/due/transport/grpc
 
 go 1.16
 

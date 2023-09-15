@@ -1,4 +1,4 @@
-module github.com/dobyte/due/log/logrus
+module github.com/symsimmy/due/log/logrus
 
 go 1.16
 

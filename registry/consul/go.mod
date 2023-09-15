@@ -1,4 +1,4 @@
-module github.com/dobyte/due/registry/consul
+module github.com/symsimmy/due/registry/consul
 
 go 1.16
 

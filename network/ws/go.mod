@@ -1,4 +1,4 @@
-module github.com/dobyte/due/network/ws
+module github.com/symsimmy/due/network/ws
 
 go 1.16
 
