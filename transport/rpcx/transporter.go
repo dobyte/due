@@ -1,13 +1,13 @@
 package rpcx
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/gate"
-	"github.com/dobyte/due/transport/rpcx/internal/client"
-	"github.com/dobyte/due/transport/rpcx/internal/server"
-	"github.com/dobyte/due/transport/rpcx/node"
+	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/transport"
+	"github.com/symsimmy/due/transport/rpcx/gate"
+	"github.com/symsimmy/due/transport/rpcx/internal/client"
+	"github.com/symsimmy/due/transport/rpcx/internal/server"
+	"github.com/symsimmy/due/transport/rpcx/node"
 	"sync"
 )
 

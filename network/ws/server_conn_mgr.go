@@ -8,7 +8,7 @@
 package ws
 
 import (
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/network"
 	"sync"
 
 	"github.com/gorilla/websocket"

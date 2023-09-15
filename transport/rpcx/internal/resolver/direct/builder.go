@@ -1,8 +1,8 @@
 package direct
 
 import (
-	"github.com/dobyte/due/errors"
 	cli "github.com/smallnest/rpcx/client"
+	"github.com/symsimmy/due/errors"
 	"net/url"
 )
 

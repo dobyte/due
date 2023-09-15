@@ -2,7 +2,7 @@ package transport
 
 import (
 	"context"
-	"github.com/dobyte/due/session"
+	"github.com/symsimmy/due/session"
 )
 
 type NodeClient interface {

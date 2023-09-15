@@ -3,8 +3,8 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/log"
 	"sync"
 )
 

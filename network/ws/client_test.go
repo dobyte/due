@@ -8,9 +8,9 @@
 package ws_test
 
 import (
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/network/ws"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/network/ws"
 	"testing"
 	"time"
 )

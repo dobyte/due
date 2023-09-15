@@ -3,10 +3,10 @@ package server
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/endpoint"
-	xnet "github.com/dobyte/due/internal/net"
 	"github.com/smallnest/rpcx/server"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/internal/endpoint"
+	xnet "github.com/symsimmy/due/internal/net"
 )
 
 const scheme = "rpcx"

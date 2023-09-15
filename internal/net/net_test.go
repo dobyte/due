@@ -1,7 +1,7 @@
 package net_test
 
 import (
-	"github.com/dobyte/due/internal/net"
+	"github.com/symsimmy/due/internal/net"
 	"testing"
 )
 

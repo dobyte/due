@@ -1,8 +1,8 @@
 package task
 
 import (
-	"github.com/dobyte/due/log"
 	"github.com/panjf2000/ants/v2"
+	"github.com/symsimmy/due/log"
 )
 
 type Pool interface {

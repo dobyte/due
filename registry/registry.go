@@ -2,7 +2,7 @@ package registry
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
+	"github.com/symsimmy/due/cluster"
 )
 
 type Registry interface {

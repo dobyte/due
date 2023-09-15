@@ -1,7 +1,7 @@
 package xpath_test
 
 import (
-	"github.com/dobyte/due/utils/xpath"
+	"github.com/symsimmy/due/utils/xpath"
 	"testing"
 )
 

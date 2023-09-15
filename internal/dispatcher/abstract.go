@@ -1,7 +1,7 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
+	"github.com/symsimmy/due/internal/endpoint"
 	"sync/atomic"
 )
 

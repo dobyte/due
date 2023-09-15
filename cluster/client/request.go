@@ -2,7 +2,7 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/packet"
+	"github.com/symsimmy/due/packet"
 )
 
 type Request interface {

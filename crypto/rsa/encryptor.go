@@ -5,7 +5,7 @@ import (
 	"crypto/rsa"
 	"math"
 
-	"github.com/dobyte/due/errors"
+	"github.com/symsimmy/due/errors"
 )
 
 type Encryptor struct {

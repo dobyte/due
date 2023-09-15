@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/network/tcp"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/network/tcp"
 )
 
 func TestNewClient(t *testing.T) {

@@ -8,11 +8,11 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/log"
 	"net"
 	"time"
 
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/network"
 )
 
 type server struct {

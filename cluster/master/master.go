@@ -2,13 +2,13 @@ package master
 
 import (
 	"context"
-	"github.com/dobyte/due/component"
-	_ "github.com/dobyte/due/crypto/ecc"
-	_ "github.com/dobyte/due/crypto/rsa"
-	_ "github.com/dobyte/due/encoding/json"
-	_ "github.com/dobyte/due/encoding/proto"
-	_ "github.com/dobyte/due/encoding/xml"
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/component"
+	_ "github.com/symsimmy/due/crypto/ecc"
+	_ "github.com/symsimmy/due/crypto/rsa"
+	_ "github.com/symsimmy/due/encoding/json"
+	_ "github.com/symsimmy/due/encoding/proto"
+	_ "github.com/symsimmy/due/encoding/xml"
+	"github.com/symsimmy/due/log"
 )
 
 type Master struct {

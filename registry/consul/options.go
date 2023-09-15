@@ -2,8 +2,8 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
 	"github.com/hashicorp/consul/api"
+	"github.com/symsimmy/due/config"
 )
 
 const (

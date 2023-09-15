@@ -1,7 +1,7 @@
 package xfile
 
 import (
-	"github.com/dobyte/due/utils/xpath"
+	"github.com/symsimmy/due/utils/xpath"
 	"io/fs"
 	"io/ioutil"
 	"os"

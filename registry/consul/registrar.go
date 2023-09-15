@@ -3,9 +3,9 @@ package consul
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
 	"github.com/hashicorp/consul/api"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/registry"
 	"net"
 	"net/url"
 	"strconv"

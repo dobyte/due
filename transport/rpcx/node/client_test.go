@@ -2,10 +2,10 @@ package node_test
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/node"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/transport"
+	"github.com/symsimmy/due/transport/rpcx/node"
 	"testing"
 )
 

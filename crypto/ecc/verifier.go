@@ -3,7 +3,7 @@ package ecc
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"github.com/dobyte/due/errors"
+	"github.com/symsimmy/due/errors"
 	"math/big"
 )
 

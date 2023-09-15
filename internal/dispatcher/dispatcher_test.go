@@ -1,10 +1,10 @@
 package dispatcher_test
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/dispatcher"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/internal/dispatcher"
+	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/registry"
 	"testing"
 )
 

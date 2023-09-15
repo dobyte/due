@@ -10,7 +10,7 @@ package zap_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log/zap"
+	"github.com/symsimmy/due/log/zap"
 )
 
 var logger *zap.Logger

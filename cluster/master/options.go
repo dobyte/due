@@ -2,13 +2,13 @@ package master
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto"
-	"github.com/dobyte/due/encoding"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/crypto"
+	"github.com/symsimmy/due/encoding"
+	"github.com/symsimmy/due/locate"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/transport"
+	"github.com/symsimmy/due/utils/xuuid"
 	"time"
 )
 

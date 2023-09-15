@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network/ws"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network/ws"
 
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/network"
 )
 
 func TestServer(t *testing.T) {

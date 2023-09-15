@@ -126,12 +126,12 @@ go get github.com/dobyte/due/transport/grpc@latest
 package main
 
 import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/gate"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/network/ws"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
+   "github.com/symsimmy/due"
+   cluster "github.com/symsimmy/due/cluster/gate"
+   "github.com/symsimmy/due/locate/redis"
+   "github.com/symsimmy/due/network/ws"
+   "github.com/symsimmy/due/registry/etcd"
+   "github.com/symsimmy/due/transport/grpc"
 )
 
 func main() {
@@ -158,11 +158,11 @@ func main() {
 package main
 
 import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/node"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
+   "github.com/symsimmy/due"
+   cluster "github.com/symsimmy/due/cluster/node"
+   "github.com/symsimmy/due/locate/redis"
+   "github.com/symsimmy/due/registry/etcd"
+   "github.com/symsimmy/due/transport/grpc"
 )
 
 func main() {
@@ -195,13 +195,13 @@ package main
 
 import (
    "context"
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/mesh"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/log"
-   "github.com/dobyte/due/mode"
-   "github.com/dobyte/due/registry/consul"
-   "github.com/dobyte/due/transport/rpcx"
+   "github.com/symsimmy/due"
+   cluster "github.com/symsimmy/due/cluster/mesh"
+   "github.com/symsimmy/due/locate/redis"
+   "github.com/symsimmy/due/log"
+   "github.com/symsimmy/due/mode"
+   "github.com/symsimmy/due/registry/consul"
+   "github.com/symsimmy/due/transport/rpcx"
 )
 
 func main() {
@@ -259,12 +259,12 @@ func (w *WalletService) IncrGold(ctx context.Context, req *IncrGoldRequest, repl
 package main
 
 import (
-    "github.com/dobyte/due/config"
-    "github.com/dobyte/due/log"
-    "github.com/dobyte/due/mode"
-    "github.com/dobyte/due/network"
-    "github.com/dobyte/due/network/ws"
-    "github.com/dobyte/due/packet"
+    "github.com/symsimmy/due/config"
+    "github.com/symsimmy/due/log"
+    "github.com/symsimmy/due/mode"
+    "github.com/symsimmy/due/network"
+    "github.com/symsimmy/due/network/ws"
+    "github.com/symsimmy/due/packet"
 )
 
 var handlers map[int32]handlerFunc

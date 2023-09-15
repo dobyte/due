@@ -2,8 +2,8 @@ package errors
 
 import (
 	"fmt"
-	"github.com/dobyte/due/code"
-	"github.com/dobyte/due/internal/stack"
+	"github.com/symsimmy/due/code"
+	"github.com/symsimmy/due/internal/stack"
 	"io"
 )
 

@@ -2,7 +2,7 @@ package xconv
 
 import (
 	"fmt"
-	"github.com/dobyte/due/encoding/json"
+	"github.com/symsimmy/due/encoding/json"
 	"reflect"
 	"strconv"
 	"time"

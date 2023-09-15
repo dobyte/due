@@ -12,9 +12,9 @@ import (
 	"go.uber.org/zap/zapcore"
 	"os"
 
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/log/zap/internal/encoder"
-	"github.com/dobyte/due/mode"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/zap/internal/encoder"
+	"github.com/symsimmy/due/mode"
 )
 
 var _ log.Logger = NewLogger()

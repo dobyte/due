@@ -1,8 +1,8 @@
 package ws
 
 import (
-	"github.com/dobyte/due/network"
 	"github.com/gorilla/websocket"
+	"github.com/symsimmy/due/network"
 )
 
 type client struct {

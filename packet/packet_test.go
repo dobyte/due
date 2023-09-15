@@ -1,7 +1,7 @@
 package packet_test
 
 import (
-	"github.com/dobyte/due/packet"
+	"github.com/symsimmy/due/packet"
 	"testing"
 )
 

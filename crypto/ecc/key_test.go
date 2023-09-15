@@ -2,7 +2,7 @@ package ecc_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/crypto/ecc"
+	"github.com/symsimmy/due/crypto/ecc"
 	"testing"
 )
 

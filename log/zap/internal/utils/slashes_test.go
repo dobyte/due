@@ -10,7 +10,7 @@ package utils_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log/zap/internal/utils"
+	"github.com/symsimmy/due/log/zap/internal/utils"
 )
 
 func TestAddslashes(t *testing.T) {

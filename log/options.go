@@ -1,7 +1,7 @@
 package log
 
 import (
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 	"strings"
 	"time"
 )

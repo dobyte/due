@@ -1,8 +1,8 @@
 package link
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/session"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/session"
 )
 
 type GetIPArgs struct {

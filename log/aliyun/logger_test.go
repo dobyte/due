@@ -10,7 +10,7 @@ package aliyun_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log/aliyun"
+	"github.com/symsimmy/due/log/aliyun"
 )
 
 var logger *aliyun.Logger

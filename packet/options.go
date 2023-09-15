@@ -2,7 +2,7 @@ package packet
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 	"strings"
 )
 

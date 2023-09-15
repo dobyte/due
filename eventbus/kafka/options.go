@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"github.com/Shopify/sarama"
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 )
 
 const (

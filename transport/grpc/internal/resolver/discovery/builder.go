@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/registry"
 	"google.golang.org/grpc/resolver"
 )
 

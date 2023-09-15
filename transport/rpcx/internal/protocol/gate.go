@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/dobyte/due/session"
+import "github.com/symsimmy/due/session"
 
 type BindRequest struct {
 	CID int64

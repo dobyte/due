@@ -2,10 +2,10 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/transport"
-	"github.com/dobyte/due/transport/rpcx/internal/code"
-	"github.com/dobyte/due/transport/rpcx/internal/protocol"
-	"github.com/dobyte/due/transport/rpcx/internal/server"
+	"github.com/symsimmy/due/transport"
+	"github.com/symsimmy/due/transport/rpcx/internal/code"
+	"github.com/symsimmy/due/transport/rpcx/internal/protocol"
+	"github.com/symsimmy/due/transport/rpcx/internal/server"
 )
 
 const (

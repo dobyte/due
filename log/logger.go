@@ -2,7 +2,7 @@ package log
 
 import (
 	"fmt"
-	"github.com/dobyte/due/mode"
+	"github.com/symsimmy/due/mode"
 	"io"
 	"os"
 	"sync"

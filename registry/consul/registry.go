@@ -2,7 +2,7 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
+	"github.com/symsimmy/due/cluster"
 	"net"
 	"net/url"
 	"strconv"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/hashicorp/consul/api"
 
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/registry"
 )
 
 var _ registry.Registry = &Registry{}

@@ -2,11 +2,11 @@ package mesh
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/internal/link"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/internal/link"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/transport"
 )
 
 type (

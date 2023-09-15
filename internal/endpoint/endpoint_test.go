@@ -1,7 +1,7 @@
 package endpoint_test
 
 import (
-	"github.com/dobyte/due/internal/endpoint"
+	"github.com/symsimmy/due/internal/endpoint"
 	"testing"
 )
 

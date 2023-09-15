@@ -1,4 +1,4 @@
-module github.com/dobyte/due
+module github.com/ymsimmy/due
 
 go 1.16
 

@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	"github.com/dobyte/due/session"
+	"github.com/symsimmy/due/session"
 )
 
 type Context struct {

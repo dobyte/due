@@ -2,7 +2,7 @@ package mode
 
 import (
 	"flag"
-	"github.com/dobyte/due/env"
+	"github.com/symsimmy/due/env"
 )
 
 const (

@@ -1,9 +1,9 @@
 package crypto
 
 import (
-	"github.com/dobyte/due/crypto/ecc"
-	"github.com/dobyte/due/crypto/rsa"
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/crypto/ecc"
+	"github.com/symsimmy/due/crypto/rsa"
+	"github.com/symsimmy/due/log"
 )
 
 type Verifier interface {

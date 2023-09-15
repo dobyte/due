@@ -16,7 +16,7 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/registry"
 )
 
 type watcherMgr struct {

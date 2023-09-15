@@ -2,11 +2,11 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/packet"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/component"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/packet"
 	"sync"
 )
 

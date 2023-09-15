@@ -1,10 +1,10 @@
 package grpc
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/transport/grpc/internal/client"
-	"github.com/dobyte/due/transport/grpc/internal/server"
+	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/transport/grpc/internal/client"
+	"github.com/symsimmy/due/transport/grpc/internal/server"
 	"google.golang.org/grpc"
 )
 

@@ -2,9 +2,9 @@ package ecc_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/crypto/ecc"
-	"github.com/dobyte/due/crypto/hash"
-	"github.com/dobyte/due/utils/xrand"
+	"github.com/symsimmy/due/crypto/ecc"
+	"github.com/symsimmy/due/crypto/hash"
+	"github.com/symsimmy/due/utils/xrand"
 	"testing"
 )
 

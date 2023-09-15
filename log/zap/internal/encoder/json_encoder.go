@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/dobyte/due/log/zap/internal/utils"
+	"github.com/symsimmy/due/log/zap/internal/utils"
 )
 
 const (

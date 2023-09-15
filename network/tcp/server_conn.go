@@ -8,15 +8,15 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/utils/xnet"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/symsimmy/due/utils/xnet"
+	"github.com/symsimmy/due/utils/xtime"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network"
 )
 
 type serverConn struct {

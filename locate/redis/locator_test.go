@@ -3,8 +3,8 @@ package redis_test
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locate/redis"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/locate/redis"
 	"strconv"
 	"testing"
 	"time"

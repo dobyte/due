@@ -1,7 +1,7 @@
 package config_test
 
 import (
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 	"testing"
 )
 

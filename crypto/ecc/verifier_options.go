@@ -1,8 +1,8 @@
 package ecc
 
 import (
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto/hash"
+	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/crypto/hash"
 	"strings"
 )
 

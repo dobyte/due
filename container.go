@@ -2,12 +2,12 @@ package due
 
 import (
 	"fmt"
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/eventbus"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/task"
-	"github.com/dobyte/due/utils/xfile"
+	"github.com/symsimmy/due/component"
+	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/eventbus"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/task"
+	"github.com/symsimmy/due/utils/xfile"
 	"os"
 	"os/signal"
 	"runtime"

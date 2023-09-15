@@ -14,7 +14,7 @@ import (
 	"go.etcd.io/etcd/client/v3"
 	"sync"
 
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/registry"
 )
 
 var _ registry.Registry = &Registry{}

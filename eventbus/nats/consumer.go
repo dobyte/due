@@ -1,10 +1,10 @@
 package nats
 
 import (
-	"github.com/dobyte/due/eventbus"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/task"
 	"github.com/nats-io/nats.go"
+	"github.com/symsimmy/due/eventbus"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/task"
 	"reflect"
 	"sync"
 )

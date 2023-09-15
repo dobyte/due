@@ -1,7 +1,7 @@
 package net
 
 import (
-	"github.com/dobyte/due/errors"
+	"github.com/symsimmy/due/errors"
 	"net"
 	"strconv"
 )

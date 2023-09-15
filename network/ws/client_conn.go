@@ -1,10 +1,10 @@
 package ws
 
 import (
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/utils/xnet"
 	"github.com/gorilla/websocket"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/utils/xnet"
 	"net"
 	"sync"
 	"sync/atomic"

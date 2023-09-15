@@ -25,10 +25,10 @@ import (
 	"context"
 	"time"
 	
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/registry/etcd"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/registry/etcd"
 )
 
 func main() {

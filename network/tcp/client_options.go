@@ -1,7 +1,7 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 	"time"
 )
 

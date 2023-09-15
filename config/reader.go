@@ -2,10 +2,10 @@ package config
 
 import (
 	"context"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/value"
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/internal/value"
 	"log"
 	"strconv"
 	"strings"

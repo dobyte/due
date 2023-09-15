@@ -1,11 +1,11 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/internal/endpoint"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/registry"
 	"sync"
 )
 

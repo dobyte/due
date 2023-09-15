@@ -9,7 +9,7 @@ package locate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
+	"github.com/symsimmy/due/cluster"
 )
 
 type Locator interface {

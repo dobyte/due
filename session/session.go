@@ -1,8 +1,8 @@
 package session
 
 import (
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/network"
 	"net"
 	"sync"
 )

@@ -10,7 +10,7 @@ package logrus_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log/logrus"
+	"github.com/symsimmy/due/log/logrus"
 )
 
 var logger *logrus.Logger

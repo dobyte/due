@@ -3,10 +3,10 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/locate"
-	"github.com/dobyte/due/log"
 	"github.com/go-redis/redis/v8"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/locate"
+	"github.com/symsimmy/due/log"
 	"sync"
 	"sync/atomic"
 )

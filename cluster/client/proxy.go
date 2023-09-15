@@ -1,9 +1,9 @@
 package client
 
 import (
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/packet"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/packet"
 )
 
 var (

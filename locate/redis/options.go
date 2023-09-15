@@ -2,8 +2,8 @@ package redis
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
 	"github.com/go-redis/redis/v8"
+	"github.com/symsimmy/due/config"
 )
 
 const (

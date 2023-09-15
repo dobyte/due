@@ -2,9 +2,9 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/packet"
-	"github.com/dobyte/due/session"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/packet"
+	"github.com/symsimmy/due/session"
 )
 
 type provider struct {

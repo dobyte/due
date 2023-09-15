@@ -1,7 +1,7 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/network"
 	"net"
 )
 

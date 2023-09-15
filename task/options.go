@@ -1,6 +1,6 @@
 package task
 
-import "github.com/dobyte/due/config"
+import "github.com/symsimmy/due/config"
 
 const (
 	defaultSize         = 100000 // 默认任务池大小

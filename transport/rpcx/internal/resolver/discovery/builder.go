@@ -1,9 +1,9 @@
 package discovery
 
 import (
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/registry"
 	cli "github.com/smallnest/rpcx/client"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/registry"
 	"net/url"
 )
 

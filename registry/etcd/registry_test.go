@@ -10,13 +10,13 @@ package etcd_test
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/cluster"
+	"github.com/symsimmy/due/cluster"
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/registry"
-	"github.com/dobyte/due/registry/etcd"
-	"github.com/dobyte/due/utils/xnet"
+	"github.com/symsimmy/due/registry"
+	"github.com/symsimmy/due/registry/etcd"
+	"github.com/symsimmy/due/utils/xnet"
 )
 
 const (

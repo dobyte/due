@@ -8,12 +8,12 @@
 package ws
 
 import (
-	"github.com/dobyte/due/log"
 	"github.com/gorilla/websocket"
+	"github.com/symsimmy/due/log"
 	"net"
 	"net/http"
 
-	"github.com/dobyte/due/network"
+	"github.com/symsimmy/due/network"
 )
 
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)

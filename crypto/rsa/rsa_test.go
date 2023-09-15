@@ -1,9 +1,9 @@
 package rsa_test
 
 import (
-	"github.com/dobyte/due/crypto/hash"
-	"github.com/dobyte/due/crypto/rsa"
-	"github.com/dobyte/due/utils/xrand"
+	"github.com/symsimmy/due/crypto/hash"
+	"github.com/symsimmy/due/crypto/rsa"
+	"github.com/symsimmy/due/utils/xrand"
 	"testing"
 )
 

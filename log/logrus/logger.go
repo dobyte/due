@@ -12,10 +12,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/log/logrus/internal/formatter"
-	"github.com/dobyte/due/log/logrus/internal/hook"
-	"github.com/dobyte/due/mode"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/logrus/internal/formatter"
+	"github.com/symsimmy/due/log/logrus/internal/hook"
+	"github.com/symsimmy/due/mode"
 )
 
 var _ log.Logger = NewLogger()

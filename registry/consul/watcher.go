@@ -2,7 +2,7 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/registry"
 	"sync"
 	"sync/atomic"
 	"time"

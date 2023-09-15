@@ -10,12 +10,12 @@ package tencent
 import (
 	"bytes"
 	"fmt"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/symsimmy/due/utils/xtime"
 	cls "github.com/tencentcloud/tencentcloud-cls-sdk-go"
 	"os"
 	"sync"
 
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/log"
 )
 
 const (

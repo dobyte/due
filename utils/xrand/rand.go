@@ -1,8 +1,8 @@
 package xrand
 
 import (
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/utils/xtime"
 	"math/rand"
 )
 

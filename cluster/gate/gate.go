@@ -9,15 +9,15 @@ package gate
 
 import (
 	"context"
-	"github.com/dobyte/due/cluster"
-	"github.com/dobyte/due/session"
-	"github.com/dobyte/due/transport"
+	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/session"
+	"github.com/symsimmy/due/transport"
 	"time"
 
-	"github.com/dobyte/due/component"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/registry"
+	"github.com/symsimmy/due/component"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/registry"
 )
 
 type Gate struct {

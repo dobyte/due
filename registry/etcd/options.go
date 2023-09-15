@@ -9,7 +9,7 @@ package etcd
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
+	"github.com/symsimmy/due/config"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
 )

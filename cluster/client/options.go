@@ -2,16 +2,16 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/config"
-	"github.com/dobyte/due/crypto"
-	_ "github.com/dobyte/due/crypto/ecc"
-	_ "github.com/dobyte/due/crypto/rsa"
-	"github.com/dobyte/due/encoding"
-	_ "github.com/dobyte/due/encoding/json"
-	_ "github.com/dobyte/due/encoding/proto"
-	_ "github.com/dobyte/due/encoding/xml"
-	"github.com/dobyte/due/network"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/crypto"
+	_ "github.com/symsimmy/due/crypto/ecc"
+	_ "github.com/symsimmy/due/crypto/rsa"
+	"github.com/symsimmy/due/encoding"
+	_ "github.com/symsimmy/due/encoding/json"
+	_ "github.com/symsimmy/due/encoding/proto"
+	_ "github.com/symsimmy/due/encoding/xml"
+	"github.com/symsimmy/due/network"
+	"github.com/symsimmy/due/utils/xuuid"
 	"time"
 )
 

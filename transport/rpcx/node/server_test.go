@@ -1,8 +1,8 @@
 package node_test
 
 import (
-	"github.com/dobyte/due/transport/rpcx/internal/server"
-	"github.com/dobyte/due/transport/rpcx/node"
+	"github.com/symsimmy/due/transport/rpcx/internal/server"
+	"github.com/symsimmy/due/transport/rpcx/node"
 	"testing"
 )
 

@@ -10,7 +10,7 @@ package tencent_test
 import (
 	"testing"
 
-	"github.com/dobyte/due/log/tencent"
+	"github.com/symsimmy/due/log/tencent"
 )
 
 var logger *tencent.Logger

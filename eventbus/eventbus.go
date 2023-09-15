@@ -2,12 +2,12 @@ package eventbus
 
 import (
 	"context"
-	"github.com/dobyte/due/encoding/json"
-	"github.com/dobyte/due/internal/value"
-	"github.com/dobyte/due/log"
-	"github.com/dobyte/due/utils/xconv"
-	"github.com/dobyte/due/utils/xtime"
-	"github.com/dobyte/due/utils/xuuid"
+	"github.com/symsimmy/due/encoding/json"
+	"github.com/symsimmy/due/internal/value"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/utils/xconv"
+	"github.com/symsimmy/due/utils/xtime"
+	"github.com/symsimmy/due/utils/xuuid"
 	"time"
 )
 

@@ -11,11 +11,11 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/aliyun/aliyun-log-go-sdk/producer"
-	"github.com/dobyte/due/utils/xtime"
+	"github.com/symsimmy/due/utils/xtime"
 	"os"
 	"sync"
 
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/log"
 )
 
 const (

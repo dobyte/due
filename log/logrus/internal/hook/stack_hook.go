@@ -8,10 +8,10 @@
 package hook
 
 import (
-	"github.com/dobyte/due/internal/stack"
 	"github.com/sirupsen/logrus"
+	"github.com/symsimmy/due/internal/stack"
 
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/log"
 )
 
 type StackHook struct {

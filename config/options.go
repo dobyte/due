@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"github.com/BurntSushi/toml"
-	"github.com/dobyte/due/errors"
+	"github.com/symsimmy/due/errors"
 	"gopkg.in/yaml.v3"
 	"strings"
 )

@@ -2,8 +2,8 @@ package flag
 
 import (
 	"fmt"
-	"github.com/dobyte/due/errors"
-	"github.com/dobyte/due/utils/xconv"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/utils/xconv"
 	"log"
 	"os"
 	"time"

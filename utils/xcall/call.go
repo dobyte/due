@@ -1,7 +1,7 @@
 package xcall
 
 import (
-	"github.com/dobyte/due/log"
+	"github.com/symsimmy/due/log"
 	"runtime"
 )
 
