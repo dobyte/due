@@ -28,14 +28,14 @@ func GetConfigurator() configurator.Configurator {
 	return globalConfigurator
 }
 
-// Has 是否存在配置
-func Has(pattern string) bool {
+// Has 检测多个匹配规则中是否存在配置
+func Has(patterns ...string) bool {
 	if globalConfigurator == nil {
 		log.Warn("the configurator component is not injected, and the has operation will be ignored.")
 		return false
 	}
 
-	return globalConfigurator.Has(pattern)
+	return globalConfigurator.Has(patterns...)
 }
 
 // Get 获取配置值
@@ -48,6 +48,16 @@ func Get(pattern string, def ...interface{}) value.Value {
 	return globalConfigurator.Get(pattern, def...)
 }
 
+// Gets 获取多个匹配规则中的配置值
+func Gets(patterns []string, def ...interface{}) value.Value {
+	if globalConfigurator == nil {
+		log.Warn("the configurator component is not injected, and the gets operation will be ignored.")
+		return value.NewValue()
+	}
+
+	return globalConfigurator.Gets(patterns, def...)
+}
+
 // Set 设置配置值
 func Set(pattern string, value interface{}) error {
 	if globalConfigurator == nil {
@@ -56,6 +66,16 @@ func Set(pattern string, value interface{}) error {
 	}
 
 	return globalConfigurator.Set(pattern, value)
+}
+
+// Watch 设置监听回调
+func Watch(cb configurator.WatchCallbackFunc) {
+	if globalConfigurator == nil {
+		log.Warn("the configurator component is not injected, and the watch operation will be ignored.")
+		return
+	}
+
+	globalConfigurator.Watch(cb)
 }
 
 // Load 加载配置项

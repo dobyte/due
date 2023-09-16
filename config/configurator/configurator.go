@@ -23,12 +23,16 @@ var (
 )
 
 type Configurator interface {
-	// Has 是否存在配置
-	Has(pattern string) bool
+	// Has 检测多个匹配规则中是否存在配置
+	Has(patterns ...string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
+	// Gets 获取多个匹配规则中的配置值
+	Gets(patterns []string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
+	// Watch 设置监听回调
+	Watch(cb WatchCallbackFunc)
 	// Load 加载配置项
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store 保存配置项
@@ -55,6 +59,8 @@ type Watcher interface {
 	Stop() error
 }
 
+type WatchCallbackFunc func(names ...string)
+
 // Configuration 配置项
 type Configuration struct {
 	decoder  Decoder // 解码器
@@ -76,13 +82,15 @@ func (c *Configuration) Decode() (interface{}, error) {
 }
 
 type defaultConfigurator struct {
-	opts    *options
-	ctx     context.Context
-	cancel  context.CancelFunc
-	sources map[string]Source
-	mu      sync.Mutex
-	idx     int64
-	values  [2]map[string]interface{}
+	opts      *options
+	ctx       context.Context
+	cancel    context.CancelFunc
+	sources   map[string]Source
+	mu        sync.Mutex
+	idx       int64
+	values    [2]map[string]interface{}
+	rw        sync.RWMutex
+	callbacks []WatchCallbackFunc
 }
 
 var _ Configurator = &defaultConfigurator{}
@@ -96,6 +104,7 @@ func NewConfigurator(opts ...Option) Configurator {
 	r := &defaultConfigurator{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
+	r.callbacks = make([]WatchCallbackFunc, 0)
 	r.init()
 	r.watch()
 
@@ -187,6 +196,7 @@ func (c *defaultConfigurator) watch() {
 					continue
 				}
 
+				names := make([]string, 0, len(cs))
 				values := make(map[string]interface{})
 				for _, cc := range cs {
 					if len(cc.Content) == 0 {
@@ -197,6 +207,7 @@ func (c *defaultConfigurator) watch() {
 					if err != nil {
 						continue
 					}
+					names = append(names, cc.Name)
 					values[cc.Name] = v
 				}
 
@@ -216,6 +227,14 @@ func (c *defaultConfigurator) watch() {
 
 					c.store(dst)
 				}()
+
+				if len(names) > 0 {
+					c.rw.RLock()
+					for _, cb := range c.callbacks {
+						cb(names...)
+					}
+					c.rw.RUnlock()
+				}
 			}
 		}()
 	}
@@ -226,8 +245,19 @@ func (c *defaultConfigurator) Close() {
 	c.cancel()
 }
 
-// Has 是否存在配置
-func (c *defaultConfigurator) Has(pattern string) bool {
+// Has 检测多个匹配规则中是否存在配置
+func (c *defaultConfigurator) Has(patterns ...string) bool {
+	for _, pattern := range patterns {
+		if ok := c.doHas(pattern); ok {
+			return ok
+		}
+	}
+
+	return false
+}
+
+// 执行检测配置是否存在操作
+func (c *defaultConfigurator) doHas(pattern string) bool {
 	var (
 		keys   = strings.Split(pattern, ".")
 		node   interface{}
@@ -268,6 +298,26 @@ func (c *defaultConfigurator) Has(pattern string) bool {
 
 // Get 获取配置值
 func (c *defaultConfigurator) Get(pattern string, def ...interface{}) value.Value {
+	if val, ok := c.doGet(pattern); ok {
+		return val
+	}
+
+	return value.NewValue(def...)
+}
+
+// Gets 获取多个匹配规则中的配置值
+func (c *defaultConfigurator) Gets(patterns []string, def ...interface{}) value.Value {
+	for _, pattern := range patterns {
+		if val, ok := c.doGet(pattern); ok {
+			return val
+		}
+	}
+
+	return value.NewValue(def...)
+}
+
+// 执行获取配置操作
+func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 	var (
 		keys   = strings.Split(pattern, ".")
 		node   interface{}
@@ -308,11 +358,11 @@ func (c *defaultConfigurator) Get(pattern string, def ...interface{}) value.Valu
 	}
 
 	if found {
-		return value.NewValue(node)
+		return value.NewValue(node), true
 	}
 
 NOTFOUND:
-	return value.NewValue(def...)
+	return nil, false
 }
 
 // Set 设置配置值
@@ -417,6 +467,13 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 	c.store(values)
 
 	return nil
+}
+
+// Watch 设置监听回调
+func (c *defaultConfigurator) Watch(cb WatchCallbackFunc) {
+	c.rw.Lock()
+	c.callbacks = append(c.callbacks, cb)
+	c.rw.Unlock()
 }
 
 // Load 加载配置项

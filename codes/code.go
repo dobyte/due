@@ -16,7 +16,8 @@ var (
 	NotFound         = NewCode(5, "not found")
 	InternalError    = NewCode(6, "internal error")
 	Unauthorized     = NewCode(7, "unauthorized")
-	Illegal          = NewCode(8, "illegal")
+	IllegalInvoke    = NewCode(8, "illegal invoke")
+	IllegalRequest   = NewCode(9, "illegal request")
 
 	NotLocatedUser = NewCode(3, "not located user")
 )
