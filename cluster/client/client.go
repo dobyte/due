@@ -10,9 +10,9 @@ import (
 	"sync"
 )
 
-type RouteHandler func(req Request)
+type RouteHandler func(ctx *Context)
 
-type EventHandler func(proxy Proxy)
+type EventHandler func(proxy *Proxy)
 
 type Client struct {
 	component.Base
@@ -22,7 +22,7 @@ type Client struct {
 	routes              map[int32]RouteHandler
 	events              map[cluster.Event]EventHandler
 	defaultRouteHandler RouteHandler
-	proxy               *proxy
+	proxy               *Proxy
 	rw                  sync.RWMutex
 	state               cluster.State
 	conn                network.Conn
@@ -83,7 +83,7 @@ func (c *Client) Destroy() {
 }
 
 // Proxy 获取节点代理
-func (c *Client) Proxy() Proxy {
+func (c *Client) Proxy() *Proxy {
 	return c.proxy
 }
 
@@ -134,9 +134,17 @@ func (c *Client) handleReceive(_ network.Conn, data []byte) {
 
 	handler, ok := c.routes[message.Route]
 	if ok {
-		handler(&request{client: c, message: message})
+		handler(&Context{
+			ctx:     context.Background(),
+			client:  c,
+			message: message,
+		})
 	} else if c.defaultRouteHandler != nil {
-		c.defaultRouteHandler(&request{client: c, message: message})
+		c.defaultRouteHandler(&Context{
+			ctx:     context.Background(),
+			client:  c,
+			message: message,
+		})
 	} else {
 		log.Errorf("route handler is not registered, route:%v", message.Route)
 	}
