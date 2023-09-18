@@ -28,8 +28,12 @@ func (c *Context) UnbindGate() error {
 }
 
 // BindNode 绑定节点
-func (c *Context) BindNode() error {
-	return c.Proxy.BindNode(c.ctx, c.Request.UID)
+func (c *Context) BindNode(nid ...string) error {
+	if len(nid) == 0 || nid[0] == "" {
+		return c.Proxy.BindNode(c.ctx, c.Request.UID)
+	} else {
+		return c.Proxy.BindNode(c.ctx, c.Request.UID, nid[0])
+	}
 }
 
 // UnbindNode 解绑节点
