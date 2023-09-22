@@ -64,6 +64,7 @@ type WatchCallbackFunc func(names ...string)
 // Configuration 配置项
 type Configuration struct {
 	decoder  Decoder // 解码器
+	scanner  Scanner // 扫描器
 	Path     string  // 文件路径
 	File     string  // 文件名称
 	Name     string  // 文件名称
@@ -79,6 +80,15 @@ func (c *Configuration) Decode() (interface{}, error) {
 	}
 
 	return c.decoder(c.Format, c.Content)
+}
+
+// Scan 扫描
+func (c *Configuration) Scan(dest interface{}) error {
+	if c.scanner == nil {
+		return ErrInvalidDecoder
+	}
+
+	return c.scanner(c.Format, c.Content, dest)
 }
 
 type defaultConfigurator struct {

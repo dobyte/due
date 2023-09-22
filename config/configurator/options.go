@@ -14,12 +14,14 @@ type Option func(o *options)
 
 type Encoder func(format string, content interface{}) ([]byte, error)
 type Decoder func(format string, content []byte) (interface{}, error)
+type Scanner func(format string, content []byte, dest interface{}) error
 
 type options struct {
 	ctx     context.Context
 	sources []Source
 	encoder Encoder
 	decoder Decoder
+	scanner Scanner
 }
 
 func defaultOptions() *options {
@@ -27,6 +29,7 @@ func defaultOptions() *options {
 		ctx:     context.Background(),
 		encoder: defaultEncoder,
 		decoder: defaultDecoder,
+		scanner: defaultScanner,
 	}
 }
 
@@ -79,6 +82,22 @@ func defaultDecoder(format string, content []byte) (interface{}, error) {
 		return unmarshal(content, toml.Unmarshal)
 	default:
 		return nil, errors.New("invalid decoding format")
+	}
+}
+
+// 默认扫描器
+func defaultScanner(format string, content []byte, dest interface{}) error {
+	switch strings.ToLower(format) {
+	case json.Name:
+		return json.Unmarshal(content, dest)
+	case xml.Name:
+		return xml.Unmarshal(content, dest)
+	case yaml.Name, yaml.ShortName:
+		return yaml.Unmarshal(content, dest)
+	case toml.Name:
+		return toml.Unmarshal(content, dest)
+	default:
+		return errors.New("invalid scan format")
 	}
 }
 

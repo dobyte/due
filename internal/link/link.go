@@ -55,6 +55,7 @@ func NewLink(opts *Options) *Link {
 		opts:           opts,
 		gateDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 		nodeDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
+		nodeSources:    make(map[int64]map[string]string),
 	}
 }
 

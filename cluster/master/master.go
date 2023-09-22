@@ -54,6 +54,8 @@ func (m *Master) Init() {
 
 // Start 启动组件
 func (m *Master) Start() {
+	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
+
 	m.proxy.watch(m.ctx)
 
 	m.debugPrint()
