@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	msgLenBytes  uint32 = 4        // 消息长度字节数
+	msgLenBytes  uint32 = 2        // 消息长度字节数
 	msgByteOrder string = "little" // 消息字节排序
 )
 

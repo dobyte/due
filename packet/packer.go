@@ -106,6 +106,12 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 		return nil, err
 	}
 
+	// write compress
+	err = binary.Write(buf, p.opts.byteOrder, message.Compress)
+	if err != nil {
+		return nil, err
+	}
+
 	err = binary.Write(buf, p.opts.byteOrder, message.Buffer)
 	if err != nil {
 		return nil, err
@@ -181,6 +187,17 @@ func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 		} else {
 			message.Route = route
 		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// compress
+	var compress bool
+	if err = binary.Read(reader, p.opts.byteOrder, &compress); err != nil {
+		return nil, err
+	} else {
+		message.Compress = compress
 	}
 	if err != nil {
 		return nil, err
