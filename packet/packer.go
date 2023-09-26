@@ -44,13 +44,17 @@ func NewPacker(opts ...Option) Packer {
 		log.Fatalf("the route bytes length must be 1、2、4, and give %d", o.routeBytesLen)
 	}
 
+	if o.compressBytesLen < 0 {
+		log.Fatalf("the compress bytes length must be 1 and give %d", o.compressBytesLen)
+	}
+
 	if o.bufferBytesLen < 0 {
 		log.Fatalf("the buffer bytes length must greater than 0, and give %d", o.bufferBytesLen)
 	}
 
 	return &defaultPacker{opts: o, buffers: sync.Pool{New: func() interface{} {
 		buf := &bytes.Buffer{}
-		buf.Grow(o.seqBytesLen + o.routeBytesLen + o.bufferBytesLen)
+		buf.Grow(o.seqBytesLen + o.routeBytesLen + o.compressBytesLen + o.bufferBytesLen)
 		return buf
 	}}}
 }
@@ -80,7 +84,7 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 		buf = bytes.NewBuffer(nil)
 	)
 
-	buf.Grow(p.opts.seqBytesLen + p.opts.routeBytesLen + len(message.Buffer))
+	buf.Grow(p.opts.seqBytesLen + p.opts.routeBytesLen + p.opts.compressBytesLen + len(message.Buffer))
 
 	switch p.opts.seqBytesLen {
 	case 1:
@@ -122,7 +126,7 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 
 // Unpack 解包消息
 func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
-	ln := len(data) - p.opts.seqBytesLen - p.opts.routeBytesLen
+	ln := len(data) - p.opts.seqBytesLen - p.opts.routeBytesLen - p.opts.compressBytesLen
 
 	if ln < 0 {
 		return nil, ErrInvalidMessage
