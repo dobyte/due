@@ -79,7 +79,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		UID:     uid,
 		Message: message,
 	}); err != nil {
-		log.Errorf("deliver message failed: %v", err)
+		log.Errorf("deliver message[route:%+v] failed: %v", message.Route, err)
 	}
 }
 

@@ -31,6 +31,7 @@ type (
 type DeliverArgs struct {
 	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
 	UID     int64    // 用户ID
+	CID     int64    // 连接ID
 	Message *Message // 消息
 }
 
@@ -178,6 +179,7 @@ func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID: args.NID,
 			UID: args.UID,
+			CID: args.CID,
 			Message: &Message{
 				Seq:   args.Message.Seq,
 				Route: args.Message.Route,
