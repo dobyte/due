@@ -53,7 +53,7 @@ func NewErrorWithStack(args ...interface{}) *Error {
 
 // Code 返回错误码
 func Code(err error) *codes.Code {
-	if err == nil {
+	if err != nil {
 		if e, ok := err.(interface{ Code() *codes.Code }); ok {
 			return e.Code()
 		}
