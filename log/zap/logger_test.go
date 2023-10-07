@@ -9,12 +9,14 @@ package zap_test
 
 import (
 	"github.com/dobyte/due/log/zap/v2"
+	"github.com/dobyte/due/v2/log"
 	"testing"
 )
 
-var logger = zap.NewLogger()
+var logger = zap.NewLogger(zap.WithStackLevel(log.DebugLevel))
 
 func TestNewLogger(t *testing.T) {
+	logger.Print(log.ErrorLevel, "print")
 	logger.Info("info")
 	logger.Warn("warn")
 	logger.Error("error")

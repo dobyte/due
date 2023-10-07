@@ -9,7 +9,7 @@ package log
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/core/stack"
+	stacks "github.com/dobyte/due/v2/core/stack"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"path/filepath"
 	"runtime"
@@ -36,7 +36,7 @@ func newEntityPool(logger *defaultLogger) *EntityPool {
 	}
 }
 
-func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
+func (p *EntityPool) build(level Level, stack bool, a ...interface{}) *Entity {
 	e := p.pool.Get().(*Entity)
 	e.pool = p
 
@@ -62,13 +62,13 @@ func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
 	e.Time = xtime.Now().Format(p.logger.opts.timeFormat)
 	e.Message = strings.TrimSuffix(msg, "\n")
 
-	if p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
-		st := stack.Callers(3+p.logger.opts.callerSkip, stack.Full)
+	if stack && p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
+		st := stacks.Callers(3+p.logger.opts.callerSkip, stacks.Full)
 		defer st.Free()
 		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)
 	} else {
-		st := stack.Callers(3+p.logger.opts.callerSkip, stack.First)
+		st := stacks.Callers(3+p.logger.opts.callerSkip, stacks.First)
 		defer st.Free()
 		e.Frames = st.Frames()
 		e.Caller = p.framesToCaller(e.Frames)

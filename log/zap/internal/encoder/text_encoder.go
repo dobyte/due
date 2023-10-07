@@ -9,6 +9,7 @@ package encoder
 
 import (
 	"fmt"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
 	"path/filepath"
@@ -48,6 +49,11 @@ func (e *TextEncoder) Clone() zapcore.Encoder {
 
 func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	line := e.bufferPool.Get()
+	stack := false
+
+	if len(fields) > 0 && fields[0].Key == StackFlag && fields[0].Type == zapcore.BoolType {
+		stack = xconv.Bool(fields[0].Integer)
+	}
 
 	levelText := ent.Level.CapitalString()[0:4]
 	if e.isTerminal {
@@ -82,7 +88,7 @@ func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 
 	line.AppendString(strings.TrimSuffix(ent.Message, "\n"))
 
-	if ent.Stack != "" {
+	if stack && ent.Stack != "" {
 		line.AppendByte('\n')
 		line.AppendString("Stack:\n")
 

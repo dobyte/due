@@ -10,6 +10,7 @@ package encoder
 import (
 	"fmt"
 	"github.com/dobyte/due/log/zap/v2/internal/utils"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
 	"path/filepath"
@@ -25,6 +26,8 @@ const (
 	fieldKeyStackFunc = "func"
 	fieldKeyStackFile = "file"
 )
+
+const StackFlag = "_stack"
 
 type JsonEncoder struct {
 	zapcore.ObjectEncoder
@@ -47,6 +50,12 @@ func (e *JsonEncoder) Clone() zapcore.Encoder {
 
 func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	line := e.bufferPool.Get()
+	stack := false
+
+	if len(fields) > 0 && fields[0].Key == StackFlag && fields[0].Type == zapcore.BoolType {
+		stack = xconv.Bool(fields[0].Integer)
+	}
+
 	line.AppendByte('{')
 	line.AppendString(fmt.Sprintf(`"%s":"%s"`, fieldKeyLevel, ent.Level.CapitalString()))
 	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyTime, ent.Time.Format(e.timeFormat)))
@@ -63,7 +72,7 @@ func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 
 	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyMsg, utils.Addslashes(strings.TrimSuffix(ent.Message, "\n"))))
 
-	if ent.Stack != "" {
+	if stack && ent.Stack != "" {
 		line.AppendString(fmt.Sprintf(`,"%s":[`, fieldKeyStack))
 
 		stacks := strings.Split(ent.Stack, "\n")

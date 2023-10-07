@@ -8,6 +8,7 @@
 package zap
 
 import (
+	"fmt"
 	"github.com/dobyte/due/log/zap/v2/internal/encoder"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
@@ -126,64 +127,107 @@ func (l *Logger) buildLevelEnabler(level log.Level) zapcore.LevelEnabler {
 	})
 }
 
+// 打印日志
+func (l *Logger) print(level log.Level, stack bool, a ...interface{}) {
+	if l.logger == nil {
+		return
+	}
+
+	var msg string
+	if len(a) == 1 {
+		if str, ok := a[0].(string); ok {
+			msg = str
+		} else {
+			msg = fmt.Sprint(a...)
+		}
+	} else {
+		msg = fmt.Sprint(a...)
+	}
+
+	switch level {
+	case log.DebugLevel:
+		l.logger.Debugw(msg, encoder.StackFlag, stack)
+	case log.InfoLevel:
+		l.logger.Infow(msg, encoder.StackFlag, stack)
+	case log.WarnLevel:
+		l.logger.Warnw(msg, encoder.StackFlag, stack)
+	case log.ErrorLevel:
+		l.logger.Errorw(msg, encoder.StackFlag, stack)
+	case log.FatalLevel:
+		l.logger.Fatalw(msg, encoder.StackFlag, stack)
+	case log.PanicLevel:
+		l.logger.Panicw(msg, encoder.StackFlag, stack)
+	}
+}
+
+// Print 打印日志，不打印堆栈信息
+func (l *Logger) Print(level log.Level, a ...interface{}) {
+	l.print(level, false, a...)
+}
+
+// Printf 打印模板日志，不打印堆栈信息
+func (l *Logger) Printf(level log.Level, format string, a ...interface{}) {
+	l.print(level, false, fmt.Sprintf(format, a...))
+}
+
 // Debug 打印调试日志
 func (l *Logger) Debug(a ...interface{}) {
-	l.logger.Debug(a...)
+	l.print(log.DebugLevel, true, a...)
 }
 
 // Debugf 打印调试模板日志
 func (l *Logger) Debugf(format string, a ...interface{}) {
-	l.logger.Debugf(format, a...)
+	l.print(log.DebugLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
 func (l *Logger) Info(a ...interface{}) {
-	l.logger.Info(a...)
+	l.print(log.InfoLevel, true, a...)
 }
 
 // Infof 打印信息模板日志
 func (l *Logger) Infof(format string, a ...interface{}) {
-	l.logger.Infof(format, a...)
+	l.print(log.InfoLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
 func (l *Logger) Warn(a ...interface{}) {
-	l.logger.Warn(a...)
+	l.print(log.WarnLevel, true, a...)
 }
 
 // Warnf 打印警告模板日志
 func (l *Logger) Warnf(format string, a ...interface{}) {
-	l.logger.Warnf(format, a...)
+	l.print(log.WarnLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
 func (l *Logger) Error(a ...interface{}) {
-	l.logger.Error(a...)
+	l.print(log.ErrorLevel, true, a...)
 }
 
 // Errorf 打印错误模板日志
 func (l *Logger) Errorf(format string, a ...interface{}) {
-	l.logger.Errorf(format, a...)
+	l.print(log.ErrorLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
 func (l *Logger) Fatal(a ...interface{}) {
-	l.logger.Fatal(a...)
+	l.print(log.FatalLevel, true, a...)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *Logger) Fatalf(format string, a ...interface{}) {
-	l.logger.Fatalf(format, a...)
+	l.print(log.FatalLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Panic 打印Panic日志
 func (l *Logger) Panic(a ...interface{}) {
-	l.logger.Panic(a...)
+	l.print(log.PanicLevel, true, a...)
 }
 
 // Panicf 打印Panic模板日志
 func (l *Logger) Panicf(format string, a ...interface{}) {
-	l.logger.Panicf(format, a...)
+	l.print(log.PanicLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Sync 同步缓存中的日志
