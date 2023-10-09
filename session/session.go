@@ -181,26 +181,14 @@ func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 // Close 关闭会话
 func (s *Session) Close(kind Kind, target int64, isForce ...bool) error {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return err
 	}
 
-	cid, uid := conn.ID(), conn.UID()
-
-	err = conn.Close(isForce...)
-	if err != nil {
-		return err
-	}
-
-	delete(s.conns, cid)
-	if uid != 0 {
-		delete(s.users, uid)
-	}
-
-	return nil
+	return conn.Close(isForce...)
 }
 
 // Send 发送消息（同步）

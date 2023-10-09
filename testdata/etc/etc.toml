@@ -253,7 +253,7 @@ timezone = "Local"
         # 客户端连接地址
         addrs = ["127.0.0.1:2379"]
         # 客户端拨号超时时间（秒）
-        dialTimeout = 5
+        dialTimeout = "5s"
         # 命名空间
         namespace = "services"
         # 超时时间
