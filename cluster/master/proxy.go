@@ -12,13 +12,6 @@ import (
 )
 
 var (
-	ErrInvalidGID         = link.ErrInvalidGID
-	ErrInvalidNID         = link.ErrInvalidNID
-	ErrInvalidMessage     = link.ErrInvalidMessage
-	ErrInvalidArgument    = link.ErrInvalidArgument
-	ErrInvalidSessionKind = link.ErrInvalidSessionKind
-	ErrNotFoundUserSource = link.ErrNotFoundUserSource
-	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
 	ErrConfigSourceNotSet = errors.New("configuration source not set")
 )
 

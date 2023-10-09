@@ -1,8 +1,5 @@
 package cluster
 
-// Kind 集群实例类型
-type Kind string
-
 const (
 	Master Kind = "master" // 管理服
 	Gate   Kind = "gate"   // 网关服
@@ -10,12 +7,12 @@ const (
 	Mesh   Kind = "mesh"   // 微服务
 )
 
+// Kind 集群实例类型
+type Kind string
+
 func (k Kind) String() string {
 	return string(k)
 }
-
-// State 集群实例状态
-type State string
 
 const (
 	Work State = "work" // 工作（节点正常工作，可以分配更多玩家到该节点）
@@ -24,11 +21,31 @@ const (
 	Shut State = "shut" // 关闭（节点已经关闭，无法正常访问该节点）
 )
 
-// Event 事件
-type Event int
+// State 集群实例状态
+type State string
+
+func (s State) String() string {
+	return string(s)
+}
 
 const (
 	Connect    Event = iota + 1 // 打开连接
 	Reconnect                   // 断线重连
 	Disconnect                  // 断开连接
 )
+
+// Event 事件
+type Event int
+
+func (e Event) String() string {
+	switch e {
+	case Connect:
+		return "connect"
+	case Reconnect:
+		return "reconnect"
+	case Disconnect:
+		return "disconnect"
+	}
+
+	return ""
+}

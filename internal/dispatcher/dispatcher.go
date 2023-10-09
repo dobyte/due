@@ -9,12 +9,6 @@ import (
 	"sync"
 )
 
-var (
-	ErrNotFoundRoute    = errors.New("not found route")
-	ErrNotFoundEvent    = errors.New("not found event")
-	ErrNotFoundEndpoint = errors.New("not found endpoint")
-)
-
 type BalanceStrategy string
 
 const (
@@ -42,7 +36,7 @@ func (d *Dispatcher) FindEndpoint(insID string) (*endpoint.Endpoint, error) {
 
 	ep, ok := d.endpoints[insID]
 	if !ok {
-		return nil, ErrNotFoundEndpoint
+		return nil, errors.ErrNotFoundEndpoint
 	}
 
 	return ep, nil
@@ -67,7 +61,7 @@ func (d *Dispatcher) FindRoute(route int32) (*Route, error) {
 
 	r, ok := d.routes[route]
 	if !ok {
-		return nil, ErrNotFoundRoute
+		return nil, errors.ErrNotFoundRoute
 	}
 
 	return r, nil
@@ -78,12 +72,12 @@ func (d *Dispatcher) FindEvent(event cluster.Event) (*Event, error) {
 	d.rw.RLock()
 	defer d.rw.RUnlock()
 
-	r, ok := d.events[event]
+	e, ok := d.events[event]
 	if !ok {
-		return nil, ErrNotFoundEvent
+		return nil, errors.ErrNotFoundEvent
 	}
 
-	return r, nil
+	return e, nil
 }
 
 // ReplaceServices 替换服务

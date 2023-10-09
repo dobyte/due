@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -157,7 +158,7 @@ func (c *Client) dial() error {
 	c.rw.RUnlock()
 
 	if isShut {
-		return ErrClientShut
+		return errors.ErrClientShut
 	}
 
 	_, err := c.opts.client.Dial()

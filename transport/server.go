@@ -30,6 +30,8 @@ type GateProvider interface {
 	Unbind(ctx context.Context, uid int64) error
 	// GetIP 获取客户端IP地址
 	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, err error)
+	// IsOnline 检测是否在线
+	IsOnline(ctx context.Context, kind session.Kind, target int64) (isOnline bool, err error)
 	// Push 发送消息（异步）
 	Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error
 	// Multicast 推送组播消息（异步）

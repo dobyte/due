@@ -9,16 +9,6 @@ import (
 	"github.com/dobyte/due/v2/transport"
 )
 
-var (
-	ErrInvalidGID         = link.ErrInvalidGID
-	ErrInvalidNID         = link.ErrInvalidNID
-	ErrInvalidMessage     = link.ErrInvalidMessage
-	ErrInvalidArgument    = link.ErrInvalidArgument
-	ErrInvalidSessionKind = link.ErrInvalidSessionKind
-	ErrNotFoundUserSource = link.ErrNotFoundUserSource
-	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
-)
-
 type (
 	GetIPArgs      = link.GetIPArgs
 	PushArgs       = link.PushArgs

@@ -2,6 +2,8 @@ package gate
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 )
@@ -13,7 +15,7 @@ type provider struct {
 // Bind 绑定用户与网关间的关系
 func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 	if cid <= 0 || uid <= 0 {
-		return ErrInvalidArgument
+		return errors.ErrInvalidArgument
 	}
 
 	err := p.gate.session.Bind(cid, uid)
@@ -32,7 +34,7 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 // Unbind 解绑用户与网关间的关系
 func (p *provider) Unbind(ctx context.Context, uid int64) error {
 	if uid == 0 {
-		return ErrInvalidArgument
+		return errors.ErrInvalidArgument
 	}
 
 	cid, err := p.gate.session.Unbind(uid)
@@ -48,15 +50,22 @@ func (p *provider) GetIP(ctx context.Context, kind session.Kind, target int64) (
 	return p.gate.session.RemoteIP(kind, target)
 }
 
+// IsOnline 检测是否在线
+func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
+	return p.gate.session.Has(kind, target)
+}
+
 // Push 发送消息
 func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
+	log.Debugf("push message: kind: %s target: %d route: %d buffer: %s", kind.String(), target, message.Route, string(message.Buffer))
+
 	msg, err := packet.Pack(message)
 	if err != nil {
 		return err
 	}
 
 	err = p.gate.session.Push(kind, target, msg)
-	if kind == session.User && err == session.ErrNotFoundSession {
+	if kind == session.User && err == errors.ErrNotFoundSession {
 		err = p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id)
 		if err != nil {
 			return err

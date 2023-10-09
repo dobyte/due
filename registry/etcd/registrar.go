@@ -46,7 +46,7 @@ func newRegistrar(registry *Registry) *registrar {
 
 		for {
 			select {
-			case heartbeat, ok := <-r.chHeartbeat:
+			case h, ok := <-r.chHeartbeat:
 				if cancel != nil {
 					cancel()
 				}
@@ -56,7 +56,7 @@ func newRegistrar(registry *Registry) *registrar {
 				}
 
 				ctx, cancel = context.WithCancel(r.ctx)
-				go r.heartbeat(ctx, heartbeat.leaseID, heartbeat.key, heartbeat.value)
+				go r.heartbeat(ctx, h.leaseID, h.key, h.value)
 			case <-r.ctx.Done():
 				if cancel != nil {
 					cancel()

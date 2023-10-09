@@ -7,6 +7,22 @@ import (
 	"io"
 )
 
+var (
+	ErrInvalidGID           = New("invalid gate id")
+	ErrInvalidNID           = New("invalid node id")
+	ErrInvalidMessage       = New("invalid message")
+	ErrNotFoundSession      = New("not found session")
+	ErrInvalidSessionKind   = New("invalid session kind")
+	ErrReceiveTargetEmpty   = New("the receive target is empty")
+	ErrInvalidArgument      = New("invalid argument")
+	ErrNotFoundRoute        = New("not found route")
+	ErrNotFoundEvent        = New("not found event")
+	ErrNotFoundEndpoint     = New("not found endpoint")
+	ErrNotFoundUserLocation = New("not found user's location")
+	ErrClientShut           = New("client is shut")
+	ErrConnectionClosed     = New("connection is closed")
+)
+
 // NewError 新建一个错误
 // 可传入一下参数：
 // text : 文本字符串

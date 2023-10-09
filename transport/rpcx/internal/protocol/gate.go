@@ -32,6 +32,16 @@ type GetIPReply struct {
 	IP   string
 }
 
+type IsOnlineRequest struct {
+	Kind   session.Kind
+	Target int64
+}
+
+type IsOnlineReply struct {
+	Code     int
+	IsOnline bool
+}
+
 type PushRequest struct {
 	Kind    session.Kind
 	Target  int64

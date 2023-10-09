@@ -18,9 +18,9 @@ const (
 	defaultAddr          = "127.0.0.1:2379"
 	defaultDialTimeout   = 5
 	defaultNamespace     = "services"
-	defaultTimeout       = 3
+	defaultTimeout       = "3s"
 	defaultRetryTimes    = 3
-	defaultRetryInterval = 10
+	defaultRetryInterval = "10s"
 )
 
 const (
@@ -74,9 +74,9 @@ func defaultOptions() *options {
 		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		dialTimeout:   etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
 		namespace:     etc.Get(defaultNamespaceKey, defaultNamespace).String(),
-		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration() * time.Second,
+		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
-		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration() * time.Second,
+		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration(),
 	}
 }
 

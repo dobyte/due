@@ -256,12 +256,12 @@ timezone = "Local"
         dialTimeout = 5
         # 命名空间
         namespace = "services"
-        # 超时时间（秒）
-        timeout = 3
+        # 超时时间
+        timeout = "3s"
         # 心跳重试次数
         retryTimes = 3
-        # 心跳重试间隔（秒）
-        retryInterval = 10
+        # 心跳重试间隔
+        retryInterval = "10s"
     [registry.consul]
         # 客户端连接地址
         addr = "127.0.0.1:8500"

@@ -48,7 +48,7 @@ func (e *endpoint) Trigger(ctx context.Context, req *protocol.TriggerRequest, re
 		}
 	}
 
-	return err
+	return nil
 }
 
 // Deliver 投递消息

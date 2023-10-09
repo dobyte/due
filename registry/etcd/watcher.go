@@ -9,6 +9,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -87,18 +88,18 @@ func (w *watcher) Stop() error {
 	return w.watcherMgr.recycle(w.idx)
 }
 
-func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
-	services, err := registry.services(ctx, serviceName)
+func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
+	services, err := r.services(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
 	w := &watcherMgr{}
-	w.ctx, w.cancel = context.WithCancel(registry.ctx)
-	w.registry = registry
+	w.ctx, w.cancel = context.WithCancel(r.ctx)
+	w.registry = r
 	w.serviceName = serviceName
-	w.watcher = clientv3.NewWatcher(registry.opts.client)
-	w.chWatch = w.watcher.Watch(w.ctx, buildPrefixKey(registry.opts.namespace, w.serviceName), clientv3.WithPrefix())
+	w.watcher = clientv3.NewWatcher(r.opts.client)
+	w.chWatch = w.watcher.Watch(w.ctx, buildPrefixKey(r.opts.namespace, w.serviceName), clientv3.WithPrefix())
 	w.watchers = make(map[int64]*watcher)
 
 	for _, service := range services {
@@ -125,10 +126,17 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 					switch ev.Type {
 					case mvccpb.PUT:
 						if service, err := unmarshal(ev.Kv.Value); err == nil {
+							log.Debugf("%s is added", service.Alias)
 							w.serviceInstances.Store(service.ID, service)
 						}
 					case mvccpb.DELETE:
 						if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
+							v, ok := w.serviceInstances.Load(parts[3])
+							if ok {
+								service := v.(*registry.ServiceInstance)
+								log.Debugf("%s is deleted", service.Alias)
+							}
+
 							w.serviceInstances.Delete(parts[3])
 						}
 					}

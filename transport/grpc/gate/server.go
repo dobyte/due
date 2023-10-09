@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/transport/grpc/v2/internal/code"
 	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
@@ -33,9 +34,11 @@ func (e *endpoint) Bind(ctx context.Context, req *pb.BindRequest) (*pb.BindReply
 	err := e.provider.Bind(ctx, req.CID, req.UID)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
+			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
+		case errors.ErrInvalidArgument:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -50,9 +53,11 @@ func (e *endpoint) Unbind(ctx context.Context, req *pb.UnbindRequest) (*pb.Unbin
 	err := e.provider.Unbind(ctx, req.UID)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
+			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
+		case errors.ErrInvalidArgument:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -67,9 +72,11 @@ func (e *endpoint) GetIP(ctx context.Context, req *pb.GetIPRequest) (*pb.GetIPRe
 	ip, err := e.provider.GetIP(ctx, session.Kind(req.Kind), req.Target)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
+			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
+		case errors.ErrInvalidArgument:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -88,9 +95,9 @@ func (e *endpoint) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushReply
 	})
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -109,7 +116,7 @@ func (e *endpoint) Multicast(ctx context.Context, req *pb.MulticastRequest) (*pb
 	})
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -128,7 +135,7 @@ func (e *endpoint) Broadcast(ctx context.Context, req *pb.BroadcastRequest) (*pb
 	})
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -143,7 +150,7 @@ func (e *endpoint) Stat(ctx context.Context, req *pb.StatRequest) (*pb.StatReply
 	total, err := e.provider.Stat(ctx, session.Kind(req.Kind))
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()
@@ -158,9 +165,9 @@ func (e *endpoint) Disconnect(ctx context.Context, req *pb.DisconnectRequest) (*
 	err := e.provider.Disconnect(ctx, session.Kind(req.Kind), req.Target, req.IsForce)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			return nil, status.New(code.NotFoundSession, err.Error()).Err()
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
 		default:
 			return nil, status.New(codes.Internal, err.Error()).Err()

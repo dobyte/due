@@ -7,17 +7,10 @@ import (
 	"github.com/dobyte/due/v2/packet"
 )
 
-var (
-	ErrClientShut       = errors.New("client is shut")
-	ErrConnectionClosed = errors.New("connection closed")
-)
-
-type (
-	Message = link.Message
-)
+type Message = link.Message
 
 type Proxy struct {
-	client *Client // 节点
+	client *Client // 客户端
 }
 
 func newProxy(client *Client) *Proxy {
@@ -50,11 +43,11 @@ func (p *Proxy) Bind(uid int64) error {
 	defer p.client.rw.RUnlock()
 
 	if p.client.state == cluster.Shut {
-		return ErrClientShut
+		return errors.ErrClientShut
 	}
 
 	if p.client.conn == nil {
-		return ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	p.client.conn.Bind(uid)
@@ -68,11 +61,11 @@ func (p *Proxy) Unbind() error {
 	defer p.client.rw.RUnlock()
 
 	if p.client.state == cluster.Shut {
-		return ErrClientShut
+		return errors.ErrClientShut
 	}
 
 	if p.client.conn == nil {
-		return ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	p.client.conn.Unbind()
@@ -86,11 +79,11 @@ func (p *Proxy) Push(message *Message) error {
 	defer p.client.rw.RUnlock()
 
 	if p.client.state == cluster.Shut {
-		return ErrClientShut
+		return errors.ErrClientShut
 	}
 
 	if p.client.conn == nil {
-		return ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	var (
@@ -137,11 +130,11 @@ func (p *Proxy) Disconnect() error {
 	defer p.client.rw.RUnlock()
 
 	if p.client.state == cluster.Shut {
-		return ErrClientShut
+		return errors.ErrClientShut
 	}
 
 	if p.client.conn == nil {
-		return ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	return p.client.conn.Close()

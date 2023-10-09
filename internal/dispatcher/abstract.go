@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
 	"sync/atomic"
 )
 
@@ -57,7 +58,7 @@ func (a *abstract) addEndpoint(insID string, ep *endpoint.Endpoint) {
 func (a *abstract) directDispatch(insID string) (*endpoint.Endpoint, error) {
 	sep, ok := a.endpointMap[insID]
 	if !ok {
-		return nil, ErrNotFoundEndpoint
+		return nil, errors.ErrNotFoundEndpoint
 	}
 
 	return sep.endpoint, nil
@@ -69,13 +70,13 @@ func (a *abstract) randomDispatch() (*endpoint.Endpoint, error) {
 		return sep.endpoint, nil
 	}
 
-	return nil, ErrNotFoundEndpoint
+	return nil, errors.ErrNotFoundEndpoint
 }
 
 // 轮询分配
 func (a *abstract) roundRobinDispatch() (*endpoint.Endpoint, error) {
 	if len(a.endpointArr) == 0 {
-		return nil, ErrNotFoundEndpoint
+		return nil, errors.ErrNotFoundEndpoint
 	}
 
 	counter := atomic.AddInt64(&a.counter, 1)

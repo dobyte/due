@@ -20,16 +20,6 @@ import (
 	"time"
 )
 
-var (
-	ErrInvalidGID         = errors.New("invalid gate id")
-	ErrInvalidNID         = errors.New("invalid node id")
-	ErrInvalidMessage     = errors.New("invalid message")
-	ErrInvalidSessionKind = errors.New("invalid session kind")
-	ErrNotFoundUserSource = errors.New("not found user source")
-	ErrReceiveTargetEmpty = errors.New("the receive target is empty")
-	ErrInvalidArgument    = errors.New("invalid argument")
-)
-
 type Link struct {
 	opts           *Options
 	gateDispatcher *dispatcher.Dispatcher      // 网关分发器
@@ -189,7 +179,7 @@ func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
 	if gid == "" {
 		l.gateSource.Delete(uid)
 
-		return "", ErrNotFoundUserSource
+		return "", errors.ErrNotFoundUserLocation
 	}
 
 	l.gateSource.Store(uid, gid)
@@ -209,7 +199,7 @@ func (l *Link) AskGate(ctx context.Context, uid int64, gid string) (string, bool
 	}
 
 	if insID == "" {
-		return "", false, ErrNotFoundUserSource
+		return "", false, errors.ErrNotFoundUserLocation
 	}
 
 	l.gateSource.Store(uid, insID)
@@ -230,7 +220,7 @@ func (l *Link) LocateNode(ctx context.Context, uid int64, name string) (string, 
 	}
 
 	if nid == "" {
-		return "", ErrNotFoundUserSource
+		return "", errors.ErrNotFoundUserLocation
 	}
 
 	l.saveNodeSource(uid, name, nid)
@@ -250,7 +240,7 @@ func (l *Link) AskNode(ctx context.Context, uid int64, name, nid string) (string
 	}
 
 	if insID == "" {
-		return "", false, ErrNotFoundUserSource
+		return "", false, errors.ErrNotFoundUserLocation
 	}
 
 	l.saveNodeSource(uid, name, insID)
@@ -296,7 +286,7 @@ func (l *Link) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
 			return l.directGetIP(ctx, args.GID, args.Kind, args.Target)
 		}
 	default:
-		return "", ErrInvalidSessionKind
+		return "", errors.ErrInvalidSessionKind
 	}
 }
 
@@ -336,7 +326,7 @@ func (l *Link) Push(ctx context.Context, args *PushArgs) error {
 			return l.directPush(ctx, args)
 		}
 	default:
-		return ErrInvalidSessionKind
+		return errors.ErrInvalidSessionKind
 	}
 }
 
@@ -391,14 +381,14 @@ func (l *Link) Multicast(ctx context.Context, args *MulticastArgs) (int64, error
 			return l.directMulticast(ctx, args)
 		}
 	default:
-		return 0, ErrInvalidSessionKind
+		return 0, errors.ErrInvalidSessionKind
 	}
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
 func (l *Link) directMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	if len(args.Targets) == 0 {
-		return 0, ErrReceiveTargetEmpty
+		return 0, errors.ErrReceiveTargetEmpty
 	}
 
 	buffer, err := l.toBuffer(args.Message.Data, true)
@@ -548,7 +538,7 @@ func (l *Link) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 			return l.directDisconnect(ctx, args.GID, args.Kind, args.Target, args.IsForce)
 		}
 	default:
-		return ErrInvalidSessionKind
+		return errors.ErrInvalidSessionKind
 	}
 }
 
@@ -600,7 +590,7 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 			Buffer: buffer,
 		}
 	default:
-		return ErrInvalidMessage
+		return errors.ErrInvalidMessage
 	}
 
 	if args.NID != "" {
@@ -768,7 +758,7 @@ func (l *Link) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
 // 根据实例ID获取网关客户端
 func (l *Link) getGateClientByGID(gid string) (transport.GateClient, error) {
 	if gid == "" {
-		return nil, ErrInvalidGID
+		return nil, errors.ErrInvalidGID
 	}
 
 	ep, err := l.gateDispatcher.FindEndpoint(gid)
@@ -782,7 +772,7 @@ func (l *Link) getGateClientByGID(gid string) (transport.GateClient, error) {
 // 根据实例ID获取节点客户端
 func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 	if nid == "" {
-		return nil, ErrInvalidNID
+		return nil, errors.ErrInvalidNID
 	}
 
 	ep, err := l.nodeDispatcher.FindEndpoint(nid)

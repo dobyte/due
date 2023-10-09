@@ -199,11 +199,13 @@ func (n *Node) registerServiceInstance() {
 
 // 解注册服务实例
 func (n *Node) deregisterServiceInstance() {
+	log.Debugf("deregister service instance, alias: %s", n.instance.Alias)
+
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Errorf("deregister dispatcher instance failed: %v", err)
+		log.Errorf("deregister service instance failed: %v", err)
 	}
 }
 

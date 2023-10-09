@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -17,7 +18,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		// ignore
 	case cluster.Reconnect:
 		if args.UID <= 0 {
-			return false, ErrInvalidArgument
+			return false, errors.ErrInvalidArgument
 		}
 
 		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
@@ -26,7 +27,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		}
 
 		if !ok {
-			return true, ErrNotFoundUserSource
+			return true, errors.ErrNotFoundUserLocation
 		}
 	case cluster.Disconnect:
 		if args.UID > 0 {
@@ -36,7 +37,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 			}
 
 			if !ok {
-				return true, ErrNotFoundUserSource
+				return true, errors.ErrNotFoundUserLocation
 			}
 		}
 	}
@@ -57,7 +58,7 @@ func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bo
 
 	if stateful {
 		if args.UID <= 0 {
-			return false, ErrInvalidArgument
+			return false, errors.ErrInvalidArgument
 		}
 
 		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
@@ -66,7 +67,7 @@ func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bo
 		}
 
 		if !ok {
-			return true, ErrNotFoundUserSource
+			return true, errors.ErrNotFoundUserLocation
 		}
 	}
 

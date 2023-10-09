@@ -7,17 +7,23 @@ import (
 	"sync"
 )
 
-var (
-	ErrNotFoundSession    = errors.New("not found session")
-	ErrInvalidSessionKind = errors.New("invalid session kind")
-)
-
 const (
 	Conn Kind = iota + 1 // 连接SESSION
 	User                 // 用户SESSION
 )
 
 type Kind int
+
+func (k Kind) String() string {
+	switch k {
+	case Conn:
+		return "conn"
+	case User:
+		return "user"
+	}
+
+	return ""
+}
 
 type Session struct {
 	rw    sync.RWMutex           // 读写锁
@@ -58,6 +64,23 @@ func (s *Session) RemConn(conn network.Conn) {
 	if uid != 0 {
 		delete(s.users, uid)
 	}
+}
+
+// Has 是否存在会话
+func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+
+	switch kind {
+	case Conn:
+		_, ok = s.conns[target]
+	case User:
+		_, ok = s.users[target]
+	default:
+		err = errors.ErrInvalidSessionKind
+	}
+
+	return
 }
 
 // Bind 绑定用户ID
@@ -222,7 +245,7 @@ func (s *Session) Multicast(kind Kind, targets []int64, msg []byte) (n int64, er
 	case User:
 		conns = s.users
 	default:
-		err = ErrInvalidSessionKind
+		err = errors.ErrInvalidSessionKind
 		return
 	}
 
@@ -251,7 +274,7 @@ func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
 	case User:
 		conns = s.users
 	default:
-		err = ErrInvalidSessionKind
+		err = errors.ErrInvalidSessionKind
 		return
 	}
 
@@ -275,7 +298,7 @@ func (s *Session) Stat(kind Kind) (int64, error) {
 	case User:
 		return int64(len(s.users)), nil
 	default:
-		return 0, ErrInvalidSessionKind
+		return 0, errors.ErrInvalidSessionKind
 	}
 }
 
@@ -285,16 +308,16 @@ func (s *Session) conn(kind Kind, target int64) (network.Conn, error) {
 	case Conn:
 		conn, ok := s.conns[target]
 		if !ok {
-			return nil, ErrNotFoundSession
+			return nil, errors.ErrNotFoundSession
 		}
 		return conn, nil
 	case User:
 		conn, ok := s.users[target]
 		if !ok {
-			return nil, ErrNotFoundSession
+			return nil, errors.ErrNotFoundSession
 		}
 		return conn, nil
 	default:
-		return nil, ErrInvalidSessionKind
+		return nil, errors.ErrInvalidSessionKind
 	}
 }

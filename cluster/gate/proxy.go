@@ -3,20 +3,10 @@ package gate
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/dispatcher"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
-)
-
-var (
-	ErrInvalidGID         = link.ErrInvalidGID
-	ErrInvalidNID         = link.ErrInvalidNID
-	ErrInvalidMessage     = link.ErrInvalidMessage
-	ErrInvalidArgument    = link.ErrInvalidArgument
-	ErrInvalidSessionKind = link.ErrInvalidSessionKind
-	ErrNotFoundUserSource = link.ErrNotFoundUserSource
-	ErrReceiveTargetEmpty = link.ErrReceiveTargetEmpty
 )
 
 type proxy struct {
@@ -61,8 +51,8 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 		Event: event,
 		CID:   cid,
 		UID:   uid,
-	}); err != nil && err != dispatcher.ErrNotFoundEvent {
-		log.Warnf("trigger event failed, gid: %s, cid: %d, uid: %d, event: %v, err: %v", p.gate.opts.id, cid, uid, event, err)
+	}); err != nil && err != errors.ErrNotFoundEvent && err != errors.ErrNotFoundUserLocation {
+		log.Warnf("trigger event failed, cid: %d, uid: %d, event: %v, err: %v", cid, uid, event.String(), err)
 	}
 }
 
@@ -73,6 +63,8 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		log.Errorf("unpack data to struct failed: %v", err)
 		return
 	}
+
+	log.Debugf("deliver message: cid: %d uid: %d route: %d buffer: %s", cid, uid, message.Route, string(message.Buffer))
 
 	if err = p.link.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,

@@ -5,8 +5,7 @@ import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
-	"github.com/dobyte/due/v2/cluster/gate"
-	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -14,6 +13,7 @@ const (
 	ServicePath             = "Gate"
 	serviceMethodBind       = "Bind"
 	serviceMethodUnbind     = "Unbind"
+	serviceMethodIsOnline   = "IsOnline"
 	serviceMethodGetIP      = "GetIP"
 	serviceMethodPush       = "Push"
 	serviceMethodMulticast  = "Multicast"
@@ -45,11 +45,11 @@ func (e *endpoint) Bind(ctx context.Context, req *protocol.BindRequest, reply *p
 	err := e.provider.Bind(ctx, req.CID, req.UID)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
-		case gate.ErrInvalidArgument:
+		case errors.ErrInvalidArgument:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -64,11 +64,11 @@ func (e *endpoint) Unbind(ctx context.Context, req *protocol.UnbindRequest, repl
 	err := e.provider.Unbind(ctx, req.UID)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
-		case gate.ErrInvalidArgument:
+		case errors.ErrInvalidArgument:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -83,11 +83,11 @@ func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply 
 	ip, err := e.provider.GetIP(ctx, req.Kind, req.Target)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
-		case gate.ErrInvalidArgument:
+		case errors.ErrInvalidArgument:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -99,14 +99,31 @@ func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply 
 	return err
 }
 
+// IsOnline 检测是否在线
+func (e *endpoint) IsOnline(ctx context.Context, req *protocol.IsOnlineRequest, reply *protocol.IsOnlineReply) error {
+	isOnline, err := e.provider.IsOnline(ctx, req.Kind, req.Target)
+	if err != nil {
+		switch err {
+		case errors.ErrInvalidSessionKind:
+			reply.Code = code.InvalidArgument
+		default:
+			reply.Code = code.Internal
+		}
+	}
+
+	reply.IsOnline = isOnline
+
+	return err
+}
+
 // Push 推送消息给连接
 func (e *endpoint) Push(ctx context.Context, req *protocol.PushRequest, reply *protocol.PushReply) error {
 	err := e.provider.Push(ctx, req.Kind, req.Target, req.Message)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -121,7 +138,7 @@ func (e *endpoint) Multicast(ctx context.Context, req *protocol.MulticastRequest
 	total, err := e.provider.Multicast(ctx, req.Kind, req.Targets, req.Message)
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -138,7 +155,7 @@ func (e *endpoint) Broadcast(ctx context.Context, req *protocol.BroadcastRequest
 	total, err := e.provider.Broadcast(ctx, req.Kind, req.Message)
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -155,7 +172,7 @@ func (e *endpoint) Stat(ctx context.Context, req *protocol.StatRequest, reply *p
 	total, err := e.provider.Stat(ctx, req.Kind)
 	if err != nil {
 		switch err {
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
@@ -172,9 +189,9 @@ func (e *endpoint) Disconnect(ctx context.Context, req *protocol.DisconnectReque
 	err := e.provider.Disconnect(ctx, req.Kind, req.Target, req.IsForce)
 	if err != nil {
 		switch err {
-		case session.ErrNotFoundSession:
+		case errors.ErrNotFoundSession:
 			reply.Code = code.NotFoundSession
-		case session.ErrInvalidSessionKind:
+		case errors.ErrInvalidSessionKind:
 			reply.Code = code.InvalidArgument
 		default:
 			reply.Code = code.Internal
