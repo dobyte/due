@@ -8,7 +8,7 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/errors"
 	"net"
 	"sync"
 )
@@ -47,7 +47,7 @@ func (cm *serverConnMgr) allocate(c net.Conn) error {
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
 		cm.mu.Unlock()
-		return network.ErrTooManyConnection
+		return errors.ErrTooManyConnection
 	}
 
 	cm.id++

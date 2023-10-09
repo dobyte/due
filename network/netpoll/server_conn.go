@@ -2,6 +2,7 @@ package netpoll
 
 import (
 	"github.com/cloudwego/netpoll"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xnet"
@@ -160,9 +161,9 @@ func (c *serverConn) init(id int64, conn netpoll.Connection, cm *connMgr) error 
 func (c *serverConn) checkState() error {
 	switch network.ConnState(atomic.LoadInt32(&c.state)) {
 	case network.ConnHanged:
-		return network.ErrConnectionHanged
+		return errors.ErrConnectionHanged
 	case network.ConnClosed:
-		return network.ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	return nil
@@ -171,7 +172,7 @@ func (c *serverConn) checkState() error {
 // 读取消息
 func (c *serverConn) read() error {
 	if network.ConnState(atomic.LoadInt32(&c.state)) != network.ConnOpened {
-		return network.ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	// block reading messages from the client

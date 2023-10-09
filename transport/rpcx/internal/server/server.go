@@ -88,7 +88,7 @@ func (s *Server) RegisterService(desc, ss interface{}) error {
 
 	for _, ds := range s.disabledServices {
 		if ds == name {
-			return errors.New(fmt.Sprintf("unable to register %s dispatcher name", ds))
+			return errors.New(fmt.Sprintf("unable to register %s service name", ds))
 		}
 	}
 

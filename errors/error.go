@@ -20,7 +20,12 @@ var (
 	ErrNotFoundEndpoint     = New("not found endpoint")
 	ErrNotFoundUserLocation = New("not found user's location")
 	ErrClientShut           = New("client is shut")
+	ErrConnectionHanged     = New("connection is hanged")
 	ErrConnectionClosed     = New("connection is closed")
+	ErrTooManyConnection    = New("too many connection")
+	ErrSeqOverflow          = New("seq overflow")
+	ErrRouteOverflow        = New("route overflow")
+	ErrBufferTooLarge       = New("buffer too large")
 )
 
 // NewError 新建一个错误

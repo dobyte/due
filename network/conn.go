@@ -8,7 +8,6 @@
 package network
 
 import (
-	"github.com/dobyte/due/v2/errors"
 	"net"
 )
 
@@ -16,12 +15,6 @@ const (
 	ConnOpened ConnState = iota + 1 // 连接打开
 	ConnHanged                      // 连接挂起
 	ConnClosed                      // 连接关闭
-)
-
-var (
-	ErrConnectionHanged  = errors.New("connection is hanged")
-	ErrConnectionClosed  = errors.New("connection is closed")
-	ErrTooManyConnection = errors.New("too many connection")
 )
 
 type (

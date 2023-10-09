@@ -8,6 +8,7 @@
 package tcp
 
 import (
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xnet"
@@ -141,9 +142,9 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 func (c *serverConn) checkState() error {
 	switch network.ConnState(atomic.LoadInt32(&c.state)) {
 	case network.ConnHanged:
-		return network.ErrConnectionHanged
+		return errors.ErrConnectionHanged
 	case network.ConnClosed:
-		return network.ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	return nil

@@ -8,7 +8,7 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/gorilla/websocket"
 	"sync"
 )
@@ -51,7 +51,7 @@ func (cm *connMgr) allocate(c *websocket.Conn) error {
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
 		cm.mu.Unlock()
-		return network.ErrTooManyConnection
+		return errors.ErrTooManyConnection
 	}
 
 	cm.id++

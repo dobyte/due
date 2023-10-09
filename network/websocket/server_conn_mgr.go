@@ -9,7 +9,7 @@ package websocket
 
 import (
 	"github.com/cloudwego/netpoll"
-	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/errors"
 	"sync"
 )
 
@@ -45,7 +45,7 @@ func (cm *connMgr) allocate(c netpoll.Connection) error {
 	defer cm.mu.Unlock()
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
-		return network.ErrTooManyConnection
+		return errors.ErrTooManyConnection
 	}
 
 	cm.id++

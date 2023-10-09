@@ -7,13 +7,6 @@ import (
 	"github.com/dobyte/due/v2/log"
 )
 
-var (
-	ErrSeqOverflow    = errors.New("seq overflow")
-	ErrRouteOverflow  = errors.New("route overflow")
-	ErrInvalidMessage = errors.New("invalid message")
-	ErrBufferTooLarge = errors.New("buffer too large")
-)
-
 type Packer interface {
 	// Pack 打包
 	Pack(message *Message) ([]byte, error)
@@ -49,17 +42,17 @@ func NewPacker(opts ...Option) Packer {
 // Pack 打包消息
 func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
-		return nil, ErrRouteOverflow
+		return nil, errors.ErrRouteOverflow
 	}
 
 	if p.opts.seqBytes > 0 {
 		if message.Seq > int32(1<<(8*p.opts.seqBytes-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytes-1)) {
-			return nil, ErrSeqOverflow
+			return nil, errors.ErrSeqOverflow
 		}
 	}
 
 	if len(message.Buffer) > p.opts.bufferBytes {
-		return nil, ErrBufferTooLarge
+		return nil, errors.ErrBufferTooLarge
 	}
 
 	var (
@@ -111,7 +104,7 @@ func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 	)
 
 	if ln < 0 {
-		return nil, ErrInvalidMessage
+		return nil, errors.ErrInvalidMessage
 	}
 
 	message := &Message{Buffer: make([]byte, ln)}

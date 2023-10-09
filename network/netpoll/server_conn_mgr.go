@@ -2,7 +2,7 @@ package netpoll
 
 import (
 	"github.com/cloudwego/netpoll"
-	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/errors"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -37,7 +37,7 @@ func (cm *connMgr) close() {
 // 分配连接
 func (cm *connMgr) allocate(c netpoll.Connection) error {
 	if atomic.LoadInt64(&cm.total) >= int64(cm.server.opts.maxConnNum) {
-		return network.ErrTooManyConnection
+		return errors.ErrTooManyConnection
 	}
 
 	id := atomic.AddInt64(&cm.id, 1)

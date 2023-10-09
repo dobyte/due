@@ -165,9 +165,9 @@ func (c *clientConn) RemoteAddr() (net.Addr, error) {
 func (c *clientConn) checkState() error {
 	switch network.ConnState(atomic.LoadInt32(&c.state)) {
 	case network.ConnHanged:
-		return network.ErrConnectionHanged
+		return errors.ErrConnectionHanged
 	case network.ConnClosed:
-		return network.ErrConnectionClosed
+		return errors.ErrConnectionClosed
 	}
 
 	return nil
