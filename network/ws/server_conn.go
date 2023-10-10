@@ -26,7 +26,7 @@ type serverConn struct {
 	uid               int64           // 用户ID
 	state             int32           // 连接状态
 	conn              *websocket.Conn // WS源连接
-	connMgr           *connMgr        // 连接管理
+	connMgr           *serverConnMgr  // 连接管理
 	chWrite           chan chWrite    // 写入队列
 	done              chan struct{}   // 写入完成信号
 	close             chan struct{}   // 关闭信号
@@ -146,7 +146,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 }
 
 // 初始化连接
-func (c *serverConn) init(id int64, conn *websocket.Conn, cm *connMgr) {
+func (c *serverConn) init(id int64, conn *websocket.Conn, cm *serverConnMgr) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm

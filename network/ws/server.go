@@ -28,7 +28,7 @@ type Server interface {
 type server struct {
 	opts              *serverOptions            // 配置
 	listener          net.Listener              // 监听器
-	connMgr           *connMgr                  // 连接管理器
+	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数

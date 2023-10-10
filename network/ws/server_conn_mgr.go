@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-type connMgr struct {
+type serverConnMgr struct {
 	mu     sync.Mutex            // 连接读写锁
 	id     int64                 // 连接ID
 	pool   sync.Pool             // 连接池
@@ -21,12 +21,8 @@ type connMgr struct {
 	server *server               // 服务器
 }
 
-func NewConnMgr() *connMgr {
-	return newConnMgr(nil)
-}
-
-func newConnMgr(server *server) *connMgr {
-	return &connMgr{
+func newConnMgr(server *server) *serverConnMgr {
+	return &serverConnMgr{
 		server: server,
 		conns:  make(map[int64]*serverConn),
 		pool:   sync.Pool{New: func() interface{} { return &serverConn{} }},
@@ -34,7 +30,7 @@ func newConnMgr(server *server) *connMgr {
 }
 
 // 关闭连接
-func (cm *connMgr) close() {
+func (cm *serverConnMgr) close() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -46,7 +42,7 @@ func (cm *connMgr) close() {
 }
 
 // 分配连接
-func (cm *connMgr) allocate(c *websocket.Conn) error {
+func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
 	cm.mu.Lock()
 
 	if len(cm.conns) >= cm.server.opts.maxConnNum {
@@ -66,7 +62,7 @@ func (cm *connMgr) allocate(c *websocket.Conn) error {
 }
 
 // 回收连接
-func (cm *connMgr) recycle(conn *serverConn) {
+func (cm *serverConnMgr) recycle(conn *serverConn) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
