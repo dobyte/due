@@ -22,6 +22,7 @@ type Server struct {
 
 type Options struct {
 	Addr       string
+	HostAddr   string
 	KeyFile    string
 	CertFile   string
 	ServerOpts []grpc.ServerOption
@@ -31,6 +32,13 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.HostAddr != "" {
+		_, hostAddr, err := xnet.ParseAddr(opts.HostAddr)
+		if err == nil {
+			exposeAddr = hostAddr
+		}
 	}
 
 	isSecure := false

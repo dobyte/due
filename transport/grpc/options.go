@@ -15,6 +15,7 @@ const (
 
 const (
 	defaultServerAddrKey       = "config.transport.grpc.server.addr"
+	defaultServerHostAddrKey   = "config.transport.grpc.server.hostAddr"
 	defaultServerKeyFileKey    = "config.transport.grpc.server.keyFile"
 	defaultServerCertFileKey   = "config.transport.grpc.server.certFile"
 	defaultClientPoolSizeKey   = "config.transport.grpc.client.poolSize"
@@ -32,6 +33,7 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{}
 	opts.server.Addr = config.Get(defaultServerAddrKey, defaultServerAddr).String()
+	opts.server.HostAddr = config.Get(defaultServerHostAddrKey).String()
 	opts.server.KeyFile = config.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = config.Get(defaultServerCertFileKey).String()
 	opts.client.PoolSize = config.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
