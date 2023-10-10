@@ -19,6 +19,8 @@ type Server interface {
 	Scheme() string
 	// Endpoint 服务端口
 	Endpoint() *endpoint.Endpoint
+	// HostEndpoint 宿主机服务端口
+	HostEndpoint() *endpoint.Endpoint
 	// RegisterService 注册服务
 	RegisterService(desc, service interface{}) error
 }

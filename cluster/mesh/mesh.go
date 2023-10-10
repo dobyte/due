@@ -132,7 +132,7 @@ func (m *Mesh) stopRPCServer() {
 
 // 注册服务实例
 func (m *Mesh) registerServiceInstances() {
-	endpoint := m.rpc.Endpoint().String()
+	endpoint := m.rpc.HostEndpoint().String()
 
 	for _, entity := range m.services {
 		id, err := xuuid.UUID()

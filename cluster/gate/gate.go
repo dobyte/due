@@ -181,7 +181,7 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate,
 		Alias:    g.opts.name,
 		State:    cluster.Work,
-		Endpoint: g.rpc.Endpoint().String(),
+		Endpoint: g.rpc.HostEndpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
