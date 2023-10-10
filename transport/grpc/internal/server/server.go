@@ -16,7 +16,6 @@ type Server struct {
 	listenAddr       string
 	exposeAddr       string
 	endpoint         *endpoint.Endpoint
-	hostEndpoint     *endpoint.Endpoint
 	server           *grpc.Server
 	disabledServices []string
 }
@@ -35,9 +34,11 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 		return nil, err
 	}
 
-	_, hostAddr, err := xnet.ParseAddr(opts.HostAddr)
-	if err != nil {
-		return nil, err
+	if opts.HostAddr != "" {
+		_, hostAddr, err := xnet.ParseAddr(opts.HostAddr)
+		if err == nil {
+			exposeAddr = hostAddr
+		}
 	}
 
 	isSecure := false
@@ -57,7 +58,6 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.server = grpc.NewServer(serverOpts...)
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
-	s.hostEndpoint = endpoint.NewEndpoint(scheme, hostAddr, isSecure)
 	s.disabledServices = disabledServices
 
 	return s, nil
@@ -76,11 +76,6 @@ func (s *Server) Scheme() string {
 // Endpoint 获取服务端口
 func (s *Server) Endpoint() *endpoint.Endpoint {
 	return s.endpoint
-}
-
-// HostEndpoint 获取宿主机服务端口
-func (s *Server) HostEndpoint() *endpoint.Endpoint {
-	return s.hostEndpoint
 }
 
 // Start 启动服务器

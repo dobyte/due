@@ -182,7 +182,7 @@ func (n *Node) registerServiceInstance() {
 		State:    n.getState(),
 		Routes:   routes,
 		Events:   events,
-		Endpoint: n.rpc.HostEndpoint().String(),
+		Endpoint: n.rpc.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
