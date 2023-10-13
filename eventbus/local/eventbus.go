@@ -1,70 +1,62 @@
-package nats
+package local
 
 import (
 	"context"
 	"github.com/dobyte/due/v2/eventbus"
-	"github.com/nats-io/nats.go"
+	"github.com/dobyte/due/v2/internal/value"
+	"github.com/dobyte/due/v2/utils/xtime"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"sync"
 )
 
 type Eventbus struct {
-	err  error
-	opts *options
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	rw        sync.RWMutex
 	consumers map[string]*consumer
 }
 
-func NewEventbus(opts ...Option) *Eventbus {
-	o := defaultOptions()
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	eb := &Eventbus{opts: o}
-	eb.opts = o
+func NewEventbus() *Eventbus {
+	eb := &Eventbus{}
 	eb.consumers = make(map[string]*consumer)
-
-	if o.conn == nil {
-		o.conn, eb.err = nats.Connect(o.url, nats.Timeout(o.timeout))
-	}
 
 	return eb
 }
 
 // Publish 发布事件
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
-	if eb.err != nil {
-		return eb.err
+	eb.rw.RLock()
+	defer eb.rw.RUnlock()
+
+	c, ok := eb.consumers[topic]
+	if !ok {
+		return nil
 	}
 
-	buf, err := eventbus.PackData(topic, payload)
+	id, err := xuuid.UUID()
 	if err != nil {
 		return err
 	}
 
-	return eb.opts.conn.Publish(topic, buf)
+	c.dispatch(&eventbus.Event{
+		ID:        id,
+		Topic:     topic,
+		Payload:   value.NewValue(payload),
+		Timestamp: xtime.UnixNano(xtime.Now().UnixNano()),
+	})
+
+	return nil
 }
 
 // Subscribe 订阅事件
 func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
-	if eb.err != nil {
-		return eb.err
-	}
-
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
 	c, ok := eb.consumers[topic]
 	if !ok {
 		c = &consumer{handlers: make(map[uintptr]eventbus.EventHandler)}
-		sub, err := eb.opts.conn.Subscribe(topic, func(msg *nats.Msg) {
-			c.dispatch(msg.Data)
-		})
-		if err != nil {
-			return err
-		}
-		c.sub = sub
 		eb.consumers[topic] = c
 	}
 
@@ -83,10 +75,6 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 			return nil
 		}
 
-		if err := c.sub.Unsubscribe(); err != nil {
-			return err
-		}
-
 		delete(eb.consumers, topic)
 	}
 
@@ -95,6 +83,5 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 
 // Close 停止监听
 func (eb *Eventbus) Close() error {
-	eb.opts.conn.Close()
 	return nil
 }

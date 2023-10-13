@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	config.SetConfigurator(configurator.NewConfigurator(configurator.WithSources(etcd.NewSource())))
+	config.SetConfigurator(configurator.NewConfigurator(configurator.WithSources(etcd.NewSource(etcd.WithMode("read-write")))))
 }
 
 func TestWatch(t *testing.T) {

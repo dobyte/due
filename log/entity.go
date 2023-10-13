@@ -36,7 +36,7 @@ func newEntityPool(logger *defaultLogger) *EntityPool {
 	}
 }
 
-func (p *EntityPool) build(level Level, stack bool, a ...interface{}) *Entity {
+func (p *EntityPool) build(level Level, isNeedStack bool, a ...interface{}) *Entity {
 	e := p.pool.Get().(*Entity)
 	e.pool = p
 
@@ -62,7 +62,7 @@ func (p *EntityPool) build(level Level, stack bool, a ...interface{}) *Entity {
 	e.Time = xtime.Now().Format(p.logger.opts.timeFormat)
 	e.Message = strings.TrimSuffix(msg, "\n")
 
-	if stack && p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
+	if isNeedStack && p.logger.opts.stackLevel != 0 && level >= p.logger.opts.stackLevel {
 		st := stacks.Callers(3+p.logger.opts.callerSkip, stacks.Full)
 		defer st.Free()
 		e.Frames = st.Frames()

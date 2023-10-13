@@ -10,6 +10,7 @@ package formatter
 import (
 	"bytes"
 	"fmt"
+	"github.com/dobyte/due/log/logrus/v2/internal/define"
 	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"runtime"
@@ -22,8 +23,6 @@ const (
 	blue   = 36
 	gray   = 37
 )
-
-const defaultOutFileFlag = "@outFileFlag@"
 
 type TextFormatter struct {
 	TimeFormat     string
@@ -41,7 +40,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
 	levelText := strings.ToUpper(entry.Level.String())[0:4]
 
-	if _, ok := entry.Data[defaultOutFileFlag]; len(entry.Logger.Hooks) == 0 || ok {
+	if _, ok := entry.Data[define.FileOutFlagField]; len(entry.Logger.Hooks) == 0 || ok {
 		var levelColor int
 		switch entry.Level {
 		case logrus.DebugLevel, logrus.TraceLevel:
@@ -58,12 +57,12 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
 		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", levelColor, levelText, entry.Time.Format(f.TimeFormat))
 	} else {
-		entry.Data[defaultOutFileFlag] = true
+		entry.Data[define.FileOutFlagField] = true
 		fmt.Fprintf(b, "%s[%s]", levelText, entry.Time.Format(f.TimeFormat))
 	}
 
 	var frames []runtime.Frame
-	if v, ok := entry.Data["stack_frames"]; ok {
+	if v, ok := entry.Data[define.StackFramesFlagField]; ok {
 		frames = v.([]runtime.Frame)
 	}
 
@@ -76,7 +75,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		fmt.Fprintf(b, " %s", message)
 	}
 
-	if _, ok := entry.Data["stack_out"]; ok && len(frames) > 0 {
+	if _, ok := entry.Data[define.StackOutFlagField]; ok && len(frames) > 0 {
 		fmt.Fprint(b, "\nStack:")
 		for i, frame := range frames {
 			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)

@@ -10,6 +10,7 @@ package formatter
 import (
 	"bytes"
 	"fmt"
+	"github.com/dobyte/due/log/logrus/v2/internal/define"
 	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"runtime"
@@ -46,7 +47,7 @@ func (f *JsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, entry.Time.Format(f.TimeFormat))
 
 	var frames []runtime.Frame
-	if v, ok := entry.Data["stack_frames"]; ok {
+	if v, ok := entry.Data[define.StackFramesFlagField]; ok {
 		frames = v.([]runtime.Frame)
 	}
 
@@ -59,7 +60,7 @@ func (f *JsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyMsg, message)
 	}
 
-	if _, ok := entry.Data["stack_out"]; ok && len(frames) > 0 {
+	if _, ok := entry.Data[define.StackOutFlagField]; ok && len(frames) > 0 {
 		fmt.Fprintf(b, `,"%s":[`, fieldKeyStack)
 		for i, frame := range frames {
 			if i == 0 {

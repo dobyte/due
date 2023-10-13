@@ -16,12 +16,12 @@ func GetLogger() Logger {
 	return globalLogger
 }
 
-// Print 打印日志，无堆栈信息
+// Print 打印日志，不含堆栈信息
 func Print(level Level, a ...interface{}) {
 	globalLogger.Print(level, a...)
 }
 
-// Printf 打印模板日志，无堆栈信息
+// Printf 打印模板日志，不含堆栈信息
 func Printf(level Level, format string, a ...interface{}) {
 	globalLogger.Printf(level, format, a...)
 }

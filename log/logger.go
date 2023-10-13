@@ -140,9 +140,14 @@ func (l *defaultLogger) buildEnabler(level Level) enabler {
 	}
 }
 
+// BuildEntity 构建日志实体
+func (l *defaultLogger) BuildEntity(level Level, isNeedStack bool, a ...interface{}) *Entity {
+	return l.entityPool.build(level, isNeedStack, a)
+}
+
 // 打印日志
-func (l *defaultLogger) print(level Level, stack bool, a ...interface{}) {
-	l.entityPool.build(level, stack, a...).Log()
+func (l *defaultLogger) print(level Level, isNeedStack bool, a ...interface{}) {
+	l.BuildEntity(level, isNeedStack, a...).Log()
 }
 
 // Print 打印日志

@@ -42,6 +42,11 @@ func Set(pattern string, value interface{}) error {
 	return globalConfigurator.Set(pattern, value)
 }
 
+// Match 匹配多个规则
+func Match(patterns ...string) configurator.Matcher {
+	return globalConfigurator.Match(patterns...)
+}
+
 // Close 关闭配置监听
 func Close() {
 	globalConfigurator.Close()

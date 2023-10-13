@@ -24,13 +24,13 @@ var (
 
 type Configurator interface {
 	// Has 检测多个匹配规则中是否存在配置
-	Has(patterns ...string) bool
+	Has(pattern string) bool
 	// Get 获取配置值
 	Get(pattern string, def ...interface{}) value.Value
-	// Gets 获取多个匹配规则中的配置值
-	Gets(patterns []string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
+	// Match 匹配多个规则
+	Match(patterns ...string) Matcher
 	// Watch 设置监听回调
 	Watch(cb WatchCallbackFunc)
 	// Load 加载配置项
@@ -256,14 +256,8 @@ func (c *defaultConfigurator) Close() {
 }
 
 // Has 检测多个匹配规则中是否存在配置
-func (c *defaultConfigurator) Has(patterns ...string) bool {
-	for _, pattern := range patterns {
-		if ok := c.doHas(pattern); ok {
-			return ok
-		}
-	}
-
-	return false
+func (c *defaultConfigurator) Has(pattern string) bool {
+	return c.doHas(pattern)
 }
 
 // 执行检测配置是否存在操作
@@ -315,15 +309,9 @@ func (c *defaultConfigurator) Get(pattern string, def ...interface{}) value.Valu
 	return value.NewValue(def...)
 }
 
-// Gets 获取多个匹配规则中的配置值
-func (c *defaultConfigurator) Gets(patterns []string, def ...interface{}) value.Value {
-	for _, pattern := range patterns {
-		if val, ok := c.doGet(pattern); ok {
-			return val
-		}
-	}
-
-	return value.NewValue(def...)
+// Match 匹配多个规则
+func (c *defaultConfigurator) Match(patterns ...string) Matcher {
+	return &defaultMatcher{c: c, patterns: patterns}
 }
 
 // 执行获取配置操作

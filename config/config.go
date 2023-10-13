@@ -10,9 +10,8 @@ import (
 
 var globalConfigurator configurator.Configurator
 
-// SetDefaultConfigurator 设置默认的文件配置器
 func SetDefaultConfigurator() {
-	SetConfigurator(configurator.NewConfigurator(configurator.WithSources(file.NewSource())))
+	SetConfigurator(NewConfigurator(file.NewSource()))
 }
 
 // SetConfigurator 设置配置器
@@ -28,14 +27,24 @@ func GetConfigurator() configurator.Configurator {
 	return globalConfigurator
 }
 
+// NewConfigurator 新建配置器
+func NewConfigurator(sources ...configurator.Source) configurator.Configurator {
+	return configurator.NewConfigurator(configurator.WithSources(sources...))
+}
+
+// SetSource 通过设置配置源来设置配置器
+func SetSource(sources ...configurator.Source) {
+	SetConfigurator(configurator.NewConfigurator(configurator.WithSources(sources...)))
+}
+
 // Has 检测多个匹配规则中是否存在配置
-func Has(patterns ...string) bool {
+func Has(pattern string) bool {
 	if globalConfigurator == nil {
 		log.Warn("the configurator component is not injected, and the has operation will be ignored.")
 		return false
 	}
 
-	return globalConfigurator.Has(patterns...)
+	return globalConfigurator.Has(pattern)
 }
 
 // Get 获取配置值
@@ -48,16 +57,6 @@ func Get(pattern string, def ...interface{}) value.Value {
 	return globalConfigurator.Get(pattern, def...)
 }
 
-// Gets 获取多个匹配规则中的配置值
-func Gets(patterns []string, def ...interface{}) value.Value {
-	if globalConfigurator == nil {
-		log.Warn("the configurator component is not injected, and the gets operation will be ignored.")
-		return value.NewValue()
-	}
-
-	return globalConfigurator.Gets(patterns, def...)
-}
-
 // Set 设置配置值
 func Set(pattern string, value interface{}) error {
 	if globalConfigurator == nil {
@@ -66,6 +65,16 @@ func Set(pattern string, value interface{}) error {
 	}
 
 	return globalConfigurator.Set(pattern, value)
+}
+
+// Match 匹配多个规则
+func Match(patterns ...string) configurator.Matcher {
+	if globalConfigurator == nil {
+		log.Warn("the configurator component is not injected, and the gets operation will be ignored.")
+		return configurator.NewEmptyMatcher()
+	}
+
+	return globalConfigurator.Match(patterns...)
 }
 
 // Watch 设置监听回调

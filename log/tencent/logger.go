@@ -76,21 +76,21 @@ func NewLogger(opts ...Option) *Logger {
 	}
 }
 
-func (l *Logger) log(level log.Level, a ...interface{}) {
+func (l *Logger) print(level log.Level, isNeedStack bool, a ...interface{}) {
 	if level < l.opts.level {
 		return
 	}
 
-	e := l.logger.(interface {
-		Entity(log.Level, ...interface{}) *log.Entity
-	}).Entity(level, a...)
+	entity := l.logger.(interface {
+		BuildEntity(log.Level, bool, ...interface{}) *log.Entity
+	}).BuildEntity(level, isNeedStack, a...)
 
 	if l.opts.syncout {
-		logData := cls.NewCLSLog(xtime.Now().Unix(), l.buildLogRaw(e))
+		logData := cls.NewCLSLog(xtime.Now().Unix(), l.buildLogRaw(entity))
 		_ = l.producer.SendLog(l.opts.topicID, logData, nil)
 	}
 
-	e.Log()
+	entity.Log()
 }
 
 func (l *Logger) buildLogRaw(e *log.Entity) map[string]string {
@@ -137,66 +137,76 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// Print 打印日志，不含堆栈信息
+func (l *Logger) Print(level log.Level, a ...interface{}) {
+	l.print(level, false, a...)
+}
+
+// Printf 打印模板日志，不含堆栈信息
+func (l *Logger) Printf(level log.Level, format string, a ...interface{}) {
+	l.print(level, false, fmt.Sprintf(format, a...))
+}
+
 // Debug 打印调试日志
 func (l *Logger) Debug(a ...interface{}) {
-	l.log(log.DebugLevel, a...)
+	l.print(log.DebugLevel, true, a...)
 }
 
 // Debugf 打印调试模板日志
 func (l *Logger) Debugf(format string, a ...interface{}) {
-	l.log(log.DebugLevel, fmt.Sprintf(format, a...))
+	l.print(log.DebugLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
 func (l *Logger) Info(a ...interface{}) {
-	l.log(log.InfoLevel, a...)
+	l.print(log.InfoLevel, true, a...)
 }
 
 // Infof 打印信息模板日志
 func (l *Logger) Infof(format string, a ...interface{}) {
-	l.log(log.InfoLevel, fmt.Sprintf(format, a...))
+	l.print(log.InfoLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
 func (l *Logger) Warn(a ...interface{}) {
-	l.log(log.WarnLevel, a...)
+	l.print(log.WarnLevel, true, a...)
 }
 
 // Warnf 打印警告模板日志
 func (l *Logger) Warnf(format string, a ...interface{}) {
-	l.log(log.WarnLevel, fmt.Sprintf(format, a...))
+	l.print(log.WarnLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
 func (l *Logger) Error(a ...interface{}) {
-	l.log(log.ErrorLevel, a...)
+	l.print(log.ErrorLevel, true, a...)
 }
 
 // Errorf 打印错误模板日志
 func (l *Logger) Errorf(format string, a ...interface{}) {
-	l.log(log.ErrorLevel, fmt.Sprintf(format, a...))
+	l.print(log.ErrorLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
 func (l *Logger) Fatal(a ...interface{}) {
-	l.log(log.FatalLevel, a...)
+	l.print(log.FatalLevel, true, a...)
 	l.Close()
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *Logger) Fatalf(format string, a ...interface{}) {
-	l.log(log.FatalLevel, fmt.Sprintf(format, a...))
+	l.print(log.FatalLevel, true, fmt.Sprintf(format, a...))
 	l.Close()
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
 func (l *Logger) Panic(a ...interface{}) {
-	l.log(log.PanicLevel, a...)
+	l.print(log.PanicLevel, true, a...)
 }
 
 // Panicf 打印Panic模板日志
 func (l *Logger) Panicf(format string, a ...interface{}) {
-	l.log(log.PanicLevel, fmt.Sprintf(format, a...))
+	l.print(log.PanicLevel, true, fmt.Sprintf(format, a...))
 }
