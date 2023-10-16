@@ -1,15 +1,14 @@
-package local
+package redis
 
 import (
 	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
-	"github.com/nats-io/nats.go"
 	"reflect"
 	"sync"
 )
 
 type consumer struct {
-	sub      *nats.Subscription
 	rw       sync.RWMutex
 	handlers map[uintptr]eventbus.EventHandler
 }
@@ -39,7 +38,13 @@ func (c *consumer) remHandler(handler eventbus.EventHandler) int {
 }
 
 // 分发数据
-func (c *consumer) dispatch(event *eventbus.Event) {
+func (c *consumer) dispatch(data []byte) {
+	event, err := deserialize(data)
+	if err != nil {
+		log.Error("invalid event data")
+		return
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 

@@ -2,16 +2,28 @@ package eventbus
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/encoding/json"
-	"github.com/dobyte/due/v2/internal/value"
+	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
+	"sync"
 	"time"
 )
 
 var globalEventbus Eventbus
+
+func init() {
+	SetEventbus(NewEventbus())
+}
+
+type EventHandler func(event *Event)
+
+type Event struct {
+	ID        string      // 事件ID
+	Topic     string      // 事件主题
+	Payload   value.Value // 事件载荷
+	Timestamp time.Time   // 事件时间
+}
 
 type Eventbus interface {
 	// Close 关闭事件总线
@@ -24,63 +36,97 @@ type Eventbus interface {
 	Unsubscribe(ctx context.Context, topic string, handler EventHandler) error
 }
 
-type EventHandler func(event *Event)
+type defaultEventbus struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 
-type Event struct {
-	ID        string      // 事件ID
-	Topic     string      // 事件主题
-	Payload   value.Value // 事件载荷
-	Timestamp time.Time   // 事件时间
+	rw        sync.RWMutex
+	consumers map[string]*consumer
 }
 
-type data struct {
-	ID        string `json:"id"`        // 事件ID
-	Topic     string `json:"topic"`     // 事件主题
-	Payload   string `json:"payload"`   // 事件载荷
-	Timestamp int64  `json:"timestamp"` // 事件时间
+func NewEventbus() *defaultEventbus {
+	eb := &defaultEventbus{}
+	eb.consumers = make(map[string]*consumer)
+
+	return eb
 }
 
-// PackData 打包数据
-func PackData(topic string, payload interface{}) ([]byte, error) {
+// Publish 发布事件
+func (eb *defaultEventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
+	eb.rw.RLock()
+	defer eb.rw.RUnlock()
+
+	c, ok := eb.consumers[topic]
+	if !ok {
+		return nil
+	}
+
 	id, err := xuuid.UUID()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return json.Marshal(&data{
+	c.dispatch(&Event{
 		ID:        id,
 		Topic:     topic,
-		Payload:   xconv.String(payload),
-		Timestamp: xtime.Now().UnixNano(),
+		Payload:   value.NewValue(payload),
+		Timestamp: xtime.UnixNano(xtime.Now().UnixNano()),
 	})
+
+	return nil
 }
 
-// UnpackData 解析
-func UnpackData(v []byte) (*Event, error) {
-	d := &data{}
+// Subscribe 订阅事件
+func (eb *defaultEventbus) Subscribe(ctx context.Context, topic string, handler EventHandler) error {
+	eb.rw.Lock()
+	defer eb.rw.Unlock()
 
-	err := json.Unmarshal(v, d)
-	if err != nil {
-		return nil, err
+	c, ok := eb.consumers[topic]
+	if !ok {
+		c = &consumer{handlers: make(map[uintptr]EventHandler)}
+		eb.consumers[topic] = c
 	}
 
-	return &Event{
-		ID:        d.ID,
-		Topic:     d.Topic,
-		Payload:   value.NewValue(d.Payload),
-		Timestamp: xtime.UnixNano(d.Timestamp),
-	}, nil
+	c.addHandler(handler)
+
+	return nil
+}
+
+// Unsubscribe 取消订阅
+func (eb *defaultEventbus) Unsubscribe(ctx context.Context, topic string, handler EventHandler) error {
+	eb.rw.Lock()
+	defer eb.rw.Unlock()
+
+	if c, ok := eb.consumers[topic]; ok {
+		if c.remHandler(handler) != 0 {
+			return nil
+		}
+
+		delete(eb.consumers, topic)
+	}
+
+	return nil
+}
+
+// Close 停止监听
+func (eb *defaultEventbus) Close() error {
+	return nil
 }
 
 // SetEventbus 设置事件总线
-func SetEventbus(eventbus Eventbus) {
+func SetEventbus(eb Eventbus) {
+	if eb == nil {
+		log.Warn("cannot set a nil eventbus")
+		return
+	}
+
 	if globalEventbus != nil {
 		if err := globalEventbus.Close(); err != nil {
 			log.Errorf("the old eventbus close failed: %v", err)
 		}
 	}
 
-	globalEventbus = eventbus
+	globalEventbus = eb
 }
 
 // GetEventbus 获取事件总线
@@ -90,39 +136,20 @@ func GetEventbus() Eventbus {
 
 // Publish 发布事件
 func Publish(ctx context.Context, topic string, message interface{}) error {
-	if globalEventbus == nil {
-		log.Warn("the eventbus component is not injected, and the publish operation will be ignored.")
-		return nil
-	}
-
 	return globalEventbus.Publish(ctx, topic, message)
 }
 
 // Subscribe 订阅事件
 func Subscribe(ctx context.Context, topic string, handler EventHandler) error {
-	if globalEventbus == nil {
-		log.Warn("the eventbus component is not injected, and the subscribe operation will be ignored.")
-		return nil
-	}
-
 	return globalEventbus.Subscribe(ctx, topic, handler)
 }
 
 // Unsubscribe 取消订阅
 func Unsubscribe(ctx context.Context, topic string, handler EventHandler) error {
-	if globalEventbus == nil {
-		log.Warn("the eventbus component is not injected, and the unsubscribe operation will be ignored.")
-		return nil
-	}
-
 	return globalEventbus.Unsubscribe(ctx, topic, handler)
 }
 
 // Close 关闭事件总线
 func Close() error {
-	if globalEventbus == nil {
-		return nil
-	}
-
 	return globalEventbus.Close()
 }

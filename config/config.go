@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/config/file"
-	"github.com/dobyte/due/v2/internal/value"
+	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/log"
 )
 

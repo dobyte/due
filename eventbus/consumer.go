@@ -1,8 +1,6 @@
-package nats
+package eventbus
 
 import (
-	"github.com/dobyte/due/v2/eventbus"
-	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/nats-io/nats.go"
 	"reflect"
@@ -12,11 +10,11 @@ import (
 type consumer struct {
 	sub      *nats.Subscription
 	rw       sync.RWMutex
-	handlers map[uintptr]eventbus.EventHandler
+	handlers map[uintptr]EventHandler
 }
 
 // 添加处理器
-func (c *consumer) addHandler(handler eventbus.EventHandler) int {
+func (c *consumer) addHandler(handler EventHandler) int {
 	pointer := reflect.ValueOf(handler).Pointer()
 
 	c.rw.Lock()
@@ -28,7 +26,7 @@ func (c *consumer) addHandler(handler eventbus.EventHandler) int {
 }
 
 // 移除处理器
-func (c *consumer) remHandler(handler eventbus.EventHandler) int {
+func (c *consumer) remHandler(handler EventHandler) int {
 	pointer := reflect.ValueOf(handler).Pointer()
 
 	c.rw.Lock()
@@ -40,13 +38,7 @@ func (c *consumer) remHandler(handler eventbus.EventHandler) int {
 }
 
 // 分发数据
-func (c *consumer) dispatch(data []byte) {
-	event, err := deserialize(data)
-	if err != nil {
-		log.Error("invalid event data")
-		return
-	}
-
+func (c *consumer) dispatch(event *Event) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 

@@ -42,7 +42,7 @@ func (c *consumer) remHandler(handler eventbus.EventHandler) int {
 
 // 分发数据
 func (c *consumer) dispatch(data []byte) {
-	event, err := eventbus.UnpackData(data)
+	event, err := deserialize(data)
 	if err != nil {
 		log.Error("invalid event data")
 		return

@@ -3,9 +3,9 @@ package etc
 import (
 	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/config/file/core"
+	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/env"
 	"github.com/dobyte/due/v2/flag"
-	"github.com/dobyte/due/v2/internal/value"
 )
 
 // etc主要被当做项目启动配置存在；常用于集群配置、服务组件配置等。

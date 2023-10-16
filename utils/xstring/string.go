@@ -5,16 +5,28 @@ import (
 	"unicode/utf8"
 )
 
-// FirstLetterIsUpper 首字母是否大写
-func FirstLetterIsUpper(s string) bool {
+// FirstCharacterIsUpper 首字符是否是大写
+func FirstCharacterIsUpper(s string) bool {
 	r, _ := utf8.DecodeRuneInString(s)
 	return r != utf8.RuneError && unicode.IsUpper(r)
 }
 
-// FirstLetterIsLower 首字母是否小写
-func FirstLetterIsLower(s string) bool {
+// FirstCharacterIsLower 首字符是否是小写
+func FirstCharacterIsLower(s string) bool {
 	r, _ := utf8.DecodeRuneInString(s)
 	return r != utf8.RuneError && unicode.IsLower(r)
+}
+
+// FirstCharacterIsNumber 首字符是否是数字
+func FirstCharacterIsNumber(s string) bool {
+	r, _ := utf8.DecodeRuneInString(s)
+	return r != utf8.RuneError && unicode.IsNumber(r)
+}
+
+// FirstCharacterIsSymbol 首字符是否是符号
+func FirstCharacterIsSymbol(s string) bool {
+	r, _ := utf8.DecodeRuneInString(s)
+	return r != utf8.RuneError && unicode.IsSymbol(r)
 }
 
 // Length 获取字符串长度

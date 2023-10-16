@@ -38,7 +38,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload interface
 		return eb.err
 	}
 
-	buf, err := eventbus.PackData(topic, payload)
+	buf, err := serialize(topic, payload)
 	if err != nil {
 		return err
 	}

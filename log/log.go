@@ -8,6 +8,10 @@ func init() {
 
 // SetLogger 设置日志记录器
 func SetLogger(logger Logger) {
+	if logger == nil {
+		return
+	}
+
 	globalLogger = logger
 }
 

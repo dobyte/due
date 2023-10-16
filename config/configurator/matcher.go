@@ -1,6 +1,8 @@
 package configurator
 
-import "github.com/dobyte/due/v2/internal/value"
+import (
+	"github.com/dobyte/due/v2/core/value"
+)
 
 type Matcher interface {
 	// Has 检测多个匹配规则中是否存在配置

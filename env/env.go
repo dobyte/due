@@ -1,7 +1,7 @@
 package env
 
 import (
-	"github.com/dobyte/due/v2/internal/value"
+	"github.com/dobyte/due/v2/core/value"
 	"os"
 )
 

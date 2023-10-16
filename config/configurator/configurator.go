@@ -2,8 +2,8 @@ package configurator
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/internal/value"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
