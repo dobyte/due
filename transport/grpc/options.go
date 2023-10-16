@@ -9,15 +9,33 @@ import (
 )
 
 const (
-	defaultServerAddr     = ":0" // 默认服务器地址
-	defaultClientPoolSize = 10   // 默认客户端连接池大小
+	defaultServerAddr                                          = ":0" // 默认服务器地址
+	defaultClientPoolSize                                      = 10   // 默认客户端连接池大小
+	defaultServerKeepAliveEnforcementPolicyMinTime             = 5    // If a client pings more than once every 5 seconds, terminate the connection
+	defaultServerKeepAliveEnforcementPolicyPermitWithoutStream = true // Allow pings even when there are no active streams
+	defaultServerKeepAliveMaxConnectionIdle                    = 15   // If a client is idle for 15 seconds, send a GOAWAY
+	defaultServerKeepAliveMaxConnectionAge                     = 30   // If any connection is alive for more than 30 seconds, send a GOAWAY
+	defaultServerKeepAliveMaxConnectionAgeGrace                = 5    // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
+	defaultServerKeepAliveTime                                 = 5    // Ping the client if it is idle for 5 seconds to ensure the connection is still active
+	defaultServerKeepAliveTimeout                              = 1    // Wait 1 second for the ping ack before assuming the connection is dead
+	defaultClientKeepAliveTime                                 = 10   // send pings every 10 seconds if there is no activity
+	defaultClientKeepAliveTimeout                              = 1    // wait 1 second for ping ack before considering the connection dead
+	defaultClientKeepAlivePermitWithoutStream                  = true // send pings even without active streams
 )
 
 const (
-	defaultServerAddrKey                         = "config.transport.grpc.server.addr"
-	defaultServerHostAddrKey                     = "config.transport.grpc.server.hostAddr"
-	defaultServerKeyFileKey                      = "config.transport.grpc.server.keyFile"
-	defaultServerCertFileKey                     = "config.transport.grpc.server.certFile"
+	defaultServerAddrKey                                          = "config.transport.grpc.server.addr"
+	defaultServerHostAddrKey                                      = "config.transport.grpc.server.hostAddr"
+	defaultServerKeyFileKey                                       = "config.transport.grpc.server.keyFile"
+	defaultServerCertFileKey                                      = "config.transport.grpc.server.certFile"
+	defaultServerKeepAliveEnforcementPolicyMinTimeKey             = "config.transport.grpc.server.keepAlive.minTime"
+	defaultServerKeepAliveEnforcementPolicyPermitWithoutStreamKey = "config.transport.grpc.server.keepAlive.permitWithoutStream"
+	defaultServerKeepAliveMaxConnectionIdleKey                    = "config.transport.grpc.server.keepAlive.MaxConnectionIdle"
+	defaultServerKeepAliveMaxConnectionAgeKey                     = "config.transport.grpc.server.keepAlive.MaxConnectionAge"
+	defaultServerKeepAliveMaxConnectionAgeGraceKey                = "config.transport.grpc.server.keepAlive.MaxConnectionAgeGrace"
+	defaultServerKeepAliveTimeKey                                 = "config.transport.grpc.server.keepAlive.Time"
+	defaultServerKeepAliveTimeoutKey                              = "config.transport.grpc.server.keepAlive.Timeout"
+
 	defaultClientPoolSizeKey                     = "config.transport.grpc.client.poolSize"
 	defaultClientCertFileKey                     = "config.transport.grpc.client.certFile"
 	defaultClientServerNameKey                   = "config.transport.grpc.client.serverName"
@@ -39,12 +57,20 @@ func defaultOptions() *options {
 	opts.server.HostAddr = config.Get(defaultServerHostAddrKey).String()
 	opts.server.KeyFile = config.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = config.Get(defaultServerCertFileKey).String()
+	opts.server.KeepAliveEnforcementPolicyMinTime = config.Get(defaultServerKeepAliveEnforcementPolicyMinTimeKey, defaultServerKeepAliveEnforcementPolicyMinTime).Int()
+	opts.server.KeepAliveEnforcementPolicyPermitWithoutStream = config.Get(defaultServerKeepAliveEnforcementPolicyPermitWithoutStreamKey, defaultServerKeepAliveEnforcementPolicyPermitWithoutStream).Bool()
+	opts.server.KeepAliveMaxConnectionIdle = config.Get(defaultServerKeepAliveMaxConnectionIdleKey, defaultServerKeepAliveMaxConnectionIdle).Int()
+	opts.server.KeepAliveMaxConnectionAge = config.Get(defaultServerKeepAliveMaxConnectionAgeKey, defaultServerKeepAliveMaxConnectionAge).Int()
+	opts.server.KeepAliveMaxConnectionAgeGrace = config.Get(defaultServerKeepAliveMaxConnectionAgeGraceKey, defaultServerKeepAliveMaxConnectionAgeGrace).Int()
+	opts.server.KeepAliveTime = config.Get(defaultServerKeepAliveTimeKey, defaultServerKeepAliveTime).Int()
+	opts.server.KeepAliveTimeout = config.Get(defaultServerKeepAliveTimeoutKey, defaultServerKeepAliveTimeout).Int()
+
 	opts.client.PoolSize = config.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
 	opts.client.CertFile = config.Get(defaultClientCertFileKey).String()
 	opts.client.ServerName = config.Get(defaultClientServerNameKey).String()
-	opts.client.KeepAliveTime = config.Get(defaultClientKeepAliveTimeKey).Int()
-	opts.client.KeepAliveTimeout = config.Get(defaultClientKeepAliveTimeoutKey).Int()
-	opts.client.KeepAlivePermitWithoutStream = config.Get(defaultClientKeepAlivePermitWithoutStreamKey).Bool()
+	opts.client.KeepAliveTime = config.Get(defaultClientKeepAliveTimeKey, defaultClientKeepAliveTime).Int()
+	opts.client.KeepAliveTimeout = config.Get(defaultClientKeepAliveTimeoutKey, defaultClientKeepAliveTimeout).Int()
+	opts.client.KeepAlivePermitWithoutStream = config.Get(defaultClientKeepAlivePermitWithoutStreamKey, defaultClientKeepAlivePermitWithoutStream).Bool()
 
 	return opts
 }

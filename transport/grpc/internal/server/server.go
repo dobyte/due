@@ -7,7 +7,9 @@ import (
 	xnet "github.com/symsimmy/due/internal/net"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"net"
+	"time"
 )
 
 const scheme = "grpc"
@@ -21,11 +23,18 @@ type Server struct {
 }
 
 type Options struct {
-	Addr       string
-	HostAddr   string
-	KeyFile    string
-	CertFile   string
-	ServerOpts []grpc.ServerOption
+	Addr                                          string
+	HostAddr                                      string
+	KeyFile                                       string
+	CertFile                                      string
+	KeepAliveEnforcementPolicyMinTime             int
+	KeepAliveEnforcementPolicyPermitWithoutStream bool
+	KeepAliveMaxConnectionIdle                    int
+	KeepAliveMaxConnectionAge                     int
+	KeepAliveMaxConnectionAgeGrace                int
+	KeepAliveTime                                 int
+	KeepAliveTimeout                              int
+	ServerOpts                                    []grpc.ServerOption
 }
 
 func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
@@ -42,7 +51,7 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 	}
 
 	isSecure := false
-	serverOpts := make([]grpc.ServerOption, 0, len(opts.ServerOpts)+1)
+	serverOpts := make([]grpc.ServerOption, 0, len(opts.ServerOpts)+3)
 	serverOpts = append(serverOpts, opts.ServerOpts...)
 	if opts.CertFile != "" && opts.KeyFile != "" {
 		cred, err := credentials.NewServerTLSFromFile(opts.CertFile, opts.KeyFile)
@@ -51,6 +60,23 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 		}
 		serverOpts = append(serverOpts, grpc.Creds(cred))
 		isSecure = true
+	}
+
+	if opts.KeepAliveTimeout > 0 && opts.KeepAliveTime > 0 {
+		serverOpts = append(serverOpts, grpc.KeepaliveEnforcementPolicy(
+			keepalive.EnforcementPolicy{
+				MinTime:             time.Duration(opts.KeepAliveEnforcementPolicyMinTime) * time.Second, // If a client pings more than once every opts.KeepAliveEnforcementPolicyMinTime seconds, terminate the connection
+				PermitWithoutStream: opts.KeepAliveEnforcementPolicyPermitWithoutStream,                  // Allow pings even when there are no active streams
+			}))
+
+		serverOpts = append(serverOpts, grpc.KeepaliveParams(
+			keepalive.ServerParameters{
+				MaxConnectionIdle:     time.Duration(opts.KeepAliveMaxConnectionIdle) * time.Second,     // If a client is idle for opts.KeepAliveMaxConnectionIdle seconds, send a GOAWAY
+				MaxConnectionAge:      time.Duration(opts.KeepAliveMaxConnectionAge) * time.Second,      // If any connection is alive for more than opts.KeepAliveMaxConnectionAge seconds, send a GOAWAY
+				MaxConnectionAgeGrace: time.Duration(opts.KeepAliveMaxConnectionAgeGrace) * time.Second, // Allow opts.KeepAliveMaxConnectionAgeGrace seconds for pending RPCs to complete before forcibly closing connections
+				Time:                  time.Duration(opts.KeepAliveTime) * time.Second,                  // Ping the client if it is idle for opts.KeepAliveTime seconds to ensure the connection is still active
+				Timeout:               time.Duration(opts.KeepAliveTimeout) * time.Second,               // Wait opts.KeepAliveTimeout second for the ping ack before assuming the connection is dead
+			}))
 	}
 
 	s := &Server{}

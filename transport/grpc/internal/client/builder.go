@@ -44,15 +44,6 @@ func NewBuilder(opts *Options) *Builder {
 		creds = insecure.NewCredentials()
 	}
 
-	var kacp keepalive.ClientParameters
-	if opts.KeepAliveTime > 0 && opts.KeepAliveTimeout > 0 {
-		kacp = keepalive.ClientParameters{
-			Time:                time.Duration(opts.KeepAliveTime) * time.Second,    // send pings every opts.KeepAliveTime seconds if there is no activity
-			Timeout:             time.Duration(opts.KeepAliveTimeout) * time.Second, // wait opts.KeepAliveTimeout second for ping ack before considering the connection dead
-			PermitWithoutStream: opts.KeepAlivePermitWithoutStream,                  // if true, send pings even without active streams
-		}
-	}
-
 	resolvers := make([]resolver.Builder, 0, 2)
 	resolvers = append(resolvers, direct.NewBuilder())
 	if opts.Discovery != nil {
@@ -62,7 +53,13 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+3)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(creds))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
+
 	if opts.KeepAliveTime > 0 && opts.KeepAliveTimeout > 0 {
+		kacp := keepalive.ClientParameters{
+			Time:                time.Duration(opts.KeepAliveTime) * time.Second,    // send pings every opts.KeepAliveTime seconds if there is no activity
+			Timeout:             time.Duration(opts.KeepAliveTimeout) * time.Second, // wait opts.KeepAliveTimeout second for ping ack before considering the connection dead
+			PermitWithoutStream: opts.KeepAlivePermitWithoutStream,                  // if true, send pings even without active streams
+		}
 		b.dialOpts = append(b.dialOpts, grpc.WithKeepaliveParams(kacp))
 	}
 
