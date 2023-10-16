@@ -14,13 +14,16 @@ const (
 )
 
 const (
-	defaultServerAddrKey       = "config.transport.grpc.server.addr"
-	defaultServerHostAddrKey   = "config.transport.grpc.server.hostAddr"
-	defaultServerKeyFileKey    = "config.transport.grpc.server.keyFile"
-	defaultServerCertFileKey   = "config.transport.grpc.server.certFile"
-	defaultClientPoolSizeKey   = "config.transport.grpc.client.poolSize"
-	defaultClientCertFileKey   = "config.transport.grpc.client.certFile"
-	defaultClientServerNameKey = "config.transport.grpc.client.serverName"
+	defaultServerAddrKey                         = "config.transport.grpc.server.addr"
+	defaultServerHostAddrKey                     = "config.transport.grpc.server.hostAddr"
+	defaultServerKeyFileKey                      = "config.transport.grpc.server.keyFile"
+	defaultServerCertFileKey                     = "config.transport.grpc.server.certFile"
+	defaultClientPoolSizeKey                     = "config.transport.grpc.client.poolSize"
+	defaultClientCertFileKey                     = "config.transport.grpc.client.certFile"
+	defaultClientServerNameKey                   = "config.transport.grpc.client.serverName"
+	defaultClientKeepAliveTimeKey                = "config.transport.grpc.client.keepAlive.time"
+	defaultClientKeepAliveTimeoutKey             = "config.transport.grpc.client.keepAlive.timeout"
+	defaultClientKeepAlivePermitWithoutStreamKey = "config.transport.grpc.client.keepAlive.permitWithoutStream"
 )
 
 type Option func(o *options)
@@ -39,6 +42,9 @@ func defaultOptions() *options {
 	opts.client.PoolSize = config.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
 	opts.client.CertFile = config.Get(defaultClientCertFileKey).String()
 	opts.client.ServerName = config.Get(defaultClientServerNameKey).String()
+	opts.client.KeepAliveTime = config.Get(defaultClientKeepAliveTimeKey).Int()
+	opts.client.KeepAliveTimeout = config.Get(defaultClientKeepAliveTimeoutKey).Int()
+	opts.client.KeepAlivePermitWithoutStream = config.Get(defaultClientKeepAlivePermitWithoutStreamKey).Bool()
 
 	return opts
 }
@@ -71,6 +77,13 @@ func WithClientCredentials(certFile string, serverName string) Option {
 // WithClientDiscovery 设置客户端服务发现组件
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
+}
+
+// WithClientKeepAliveParams 设置客户端keep alive参数
+func WithClientKeepAliveParams(time int, timeout int, permitWithoutStream bool) Option {
+	return func(o *options) {
+		o.client.KeepAliveTime, o.client.KeepAliveTimeout, o.client.KeepAlivePermitWithoutStream = time, timeout, permitWithoutStream
+	}
 }
 
 // WithClientDialOptions 设置客户端拨号选项

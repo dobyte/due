@@ -7,8 +7,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	"sync"
+	"time"
 )
 
 type Builder struct {
@@ -19,11 +21,14 @@ type Builder struct {
 }
 
 type Options struct {
-	PoolSize   int
-	CertFile   string
-	ServerName string
-	Discovery  registry.Discovery
-	DialOpts   []grpc.DialOption
+	PoolSize                     int
+	CertFile                     string
+	ServerName                   string
+	Discovery                    registry.Discovery
+	DialOpts                     []grpc.DialOption
+	KeepAliveTime                int
+	KeepAliveTimeout             int
+	KeepAlivePermitWithoutStream bool
 }
 
 func NewBuilder(opts *Options) *Builder {
@@ -39,15 +44,27 @@ func NewBuilder(opts *Options) *Builder {
 		creds = insecure.NewCredentials()
 	}
 
+	var kacp keepalive.ClientParameters
+	if opts.KeepAliveTime > 0 && opts.KeepAliveTimeout > 0 {
+		kacp = keepalive.ClientParameters{
+			Time:                time.Duration(opts.KeepAliveTime) * time.Second,    // send pings every opts.KeepAliveTime seconds if there is no activity
+			Timeout:             time.Duration(opts.KeepAliveTimeout) * time.Second, // wait opts.KeepAliveTimeout second for ping ack before considering the connection dead
+			PermitWithoutStream: opts.KeepAlivePermitWithoutStream,                  // if true, send pings even without active streams
+		}
+	}
+
 	resolvers := make([]resolver.Builder, 0, 2)
 	resolvers = append(resolvers, direct.NewBuilder())
 	if opts.Discovery != nil {
 		resolvers = append(resolvers, discovery.NewBuilder(opts.Discovery))
 	}
 
-	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+2)
+	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+3)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(creds))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
+	if opts.KeepAliveTime > 0 && opts.KeepAliveTimeout > 0 {
+		b.dialOpts = append(b.dialOpts, grpc.WithKeepaliveParams(kacp))
+	}
 
 	return b
 }
