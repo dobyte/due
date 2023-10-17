@@ -3,6 +3,7 @@ package rpcx
 import (
 	"github.com/dobyte/due/transport/rpcx/v2/gate"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
+	"github.com/dobyte/due/transport/rpcx/v2/internal/logger"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
 	"github.com/dobyte/due/transport/rpcx/v2/node"
 	"github.com/dobyte/due/v2/core/endpoint"
@@ -22,6 +23,8 @@ func NewTransporter(opts ...Option) *Transporter {
 	for _, opt := range opts {
 		opt(o)
 	}
+
+	logger.InitLogger()
 
 	return &Transporter{opts: o}
 }
