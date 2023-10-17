@@ -144,7 +144,11 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 // 处理接收到的消息
 func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
+	remoteAddr, _ := conn.RemoteAddr()
+	localAddr, _ := conn.LocalAddr()
 	cid, uid := conn.ID(), conn.UID()
+	log.Debugf("gate handle receive message.remoteAddr:%+v,localAddr%+v,cid:%+v,uid%+v,byte len:%+v,data:[%+v]",
+		remoteAddr, localAddr, cid, uid, len(data), data)
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
 	g.proxy.deliver(ctx, cid, uid, data)
 	cancel()
