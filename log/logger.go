@@ -152,7 +152,7 @@ func (l *defaultLogger) print(level Level, isNeedStack bool, a ...interface{}) {
 
 // Print 打印日志
 func (l *defaultLogger) Print(level Level, a ...interface{}) {
-	l.entityPool.build(level, false, a...).Log()
+	l.print(level, false, a...)
 }
 
 // Printf 打印模板日志

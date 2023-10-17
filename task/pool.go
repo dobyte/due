@@ -2,6 +2,7 @@ package task
 
 import (
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -64,13 +65,13 @@ func GetPool() Pool {
 // AddTask 添加任务
 func AddTask(task func()) {
 	if globalPool == nil {
-		go task()
+		go xcall.Call(task)
 		return
 	}
 
 	err := globalPool.AddTask(task)
 	if err != nil {
-		go task()
+		go xcall.Call(task)
 		log.Warnf("add task to the task pool failed: %v", err)
 		return
 	}
