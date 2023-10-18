@@ -10,6 +10,7 @@ type Context struct {
 	Proxy      *Proxy
 	Request    *Request
 	Middleware *Middleware
+	Handler    RouteHandler
 }
 
 // Context 获取上线文
@@ -69,4 +70,16 @@ func (c *Context) Disconnect(isForce ...bool) error {
 	}
 
 	return c.Proxy.Disconnect(c.ctx, args)
+}
+
+// Next 往下执行
+func (c *Context) Next() {
+	c.Middleware.index++
+	for c.Middleware.index < len(c.Middleware.middlewares) {
+		c.Middleware.middlewares[c.Middleware.index](c)
+		c.Middleware.index++
+	}
+	if c.Middleware.isFinished() {
+		c.Handler(c)
+	}
 }

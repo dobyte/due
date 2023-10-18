@@ -124,11 +124,9 @@ func (r *Router) handle(ctx *Context) {
 	if ok {
 		if len(route.middlewares) > 0 {
 			ctx.Middleware.reset(route.middlewares)
-			ctx.Middleware.Next(ctx)
+			ctx.Handler = route.handler
+			ctx.Next()
 
-			if ctx.Middleware.isFinished() {
-				route.handler(ctx)
-			}
 		} else {
 			route.handler(ctx)
 		}

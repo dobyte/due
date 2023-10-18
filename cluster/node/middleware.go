@@ -29,5 +29,5 @@ func (m *Middleware) Skip(ctx *Context, skip int) {
 
 // 是否完成中间件处理
 func (m *Middleware) isFinished() bool {
-	return m.index >= len(m.middlewares)
+	return m.index == len(m.middlewares)
 }
