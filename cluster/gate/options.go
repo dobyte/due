@@ -10,6 +10,7 @@ package gate
 import (
 	"context"
 	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/hook"
 	"github.com/symsimmy/due/locate"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/utils/xuuid"
@@ -41,6 +42,7 @@ type options struct {
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
+	receiveHook []hook.ReceiveHook    // 接受消息hook
 }
 
 func defaultOptions() *options {
@@ -105,4 +107,9 @@ func WithRegistry(r registry.Registry) Option {
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
+}
+
+// WithReceiveHook 设置Gate收到消息时的Hook函数
+func WithReceiveHook(receiveHook ...hook.ReceiveHook) Option {
+	return func(o *options) { o.receiveHook = append(o.receiveHook, receiveHook...) }
 }

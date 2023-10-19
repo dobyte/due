@@ -74,6 +74,12 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		return
 	}
 
+	if len(p.gate.opts.receiveHook) > 0 {
+		for _, f := range p.gate.opts.receiveHook {
+			f(ctx, cid, uid, message)
+		}
+	}
+
 	if err = p.link.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,
 		UID:     uid,
