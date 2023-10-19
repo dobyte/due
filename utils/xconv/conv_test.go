@@ -44,6 +44,37 @@ func TestDuration(t *testing.T) {
 }
 
 func TestStrings(t *testing.T) {
-	any := []int64{1, 2, 3, 4}
-	t.Log(xconv.Strings(any))
+	a := []int64{1, 2, 3, 4}
+	t.Log(xconv.Strings(a))
+}
+
+func TestJson(t *testing.T) {
+	t.Log(xconv.Json("{}"))
+	t.Log(xconv.Json(`{"id":1,"name":"fuxiao"}`))
+	t.Log(xconv.Json("[]"))
+	t.Log(xconv.Json(`[{"id":1,"name":"fuxiao"}]`))
+	t.Log(xconv.Json(map[string]interface{}{
+		"id":   1,
+		"name": "fuxiao",
+	}))
+	t.Log(xconv.Json([]map[string]interface{}{{
+		"id":   1,
+		"name": "fuxiao",
+	}}))
+	t.Log(xconv.Json(struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}{
+		ID:   1,
+		Name: "fuxiao",
+	}))
+	t.Log(xconv.Json([]struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}{
+		{
+			ID:   1,
+			Name: "fuxiao",
+		},
+	}))
 }

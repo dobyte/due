@@ -1,6 +1,7 @@
 package xrand_test
 
 import (
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xrand"
 	"testing"
 )
@@ -19,4 +20,22 @@ func Test_Int(t *testing.T) {
 
 func Test_Float32(t *testing.T) {
 	t.Log(xrand.Float32(-50, 5))
+}
+
+func TestLucky(t *testing.T) {
+	t.Log(xrand.Lucky(50.201222))
+	t.Log(xrand.Lucky(0.201222))
+	t.Log(xrand.Lucky(50))
+}
+
+func TestWeight(t *testing.T) {
+	i := xrand.Weight([]interface{}{
+		50,
+		20.3,
+		39.7,
+	}, func(v interface{}) float64 {
+		return xconv.Float64(v)
+	})
+
+	t.Log(i)
 }

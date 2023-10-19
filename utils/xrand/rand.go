@@ -3,7 +3,10 @@ package xrand
 import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
+	"math"
 	"math/rand"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -115,4 +118,64 @@ func Float64(min, max float64) float64 {
 	}
 
 	return min + rand.Float64()*(max-min)
+}
+
+// Lucky 根据概率抽取幸运值
+func Lucky(probability float64, base ...float64) bool {
+	b := float64(100)
+	if len(base) > 0 {
+		b = base[0]
+	}
+
+	if probability >= b {
+		return true
+	}
+
+	str := strconv.FormatFloat(probability, 'f', -1, 64)
+	scale := float64(0)
+
+	if i := strings.IndexByte(str, '.'); i > 0 {
+		scale = math.Pow10(len(str) - i - 1)
+	}
+
+	return Int64(1, int64(b*scale)) <= int64(probability*scale)
+}
+
+// Weight 权重随机
+func Weight(list []interface{}, fn func(v interface{}) float64) int {
+	if len(list) == 0 {
+		return -1
+	}
+
+	total := float64(0)
+	scale := float64(0)
+
+	for _, item := range list {
+		weight := fn(item)
+		str := strconv.FormatFloat(weight, 'f', -1, 64)
+
+		if i := strings.IndexByte(str, '.'); i > 0 {
+			scale = math.Max(scale, math.Pow10(len(str)-i-1))
+		}
+
+		total += weight
+	}
+
+	sum := int64(total * scale)
+
+	if sum == 0 {
+		return Int(1, len(list))
+	}
+
+	weight := Int64(1, sum)
+	acc := int64(0)
+
+	for i, item := range list {
+		acc += int64(fn(item) * scale)
+		if weight <= acc {
+			return i
+		}
+	}
+
+	return Int(1, len(list))
 }
