@@ -28,7 +28,7 @@ func newRouter(node *Node) *Router {
 	return &Router{
 		node:    node,
 		routes:  make(map[int32]*routeEntity),
-		ctxChan: make(chan *Context, 4096),
+		ctxChan: make(chan *Context, 40960),
 		ctxPool: sync.Pool{New: func() interface{} {
 			return &Context{
 				ctx:        context.Background(),
@@ -105,6 +105,10 @@ func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data
 }
 
 func (r *Router) receive() <-chan *Context {
+	chanLen := len(r.ctxChan)
+	if chanLen > 0 {
+		log.Debugf("router ctxChan exists count:%+v", len(r.ctxChan))
+	}
 	return r.ctxChan
 }
 
