@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"bufio"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,7 @@ type clientConn struct {
 	client  *client       // 客户端
 	chWrite chan chWrite  // 写入队列
 	done    chan struct{} // 写入完成信号
+	reader  *bufio.Reader // 读取缓冲区
 }
 
 var _ network.Conn = &clientConn{}
@@ -216,8 +218,9 @@ func (c *clientConn) cleanup() {
 
 // 读取消息
 func (c *clientConn) read() {
+	c.reader = bufio.NewReader(c.conn)
 	for {
-		msg, err := readMsgFromConn(c.conn, c.client.opts.maxMsgLen)
+		msg, err := readMsgFromConn(c.reader, c.client.opts.maxMsgLen)
 		if err != nil {
 			if err == errMsgSizeTooLarge {
 				log.Warnf("the msg size too large, has been ignored")
