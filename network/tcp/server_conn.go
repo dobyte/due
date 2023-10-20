@@ -30,6 +30,7 @@ type serverConn struct {
 	chWrite           chan chWrite   // 写入队列
 	lastHeartbeatTime int64          // 上次心跳时间
 	done              chan struct{}  // 写入完成信号
+	reader            *bufio.Reader  // 读取缓冲区
 }
 
 var _ network.Conn = &serverConn{}
@@ -174,9 +175,9 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 
 // 读取消息
 func (c *serverConn) read() {
-	reader := bufio.NewReader(c.conn)
+	c.reader = bufio.NewReader(c.conn)
 	for {
-		msg, err := readMsgFromConn(reader, c.connMgr.server.opts.maxMsgLen)
+		msg, err := readMsgFromConn(c.reader, c.connMgr.server.opts.maxMsgLen)
 		if err != nil {
 			if err == errMsgSizeTooLarge {
 				log.Warnf("the msg size too large, has been ignored")
