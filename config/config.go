@@ -78,13 +78,13 @@ func Match(patterns ...string) configurator.Matcher {
 }
 
 // Watch 设置监听回调
-func Watch(cb configurator.WatchCallbackFunc) {
+func Watch(cb configurator.WatchCallbackFunc, names ...string) {
 	if globalConfigurator == nil {
 		log.Warn("the configurator component is not injected, and the watch operation will be ignored.")
 		return
 	}
 
-	globalConfigurator.Watch(cb)
+	globalConfigurator.Watch(cb, names...)
 }
 
 // Load 加载配置项
@@ -98,13 +98,13 @@ func Load(ctx context.Context, source string, file ...string) ([]*configurator.C
 }
 
 // Store 保存配置项
-func Store(ctx context.Context, source string, name string, content interface{}) error {
+func Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error {
 	if globalConfigurator == nil {
 		log.Warn("the configurator component is not injected, and the store operation will be ignored.")
 		return nil
 	}
 
-	return globalConfigurator.Store(ctx, source, name, content)
+	return globalConfigurator.Store(ctx, source, file, content, override...)
 }
 
 // Close 关闭配置监听

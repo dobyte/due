@@ -21,6 +21,7 @@ func TestWatch(t *testing.T) {
 		select {
 		case <-ticker1.C:
 			t.Log(config.Get("config.timezone").String())
+			t.Log(config.Get("config.pid").String())
 		case <-ticker2:
 			config.Close()
 			return
@@ -45,11 +46,23 @@ func TestLoad(t *testing.T) {
 func TestStore(t *testing.T) {
 	ctx := context.Background()
 	file := "config.json"
-	content := map[string]interface{}{
+	content1 := map[string]interface{}{
 		"timezone": "Local",
 	}
 
-	err := config.Store(ctx, etcd.Name, file, content)
+	content2 := map[string]interface{}{
+		"timezone": "UTC",
+		"pid":      "./run/gate.pid",
+	}
+
+	err := config.Store(ctx, etcd.Name, file, content1, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(5 * time.Second)
+
+	err = config.Store(ctx, etcd.Name, file, content2)
 	if err != nil {
 		t.Fatal(err)
 	}
