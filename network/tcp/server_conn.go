@@ -8,6 +8,7 @@
 package tcp
 
 import (
+	"bufio"
 	"github.com/symsimmy/due/utils/xnet"
 	"github.com/symsimmy/due/utils/xtime"
 	"net"
@@ -175,6 +176,9 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 func (c *serverConn) read() {
 	for {
 		msg, err := readMsgFromConn(c.conn, c.connMgr.server.opts.maxMsgLen)
+		bufConn := bufio.NewReader(c.conn)
+		n := bufConn.Buffered()
+		log.Debugf("read buffer size:%+v", n)
 		if err != nil {
 			if err == errMsgSizeTooLarge {
 				log.Warnf("the msg size too large, has been ignored")
