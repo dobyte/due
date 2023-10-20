@@ -174,11 +174,9 @@ func (c *serverConn) init(conn net.Conn, cm *serverConnMgr) {
 
 // 读取消息
 func (c *serverConn) read() {
+	reader := bufio.NewReader(c.conn)
 	for {
-		msg, err := readMsgFromConn(c.conn, c.connMgr.server.opts.maxMsgLen)
-		bufConn := bufio.NewReader(c.conn)
-		n := bufConn.Buffered()
-		log.Debugf("read buffer size:%+v", n)
+		msg, err := readMsgFromConn(reader, c.connMgr.server.opts.maxMsgLen)
 		if err != nil {
 			if err == errMsgSizeTooLarge {
 				log.Warnf("the msg size too large, has been ignored")

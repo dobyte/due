@@ -8,11 +8,11 @@
 package tcp
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
-	"net"
 )
 
 const (
@@ -64,9 +64,9 @@ func unpack(packet []byte) (msg []byte, err error) {
 }
 
 // 读取连接数据
-func readMsgFromConn(conn net.Conn, maxMsgLength int) (msg []byte, err error) {
+func readMsgFromConn(reader *bufio.Reader, maxMsgLength int) (msg []byte, err error) {
 	packet := make([]byte, msgLenBytes)
-	if _, err = io.ReadFull(conn, packet); err != nil {
+	if _, err = io.ReadFull(reader, packet); err != nil {
 		return
 	}
 
@@ -81,7 +81,7 @@ func readMsgFromConn(conn net.Conn, maxMsgLength int) (msg []byte, err error) {
 
 	if msgLen > 0 {
 		msg = make([]byte, msgLen)
-		if _, err = io.ReadFull(conn, msg); err != nil {
+		if _, err = io.ReadFull(reader, msg); err != nil {
 			return
 		}
 
