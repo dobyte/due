@@ -53,6 +53,7 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+3)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(creds))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
+	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
 
 	if opts.KeepAliveTime > 0 && opts.KeepAliveTimeout > 0 {
 		kacp := keepalive.ClientParameters{
