@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xfile"
 	"io"
@@ -68,7 +67,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 // Store 保存配置项
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.mode != config.WriteOnly && s.mode != config.ReadWrite {
-		return configurator.ErrNoOperationPermission
+		return errors.ErrNoOperationPermission
 	}
 
 	info, err := os.Stat(s.path)
