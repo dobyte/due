@@ -2,7 +2,7 @@ package etcd
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/client/v3"
 	"path/filepath"
@@ -17,7 +17,7 @@ type watcher struct {
 	chWatch clientv3.WatchChan
 }
 
-func newWatcher(ctx context.Context, source *Source) (configurator.Watcher, error) {
+func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
 	w.source = source
@@ -28,7 +28,7 @@ func newWatcher(ctx context.Context, source *Source) (configurator.Watcher, erro
 }
 
 // Next 返回服务实例列表
-func (w *watcher) Next() ([]*configurator.Configuration, error) {
+func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
 		return nil, w.ctx.Err()
@@ -43,7 +43,7 @@ func (w *watcher) Next() ([]*configurator.Configuration, error) {
 			return nil, res.Err()
 		}
 
-		configs := make([]*configurator.Configuration, 0, len(res.Events))
+		configs := make([]*config.Configuration, 0, len(res.Events))
 		for _, ev := range res.Events {
 			switch ev.Type {
 			case mvccpb.PUT:
@@ -51,7 +51,7 @@ func (w *watcher) Next() ([]*configurator.Configuration, error) {
 				path := strings.TrimPrefix(fullPath, w.source.opts.path)
 				file := filepath.Base(fullPath)
 				ext := filepath.Ext(file)
-				configs = append(configs, &configurator.Configuration{
+				configs = append(configs, &config.Configuration{
 					Path:     path,
 					File:     file,
 					Name:     strings.TrimSuffix(file, ext),

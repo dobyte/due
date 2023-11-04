@@ -19,7 +19,7 @@
     [config.file]
         # 配置文件或配置目录路径
         path = "./config"
-        # 读写模式。可选：read-only | read-write，默认为read-only
+        # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-write"
 ```
 

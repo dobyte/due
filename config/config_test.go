@@ -4,13 +4,12 @@ import (
 	"context"
 	"github.com/dobyte/due/config/etcd/v2"
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/configurator"
 	"testing"
 	"time"
 )
 
 func init() {
-	config.SetConfigurator(configurator.NewConfigurator(configurator.WithSources(etcd.NewSource(etcd.WithMode("read-write")))))
+	config.SetConfigurator(config.NewConfigurator(config.WithSources(etcd.NewSource(etcd.WithMode("read-write")))))
 }
 
 func TestWatch(t *testing.T) {

@@ -1,4 +1,4 @@
-package configurator
+package config
 
 import (
 	"github.com/dobyte/due/v2/core/value"
@@ -18,7 +18,7 @@ type defaultMatcher struct {
 	patterns []string
 }
 
-func NewEmptyMatcher() Matcher {
+func newEmptyMatcher() Matcher {
 	return &defaultMatcher{}
 }
 

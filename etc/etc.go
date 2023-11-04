@@ -1,7 +1,7 @@
 package etc
 
 import (
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/config/file/core"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/env"
@@ -19,12 +19,12 @@ const (
 	defaultEtcPath = "./etc"
 )
 
-var globalConfigurator configurator.Configurator
+var globalConfigurator config.Configurator
 
 func init() {
 	path := flag.String(dueEtcArgName, defaultEtcPath)
 	path = env.Get(dueEtcEnvName, path).String()
-	globalConfigurator = configurator.NewConfigurator(configurator.WithSources(core.NewSource(path, "read-write")))
+	globalConfigurator = config.NewConfigurator(config.WithSources(core.NewSource(path, config.ReadOnly)))
 }
 
 // Has 是否存在配置
@@ -43,7 +43,7 @@ func Set(pattern string, value interface{}) error {
 }
 
 // Match 匹配多个规则
-func Match(patterns ...string) configurator.Matcher {
+func Match(patterns ...string) config.Matcher {
 	return globalConfigurator.Match(patterns...)
 }
 

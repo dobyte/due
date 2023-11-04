@@ -1,4 +1,4 @@
-package configurator
+package config
 
 import (
 	"context"
@@ -16,13 +16,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-)
-
-var (
-	ErrInvalidDecoder        = errors.New("invalid decoder")
-	ErrNoOperationPermission = errors.New("no operation permission")
-	ErrInvalidConfigContent  = errors.New("invalid config content")
-	ErrNotFoundConfigSource  = errors.New("not found config source")
 )
 
 type Configurator interface {
@@ -44,59 +37,11 @@ type Configurator interface {
 	Close()
 }
 
-type Source interface {
-	// Name 配置源名称
-	Name() string
-	// Load 加载配置项
-	Load(ctx context.Context, file ...string) ([]*Configuration, error)
-	// Store 保存配置项
-	Store(ctx context.Context, file string, content []byte) error
-	// Watch 监听配置项
-	Watch(ctx context.Context) (Watcher, error)
-}
-
-type Watcher interface {
-	// Next 返回服务实例列表
-	Next() ([]*Configuration, error)
-	// Stop 停止监听
-	Stop() error
-}
+type WatchCallbackFunc func(names ...string)
 
 type watcher struct {
 	names    map[string]struct{}
 	callback WatchCallbackFunc
-}
-
-type WatchCallbackFunc func(names ...string)
-
-// Configuration 配置项
-type Configuration struct {
-	decoder  Decoder // 解码器
-	scanner  Scanner // 扫描器
-	Path     string  // 文件路径
-	File     string  // 文件全称
-	Name     string  // 文件名称
-	Format   string  // 文件格式
-	Content  []byte  // 文件内容
-	FullPath string  // 文件全路径
-}
-
-// Decode 解码
-func (c *Configuration) Decode() (interface{}, error) {
-	if c.decoder == nil {
-		return nil, ErrInvalidDecoder
-	}
-
-	return c.decoder(c.Format, c.Content)
-}
-
-// Scan 扫描
-func (c *Configuration) Scan(dest interface{}) error {
-	if c.scanner == nil {
-		return ErrInvalidDecoder
-	}
-
-	return c.scanner(c.Format, c.Content, dest)
 }
 
 type defaultConfigurator struct {
@@ -193,14 +138,14 @@ func (c *defaultConfigurator) copy() (map[string]interface{}, error) {
 // 监听配置源变化
 func (c *defaultConfigurator) watch() {
 	for _, s := range c.opts.sources {
-		watcher, err := s.Watch(c.ctx)
+		w, err := s.Watch(c.ctx)
 		if err != nil {
 			log.Printf("watching configure change failed: %v", err)
 			continue
 		}
 
 		go func() {
-			defer watcher.Stop()
+			defer w.Stop()
 
 			for {
 				select {
@@ -209,7 +154,7 @@ func (c *defaultConfigurator) watch() {
 				default:
 					// exec watch
 				}
-				cs, err := watcher.Next()
+				cs, err := w.Next()
 				if err != nil {
 					continue
 				}
@@ -280,6 +225,10 @@ func (c *defaultConfigurator) notify(names ...string) {
 // Close 关闭配置监听
 func (c *defaultConfigurator) Close() {
 	c.cancel()
+
+	for _, source := range c.sources {
+		_ = source.Close()
+	}
 }
 
 // Has 检测多个匹配规则中是否存在配置
@@ -513,7 +462,7 @@ func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
 	s, ok := c.sources[source]
 	if !ok {
-		return nil, ErrNotFoundConfigSource
+		return nil, errors.ErrNotFoundConfigSource
 	}
 
 	configs, err := s.Load(ctx, file...)
@@ -531,12 +480,12 @@ func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...s
 // Store 保存配置项
 func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error {
 	if content == nil {
-		return ErrInvalidConfigContent
+		return errors.ErrInvalidConfigContent
 	}
 
 	s, ok := c.sources[source]
 	if !ok {
-		return ErrNotFoundConfigSource
+		return errors.ErrNotFoundConfigSource
 	}
 
 	var (

@@ -1,7 +1,7 @@
 package file
 
 import (
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/config/file/core"
 	"github.com/dobyte/due/v2/log"
 )
@@ -12,7 +12,7 @@ type Source struct {
 	opts *options
 }
 
-func NewSource(opts ...Option) configurator.Source {
+func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)

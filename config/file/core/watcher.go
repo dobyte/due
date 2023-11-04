@@ -2,7 +2,7 @@ package core
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"github.com/fsnotify/fsnotify"
 	"io/fs"
 	"os"
@@ -17,7 +17,7 @@ type watcher struct {
 	watcher *fsnotify.Watcher
 }
 
-func newWatcher(ctx context.Context, source *Source) (configurator.Watcher, error) {
+func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
 	info, err := os.Stat(source.path)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func newWatcher(ctx context.Context, source *Source) (configurator.Watcher, erro
 }
 
 // Next 返回服务实例列表
-func (w *watcher) Next() ([]*configurator.Configuration, error) {
+func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case event, ok := <-w.watcher.Events:
 		if !ok {
@@ -67,7 +67,7 @@ func (w *watcher) Next() ([]*configurator.Configuration, error) {
 			if err != nil {
 				return nil, err
 			}
-			return []*configurator.Configuration{c}, nil
+			return []*config.Configuration{c}, nil
 		}
 	case err := <-w.watcher.Errors:
 		return nil, err

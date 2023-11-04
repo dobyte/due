@@ -3,6 +3,7 @@ package due
 import (
 	"fmt"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/log"
@@ -66,6 +67,8 @@ func (c *Container) Serve() {
 	}
 
 	task.Release()
+
+	config.Close()
 
 	etc.Close()
 }

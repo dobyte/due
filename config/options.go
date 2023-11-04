@@ -1,4 +1,4 @@
-package configurator
+package config
 
 import (
 	"context"

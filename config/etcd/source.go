@@ -3,7 +3,8 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"go.etcd.io/etcd/client/v3"
 	"path/filepath"
@@ -18,7 +19,7 @@ type Source struct {
 	builtin bool
 }
 
-func NewSource(opts ...Option) *Source {
+func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
@@ -45,7 +46,7 @@ func (s *Source) Name() string {
 }
 
 // Load 加载配置项
-func (s *Source) Load(ctx context.Context, file ...string) ([]*configurator.Configuration, error) {
+func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -66,13 +67,13 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*configurator.Conf
 		return nil, err
 	}
 
-	configs := make([]*configurator.Configuration, 0, len(res.Kvs))
+	configs := make([]*config.Configuration, 0, len(res.Kvs))
 	for _, kv := range res.Kvs {
 		fullPath := string(kv.Key)
 		path := strings.TrimPrefix(fullPath, s.opts.path)
 		file := filepath.Base(fullPath)
 		ext := filepath.Ext(file)
-		configs = append(configs, &configurator.Configuration{
+		configs = append(configs, &config.Configuration{
 			Path:     path,
 			File:     file,
 			Name:     strings.TrimSuffix(file, ext),
@@ -92,7 +93,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	}
 
 	if s.opts.mode != "read-write" {
-		return configurator.ErrNoOperationPermission
+		return errors.ErrNoOperationPermission
 	}
 
 	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
@@ -101,7 +102,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 }
 
 // Watch 监听配置项
-func (s *Source) Watch(ctx context.Context) (configurator.Watcher, error) {
+func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xfile"
@@ -16,12 +17,12 @@ const Name = "file"
 
 type Source struct {
 	path string
-	mode string
+	mode config.Mode
 }
 
-var _ configurator.Source = &Source{}
+var _ config.Source = &Source{}
 
-func NewSource(path, mode string) *Source {
+func NewSource(path string, mode config.Mode) *Source {
 	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode}
 }
 
@@ -31,7 +32,7 @@ func (s *Source) Name() string {
 }
 
 // Load 加载配置
-func (s *Source) Load(ctx context.Context, file ...string) ([]*configurator.Configuration, error) {
+func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	path := s.path
 
 	if len(file) > 0 && file[0] != "" {
@@ -61,12 +62,12 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*configurator.Conf
 		return nil, err
 	}
 
-	return []*configurator.Configuration{c}, nil
+	return []*config.Configuration{c}, nil
 }
 
 // Store 保存配置项
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
-	if s.mode != "read-write" {
+	if s.mode != config.WriteOnly && s.mode != config.ReadWrite {
 		return configurator.ErrNoOperationPermission
 	}
 
@@ -83,12 +84,16 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 }
 
 // Watch 监听配置变化
-func (s *Source) Watch(ctx context.Context) (configurator.Watcher, error) {
+func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return newWatcher(ctx, s)
 }
 
+func (s *Source) Close() error {
+	return nil
+}
+
 // 加载文件配置
-func (s *Source) loadFile(path string) (*configurator.Configuration, error) {
+func (s *Source) loadFile(path string) (*config.Configuration, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -111,7 +116,7 @@ func (s *Source) loadFile(path string) (*configurator.Configuration, error) {
 	path = strings.TrimPrefix(path1, path2)
 	fullPath := s.path + path
 
-	return &configurator.Configuration{
+	return &config.Configuration{
 		Path:     path,
 		File:     info.Name(),
 		Name:     strings.TrimSuffix(info.Name(), ext),
@@ -122,7 +127,7 @@ func (s *Source) loadFile(path string) (*configurator.Configuration, error) {
 }
 
 // 加载目录配置
-func (s *Source) loadDir(path string) (cs []*configurator.Configuration, err error) {
+func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
 	err = filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

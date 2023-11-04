@@ -8,6 +8,7 @@
 package etcd
 
 import (
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"go.etcd.io/etcd/client/v3"
 	"time"
@@ -17,7 +18,7 @@ const (
 	defaultAddr        = "127.0.0.1:2379"
 	defaultDialTimeout = 5
 	defaultPath        = "/config"
-	defaultMode        = "read-only"
+	defaultMode        = config.ReadOnly
 )
 
 const (
@@ -47,8 +48,8 @@ type options struct {
 	path string
 
 	// 读写模式
-	// 支持read-only和read-write两种模式，默认为read-only模式
-	mode string
+	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	mode config.Mode
 }
 
 func defaultOptions() *options {
@@ -56,7 +57,7 @@ func defaultOptions() *options {
 		addrs:       etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		dialTimeout: etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
 		path:        etc.Get(defaultPathKey, defaultPath).String(),
-		mode:        etc.Get(defaultModeKey, defaultMode).String(),
+		mode:        config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
 	}
 }
 
@@ -81,6 +82,6 @@ func WithPath(path string) Option {
 }
 
 // WithMode 设置读写模式
-func WithMode(mode string) Option {
+func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }
