@@ -24,7 +24,7 @@ type Source interface {
 }
 
 type Watcher interface {
-	// Next 返回服务实例列表
+	// Next 返回配置列表
 	Next() ([]*Configuration, error)
 	// Stop 停止监听
 	Stop() error

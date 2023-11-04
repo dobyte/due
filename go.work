@@ -15,6 +15,7 @@ use (
 	./network/ws
 	./network/websocket
 	./network/netpoll
+	./config/consul
 	./config/etcd
 	./locate/redis
 	./log/zap

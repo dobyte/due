@@ -1,17 +1,14 @@
-package etcd
+package consul
 
 import (
 	"context"
-	"fmt"
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xconv"
-	"go.etcd.io/etcd/client/v3"
+	"github.com/hashicorp/consul/api"
 	"path/filepath"
 	"strings"
 )
 
-const Name = "etcd"
+const Name = "consul"
 
 type Source struct {
 	err     error
@@ -27,14 +24,16 @@ func NewSource(opts ...Option) config.Source {
 
 	s := &Source{}
 	s.opts = o
-	s.opts.path = fmt.Sprintf("/%s", strings.TrimSuffix(strings.TrimPrefix(s.opts.path, "/"), "/"))
+	s.opts.path = strings.TrimSuffix(strings.TrimPrefix(s.opts.path, "/"), "/")
 
 	if o.client == nil {
+		c := api.DefaultConfig()
+		if o.addr != "" {
+			c.Address = o.addr
+		}
+
 		s.builtin = true
-		o.client, s.err = clientv3.New(clientv3.Config{
-			Endpoints:   o.addrs,
-			DialTimeout: o.dialTimeout,
-		})
+		s.opts.client, s.err = api.NewClient(c)
 	}
 
 	return s
@@ -47,29 +46,28 @@ func (s *Source) Name() string {
 
 // Load 加载配置项
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
-	if s.err != nil {
-		return nil, s.err
+	var prefix string
+
+	if s.opts.path != "" {
+		if len(file) > 0 && file[0] != "" {
+			prefix = s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
+		} else {
+			prefix = s.opts.path + "/"
+		}
 	}
 
-	var (
-		key  = s.opts.path
-		opts []clientv3.OpOption
-	)
-
-	if len(file) > 0 && file[0] != "" {
-		key += "/" + strings.TrimPrefix(file[0], "/")
-	} else {
-		opts = append(opts, clientv3.WithPrefix())
-	}
-
-	res, err := s.opts.client.Get(ctx, key, opts...)
+	kvs, _, err := s.opts.client.KV().List(prefix, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	configs := make([]*config.Configuration, 0, len(res.Kvs))
-	for _, kv := range res.Kvs {
-		fullPath := string(kv.Key)
+	if len(kvs) == 0 {
+		return nil, nil
+	}
+
+	configs := make([]*config.Configuration, 0, len(kvs))
+	for _, kv := range kvs {
+		fullPath := kv.Key
 		path := strings.TrimPrefix(fullPath, s.opts.path)
 		file := filepath.Base(fullPath)
 		ext := filepath.Ext(file)
@@ -88,37 +86,28 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 // Store 保存配置项
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
-	if s.err != nil {
-		return s.err
+	var key string
+
+	if s.opts.path != "" {
+		key = s.opts.path + "/" + strings.TrimPrefix(file, "/")
+	} else {
+		key = strings.TrimPrefix(file, "/")
 	}
 
-	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
-		return errors.ErrNoOperationPermission
-	}
+	_, err := s.opts.client.KV().Put(&api.KVPair{
+		Key:   key,
+		Value: content,
+	}, nil)
 
-	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
-	_, err := s.opts.client.Put(ctx, key, xconv.String(content))
 	return err
 }
 
 // Watch 监听配置项
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-
-	return newWatcher(ctx, s)
+	return newWatcher()
 }
 
-// Close 关闭资源
+// Close 关闭配置源
 func (s *Source) Close() error {
-	if s.err != nil {
-		return s.err
-	}
-
-	if s.builtin {
-		return s.opts.client.Close()
-	}
-
 	return nil
 }

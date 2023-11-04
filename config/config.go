@@ -82,10 +82,10 @@ func Load(ctx context.Context, source string, file ...string) ([]*Configuration,
 // Store 保存配置项
 func Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error {
 	if globalConfigurator == nil {
-		return globalConfigurator.Store(ctx, source, file, content, override...)
+		return nil
 	}
 
-	return nil
+	return globalConfigurator.Store(ctx, source, file, content, override...)
 }
 
 // Close 关闭配置监听

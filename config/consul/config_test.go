@@ -1,12 +1,17 @@
-package config_test
+package consul_test
 
 import (
 	"context"
-	"github.com/dobyte/due/config/etcd/v2"
+	"github.com/dobyte/due/config/consul/v2"
 	"github.com/dobyte/due/v2/config"
 	"testing"
 	"time"
 )
+
+func init() {
+	source := consul.NewSource(consul.WithMode(config.ReadWrite))
+	config.SetConfigurator(config.NewConfigurator(config.WithSources(source)))
+}
 
 func TestWatch(t *testing.T) {
 	ticker1 := time.NewTicker(2 * time.Second)
@@ -27,7 +32,7 @@ func TestWatch(t *testing.T) {
 func TestLoad(t *testing.T) {
 	ctx := context.Background()
 	file := "config.json"
-	c, err := config.Load(ctx, etcd.Name, file)
+	c, err := config.Load(ctx, consul.Name, file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,14 +55,14 @@ func TestStore(t *testing.T) {
 		"pid":      "./run/gate.pid",
 	}
 
-	err := config.Store(ctx, etcd.Name, file, content1, true)
+	err := config.Store(ctx, consul.Name, file, content1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(5 * time.Second)
 
-	err = config.Store(ctx, etcd.Name, file, content2)
+	err = config.Store(ctx, consul.Name, file, content2)
 	if err != nil {
 		t.Fatal(err)
 	}
