@@ -30,6 +30,14 @@ timezone = "Local"
         path = "/config"
         # 读写模式。可选：read-only | read-write，默认为read-only
         mode = "read-only"
+    # consul配置中心
+    [config.consul]
+        # 客户端连接地址
+        addr = "127.0.0.1:8500"
+        # 路径。默认为/config
+        path = "/config"
+        # 读写模式。可选：read-only | read-write，默认为read-only
+        mode = "read-only"
 
 [cluster]
     # 集群网关配置

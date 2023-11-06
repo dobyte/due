@@ -1,15 +1,15 @@
-package config_test
+package etcd_test
 
 import (
 	"context"
+	"github.com/dobyte/due/config/etcd/v2"
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/file"
 	"testing"
 	"time"
 )
 
 func init() {
-	source := file.NewSource(file.WithMode(config.ReadWrite))
+	source := etcd.NewSource(etcd.WithMode(config.ReadWrite))
 	config.SetConfigurator(config.NewConfigurator(config.WithSources(source)))
 }
 
@@ -31,8 +31,8 @@ func TestWatch(t *testing.T) {
 
 func TestLoad(t *testing.T) {
 	ctx := context.Background()
-	filename := "config.json"
-	c, err := config.Load(ctx, file.Name, filename)
+	file := "config.json"
+	c, err := config.Load(ctx, etcd.Name, file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestLoad(t *testing.T) {
 
 func TestStore(t *testing.T) {
 	ctx := context.Background()
-	filename := "config.json"
+	file := "config.json"
 	content1 := map[string]interface{}{
 		"timezone": "Local",
 	}
@@ -55,14 +55,14 @@ func TestStore(t *testing.T) {
 		"pid":      "./run/gate.pid",
 	}
 
-	err := config.Store(ctx, file.Name, filename, content1, true)
+	err := config.Store(ctx, etcd.Name, file, content1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(5 * time.Second)
 
-	err = config.Store(ctx, file.Name, filename, content2)
+	err = config.Store(ctx, etcd.Name, file, content2)
 	if err != nil {
 		t.Fatal(err)
 	}
