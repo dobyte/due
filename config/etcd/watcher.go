@@ -17,10 +17,10 @@ type watcher struct {
 	chWatch clientv3.WatchChan
 }
 
-func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
+func newWatcher(ctx context.Context, s *Source) (config.Watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
-	w.source = source
+	w.source = s
 	w.watcher = clientv3.NewWatcher(w.source.opts.client)
 	w.chWatch = w.watcher.Watch(w.ctx, w.source.opts.path, clientv3.WithPrefix())
 

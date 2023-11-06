@@ -11,9 +11,8 @@ import (
 const Name = "consul"
 
 type Source struct {
-	err     error
-	opts    *options
-	builtin bool
+	err  error
+	opts *options
 }
 
 func NewSource(opts ...Option) config.Source {
@@ -32,7 +31,6 @@ func NewSource(opts ...Option) config.Source {
 			c.Address = o.addr
 		}
 
-		s.builtin = true
 		s.opts.client, s.err = api.NewClient(c)
 	}
 
@@ -104,7 +102,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 // Watch 监听配置项
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
-	return newWatcher()
+	return newWatcher(ctx, s)
 }
 
 // Close 关闭配置源
