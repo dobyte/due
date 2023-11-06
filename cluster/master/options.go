@@ -2,7 +2,7 @@ package master
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
@@ -29,17 +29,17 @@ const (
 type Option func(o *options)
 
 type options struct {
-	id           string                    // 实例ID
-	name         string                    // 实例名称
-	ctx          context.Context           // 上下文
-	codec        encoding.Codec            // 编解码器
-	timeout      time.Duration             // RPC调用超时时间
-	locator      locate.Locator            // 用户定位器
-	registry     registry.Registry         // 服务注册器
-	transporter  transport.Transporter     // 消息传输器
-	encryptor    crypto.Encryptor          // 消息加密器
-	configSource configurator.Source       // 配置源
-	configurator configurator.Configurator // 配置器
+	id           string                // 实例ID
+	name         string                // 实例名称
+	ctx          context.Context       // 上下文
+	codec        encoding.Codec        // 编解码器
+	timeout      time.Duration         // RPC调用超时时间
+	locator      locate.Locator        // 用户定位器
+	registry     registry.Registry     // 服务注册器
+	transporter  transport.Transporter // 消息传输器
+	encryptor    crypto.Encryptor      // 消息加密器
+	configSource config.Source         // 配置源
+	configurator config.Configurator   // 配置器
 }
 
 func defaultOptions() *options {
@@ -118,8 +118,8 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 }
 
 // WithConfigSource 设置配置源
-func WithConfigSource(configSource configurator.Source) Option {
+func WithConfigSource(source config.Source) Option {
 	return func(o *options) {
-		o.configSource, o.configurator = configSource, configurator.NewConfigurator(configurator.WithSources(configSource))
+		o.configSource, o.configurator = source, config.NewConfigurator(config.WithSources(source))
 	}
 }

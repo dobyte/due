@@ -3,7 +3,7 @@ package master
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/config/configurator"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
@@ -45,7 +45,7 @@ func (p *Proxy) GetMasterName() string {
 }
 
 // LoadConfig 加载配置
-func (p *Proxy) LoadConfig(ctx context.Context, file string) ([]*configurator.Configuration, error) {
+func (p *Proxy) LoadConfig(ctx context.Context, file string) ([]*config.Configuration, error) {
 	if p.master.opts.configurator != nil {
 		return p.master.opts.configurator.Load(ctx, p.master.opts.configSource.Name(), file)
 	}

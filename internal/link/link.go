@@ -177,8 +177,6 @@ func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
 	}
 
 	if gid == "" {
-		l.gateSource.Delete(uid)
-
 		return "", errors.ErrNotFoundUserLocation
 	}
 
@@ -606,7 +604,10 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 			miss, err := client.Deliver(ctx, arguments)
 			return miss, nil, err
 		})
-		return err
+		if err != nil && err != errors.ErrNotFoundUserLocation {
+			return err
+		}
+		return nil
 	}
 }
 
