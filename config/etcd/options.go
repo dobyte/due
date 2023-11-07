@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultAddr        = "127.0.0.1:2379"
-	defaultDialTimeout = 5
+	defaultDialTimeout = "5s"
 	defaultPath        = "/config"
 	defaultMode        = config.ReadOnly
 )
@@ -55,7 +55,7 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		addrs:       etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		dialTimeout: etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration() * time.Second,
+		dialTimeout: etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
 		path:        etc.Get(defaultPathKey, defaultPath).String(),
 		mode:        config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
 	}

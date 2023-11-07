@@ -6,13 +6,14 @@
 * 支持读写模式设置
 * 支持集群内热更新
 * 支持json、yaml、toml、xml等多种配置格式
+* 支持监听配置文件变动
 
 ### 2.快速开始
 
 1.安装
 
 ```shell
-go get github.com/dobyte/due/config/etcd/v2@latest
+go get -u github.com/dobyte/due/config/etcd/v2@latest
 ```
 
 2.etc配置项
@@ -20,15 +21,15 @@ go get github.com/dobyte/due/config/etcd/v2@latest
 ```toml
 # 配置中心
 [config]
-    # # etcd配置中心
+    # etcd配置中心
     [config.etcd]
         # 客户端连接地址
         addrs = ["127.0.0.1:2379"]
-        # 客户端拨号超时时间（秒）
+		# 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = 5
         # 路径。默认为/config
         path = "/config"
-        # 读写模式。可选：read-only | read-write，默认为read-only
+        # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-write"
 ```
 
@@ -41,17 +42,16 @@ import (
 	"context"
 	"github.com/dobyte/due/config/etcd/v2"
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/configurator"
 	"github.com/dobyte/due/v2/log"
 	"time"
 )
 
 func main() {
+	// 设置全局配置器
+	config.SetConfigurator(config.NewConfigurator(config.WithSources(etcd.NewSource())))
+
 	ctx := context.Background()
 	filepath := "config.toml"
-
-	// 设置全局配置器
-	config.SetConfigurator(configurator.NewConfigurator(configurator.WithSources(etcd.NewSource())))
 
 	// 更新配置
 	if err := config.Store(ctx, etcd.Name, filepath, map[string]interface{}{
@@ -61,7 +61,7 @@ func main() {
 		return
 	}
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 读取配置
 	timezone := config.Get("config.timezone", "UTC").String()
@@ -75,7 +75,7 @@ func main() {
 		return
 	}
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 读取配置
 	timezone = config.Get("config.timezone", "UTC").String()
@@ -83,6 +83,6 @@ func main() {
 }
 ```
 
-### 3.详细示例
+### 4.详细示例
 
-更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples/config/etcd/README.md)
+更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples/config/etcd)

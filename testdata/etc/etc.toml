@@ -18,25 +18,25 @@ timezone = "Local"
     [config.file]
         # 配置文件或配置目录路径
         path = "./config"
-        # 读写模式。可选：read-only | read-write，默认为read-only
+        # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-only"
     # etcd配置中心
     [config.etcd]
         # 客户端连接地址
         addrs = ["127.0.0.1:2379"]
-        # 客户端拨号超时时间（秒）
-        dialTimeout = 5
+        # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+        dialTimeout = "5s"
         # 路径。默认为/config
         path = "/config"
-        # 读写模式。可选：read-only | read-write，默认为read-only
+        # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-only"
     # consul配置中心
     [config.consul]
         # 客户端连接地址
         addr = "127.0.0.1:8500"
-        # 路径。默认为/config
-        path = "/config"
-        # 读写模式。可选：read-only | read-write，默认为read-only
+        # 路径。默认为config
+        path = "config"
+        # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-only"
 
 [cluster]

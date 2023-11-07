@@ -64,7 +64,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		return
 	}
 
-	log.Debugf("deliver message: cid: %d uid: %d route: %d buffer: %s", cid, uid, message.Route, string(message.Buffer))
+	//log.Debugf("deliver message: cid: %d uid: %d route: %d buffer: %s", cid, uid, message.Route, string(message.Buffer))
 
 	if err = p.link.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,

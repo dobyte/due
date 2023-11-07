@@ -1,5 +1,16 @@
-.idea/
+# OS general
 */.DS_Store
-.vscode
+
+# Docker container's temp data
 docker/*/
+
+# Test data
 testdata/log/
+
+# Develop tools
+.vscode
+.idea/
+
+# Go workspace
+go.work
+go.work.sum

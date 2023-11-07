@@ -1,4 +1,4 @@
-# 配置中心-file文件配置
+# 配置中心-file
 
 ### 1.功能
 
@@ -7,10 +7,11 @@
 * 支持读写模式设置
 * 支持json、yaml、toml、xml等多种配置格式
 * 不支持集群内热更新
+* 支持监听配置文件变动
 
 ### 2.快速开始
 
-1.etc配置项
+1.file配置项
 
 ```toml
 # 配置中心
@@ -36,36 +37,41 @@ import (
 	"time"
 )
 
-func main() {
-	ctx := context.Background()
-	filepath := "config.toml"
-
+func init() {
 	// 设置全局配置器
-	config.SetDefaultConfigurator()
+	config.SetConfigurator(config.NewConfigurator(config.WithSources(file.NewSource())))
+}
+
+func main() {
+	var (
+		ctx      = context.Background()
+		name     = file.Name
+		filepath = "config.toml"
+	)
 
 	// 更新配置
-	if err := config.Store(ctx, file.Name, filepath, map[string]interface{}{
+	if err := config.Store(ctx, name, filepath, map[string]interface{}{
 		"timezone": "Local",
 	}); err != nil {
 		log.Errorf("store config failed: %v", err)
 		return
 	}
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 读取配置
 	timezone := config.Get("config.timezone", "UTC").String()
 	log.Infof("timezone: %s", timezone)
 
 	// 更新配置
-	if err := config.Store(ctx, file.Name, filepath, map[string]interface{}{
+	if err := config.Store(ctx, name, filepath, map[string]interface{}{
 		"timezone": "UTC",
 	}); err != nil {
 		log.Errorf("store config failed: %v", err)
 		return
 	}
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 读取配置
 	timezone = config.Get("config.timezone", "UTC").String()
@@ -75,4 +81,4 @@ func main() {
 
 ### 3.详细示例
 
-更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples/config/file/README.md)
+更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples/config/file)
