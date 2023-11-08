@@ -19,3 +19,7 @@ func Call(fn func()) {
 
 	fn()
 }
+
+func Go(fn func()) {
+	go Call(fn)
+}
