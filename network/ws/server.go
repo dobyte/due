@@ -10,6 +10,7 @@ package ws
 import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
 	"net"
 	"net/http"
@@ -72,7 +73,7 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	go s.serve()
+	xcall.Go(s.serve)
 
 	return nil
 }

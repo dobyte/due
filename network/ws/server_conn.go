@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
@@ -157,9 +158,9 @@ func (c *serverConn) init(id int64, conn *websocket.Conn, cm *serverConnMgr) {
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
-	go c.read()
+	xcall.Go(c.read)
 
-	go c.write()
+	xcall.Go(c.write)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)

@@ -12,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"net/http"
 	"testing"
 )
@@ -57,12 +58,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go func() {
+	xcall.Go(func() {
 		err := http.ListenAndServe(":8089", nil)
 		if err != nil {
 			log.Errorf("pprof server start failed: %v", err)
 		}
-	}()
+	})
 
 	select {}
 }
@@ -100,12 +101,12 @@ func TestServer_Benchmark(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go func() {
+	xcall.Go(func() {
 		err := http.ListenAndServe(":8089", nil)
 		if err != nil {
 			log.Errorf("pprof server start failed: %v", err)
 		}
-	}()
+	})
 
 	select {}
 }

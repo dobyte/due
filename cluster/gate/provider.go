@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 )
@@ -56,7 +57,7 @@ func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64
 
 // Push 发送消息
 func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
-	//log.Debugf("push message: kind: %s target: %d route: %d buffer: %s", kind.String(), target, message.Route, string(message.Buffer))
+	log.Debugf("push message: kind: %s target: %d route: %d buffer: %s", kind.String(), target, message.Route, string(message.Buffer))
 
 	msg, err := packet.Pack(message)
 	if err != nil {

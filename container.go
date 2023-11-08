@@ -66,8 +66,6 @@ func (c *Container) Serve() {
 		log.Errorf("eventbus close failed: %v", err)
 	}
 
-	eventbus.Close()
-
 	task.Release()
 
 	config.Close()

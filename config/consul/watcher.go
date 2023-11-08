@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
 	"path/filepath"
@@ -47,12 +48,12 @@ func (w *watcher) init() (err error) {
 
 	w.plan.Handler = w.planHandler
 
-	go func() {
+	xcall.Go(func() {
 		err = w.plan.RunWithClientAndHclog(w.source.opts.client, nil)
 		if err != nil {
 			log.Fatalf("create watcher failed: %v", err)
 		}
-	}()
+	})
 
 	return
 }

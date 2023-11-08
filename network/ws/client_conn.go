@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
@@ -40,9 +41,9 @@ func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn 
 		close:             make(chan struct{}),
 	}
 
-	go c.read()
+	xcall.Go(c.read)
 
-	go c.write()
+	xcall.Go(c.write)
 
 	if c.client.connectHandler != nil {
 		c.client.connectHandler(c)
