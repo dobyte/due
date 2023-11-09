@@ -20,9 +20,14 @@ import (
 
 var _ log.Logger = NewLogger()
 
+type closer interface {
+	Close() error
+}
+
 type Logger struct {
-	opts   *options
-	logger *logrus.Logger
+	opts    *options
+	logger  *logrus.Logger
+	writers []io.Writer
 }
 
 func NewLogger(opts ...Option) *Logger {
@@ -31,7 +36,7 @@ func NewLogger(opts ...Option) *Logger {
 		opt(o)
 	}
 
-	l := &Logger{opts: o, logger: logrus.New()}
+	l := &Logger{opts: o, logger: logrus.New(), writers: make([]io.Writer, 0, 6)}
 
 	switch o.level {
 	case log.DebugLevel:
@@ -65,16 +70,24 @@ func NewLogger(opts ...Option) *Logger {
 
 	if o.file != "" {
 		if o.classifiedStorage {
-			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
+			writers := hook.WriterMap{
 				logrus.DebugLevel: l.buildWriter(log.DebugLevel),
 				logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
 				logrus.WarnLevel:  l.buildWriter(log.WarnLevel),
 				logrus.ErrorLevel: l.buildWriter(log.ErrorLevel),
 				logrus.FatalLevel: l.buildWriter(log.FatalLevel),
 				logrus.PanicLevel: l.buildWriter(log.PanicLevel),
-			}))
+			}
+
+			for key := range writers {
+				l.writers = append(l.writers, writers[key])
+			}
+
+			l.logger.AddHook(hook.NewWriterHook(writers))
 		} else {
-			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(log.NoneLevel)))
+			writer := l.buildWriter(log.NoneLevel)
+			l.writers = append(l.writers, writer)
+			l.logger.AddHook(hook.NewWriterHook(writer))
 		}
 	}
 
@@ -194,4 +207,20 @@ func (l *Logger) Panic(a ...interface{}) {
 // Panicf 打印Panic模板日志
 func (l *Logger) Panicf(format string, a ...interface{}) {
 	l.logger.WithField(define.StackOutFlagField, true).Fatalf(format, a...)
+}
+
+// Close 关闭日志
+func (l *Logger) Close() (err error) {
+	for _, writer := range l.writers {
+		w, ok := writer.(interface{ Close() error })
+		if !ok {
+			continue
+		}
+
+		if e := w.Close(); e != nil {
+			err = e
+		}
+	}
+
+	return
 }

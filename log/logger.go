@@ -37,6 +37,8 @@ type Logger interface {
 	Panic(a ...interface{})
 	// Panicf 打印Panic模板日志
 	Panicf(format string, a ...interface{})
+	// Close 关闭日志
+	Close() error
 }
 
 type defaultLogger struct {
@@ -220,4 +222,20 @@ func (l *defaultLogger) Panic(a ...interface{}) {
 // Panicf 打印Panic模板日志
 func (l *defaultLogger) Panicf(format string, a ...interface{}) {
 	l.print(PanicLevel, true, fmt.Sprintf(format, a...))
+}
+
+// Close 关闭日志
+func (l *defaultLogger) Close() (err error) {
+	for _, s := range l.syncers {
+		w, ok := s.writer.(interface{ Close() error })
+		if !ok {
+			continue
+		}
+
+		if e := w.Close(); e != nil {
+			err = e
+		}
+	}
+
+	return
 }

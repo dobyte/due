@@ -71,6 +71,8 @@ func (c *Container) Serve() {
 	config.Close()
 
 	etc.Close()
+
+	log.Close()
 }
 
 func (c *Container) doSavePID() {
