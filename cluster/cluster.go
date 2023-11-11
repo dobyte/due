@@ -1,5 +1,7 @@
 package cluster
 
+import "github.com/dobyte/due/v2/internal/link"
+
 const (
 	Master Kind = "master" // 管理服
 	Gate   Kind = "gate"   // 网关服
@@ -49,3 +51,12 @@ func (e Event) String() string {
 
 	return ""
 }
+
+type (
+	GetIPArgs      = link.GetIPArgs
+	PushArgs       = link.PushArgs
+	MulticastArgs  = link.MulticastArgs
+	BroadcastArgs  = link.BroadcastArgs
+	DisconnectArgs = link.DisconnectArgs
+	Message        = link.Message
+)
