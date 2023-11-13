@@ -13,9 +13,9 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 		instance1 = &registry.ServiceInstance{
 			ID:       "xc",
 			Name:     "gate-3",
-			Kind:     cluster.Node,
+			Kind:     cluster.Node.String(),
 			Alias:    "gate-3",
-			State:    cluster.Work,
+			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8003", false).String(),
 			Routes: []registry.Route{{
 				ID:       2,
@@ -31,9 +31,9 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 		instance2 = &registry.ServiceInstance{
 			ID:       "xa",
 			Name:     "gate-1",
-			Kind:     cluster.Node,
+			Kind:     cluster.Node.String(),
 			Alias:    "gate-1",
-			State:    cluster.Work,
+			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8001", false).String(),
 			Routes: []registry.Route{{
 				ID:       1,
@@ -52,11 +52,11 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 		instance3 = &registry.ServiceInstance{
 			ID:       "xb",
 			Name:     "gate-2",
-			Kind:     cluster.Node,
+			Kind:     cluster.Node.String(),
 			Alias:    "gate-2",
-			State:    cluster.Work,
+			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8002", false).String(),
-			Events:   []cluster.Event{cluster.Disconnect},
+			Events:   []int{int(cluster.Disconnect)},
 			Routes: []registry.Route{{
 				ID:       1,
 				Stateful: false,
