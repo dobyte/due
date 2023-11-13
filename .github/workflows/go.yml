@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        go: [1.16, 1.17, 1.18, 1.19, 1.20.x]
+        go: [1.20.x]
     name: build & test
     runs-on: ubuntu-latest
     services:
