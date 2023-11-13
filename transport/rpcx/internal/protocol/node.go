@@ -1,12 +1,11 @@
 package protocol
 
 import (
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/packet"
 )
 
 type TriggerRequest struct {
-	Event cluster.Event
+	Event int
 	GID   string
 	CID   int64
 	UID   int64

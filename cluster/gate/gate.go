@@ -177,9 +177,9 @@ func (g *Gate) registerServiceInstance() {
 	g.instance = &registry.ServiceInstance{
 		ID:       g.opts.id,
 		Name:     string(cluster.Gate),
-		Kind:     cluster.Gate,
+		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
-		State:    cluster.Work,
+		State:    cluster.Work.String(),
 		Endpoint: g.rpc.Endpoint().String(),
 	}
 

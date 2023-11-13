@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/go-redis/redis/v8"
@@ -77,11 +76,11 @@ type watcherMgr struct {
 	watchers map[int64]*watcher
 }
 
-func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...cluster.Kind) (*watcherMgr, error) {
+func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string) (*watcherMgr, error) {
 	sub := l.opts.client.Subscribe(ctx)
 	channels := make([]string, 0, len(kinds))
 	for _, kind := range kinds {
-		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, string(kind)))
+		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, kind))
 	}
 
 	err := sub.Subscribe(ctx, channels...)

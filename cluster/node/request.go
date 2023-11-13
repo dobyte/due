@@ -8,17 +8,18 @@
 package node
 
 import (
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/jinzhu/copier"
 )
 
 // Request 请求数据
 type Request struct {
 	node    *Node
-	GID     string   // 来源网关ID
-	NID     string   // 来源节点ID
-	CID     int64    // 连接ID
-	UID     int64    // 用户ID
-	Message *Message // 请求消息
+	GID     string           // 来源网关ID
+	NID     string           // 来源节点ID
+	CID     int64            // 连接ID
+	UID     int64            // 用户ID
+	Message *cluster.Message // 请求消息
 }
 
 // Parse 解析消息

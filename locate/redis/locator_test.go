@@ -90,12 +90,12 @@ func TestLocator_UnbindNode(t *testing.T) {
 }
 
 func TestLocator_Watch(t *testing.T) {
-	watcher1, err := locator.Watch(context.Background(), cluster.Gate, cluster.Node)
+	watcher1, err := locator.Watch(context.Background(), cluster.Gate.String(), cluster.Node.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	watcher2, err := locator.Watch(context.Background(), cluster.Gate)
+	watcher2, err := locator.Watch(context.Background(), cluster.Gate.String())
 	if err != nil {
 		t.Fatal(err)
 	}

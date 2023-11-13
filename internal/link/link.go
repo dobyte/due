@@ -2,7 +2,6 @@ package link
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
@@ -247,8 +246,8 @@ func (l *Link) AskNode(ctx context.Context, uid int64, name, nid string) (string
 }
 
 // FetchServiceList 拉取服务列表
-func (l *Link) FetchServiceList(ctx context.Context, kind cluster.Kind, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	services, err := l.opts.Registry.Services(ctx, string(kind))
+func (l *Link) FetchServiceList(ctx context.Context, kind string, states ...string) ([]*registry.ServiceInstance, error) {
+	services, err := l.opts.Registry.Services(ctx, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +256,7 @@ func (l *Link) FetchServiceList(ctx context.Context, kind cluster.Kind, states .
 		return services, nil
 	}
 
-	mp := make(map[cluster.State]struct{}, len(states))
+	mp := make(map[string]struct{}, len(states))
 	for _, state := range states {
 		mp[state] = struct{}{}
 	}
@@ -785,16 +784,16 @@ func (l *Link) getNodeClientByNID(nid string) (transport.NodeClient, error) {
 }
 
 // WatchServiceInstance 监听服务实例
-func (l *Link) WatchServiceInstance(ctx context.Context, kinds ...cluster.Kind) {
+func (l *Link) WatchServiceInstance(ctx context.Context, kinds ...string) {
 	for _, kind := range kinds {
 		l.watchServiceInstance(ctx, kind)
 	}
 }
 
 // 监听服务实例
-func (l *Link) watchServiceInstance(ctx context.Context, kind cluster.Kind) {
+func (l *Link) watchServiceInstance(ctx context.Context, kind string) {
 	rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
-	watcher, err := l.opts.Registry.Watch(rctx, string(kind))
+	watcher, err := l.opts.Registry.Watch(rctx, kind)
 	rcancel()
 	if err != nil {
 		log.Fatalf("the dispatcher instance watch failed: %v", err)
@@ -814,7 +813,7 @@ func (l *Link) watchServiceInstance(ctx context.Context, kind cluster.Kind) {
 				continue
 			}
 
-			if kind == cluster.Node {
+			if kind == "node" {
 				l.nodeDispatcher.ReplaceServices(services...)
 			} else {
 				l.gateDispatcher.ReplaceServices(services...)
@@ -824,7 +823,7 @@ func (l *Link) watchServiceInstance(ctx context.Context, kind cluster.Kind) {
 }
 
 // WatchUserLocate 监听用户定位
-func (l *Link) WatchUserLocate(ctx context.Context, kinds ...cluster.Kind) {
+func (l *Link) WatchUserLocate(ctx context.Context, kinds ...string) {
 	rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
 	watcher, err := l.opts.Locator.Watch(rctx, kinds...)
 	rcancel()

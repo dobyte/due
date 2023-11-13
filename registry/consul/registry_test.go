@@ -52,9 +52,9 @@ func TestRegistry_Register(t *testing.T) {
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
 		Name:     serviceName,
-		Kind:     cluster.Node,
+		Kind:     cluster.Node.String(),
 		Alias:    "mahjong",
-		State:    cluster.Work,
+		State:    cluster.Work.String(),
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
@@ -64,7 +64,7 @@ func TestRegistry_Register(t *testing.T) {
 
 	time.Sleep(10 * time.Second)
 
-	ins.State = cluster.Busy
+	ins.State = cluster.Busy.String()
 	if err = reg.Register(ctx, ins); err != nil {
 		t.Fatal(err)
 	}

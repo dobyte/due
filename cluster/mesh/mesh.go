@@ -143,9 +143,9 @@ func (m *Mesh) registerServiceInstances() {
 		m.instances = append(m.instances, &registry.ServiceInstance{
 			ID:       id,
 			Name:     entity.name,
-			Kind:     cluster.Mesh,
+			Kind:     cluster.Mesh.String(),
 			Alias:    entity.name,
-			State:    cluster.Work,
+			State:    cluster.Work.String(),
 			Endpoint: endpoint,
 		})
 	}

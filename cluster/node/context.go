@@ -2,6 +2,8 @@ package node
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/session"
 )
 
@@ -39,7 +41,7 @@ func (c *Context) UnbindNode() error {
 
 // GetIP 获取来自网关的连接IP地址
 func (c *Context) GetIP() (string, error) {
-	return c.Proxy.GetIP(c.ctx, &GetIPArgs{
+	return c.Proxy.GetIP(c.ctx, &cluster.GetIPArgs{
 		GID:    c.Request.GID,
 		Kind:   session.Conn,
 		Target: c.Request.CID,
@@ -54,7 +56,7 @@ func (c *Context) Response(message interface{}) error {
 
 // Disconnect 关闭来自网关的连接
 func (c *Context) Disconnect(isForce ...bool) error {
-	args := &DisconnectArgs{
+	args := &link.DisconnectArgs{
 		GID:    c.Request.GID,
 		Kind:   session.Conn,
 		Target: c.Request.CID,

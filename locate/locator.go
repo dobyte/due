@@ -9,12 +9,11 @@ package locate
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 )
 
 type Locator interface {
 	// Watch 监听用户定位变化
-	Watch(ctx context.Context, kinds ...cluster.Kind) (Watcher, error)
+	Watch(ctx context.Context, kinds ...string) (Watcher, error)
 	// BindGate 绑定网关
 	BindGate(ctx context.Context, uid int64, gid string) error
 	// BindNode 绑定节点
@@ -44,7 +43,7 @@ type Event struct {
 	// 实例ID
 	InsID string `json:"ins_id"`
 	// 实例类型
-	InsKind cluster.Kind `json:"ins_kind"`
+	InsKind string `json:"ins_kind"`
 	// 实例名称
 	InsName string `json:"ins_name"`
 }

@@ -2,7 +2,6 @@ package transport
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
@@ -60,7 +59,7 @@ type DeliverArgs struct {
 }
 
 type TriggerArgs struct {
-	Event cluster.Event
+	Event int
 	GID   string
 	CID   int64
 	UID   int64

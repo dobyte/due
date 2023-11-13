@@ -1,7 +1,6 @@
 package link
 
 import (
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/session"
 )
 
@@ -44,9 +43,9 @@ type DeliverArgs struct {
 }
 
 type TriggerArgs struct {
-	Event cluster.Event // 事件
-	CID   int64         // 连接ID
-	UID   int64         // 用户ID
+	Event int   // 事件
+	CID   int64 // 连接ID
+	UID   int64 // 用户ID
 }
 
 type DisconnectArgs struct {

@@ -26,7 +26,7 @@ func TestNewClient(t *testing.T) {
 	_, err = c.Trigger(context.Background(), &transport.TriggerArgs{
 		GID:   "1",
 		UID:   1,
-		Event: cluster.Disconnect,
+		Event: int(cluster.Disconnect),
 	})
 	if err != nil {
 		t.Fatal(err)

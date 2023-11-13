@@ -1,15 +1,11 @@
 package dispatcher
 
-import (
-	"github.com/dobyte/due/v2/cluster"
-)
-
 type Event struct {
 	abstract
-	event cluster.Event // 路由ID
+	event int // 事件ID
 }
 
-func newEvent(dispatcher *Dispatcher, event cluster.Event) *Event {
+func newEvent(dispatcher *Dispatcher, event int) *Event {
 	return &Event{
 		abstract: abstract{
 			dispatcher:  dispatcher,
@@ -21,6 +17,6 @@ func newEvent(dispatcher *Dispatcher, event cluster.Event) *Event {
 }
 
 // Event 获取事件
-func (e *Event) Event() cluster.Event {
+func (e *Event) Event() int {
 	return e.event
 }

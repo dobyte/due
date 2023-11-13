@@ -173,15 +173,15 @@ func (n *Node) registerServiceInstance() {
 		})
 	}
 
-	events := make([]cluster.Event, 0, len(n.events.events))
+	events := make([]int, 0, len(n.events.events))
 	for event := range n.events.events {
-		events = append(events, event)
+		events = append(events, int(event))
 	}
 
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
 		Name:     string(cluster.Node),
-		Kind:     cluster.Node,
+		Kind:     cluster.Node.String(),
 		Alias:    n.opts.name,
 		State:    n.getState(),
 		Routes:   routes,
@@ -233,9 +233,9 @@ func (n *Node) setState(state cluster.State) {
 }
 
 // 获取节点状态
-func (n *Node) getState() cluster.State {
-	if state := (*cluster.State)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)))); state == nil {
-		return cluster.Shut
+func (n *Node) getState() string {
+	if state := (*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)))); state == nil {
+		return cluster.Shut.String()
 	} else {
 		return *state
 	}
@@ -243,7 +243,7 @@ func (n *Node) getState() cluster.State {
 
 // 检测节点状态
 func (n *Node) checkState(state cluster.State) bool {
-	return n.getState() == state
+	return n.getState() == state.String()
 }
 
 func (n *Node) debugPrint() {

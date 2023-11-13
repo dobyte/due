@@ -48,7 +48,7 @@ func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 // 触发事件
 func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
 	if err := p.link.Trigger(ctx, &link.TriggerArgs{
-		Event: event,
+		Event: int(event),
 		CID:   cid,
 		UID:   uid,
 	}); err != nil && err != errors.ErrNotFoundEvent && err != errors.ErrNotFoundUserLocation {
@@ -77,7 +77,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 
 // 启动监听
 func (p *proxy) watch(ctx context.Context) {
-	p.link.WatchUserLocate(ctx, cluster.Node)
+	p.link.WatchUserLocate(ctx, cluster.Node.String())
 
-	p.link.WatchServiceInstance(ctx, cluster.Node)
+	p.link.WatchServiceInstance(ctx, cluster.Node.String())
 }

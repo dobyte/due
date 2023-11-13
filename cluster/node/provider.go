@@ -13,7 +13,9 @@ type provider struct {
 
 // Trigger 触发事件
 func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bool, error) {
-	switch args.Event {
+	event := cluster.Event(args.Event)
+
+	switch event {
 	case cluster.Connect:
 		// ignore
 	case cluster.Reconnect:
@@ -42,7 +44,7 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 		}
 	}
 
-	p.node.events.trigger(args.Event, args.GID, args.CID, args.UID)
+	p.node.events.trigger(event, args.GID, args.CID, args.UID)
 
 	return false, nil
 }

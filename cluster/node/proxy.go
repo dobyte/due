@@ -9,21 +9,6 @@ import (
 	"github.com/dobyte/due/v2/transport"
 )
 
-type (
-	GetIPArgs      = link.GetIPArgs
-	PushArgs       = link.PushArgs
-	MulticastArgs  = link.MulticastArgs
-	BroadcastArgs  = link.BroadcastArgs
-	DisconnectArgs = link.DisconnectArgs
-	Message        = link.Message
-)
-
-type DeliverArgs struct {
-	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
-	UID     int64    // 用户ID
-	Message *Message // 消息
-}
-
 type Proxy struct {
 	node *Node      // 节点
 	link *link.Link // 链接
@@ -52,7 +37,7 @@ func (p *Proxy) GetNodeName() string {
 
 // GetNodeState 获取当前节点状态
 func (p *Proxy) GetNodeState() cluster.State {
-	return p.node.getState()
+	return cluster.State(p.node.getState())
 }
 
 // SetNodeState 设置当前节点状态
@@ -132,45 +117,51 @@ func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (strin
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.link.FetchServiceList(ctx, cluster.Gate, states...)
+	list := make([]string, 0, len(states))
+	for _, state := range states {
+		list = append(list, state.String())
+	}
+
+	return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.link.FetchServiceList(ctx, cluster.Node, states...)
+	list := make([]string, 0, len(states))
+	for _, state := range states {
+		list = append(list, state.String())
+	}
+
+	return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
 }
 
 // GetIP 获取客户端IP
-func (p *Proxy) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
+func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.link.GetIP(ctx, args)
 }
 
 // Push 推送消息
-func (p *Proxy) Push(ctx context.Context, args *PushArgs) error {
+func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
 	return p.link.Push(ctx, args)
 }
 
 // Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
+func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
 	return p.link.Multicast(ctx, args)
 }
 
 // Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
+func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
 	return p.link.Broadcast(ctx, args)
 }
 
 // Deliver 投递消息给节点处理
-func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
+func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	if args.NID != p.GetNodeID() {
 		return p.link.Deliver(ctx, &link.DeliverArgs{
-			NID: args.NID,
-			UID: args.UID,
-			Message: &Message{
-				Seq:   args.Message.Seq,
-				Route: args.Message.Route,
-				Data:  args.Message.Data,
-			},
+			NID:     args.NID,
+			UID:     args.UID,
+			Message: args.Message,
 		})
 	} else {
 		p.node.router.deliver("", args.NID, 0, args.UID, args.Message.Seq, args.Message.Route, args.Message.Data)
@@ -187,7 +178,7 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 			GID:    req.GID,
 			Kind:   session.Conn,
 			Target: req.CID,
-			Message: &Message{
+			Message: &link.Message{
 				Seq:   req.Message.Seq,
 				Route: req.Message.Route,
 				Data:  message,
@@ -197,7 +188,7 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID: req.NID,
 			UID: req.UID,
-			Message: &Message{
+			Message: &link.Message{
 				Seq:   req.Message.Seq,
 				Route: req.Message.Route,
 				Data:  message,
@@ -214,7 +205,7 @@ func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 }
 
 // Disconnect 断开连接
-func (p *Proxy) Disconnect(ctx context.Context, args *DisconnectArgs) error {
+func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) error {
 	return p.link.Disconnect(ctx, args)
 }
 
@@ -225,7 +216,7 @@ func (p *Proxy) Invoke(fn func()) {
 
 // 启动监听
 func (p *Proxy) watch(ctx context.Context) {
-	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
+	p.link.WatchUserLocate(ctx, cluster.Gate.String(), cluster.Node.String())
 
-	p.link.WatchServiceInstance(ctx, cluster.Gate, cluster.Node)
+	p.link.WatchServiceInstance(ctx, cluster.Gate.String(), cluster.Node.String())
 }

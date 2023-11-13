@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 )
 
 type Registry interface {
@@ -36,13 +35,13 @@ type ServiceInstance struct {
 	// 服务实体名
 	Name string `json:"name"`
 	// 服务实体类型
-	Kind cluster.Kind `json:"kind"`
+	Kind string `json:"kind"`
 	// 服务实体别名
 	Alias string `json:"alias"`
 	// 服务实例状态
-	State cluster.State `json:"state"`
+	State string `json:"state"`
 	// 服务事件集合
-	Events []cluster.Event `json:"events"`
+	Events []int `json:"events"`
 	// 服务路由ID
 	Routes []Route `json:"routes"`
 	// 服务器实体暴露端口

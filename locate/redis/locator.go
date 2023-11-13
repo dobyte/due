@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -177,14 +176,14 @@ func (l *Locator) UnbindNode(ctx context.Context, uid int64, name string, nid st
 
 func (l *Locator) publish(ctx context.Context, typ locate.EventType, uid int64, insID string, insName ...string) error {
 	var (
-		kind cluster.Kind
+		kind string
 		name string
 	)
 	switch typ {
 	case locate.BindGate, locate.UnbindGate:
-		kind = cluster.Gate
+		kind = "gate"
 	case locate.BindNode, locate.UnbindNode:
-		kind = cluster.Node
+		kind = "node"
 	}
 
 	if len(insName) > 0 {
@@ -205,21 +204,21 @@ func (l *Locator) publish(ctx context.Context, typ locate.EventType, uid int64, 
 	return l.opts.client.Publish(ctx, fmt.Sprintf(clusterEventKey, l.opts.prefix, kind), msg).Err()
 }
 
-func (l *Locator) toUniqueKey(kinds ...cluster.Kind) string {
+func (l *Locator) toUniqueKey(kinds ...string) string {
 	sort.Slice(kinds, func(i, j int) bool {
 		return kinds[i] < kinds[j]
 	})
 
 	keys := make([]string, 0, len(kinds))
-	for _, insKind := range kinds {
-		keys = append(keys, string(insKind))
+	for _, kind := range kinds {
+		keys = append(keys, kind)
 	}
 
 	return strings.Join(keys, "&")
 }
 
 // Watch 监听用户定位变化
-func (l *Locator) Watch(ctx context.Context, kinds ...cluster.Kind) (locate.Watcher, error) {
+func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, error) {
 	key := l.toUniqueKey(kinds...)
 
 	v, ok := l.watchers.Load(key)

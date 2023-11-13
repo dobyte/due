@@ -11,14 +11,6 @@ import (
 	"github.com/dobyte/due/v2/transport"
 )
 
-var (
-	ErrConfigSourceNotSet = errors.New("configuration source not set")
-)
-
-type (
-	Message = link.Message
-)
-
 type Proxy struct {
 	master *Master
 	link   *link.Link
@@ -50,7 +42,7 @@ func (p *Proxy) LoadConfig(ctx context.Context, file string) ([]*config.Configur
 		return p.master.opts.configurator.Load(ctx, p.master.opts.configSource.Name(), file)
 	}
 
-	return nil, ErrConfigSourceNotSet
+	return nil, errors.ErrNotFoundConfigSource
 }
 
 // StoreConfig 保存配置
@@ -59,7 +51,7 @@ func (p *Proxy) StoreConfig(ctx context.Context, file string, content interface{
 		return p.master.opts.configurator.Store(ctx, p.master.opts.configSource.Name(), file, content)
 	}
 
-	return ErrConfigSourceNotSet
+	return errors.ErrNotFoundConfigSource
 }
 
 // NewServiceClient 新建微服务客户端
@@ -82,12 +74,22 @@ func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string,
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.link.FetchServiceList(ctx, cluster.Gate, states...)
+	list := make([]string, 0, len(states))
+	for _, state := range states {
+		list = append(list, state.String())
+	}
+
+	return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.link.FetchServiceList(ctx, cluster.Node, states...)
+	list := make([]string, 0, len(states))
+	for _, state := range states {
+		list = append(list, state.String())
+	}
+
+	return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
 }
 
 // GetIP 获取客户端IP
@@ -99,7 +101,7 @@ func (p *Proxy) GetIP(ctx context.Context, uid int64) (string, error) {
 }
 
 // Push 推送消息
-func (p *Proxy) Push(ctx context.Context, uid int64, message *Message) error {
+func (p *Proxy) Push(ctx context.Context, uid int64, message *cluster.Message) error {
 	return p.link.Push(ctx, &link.PushArgs{
 		Kind:    session.User,
 		Target:  uid,
@@ -108,7 +110,7 @@ func (p *Proxy) Push(ctx context.Context, uid int64, message *Message) error {
 }
 
 // Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *Message) (int64, error) {
+func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *cluster.Message) (int64, error) {
 	return p.link.Multicast(ctx, &link.MulticastArgs{
 		Kind:    session.User,
 		Targets: uids[:],
@@ -117,7 +119,7 @@ func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *Message) (
 }
 
 // Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *Message) (int64, error) {
+func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *cluster.Message) (int64, error) {
 	return p.link.Broadcast(ctx, &link.BroadcastArgs{
 		Kind:    kind,
 		Message: message,
@@ -125,7 +127,7 @@ func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *Messa
 }
 
 // Deliver 投递消息给节点处理
-func (p *Proxy) Deliver(ctx context.Context, uid int64, message *Message) error {
+func (p *Proxy) Deliver(ctx context.Context, uid int64, message *cluster.Message) error {
 	return p.link.Deliver(ctx, &link.DeliverArgs{
 		UID:     uid,
 		Message: message,
@@ -148,7 +150,7 @@ func (p *Proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
 
 // 启动监听
 func (p *Proxy) watch(ctx context.Context) {
-	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
+	p.link.WatchUserLocate(ctx, cluster.Gate.String(), cluster.Node.String())
 
-	p.link.WatchServiceInstance(ctx, cluster.Gate, cluster.Node)
+	p.link.WatchServiceInstance(ctx, cluster.Gate.String(), cluster.Node.String())
 }

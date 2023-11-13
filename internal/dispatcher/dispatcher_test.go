@@ -71,7 +71,7 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 
 	d.ReplaceServices(instance1, instance2, instance3)
 
-	event, err := d.FindEvent(cluster.Disconnect)
+	event, err := d.FindEvent(int(cluster.Disconnect))
 	if err != nil {
 		t.Errorf("find event failed: %v", err)
 	} else {

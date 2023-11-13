@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"sync"
 )
@@ -33,7 +34,7 @@ func newRouter(node *Node) *Router {
 			return &Context{
 				ctx:        context.Background(),
 				Proxy:      node.proxy,
-				Request:    &Request{node: node, Message: &Message{}},
+				Request:    &Request{node: node, Message: &link.Message{}},
 				Middleware: &Middleware{},
 			}
 		}},
@@ -42,7 +43,7 @@ func newRouter(node *Node) *Router {
 
 // AddRouteHandler 添加路由处理器
 func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	if r.node.getState() != cluster.Shut {
+	if r.node.getState() != cluster.Shut.String() {
 		log.Warnf("the node server is working, can't add route handler")
 		return
 	}
@@ -57,7 +58,7 @@ func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandle
 
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
-	if r.node.getState() != cluster.Shut {
+	if r.node.getState() != cluster.Shut.String() {
 		log.Warnf("the node server is working, can't set default route handler")
 		return
 	}

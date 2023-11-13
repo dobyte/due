@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -21,7 +20,7 @@ type Dispatcher struct {
 	strategy  BalanceStrategy
 	rw        sync.RWMutex
 	routes    map[int32]*Route
-	events    map[cluster.Event]*Event
+	events    map[int]*Event
 	endpoints map[string]*endpoint.Endpoint
 }
 
@@ -68,7 +67,7 @@ func (d *Dispatcher) FindRoute(route int32) (*Route, error) {
 }
 
 // FindEvent 查找节点事件
-func (d *Dispatcher) FindEvent(event cluster.Event) (*Event, error) {
+func (d *Dispatcher) FindEvent(event int) (*Event, error) {
 	d.rw.RLock()
 	defer d.rw.RUnlock()
 
@@ -83,7 +82,7 @@ func (d *Dispatcher) FindEvent(event cluster.Event) (*Event, error) {
 // ReplaceServices 替换服务
 func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	routes := make(map[int32]*Route, len(services))
-	events := make(map[cluster.Event]*Event, len(services))
+	events := make(map[int]*Event, len(services))
 	endpoints := make(map[string]*endpoint.Endpoint)
 
 	for _, service := range services {
@@ -106,10 +105,10 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 		}
 
 		for _, evt := range service.Events {
-			event, ok := events[evt]
+			event, ok := events[int(evt)]
 			if !ok {
 				event = newEvent(d, evt)
-				events[evt] = event
+				events[int(evt)] = event
 			}
 			event.addEndpoint(service.ID, ep)
 		}

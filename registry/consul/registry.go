@@ -2,7 +2,6 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/hashicorp/consul/api"
 	"net"
@@ -149,11 +148,11 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 		for k, v := range entry.Service.Meta {
 			switch k {
 			case metaFieldKind:
-				ins.Kind = cluster.Kind(v)
+				ins.Kind = v
 			case metaFieldAlias:
 				ins.Alias = v
 			case metaFieldState:
-				ins.State = cluster.State(v)
+				ins.State = v
 			default:
 				route, err := strconv.Atoi(k)
 				if err != nil {
@@ -178,7 +177,7 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				continue
 			}
 
-			ins.Events = append(ins.Events, cluster.Event(event))
+			ins.Events = append(ins.Events, event)
 		}
 
 		services = append(services, ins)

@@ -5,7 +5,6 @@ import (
 	"github.com/dobyte/due/transport/grpc/v2/internal/code"
 	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/transport"
 	"google.golang.org/grpc/codes"
@@ -37,7 +36,7 @@ func (e *endpoint) Trigger(ctx context.Context, req *pb.TriggerRequest) (*pb.Tri
 		GID:   req.GID,
 		CID:   req.CID,
 		UID:   req.UID,
-		Event: cluster.Event(req.Event),
+		Event: int(req.Event),
 	})
 	if err != nil {
 		if miss {
