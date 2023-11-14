@@ -71,7 +71,7 @@ func AddTask(task func()) {
 
 	err := globalPool.AddTask(task)
 	if err != nil {
-		go xcall.Call(task)
+		xcall.Go(task)
 		log.Warnf("add task to the task pool failed: %v", err)
 		return
 	}

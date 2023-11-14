@@ -217,15 +217,17 @@ func (n *Node) setState(state cluster.State) {
 
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)), unsafe.Pointer(&state))
 
-	if n.instance != nil {
-		n.instance.State = n.getState()
-		for i := 0; i < 3; i++ {
-			ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-			err := n.opts.registry.Register(ctx, n.instance)
-			cancel()
-			if err == nil {
-				break
-			}
+	if n.instance == nil {
+		return
+	}
+
+	n.instance.State = n.getState()
+	for i := 0; i < 3; i++ {
+		ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+		err := n.opts.registry.Register(ctx, n.instance)
+		cancel()
+		if err == nil {
+			break
 		}
 	}
 

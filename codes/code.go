@@ -18,8 +18,6 @@ var (
 	Unauthorized     = NewCode(7, "unauthorized")
 	IllegalInvoke    = NewCode(8, "illegal invoke")
 	IllegalRequest   = NewCode(9, "illegal request")
-
-	NotLocatedUser = NewCode(3, "not located user")
 )
 
 type Code struct {

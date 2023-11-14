@@ -54,10 +54,9 @@ timezone = "Local"
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 加密器。可选：rsa | ecc
-        encryptor = "ecc"
-        # 解密器。可选：rsa | ecc
-        decryptor = "ecc"
+        # 调度模型。可选：single-thread | multi-thread | gorutine | actor
+        scheduling = ""
+
     # 集群管理节点配置
     [cluster.master]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
