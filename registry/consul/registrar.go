@@ -70,15 +70,15 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		}},
 	}
 
-	registration.Meta[metaFieldKind] = string(ins.Kind)
+	registration.Meta[metaFieldKind] = ins.Kind
 	registration.Meta[metaFieldAlias] = ins.Alias
-	registration.Meta[metaFieldState] = string(ins.State)
+	registration.Meta[metaFieldState] = ins.State
 	for _, route := range ins.Routes {
 		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.FormatBool(route.Stateful)
 	}
 
 	for _, event := range ins.Events {
-		registration.Tags = append(registration.Tags, strconv.Itoa(int(event)))
+		registration.Tags = append(registration.Tags, strconv.Itoa(event))
 	}
 
 	if r.registry.opts.enableHealthCheck {

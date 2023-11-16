@@ -15,16 +15,16 @@ import (
 
 type Node struct {
 	component.Base
-	opts     *options
-	ctx      context.Context
-	cancel   context.CancelFunc
-	state    cluster.State
-	events   *Events
-	router   *Router
-	proxy    *Proxy
-	instance *registry.ServiceInstance
-	rpc      transport.Server
-	fnChan   chan func()
+	opts        *options
+	ctx         context.Context
+	cancel      context.CancelFunc
+	state       cluster.State
+	events      *Events
+	router      *Router
+	proxy       *Proxy
+	instance    *registry.ServiceInstance
+	transporter transport.Server
+	fnChan      chan func()
 }
 
 func NewNode(opts ...Option) *Node {
@@ -82,7 +82,7 @@ func (n *Node) Start() {
 
 	n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
 
-	n.startRPCServer()
+	n.startTransportServer()
 
 	n.registerServiceInstance()
 
@@ -97,7 +97,7 @@ func (n *Node) Start() {
 func (n *Node) Destroy() {
 	n.deregisterServiceInstance()
 
-	n.stopRPCServer()
+	n.stopTransportServer()
 
 	n.events.close()
 
@@ -140,26 +140,26 @@ func (n *Node) dispatch() {
 	}
 }
 
-// 启动RPC服务器
-func (n *Node) startRPCServer() {
+// 启动传输服务器
+func (n *Node) startTransportServer() {
 	var err error
 
-	n.rpc, err = n.opts.transporter.NewNodeServer(&provider{n})
+	n.transporter, err = n.opts.transporter.NewNodeServer(&provider{n})
 	if err != nil {
-		log.Fatalf("rpc server create failed: %v", err)
+		log.Fatalf("transporter create failed: %v", err)
 	}
 
 	go func() {
-		if err = n.rpc.Start(); err != nil {
-			log.Fatalf("rpc server start failed: %v", err)
+		if err = n.transporter.Start(); err != nil {
+			log.Fatalf("transporter start failed: %v", err)
 		}
 	}()
 }
 
-// 停止RPC服务器
-func (n *Node) stopRPCServer() {
-	if err := n.rpc.Stop(); err != nil {
-		log.Errorf("rpc server stop failed: %v", err)
+// 停止传输服务器
+func (n *Node) stopTransportServer() {
+	if err := n.transporter.Stop(); err != nil {
+		log.Errorf("transporter stop failed: %v", err)
 	}
 }
 
@@ -186,7 +186,7 @@ func (n *Node) registerServiceInstance() {
 		State:    n.getState(),
 		Routes:   routes,
 		Events:   events,
-		Endpoint: n.rpc.Endpoint().String(),
+		Endpoint: n.transporter.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
@@ -250,5 +250,5 @@ func (n *Node) checkState(state cluster.State) bool {
 
 func (n *Node) debugPrint() {
 	log.Debugf("node server startup successful")
-	log.Debugf("%s server listen on %s", n.rpc.Scheme(), n.rpc.Addr())
+	log.Debugf("%s server listen on %s", n.transporter.Scheme(), n.transporter.Addr())
 }

@@ -132,12 +132,24 @@ func (m *Mesh) stopRPCServer() {
 
 // 注册服务实例
 func (m *Mesh) registerServiceInstances() {
-	endpoint := m.rpc.Endpoint().String()
+	var (
+		id       string
+		err      error
+		check    = make(map[string]struct{}, len(m.services))
+		endpoint = m.rpc.Endpoint().String()
+	)
 
 	for _, entity := range m.services {
-		id, err := xuuid.UUID()
-		if err != nil {
-			log.Fatalf("generate service id failed: %v", err)
+		for {
+			id, err = xuuid.UUID()
+			if err != nil {
+				log.Fatalf("generate service id failed: %v", err)
+			}
+
+			if _, ok := check[id]; !ok {
+				check[id] = struct{}{}
+				break
+			}
 		}
 
 		m.instances = append(m.instances, &registry.ServiceInstance{

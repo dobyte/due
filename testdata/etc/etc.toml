@@ -54,8 +54,8 @@ timezone = "Local"
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 调度模型。可选：single-thread | multi-thread | gorutine | actor
-        scheduling = ""
+        # 调度模型，默认为single-thread。可选：single-thread | multi-thread | goroutine | actor
+        scheduling = "single-thread"
 
     # 集群管理节点配置
     [cluster.master]
