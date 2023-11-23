@@ -225,12 +225,19 @@ func (v *value) Scan(pointer interface{}) error {
 	case *time.Duration:
 		*p = v.Duration()
 	default:
-		b, err := json.Marshal(v.Value())
-		if err != nil {
-			return err
-		}
+		switch val := v.Value().(type) {
+		case string, *string:
+			return json.Unmarshal(v.Bytes(), pointer)
+		case []byte, *[]byte:
+			return json.Unmarshal(v.Bytes(), pointer)
+		default:
+			b, err := json.Marshal(val)
+			if err != nil {
+				return err
+			}
 
-		return json.Unmarshal(b, pointer)
+			return json.Unmarshal(b, pointer)
+		}
 	}
 
 	return nil
