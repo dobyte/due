@@ -56,8 +56,16 @@ func (e *JsonEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 		stack = xconv.Bool(fields[0].Integer)
 	}
 
+	var levelText string
+	switch ent.Level {
+	case zapcore.DPanicLevel:
+		levelText = zapcore.PanicLevel.CapitalString()
+	default:
+		levelText = ent.Level.CapitalString()
+	}
+
 	line.AppendByte('{')
-	line.AppendString(fmt.Sprintf(`"%s":"%s"`, fieldKeyLevel, ent.Level.CapitalString()))
+	line.AppendString(fmt.Sprintf(`"%s":"%s"`, fieldKeyLevel, levelText))
 	line.AppendString(fmt.Sprintf(`,"%s":"%s"`, fieldKeyTime, ent.Time.Format(e.timeFormat)))
 
 	if ent.Caller.Defined {

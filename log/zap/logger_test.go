@@ -13,14 +13,17 @@ import (
 	"testing"
 )
 
-var logger = zap.NewLogger(zap.WithStackLevel(log.DebugLevel))
+var logger = zap.NewLogger(
+	zap.WithStackLevel(log.DebugLevel),
+	zap.WithFormat(log.JsonFormat),
+)
 
 func TestNewLogger(t *testing.T) {
-	logger.Print(log.ErrorLevel, "print")
-	logger.Info("info")
-	logger.Warn("warn")
-	logger.Error("error")
-	logger.Error("error")
-	logger.Fatal("fatal")
+	//logger.Print(log.ErrorLevel, "print")
+	//logger.Info("info")
+	//logger.Warn("warn")
+	//logger.Error("error")
+	//logger.Error("error")
+	//logger.Fatal("fatal")
 	logger.Panic("panic")
 }

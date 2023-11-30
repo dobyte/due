@@ -65,6 +65,9 @@ func (e *TextEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*b
 			levelColor = yellow
 		case zapcore.ErrorLevel, zapcore.FatalLevel, zapcore.PanicLevel:
 			levelColor = red
+		case zapcore.DPanicLevel:
+			levelColor = red
+			levelText = zapcore.PanicLevel.CapitalString()[0:4]
 		case zapcore.InfoLevel:
 			levelColor = blue
 		default:

@@ -23,12 +23,12 @@ var levelMap map[zapcore.Level]log.Level
 
 func init() {
 	levelMap = map[zapcore.Level]log.Level{
-		zap.DebugLevel: log.DebugLevel,
-		zap.InfoLevel:  log.InfoLevel,
-		zap.WarnLevel:  log.WarnLevel,
-		zap.ErrorLevel: log.ErrorLevel,
-		zap.FatalLevel: log.FatalLevel,
-		zap.PanicLevel: log.PanicLevel,
+		zap.DebugLevel:  log.DebugLevel,
+		zap.InfoLevel:   log.InfoLevel,
+		zap.WarnLevel:   log.WarnLevel,
+		zap.ErrorLevel:  log.ErrorLevel,
+		zap.FatalLevel:  log.FatalLevel,
+		zap.DPanicLevel: log.PanicLevel,
 	}
 }
 
@@ -156,7 +156,7 @@ func (l *Logger) print(level log.Level, stack bool, a ...interface{}) {
 	case log.FatalLevel:
 		l.logger.Fatalw(msg, encoder.StackFlag, stack)
 	case log.PanicLevel:
-		l.logger.Panicw(msg, encoder.StackFlag, stack)
+		l.logger.DPanicw(msg, encoder.StackFlag, stack)
 	}
 }
 
