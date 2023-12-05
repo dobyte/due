@@ -14,14 +14,14 @@ import (
 
 type Mesh struct {
 	component.Base
-	opts      *options
-	ctx       context.Context
-	cancel    context.CancelFunc
-	state     cluster.State
-	proxy     *Proxy
-	services  []*serviceEntity
-	instances []*registry.ServiceInstance
-	rpc       transport.Server
+	opts        *options
+	ctx         context.Context
+	cancel      context.CancelFunc
+	state       cluster.State
+	proxy       *Proxy
+	services    []*serviceEntity
+	instances   []*registry.ServiceInstance
+	transporter transport.Server
 }
 
 type serviceEntity struct {
@@ -75,9 +75,7 @@ func (m *Mesh) Init() {
 func (m *Mesh) Start() {
 	m.state = cluster.Work
 
-	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
-
-	m.startRPCServer()
+	m.startTransporter()
 
 	m.registerServiceInstances()
 
@@ -90,7 +88,7 @@ func (m *Mesh) Start() {
 func (m *Mesh) Destroy() {
 	m.deregisterServiceInstances()
 
-	m.stopRPCServer()
+	m.stopTransporter()
 
 	m.cancel()
 }
@@ -100,33 +98,35 @@ func (m *Mesh) Proxy() *Proxy {
 	return m.proxy
 }
 
-// 启动RPC服务器
-func (m *Mesh) startRPCServer() {
-	var err error
+// 启动传输服务器
+func (m *Mesh) startTransporter() {
+	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
 
-	m.rpc, err = m.opts.transporter.NewServiceServer()
+	transporter, err := m.opts.transporter.NewServiceServer()
 	if err != nil {
-		log.Fatalf("rpc server create failed: %v", err)
+		log.Fatalf("transporter create failed: %v", err)
 	}
 
+	m.transporter = transporter
+
 	for _, entity := range m.services {
-		err = m.rpc.RegisterService(entity.desc, entity.provider)
+		err = m.transporter.RegisterService(entity.desc, entity.provider)
 		if err != nil {
 			log.Fatalf("register service failed: %v", err)
 		}
 	}
 
 	go func() {
-		if err = m.rpc.Start(); err != nil {
-			log.Fatalf("rpc server start failed: %v", err)
+		if err = m.transporter.Start(); err != nil {
+			log.Fatalf("transporter start failed: %v", err)
 		}
 	}()
 }
 
-// 停止RPC服务器
-func (m *Mesh) stopRPCServer() {
-	if err := m.rpc.Stop(); err != nil {
-		log.Errorf("rpc server stop failed: %v", err)
+// 停止传输服务器
+func (m *Mesh) stopTransporter() {
+	if err := m.transporter.Stop(); err != nil {
+		log.Errorf("transporter stop failed: %v", err)
 	}
 }
 
@@ -136,7 +136,7 @@ func (m *Mesh) registerServiceInstances() {
 		id       string
 		err      error
 		check    = make(map[string]struct{}, len(m.services))
-		endpoint = m.rpc.Endpoint().String()
+		endpoint = m.transporter.Endpoint().String()
 	)
 
 	for _, entity := range m.services {
@@ -157,7 +157,7 @@ func (m *Mesh) registerServiceInstances() {
 			Name:     entity.name,
 			Kind:     cluster.Mesh.String(),
 			Alias:    entity.name,
-			State:    cluster.Work.String(),
+			State:    m.state.String(),
 			Endpoint: endpoint,
 		})
 	}
@@ -173,7 +173,7 @@ func (m *Mesh) registerServiceInstances() {
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Fatalf("register service instance failed: %v", err)
+		log.Fatalf("register mesh instance failed: %v", err)
 	}
 }
 
@@ -190,11 +190,11 @@ func (m *Mesh) deregisterServiceInstances() {
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+		log.Errorf("deregister mesh instance failed: %v", err)
 	}
 }
 
 func (m *Mesh) debugPrint() {
 	log.Debugf("mesh server startup successful")
-	log.Debugf("%s server listen on %s", m.rpc.Scheme(), m.rpc.Addr())
+	log.Debugf("%s server listen on %s", m.transporter.Scheme(), m.transporter.Addr())
 }

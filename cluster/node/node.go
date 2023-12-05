@@ -80,9 +80,7 @@ func (n *Node) Init() {
 func (n *Node) Start() {
 	n.setState(cluster.Work)
 
-	n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
-
-	n.startTransportServer()
+	n.startTransporter()
 
 	n.registerServiceInstance()
 
@@ -97,7 +95,7 @@ func (n *Node) Start() {
 func (n *Node) Destroy() {
 	n.deregisterServiceInstance()
 
-	n.stopTransportServer()
+	n.stopTransporter()
 
 	n.events.close()
 
@@ -141,13 +139,15 @@ func (n *Node) dispatch() {
 }
 
 // 启动传输服务器
-func (n *Node) startTransportServer() {
-	var err error
+func (n *Node) startTransporter() {
+	n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
 
-	n.transporter, err = n.opts.transporter.NewNodeServer(&provider{n})
+	transporter, err := n.opts.transporter.NewNodeServer(&provider{n})
 	if err != nil {
 		log.Fatalf("transporter create failed: %v", err)
 	}
+
+	n.transporter = transporter
 
 	go func() {
 		if err = n.transporter.Start(); err != nil {
@@ -157,7 +157,7 @@ func (n *Node) startTransportServer() {
 }
 
 // 停止传输服务器
-func (n *Node) stopTransportServer() {
+func (n *Node) stopTransporter() {
 	if err := n.transporter.Stop(); err != nil {
 		log.Errorf("transporter stop failed: %v", err)
 	}
@@ -193,19 +193,19 @@ func (n *Node) registerServiceInstance() {
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register dispatcher instance failed: %v", err)
+		log.Fatalf("register node instance failed: %v", err)
 	}
 }
 
 // 解注册服务实例
 func (n *Node) deregisterServiceInstance() {
-	log.Debugf("deregister service instance, alias: %s", n.instance.Alias)
+	log.Debugf("deregister node instance, alias: %s", n.instance.Alias)
 
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+		log.Errorf("deregister node instance failed: %v", err)
 	}
 }
 
