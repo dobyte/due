@@ -14,6 +14,30 @@ type Context struct {
 	Middleware *Middleware
 }
 
+// Clone 克隆Context
+func (c *Context) Clone() *Context {
+	return &Context{
+		ctx:   context.Background(),
+		Proxy: c.Proxy,
+		Request: &Request{
+			node: c.Request.node,
+			GID:  c.Request.GID,
+			NID:  c.Request.NID,
+			CID:  c.Request.CID,
+			UID:  c.Request.UID,
+			Message: &cluster.Message{
+				Seq:   c.Request.Message.Seq,
+				Route: c.Request.Message.Route,
+				Data:  c.Request.Message.Data,
+			},
+		},
+		Middleware: &Middleware{
+			index:       c.Middleware.index,
+			middlewares: c.Middleware.middlewares,
+		},
+	}
+}
+
 // Context 获取上下文
 func (c *Context) Context() context.Context {
 	return c.ctx

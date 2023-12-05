@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/packet"
 )
 
@@ -71,6 +72,6 @@ func (c *Context) Unbind() error {
 }
 
 // Push 推送消息
-func (c *Context) Push(message *Message) error {
+func (c *Context) Push(message *cluster.Message) error {
 	return c.client.proxy.Push(message)
 }

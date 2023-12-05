@@ -19,7 +19,7 @@ service Gate {
   rpc Multicast(MulticastRequest) returns (MulticastReply) {}
   // 推送广播消息
   rpc Broadcast(BroadcastRequest) returns (BroadcastReply) {}
-  // 推送广播消息
+  // 统计会话总数
   rpc Stat(StatRequest) returns (StatReply) {}
   // 断开连接
   rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
