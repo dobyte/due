@@ -1,4 +1,5 @@
 # due
+
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
@@ -98,7 +99,6 @@ tcp心跳包格式：
 1. ws协议心跳包默认为空bytes。
 2. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，包长度固定为0。
 
-
 ### 4.协议（v2）
 
 在due框架中，通信协议统一采用opcode+route+seq+message的格式：
@@ -144,76 +144,80 @@ tcp心跳包格式：
 ```
 
 len: 4 bytes
-   
-   - TCP包长度位
-   - 固定长度为4字节，且不可修改
-   - 采用大端序
-   - WebSocket协议无包长度位
-   - 此参数由TCP网络框架自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+
+- TCP包长度位
+- 固定长度为4字节，且不可修改
+- 采用大端序
+- WebSocket协议无包长度位
+- 此参数由TCP网络框架自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
 
 h: 1 bit
 
-   - 心跳标识位
-   - %x0 表示数据包
-   - %x1 表示心跳包
-   - 采用大端序
-   - 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+- 心跳标识位
+- %x0 表示数据包
+- %x1 表示心跳包
+- 采用大端序
+- 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
 
 extcode: 7 bit
 
-   - 扩展操作码
-   - 暂未明确定义具体操作码
-   - 采用大端序
-   - 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+- 扩展操作码
+- 暂未明确定义具体操作码
+- 采用大端序
+- 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
 
 route: 1 bytes | 2 bytes | 4 bytes
 
-   - 消息路由
-   - 默认采用2字节，可通过打包器配置packet.routeBytes进行修改
-   - 不同的路由对应不同的业务处理流程
-   - 心跳包无消息路由位
-   - 此参数由业务打包器打包，服务器开发者和客户端开发者均要关心此参数
+- 消息路由
+- 默认采用2字节，可通过打包器配置packet.routeBytes进行修改
+- 不同的路由对应不同的业务处理流程
+- 心跳包无消息路由位
+- 此参数由业务打包器打包，服务器开发者和客户端开发者均要关心此参数
 
 seq: 0 bytes | 1 bytes | 2 bytes | 4 bytes
 
-   - 消息序列号
-   - 默认采用2字节，可通过打包器配置packet.seqBytes进行修改
-   - 可通过将打包器配置packet.seqBytes设置为0来屏蔽使用序列号
-   - 消息序列号常用于请求/响应模型的消息对儿的确认
-   - 心跳包无消息序列号位
-   - 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
+- 消息序列号
+- 默认采用2字节，可通过打包器配置packet.seqBytes进行修改
+- 可通过将打包器配置packet.seqBytes设置为0来屏蔽使用序列号
+- 消息序列号常用于请求/响应模型的消息对儿的确认
+- 心跳包无消息序列号位
+- 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
 
 message data: n bytes
 
-   - 消息数据
-   - 心跳包无消息数据
-   - 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
+- 消息数据
+- 心跳包无消息数据
+- 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
 
 server time: 8 bytes
 
-   - 心跳数据
-   - 数据包无心跳数据
-   - 上行心跳包无需携带心跳数据，下行心跳包默认携带8 bytes的服务器时间（ms），可通过网络库配置进行设置是否携带下行包时间信息
-   - 此参数由网络框架层自动打包，服务端开发者不关注此参数，客户端开发者需关注此参数
+- 心跳数据
+- 数据包无心跳数据
+- 上行心跳包无需携带心跳数据，下行心跳包默认携带8 bytes的服务器时间（ms），可通过网络库配置进行设置是否携带下行包时间信息
+- 此参数由网络框架层自动打包，服务端开发者不关注此参数，客户端开发者需关注此参数
 
 ### 5.配置中心（v2）
 
 1.功能介绍
 
-config配置中心定位区别于etc系统配置。配置中心主要应用于项目业务层，为开发者提供完善的读取、设置、修改、热更新等功能。
+配置中心主要定位于业务的配置管理，提供快捷灵活的配置方案。支持完善的读取、修改、删除、热更新等功能。
 
 2.配置组件
-   * [file](config/file/README.md)
-   * [etcd](config/etcd/README.md)
-   * consul
+
+* [file](config/file/README-ZH.md)
+* [etcd](config/etcd/README-ZH.md)
+* [consul](config/consul/README-ZH.md)
 
 ### 6.注册中心（v2）
 
 1.功能介绍
 
+注册中心用于集群实例的服务注册和发现。支撑整个集群的无感知停服、重启、动态扩容等功能。
+
 2.相关组件
-   * [consul](registry/consul/README.md)
-   * [etcd](registry/etcd/README.md)
+
+* [etcd](registry/etcd/README-ZH.md)
+* [consul](registry/consul/README-ZH.md)
 
 ### 7.网络
 
@@ -268,7 +272,6 @@ func main() {
    // 启动容器
    container.Serve()
 }
-
 ```
 
 3.构建Node服务器
@@ -304,7 +307,6 @@ func main() {
 func greetHandler(ctx *cluster.Context) {
    _ = ctx.Response([]byte("hello world~~"))
 }
-
 ```
 
 4.构建Mesh服务
@@ -368,9 +370,7 @@ func (w *WalletService) IncrGold(ctx context.Context, req *IncrGoldRequest, repl
 
    return nil
 }
-
 ```
-
 
 5.构建测试客户端
 

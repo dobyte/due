@@ -22,7 +22,7 @@ timezone = "Local"
         mode = "read-only"
     # etcd配置中心
     [config.etcd]
-        # 客户端连接地址
+        # 客户端连接地址，默认为["127.0.0.1:2379"]
         addrs = ["127.0.0.1:2379"]
         # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = "5s"
@@ -54,8 +54,8 @@ timezone = "Local"
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 调度模型，默认为single-thread。可选：single-thread | multi-thread | goroutine | actor
-        scheduling = "single-thread"
+        # 调度器模型，默认为0。可选：0（单线程） | 1（多线程） | 2（多协程） | 3（actor）
+        scheduler = 0
 
     # 集群管理节点配置
     [cluster.master]
@@ -257,32 +257,32 @@ timezone = "Local"
         classifiedStorage = true
 [registry]
     [registry.etcd]
-        # 客户端连接地址
+        # 客户端连接地址，默认为["127.0.0.1:2379"]
         addrs = ["127.0.0.1:2379"]
-        # 客户端拨号超时时间（秒）
+        # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = "5s"
-        # 命名空间
+        # 命名空间，默认为services
         namespace = "services"
-        # 超时时间
+        # 超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
-        # 心跳重试次数
+        # 心跳重试次数，默认为3
         retryTimes = 3
-        # 心跳重试间隔
+        # 心跳重试间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
         retryInterval = "10s"
     [registry.consul]
-        # 客户端连接地址
+        # 客户端连接地址，默认为127.0.0.1:8500
         addr = "127.0.0.1:8500"
-        # 是否启用健康检查
+        # 是否启用健康检查，默认为true
         healthCheck = true
-        # 健康检查时间间隔（秒），仅在启用健康检查后生效
+        # 健康检查时间间隔（秒），仅在启用健康检查后生效，默认为10
         healthCheckInterval = 10
-        # 健康检查超时时间（秒），仅在启用健康检查后生效
+        # 健康检查超时时间（秒），仅在启用健康检查后生效，默认为5
         healthCheckTimeout = 5
-        # 是否启用心跳检查
+        # 是否启用心跳检查，默认为true
         heartbeatCheck = true
-        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效
+        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效，默认为10
         heartbeatCheckInterval = 10
-        # 健康检测失败后自动注销服务时间（秒）
+        # 健康检测失败后自动注销服务时间（秒），默认为30
         deregisterCriticalServiceAfter = 30
 [network]
     [network.ws]
