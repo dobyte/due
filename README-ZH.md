@@ -198,36 +198,36 @@ go get -u github.com/dobyte/due/transport/rpcx/v2@latest
 package main
 
 import (
-	"github.com/dobyte/due/locate/redis/v2"
-	"github.com/dobyte/due/network/ws/v2"
-	"github.com/dobyte/due/registry/consul/v2"
-	"github.com/dobyte/due/transport/rpcx/v2"
-	"github.com/dobyte/due/v2"
-	"github.com/dobyte/due/v2/cluster/gate"
+    "github.com/dobyte/due/locate/redis/v2"
+    "github.com/dobyte/due/network/ws/v2"
+    "github.com/dobyte/due/registry/consul/v2"
+    "github.com/dobyte/due/transport/rpcx/v2"
+    "github.com/dobyte/due/v2"
+    "github.com/dobyte/due/v2/cluster/gate"
 )
 
 func main() {
-	// 创建容器
-	container := due.NewContainer()
-	// 创建服务器
-	server := ws.NewServer()
-	// 创建用户定位器
-	locator := redis.NewLocator()
-	// 创建服务发现
-	registry := consul.NewRegistry()
-	// 创建RPC传输器
-	transporter := rpcx.NewTransporter()
-	// 创建网关组件
-	component := gate.NewGate(
-		gate.WithServer(server),
-		gate.WithLocator(locator),
-		gate.WithRegistry(registry),
-		gate.WithTransporter(transporter),
-	)
-	// 添加网关组件
-	container.Add(component)
-	// 启动容器
-	container.Serve()
+    // 创建容器
+    container := due.NewContainer()
+    // 创建服务器
+    server := ws.NewServer()
+    // 创建用户定位器
+    locator := redis.NewLocator()
+    // 创建服务发现
+    registry := consul.NewRegistry()
+    // 创建RPC传输器
+    transporter := rpcx.NewTransporter()
+    // 创建网关组件
+    component := gate.NewGate(
+        gate.WithServer(server),
+        gate.WithLocator(locator),
+        gate.WithRegistry(registry),
+        gate.WithTransporter(transporter),
+    )
+    // 添加网关组件
+    container.Add(component)
+    // 启动容器
+    container.Serve()
 }
 ```
 
@@ -237,32 +237,65 @@ func main() {
 package main
 
 import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/node"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
+	"fmt"
+	"github.com/dobyte/due/locate/redis/v2"
+	"github.com/dobyte/due/registry/consul/v2"
+	"github.com/dobyte/due/transport/rpcx/v2"
+	"github.com/dobyte/due/v2"
+	"github.com/dobyte/due/v2/cluster/node"
+	"github.com/dobyte/due/v2/codes"
+	"github.com/dobyte/due/v2/log"
 )
 
 func main() {
-   // 创建容器
-   container := due.NewContainer()
-   // 创建节点组件
-   node := cluster.NewNode(
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(etcd.NewRegistry()),
-      cluster.WithTransporter(grpc.NewTransporter()),
-   )
-   // 注册路由
-   node.Proxy().Router().AddRouteHandler(1, false, greetHandler)
-   // 添加组件
-   container.Add(node)
-   // 启动服务器
-   container.Serve()
+	// 创建容器
+	container := due.NewContainer()
+	// 创建用户定位器
+	locator := redis.NewLocator()
+	// 创建服务发现
+	registry := consul.NewRegistry()
+	// 创建RPC传输器
+	transporter := rpcx.NewTransporter()
+	// 创建网关组件
+	component := node.NewNode(
+		node.WithLocator(locator),
+		node.WithRegistry(registry),
+		node.WithTransporter(transporter),
+	)
+	// 注册路由
+	component.Proxy().Router().AddRouteHandler(1, false, greetHandler)
+	// 添加网关组件
+	container.Add(component)
+	// 启动容器
+	container.Serve()
 }
 
-func greetHandler(ctx *cluster.Context) {
-   _ = ctx.Response([]byte("hello world~~"))
+type greetReq struct {
+	Name string `json:"name"`
+}
+
+type greetRes struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func greetHandler(ctx *node.Context) {
+	req := &greetReq{}
+	res := &greetRes{}
+	defer func() {
+		if err := ctx.Response(res); err != nil {
+			log.Errorf("response message failed: %v", err)
+		}
+	}()
+
+	if err := ctx.Request.Parse(req); err != nil {
+		log.Errorf("parse request message failed: %v", err)
+		res.Code = codes.InternalError.Code()
+		return
+	}
+
+	res.Code = codes.OK.Code()
+	res.Message = fmt.Sprintf("hello %s~~", req.Name)
 }
 ```
 

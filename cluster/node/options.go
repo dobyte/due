@@ -122,6 +122,7 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
 }
 
-func WithSchedulingModel() Option {
-	return func(o *options) {}
+// WithSchedulingModel 设置调度模型
+func WithSchedulingModel(schedulingModel SchedulingModel) Option {
+	return func(o *options) { o.schedulingModel = schedulingModel }
 }
