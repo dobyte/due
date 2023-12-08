@@ -46,6 +46,8 @@ timezone = "Local"
         id = ""
         # 实例名称
         name = "gate"
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
     # 集群节点配置
     [cluster.node]
         # 实例ID，节点集群中唯一。不填写默认自动生成唯一的实例ID
@@ -54,6 +56,8 @@ timezone = "Local"
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
         # 调度器模型，默认为0。可选：0（单线程） | 1（多线程） | 2（多协程） | 3（actor）
         scheduler = 0
 
@@ -299,10 +303,10 @@ timezone = "Local"
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
-            # 握手超时时间（秒），默认10秒
-            handshakeTimeout = 10
-            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            handshakeTimeout = "10s"
+            # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
             heartbeatMechanism = "resp"
             # 下行心跳是否携带服务器时间，默认为true
@@ -310,10 +314,10 @@ timezone = "Local"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
-            # 握手超时时间（秒）
-            handshakeTimeout = 10
-            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            handshakeTimeout = "10s"
+            # 心跳间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
     [network.tcp]
         [network.tcp.server]
             # 服务器监听地址

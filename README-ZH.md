@@ -52,7 +52,7 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 
 在due框架中，通信协议统一采用opcode+route+seq+message的格式：
 
-1.websocket数据包格式：
+1.Websocket数据包
 
 ```
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
@@ -63,7 +63,7 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 +-------------------------------------------------------------------------------+
 ```
 
-2.websocket心跳包格式：
+2.Websocket心跳包
 
 ```
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
@@ -72,7 +72,7 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 +-+-------------+---------------------------------------------------------------+
 ```
 
-3.tcp数据包格式：
+3.TCP数据包
 
 ```
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
@@ -83,7 +83,7 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 +-----------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-4.tcp心跳包格式：
+4.TCP心跳包
 
 ```
  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
@@ -91,8 +91,6 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 |                              len                              |h|   extcode   |                       server time (ms)                        |
 +---------------------------------------------------------------+-+-------------+---------------------------------------------------------------+
 ```
-
-5.格式说明：
 
 len: 4 bytes
 
@@ -153,7 +151,7 @@ server time: 8 bytes
 
 配置中心主要定位于业务的配置管理，提供快捷灵活的配置方案。支持完善的读取、修改、删除、热更新等功能。
 
-2.相关组件
+2.配置组件
 
 * [file](config/file/README-ZH.md)
 * [etcd](config/etcd/README-ZH.md)
@@ -187,11 +185,11 @@ docker-compose up
 1.获取框架
 
 ```shell
-go get github.com/dobyte/due@latest
-go get github.com/dobyte/due/network/ws@latest
-go get github.com/dobyte/due/registry/etcd@latest
-go get github.com/dobyte/due/locate/redis@latest
-go get github.com/dobyte/due/transport/grpc@latest
+go get -u github.com/dobyte/due/v2@latest
+go get -u github.com/dobyte/due/locate/redis/v2@latest
+go get -u github.com/dobyte/due/network/ws/v2@latest
+go get -u github.com/dobyte/due/registry/consul/v2@latest
+go get -u github.com/dobyte/due/transport/rpcx/v2@latest
 ```
 
 2.构建Gate服务器
@@ -200,28 +198,36 @@ go get github.com/dobyte/due/transport/grpc@latest
 package main
 
 import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/gate"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/network/ws"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
+	"github.com/dobyte/due/locate/redis/v2"
+	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/registry/consul/v2"
+	"github.com/dobyte/due/transport/rpcx/v2"
+	"github.com/dobyte/due/v2"
+	"github.com/dobyte/due/v2/cluster/gate"
 )
 
 func main() {
-   // 创建容器
-   container := due.NewContainer()
-   // 创建网关组件
-   gate := cluster.NewGate(
-      cluster.WithServer(ws.NewServer()),
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(etcd.NewRegistry()),
-      cluster.WithTransporter(grpc.NewTransporter()),
-   )
-   // 添加网关组件
-   container.Add(gate)
-   // 启动容器
-   container.Serve()
+	// 创建容器
+	container := due.NewContainer()
+	// 创建服务器
+	server := ws.NewServer()
+	// 创建用户定位器
+	locator := redis.NewLocator()
+	// 创建服务发现
+	registry := consul.NewRegistry()
+	// 创建RPC传输器
+	transporter := rpcx.NewTransporter()
+	// 创建网关组件
+	component := gate.NewGate(
+		gate.WithServer(server),
+		gate.WithLocator(locator),
+		gate.WithRegistry(registry),
+		gate.WithTransporter(transporter),
+	)
+	// 添加网关组件
+	container.Add(component)
+	// 启动容器
+	container.Serve()
 }
 ```
 

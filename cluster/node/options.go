@@ -70,8 +70,8 @@ func defaultOptions() *options {
 		opts.codec = encoding.Invoke(codec)
 	}
 
-	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
-		opts.timeout = time.Duration(timeout) * time.Second
+	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
+		opts.timeout = timeout
 	}
 
 	return opts
