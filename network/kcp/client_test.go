@@ -1,8 +1,10 @@
 package kcp_test
 
 import (
+	"github.com/symsimmy/due/internal/pb"
 	"github.com/symsimmy/due/network"
 	"github.com/symsimmy/due/network/kcp"
+	"github.com/symsimmy/due/packet"
 	"testing"
 	"time"
 )
@@ -33,7 +35,10 @@ func TestNewClient(t *testing.T) {
 	for {
 		select {
 		case <-ticker.C:
-			if err = conn.Push([]byte("hello kcp server~~")); err != nil {
+			req := &pb.C2SLoginRequest{}
+			b, _ := req.Marshal()
+			p, _ := packet.Pack(&packet.Message{Seq: 1, Route: 1, Compress: true, Buffer: b})
+			if err = conn.Push([]byte(p)); err != nil {
 				t.Error(err)
 				return
 			}

@@ -59,7 +59,7 @@ func (s *server) Start() error {
 		s.startHandler()
 	}
 
-	s.serve()
+	go s.serve()
 
 	return nil
 }
