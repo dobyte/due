@@ -4,56 +4,46 @@ import (
 	"github.com/symsimmy/due/network"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 type serverConnMgr struct {
-	rw     sync.RWMutex             // 连接读写锁
-	id     int64                    // 连接ID
-	pool   sync.Pool                // 连接池
-	conns  map[net.Conn]*serverConn // 连接集合
-	server *server                  // 服务器
+	id     int64     // 连接ID
+	pool   sync.Pool // 连接池
+	conns  sync.Map  // 连接集合
+	server *server   // 服务器
 }
 
 func newConnMgr(server *server) *serverConnMgr {
 	return &serverConnMgr{
 		server: server,
-		conns:  make(map[net.Conn]*serverConn),
 		pool:   sync.Pool{New: func() interface{} { return &serverConn{} }},
 	}
 }
 
 // 关闭连接
 func (cm *serverConnMgr) close() {
-	cm.rw.Lock()
-	defer cm.rw.RUnlock()
-
-	for _, conn := range cm.conns {
-		_ = conn.Close()
-	}
+	cm.conns.Range(func(k, v interface{}) bool {
+		conn := v.(network.Conn)
+		_ = conn.Close(false)
+		return true
+	})
 }
 
 // 分配连接
 func (cm *serverConnMgr) allocate(c net.Conn) error {
-	cm.rw.Lock()
-	defer cm.rw.Unlock()
-
-	if len(cm.conns) >= cm.server.opts.maxConnNum {
-		return network.ErrTooManyConnection
-	}
-
-	cm.id++
+	atomic.AddInt64(&cm.id, 1)
 	conn := cm.pool.Get().(*serverConn)
+	cm.conns.Store(c, conn)
+
 	conn.init(c, cm)
-	cm.conns[c] = conn
 
 	return nil
 }
 
 // 回收连接
 func (cm *serverConnMgr) recycle(conn *serverConn) {
-	cm.rw.Lock()
-	defer cm.rw.Unlock()
-
-	delete(cm.conns, conn.conn)
+	cm.conns.Delete(conn.conn)
+	conn.conn = nil
 	cm.pool.Put(conn)
 }
