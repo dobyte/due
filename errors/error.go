@@ -31,6 +31,7 @@ var (
 	ErrNoOperationPermission = New("no operation permission")
 	ErrInvalidConfigContent  = New("invalid config content")
 	ErrNotFoundConfigSource  = New("not found config source")
+	ErrInvalidFormat         = New("invalid format")
 )
 
 // NewError 新建一个错误
