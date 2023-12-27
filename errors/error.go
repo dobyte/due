@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	ErrNil                   = New("nil")
 	ErrInvalidGID            = New("invalid gate id")
 	ErrInvalidNID            = New("invalid node id")
 	ErrInvalidMessage        = New("invalid message")
