@@ -61,13 +61,8 @@ func (eb *defaultEventbus) Publish(ctx context.Context, topic string, payload in
 		return nil
 	}
 
-	id, err := xuuid.UUID()
-	if err != nil {
-		return err
-	}
-
 	c.dispatch(&Event{
-		ID:        id,
+		ID:        xuuid.UUID(),
 		Topic:     topic,
 		Payload:   value.NewValue(payload),
 		Timestamp: xtime.UnixNano(xtime.Now().UnixNano()),

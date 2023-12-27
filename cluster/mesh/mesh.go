@@ -134,18 +134,13 @@ func (m *Mesh) stopTransporter() {
 func (m *Mesh) registerServiceInstances() {
 	var (
 		id       string
-		err      error
 		check    = make(map[string]struct{}, len(m.services))
 		endpoint = m.transporter.Endpoint().String()
 	)
 
 	for _, entity := range m.services {
 		for {
-			id, err = xuuid.UUID()
-			if err != nil {
-				log.Fatalf("generate service id failed: %v", err)
-			}
-
+			id = xuuid.UUID()
 			if _, ok := check[id]; !ok {
 				check[id] = struct{}{}
 				break

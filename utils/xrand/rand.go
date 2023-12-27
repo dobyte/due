@@ -2,11 +2,11 @@ package xrand
 
 import (
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"math"
 	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -18,9 +18,7 @@ const (
 	SymbolSeed           = "!\\\"#$%&'()*+,-./:;<=>?@[\\\\]^_`{|}~"               // 特殊字符
 )
 
-func init() {
-	rand.Seed(xtime.Now().UnixNano())
-}
+var globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // Str 生成指定长度的字符串
 func Str(seed string, length int) (str string) {
@@ -32,7 +30,7 @@ func Str(seed string, length int) (str string) {
 	}
 
 	for i := 0; i < length; i++ {
-		pos := rand.Intn(n)
+		pos := globalRand.Intn(n)
 		str += string(r[pos : pos+1])
 	}
 
@@ -65,7 +63,7 @@ func Int(min, max int) int {
 		min, max = max, min
 	}
 
-	return rand.Intn(max+1-min) + min
+	return globalRand.Intn(max+1-min) + min
 }
 
 // Int32 生成[min,max]范围间的32位整数，
@@ -78,7 +76,7 @@ func Int32(min, max int32) int32 {
 		min, max = max, min
 	}
 
-	return rand.Int31n(max+1-min) + min
+	return globalRand.Int31n(max+1-min) + min
 }
 
 // Int64 生成[min,max]范围间的64位整数
@@ -91,7 +89,7 @@ func Int64(min, max int64) int64 {
 		min, max = max, min
 	}
 
-	return rand.Int63n(max+1-min) + min
+	return globalRand.Int63n(max+1-min) + min
 }
 
 // Float32 生成[min,max)范围间的32位浮点数
@@ -104,7 +102,7 @@ func Float32(min, max float32) float32 {
 		min, max = max, min
 	}
 
-	return min + rand.Float32()*(max-min)
+	return min + globalRand.Float32()*(max-min)
 }
 
 // Float64 生成[min,max)范围间的64位浮点数
@@ -117,7 +115,7 @@ func Float64(min, max float64) float64 {
 		min, max = max, min
 	}
 
-	return min + rand.Float64()*(max-min)
+	return min + globalRand.Float64()*(max-min)
 }
 
 // Lucky 根据概率抽取幸运值
@@ -178,4 +176,15 @@ func Weight(list []interface{}, fn func(v interface{}) float64) int {
 	}
 
 	return Int(1, len(list))
+}
+
+// Shuffle 打乱数组
+func Shuffle(list []interface{}) {
+	globalRand.Shuffle(len(list), func(i, j int) {
+		list[i], list[j] = list[j], list[i]
+	})
+}
+
+func Rand() *rand.Rand {
+	return globalRand
 }

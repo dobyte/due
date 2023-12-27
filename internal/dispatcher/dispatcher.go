@@ -105,10 +105,10 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 		}
 
 		for _, evt := range service.Events {
-			event, ok := events[int(evt)]
+			event, ok := events[evt]
 			if !ok {
 				event = newEvent(d, evt)
-				events[int(evt)] = event
+				events[evt] = event
 			}
 			event.addEndpoint(service.ID, ep)
 		}

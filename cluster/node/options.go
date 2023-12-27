@@ -58,8 +58,8 @@ func defaultOptions() *options {
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
-	} else if id, err := xuuid.UUID(); err == nil {
-		opts.id = id
+	} else {
+		opts.id = xuuid.UUID()
 	}
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
