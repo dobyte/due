@@ -6,6 +6,42 @@ import (
 )
 
 type Result interface {
+	Err() error
+	Result() (value.Value, error)
+	Int() (int, error)
+	Int8() (int8, error)
+	Int16() (int16, error)
+	Int32() (int32, error)
+	Int64() (int64, error)
+	Uint() (uint, error)
+	Uint8() (uint8, error)
+	Uint16() (uint16, error)
+	Uint32() (uint32, error)
+	Uint64() (uint64, error)
+	Float32() (float32, error)
+	Float64() (float64, error)
+	Bool() (bool, error)
+	String() (string, error)
+	Duration() (time.Duration, error)
+	Ints() ([]int, error)
+	Int8s() ([]int8, error)
+	Int16s() ([]int16, error)
+	Int32s() ([]int32, error)
+	Int64s() ([]int64, error)
+	Uints() ([]uint, error)
+	Uint8s() ([]uint8, error)
+	Uint16s() ([]uint16, error)
+	Uint32s() ([]uint32, error)
+	Uint64s() ([]uint64, error)
+	Float32s() ([]float32, error)
+	Float64s() ([]float64, error)
+	Bools() ([]bool, error)
+	Strings() ([]string, error)
+	Bytes() ([]byte, error)
+	Durations() ([]time.Duration, error)
+	Slice() ([]interface{}, error)
+	Map() (map[string]interface{}, error)
+	Scan(pointer interface{}) error
 }
 
 type result struct {
@@ -19,6 +55,14 @@ func NewResult(val interface{}, err ...error) Result {
 	} else {
 		return &result{value: value.NewValue(val)}
 	}
+}
+
+func (r *result) Err() error {
+	return r.err
+}
+
+func (r *result) Result() (value.Value, error) {
+	return r.value, r.err
 }
 
 func (r *result) Int() (int, error) {
@@ -291,12 +335,4 @@ func (r *result) Scan(pointer interface{}) error {
 	}
 
 	return r.value.Scan(pointer)
-}
-
-func (r *result) Value() (interface{}, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-
-	return r.Value(), nil
 }
