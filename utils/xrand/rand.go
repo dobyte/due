@@ -120,6 +120,10 @@ func Float64(min, max float64) float64 {
 
 // Lucky 根据概率抽取幸运值
 func Lucky(probability float64, base ...float64) bool {
+	if probability <= 0 {
+		return false
+	}
+
 	b := float64(100)
 	if len(base) > 0 {
 		b = base[0]

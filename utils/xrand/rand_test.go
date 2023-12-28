@@ -26,6 +26,7 @@ func TestLucky(t *testing.T) {
 	t.Log(xrand.Lucky(50.201222))
 	t.Log(xrand.Lucky(0.201222))
 	t.Log(xrand.Lucky(50))
+	t.Log(xrand.Lucky(0))
 }
 
 func TestWeight(t *testing.T) {
