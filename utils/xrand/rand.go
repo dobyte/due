@@ -150,7 +150,7 @@ func Weight(list []interface{}, fn func(v interface{}) float64) int {
 	}
 
 	total := float64(0)
-	scale := float64(0)
+	scale := float64(1)
 
 	for _, item := range list {
 		weight := fn(item)
