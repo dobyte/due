@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
+	"reflect"
 	"time"
 )
 
@@ -40,15 +41,6 @@ func NewCache(opts ...Option) *Cache {
 	return c
 }
 
-// AddPrefix 添加Key前缀
-func (c *Cache) AddPrefix(key string) string {
-	if c.opts.prefix == "" {
-		return key
-	} else {
-		return c.opts.prefix + ":" + key
-	}
-}
-
 // Has 检测缓存是否存在
 func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	key = c.AddPrefix(key)
@@ -77,11 +69,11 @@ func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.R
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
-	if err != nil {
-		if err != redis.Nil {
-			return cache.NewResult(nil, err)
-		}
+	if err != nil && err != redis.Nil {
+		return cache.NewResult(nil, err)
+	}
 
+	if err == redis.Nil || val == c.opts.nilValue {
 		if len(def) > 0 {
 			return cache.NewResult(def[0])
 		} else {
@@ -99,6 +91,54 @@ func (c *Cache) Set(ctx context.Context, key string, value interface{}, expirati
 	} else {
 		return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), redis.KeepTTL).Err()
 	}
+}
+
+// GetSet 获取设置缓存值
+func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
+	key = c.AddPrefix(key)
+
+	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+		return c.opts.client.Get(ctx, key).Result()
+	})
+	if err != nil && err != redis.Nil {
+		return cache.NewResult(nil, err)
+	}
+
+	if err == nil {
+		if val == c.opts.nilValue {
+			return cache.NewResult(nil, errors.ErrNil)
+		} else {
+			return cache.NewResult(val)
+		}
+	}
+
+	rst, _, _ := c.sfg.Do(key+":set", func() (interface{}, error) {
+		val, expiration, err := fn()
+		if err != nil {
+			return cache.NewResult(nil, err), nil
+		}
+
+		if val == nil || reflect.ValueOf(val).IsNil() {
+			if err = c.opts.client.Set(ctx, key, c.opts.nilValue, c.opts.nilExpiration).Err(); err != nil {
+				return cache.NewResult(nil, err), nil
+			}
+			return cache.NewResult(nil, errors.ErrNil), nil
+		}
+
+		if err = c.opts.client.Set(ctx, key, xconv.String(val), expiration).Err(); err != nil {
+			return cache.NewResult(nil, err), nil
+		}
+
+		return cache.NewResult(val, nil), nil
+	})
+
+	return rst.(cache.Result)
+}
+
+// Delete 删除缓存
+func (c *Cache) Delete(ctx context.Context, key string) (bool, error) {
+	ok, err := c.opts.client.Del(ctx, c.AddPrefix(key)).Result()
+	return ok == 1, err
 }
 
 // IncrInt 整数自增
@@ -119,4 +159,18 @@ func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, er
 // DecrFloat 浮点数自减
 func (c *Cache) DecrFloat(ctx context.Context, key string, value float64) (float64, error) {
 	return c.opts.client.IncrByFloat(ctx, c.AddPrefix(key), -value).Result()
+}
+
+// AddPrefix 添加Key前缀
+func (c *Cache) AddPrefix(key string) string {
+	if c.opts.prefix == "" {
+		return key
+	} else {
+		return c.opts.prefix + ":" + key
+	}
+}
+
+// Client 获取客户端
+func (c *Cache) Client() interface{} {
+	return c.opts.client
 }
