@@ -24,7 +24,7 @@ const (
 	defaultUsernameKey      = "etc.cache.redis.username"
 	defaultPasswordKey      = "etc.cache.redis.password"
 	defaultNilValueKey      = "etc.cache.redis.nilValue"
-	defaultNilExpirationKey = "etc.cache.redis.defaultNilExpiration"
+	defaultNilExpirationKey = "etc.cache.redis.nilExpiration"
 )
 
 type Option func(o *options)
