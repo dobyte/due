@@ -22,6 +22,10 @@ var globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // Str 生成指定长度的字符串
 func Str(seed string, length int) (str string) {
+	if length <= 0 {
+		return ""
+	}
+
 	r := []rune(seed)
 	n := len(r)
 	if n == 0 {
@@ -43,8 +47,16 @@ func Letters(length int) string {
 }
 
 // Digits 生成指定长度的数字字符串
-func Digits(length int) string {
-	return Str(DigitSeed, length)
+func Digits(length int, hasLeadingZero ...bool) string {
+	if len(hasLeadingZero) > 0 && hasLeadingZero[0] {
+		return Str(DigitSeed, length)
+	}
+
+	if length == 1 {
+		return Str(DigitWithoutZeroSeed, 1)
+	}
+
+	return Str(DigitWithoutZeroSeed, 1) + Str(DigitSeed, length-1)
 }
 
 // Symbols 生成指定长度的特殊字符串
@@ -53,7 +65,6 @@ func Symbols(length int) string {
 }
 
 // Int 生成[min,max]的整数
-// min -50 max 100
 func Int(min, max int) int {
 	if min == max {
 		return min
