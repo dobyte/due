@@ -65,7 +65,7 @@ func defaultEncoder(format string, content interface{}) ([]byte, error) {
 	case toml.Name:
 		return toml.Marshal(content)
 	default:
-		return nil, errors.New("invalid encoding format")
+		return nil, errors.ErrInvalidFormat
 	}
 }
 
@@ -81,7 +81,7 @@ func defaultDecoder(format string, content []byte) (interface{}, error) {
 	case toml.Name:
 		return unmarshal(content, toml.Unmarshal)
 	default:
-		return nil, errors.New("invalid decoding format")
+		return nil, errors.ErrInvalidFormat
 	}
 }
 
@@ -97,7 +97,7 @@ func defaultScanner(format string, content []byte, dest interface{}) error {
 	case toml.Name:
 		return toml.Unmarshal(content, dest)
 	default:
-		return errors.New("invalid scan format")
+		return errors.ErrInvalidFormat
 	}
 }
 

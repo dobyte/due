@@ -21,13 +21,13 @@ import (
 
 type Gate struct {
 	component.Base
-	opts     *options
-	ctx      context.Context
-	cancel   context.CancelFunc
-	proxy    *proxy
-	instance *registry.ServiceInstance
-	rpc      transport.Server
-	session  *session.Session
+	opts        *options
+	ctx         context.Context
+	cancel      context.CancelFunc
+	proxy       *proxy
+	instance    *registry.ServiceInstance
+	session     *session.Session
+	transporter transport.Server
 }
 
 func NewGate(opts ...Option) *Gate {
@@ -77,7 +77,7 @@ func (g *Gate) Init() {
 func (g *Gate) Start() {
 	g.startNetworkServer()
 
-	g.startRPCServer()
+	g.startTransporter()
 
 	g.registerServiceInstance()
 
@@ -92,7 +92,7 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
-	g.stopRPCServer()
+	g.stopTransporter()
 
 	g.cancel()
 }
@@ -149,26 +149,26 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 	cancel()
 }
 
-// 启动RPC服务器
-func (g *Gate) startRPCServer() {
-	var err error
-
-	g.rpc, err = g.opts.transporter.NewGateServer(&provider{g})
+// 启动传输服务器
+func (g *Gate) startTransporter() {
+	transporter, err := g.opts.transporter.NewGateServer(&provider{g})
 	if err != nil {
-		log.Fatalf("rpc server create failed: %v", err)
+		log.Fatalf("transporter create failed: %v", err)
 	}
 
+	g.transporter = transporter
+
 	go func() {
-		if err = g.rpc.Start(); err != nil {
-			log.Fatalf("rpc server start failed: %v", err)
+		if err = g.transporter.Start(); err != nil {
+			log.Fatalf("transporter start failed: %v", err)
 		}
 	}()
 }
 
-// 停止RPC服务器
-func (g *Gate) stopRPCServer() {
-	if err := g.rpc.Stop(); err != nil {
-		log.Errorf("rpc server stop failed: %v", err)
+// 停止传输服务器
+func (g *Gate) stopTransporter() {
+	if err := g.transporter.Stop(); err != nil {
+		log.Errorf("transporter stop failed: %v", err)
 	}
 }
 
@@ -180,14 +180,14 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    cluster.Work.String(),
-		Endpoint: g.rpc.Endpoint().String(),
+		Endpoint: g.transporter.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register dispatcher instance failed: %v", err)
+		log.Fatalf("register gate instance failed: %v", err)
 	}
 }
 
@@ -197,12 +197,12 @@ func (g *Gate) deregisterServiceInstance() {
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
 	if err != nil {
-		log.Errorf("deregister dispatcher instance failed: %v", err)
+		log.Errorf("deregister gate instance failed: %v", err)
 	}
 }
 
 func (g *Gate) debugPrint() {
 	log.Debugf("gate server startup successful")
 	log.Debugf("%s server listen on %s", g.opts.server.Protocol(), g.opts.server.Addr())
-	log.Debugf("%s server listen on %s", g.rpc.Scheme(), g.rpc.Addr())
+	log.Debugf("%s server listen on %s", g.transporter.Scheme(), g.transporter.Addr())
 }

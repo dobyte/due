@@ -22,7 +22,7 @@ timezone = "Local"
         mode = "read-only"
     # etcd配置中心
     [config.etcd]
-        # 客户端连接地址
+        # 客户端连接地址，默认为["127.0.0.1:2379"]
         addrs = ["127.0.0.1:2379"]
         # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = "5s"
@@ -46,6 +46,8 @@ timezone = "Local"
         id = ""
         # 实例名称
         name = "gate"
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
     # 集群节点配置
     [cluster.node]
         # 实例ID，节点集群中唯一。不填写默认自动生成唯一的实例ID
@@ -54,10 +56,11 @@ timezone = "Local"
         name = "node"
         # 编解码器。可选：json | proto
         codec = "proto"
-        # 加密器。可选：rsa | ecc
-        encryptor = "ecc"
-        # 解密器。可选：rsa | ecc
-        decryptor = "ecc"
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
+        # 调度器模型，默认为0。可选：0（单线程） | 1（多线程） | 2（多协程） | 3（actor）
+        scheduler = 0
+
     # 集群管理节点配置
     [cluster.master]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
@@ -258,32 +261,32 @@ timezone = "Local"
         classifiedStorage = true
 [registry]
     [registry.etcd]
-        # 客户端连接地址
+        # 客户端连接地址，默认为["127.0.0.1:2379"]
         addrs = ["127.0.0.1:2379"]
-        # 客户端拨号超时时间（秒）
+        # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = "5s"
-        # 命名空间
+        # 命名空间，默认为services
         namespace = "services"
-        # 超时时间
+        # 超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
-        # 心跳重试次数
+        # 心跳重试次数，默认为3
         retryTimes = 3
-        # 心跳重试间隔
+        # 心跳重试间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
         retryInterval = "10s"
     [registry.consul]
-        # 客户端连接地址
+        # 客户端连接地址，默认为127.0.0.1:8500
         addr = "127.0.0.1:8500"
-        # 是否启用健康检查
+        # 是否启用健康检查，默认为true
         healthCheck = true
-        # 健康检查时间间隔（秒），仅在启用健康检查后生效
+        # 健康检查时间间隔（秒），仅在启用健康检查后生效，默认为10
         healthCheckInterval = 10
-        # 健康检查超时时间（秒），仅在启用健康检查后生效
+        # 健康检查超时时间（秒），仅在启用健康检查后生效，默认为5
         healthCheckTimeout = 5
-        # 是否启用心跳检查
+        # 是否启用心跳检查，默认为true
         heartbeatCheck = true
-        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效
+        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效，默认为10
         heartbeatCheckInterval = 10
-        # 健康检测失败后自动注销服务时间（秒）
+        # 健康检测失败后自动注销服务时间（秒），默认为30
         deregisterCriticalServiceAfter = 30
 [network]
     [network.ws]
@@ -300,10 +303,10 @@ timezone = "Local"
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
-            # 握手超时时间（秒），默认10秒
-            handshakeTimeout = 10
-            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            handshakeTimeout = "10s"
+            # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
             heartbeatMechanism = "resp"
             # 下行心跳是否携带服务器时间，默认为true
@@ -311,10 +314,10 @@ timezone = "Local"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
-            # 握手超时时间（秒）
-            handshakeTimeout = 10
-            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            handshakeTimeout = "10s"
+            # 心跳间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
     [network.tcp]
         [network.tcp.server]
             # 服务器监听地址
@@ -342,6 +345,26 @@ timezone = "Local"
         maxRetries = 3
         # key前缀
         prefix = "due"
+
+[cache]
+    [cache.redis]
+        # 客户端连接地址
+        addrs = ["127.0.0.1:6379"]
+        # 数据库号
+        db = 0
+        # 用户名
+        username = ""
+        # 密码
+        password = ""
+        # 最大重试次数
+        maxRetries = 3
+        # key前缀，默认为cache
+        prefix = "cache"
+        # 空值，默认为cache@nil
+        nilValue = "cache@nil"
+        # 空值过期时间，默认为10s
+        nilExpiration = "10s"
+
 [crypto]
     # RSA设置
     [crypto.rsa]

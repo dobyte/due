@@ -1,4 +1,7 @@
 # due
+
+##### [中文文档](README-ZH.md)
+
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
@@ -7,106 +10,52 @@
 ![Coverage](https://img.shields.io/badge/Coverage-17.4%25-red)
 [![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
 
-### 1.介绍
+### 1.Introduction
 
-due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 其中，模块设计方面借鉴了[kratos](https://github.com/go-kratos/kratos)的模块设计思路，为开发者提供了较为灵活的集群构建方案。
+due is a lightweight distributed game server framework developed based on Go language. Among them, the module design draws on the module design ideas of [kratos](https://github.com/go-kratos/kratos) to provide developers with a more flexible cluster construction solution.
 
-![架构图](architecture.jpg)
+![architecture](architecture.jpg)
 
-### 2.优势
+### 2.Advantages
 
-* 简单性：架构简单，源码简洁易理解。
-* 便捷性：仅暴露必要的调用接口，减轻开发者的心智负担。
-* 高效性：框架原生提供tcp、kcp、ws等协议的服务器，方便开发者快速构建各种类型的网关服务器。
-* 扩展性：采用良好的接口设计，方便开发者设计实现自有功能。
-* 平滑性：引入信号量，通过控制服务注册中心来实现优雅地重启。
-* 扩容性：通过优雅的路由分发机制，理论上可实现无限扩容。
-* 易调试：框架原生提供了tcp、kcp、ws等协议的客户端，方便开发者进行独立的调试全流程调试。
-* 可管理：提供完善的后台管理接口，方便开发者快速实现自定义的后台管理功能。
+* Simplicity: The architecture is simple, and the source code is concise and easy to understand.
+* Convenience: Only the necessary calling interfaces are exposed, reducing the mental burden on developers.
+* Efficiency: The framework natively provides servers for protocols such as tcp, kcp, and ws, making it easy for developers to quickly build various types of gateway servers.
+* Scalability: Use good interface design to facilitate developers to design and implement their own functions.
+* Smoothness: Introduce semaphores to achieve graceful restart by controlling the service registration center.
+* Scalability: Through the elegant route distribution mechanism, unlimited expansion can be theoretically achieved.
+* Easy debugging: The framework natively provides clients for protocols such as tcp, kcp, and ws, which facilitates developers to conduct independent debugging of the entire process.
+* Manageable: Provides a complete backend management interface to facilitate developers to quickly implement customized backend management functions.
 
-### 3.功能
+### 3.Features
 
-* 网关：支持tcp、kcp、ws等协议的网关服务器。
-* 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
-* 注册：支持consul、etcd、k8s、nacos、servicecomb、zookeeper等多种服务注册中心。
-* 协议：支持json、protobuf（gogo/protobuf）、msgpack等多种通信协议。
-* 配置：支持json、yaml、toml、xml等多种文件格式。
-* 通信：支持grpc、rpcx等多种高性能通信方案。
-* 重启：支持服务器的平滑重启。
-* 事件：支持redis、nats、kafka、rabbitMQ等事件总线实现方案。
-* 加密：支持rsa、ecc等多种加密方案。
-* 服务：支持grpc、rpcx等多种微服务解决方案。
-* 灵活：支持单体、分布式等多种架构方案。
-* 管理：提供master后台管理服相关接口支持。
+* Gateway: Gateway server that supports tcp, kcp, ws and other protocols.
+* Log: supports std, zap, logrus, aliyun, tencent and other log components.
+* Registration: Supports multiple service registration centers such as consul, etcd, k8s, nacos, servicecomb, zookeeper, etc.
+* Protocol: Supports json, protobuf (gogo/protobuf), msgpack and other communication protocols.
+* Configuration: Supports json, yaml, toml, xml and other file formats.
+* Communication: Supports various high-performance communication solutions such as grpc and rpcx.
+* Restart: Supports smooth restart of the server.
+* Event: Supports event bus implementation solutions such as redis, nats, kafka, rabbitMQ, etc.
+* Encryption: Supports multiple encryption schemes such as rsa and ecc.
+* Service: Supports various microservice solutions such as grpc and rpcx.
+* Flexible: supports multiple architecture solutions such as single and distributed.
+* Management: Provide master backend management service related interface support.
 
-> 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
+> Note: For performance reasons, the protobuf protocol uses [gogo/protobuf](https://github.com/gogo/protobuf) for encoding and decoding by default. When generating go code, please use protoc-gen-xxxx of the gogo library.
 
 ```bash
 go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 ```
 
-### 4.协议
+### 4.Protocol
 
-在due框架中，通信协议统一采用route+message的格式：
+In the due framework, the communication protocol uniformly adopts the format of opcode+route+seq+message:
 
-```
--------------------------
-| seq | route | message |
--------------------------
-```
-
-tcp协议格式：
+1.Data package format for websocket:
 
 ```
--------------------------------
-| len | seq | route | message |
--------------------------------
-```
-
-说明：
-
-1. seq表示请求序列号，默认为2字节，常用于请求、响应对的确认。可通过配置文件修改
-2. route表示消息路由，默认为2字节，不同的路由对应不同的业务处理流程。可通过配置文件修改
-3. message表示消息体，采用json或protobuf编码。
-4. 打包器，默认使用小端序编码。可通过配置文件修改
-5. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，默认使用小端序编码。
-
-### 5.心跳
-
-很意外，在due框架中，我们并没有采用0号路由来作为默认的心跳包来检测，默认我们采用的空包作为心跳检测包。
-
-> 设计初衷：不想心跳检测侵入到业务路由层，哪怕是特殊的0号路由。
-
-ws心跳包格式：
-
-```go
-[]byte
-```
-
-tcp心跳包格式：
-
-```
--------
-| len |
--------
-|  0  |
--------
-```
-
-说明：
-
-1. ws协议心跳包默认为空bytes。
-2. 选择使用tcp协议时，为了解决粘包问题，还应在包前面加上包长度len，固定为4字节，包长度固定为0。
-
-
-### 4.协议（v2）
-
-在due框架中，通信协议统一采用opcode+route+seq+message的格式：
-
-1.数据包
-
-```
- 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +-+-------------+-------------------------------+-------------------------------+
 |h|   extcode   |             route             |              seq              |
 +-+-------------+-------------------------------+-------------------------------+
@@ -114,19 +63,19 @@ tcp心跳包格式：
 +-------------------------------------------------------------------------------+
 ```
 
-2.心跳包
+2.Heartbeat package format for websocket:
 
 ```
- 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +-+-------------+---------------------------------------------------------------+
 |h|   extcode   |                       server time (ms)                        |
 +-+-------------+---------------------------------------------------------------+
 ```
 
-3.TCP数据包
+3.Data package format for tcp:
 
 ```
- 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +---------------------------------------------------------------+-+-------------+-------------------------------+-------------------------------+
 |                              len                              |h|   extcode   |             route             |              seq              |
 +---------------------------------------------------------------+-+-------------+-------------------------------+-------------------------------+
@@ -134,358 +83,89 @@ tcp心跳包格式：
 +-----------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-4.TCP心跳包
+4.Heartbeat package format for tcp:
 
 ```
- 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 +---------------------------------------------------------------+-+-------------+---------------------------------------------------------------+
 |                              len                              |h|   extcode   |                       server time (ms)                        |
 +---------------------------------------------------------------+-+-------------+---------------------------------------------------------------+
 ```
 
+5.Format description:
+
 len: 4 bytes
-   
-   - TCP包长度位
-   - 固定长度为4字节，且不可修改
-   - 采用大端序
-   - WebSocket协议无包长度位
-   - 此参数由TCP网络框架自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+
+- TCP package length bits
+- Fixed length is 4 bytes and cannot be modified
+- Use big endian order
+- WebSocket protocol has no packet length bit
+- This parameter is automatically packaged and generated by the TCP network framework. Server developers do not pay attention to this parameter. Client developers need to pay attention to this parameter.
 
 h: 1 bit
 
-   - 心跳标识位
-   - %x0 表示数据包
-   - %x1 表示心跳包
-   - 采用大端序
-   - 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+- Heartbeat identification bit
+- %x0 represents the data packet
+- %x1 represents heartbeat packet
+- Use big endian order
+- This parameter is automatically packaged and generated by the network framework layer. Server developers do not pay attention to this parameter. Client developers need to pay attention to this parameter.
 
 extcode: 7 bit
 
-   - 扩展操作码
-   - 暂未明确定义具体操作码
-   - 采用大端序
-   - 此参数由网络框架层自动打包生成，服务端开发者不关注此参数，客户端开发者需关注此参数
+- Extended opcodes
+- The specific operation code has not been clearly defined yet
+- Use big endian order
+- This parameter is automatically packaged and generated by the network framework layer. Server developers do not pay attention to this parameter. Client developers need to pay attention to this parameter.
 
 route: 1 bytes | 2 bytes | 4 bytes
 
-   - 消息路由
-   - 默认采用2字节，可通过打包器配置packet.routeBytes进行修改
-   - 不同的路由对应不同的业务处理流程
-   - 心跳包无消息路由位
-   - 此参数由业务打包器打包，服务器开发者和客户端开发者均要关心此参数
+- Message routing
+- The default is 2 bytes, which can be modified through the packager configuration packet.routeBytes
+- Different routes correspond to different business processing processes
+- Heartbeat packet has no message routing bit
+- This parameter is packaged by the business packager. Both server developers and client developers should care about this parameter.
 
 seq: 0 bytes | 1 bytes | 2 bytes | 4 bytes
 
-   - 消息序列号
-   - 默认采用2字节，可通过打包器配置packet.seqBytes进行修改
-   - 可通过将打包器配置packet.seqBytes设置为0来屏蔽使用序列号
-   - 消息序列号常用于请求/响应模型的消息对儿的确认
-   - 心跳包无消息序列号位
-   - 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
+- Message sequence number
+- The default is 2 bytes, which can be modified through the packager configuration packet.seqBytes
+- The use of sequence numbers can be blocked by setting the packer configuration packet.seqBytes to 0
+- The message sequence number is often used to confirm the message pair of the request/response model.
+- Heartbeat packet has no message sequence number bit
+- This parameter is packaged by the business packager packet.Packer. Both server developers and client developers should care about this parameter.
 
 message data: n bytes
 
-   - 消息数据
-   - 心跳包无消息数据
-   - 此参数由业务打包器packet.Packer打包，服务器开发者和客户端开发者均要关心此参数
+- Message data
+- Heartbeat packet has no message data
+- This parameter is packaged by the business packager packet.Packer. Both server developers and client developers should care about this parameter.
 
 server time: 8 bytes
 
-   - 心跳数据
-   - 数据包无心跳数据
-   - 上行心跳包无需携带心跳数据，下行心跳包默认携带8 bytes的服务器时间（ms），可通过网络库配置进行设置是否携带下行包时间信息
-   - 此参数由网络框架层自动打包，服务端开发者不关注此参数，客户端开发者需关注此参数
+- Heartbeat data
+- Data packet has no heartbeat data
+- Uplink heartbeat packets do not need to carry heartbeat data. Downlink heartbeat packets carry 8 bytes of server time (ms) by default. You can set whether to carry downlink packet time information through network library configuration.
+- This parameter is automatically packaged by the network framework layer. Server developers do not pay attention to this parameter. Client developers need to pay attention to this parameter.
 
-### 5.配置中心（v2）
+### 5.Configuration center
 
-1.功能介绍
+1.Feature introduction
 
-config配置中心定位区别于etc系统配置。配置中心主要应用于项目业务层，为开发者提供完善的读取、设置、修改、热更新等功能。
+The configuration center is mainly positioned at business configuration management and provides fast and flexible configuration solutions. Supports complete reading, modification, deletion, hot update and other functions.
 
-2.配置组件
-   * [file](config/file/README.md)
-   * [etcd](config/etcd/README.md)
-   * consul
+2.Related components
 
-### 6.注册中心（v2）
+* [file](config/file/README.md)
+* [etcd](config/etcd/README.md)
+* [consul](config/consul/README.md)
 
-1.功能介绍
+### 6.Registration center
 
-2.相关组件
-   * [consul](registry/consul/README.md)
-   * [etcd](registry/etcd/README.md)
+1.Feature introduction
 
-### 7.网络
+The registration center is used for service registration and discovery of cluster instances. Supports functions such as unconscious shutdown, restart, and dynamic expansion of the entire cluster.
 
-### 6.快速开始
+2.Related components
 
-下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
-
-0.启动组件
-
-```shell
-docker-compose up
-```
-
-> docker-compose.yaml文件已在docker目录中备好，可以直接取用
-
-1.获取框架
-
-```shell
-go get github.com/dobyte/due@latest
-go get github.com/dobyte/due/network/ws@latest
-go get github.com/dobyte/due/registry/etcd@latest
-go get github.com/dobyte/due/locate/redis@latest
-go get github.com/dobyte/due/transport/grpc@latest
-```
-
-2.构建Gate服务器
-
-```go
-package main
-
-import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/gate"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/network/ws"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
-)
-
-func main() {
-   // 创建容器
-   container := due.NewContainer()
-   // 创建网关组件
-   gate := cluster.NewGate(
-      cluster.WithServer(ws.NewServer()),
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(etcd.NewRegistry()),
-      cluster.WithTransporter(grpc.NewTransporter()),
-   )
-   // 添加网关组件
-   container.Add(gate)
-   // 启动容器
-   container.Serve()
-}
-
-```
-
-3.构建Node服务器
-
-```go
-package main
-
-import (
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/node"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/registry/etcd"
-   "github.com/dobyte/due/transport/grpc"
-)
-
-func main() {
-   // 创建容器
-   container := due.NewContainer()
-   // 创建节点组件
-   node := cluster.NewNode(
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(etcd.NewRegistry()),
-      cluster.WithTransporter(grpc.NewTransporter()),
-   )
-   // 注册路由
-   node.Proxy().Router().AddRouteHandler(1, false, greetHandler)
-   // 添加组件
-   container.Add(node)
-   // 启动服务器
-   container.Serve()
-}
-
-func greetHandler(ctx *cluster.Context) {
-   _ = ctx.Response([]byte("hello world~~"))
-}
-
-```
-
-4.构建Mesh服务
-
-```go
-package main
-
-import (
-   "context"
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/mesh"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/log"
-   "github.com/dobyte/due/mode"
-   "github.com/dobyte/due/registry/consul"
-   "github.com/dobyte/due/transport/rpcx"
-)
-
-func main() {
-   // 开启调试模式
-   mode.SetMode(mode.DebugMode)
-   // 创建容器
-   container := due.NewContainer()
-   // 创建网格组件
-   mesh := cluster.NewMesh(
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(consul.NewRegistry()),
-      cluster.WithTransporter(rpcx.NewTransporter()),
-   )
-   // 初始化业务
-   NewWalletService(mesh.Proxy()).Init()
-   // 添加网格组件
-   container.Add(mesh)
-   // 启动容器
-   container.Serve()
-}
-
-// WalletService 钱包服务
-type WalletService struct {
-   proxy *cluster.Proxy
-}
-
-type IncrGoldRequest struct {
-   UID  int64
-   Gold int64
-}
-
-type IncrGoldReply struct {
-}
-
-func NewWalletService(proxy *cluster.Proxy) *WalletService {
-   return &WalletService{proxy: proxy}
-}
-
-func (w *WalletService) Init() {
-   w.proxy.AddServiceProvider("wallet", "Wallet", w)
-}
-
-func (w *WalletService) IncrGold(ctx context.Context, req *IncrGoldRequest, reply *IncrGoldReply) error {
-   log.Infof("incr %d gold success for uid: %d", req.Gold, req.UID)
-
-   return nil
-}
-
-```
-
-
-5.构建测试客户端
-
-```go
-package main
-
-import (
-    "github.com/dobyte/due/config"
-    "github.com/dobyte/due/log"
-    "github.com/dobyte/due/mode"
-    "github.com/dobyte/due/network"
-    "github.com/dobyte/due/network/ws"
-    "github.com/dobyte/due/packet"
-)
-
-var handlers map[int32]handlerFunc
-
-type handlerFunc func(conn network.Conn, buffer []byte)
-
-func init() {
-    handlers = map[int32]handlerFunc{
-        1: greetHandler,
-    }
-}
-
-func main() {
-    // 创建客户端
-    client := ws.NewClient()
-    // 监听连接
-    client.OnConnect(func(conn network.Conn) {
-        log.Infof("connection is opened")
-    })
-    // 监听断开连接
-    client.OnDisconnect(func(conn network.Conn) {
-        log.Infof("connection is closed")
-    })
-    // 监听收到消息
-    client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-        message, err := packet.Unpack(msg)
-        if err != nil {
-            log.Errorf("unpack message failed: %v", err)
-            return
-        }
-
-        handler, ok := handlers[message.Route]
-        if !ok {
-            log.Errorf("the route handler is not registered, route:%v", message.Route)
-            return
-        }
-        handler(conn, message.Buffer)
-    })
-
-    conn, err := client.Dial()
-    if err != nil {
-        log.Fatalf("dial failed: %v", err)
-    }
-
-    if err = push(conn, 1, []byte("hello due~~")); err != nil {
-        log.Errorf("push message failed: %v", err)
-    }
-
-    select {}
-}
-
-func greetHandler(conn network.Conn, buffer []byte) {
-    log.Infof("received message from server: %s", string(buffer))
-}
-
-func push(conn network.Conn, route int32, buffer []byte) error {
-    msg, err := packet.Pack(&packet.Message{
-        Seq:    1,
-        Route:  route,
-        Buffer: buffer,
-    })
-    if err != nil {
-        return err
-    }
-
-    return conn.Push(msg)
-}
-```
-
-### 7.支持组件
-
-1. 日志组件
-   * zap: github.com/dobyte/due/log/zap
-   * logrus: github.com/dobyte/due/log/logrus
-   * aliyun: github.com/dobyte/due/log/aliyun
-   * tencent: github.com/dobyte/due/log/zap
-2. 网络组件
-   * ws: github.com/dobyte/due/network/ws
-   * tcp: github.com/dobyte/due/network/tcp
-3. 注册发现
-   * etcd: github.com/dobyte/due/registry/etcd
-   * consul: github.com/dobyte/due/registry/consul
-4. 传输组件
-   * grpc: github.com/dobyte/due/transporter/grpc
-   * rpcx: github.com/dobyte/due/transporter/rpcx
-5. 定位组件
-   * redis: github.com/dobyte/due/locate/redis
-6. 事件总线
-   * redis: github.com/dobyte/due/eventbus/redis
-   * nats: github.com/dobyte/due/eventbus/nats
-   * kafka: github.com/dobyte/due/eventbus/kafka
-
-### 8.详细示例
-
-更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
-
-### 9.其他客户端
-
-[due-client-ts](https://github.com/dobyte/due-client-ts)
-
-### 10.交流与讨论
-
-<img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
-
-个人微信：yuebanfuxiao
+* [etcd](registry/etcd/README.md)
+* [consul](registry/consul/README.md)

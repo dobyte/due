@@ -3,11 +3,8 @@ package client
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/packet"
 )
-
-type Message = link.Message
 
 type Proxy struct {
 	client *Client // 客户端
@@ -74,7 +71,7 @@ func (p *Proxy) Unbind() error {
 }
 
 // Push 推送消息
-func (p *Proxy) Push(message *Message) error {
+func (p *Proxy) Push(message *cluster.Message) error {
 	p.client.rw.RLock()
 	defer p.client.rw.RUnlock()
 

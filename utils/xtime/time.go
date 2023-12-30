@@ -55,6 +55,11 @@ func init() {
 	}
 }
 
+// Parse 解析日期时间
+func Parse(layout string, value string) (time.Time, error) {
+	return time.ParseInLocation(layout, value, location)
+}
+
 // Now 当前时间
 func Now() time.Time {
 	return time.Now().In(location)

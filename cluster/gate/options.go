@@ -52,16 +52,16 @@ func defaultOptions() *options {
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
-	} else if id, err := xuuid.UUID(); err == nil {
-		opts.id = id
+	} else {
+		opts.id = xuuid.UUID()
 	}
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
 
-	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
-		opts.timeout = time.Duration(timeout) * time.Second
+	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
+		opts.timeout = timeout
 	}
 
 	return opts

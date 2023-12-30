@@ -16,12 +16,9 @@ var locator = redis.NewLocator(
 
 func TestLocator_BindGate(t *testing.T) {
 	for i := 1; i <= 6; i++ {
-		gid, err := xuuid.UUID()
-		if err != nil {
-			t.Fatal(err)
-		}
+		gid := xuuid.UUID()
 
-		err = locator.BindGate(context.Background(), int64(i), gid)
+		err := locator.BindGate(context.Background(), int64(i), gid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -30,14 +27,11 @@ func TestLocator_BindGate(t *testing.T) {
 
 func TestLocator_BindNode(t *testing.T) {
 	for i := 1; i <= 6; i++ {
-		nid, err := xuuid.UUID()
-		if err != nil {
-			t.Fatal(err)
-		}
+		nid := xuuid.UUID()
 
 		name := fmt.Sprintf("node-%d", i)
 
-		err = locator.BindNode(context.Background(), int64(i), name, nid)
+		err := locator.BindNode(context.Background(), int64(i), name, nid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,15 +40,11 @@ func TestLocator_BindNode(t *testing.T) {
 
 func TestLocator_UnbindGate(t *testing.T) {
 	for i := 1; i <= 6; i++ {
-		gid, err := xuuid.UUID()
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		gid := xuuid.UUID()
 		ctx := context.Background()
 		uid := int64(i)
 
-		err = locator.BindGate(ctx, uid, gid)
+		err := locator.BindGate(ctx, uid, gid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,16 +58,13 @@ func TestLocator_UnbindGate(t *testing.T) {
 
 func TestLocator_UnbindNode(t *testing.T) {
 	for i := 1; i <= 6; i++ {
-		nid, err := xuuid.UUID()
-		if err != nil {
-			t.Fatal(err)
-		}
+		nid := xuuid.UUID()
 
 		ctx := context.Background()
 		uid := int64(i)
 		name := fmt.Sprintf("node-%d", i)
 
-		err = locator.BindNode(ctx, uid, name, nid)
+		err := locator.BindNode(ctx, uid, name, nid)
 		if err != nil {
 			t.Fatal(err)
 		}

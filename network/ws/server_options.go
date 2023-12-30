@@ -78,8 +78,8 @@ func defaultServerOptions() *serverOptions {
 		checkOrigin:             checkOrigin,
 		keyFile:                 etc.Get(defaultServerKeyFileKey).String(),
 		certFile:                etc.Get(defaultServerCertFileKey).String(),
-		handshakeTimeout:        etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration() * time.Second,
-		heartbeatInterval:       etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
+		handshakeTimeout:        etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration(),
+		heartbeatInterval:       etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism:      HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
 		heartbeatWithServerTime: etc.Get(defaultServerHeartbeatWithServerTimeKey, defaultServerHeartbeatWithServerTime).Bool(),
 	}

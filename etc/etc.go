@@ -27,6 +27,20 @@ func init() {
 	globalConfigurator = config.NewConfigurator(config.WithSources(core.NewSource(path, config.ReadOnly)))
 }
 
+// SetConfigurator 设置配置器
+func SetConfigurator(configurator config.Configurator) {
+	if globalConfigurator != nil {
+		globalConfigurator.Close()
+	}
+
+	globalConfigurator = configurator
+}
+
+// GetConfigurator 获取配置器
+func GetConfigurator() config.Configurator {
+	return globalConfigurator
+}
+
 // Has 是否存在配置
 func Has(pattern string) bool {
 	return globalConfigurator.Has(pattern)

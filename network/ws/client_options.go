@@ -29,8 +29,8 @@ type clientOptions struct {
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
 		url:               etc.Get(defaultClientDialUrlKey, defaultClientDialUrl).String(),
-		handshakeTimeout:  etc.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration() * time.Second,
-		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
+		handshakeTimeout:  etc.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration(),
+		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(),
 	}
 }
 

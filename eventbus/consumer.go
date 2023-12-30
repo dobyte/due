@@ -2,13 +2,11 @@ package eventbus
 
 import (
 	"github.com/dobyte/due/v2/task"
-	"github.com/nats-io/nats.go"
 	"reflect"
 	"sync"
 )
 
 type consumer struct {
-	sub      *nats.Subscription
 	rw       sync.RWMutex
 	handlers map[uintptr]EventHandler
 }

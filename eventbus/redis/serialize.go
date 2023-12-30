@@ -18,13 +18,8 @@ type data struct {
 
 // 序列化
 func serialize(topic string, payload interface{}) ([]byte, error) {
-	id, err := xuuid.UUID()
-	if err != nil {
-		return nil, err
-	}
-
 	return json.Marshal(&data{
-		ID:        id,
+		ID:        xuuid.UUID(),
 		Topic:     topic,
 		Payload:   xconv.String(payload),
 		Timestamp: xtime.Now().UnixNano(),

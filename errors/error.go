@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	ErrNil                   = New("nil")
 	ErrInvalidGID            = New("invalid gate id")
 	ErrInvalidNID            = New("invalid node id")
 	ErrInvalidMessage        = New("invalid message")
@@ -31,6 +32,7 @@ var (
 	ErrNoOperationPermission = New("no operation permission")
 	ErrInvalidConfigContent  = New("invalid config content")
 	ErrNotFoundConfigSource  = New("not found config source")
+	ErrInvalidFormat         = New("invalid format")
 )
 
 // NewError 新建一个错误

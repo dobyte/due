@@ -35,9 +35,9 @@ func TestRegistry_Register1(t *testing.T) {
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
 		Name:     serviceName,
-		Kind:     cluster.Node,
+		Kind:     cluster.Node.String(),
 		Alias:    "login-server",
-		State:    cluster.Work,
+		State:    cluster.Work.String(),
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
@@ -50,7 +50,7 @@ func TestRegistry_Register1(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	ins.State = cluster.Busy
+	ins.State = cluster.Busy.String()
 	rctx, rcancel = context.WithTimeout(ctx, 2*time.Second)
 	err = reg.Register(rctx, ins)
 	rcancel()
@@ -80,8 +80,8 @@ func TestRegistry_Register2(t *testing.T) {
 	if err = reg.Register(context.Background(), &registry.ServiceInstance{
 		ID:       "test-2",
 		Name:     serviceName,
-		Kind:     cluster.Node,
-		State:    cluster.Work,
+		Kind:     cluster.Node.String(),
+		State:    cluster.Work.String(),
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}); err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestRegistry_Register2(t *testing.T) {
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		reg.Stop()
+		reg.Close()
 	}()
 
 	time.Sleep(30 * time.Second)

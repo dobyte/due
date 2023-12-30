@@ -25,18 +25,27 @@ const (
 	defaultTimeoutKey = "etc.cluster.node.timeout"
 )
 
+const (
+	SingleThread SchedulingModel = "single-thread" // 单线程
+	MultiThread  SchedulingModel = "multi-thread"  // 多线程
+)
+
+// SchedulingModel 调度模型
+type SchedulingModel string
+
 type Option func(o *options)
 
 type options struct {
-	id          string                // 实例ID
-	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
-	ctx         context.Context       // 上下文
-	codec       encoding.Codec        // 编解码器
-	timeout     time.Duration         // RPC调用超时时间
-	locator     locate.Locator        // 用户定位器
-	registry    registry.Registry     // 服务注册器
-	transporter transport.Transporter // 消息传输器
-	encryptor   crypto.Encryptor      // 消息加密器
+	id              string                // 实例ID
+	name            string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
+	ctx             context.Context       // 上下文
+	codec           encoding.Codec        // 编解码器
+	timeout         time.Duration         // RPC调用超时时间
+	locator         locate.Locator        // 用户定位器
+	registry        registry.Registry     // 服务注册器
+	transporter     transport.Transporter // 消息传输器
+	encryptor       crypto.Encryptor      // 消息加密器
+	schedulingModel SchedulingModel       // 调度模型
 }
 
 func defaultOptions() *options {
@@ -49,8 +58,8 @@ func defaultOptions() *options {
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
-	} else if id, err := xuuid.UUID(); err == nil {
-		opts.id = id
+	} else {
+		opts.id = xuuid.UUID()
 	}
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
@@ -61,8 +70,8 @@ func defaultOptions() *options {
 		opts.codec = encoding.Invoke(codec)
 	}
 
-	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
-		opts.timeout = time.Duration(timeout) * time.Second
+	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
+		opts.timeout = timeout
 	}
 
 	return opts
@@ -111,4 +120,9 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
+}
+
+// WithSchedulingModel 设置调度模型
+func WithSchedulingModel(schedulingModel SchedulingModel) Option {
+	return func(o *options) { o.schedulingModel = schedulingModel }
 }

@@ -96,7 +96,9 @@ func (c *defaultConfigurator) init() {
 
 			v, err := c.opts.decoder(cc.Format, cc.Content)
 			if err != nil {
-				log.Printf("decode configure failed: %v", err)
+				if err != errors.ErrInvalidFormat {
+					log.Printf("decode configure failed: %v", err)
+				}
 				continue
 			}
 
