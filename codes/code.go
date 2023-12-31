@@ -89,6 +89,10 @@ func Convert(err error) *Code {
 		return OK
 	}
 
+	if e, ok := err.(interface{ Code() *Code }); ok {
+		return e.Code()
+	}
+
 	text := err.Error()
 
 	after, found := strings.CutPrefix(text, "code error:")
