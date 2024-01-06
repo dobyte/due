@@ -2,12 +2,12 @@ package memcache
 
 import (
 	"context"
-	"errors"
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"golang.org/x/sync/singleflight"
+	"reflect"
 	"time"
 )
 
@@ -105,7 +105,57 @@ func (c *Cache) Set(ctx context.Context, key string, value interface{}, expirati
 
 // GetSet 获取设置缓存值
 func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
+	key = c.AddPrefix(key)
 
+	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+		item, err := c.opts.client.Get(key)
+		if err != nil {
+			return nil, err
+		}
+
+		return xconv.String(item.Value), nil
+	})
+	if err != nil && !errors.Is(err, memcache.ErrCacheMiss) {
+		return cache.NewResult(nil, err)
+	}
+
+	if err == nil {
+		if val == c.opts.nilValue {
+			return cache.NewResult(nil, errors.ErrNil)
+		} else {
+			return cache.NewResult(val)
+		}
+	}
+
+	rst, _, _ := c.sfg.Do(key+":set", func() (interface{}, error) {
+		val, expiration, err := fn()
+		if err != nil {
+			return cache.NewResult(nil, err), nil
+		}
+
+		if val == nil || reflect.ValueOf(val).IsNil() {
+			if err = c.opts.client.Set(&memcache.Item{
+				Key:        key,
+				Value:      xconv.Bytes(c.opts.nilValue),
+				Expiration: int32(c.opts.nilExpiration / time.Second),
+			}); err != nil {
+				return cache.NewResult(nil, err), nil
+			}
+			return cache.NewResult(nil, errors.ErrNil), nil
+		}
+
+		if err = c.opts.client.Set(&memcache.Item{
+			Key:        key,
+			Value:      xconv.Bytes(val),
+			Expiration: int32(expiration / time.Second),
+		}); err != nil {
+			return cache.NewResult(nil, err), nil
+		}
+
+		return cache.NewResult(val, nil), nil
+	})
+
+	return rst.(cache.Result)
 }
 
 // Delete 删除缓存
