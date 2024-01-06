@@ -12,10 +12,8 @@ import (
 )
 
 type Cache struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	opts   *options
-	sfg    singleflight.Group
+	opts *options
+	sfg  singleflight.Group
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -35,7 +33,6 @@ func NewCache(opts ...Option) *Cache {
 	}
 
 	c := &Cache{}
-	c.ctx, c.cancel = context.WithCancel(o.ctx)
 	c.opts = o
 
 	return c
@@ -49,7 +46,7 @@ func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return false, nil
 		}
 		return false, err
@@ -69,11 +66,11 @@ func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.R
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return cache.NewResult(nil, err)
 	}
 
-	if err == redis.Nil || val == c.opts.nilValue {
+	if errors.Is(err, redis.Nil) || val == c.opts.nilValue {
 		if len(def) > 0 {
 			return cache.NewResult(def[0])
 		} else {
@@ -100,7 +97,7 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return cache.NewResult(nil, err)
 	}
 

@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"context"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/go-redis/redis/v8"
 	"time"
@@ -30,8 +29,6 @@ const (
 type Option func(o *options)
 
 type options struct {
-	ctx context.Context
-
 	// 客户端连接地址
 	// 内建客户端配置，默认为[]string{"127.0.0.1:6379"}
 	addrs []string
@@ -69,7 +66,6 @@ type options struct {
 
 func defaultOptions() *options {
 	return &options{
-		ctx:           context.Background(),
 		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		db:            etc.Get(defaultDBKey, defaultDB).Int(),
 		maxRetries:    etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
@@ -79,11 +75,6 @@ func defaultOptions() *options {
 		nilValue:      etc.Get(defaultNilValueKey, defaultNilValue).String(),
 		nilExpiration: etc.Get(defaultNilExpirationKey, defaultNilExpiration).Duration(),
 	}
-}
-
-// WithContext 设置上下文
-func WithContext(ctx context.Context) Option {
-	return func(o *options) { o.ctx = ctx }
 }
 
 // WithAddrs 设置连接地址
