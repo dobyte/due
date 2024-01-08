@@ -14,6 +14,8 @@ import (
 
 const timeout = 5 * time.Second
 
+type HookHandler func(proxy *Proxy)
+
 type Node struct {
 	component.Base
 	opts        *options
@@ -23,6 +25,7 @@ type Node struct {
 	events      *Events
 	router      *Router
 	proxy       *Proxy
+	hooks       map[cluster.Hook]HookHandler
 	instance    *registry.ServiceInstance
 	transporter transport.Server
 	fnChan      chan func()
@@ -39,6 +42,7 @@ func NewNode(opts ...Option) *Node {
 	n.events = newEvents(n)
 	n.router = newRouter(n)
 	n.proxy = newProxy(n)
+	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 
@@ -77,6 +81,8 @@ func (n *Node) Init() {
 	if n.opts.transporter == nil {
 		log.Fatal("transporter component is not injected")
 	}
+
+	n.runHookFunc(cluster.Init)
 }
 
 // Start 启动节点
@@ -92,10 +98,14 @@ func (n *Node) Start() {
 	go n.dispatch()
 
 	n.debugPrint()
+
+	n.runHookFunc(cluster.Start)
 }
 
 // Destroy 销毁网关服务器
 func (n *Node) Destroy() {
+	n.setState(cluster.Shut)
+
 	n.deregisterServiceInstance()
 
 	n.stopTransporter()
@@ -107,6 +117,8 @@ func (n *Node) Destroy() {
 	close(n.fnChan)
 
 	n.cancel()
+
+	n.runHookFunc(cluster.Destroy)
 }
 
 // Proxy 获取节点代理
@@ -244,7 +256,23 @@ func (n *Node) updateState(state cluster.State) error {
 	return nil
 }
 
+// 添加钩子监听器
+func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
+	if n.getState() == cluster.Shut {
+		n.hooks[hook] = handler
+	} else {
+		log.Warnf("the node server is working, can't add hook handler")
+	}
+}
+
 func (n *Node) debugPrint() {
 	log.Debugf("node server startup successful")
 	log.Debugf("%s server listen on %s", n.transporter.Scheme(), n.transporter.Addr())
+}
+
+// 执行钩子函数
+func (n *Node) runHookFunc(hook cluster.Hook) {
+	if handler, ok := n.hooks[hook]; ok {
+		handler(n.proxy)
+	}
 }

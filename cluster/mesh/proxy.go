@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/link"
-	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
@@ -27,16 +26,12 @@ func newProxy(mesh *Mesh) *Proxy {
 
 // AddServiceProvider 添加服务提供者
 func (p *Proxy) AddServiceProvider(name string, desc interface{}, provider interface{}) {
-	if p.mesh.state != cluster.Shut {
-		log.Warnf("the mesh server is working, can't add server provider")
-		return
-	}
+	p.mesh.addServiceProvider(name, desc, provider)
+}
 
-	p.mesh.services = append(p.mesh.services, &serviceEntity{
-		name:     name,
-		desc:     desc,
-		provider: provider,
-	})
+// AddHookListener 添加钩子监听器
+func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
+	p.mesh.addHookListener(hook, handler)
 }
 
 // NewServiceClient 新建微服务客户端

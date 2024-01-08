@@ -50,9 +50,14 @@ func (p *Proxy) Router() *Router {
 	return p.node.router
 }
 
-// Events 事件分发器
-func (p *Proxy) Events() *Events {
-	return p.node.events
+// AddEventHandler 添加事件监听器
+func (p *Proxy) AddEventHandler(event cluster.Event, handler EventHandler) {
+	p.node.events.addEventHandler(event, handler)
+}
+
+// AddHookListener 添加钩子监听器
+func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
+	p.node.addHookListener(hook, handler)
 }
 
 // NewServiceClient 新建微服务客户端

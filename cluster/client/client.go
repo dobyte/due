@@ -66,9 +66,7 @@ func (c *Client) Init() {
 		log.Fatal("codec plugin is not injected")
 	}
 
-	if handler, ok := c.hooks[cluster.Init]; ok {
-		handler(c.proxy)
-	}
+	c.runHookFunc(cluster.Init)
 }
 
 // Start 启动组件
@@ -79,18 +77,14 @@ func (c *Client) Start() {
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 
-	if handler, ok := c.hooks[cluster.Start]; ok {
-		handler(c.proxy)
-	}
+	c.runHookFunc(cluster.Start)
 }
 
 // Destroy 销毁组件
 func (c *Client) Destroy() {
-	if handler, ok := c.hooks[cluster.Destroy]; ok {
-		handler(c.proxy)
-	}
-
 	c.setState(cluster.Shut)
+
+	c.runHookFunc(cluster.Destroy)
 }
 
 // Proxy 获取节点代理
@@ -218,4 +212,11 @@ func (c *Client) setState(state cluster.State) {
 // 获取状态
 func (c *Client) getState() cluster.State {
 	return cluster.State(atomic.LoadInt32(&c.state))
+}
+
+// 执行钩子函数
+func (c *Client) runHookFunc(hook cluster.Hook) {
+	if handler, ok := c.hooks[hook]; ok {
+		handler(c.proxy)
+	}
 }

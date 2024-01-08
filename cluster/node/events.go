@@ -61,9 +61,9 @@ func (e *Events) handle(evt *Event) {
 	handler(evt)
 }
 
-// AddEventHandler 添加事件处理器
-func (e *Events) AddEventHandler(event cluster.Event, handler EventHandler) {
-	if e.node.getState() != cluster.Shut.String() {
+// 添加事件处理器
+func (e *Events) addEventHandler(event cluster.Event, handler EventHandler) {
+	if e.node.getState() != cluster.Shut {
 		log.Warnf("the node server is working, can't add Event handler")
 		return
 	}

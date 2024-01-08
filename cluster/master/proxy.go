@@ -26,13 +26,13 @@ func newProxy(master *Master) *Proxy {
 	})}
 }
 
-// GetMasterID 获取当前管理节点ID
-func (p *Proxy) GetMasterID() string {
+// GetID 获取当前管理节点ID
+func (p *Proxy) GetID() string {
 	return p.master.opts.id
 }
 
-// GetMasterName 获取当前管理节点名称
-func (p *Proxy) GetMasterName() string {
+// GetName 获取当前管理节点名称
+func (p *Proxy) GetName() string {
 	return p.master.opts.name
 }
 
@@ -52,6 +52,11 @@ func (p *Proxy) StoreConfig(ctx context.Context, file string, content interface{
 	}
 
 	return errors.ErrNotFoundConfigSource
+}
+
+// AddHookListener 添加钩子监听器
+func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
+	p.master.addHookListener(hook, handler)
 }
 
 // NewServiceClient 新建微服务客户端
