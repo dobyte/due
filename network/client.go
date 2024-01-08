@@ -9,7 +9,7 @@ package network
 
 type Client interface {
 	// Dial 拨号连接
-	Dial() (Conn, error)
+	Dial(addr ...string) (Conn, error)
 	// OnConnect 监听连接打开
 	OnConnect(handler ConnectHandler)
 	// OnReceive 监听接收消息

@@ -29,8 +29,16 @@ func NewClient(opts ...ClientOption) network.Client {
 }
 
 // Dial 拨号连接
-func (c *client) Dial() (network.Conn, error) {
-	conn, _, err := c.dialer.Dial(c.opts.url, nil)
+func (c *client) Dial(addr ...string) (network.Conn, error) {
+	var url string
+
+	if len(addr) > 0 {
+		url = addr[0]
+	} else {
+		url = c.opts.url
+	}
+
+	conn, _, err := c.dialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}

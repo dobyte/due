@@ -52,6 +52,31 @@ func (e Event) String() string {
 	return ""
 }
 
+const (
+	Init    Hook = iota + 1 // 初始化组件
+	Start                   // 启动组件
+	Restart                 // 重启组件
+	Destroy                 // 销毁组件
+)
+
+// Hook 生命周期钩子
+type Hook int
+
+func (h Hook) String() string {
+	switch h {
+	case Init:
+		return "init"
+	case Start:
+		return "start"
+	case Restart:
+		return "restart"
+	case Destroy:
+		return "destroy"
+	}
+
+	return ""
+}
+
 type (
 	GetIPArgs      = link.GetIPArgs
 	PushArgs       = link.PushArgs

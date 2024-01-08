@@ -3,7 +3,6 @@ package client
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/packet"
 )
 
 type Proxy struct {
@@ -32,6 +31,16 @@ func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
 // AddEventListener 添加事件监听器
 func (p *Proxy) AddEventListener(event cluster.Event, handler EventHandler) {
 	p.client.addEventListener(event, handler)
+}
+
+// AddHookListener 添加钩子监听器
+func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
+	p.client.addHookListener(hook, handler)
+}
+
+// Dial 拨号
+func (p *Proxy) Dial(addr ...string) (*Conn, error) {
+	return p.client.dial(addr...)
 }
 
 // Bind 绑定用户ID
@@ -70,69 +79,64 @@ func (p *Proxy) Unbind() error {
 	return nil
 }
 
-// Push 推送消息
-func (p *Proxy) Push(message *cluster.Message) error {
-	p.client.rw.RLock()
-	defer p.client.rw.RUnlock()
-
-	if p.client.state == cluster.Shut {
-		return errors.ErrClientShut
-	}
-
-	if p.client.conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	var (
-		err    error
-		buffer []byte
-	)
-
-	if v, ok := message.Data.([]byte); ok {
-		buffer = v
-	} else {
-		buffer, err = p.client.opts.codec.Marshal(message.Data)
-		if err != nil {
-			return err
-		}
-	}
-
-	if p.client.opts.encryptor != nil {
-		buffer, err = p.client.opts.encryptor.Encrypt(buffer)
-		if err != nil {
-			return err
-		}
-	}
-
-	msg, err := packet.Pack(&packet.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: buffer,
-	})
-	if err != nil {
-		return err
-	}
-
-	return p.client.conn.Push(msg)
-}
-
-// Reconnect 重新连接
-func (p *Proxy) Reconnect() error {
-	return p.client.dial()
-}
-
-// Disconnect 断开连接
-func (p *Proxy) Disconnect() error {
-	p.client.rw.RLock()
-	defer p.client.rw.RUnlock()
-
-	if p.client.state == cluster.Shut {
-		return errors.ErrClientShut
-	}
-
-	if p.client.conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	return p.client.conn.Close()
-}
+//// Push 推送消息
+//func (p *Proxy) Push(message *cluster.Message) error {
+//	p.client.rw.RLock()
+//	defer p.client.rw.RUnlock()
+//
+//	if p.client.state == cluster.Shut {
+//		return errors.ErrClientShut
+//	}
+//
+//	if p.client.conn == nil {
+//		return errors.ErrConnectionClosed
+//	}
+//
+//	var (
+//		err    error
+//		buffer []byte
+//	)
+//
+//	if v, ok := message.Data.([]byte); ok {
+//		buffer = v
+//	} else {
+//		buffer, err = p.client.opts.codec.Marshal(message.Data)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+//	if p.client.opts.encryptor != nil {
+//		buffer, err = p.client.opts.encryptor.Encrypt(buffer)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+//	msg, err := packet.Pack(&packet.Message{
+//		Seq:    message.Seq,
+//		Route:  message.Route,
+//		Buffer: buffer,
+//	})
+//	if err != nil {
+//		return err
+//	}
+//
+//	return p.client.conn.Push(msg)
+//}
+//
+//// Disconnect 断开连接
+//func (p *Proxy) Disconnect() error {
+//	p.client.rw.RLock()
+//	defer p.client.rw.RUnlock()
+//
+//	if p.client.state == cluster.Shut {
+//		return errors.ErrClientShut
+//	}
+//
+//	if p.client.conn == nil {
+//		return errors.ErrConnectionClosed
+//	}
+//
+//	return p.client.conn.Close()
+//}

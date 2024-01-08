@@ -11,9 +11,11 @@ import (
 	"sync"
 )
 
+type HookHandler func(proxy *Proxy)
+
 type RouteHandler func(ctx *Context)
 
-type EventHandler func(proxy *Proxy)
+type EventHandler func(conn *Conn)
 
 type Client struct {
 	component.Base
@@ -22,11 +24,12 @@ type Client struct {
 	cancel              context.CancelFunc
 	routes              map[int32]RouteHandler
 	events              map[cluster.Event]EventHandler
+	hooks               map[cluster.Hook]HookHandler
 	defaultRouteHandler RouteHandler
 	proxy               *Proxy
 	rw                  sync.RWMutex
 	state               cluster.State
-	conn                network.Conn
+	conns               sync.Map
 }
 
 func NewClient(opts ...Option) *Client {
@@ -40,6 +43,7 @@ func NewClient(opts ...Option) *Client {
 	c.proxy = newProxy(c)
 	c.routes = make(map[int32]RouteHandler)
 	c.events = make(map[cluster.Event]EventHandler)
+	c.hooks = make(map[cluster.Hook]HookHandler)
 	c.state = cluster.Shut
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
 
@@ -61,6 +65,10 @@ func (c *Client) Init() {
 		log.Fatal("codec plugin is not injected")
 	}
 
+	if handler, ok := c.hooks[cluster.Init]; ok {
+		handler(c.proxy)
+	}
+
 	c.state = cluster.Work
 }
 
@@ -70,13 +78,17 @@ func (c *Client) Start() {
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 
-	if err := c.dial(); err != nil {
-		log.Fatalf("connect server failed: %v", err)
+	if handler, ok := c.hooks[cluster.Start]; ok {
+		handler(c.proxy)
 	}
 }
 
 // Destroy 销毁组件
 func (c *Client) Destroy() {
+	if handler, ok := c.hooks[cluster.Destroy]; ok {
+		handler(c.proxy)
+	}
+
 	c.rw.Lock()
 	c.conn = nil
 	c.state = cluster.Shut
@@ -116,13 +128,20 @@ func (c *Client) handleConnect(conn network.Conn) {
 }
 
 // 处理断开连接
-func (c *Client) handleDisconnect(_ network.Conn) {
+func (c *Client) handleDisconnect(conn network.Conn) {
 	handler, ok := c.events[cluster.Disconnect]
 	if !ok {
 		return
 	}
 
-	handler(c.proxy)
+	val, ok := c.conns.Load(conn)
+	if !ok {
+		return
+	}
+
+	handler(val.(*Conn))
+
+	c.conns.Delete(conn)
 }
 
 // 处理接收到的消息
@@ -152,17 +171,21 @@ func (c *Client) handleReceive(_ network.Conn, data []byte) {
 }
 
 // 拨号
-func (c *Client) dial() error {
+func (c *Client) dial(addr ...string) (*Conn, error) {
 	c.rw.RLock()
 	isShut := c.state == cluster.Shut
 	c.rw.RUnlock()
 
 	if isShut {
-		return errors.ErrClientShut
+		return nil, errors.ErrClientShut
 	}
 
-	_, err := c.opts.client.Dial()
-	return err
+	conn, err := c.opts.client.Dial(addr...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Conn{conn: conn, client: c}, nil
 }
 
 // 添加路由处理器
@@ -189,5 +212,14 @@ func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 		c.events[event] = handler
 	} else {
 		log.Warnf("client is working, can't add event handler")
+	}
+}
+
+// 添加钩子监听器
+func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
+	if c.state == cluster.Shut {
+		c.hooks[hook] = handler
+	} else {
+		log.Warnf("client is working, can't add hook handler")
 	}
 }
