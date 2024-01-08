@@ -306,57 +306,73 @@ package main
 
 import (
    "context"
-   "github.com/dobyte/due"
-   cluster "github.com/dobyte/due/cluster/mesh"
-   "github.com/dobyte/due/locate/redis"
-   "github.com/dobyte/due/log"
-   "github.com/dobyte/due/mode"
-   "github.com/dobyte/due/registry/consul"
-   "github.com/dobyte/due/transport/rpcx"
+   "github.com/dobyte/due/locate/redis/v2"
+   "github.com/dobyte/due/registry/consul/v2"
+   "github.com/dobyte/due/transport/rpcx/v2"
+   "github.com/dobyte/due/v2"
+   "github.com/dobyte/due/v2/cluster/mesh"
+   "sync"
 )
 
 func main() {
-   // 开启调试模式
-   mode.SetMode(mode.DebugMode)
    // 创建容器
    container := due.NewContainer()
-   // 创建网格组件
-   mesh := cluster.NewMesh(
-      cluster.WithLocator(redis.NewLocator()),
-      cluster.WithRegistry(consul.NewRegistry()),
-      cluster.WithTransporter(rpcx.NewTransporter()),
+   // 创建用户定位器
+   locator := redis.NewLocator()
+   // 创建服务发现
+   registry := consul.NewRegistry()
+   // 创建RPC传输器
+   transporter := rpcx.NewTransporter()
+   // 创建服务组件
+   component := mesh.NewMesh(
+      mesh.WithLocator(locator),
+      mesh.WithRegistry(registry),
+      mesh.WithTransporter(transporter),
    )
-   // 初始化业务
-   NewWalletService(mesh.Proxy()).Init()
-   // 添加网格组件
-   container.Add(mesh)
+   // 初始化服务
+   newWallet(component.Proxy()).Init()
+   // 添加服务组件
+   container.Add(component)
    // 启动容器
    container.Serve()
 }
 
-// WalletService 钱包服务
-type WalletService struct {
-   proxy *cluster.Proxy
-}
-
-type IncrGoldRequest struct {
-   UID  int64
-   Gold int64
+type IncrGoldArgs struct {
+   UID  int64 // 用户ID
+   Gold int64 // 增加金币
 }
 
 type IncrGoldReply struct {
+   Gold int64 // 用户金币
 }
 
-func NewWalletService(proxy *cluster.Proxy) *WalletService {
-   return &WalletService{proxy: proxy}
+type Wallet struct {
+   proxy *mesh.Proxy
+   rw    sync.RWMutex
+   golds map[int64]int64
 }
 
-func (w *WalletService) Init() {
-   w.proxy.AddServiceProvider("wallet", "Wallet", w)
+func newWallet(proxy *mesh.Proxy) *Wallet {
+   return &Wallet{
+      proxy: proxy,
+      golds: make(map[int64]int64),
+   }
 }
 
-func (w *WalletService) IncrGold(ctx context.Context, req *IncrGoldRequest, reply *IncrGoldReply) error {
-   log.Infof("incr %d gold success for uid: %d", req.Gold, req.UID)
+func (s *Wallet) Init() {
+   s.proxy.AddServiceProvider("wallet", "Wallet", s)
+}
+
+// IncrGold 增加用户金币
+func (s *Wallet) IncrGold(ctx context.Context, args *IncrGoldArgs, reply IncrGoldReply) error {
+   s.rw.Lock()
+   defer s.rw.Unlock()
+
+   gold := s.golds[args.UID] + args.Gold
+
+   s.golds[args.UID] = gold
+
+   reply.Gold = gold
 
    return nil
 }

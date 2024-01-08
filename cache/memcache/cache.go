@@ -1,19 +1,20 @@
-package redis
+package memcache
 
 import (
 	"context"
+	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
 	"reflect"
 	"time"
 )
 
 type Cache struct {
-	opts *options
-	sfg  singleflight.Group
+	opts    *options
+	builtin bool
+	sfg     singleflight.Group
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -22,18 +23,13 @@ func NewCache(opts ...Option) *Cache {
 		opt(o)
 	}
 
-	if o.client == nil {
-		o.client = redis.NewUniversalClient(&redis.UniversalOptions{
-			Addrs:      o.addrs,
-			DB:         o.db,
-			Username:   o.username,
-			Password:   o.password,
-			MaxRetries: o.maxRetries,
-		})
-	}
-
 	c := &Cache{}
 	c.opts = o
+
+	if o.client == nil {
+		c.builtin = true
+		o.client = memcache.New(o.addrs...)
+	}
 
 	return c
 }
@@ -43,10 +39,15 @@ func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	key = c.AddPrefix(key)
 
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
-		return c.opts.client.Get(ctx, key).Result()
+		item, err := c.opts.client.Get(key)
+		if err != nil {
+			return nil, err
+		}
+
+		return xconv.String(item.Value), nil
 	})
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
+		if errors.Is(err, memcache.ErrCacheMiss) {
 			return false, nil
 		}
 		return false, err
@@ -64,13 +65,18 @@ func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.R
 	key = c.AddPrefix(key)
 
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
-		return c.opts.client.Get(ctx, key).Result()
+		item, err := c.opts.client.Get(key)
+		if err != nil {
+			return nil, err
+		}
+
+		return xconv.String(item.Value), nil
 	})
-	if err != nil && !errors.Is(err, redis.Nil) {
+	if err != nil && !errors.Is(err, memcache.ErrCacheMiss) {
 		return cache.NewResult(nil, err)
 	}
 
-	if errors.Is(err, redis.Nil) || val == c.opts.nilValue {
+	if errors.Is(err, memcache.ErrCacheMiss) || val.(string) == c.opts.nilValue {
 		if len(def) > 0 {
 			return cache.NewResult(def[0])
 		} else {
@@ -83,10 +89,17 @@ func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.R
 
 // Set 设置缓存值
 func (c *Cache) Set(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error {
-	if len(expiration) > 0 {
-		return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), expiration[0]).Err()
+	if len(expiration) > 0 && expiration[0] > 0 {
+		return c.opts.client.Set(&memcache.Item{
+			Key:        c.AddPrefix(key),
+			Value:      xconv.Bytes(value),
+			Expiration: int32(expiration[0] / time.Second),
+		})
 	} else {
-		return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), redis.KeepTTL).Err()
+		return c.opts.client.Set(&memcache.Item{
+			Key:   c.AddPrefix(key),
+			Value: xconv.Bytes(value),
+		})
 	}
 }
 
@@ -95,9 +108,14 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 	key = c.AddPrefix(key)
 
 	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
-		return c.opts.client.Get(ctx, key).Result()
+		item, err := c.opts.client.Get(key)
+		if err != nil {
+			return nil, err
+		}
+
+		return xconv.String(item.Value), nil
 	})
-	if err != nil && !errors.Is(err, redis.Nil) {
+	if err != nil && !errors.Is(err, memcache.ErrCacheMiss) {
 		return cache.NewResult(nil, err)
 	}
 
@@ -116,13 +134,21 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 		}
 
 		if val == nil || reflect.ValueOf(val).IsNil() {
-			if err = c.opts.client.Set(ctx, key, c.opts.nilValue, c.opts.nilExpiration).Err(); err != nil {
+			if err = c.opts.client.Set(&memcache.Item{
+				Key:        key,
+				Value:      xconv.Bytes(c.opts.nilValue),
+				Expiration: int32(c.opts.nilExpiration / time.Second),
+			}); err != nil {
 				return cache.NewResult(nil, err), nil
 			}
 			return cache.NewResult(nil, errors.ErrNil), nil
 		}
 
-		if err = c.opts.client.Set(ctx, key, xconv.String(val), expiration).Err(); err != nil {
+		if err = c.opts.client.Set(&memcache.Item{
+			Key:        key,
+			Value:      xconv.Bytes(val),
+			Expiration: int32(expiration / time.Second),
+		}); err != nil {
 			return cache.NewResult(nil, err), nil
 		}
 
@@ -134,28 +160,67 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 
 // Delete 删除缓存
 func (c *Cache) Delete(ctx context.Context, key string) (bool, error) {
-	ok, err := c.opts.client.Del(ctx, c.AddPrefix(key)).Result()
-	return ok == 1, err
+	err := c.opts.client.Delete(c.AddPrefix(key))
+	if err != nil {
+		if errors.Is(err, memcache.ErrCacheMiss) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 // IncrInt 整数自增
 func (c *Cache) IncrInt(ctx context.Context, key string, value int64) (int64, error) {
-	return c.opts.client.IncrBy(ctx, c.AddPrefix(key), value).Result()
+	if value < 0 {
+		return c.DecrInt(ctx, key, 0-value)
+	}
+
+	key = c.AddPrefix(key)
+
+	newValue, err := c.opts.client.Increment(key, uint64(value))
+	if err != nil {
+		if errors.Is(err, memcache.ErrCacheMiss) {
+			err = c.opts.client.Add(&memcache.Item{
+				Key:   key,
+				Value: xconv.Bytes(xconv.String(value)),
+			})
+			if err != nil {
+				if errors.Is(err, memcache.ErrNotStored) {
+					newValue, err = c.opts.client.Increment(key, uint64(value))
+					if err != nil {
+						return 0, err
+					}
+
+					return int64(newValue), nil
+				}
+				return 0, err
+			}
+
+			return value, nil
+		} else {
+			return 0, err
+		}
+	}
+
+	return int64(newValue), nil
 }
 
 // IncrFloat 浮点数自增
 func (c *Cache) IncrFloat(ctx context.Context, key string, value float64) (float64, error) {
-	return c.opts.client.IncrByFloat(ctx, c.AddPrefix(key), value).Result()
+
 }
 
 // DecrInt 整数自减
 func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, error) {
-	return c.opts.client.DecrBy(ctx, c.AddPrefix(key), value).Result()
+
 }
 
 // DecrFloat 浮点数自减
 func (c *Cache) DecrFloat(ctx context.Context, key string, value float64) (float64, error) {
-	return c.opts.client.IncrByFloat(ctx, c.AddPrefix(key), -value).Result()
+
 }
 
 // AddPrefix 添加Key前缀
@@ -170,4 +235,13 @@ func (c *Cache) AddPrefix(key string) string {
 // Client 获取客户端
 func (c *Cache) Client() interface{} {
 	return c.opts.client
+}
+
+// Close 关闭客户端
+func (c *Cache) Close() error {
+	if !c.builtin {
+		return nil
+	}
+
+	return c.opts.client.Close()
 }
