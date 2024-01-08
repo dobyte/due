@@ -22,8 +22,20 @@ func Bytes(any interface{}) []byte {
 	)
 
 	switch v := any.(type) {
-	case bool, *bool, int, *int, int8, *int8, int16, *int16, int32, *int32, int64, *int64, uint, *uint, uint8, *uint8, uint16, *uint16, uint32, *uint32, uint64, *uint64, float32, *float32, float64, *float64:
+	case int:
+		err = binary.Write(buf, binary.BigEndian, int64(v))
+	case *int:
+		err = binary.Write(buf, binary.BigEndian, int64(*v))
+	case uint:
+		err = binary.Write(buf, binary.BigEndian, uint64(v))
+	case *uint:
+		err = binary.Write(buf, binary.BigEndian, uint64(*v))
+	case bool, *bool, int8, *int8, int16, *int16, int32, *int32, int64, *int64, uint8, *uint8, uint16, *uint16, uint32, *uint32, uint64, *uint64, float32, *float32, float64, *float64:
 		err = binary.Write(buf, binary.BigEndian, v)
+	case uintptr:
+		err = binary.Write(buf, binary.BigEndian, uint64(v))
+	case *uintptr:
+		err = binary.Write(buf, binary.BigEndian, uint64(*v))
 	case complex64, *complex64, complex128, *complex128:
 		return nil
 	case string:
@@ -52,10 +64,22 @@ func Bytes(any interface{}) []byte {
 			err = binary.Write(buf, binary.BigEndian, rv.Bool())
 		case reflect.String:
 			return StringToBytes(rv.String())
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		case reflect.Int, reflect.Int64:
 			err = binary.Write(buf, binary.BigEndian, rv.Int())
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		case reflect.Int8:
+			err = binary.Write(buf, binary.BigEndian, int8(rv.Int()))
+		case reflect.Int16:
+			err = binary.Write(buf, binary.BigEndian, int16(rv.Int()))
+		case reflect.Int32:
+			err = binary.Write(buf, binary.BigEndian, int32(rv.Int()))
+		case reflect.Uint, reflect.Uint64, reflect.Uintptr:
 			err = binary.Write(buf, binary.BigEndian, rv.Uint())
+		case reflect.Uint8:
+			err = binary.Write(buf, binary.BigEndian, uint8(rv.Uint()))
+		case reflect.Uint16:
+			err = binary.Write(buf, binary.BigEndian, uint16(rv.Uint()))
+		case reflect.Uint32:
+			err = binary.Write(buf, binary.BigEndian, uint32(rv.Uint()))
 		case reflect.Float32, reflect.Float64:
 			err = binary.Write(buf, binary.BigEndian, rv.Float())
 		case reflect.Complex64, reflect.Complex128:

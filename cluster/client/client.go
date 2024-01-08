@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"sync"
+	"sync/atomic"
 )
 
 type HookHandler func(proxy *Proxy)
@@ -27,8 +28,7 @@ type Client struct {
 	hooks               map[cluster.Hook]HookHandler
 	defaultRouteHandler RouteHandler
 	proxy               *Proxy
-	rw                  sync.RWMutex
-	state               cluster.State
+	state               int32
 	conns               sync.Map
 }
 
@@ -44,8 +44,9 @@ func NewClient(opts ...Option) *Client {
 	c.routes = make(map[int32]RouteHandler)
 	c.events = make(map[cluster.Event]EventHandler)
 	c.hooks = make(map[cluster.Hook]HookHandler)
-	c.state = cluster.Shut
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
+
+	c.setState(cluster.Shut)
 
 	return c
 }
@@ -68,12 +69,12 @@ func (c *Client) Init() {
 	if handler, ok := c.hooks[cluster.Init]; ok {
 		handler(c.proxy)
 	}
-
-	c.state = cluster.Work
 }
 
 // Start 启动组件
 func (c *Client) Start() {
+	c.setState(cluster.Work)
+
 	c.opts.client.OnConnect(c.handleConnect)
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
@@ -89,10 +90,7 @@ func (c *Client) Destroy() {
 		handler(c.proxy)
 	}
 
-	c.rw.Lock()
-	c.conn = nil
-	c.state = cluster.Shut
-	c.rw.Unlock()
+	c.setState(cluster.Shut)
 }
 
 // Proxy 获取节点代理
@@ -102,29 +100,16 @@ func (c *Client) Proxy() *Proxy {
 
 // 处理连接打开
 func (c *Client) handleConnect(conn network.Conn) {
-	c.rw.Lock()
-	isNew := c.conn == nil
-	c.conn = conn
-	c.rw.Unlock()
-
-	var (
-		ok      bool
-		handler EventHandler
-	)
-
-	if !isNew {
-		handler, ok = c.events[cluster.Reconnect]
-	}
-
-	if !ok {
-		handler, ok = c.events[cluster.Connect]
-	}
-
+	handler, ok := c.events[cluster.Connect]
 	if !ok {
 		return
 	}
 
-	handler(c.proxy)
+	cc := &Conn{conn: conn, client: c}
+
+	c.conns.Store(conn, cc)
+
+	handler(cc)
 }
 
 // 处理断开连接
@@ -145,7 +130,12 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 }
 
 // 处理接收到的消息
-func (c *Client) handleReceive(_ network.Conn, data []byte) {
+func (c *Client) handleReceive(conn network.Conn, data []byte) {
+	val, ok := c.conns.Load(conn)
+	if !ok {
+		return
+	}
+
 	message, err := packet.Unpack(data)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)
@@ -156,13 +146,13 @@ func (c *Client) handleReceive(_ network.Conn, data []byte) {
 	if ok {
 		handler(&Context{
 			ctx:     context.Background(),
-			client:  c,
+			conn:    val.(*Conn),
 			message: message,
 		})
 	} else if c.defaultRouteHandler != nil {
 		c.defaultRouteHandler(&Context{
 			ctx:     context.Background(),
-			client:  c,
+			conn:    val.(*Conn),
 			message: message,
 		})
 	} else {
@@ -172,11 +162,7 @@ func (c *Client) handleReceive(_ network.Conn, data []byte) {
 
 // 拨号
 func (c *Client) dial(addr ...string) (*Conn, error) {
-	c.rw.RLock()
-	isShut := c.state == cluster.Shut
-	c.rw.RUnlock()
-
-	if isShut {
+	if c.getState() == cluster.Shut {
 		return nil, errors.ErrClientShut
 	}
 
@@ -190,7 +176,7 @@ func (c *Client) dial(addr ...string) (*Conn, error) {
 
 // 添加路由处理器
 func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
-	if c.state == cluster.Shut {
+	if c.getState() == cluster.Shut {
 		c.routes[route] = handler
 	} else {
 		log.Warnf("client is working, can't add route handler")
@@ -199,7 +185,7 @@ func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 
 // 默认路由处理器
 func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
-	if c.state == cluster.Shut {
+	if c.getState() == cluster.Shut {
 		c.defaultRouteHandler = handler
 	} else {
 		log.Warnf("client is working, can't set default route handler")
@@ -208,7 +194,7 @@ func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 
 // 添加事件处理器
 func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
-	if c.state == cluster.Shut {
+	if c.getState() == cluster.Shut {
 		c.events[event] = handler
 	} else {
 		log.Warnf("client is working, can't add event handler")
@@ -217,9 +203,19 @@ func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 
 // 添加钩子监听器
 func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
-	if c.state == cluster.Shut {
+	if c.getState() == cluster.Shut {
 		c.hooks[hook] = handler
 	} else {
 		log.Warnf("client is working, can't add hook handler")
 	}
+}
+
+// 设置状态
+func (c *Client) setState(state cluster.State) {
+	atomic.StoreInt32(&c.state, int32(state))
+}
+
+// 获取状态
+func (c *Client) getState() cluster.State {
+	return cluster.State(atomic.LoadInt32(&c.state))
 }

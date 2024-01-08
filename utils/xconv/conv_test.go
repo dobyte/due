@@ -48,6 +48,17 @@ func TestStrings(t *testing.T) {
 	t.Log(xconv.Strings(a))
 }
 
+func TestBytes(t *testing.T) {
+	t.Log(xconv.Bytes("1"))
+	t.Log(xconv.Int(xconv.String(xconv.Bytes("1"))))
+	t.Log(xconv.Bytes(1))
+	t.Log(xconv.Int(xconv.Bytes(1)))
+	t.Log(xconv.Bytes(uint8(255)))
+	t.Log(xconv.Int(xconv.Bytes(uint8(255))))
+	t.Log(xconv.Bytes(255))
+	t.Log(xconv.Int(xconv.Bytes(255)))
+}
+
 func TestJson(t *testing.T) {
 	t.Log(xconv.Json("{}"))
 	t.Log(xconv.Json(`{"id":1,"name":"fuxiao"}`))

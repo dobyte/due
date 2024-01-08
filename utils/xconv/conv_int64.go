@@ -1,6 +1,8 @@
 package xconv
 
 import (
+	"bytes"
+	"encoding/binary"
 	"reflect"
 	"strconv"
 	"time"
@@ -82,6 +84,18 @@ func Int64(any interface{}) int64 {
 		return v.UnixNano()
 	case *time.Time:
 		return v.UnixNano()
+	case []byte:
+		buf := make([]byte, 8)
+		copy(buf[len(buf)-len(v):], v)
+
+		var i int64
+		if err := binary.Read(bytes.NewReader(buf), binary.BigEndian, &i); err == nil {
+			return i
+		} else {
+			return 0
+		}
+	case *[]byte:
+		return Int64(*v)
 	default:
 		var (
 			rv   = reflect.ValueOf(any)

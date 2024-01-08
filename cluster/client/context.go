@@ -2,19 +2,13 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/packet"
 )
 
 type Context struct {
 	ctx     context.Context // 上下文
-	client  *Client         // 客户端
+	conn    *Conn           // 连接
 	message *packet.Message // 消息
-}
-
-// Proxy 响应请求
-func (c *Context) Proxy() *Proxy {
-	return c.client.proxy
 }
 
 // Context 获取上线文
@@ -24,12 +18,17 @@ func (c *Context) Context() context.Context {
 
 // CID 获取连接ID
 func (c *Context) CID() int64 {
-	return c.client.conn.ID()
+	return c.conn.ID()
 }
 
 // UID 获取用户ID
 func (c *Context) UID() int64 {
-	return c.client.conn.UID()
+	return c.conn.UID()
+}
+
+// Conn 获取连接
+func (c *Context) Conn() *Conn {
+	return c.conn
 }
 
 // Seq 获取消息序列号
@@ -51,27 +50,12 @@ func (c *Context) Data() interface{} {
 func (c *Context) Parse(v interface{}) (err error) {
 	buffer := c.message.Buffer
 
-	if c.client.opts.encryptor != nil {
-		buffer, err = c.client.opts.encryptor.Decrypt(buffer)
+	if c.conn.client.opts.encryptor != nil {
+		buffer, err = c.conn.client.opts.encryptor.Decrypt(buffer)
 		if err != nil {
 			return
 		}
 	}
 
-	return c.client.opts.codec.Unmarshal(buffer, v)
-}
-
-// Bind 绑定用户ID
-func (c *Context) Bind(uid int64) error {
-	return c.client.proxy.Bind(uid)
-}
-
-// Unbind 解绑用户ID
-func (c *Context) Unbind() error {
-	return c.client.proxy.Unbind()
-}
-
-// Push 推送消息
-func (c *Context) Push(message *cluster.Message) error {
-	return c.client.proxy.Push(message)
+	return c.conn.client.opts.codec.Unmarshal(buffer, v)
 }
