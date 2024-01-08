@@ -159,14 +159,15 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 					continue
 				}
 
-				stateful, err := strconv.ParseBool(v)
+				attr, err := strconv.Atoi(v)
 				if err != nil {
 					continue
 				}
 
 				ins.Routes = append(ins.Routes, registry.Route{
 					ID:       int32(route),
-					Stateful: stateful,
+					Stateful: attr&stateful == stateful,
+					Internal: attr&internal == internal,
 				})
 			}
 		}

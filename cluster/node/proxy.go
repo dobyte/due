@@ -25,24 +25,24 @@ func newProxy(node *Node) *Proxy {
 	})}
 }
 
-// GetNodeID 获取当前节点ID
-func (p *Proxy) GetNodeID() string {
+// GetID 获取当前节点ID
+func (p *Proxy) GetID() string {
 	return p.node.opts.id
 }
 
-// GetNodeName 获取当前节点名称
-func (p *Proxy) GetNodeName() string {
+// GetName 获取当前节点名称
+func (p *Proxy) GetName() string {
 	return p.node.opts.name
 }
 
-// GetNodeState 获取当前节点状态
-func (p *Proxy) GetNodeState() cluster.State {
-	return cluster.State(p.node.getState())
+// GetState 获取当前节点状态
+func (p *Proxy) GetState() cluster.State {
+	return p.node.getState()
 }
 
-// SetNodeState 设置当前节点状态
-func (p *Proxy) SetNodeState(state cluster.State) {
-	p.node.setState(state)
+// SetState 设置当前节点状态
+func (p *Proxy) SetState(state cluster.State) error {
+	return p.node.updateState(state)
 }
 
 // Router 路由器
@@ -157,7 +157,7 @@ func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int
 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
-	if args.NID != p.GetNodeID() {
+	if args.NID != p.GetID() {
 		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID:     args.NID,
 			UID:     args.UID,

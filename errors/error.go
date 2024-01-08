@@ -33,6 +33,7 @@ var (
 	ErrInvalidConfigContent  = New("invalid config content")
 	ErrNotFoundConfigSource  = New("not found config source")
 	ErrInvalidFormat         = New("invalid format")
+	ErrIllegalRequest        = New("illegal request")
 )
 
 // NewError 新建一个错误

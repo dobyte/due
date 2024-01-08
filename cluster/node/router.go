@@ -21,6 +21,7 @@ type Router struct {
 type routeEntity struct {
 	route       int32               // 路由
 	stateful    bool                // 是否有状态
+	internal    bool                // 是否内部路由
 	handler     RouteHandler        // 路由处理器
 	middlewares []MiddlewareHandler // 路由中间件
 }
@@ -43,7 +44,7 @@ func newRouter(node *Node) *Router {
 
 // AddRouteHandler 添加路由处理器
 func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	if r.node.getState() != cluster.Shut.String() {
+	if r.node.getState() != cluster.Shut {
 		log.Warnf("the node server is working, can't add route handler")
 		return
 	}
@@ -56,9 +57,25 @@ func (r *Router) AddRouteHandler(route int32, stateful bool, handler RouteHandle
 	}
 }
 
+// AddInternalRouteHandler 添加内部路由处理器（node节点间路由消息处理）
+func (r *Router) AddInternalRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
+	if r.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't add route handler")
+		return
+	}
+
+	r.routes[route] = &routeEntity{
+		route:       route,
+		stateful:    stateful,
+		internal:    true,
+		handler:     handler,
+		middlewares: middlewares[:],
+	}
+}
+
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
-	if r.node.getState() != cluster.Shut.String() {
+	if r.node.getState() != cluster.Shut {
 		log.Warnf("the node server is working, can't set default route handler")
 		return
 	}
@@ -156,6 +173,16 @@ func (g *RouterGroup) AddRouteHandler(route int32, stateful bool, handler RouteH
 	copy(dst, g.middlewares)
 	copy(dst[len(g.middlewares):], middlewares)
 	g.router.AddRouteHandler(route, stateful, handler, dst...)
+
+	return g
+}
+
+// AddInternalRouteHandler 添加内部路由处理器（node节点间路由消息处理）
+func (g *RouterGroup) AddInternalRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) *RouterGroup {
+	dst := make([]MiddlewareHandler, len(g.middlewares)+len(middlewares))
+	copy(dst, g.middlewares)
+	copy(dst[len(g.middlewares):], middlewares)
+	g.router.AddInternalRouteHandler(route, stateful, handler, dst...)
 
 	return g
 }

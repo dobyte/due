@@ -19,6 +19,8 @@ import (
 	"time"
 )
 
+const timeout = 5 * time.Second
+
 type Gate struct {
 	component.Base
 	opts        *options
@@ -183,7 +185,7 @@ func (g *Gate) registerServiceInstance() {
 		Endpoint: g.transporter.Endpoint().String(),
 	}
 
-	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(g.ctx, timeout)
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
 	if err != nil {
@@ -193,7 +195,7 @@ func (g *Gate) registerServiceInstance() {
 
 // 解注册服务实例
 func (g *Gate) deregisterServiceInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(g.ctx, timeout)
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
 	if err != nil {

@@ -20,6 +20,11 @@ const (
 	metaFieldState    = "state"
 )
 
+const (
+	stateful = 1 << iota
+	internal
+)
+
 type registrar struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -74,7 +79,17 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
 	for _, route := range ins.Routes {
-		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.FormatBool(route.Stateful)
+		attr := 0
+
+		if route.Internal {
+			attr |= internal
+		}
+
+		if route.Stateful {
+			attr |= stateful
+		}
+
+		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.Itoa(attr)
 	}
 
 	for _, event := range ins.Events {

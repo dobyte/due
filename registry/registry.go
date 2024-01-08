@@ -53,4 +53,6 @@ type Route struct {
 	ID int32 `json:"id"`
 	// 是否有状态
 	Stateful bool `json:"stateful"`
+	// 是否内部路由
+	Internal bool `json:"internal"`
 }

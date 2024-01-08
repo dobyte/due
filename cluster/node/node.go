@@ -10,15 +10,16 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
+
+const timeout = 5 * time.Second
 
 type Node struct {
 	component.Base
 	opts        *options
 	ctx         context.Context
 	cancel      context.CancelFunc
-	state       cluster.State
+	state       int32
 	events      *Events
 	router      *Router
 	proxy       *Proxy
@@ -40,6 +41,8 @@ func NewNode(opts ...Option) *Node {
 	n.proxy = newProxy(n)
 	n.fnChan = make(chan func(), 4096)
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
+
+	n.setState(cluster.Shut)
 
 	return n
 }
@@ -170,6 +173,7 @@ func (n *Node) registerServiceInstance() {
 		routes = append(routes, registry.Route{
 			ID:       entity.route,
 			Stateful: entity.stateful,
+			Internal: entity.internal,
 		})
 	}
 
@@ -183,13 +187,13 @@ func (n *Node) registerServiceInstance() {
 		Name:     string(cluster.Node),
 		Kind:     cluster.Node.String(),
 		Alias:    n.opts.name,
-		State:    n.getState(),
+		State:    n.getState().String(),
 		Routes:   routes,
 		Events:   events,
 		Endpoint: n.transporter.Endpoint().String(),
 	}
 
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(n.ctx, timeout)
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
@@ -199,9 +203,7 @@ func (n *Node) registerServiceInstance() {
 
 // 解注册服务实例
 func (n *Node) deregisterServiceInstance() {
-	log.Debugf("deregister node instance, alias: %s", n.instance.Alias)
-
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(n.ctx, timeout)
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
@@ -209,43 +211,37 @@ func (n *Node) deregisterServiceInstance() {
 	}
 }
 
-// 设置节点状态
+// 设置状态
 func (n *Node) setState(state cluster.State) {
-	if n.checkState(state) {
-		return
-	}
-
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)), unsafe.Pointer(&state))
-
-	if n.instance == nil {
-		return
-	}
-
-	n.instance.State = n.getState()
-	for i := 0; i < 3; i++ {
-		ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-		err := n.opts.registry.Register(ctx, n.instance)
-		cancel()
-		if err == nil {
-			break
-		}
-	}
-
-	return
+	atomic.StoreInt32(&n.state, int32(state))
 }
 
-// 获取节点状态
-func (n *Node) getState() string {
-	if state := (*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.state)))); state == nil {
-		return cluster.Shut.String()
-	} else {
-		return *state
-	}
+// 获取状态
+func (n *Node) getState() cluster.State {
+	return cluster.State(atomic.LoadInt32(&n.state))
 }
 
-// 检测节点状态
-func (n *Node) checkState(state cluster.State) bool {
-	return n.getState() == state.String()
+// 更新状态
+func (n *Node) updateState(state cluster.State) error {
+	if n.getState() == state {
+		return nil
+	}
+
+	instance := n.instance
+	instance.State = state.String()
+
+	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	defer cancel()
+
+	err := n.opts.registry.Register(ctx, instance)
+	if err != nil {
+		return err
+	}
+
+	n.setState(state)
+	n.instance.State = state.String()
+
+	return nil
 }
 
 func (n *Node) debugPrint() {

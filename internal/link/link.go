@@ -603,7 +603,7 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 			miss, err := client.Deliver(ctx, arguments)
 			return miss, nil, err
 		})
-		if err != nil && err != errors.ErrNotFoundUserLocation {
+		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 			return err
 		}
 		return nil
@@ -696,6 +696,10 @@ func (l *Link) doNodeRPC(ctx context.Context, routeID int32, uid int64, fn func(
 
 	if route, err = l.nodeDispatcher.FindRoute(routeID); err != nil {
 		return nil, err
+	}
+
+	if l.opts.GID != "" && route.Internal() {
+		return nil, errors.ErrIllegalRequest
 	}
 
 	for i := 0; i < 2; i++ {
