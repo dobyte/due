@@ -145,7 +145,57 @@ server time: 8 bytes
 - 上行心跳包无需携带心跳数据，下行心跳包默认携带8 bytes的服务器时间（ms），可通过网络库配置进行设置是否携带下行包时间信息
 - 此参数由网络框架层自动打包，服务端开发者不关注此参数，客户端开发者需关注此参数
 
-### 5.配置中心
+### 5、相关工具链
+
+1.安装protobuf编译器（使用场景：开发mesh微服务）
+
+- Linux, using apt or apt-get, for example:
+
+```shell
+$ apt install -y protobuf-compiler
+$ protoc --version  # Ensure compiler version is 3+
+```
+
+- MacOS, using Homebrew:
+
+```shell
+$ brew install protobuf
+$ protoc --version  # Ensure compiler version is 3+
+```
+
+- Windows, download from [Github](https://github.com/protocolbuffers/protobuf/releases):
+
+2.安装protobuf go代码生成工具（使用场景：开发mesh微服务）
+
+```shell
+go install github.com/gogo/protobuf/protoc-gen-gofast@latest
+```
+
+3.安装grpc代码生成工具（使用场景：使用[GRPC](https://grpc.io/)组件开发mesh微服务）
+
+```shell
+go install github.com/rpcxio/protoc-gen-rpcx@latest
+```
+
+4.安装rpcx代码生成工具（使用场景：使用[RPCX](https://rpcx.io/)组件开发mesh微服务）
+
+```shell
+go install github.com/rpcxio/protoc-gen-rpcx@latest
+```
+
+5.安装gorm dao代码生成工具（使用场景：使用[GORM](https://gorm.io/)作为数据库orm）
+
+```shell
+go install github.com/dobyte/gorm-dao-generator@latest
+```
+
+6.安装mongo dao代码生成工具（使用场景：使用[MongoDB](https://github.com/mongodb/mongo-go-driver)作为数据库orm）
+
+```shell
+go install github.com/dobyte/mongo-dao-generator@latest
+```
+
+### 6.配置中心
 
 1.功能介绍
 
@@ -157,7 +207,7 @@ server time: 8 bytes
 * [etcd](config/etcd/README-ZH.md)
 * [consul](config/consul/README-ZH.md)
 
-### 6.注册中心
+### 7.注册中心
 
 1.功能介绍
 
@@ -168,9 +218,9 @@ server time: 8 bytes
 * [etcd](registry/etcd/README-ZH.md)
 * [consul](registry/consul/README-ZH.md)
 
-### 7.网络
+### 8.网络
 
-### 6.快速开始
+### 9.快速开始
 
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
 
@@ -459,7 +509,7 @@ func push(conn network.Conn, route int32, buffer []byte) error {
 }
 ```
 
-### 7.支持组件
+### 10.支持组件
 
 1. 日志组件
    * zap: github.com/dobyte/due/log/zap
@@ -482,15 +532,15 @@ func push(conn network.Conn, route int32, buffer []byte) error {
    * nats: github.com/dobyte/due/eventbus/nats
    * kafka: github.com/dobyte/due/eventbus/kafka
 
-### 8.详细示例
+### 11.详细示例
 
 更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
 
-### 9.其他客户端
+### 12.其他客户端
 
 [due-client-ts](https://github.com/dobyte/due-client-ts)
 
-### 10.交流与讨论
+### 13.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 
