@@ -2,6 +2,7 @@ package xvalidate
 
 import (
 	"fmt"
+	"github.com/dobyte/due/v2/utils/xreflect"
 	"reflect"
 	"regexp"
 	"unicode/utf8"
@@ -98,10 +99,57 @@ func IsNumber(number string, langths ...int) bool {
 }
 
 // In 检测是值是否在给定的集合中
-func In(v interface{}, set ...interface{}) bool {
-	for _, item := range set {
-		if reflect.DeepEqual(v, item) {
-			return true
+func In(v interface{}, set interface{}) bool {
+	kind, value := xreflect.Value(set)
+	if kind != reflect.Slice && kind != reflect.Array {
+		return false
+	}
+
+	if value.Len() == 0 {
+		return false
+	}
+
+	kk, vv := xreflect.Value(v)
+
+	if kk == reflect.Slice || kk == reflect.Array {
+		check := make(map[interface{}]struct{}, value.Len())
+
+		for i := 0; i < value.Len(); i++ {
+			val := value.Index(i)
+
+			if !val.Comparable() {
+				continue
+			}
+
+			check[val.Interface()] = struct{}{}
+		}
+
+		for i := 0; i < vv.Len(); i++ {
+			val := vv.Index(i)
+
+			if !val.Comparable() {
+				continue
+			}
+
+			if _, ok := check[val.Interface()]; ok {
+				return true
+			}
+		}
+	} else {
+		if !vv.Comparable() {
+			return false
+		}
+
+		for i := 0; i < value.Len(); i++ {
+			val := value.Index(i)
+
+			if !val.Comparable() {
+				continue
+			}
+
+			if reflect.DeepEqual(vv.Interface(), val.Interface()) {
+				return true
+			}
 		}
 	}
 

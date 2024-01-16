@@ -19,7 +19,7 @@ type Cache interface {
 	// GetSet 获取设置缓存值
 	GetSet(ctx context.Context, key string, fn SetValueFunc) Result
 	// Delete 删除缓存
-	Delete(ctx context.Context, key string) (bool, error)
+	Delete(ctx context.Context, keys ...string) (bool, error)
 	// IncrInt 整数自增
 	IncrInt(ctx context.Context, key string, value int64) (int64, error)
 	// IncrFloat 浮点数自增
@@ -65,8 +65,8 @@ func GetSet(ctx context.Context, key string, fn SetValueFunc) Result {
 }
 
 // Delete 删除缓存
-func Delete(ctx context.Context, key string) (bool, error) {
-	return globalCache.Delete(ctx, key)
+func Delete(ctx context.Context, keys ...string) (bool, error) {
+	return globalCache.Delete(ctx, keys...)
 }
 
 // IncrInt 整数自增

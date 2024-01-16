@@ -51,3 +51,10 @@ func TestIsDigit(t *testing.T) {
 	t.Log(xvalidate.IsDigit("011.1"))
 	t.Log(xvalidate.IsDigit("aa.1"))
 }
+
+func TestIn(t *testing.T) {
+	t.Log(xvalidate.In("a", []string{"a", "b", "c"}))
+	t.Log(xvalidate.In("d", []string{"a", "b", "c"}))
+	t.Log(xvalidate.In([]string{"a", "b", "c"}, []string{"a", "b", "c"}))
+	t.Log(xvalidate.In([]string{"a", "b", "c"}, []string{"d", "f", "g"}))
+}

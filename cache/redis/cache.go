@@ -133,9 +133,20 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 }
 
 // Delete 删除缓存
-func (c *Cache) Delete(ctx context.Context, key string) (bool, error) {
-	ok, err := c.opts.client.Del(ctx, c.AddPrefix(key)).Result()
-	return ok == 1, err
+func (c *Cache) Delete(ctx context.Context, keys ...string) (bool, error) {
+	prefixedKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if key != "" {
+			prefixedKeys = append(prefixedKeys, c.AddPrefix(key))
+		}
+	}
+
+	if len(prefixedKeys) == 0 {
+		return false, nil
+	}
+
+	num, err := c.opts.client.Del(ctx, prefixedKeys...).Result()
+	return num > 1, err
 }
 
 // IncrInt 整数自增
