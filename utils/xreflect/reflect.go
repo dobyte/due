@@ -1,6 +1,8 @@
 package xreflect
 
-import "reflect"
+import (
+	"reflect"
+)
 
 func Value(i any) (reflect.Kind, reflect.Value) {
 	var (
@@ -14,4 +16,17 @@ func Value(i any) (reflect.Kind, reflect.Value) {
 	}
 
 	return rk, rv
+}
+
+// IsNil 检测值是否为nil
+func IsNil(v any) bool {
+	rv := reflect.ValueOf(v)
+	rk := rv.Kind()
+
+	switch rk {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }

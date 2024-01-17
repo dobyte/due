@@ -5,9 +5,10 @@ import (
 	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xrand"
+	"github.com/dobyte/due/v2/utils/xreflect"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
-	"reflect"
 	"time"
 )
 
@@ -110,17 +111,19 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 	}
 
 	rst, _, _ := c.sfg.Do(key+":set", func() (interface{}, error) {
-		val, expiration, err := fn()
+		val, err := fn()
 		if err != nil {
 			return cache.NewResult(nil, err), nil
 		}
 
-		if val == nil || reflect.ValueOf(val).IsNil() {
+		if val == nil || xreflect.IsNil(val) {
 			if err = c.opts.client.Set(ctx, key, c.opts.nilValue, c.opts.nilExpiration).Err(); err != nil {
 				return cache.NewResult(nil, err), nil
 			}
 			return cache.NewResult(nil, errors.ErrNil), nil
 		}
+
+		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
 
 		if err = c.opts.client.Set(ctx, key, xconv.String(val), expiration).Err(); err != nil {
 			return cache.NewResult(nil, err), nil

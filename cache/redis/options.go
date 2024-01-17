@@ -13,6 +13,8 @@ const (
 	defaultPrefix        = "cache"
 	defaultNilValue      = "cache@nil"
 	defaultNilExpiration = "10s"
+	defaultMinExpiration = "1h"
+	defaultMaxExpiration = "24h"
 )
 
 const (
@@ -24,6 +26,8 @@ const (
 	defaultPasswordKey      = "etc.cache.redis.password"
 	defaultNilValueKey      = "etc.cache.redis.nilValue"
 	defaultNilExpirationKey = "etc.cache.redis.nilExpiration"
+	defaultMinExpirationKey = "etc.cache.redis.minExpiration"
+	defaultMaxExpirationKey = "etc.cache.redis.maxExpiration"
 )
 
 type Option func(o *options)
@@ -62,6 +66,12 @@ type options struct {
 
 	// 空值过期时间，默认为10s
 	nilExpiration time.Duration
+
+	// 最小过期时间，默认为1h
+	minExpiration time.Duration
+
+	// 最大过期时间，默认为24h
+	maxExpiration time.Duration
 }
 
 func defaultOptions() *options {
@@ -74,6 +84,8 @@ func defaultOptions() *options {
 		password:      etc.Get(defaultPasswordKey).String(),
 		nilValue:      etc.Get(defaultNilValueKey, defaultNilValue).String(),
 		nilExpiration: etc.Get(defaultNilExpirationKey, defaultNilExpiration).Duration(),
+		minExpiration: etc.Get(defaultMinExpirationKey, defaultMinExpiration).Duration(),
+		maxExpiration: etc.Get(defaultMaxExpirationKey, defaultMaxExpiration).Duration(),
 	}
 }
 
@@ -120,4 +132,14 @@ func WithNilValue(nilValue string) Option {
 // WithNilExpiration 设置空值过期时间
 func WithNilExpiration(nilExpiration time.Duration) Option {
 	return func(o *options) { o.nilExpiration = nilExpiration }
+}
+
+// WithMinExpiration 设置最小过期时间
+func WithMinExpiration(minExpiration time.Duration) Option {
+	return func(o *options) { o.minExpiration = minExpiration }
+}
+
+// WithMaxExpiration 设置最大过期时间
+func WithMaxExpiration(maxExpiration time.Duration) Option {
+	return func(o *options) { o.maxExpiration = maxExpiration }
 }

@@ -364,7 +364,10 @@ timezone = "Local"
         nilValue = "cache@nil"
         # 空值过期时间，默认为10s
         nilExpiration = "10s"
-
+        # 最小过期时间，默认为1h
+        minExpiration = "1h"
+        # 最大过期时间，默认为24h
+        maxExpiration = "24h"
 [crypto]
     # RSA设置
     [crypto.rsa]

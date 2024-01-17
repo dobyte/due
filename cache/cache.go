@@ -7,7 +7,7 @@ import (
 
 var globalCache Cache
 
-type SetValueFunc func() (interface{}, time.Duration, error)
+type SetValueFunc func() (interface{}, error)
 
 type Cache interface {
 	// Has 检测缓存是否存在
