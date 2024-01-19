@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
@@ -55,19 +56,25 @@ func (c *serverConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *serverConn) Send(msg []byte) error {
+func (c *serverConn) Send(msg []byte) (err error) {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
-	if err := c.checkState(); err != nil {
-		return err
+	if err = c.checkState(); err != nil {
+		c.rw.RUnlock()
+		return
 	}
 
-	return write(c.conn, msg)
+	conn := c.conn
+	c.rw.RUnlock()
+
+	_, err = conn.Write(packMessage(msg))
+	return
 }
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) (err error) {
+	msg = packMessage(msg)
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -145,9 +152,9 @@ func (c *serverConn) checkState() error {
 		return errors.ErrConnectionHanged
 	case network.ConnClosed:
 		return errors.ErrConnectionClosed
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 // 初始化连接
@@ -155,16 +162,16 @@ func (c *serverConn) init(id int64, conn net.Conn, cm *serverConnMgr) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 1024)
+	c.chWrite = make(chan chWrite, 4096)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
-	c.lastHeartbeatTime = xtime.Now().Unix()
+	c.lastHeartbeatTime = xtime.Now().UnixNano()
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
-	go c.read()
+	xcall.Go(c.read)
 
-	go c.write()
+	xcall.Go(c.write)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
@@ -174,6 +181,7 @@ func (c *serverConn) init(id int64, conn net.Conn, cm *serverConnMgr) {
 // 优雅关闭
 func (c *serverConn) graceClose(isNeedRecycle bool) (err error) {
 	c.rw.Lock()
+
 	if err = c.checkState(); err != nil {
 		c.rw.Unlock()
 		return
@@ -190,7 +198,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) (err error) {
 	close(c.chWrite)
 	close(c.close)
 	close(c.done)
-	c.conn.Close()
+	err = c.conn.Close()
 	c.conn = nil
 	if isNeedRecycle {
 		c.connMgr.recycle(c)
@@ -217,7 +225,7 @@ func (c *serverConn) forceClose() (err error) {
 	close(c.chWrite)
 	close(c.close)
 	close(c.done)
-	c.conn.Close()
+	err = c.conn.Close()
 	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
@@ -231,19 +239,21 @@ func (c *serverConn) forceClose() (err error) {
 
 // 读取消息
 func (c *serverConn) read() {
+	conn := c.conn
+
 	for {
 		select {
 		case <-c.close:
 			return
 		default:
-			msg, err := read(c.conn)
+			isHeartbeat, msg, err := read(conn)
 			if err != nil {
-				c.forceClose()
+				_ = c.forceClose()
 				return
 			}
 
 			if c.connMgr.server.opts.heartbeatInterval > 0 {
-				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
 			}
 
 			switch c.State() {
@@ -251,9 +261,22 @@ func (c *serverConn) read() {
 				continue
 			case network.ConnClosed:
 				return
+			default:
+				// ignore
 			}
 
 			// ignore heartbeat packet
+			if isHeartbeat {
+				// responsive heartbeat
+				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
+					if _, err = conn.Write(packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
+				}
+				continue
+			}
+
+			// ignore empty packet
 			if len(msg) == 0 {
 				continue
 			}
@@ -267,7 +290,10 @@ func (c *serverConn) read() {
 
 // 写入消息
 func (c *serverConn) write() {
-	var ticker *time.Ticker
+	var (
+		conn   = c.conn
+		ticker *time.Ticker
+	)
 
 	if c.connMgr.server.opts.heartbeatInterval > 0 {
 		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
@@ -283,46 +309,43 @@ func (c *serverConn) write() {
 				return
 			}
 
-			c.rw.RLock()
 			if r.typ == closeSig {
+				c.rw.RLock()
 				c.done <- struct{}{}
 				c.rw.RUnlock()
 				return
 			}
 
-			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-				c.rw.RUnlock()
+			if c.isClosed() {
 				return
 			}
 
-			err := write(c.conn, r.msg)
-			c.rw.RUnlock()
-
-			if err != nil {
-				log.Errorf("write message error: %v", err)
+			if _, err := conn.Write(r.msg); err != nil {
+				log.Errorf("write data message error: %v", err)
 			}
 		case <-ticker.C:
-			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
+			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).UnixNano()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				log.Debugf("connection heartbeat timeout")
-				c.forceClose()
+				log.Debugf("connection heartbeat timeout, cid: %d", c.id)
+				_ = c.forceClose()
 				return
 			} else {
-				c.rw.RLock()
+				if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
+					if c.isClosed() {
+						return
+					}
 
-				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-					c.rw.RUnlock()
-					return
-				}
-
-				// send heartbeat packet
-				err := write(c.conn, nil)
-				c.rw.RUnlock()
-
-				if err != nil {
-					log.Errorf("send heartbeat packet failed: %v", err)
+					// send heartbeat packet
+					if _, err := conn.Write(packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
 				}
 			}
 		}
 	}
+}
+
+// 是否已关闭
+func (c *serverConn) isClosed() bool {
+	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
 }

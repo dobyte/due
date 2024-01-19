@@ -11,9 +11,9 @@ const (
 	defaultServerPath                    = "/"
 	defaultServerMaxConnNum              = 5000
 	defaultServerCheckOrigin             = "*"
-	defaultServerHandshakeTimeout        = 10
-	defaultServerHeartbeatInterval       = 10
-	defaultServerHeartbeatMechanism      = RespHeartbeat
+	defaultServerHandshakeTimeout        = "10s"
+	defaultServerHeartbeatInterval       = "10s"
+	defaultServerHeartbeatMechanism      = "resp"
 	defaultServerHeartbeatWithServerTime = true
 )
 
@@ -50,7 +50,7 @@ type serverOptions struct {
 	checkOrigin             CheckOriginFunc    // 跨域检测
 	handshakeTimeout        time.Duration      // 握手超时时间，默认10s
 	heartbeatInterval       time.Duration      // 心跳间隔时间，默认10s
-	heartbeatMechanism      HeartbeatMechanism // 心跳机制，默认responsive
+	heartbeatMechanism      HeartbeatMechanism // 心跳机制，默认resp
 	heartbeatWithServerTime bool               // 下行心跳是否携带服务器时间，默认为true
 }
 

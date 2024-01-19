@@ -7,8 +7,8 @@ import (
 
 const (
 	defaultClientDialUrl           = "ws://127.0.0.1:3553"
-	defaultClientHandshakeTimeout  = 10
-	defaultClientHeartbeatInterval = 10
+	defaultClientHandshakeTimeout  = "10s"
+	defaultClientHeartbeatInterval = "10s"
 )
 
 const (

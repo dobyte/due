@@ -28,7 +28,8 @@ type serverConn struct {
 	state             int32           // 连接状态
 	conn              *websocket.Conn // WS源连接
 	connMgr           *serverConnMgr  // 连接管理
-	chWrite           chan chWrite    // 写入队列
+	chLowWrite        chan chWrite    // 低级队列
+	chHighWrite       chan chWrite    // 优先队列
 	done              chan struct{}   // 写入完成信号
 	close             chan struct{}   // 关闭信号
 	lastHeartbeatTime int64           // 上次心跳时间
@@ -57,19 +58,19 @@ func (c *serverConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-// 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
-// 建议使用Push方法替代Send
-func (c *serverConn) Send(msg []byte) error {
+func (c *serverConn) Send(msg []byte) (err error) {
 	msg = packMessage(msg)
 
-	c.rw.Lock()
-	defer c.rw.Unlock()
+	c.rw.RLock()
+	defer c.rw.RUnlock()
 
-	if err := c.checkState(); err != nil {
-		return err
+	if err = c.checkState(); err != nil {
+		return
 	}
 
-	return c.conn.WriteMessage(websocket.BinaryMessage, msg)
+	c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
+
+	return
 }
 
 // Push 发送消息（异步）
@@ -83,7 +84,7 @@ func (c *serverConn) Push(msg []byte) error {
 		return err
 	}
 
-	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
+	c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
 
 	return nil
 }
@@ -151,10 +152,11 @@ func (c *serverConn) init(id int64, conn *websocket.Conn, cm *serverConnMgr) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 4096)
+	c.chLowWrite = make(chan chWrite, 4096)
+	c.chHighWrite = make(chan chWrite, 1024)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
-	c.lastHeartbeatTime = xtime.Now().Unix()
+	c.lastHeartbeatTime = xtime.Now().UnixNano()
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
@@ -174,9 +176,9 @@ func (c *serverConn) checkState() error {
 		return errors.ErrConnectionHanged
 	case network.ConnClosed:
 		return errors.ErrConnectionClosed
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 // 优雅关闭
@@ -189,17 +191,18 @@ func (c *serverConn) graceClose(isNeedRecycle bool) (err error) {
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
-	c.chWrite <- chWrite{typ: closeSig}
+	c.chHighWrite <- chWrite{typ: closeSig}
 	c.rw.Unlock()
 
 	<-c.done
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
+	close(c.chLowWrite)
+	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	c.conn.Close()
+	err = c.conn.Close()
 	c.conn = nil
 	if isNeedRecycle {
 		c.connMgr.recycle(c)
@@ -223,10 +226,11 @@ func (c *serverConn) forceClose() (err error) {
 	}
 
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
+	close(c.chLowWrite)
+	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	c.conn.Close()
+	err = c.conn.Close()
 	c.conn = nil
 	c.connMgr.recycle(c)
 	c.rw.Unlock()
@@ -240,19 +244,21 @@ func (c *serverConn) forceClose() (err error) {
 
 // 读取消息
 func (c *serverConn) read() {
+	conn := c.conn
+
 	for {
 		select {
 		case <-c.close:
 			return
 		default:
-			msgType, msg, err := c.conn.ReadMessage()
+			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
 				if !errors.Is(err, net.ErrClosed) {
 					if _, ok := err.(*websocket.CloseError); !ok {
 						log.Warnf("read message failed: %d %v", c.id, err)
 					}
 				}
-				c.forceClose()
+				_ = c.forceClose()
 				return
 			}
 
@@ -261,7 +267,7 @@ func (c *serverConn) read() {
 			}
 
 			if c.connMgr.server.opts.heartbeatInterval > 0 {
-				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
 			}
 
 			switch c.State() {
@@ -269,6 +275,8 @@ func (c *serverConn) read() {
 				continue
 			case network.ConnClosed:
 				return
+			default:
+				// ignore
 			}
 
 			isHeartbeat, msg, err := parsePacket(msg)
@@ -281,9 +289,15 @@ func (c *serverConn) read() {
 			if isHeartbeat {
 				// responsive heartbeat
 				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
-					c.chWrite <- chWrite{typ: heartbeatPacket}
+					c.rw.RLock()
+					c.chHighWrite <- chWrite{typ: heartbeatPacket}
+					c.rw.RUnlock()
 				}
+				continue
+			}
 
+			// ignore empty packet
+			if len(msg) == 0 {
 				continue
 			}
 
@@ -295,8 +309,12 @@ func (c *serverConn) read() {
 }
 
 // 写入消息
+// 由于gorilla/websocket库并发写入的限制，同时为了保证心跳能够优先下发到客户端，故而实现一个优先队列
 func (c *serverConn) write() {
-	var ticker *time.Ticker
+	var (
+		conn   = c.conn
+		ticker *time.Ticker
+	)
 
 	if c.connMgr.server.opts.heartbeatInterval > 0 {
 		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
@@ -307,60 +325,97 @@ func (c *serverConn) write() {
 
 	for {
 		select {
-		case r, ok := <-c.chWrite:
+		case r, ok := <-c.chHighWrite:
 			if !ok {
 				return
 			}
 
-			c.rw.RLock()
-
-			if r.typ == closeSig {
-				c.done <- struct{}{}
-				c.rw.RUnlock()
+			if !c.doWrite(conn, r) {
 				return
-			}
-
-			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-				c.rw.RUnlock()
-				return
-			}
-
-			if r.typ == heartbeatPacket {
-				r.msg = packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)
-			}
-
-			err := c.conn.WriteMessage(websocket.BinaryMessage, r.msg)
-			c.rw.RUnlock()
-
-			if err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					if _, ok := err.(*websocket.CloseError); !ok {
-						log.Errorf("write message error: %v", err)
-					}
-				}
 			}
 		case <-ticker.C:
-			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
-			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				log.Debugf("connection heartbeat timeout, cid: %d", c.id)
-				c.forceClose()
+			if !c.doHandleHeartbeat(conn) {
 				return
-			} else {
-				if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
-					// send heartbeat packet
-					c.rw.RLock()
+			}
+		default:
+			select {
+			case r, ok := <-c.chHighWrite:
+				if !ok {
+					return
+				}
 
-					if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-						c.rw.RUnlock()
-						return
-					}
+				if !c.doWrite(conn, r) {
+					return
+				}
+			case r, ok := <-c.chLowWrite:
+				if !ok {
+					return
+				}
 
-					// Connections support one concurrent writer.
-					c.chWrite <- chWrite{typ: heartbeatPacket}
-
-					c.rw.RUnlock()
+				if !c.doWrite(conn, r) {
+					return
+				}
+			case <-ticker.C:
+				if !c.doHandleHeartbeat(conn) {
+					return
 				}
 			}
 		}
 	}
+}
+
+// 执行写入操作
+func (c *serverConn) doWrite(conn *websocket.Conn, r chWrite) bool {
+	if r.typ == closeSig {
+		c.rw.RLock()
+		c.done <- struct{}{}
+		c.rw.RUnlock()
+		return false
+	}
+
+	if c.isClosed() {
+		return false
+	}
+
+	if r.typ == heartbeatPacket {
+		r.msg = packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)
+	}
+
+	if err := conn.WriteMessage(websocket.BinaryMessage, r.msg); err != nil {
+		if !errors.Is(err, net.ErrClosed) {
+			if _, ok := err.(*websocket.CloseError); !ok {
+				log.Errorf("write message error: %v", err)
+			}
+		}
+	}
+
+	return true
+}
+
+// 处理心跳
+func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn) bool {
+	deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).UnixNano()
+	if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
+		_ = c.forceClose()
+		return false
+	} else {
+		if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
+			if c.isClosed() {
+				return false
+			}
+
+			// send heartbeat packet
+			if err := conn.WriteMessage(websocket.BinaryMessage, packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
+				log.Errorf("write heartbeat message error: %v", err)
+			}
+		}
+	}
+
+	return true
+}
+
+// 是否已关闭
+func (c *serverConn) isClosed() bool {
+	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
 }

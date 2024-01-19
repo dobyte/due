@@ -26,18 +26,25 @@ func NewClient(opts ...ClientOption) network.Client {
 }
 
 // Dial 拨号连接
-func (c *client) Dial() (network.Conn, error) {
-	addr, err := net.ResolveTCPAddr("tcp", c.opts.addr)
+func (c *client) Dial(addr ...string) (network.Conn, error) {
+	var address string
+	if len(addr) > 0 && addr[0] != "" {
+		address = addr[0]
+	} else {
+		address = c.opts.addr
+	}
+
+	tcpAddr, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := net.Dial(addr.Network(), addr.String())
+	conn, err := net.Dial(tcpAddr.Network(), tcpAddr.String())
 	if err != nil {
 		return nil, err
 	}
 
-	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
+	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
 }
 
 // OnConnect 监听连接打开

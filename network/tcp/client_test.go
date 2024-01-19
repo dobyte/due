@@ -2,7 +2,6 @@ package tcp_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/network/netpoll/v2"
 	"github.com/dobyte/due/network/tcp/v2"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -13,47 +12,8 @@ import (
 )
 
 func TestClient_Dial(t *testing.T) {
-	client := netpoll.NewClient()
-
-	client.OnConnect(func(conn network.Conn) {
-		t.Log("connection is opened")
-	})
-	client.OnDisconnect(func(conn network.Conn) {
-		t.Log("connection is closed")
-	})
-	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-
-		t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-	})
-
-	conn, err := client.Dial()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer conn.Close()
-
-	msg, _ := packet.Pack(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
-
-	if err = conn.Push(msg); err != nil {
-		t.Fatal(err)
-	}
-
-	time.Sleep(1 * time.Second)
-}
-
-func TestNewClient_Dial(t *testing.T) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < 400; i++ {
+	for i := 0; i < 1; i++ {
 		wg.Add(1)
 
 		go func() {

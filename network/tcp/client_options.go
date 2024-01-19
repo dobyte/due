@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultClientDialAddr          = "127.0.0.1:3553"
-	defaultClientHeartbeatInterval = 10
+	defaultClientHeartbeatInterval = "10s"
 )
 
 const (
@@ -25,7 +25,7 @@ type clientOptions struct {
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
 		addr:              etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String(),
-		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration() * time.Second,
+		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(),
 	}
 }
 
