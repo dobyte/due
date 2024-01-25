@@ -1,6 +1,8 @@
 package xstring
 
 import (
+	"math"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -32,4 +34,30 @@ func FirstCharacterIsSymbol(s string) bool {
 // Length 获取字符串长度
 func Length(s string) int {
 	return utf8.RuneCountInString(s)
+}
+
+// PaddingPrefix 填充前缀
+func PaddingPrefix(s, padding string, length int) string {
+	paddingLen := length - len(s)
+
+	if paddingLen <= 0 {
+		return s
+	}
+
+	n := int(math.Ceil(float64(paddingLen) / float64(len(padding))))
+
+	return strings.Repeat(padding, n)[:paddingLen] + s
+}
+
+// PaddingSuffix 填充后缀
+func PaddingSuffix(s, padding string, length int) string {
+	paddingLen := length - len(s)
+
+	if paddingLen <= 0 {
+		return s
+	}
+
+	n := int(math.Ceil(float64(paddingLen) / float64(len(padding))))
+
+	return s + strings.Repeat(padding, n)[:paddingLen]
 }

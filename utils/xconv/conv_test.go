@@ -59,6 +59,11 @@ func TestBytes(t *testing.T) {
 	t.Log(xconv.Int(xconv.Bytes(255)))
 }
 
+func TestAnys(t *testing.T) {
+	a := []int64{1, 2, 3, 4}
+	t.Log(xconv.Anys(a))
+}
+
 func TestJson(t *testing.T) {
 	t.Log(xconv.Json("{}"))
 	t.Log(xconv.Json(`{"id":1,"name":"fuxiao"}`))
