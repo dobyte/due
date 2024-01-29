@@ -32,8 +32,9 @@ func (c *Context) Clone() *Context {
 			},
 		},
 		Middleware: &Middleware{
-			index:       c.Middleware.index,
-			middlewares: c.Middleware.middlewares,
+			index:        c.Middleware.index,
+			middlewares:  c.Middleware.middlewares,
+			routeHandler: c.Middleware.routeHandler,
 		},
 	}
 }

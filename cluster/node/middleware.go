@@ -3,14 +3,16 @@ package node
 type MiddlewareHandler func(ctx *Context)
 
 type Middleware struct {
-	index       int
-	middlewares []MiddlewareHandler
+	index        int
+	middlewares  []MiddlewareHandler
+	routeHandler RouteHandler
 }
 
 // 重置中间件
-func (m *Middleware) reset(middlewares []MiddlewareHandler) {
+func (m *Middleware) reset(middlewares []MiddlewareHandler, routeHandler RouteHandler) {
 	m.index = -1
 	m.middlewares = middlewares
+	m.routeHandler = routeHandler
 }
 
 // Next 下一个中间件
@@ -20,14 +22,15 @@ func (m *Middleware) Next(ctx *Context) {
 
 // Skip 跳过N个中间件
 func (m *Middleware) Skip(ctx *Context, skip int) {
-	m.index += skip
-	if m.isFinished() {
+	if m.index >= len(m.middlewares) {
 		return
 	}
-	m.middlewares[m.index](ctx)
-}
 
-// 是否完成中间件处理
-func (m *Middleware) isFinished() bool {
-	return m.index >= len(m.middlewares)
+	m.index += skip
+
+	if m.index >= len(m.middlewares) {
+		m.routeHandler(ctx)
+	} else {
+		m.middlewares[m.index](ctx)
+	}
 }
