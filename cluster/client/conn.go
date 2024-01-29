@@ -92,7 +92,7 @@ func (c *Conn) Push(message *cluster.Message) error {
 		}
 	}
 
-	msg, err := packet.Pack(&packet.Message{
+	msg, err := packet.PackMessage(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,

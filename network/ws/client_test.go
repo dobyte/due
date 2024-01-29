@@ -20,42 +20,65 @@ import (
 )
 
 func TestClient_Dial(t *testing.T) {
-	client := ws.NewClient()
+	wg := sync.WaitGroup{}
+	for i := 0; i < 1; i++ {
+		wg.Add(1)
 
-	client.OnConnect(func(conn network.Conn) {
-		t.Log("connection is opened")
-	})
-	client.OnDisconnect(func(conn network.Conn) {
-		t.Log("connection is closed")
-	})
-	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
-		if err != nil {
-			t.Error(err)
-			return
-		}
+		go func() {
+			client := ws.NewClient()
+			client.OnConnect(func(conn network.Conn) {
+				t.Log("connection is opened")
+			})
+			client.OnDisconnect(func(conn network.Conn) {
+				t.Log("connection is closed")
+			})
+			client.OnReceive(func(conn network.Conn, msg []byte) {
+				message, err := packet.UnpackMessage(msg)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 
-		t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-	})
+				t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+			})
 
-	conn, err := client.Dial()
-	if err != nil {
-		t.Fatal(err)
+			defer wg.Done()
+
+			conn, err := client.Dial()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			defer conn.Close()
+
+			times := 0
+			msg, _ := packet.PackMessage(&packet.Message{
+				Seq:    1,
+				Route:  1,
+				Buffer: []byte("hello server~~"),
+			})
+
+			for {
+				select {
+				case <-ticker.C:
+					if err = conn.Push(msg); err != nil {
+						t.Error(err)
+						return
+					}
+
+					times++
+
+					if times >= 5 {
+						return
+					}
+				}
+			}
+		}()
 	}
 
-	defer conn.Close()
-
-	msg, _ := packet.Pack(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
-
-	if err = conn.Push(msg); err != nil {
-		t.Fatal(err)
-	}
-
-	select {}
+	wg.Wait()
 }
 
 func TestNewClient(t *testing.T) {
@@ -68,7 +91,7 @@ func TestNewClient(t *testing.T) {
 		log.Info("connection is closed")
 	})
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
+		message, err := packet.UnpackMessage(msg)
 		if err != nil {
 			t.Error(err)
 			return
@@ -87,7 +110,7 @@ func TestNewClient(t *testing.T) {
 	defer conn.Close()
 
 	times := 0
-	data, _ := packet.Pack(&packet.Message{
+	data, _ := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello server~~"),
@@ -121,7 +144,7 @@ func TestClient_Benchmark(t *testing.T) {
 	totalRecv := int64(0)
 
 	// 准备消息
-	msg, err := packet.Pack(&packet.Message{
+	msg, err := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello server~~"),

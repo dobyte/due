@@ -58,7 +58,7 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
-	message, err := packet.Unpack(data)
+	message, err := packet.UnpackMessage(data)
 	if err != nil {
 		log.Errorf("unpack data to struct failed: %v", err)
 		return

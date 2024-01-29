@@ -7,24 +7,10 @@ import (
 	"github.com/dobyte/due/v2/packet"
 	"net/http"
 	_ "net/http/pprof"
-	"syscall"
 	"testing"
 )
 
-func setLimit() {
-	var rLimit syscall.Rlimit
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
-		panic(err)
-	}
-	rLimit.Cur = rLimit.Max
-	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
-		panic(err)
-	}
-}
-
 func TestServer(t *testing.T) {
-	setLimit()
-
 	server := netpoll.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
@@ -36,7 +22,7 @@ func TestServer(t *testing.T) {
 		t.Logf("connection is closed, connection id: %d", conn.ID())
 	})
 	server.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
+		message, err := packet.UnpackMessage(msg)
 		if err != nil {
 			t.Error(err)
 			return
@@ -44,7 +30,7 @@ func TestServer(t *testing.T) {
 
 		t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 
-		msg, err = packet.Pack(&packet.Message{
+		msg, err = packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: []byte("I'm fine~~"),
@@ -73,20 +59,18 @@ func TestServer(t *testing.T) {
 }
 
 func TestServer_Benchmark(t *testing.T) {
-	setLimit()
-
 	server := netpoll.NewServer()
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
 	server.OnReceive(func(conn network.Conn, msg []byte) {
-		_, err := packet.Unpack(msg)
+		_, err := packet.UnpackMessage(msg)
 		if err != nil {
 			t.Error(err)
 			return
 		}
 
-		msg, err = packet.Pack(&packet.Message{
+		msg, err = packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: []byte("I'm fine~~"),

@@ -59,7 +59,7 @@ func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64
 func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
 	log.Debugf("push message: kind: %s target: %d route: %d buffer: %s", kind.String(), target, message.Route, string(message.Buffer))
 
-	msg, err := packet.Pack(message)
+	msg, err := packet.PackMessage(message)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 		return 0, nil
 	}
 
-	msg, err := packet.Pack(message)
+	msg, err := packet.PackMessage(message)
 	if err != nil {
 		return 0, err
 	}
@@ -91,7 +91,7 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 
 // Broadcast 推送广播消息
 func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (int64, error) {
-	msg, err := packet.Pack(message)
+	msg, err := packet.PackMessage(message)
 	if err != nil {
 		return 0, err
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
@@ -59,8 +60,6 @@ func (c *serverConn) Unbind() {
 
 // Send 发送消息（同步）
 func (c *serverConn) Send(msg []byte) (err error) {
-	msg = packMessage(msg)
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -75,8 +74,6 @@ func (c *serverConn) Send(msg []byte) (err error) {
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) error {
-	msg = packMessage(msg)
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -279,9 +276,15 @@ func (c *serverConn) read() {
 				// ignore
 			}
 
-			isHeartbeat, msg, err := parsePacket(msg)
+			// ignore empty packet
+			if len(msg) == 0 {
+				continue
+			}
+
+			// check heartbeat packet
+			isHeartbeat, err := packet.CheckHeartbeat(msg)
 			if err != nil {
-				log.Errorf("parse message failed: %v", err)
+				log.Errorf("check heartbeat message error: %v", err)
 				continue
 			}
 
@@ -293,11 +296,6 @@ func (c *serverConn) read() {
 					c.chHighWrite <- chWrite{typ: heartbeatPacket}
 					c.rw.RUnlock()
 				}
-				continue
-			}
-
-			// ignore empty packet
-			if len(msg) == 0 {
 				continue
 			}
 
@@ -378,7 +376,12 @@ func (c *serverConn) doWrite(conn *websocket.Conn, r chWrite) bool {
 	}
 
 	if r.typ == heartbeatPacket {
-		r.msg = packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)
+		if msg, err := packet.PackHeartbeat(); err != nil {
+			log.Errorf("pack heartbeat message error: %v", err)
+			return true
+		} else {
+			r.msg = msg
+		}
 	}
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, r.msg); err != nil {
@@ -405,9 +408,13 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn) bool {
 				return false
 			}
 
-			// send heartbeat packet
-			if err := conn.WriteMessage(websocket.BinaryMessage, packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
-				log.Errorf("write heartbeat message error: %v", err)
+			if heartbeat, err := packet.PackHeartbeat(); err != nil {
+				log.Errorf("pack heartbeat message error: %v", err)
+			} else {
+				// send heartbeat packet
+				if err := conn.WriteMessage(websocket.BinaryMessage, heartbeat); err != nil {
+					log.Errorf("write heartbeat message error: %v", err)
+				}
 			}
 		}
 	}

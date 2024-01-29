@@ -130,7 +130,7 @@ func (c *Client) handleReceive(conn network.Conn, data []byte) {
 		return
 	}
 
-	message, err := packet.Unpack(data)
+	message, err := packet.UnpackMessage(data)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)
 		return

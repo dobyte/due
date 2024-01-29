@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
@@ -83,14 +84,12 @@ func (c *clientConn) Send(msg []byte) (err error) {
 	conn := c.conn
 	c.rw.RUnlock()
 
-	_, err = conn.Write(packMessage(msg))
+	_, err = conn.Write(msg)
 	return
 }
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
-	msg = packMessage(msg)
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -237,7 +236,7 @@ func (c *clientConn) read() {
 		case <-c.close:
 			return
 		default:
-			isHeartbeat, msg, err := read(conn)
+			msg, err := packet.ReadMessage(conn)
 			if err != nil {
 				_ = c.forceClose()
 				return
@@ -254,6 +253,12 @@ func (c *clientConn) read() {
 				return
 			default:
 				// ignore
+			}
+
+			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			if err != nil {
+				log.Errorf("check heartbeat message error: %v", err)
+				continue
 			}
 
 			// ignore heartbeat packet
@@ -319,9 +324,13 @@ func (c *clientConn) write() {
 					return
 				}
 
-				// send heartbeat packet
-				if _, err := conn.Write(packHeartbeat(false)); err != nil {
-					log.Errorf("write heartbeat message error: %v", err)
+				if heartbeat, err := packet.PackHeartbeat(); err != nil {
+					log.Errorf("pack heartbeat message error: %v", err)
+				} else {
+					// send heartbeat packet
+					if _, err := conn.Write(heartbeat); err != nil {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
 				}
 			}
 		}

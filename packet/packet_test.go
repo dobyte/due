@@ -5,8 +5,12 @@ import (
 	"testing"
 )
 
-func TestPacket(t *testing.T) {
-	data, err := packet.Pack(&packet.Message{
+var packer = packet.NewPacker(
+	packet.WithHeartbeatTime(true),
+)
+
+func TestDefaultPacker_PackMessage(t *testing.T) {
+	data, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello world"),
@@ -15,9 +19,9 @@ func TestPacket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(len(data))
+	t.Log(data)
 
-	message, err := packet.Unpack(data)
+	message, err := packer.UnpackMessage(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,11 +31,27 @@ func TestPacket(t *testing.T) {
 	t.Logf("buffer: %s", string(message.Buffer))
 }
 
+func TestPackHeartbeat(t *testing.T) {
+	data, err := packer.PackHeartbeat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(data)
+
+	isHeartbeat, err := packer.CheckHeartbeat(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(isHeartbeat)
+}
+
 func BenchmarkPack(b *testing.B) {
 	buffer := []byte("hello world")
 
 	for i := 0; i < b.N; i++ {
-		_, err := packet.Pack(&packet.Message{
+		_, err := packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: buffer,
@@ -43,7 +63,7 @@ func BenchmarkPack(b *testing.B) {
 }
 
 func BenchmarkUnpack(b *testing.B) {
-	buf, err := packet.Pack(&packet.Message{
+	buf, err := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello world"),
@@ -53,7 +73,7 @@ func BenchmarkUnpack(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		_, err := packet.Unpack(buf)
+		_, err := packet.UnpackMessage(buf)
 		if err != nil {
 			b.Fatal(err)
 		}

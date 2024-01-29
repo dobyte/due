@@ -62,7 +62,7 @@ func BenchmarkClient(b *testing.B) {
 	wg := sync.WaitGroup{}
 	client := websocket.NewClient()
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		//_, err := packet.Unpack(msg)
+		//_, err := packet.UnpackMessage(msg)
 		//if err != nil {
 		//	b.Error(err)
 		//	return
@@ -70,7 +70,7 @@ func BenchmarkClient(b *testing.B) {
 		wg.Done()
 	})
 
-	msg, err := packet.Pack(&packet.Message{
+	msg, err := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello server~~"),

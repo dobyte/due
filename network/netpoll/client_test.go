@@ -21,7 +21,7 @@ func TestClient_Dial(t *testing.T) {
 		t.Log("connection is closed")
 	})
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.Unpack(msg)
+		message, err := packet.UnpackMessage(msg)
 		if err != nil {
 			t.Error(err)
 			return
@@ -37,7 +37,7 @@ func TestClient_Dial(t *testing.T) {
 
 	defer conn.Close()
 
-	msg, _ := packet.Pack(&packet.Message{
+	msg, _ := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello server~~"),
@@ -64,7 +64,7 @@ func TestNewClient_Dial(t *testing.T) {
 				t.Log("connection is closed")
 			})
 			client.OnReceive(func(conn network.Conn, msg []byte) {
-				message, err := packet.Unpack(msg)
+				message, err := packet.UnpackMessage(msg)
 				if err != nil {
 					t.Error(err)
 					return
@@ -85,7 +85,7 @@ func TestNewClient_Dial(t *testing.T) {
 			defer conn.Close()
 
 			times := 0
-			msg, _ := packet.Pack(&packet.Message{
+			msg, _ := packet.PackMessage(&packet.Message{
 				Seq:    1,
 				Route:  1,
 				Buffer: []byte("hello server~~"),
@@ -123,7 +123,7 @@ func TestClient_Benchmark(t *testing.T) {
 	totalRecv := int64(0)
 
 	// 准备消息
-	msg, err := packet.Pack(&packet.Message{
+	msg, err := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello server~~"),

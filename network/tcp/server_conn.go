@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
@@ -67,14 +68,12 @@ func (c *serverConn) Send(msg []byte) (err error) {
 	conn := c.conn
 	c.rw.RUnlock()
 
-	_, err = conn.Write(packMessage(msg))
+	_, err = conn.Write(msg)
 	return
 }
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) (err error) {
-	msg = packMessage(msg)
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -246,7 +245,7 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
-			isHeartbeat, msg, err := read(conn)
+			msg, err := packet.ReadMessage(conn)
 			if err != nil {
 				_ = c.forceClose()
 				return
@@ -265,12 +264,22 @@ func (c *serverConn) read() {
 				// ignore
 			}
 
+			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			if err != nil {
+				log.Errorf("check heartbeat message error: %v", err)
+				continue
+			}
+
 			// ignore heartbeat packet
 			if isHeartbeat {
 				// responsive heartbeat
 				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
-					if _, err = conn.Write(packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
-						log.Errorf("write heartbeat message error: %v", err)
+					if heartbeat, err := packet.PackHeartbeat(); err != nil {
+						log.Errorf("pack heartbeat message error: %v", err)
+					} else {
+						if _, err := conn.Write(heartbeat); err != nil {
+							log.Errorf("write heartbeat message error: %v", err)
+						}
 					}
 				}
 				continue
@@ -335,9 +344,13 @@ func (c *serverConn) write() {
 						return
 					}
 
-					// send heartbeat packet
-					if _, err := conn.Write(packHeartbeat(c.connMgr.server.opts.heartbeatWithServerTime)); err != nil {
-						log.Errorf("write heartbeat message error: %v", err)
+					if heartbeat, err := packet.PackHeartbeat(); err != nil {
+						log.Errorf("pack heartbeat message error: %v", err)
+					} else {
+						// send heartbeat packet
+						if _, err := conn.Write(heartbeat); err != nil {
+							log.Errorf("write heartbeat message error: %v", err)
+						}
 					}
 				}
 			}
