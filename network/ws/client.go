@@ -32,7 +32,7 @@ func NewClient(opts ...ClientOption) network.Client {
 func (c *client) Dial(addr ...string) (network.Conn, error) {
 	var url string
 
-	if len(addr) > 0 {
+	if len(addr) > 0 && addr[0] != "" {
 		url = addr[0]
 	} else {
 		url = c.opts.url

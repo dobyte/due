@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"sync"
 	"sync/atomic"
 )
@@ -23,8 +24,8 @@ type Client struct {
 	opts                *options
 	ctx                 context.Context
 	cancel              context.CancelFunc
-	routes              map[int32]RouteHandler
-	events              map[cluster.Event]EventHandler
+	routes              map[int32][]RouteHandler
+	events              map[cluster.Event][]EventHandler
 	hooks               map[cluster.Hook]HookHandler
 	defaultRouteHandler RouteHandler
 	proxy               *Proxy
@@ -41,8 +42,8 @@ func NewClient(opts ...Option) *Client {
 	c := &Client{}
 	c.opts = o
 	c.proxy = newProxy(c)
-	c.routes = make(map[int32]RouteHandler)
-	c.events = make(map[cluster.Event]EventHandler)
+	c.routes = make(map[int32][]RouteHandler)
+	c.events = make(map[cluster.Event][]EventHandler)
 	c.hooks = make(map[cluster.Hook]HookHandler)
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
 
@@ -73,7 +74,6 @@ func (c *Client) Init() {
 func (c *Client) Start() {
 	c.setState(cluster.Work)
 
-	c.opts.client.OnConnect(c.handleConnect)
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 
@@ -92,35 +92,25 @@ func (c *Client) Proxy() *Proxy {
 	return c.proxy
 }
 
-// 处理连接打开
-func (c *Client) handleConnect(conn network.Conn) {
-	handler, ok := c.events[cluster.Connect]
-	if !ok {
-		return
-	}
-
-	cc := &Conn{conn: conn, client: c}
-
-	c.conns.Store(conn, cc)
-
-	handler(cc)
-}
-
 // 处理断开连接
 func (c *Client) handleDisconnect(conn network.Conn) {
-	handler, ok := c.events[cluster.Disconnect]
-	if !ok {
-		return
-	}
-
 	val, ok := c.conns.Load(conn)
 	if !ok {
 		return
 	}
 
-	handler(val.(*Conn))
-
 	c.conns.Delete(conn)
+
+	handlers, ok := c.events[cluster.Disconnect]
+	if !ok {
+		return
+	}
+
+	for _, handler := range handlers {
+		xcall.Call(func() {
+			handler(val.(*Conn))
+		})
+	}
 }
 
 // 处理接收到的消息
@@ -136,13 +126,17 @@ func (c *Client) handleReceive(conn network.Conn, data []byte) {
 		return
 	}
 
-	handler, ok := c.routes[message.Route]
+	handlers, ok := c.routes[message.Route]
 	if ok {
-		handler(&Context{
-			ctx:     context.Background(),
-			conn:    val.(*Conn),
-			message: message,
-		})
+		for _, handler := range handlers {
+			xcall.Call(func() {
+				handler(&Context{
+					ctx:     context.Background(),
+					conn:    val.(*Conn),
+					message: message,
+				})
+			})
+		}
 	} else if c.defaultRouteHandler != nil {
 		c.defaultRouteHandler(&Context{
 			ctx:     context.Background(),
@@ -155,23 +149,44 @@ func (c *Client) handleReceive(conn network.Conn, data []byte) {
 }
 
 // 拨号
-func (c *Client) dial(addr ...string) (*Conn, error) {
+func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	if c.getState() == cluster.Shut {
 		return nil, errors.ErrClientShut
 	}
 
-	conn, err := c.opts.client.Dial(addr...)
+	o := &dialOptions{attrs: make(map[string]any)}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	conn, err := c.opts.client.Dial(o.addr)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Conn{conn: conn, client: c}, nil
+	cc := &Conn{conn: conn, client: c}
+
+	for key, value := range o.attrs {
+		cc.SetAttr(key, value)
+	}
+
+	c.conns.Store(conn, cc)
+
+	if handlers, ok := c.events[cluster.Connect]; ok {
+		for _, handler := range handlers {
+			xcall.Call(func() {
+				handler(cc)
+			})
+		}
+	}
+
+	return cc, nil
 }
 
 // 添加路由处理器
 func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 	if c.getState() == cluster.Shut {
-		c.routes[route] = handler
+		c.routes[route] = append(c.routes[route], handler)
 	} else {
 		log.Warnf("client is working, can't add route handler")
 	}
@@ -189,7 +204,7 @@ func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 // 添加事件处理器
 func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 	if c.getState() == cluster.Shut {
-		c.events[event] = handler
+		c.events[event] = append(c.events[event], handler)
 	} else {
 		log.Warnf("client is working, can't add event handler")
 	}

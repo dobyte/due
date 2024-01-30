@@ -43,6 +43,6 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 }
 
 // Dial 拨号
-func (p *Proxy) Dial(addr ...string) (*Conn, error) {
-	return p.client.dial(addr...)
+func (p *Proxy) Dial(opts ...DialOption) (*Conn, error) {
+	return p.client.dial(opts...)
 }

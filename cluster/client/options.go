@@ -99,3 +99,20 @@ func WithTimeout(timeout time.Duration) Option {
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
 }
+
+type DialOption func(o *dialOptions)
+
+type dialOptions struct {
+	addr  string
+	attrs map[string]any
+}
+
+// WithDialAddr 设置拨号地址
+func WithDialAddr(addr string) DialOption {
+	return func(o *dialOptions) { o.addr = addr }
+}
+
+// WithConnAttr 设置连接属性
+func WithConnAttr(key string, value any) DialOption {
+	return func(o *dialOptions) { o.attrs[key] = value }
+}
