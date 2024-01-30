@@ -81,19 +81,21 @@ func (c *Conn) Push(message *cluster.Message) error {
 		buffer []byte
 	)
 
-	if v, ok := message.Data.([]byte); ok {
-		buffer = v
-	} else {
-		buffer, err = c.client.opts.codec.Marshal(message.Data)
-		if err != nil {
-			return err
+	if message.Data != nil {
+		if v, ok := message.Data.([]byte); ok {
+			buffer = v
+		} else {
+			buffer, err = c.client.opts.codec.Marshal(message.Data)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	if c.client.opts.encryptor != nil {
-		buffer, err = c.client.opts.encryptor.Encrypt(buffer)
-		if err != nil {
-			return err
+		if c.client.opts.encryptor != nil {
+			buffer, err = c.client.opts.encryptor.Encrypt(buffer)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
