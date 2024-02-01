@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
@@ -50,9 +51,34 @@ func (p *Proxy) Router() *Router {
 	return p.node.router
 }
 
-// AddEventHandler 添加事件监听器
+// RouteGroup 路由组
+func (p *Proxy) RouteGroup(groups ...func(group *RouterGroup)) *RouterGroup {
+	return p.node.router.Group(groups...)
+}
+
+// Trigger 事件触发器
+func (p *Proxy) Trigger() *Trigger {
+	return p.node.trigger
+}
+
+// AddRouteHandler 添加路由处理器
+func (p *Proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
+	p.node.router.AddRouteHandler(route, stateful, handler, middlewares...)
+}
+
+// AddInternalRouteHandler 添加内部路由处理器（node节点间路由消息处理）
+func (p *Proxy) AddInternalRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
+	p.node.router.AddInternalRouteHandler(route, stateful, handler, middlewares...)
+}
+
+// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
+func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
+	p.node.router.SetDefaultRouteHandler(handler)
+}
+
+// AddEventHandler 添加事件处理器
 func (p *Proxy) AddEventHandler(event cluster.Event, handler EventHandler) {
-	p.node.events.addEventHandler(event, handler)
+	p.node.trigger.AddEventHandler(event, handler)
 }
 
 // AddHookListener 添加钩子监听器
@@ -199,9 +225,9 @@ func (p *Proxy) Response(ctx context.Context, req *Request, message interface{})
 				Data:  message,
 			},
 		})
+	default:
+		return errors.ErrIllegalOperation
 	}
-
-	return nil
 }
 
 // Stat 统计会话总数

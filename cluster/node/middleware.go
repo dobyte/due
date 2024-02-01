@@ -1,6 +1,6 @@
 package node
 
-type MiddlewareHandler func(ctx *Context)
+type MiddlewareHandler func(middleware *Middleware, ctx Context)
 
 type Middleware struct {
 	index        int
@@ -16,12 +16,12 @@ func (m *Middleware) reset(middlewares []MiddlewareHandler, routeHandler RouteHa
 }
 
 // Next 下一个中间件
-func (m *Middleware) Next(ctx *Context) {
+func (m *Middleware) Next(ctx Context) {
 	m.Skip(ctx, 1)
 }
 
 // Skip 跳过N个中间件
-func (m *Middleware) Skip(ctx *Context, skip int) {
+func (m *Middleware) Skip(ctx Context, skip int) {
 	if m.index >= len(m.middlewares) {
 		return
 	}
@@ -31,6 +31,6 @@ func (m *Middleware) Skip(ctx *Context, skip int) {
 	if m.index >= len(m.middlewares) {
 		m.routeHandler(ctx)
 	} else {
-		m.middlewares[m.index](ctx)
+		m.middlewares[m.index](m, ctx)
 	}
 }

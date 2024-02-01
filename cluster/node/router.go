@@ -3,19 +3,18 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"sync"
 )
 
-type RouteHandler func(ctx *Context)
+type RouteHandler func(ctx Context)
 
 type Router struct {
 	node                *Node
 	routes              map[int32]*routeEntity
 	defaultRouteHandler RouteHandler
-	ctxPool             sync.Pool
-	ctxChan             chan *Context
+	reqPool             sync.Pool
+	reqChan             chan *request
 }
 
 type routeEntity struct {
@@ -30,13 +29,13 @@ func newRouter(node *Node) *Router {
 	return &Router{
 		node:    node,
 		routes:  make(map[int32]*routeEntity),
-		ctxChan: make(chan *Context, 4096),
-		ctxPool: sync.Pool{New: func() interface{} {
-			return &Context{
+		reqChan: make(chan *request, 4096),
+		reqPool: sync.Pool{New: func() interface{} {
+			return &request{
 				ctx:        context.Background(),
-				Proxy:      node.proxy,
-				Request:    &Request{node: node, Message: &link.Message{}},
-				Middleware: &Middleware{},
+				node:       node,
+				message:    &cluster.Message{},
+				middleware: &Middleware{},
 			}
 		}},
 	}
@@ -111,43 +110,47 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 }
 
 func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data interface{}) {
-	ctx := r.ctxPool.Get().(*Context)
-	ctx.Request.GID = gid
-	ctx.Request.NID = nid
-	ctx.Request.CID = cid
-	ctx.Request.UID = uid
-	ctx.Request.Message.Seq = seq
-	ctx.Request.Message.Route = route
-	ctx.Request.Message.Data = data
-	r.ctxChan <- ctx
+	req := r.reqPool.Get().(*request)
+	req.gid = gid
+	req.nid = nid
+	req.cid = cid
+	req.uid = uid
+	req.message.Seq = seq
+	req.message.Route = route
+	req.message.Data = data
+	r.reqChan <- req
 }
 
-func (r *Router) receive() <-chan *Context {
-	return r.ctxChan
+func (r *Router) receive() <-chan *request {
+	return r.reqChan
 }
 
 func (r *Router) close() {
-	close(r.ctxChan)
+	close(r.reqChan)
 }
 
-func (r *Router) handle(ctx *Context) {
-	defer r.ctxPool.Put(ctx)
+func (r *Router) handle(req *request) {
+	defer r.reqPool.Put(req)
 
-	route, ok := r.routes[ctx.Request.Message.Route]
+	route, ok := r.routes[req.message.Route]
 	if !ok && r.defaultRouteHandler == nil {
-		log.Warnf("message routing does not register handler function, route: %v", ctx.Request.Message.Route)
+		log.Warnf("message routing does not register handler function, route: %v", req.message.Route)
 		return
 	}
 
 	if ok {
 		if len(route.middlewares) > 0 {
-			ctx.Middleware.reset(route.middlewares, route.handler)
-			ctx.Middleware.Next(ctx)
+			middleware := &Middleware{
+				index:        -1,
+				middlewares:  route.middlewares,
+				routeHandler: route.handler,
+			}
+			middleware.Next(req)
 		} else {
-			route.handler(ctx)
+			route.handler(req)
 		}
 	} else {
-		r.defaultRouteHandler(ctx)
+		r.defaultRouteHandler(req)
 	}
 }
 

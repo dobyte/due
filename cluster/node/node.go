@@ -22,8 +22,8 @@ type Node struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	state       int32
-	events      *Events
 	router      *Router
+	trigger     *Trigger
 	proxy       *Proxy
 	hooks       map[cluster.Hook]HookHandler
 	instance    *registry.ServiceInstance
@@ -39,9 +39,9 @@ func NewNode(opts ...Option) *Node {
 
 	n := &Node{}
 	n.opts = o
-	n.events = newEvents(n)
-	n.router = newRouter(n)
 	n.proxy = newProxy(n)
+	n.router = newRouter(n)
+	n.trigger = newTrigger(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
@@ -110,9 +110,9 @@ func (n *Node) Destroy() {
 
 	n.stopTransporter()
 
-	n.events.close()
-
 	n.router.close()
+
+	n.trigger.close()
 
 	close(n.fnChan)
 
@@ -130,12 +130,12 @@ func (n *Node) Proxy() *Proxy {
 func (n *Node) dispatch() {
 	for {
 		select {
-		case evt, ok := <-n.events.receive():
+		case evt, ok := <-n.trigger.receive():
 			if !ok {
 				return
 			}
 			xcall.Call(func() {
-				n.events.handle(evt)
+				n.trigger.handle(evt)
 			})
 		case ctx, ok := <-n.router.receive():
 			if !ok {
@@ -189,8 +189,8 @@ func (n *Node) registerServiceInstance() {
 		})
 	}
 
-	events := make([]int, 0, len(n.events.events))
-	for event := range n.events.events {
+	events := make([]int, 0, len(n.trigger.events))
+	for event := range n.trigger.events {
 		events = append(events, int(event))
 	}
 
