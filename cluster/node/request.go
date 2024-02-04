@@ -15,46 +15,14 @@ import (
 	"github.com/jinzhu/copier"
 )
 
-// Request 请求数据
-type Request struct {
-	node    *Node
-	GID     string           // 来源网关ID
-	NID     string           // 来源节点ID
-	CID     int64            // 连接ID
-	UID     int64            // 用户ID
-	Message *cluster.Message // 请求消息
-}
-
-// Parse 解析消息
-func (r *Request) Parse(v interface{}) error {
-	msg, ok := r.Message.Data.([]byte)
-	if !ok {
-		return copier.CopyWithOption(v, r.Message.Data, copier.Option{
-			DeepCopy: true,
-		})
-	}
-
-	if r.GID != "" && r.node.opts.encryptor != nil {
-		data, err := r.node.opts.encryptor.Decrypt(msg)
-		if err != nil {
-			return err
-		}
-
-		return r.node.opts.codec.Unmarshal(data, v)
-	}
-
-	return r.node.opts.codec.Unmarshal(msg, v)
-}
-
 type request struct {
-	node       *Node
-	ctx        context.Context  // 上下文
-	gid        string           // 来源网关ID
-	nid        string           // 来源节点ID
-	cid        int64            // 连接ID
-	uid        int64            // 用户ID
-	message    *cluster.Message // 请求消息
-	middleware *Middleware      // 中间件
+	node    *Node
+	ctx     context.Context  // 上下文
+	gid     string           // 来源网关ID
+	nid     string           // 来源节点ID
+	cid     int64            // 连接ID
+	uid     int64            // 用户ID
+	message *cluster.Message // 请求消息
 }
 
 // GID 获取网关ID
@@ -134,11 +102,6 @@ func (r *request) Clone() Context {
 func (r *request) Context() context.Context {
 	return r.ctx
 }
-
-//// Middleware 中间件
-//func (r *request) Middleware() *Middleware {
-//	return r.middleware
-//}
 
 // BindGate 绑定网关
 func (r *request) BindGate(uid ...int64) error {

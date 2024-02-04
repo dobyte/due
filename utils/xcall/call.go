@@ -6,6 +6,10 @@ import (
 )
 
 func Call(fn func()) {
+	if fn == nil {
+		return
+	}
+
 	defer func() {
 		if err := recover(); err != nil {
 			switch err.(type) {

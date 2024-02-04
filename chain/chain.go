@@ -1,5 +1,7 @@
 package chain
 
+import "github.com/dobyte/due/v2/utils/xcall"
+
 type Chain struct {
 	head *node
 	tail *node
@@ -44,9 +46,7 @@ func (c *Chain) FireHead() {
 	head := c.head
 
 	for head != nil {
-		if head.fn != nil {
-			head.fn()
-		}
+		xcall.Call(head.fn)
 		next := head.next
 		head.next = nil
 		head = next
@@ -61,9 +61,7 @@ func (c *Chain) FireTail() {
 	tail := c.tail
 
 	for tail != nil {
-		if tail.fn != nil {
-			tail.fn()
-		}
+		xcall.Call(tail.fn)
 		prev := tail.prev
 		tail.prev = nil
 		tail = prev

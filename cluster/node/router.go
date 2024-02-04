@@ -32,10 +32,9 @@ func newRouter(node *Node) *Router {
 		reqChan: make(chan *request, 4096),
 		reqPool: sync.Pool{New: func() interface{} {
 			return &request{
-				ctx:        context.Background(),
-				node:       node,
-				message:    &cluster.Message{},
-				middleware: &Middleware{},
+				ctx:     context.Background(),
+				node:    node,
+				message: &cluster.Message{},
 			}
 		}},
 	}

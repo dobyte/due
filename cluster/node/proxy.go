@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
@@ -199,35 +198,6 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	}
 
 	return nil
-}
-
-// Response 响应消息
-func (p *Proxy) Response(ctx context.Context, req *Request, message interface{}) error {
-	switch {
-	case req.GID != "":
-		return p.link.Push(ctx, &link.PushArgs{
-			GID:    req.GID,
-			Kind:   session.Conn,
-			Target: req.CID,
-			Message: &link.Message{
-				Seq:   req.Message.Seq,
-				Route: req.Message.Route,
-				Data:  message,
-			},
-		})
-	case req.NID != "":
-		return p.link.Deliver(ctx, &link.DeliverArgs{
-			NID: req.NID,
-			UID: req.UID,
-			Message: &link.Message{
-				Seq:   req.Message.Seq,
-				Route: req.Message.Route,
-				Data:  message,
-			},
-		})
-	default:
-		return errors.ErrIllegalOperation
-	}
 }
 
 // Stat 统计会话总数

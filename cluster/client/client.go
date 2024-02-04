@@ -144,7 +144,7 @@ func (c *Client) handleReceive(conn network.Conn, data []byte) {
 			message: message,
 		})
 	} else {
-		log.Errorf("route handler is not registered, route:%v", message.Route)
+		log.Debugf("route handler is not registered, route: %v", message.Route)
 	}
 }
 

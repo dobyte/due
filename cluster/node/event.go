@@ -8,12 +8,12 @@ import (
 )
 
 type event struct {
+	proxy *Proxy
 	ctx   context.Context
 	gid   string
 	cid   int64
 	uid   int64
 	kind  cluster.Event
-	proxy *Proxy
 }
 
 // GID 获取网关ID
