@@ -18,6 +18,8 @@ require (
 )
 
 require (
+	github.com/antlabs/stl v0.0.2 // indirect
+	github.com/antlabs/timer v0.1.1 // indirect
 	github.com/jonboulle/clockwork v0.3.0 // indirect
 	github.com/lestrrat-go/strftime v1.0.6 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect

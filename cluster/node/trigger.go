@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
 	"sync"
@@ -19,7 +20,7 @@ func newTrigger(node *Node) *Trigger {
 	return &Trigger{
 		node:    node,
 		events:  make(map[cluster.Event]EventHandler, 3),
-		evtPool: sync.Pool{New: func() interface{} { return &event{proxy: node.proxy} }},
+		evtPool: sync.Pool{New: func() interface{} { return &event{proxy: node.proxy, ctx: context.Background()} }},
 		evtChan: make(chan *event, 4096),
 	}
 }
