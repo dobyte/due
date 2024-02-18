@@ -106,6 +106,8 @@ func (n *Node) Start() {
 func (n *Node) Destroy() {
 	n.setState(cluster.Shut)
 
+	n.runHookFunc(cluster.Destroy)
+
 	n.deregisterServiceInstance()
 
 	n.stopTransporter()
@@ -117,8 +119,6 @@ func (n *Node) Destroy() {
 	close(n.fnChan)
 
 	n.cancel()
-
-	n.runHookFunc(cluster.Destroy)
 }
 
 // Proxy 获取节点代理
@@ -166,7 +166,7 @@ func (n *Node) startTransporter() {
 
 	go func() {
 		if err = n.transporter.Start(); err != nil {
-			log.Fatalf("transporter start failed: %v", err)
+			log.Errorf("transporter start failed: %v", err)
 		}
 	}()
 }
