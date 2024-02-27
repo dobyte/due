@@ -1,0 +1,67 @@
+package gnet
+
+import (
+	"github.com/symsimmy/due/config"
+	"time"
+)
+
+const (
+	defaultServerAddr              = ":3553"
+	defaultServerMaxMsgLen         = 1024
+	defaultServerHeartbeatCheck    = false
+	defaultServerHeartbeatInterval = 10
+	defaultMulticore               = true
+)
+
+const (
+	defaultServerAddrKey              = "config.network.tcp.server.addr"
+	defaultServerMaxMsgLenKey         = "config.network.tcp.server.maxMsgLen"
+	defaultServerHeartbeatCheckKey    = "config.network.tcp.server.heartbeatCheck"
+	defaultServerHeartbeatIntervalKey = "config.network.tcp.server.heartbeatInterval"
+	defaultMulticoreKey               = "config.network.tcp.server.multicore"
+)
+
+type ServerOption func(o *serverOptions)
+
+type serverOptions struct {
+	addr                 string        // 监听地址，默认0.0.0.0:3553
+	maxMsgLen            int           // 最大消息长度，默认1K
+	enableHeartbeatCheck bool          // 是否启用心跳检测，默认不启用
+	heartbeatInterval    time.Duration // 心跳检测间隔时间，默认10s
+	multicore            bool
+}
+
+func defaultServerOptions() *serverOptions {
+	return &serverOptions{
+		addr:                 config.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxMsgLen:            config.Get(defaultServerMaxMsgLenKey, defaultServerMaxMsgLen).Int(),
+		enableHeartbeatCheck: config.Get(defaultServerHeartbeatCheckKey, defaultServerHeartbeatCheck).Bool(),
+		heartbeatInterval:    config.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration() * time.Second,
+		multicore:            config.Get(defaultMulticoreKey, defaultMulticore).Bool(),
+	}
+}
+
+// WithServerListenAddr 设置监听地址
+func WithServerListenAddr(addr string) ServerOption {
+	return func(o *serverOptions) { o.addr = addr }
+}
+
+// WithServerMaxMsgLen 设置消息最大长度
+func WithServerMaxMsgLen(maxMsgLen int) ServerOption {
+	return func(o *serverOptions) { o.maxMsgLen = maxMsgLen }
+}
+
+// WithServerEnableHeartbeatCheck 是否启用心跳检测
+func WithServerEnableHeartbeatCheck(enable bool) ServerOption {
+	return func(o *serverOptions) { o.enableHeartbeatCheck = enable }
+}
+
+// WithServerHeartbeatInterval 设置心跳检测间隔时间
+func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
+	return func(o *serverOptions) { o.heartbeatInterval = heartbeatInterval }
+}
+
+// WithServerMulticore 设置心跳检测间隔时间
+func WithServerMulticore(multicore bool) ServerOption {
+	return func(o *serverOptions) { o.multicore = multicore }
+}
