@@ -8,7 +8,7 @@ import (
 
 type consumer struct {
 	rw       sync.RWMutex
-	handlers map[uintptr]EventHandler
+	handlers map[uintptr][]EventHandler
 }
 
 // 添加处理器
@@ -18,9 +18,13 @@ func (c *consumer) addHandler(handler EventHandler) int {
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
-	c.handlers[pointer] = handler
+	if _, ok := c.handlers[pointer]; !ok {
+		c.handlers[pointer] = make([]EventHandler, 0, 1)
+	}
 
-	return len(c.handlers)
+	c.handlers[pointer] = append(c.handlers[pointer], handler)
+
+	return len(c.handlers[pointer])
 }
 
 // 移除处理器
@@ -40,8 +44,10 @@ func (c *consumer) dispatch(event *Event) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	for _, handler := range c.handlers {
-		fn := handler
-		task.AddTask(func() { fn(event) })
+	for _, handlers := range c.handlers {
+		for i := range handlers {
+			handler := handlers[i]
+			task.AddTask(func() { handler(event) })
+		}
 	}
 }

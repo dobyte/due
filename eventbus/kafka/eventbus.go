@@ -103,7 +103,7 @@ func (eb *Eventbus) Subscribe(_ context.Context, topic string, handler eventbus.
 	eb.rw.Lock()
 	c, ok := eb.consumers[topic]
 	if !ok {
-		c = &consumer{handlers: make(map[uintptr]eventbus.EventHandler)}
+		c = &consumer{handlers: make(map[uintptr][]eventbus.EventHandler)}
 		c.ctx, c.cancel = context.WithCancel(eb.ctx)
 		eb.consumers[topic] = c
 	}
