@@ -111,7 +111,7 @@ func Int64(any interface{}) int64 {
 		case reflect.Bool:
 			return Int64(rv.Bool())
 		case reflect.String:
-			i, _ := strconv.ParseInt(rv.String(), 0, 64)
+			i, _ := strconv.ParseInt(rv.String(), 10, 64)
 			return i
 		case reflect.Uintptr:
 			return int64(rv.Uint())
