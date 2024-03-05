@@ -35,6 +35,7 @@ var (
 	ErrInvalidFormat         = New("invalid format")
 	ErrIllegalRequest        = New("illegal request")
 	ErrIllegalOperation      = New("illegal operation")
+	ErrInvalidPointer        = New("invalid pointer")
 )
 
 // NewError 新建一个错误

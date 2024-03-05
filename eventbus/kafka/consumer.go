@@ -13,7 +13,7 @@ type consumer struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	rw       sync.RWMutex
-	handlers map[uintptr]eventbus.EventHandler
+	handlers map[uintptr][]eventbus.EventHandler
 }
 
 // 添加处理器
@@ -23,9 +23,13 @@ func (c *consumer) addHandler(handler eventbus.EventHandler) int {
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
-	c.handlers[pointer] = handler
+	if _, ok := c.handlers[pointer]; !ok {
+		c.handlers[pointer] = make([]eventbus.EventHandler, 0, 1)
+	}
 
-	return len(c.handlers)
+	c.handlers[pointer] = append(c.handlers[pointer], handler)
+
+	return len(c.handlers[pointer])
 }
 
 // 移除处理器
@@ -51,8 +55,10 @@ func (c *consumer) dispatch(data []byte) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	for _, handler := range c.handlers {
-		fn := handler
-		task.AddTask(func() { fn(event) })
+	for _, handlers := range c.handlers {
+		for i := range handlers {
+			handler := handlers[i]
+			task.AddTask(func() { handler(event) })
+		}
 	}
 }

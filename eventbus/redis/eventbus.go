@@ -72,7 +72,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 
 	c, ok := eb.consumers[topic]
 	if !ok {
-		c = &consumer{handlers: make(map[uintptr]eventbus.EventHandler, 1)}
+		c = &consumer{handlers: make(map[uintptr][]eventbus.EventHandler, 1)}
 		eb.consumers[topic] = c
 	}
 

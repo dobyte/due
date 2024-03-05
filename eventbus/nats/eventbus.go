@@ -57,7 +57,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 
 	c, ok := eb.consumers[topic]
 	if !ok {
-		c = &consumer{handlers: make(map[uintptr]eventbus.EventHandler)}
+		c = &consumer{handlers: make(map[uintptr][]eventbus.EventHandler)}
 		sub, err := eb.opts.conn.Subscribe(topic, func(msg *nats.Msg) {
 			c.dispatch(msg.Data)
 		})

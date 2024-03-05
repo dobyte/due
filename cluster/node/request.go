@@ -69,6 +69,10 @@ func (r *request) Parse(v interface{}) error {
 		})
 	}
 
+	if len(msg) == 0 {
+		return nil
+	}
+
 	if r.gid != "" && r.node.opts.encryptor != nil {
 		data, err := r.node.opts.encryptor.Decrypt(msg)
 		if err != nil {
