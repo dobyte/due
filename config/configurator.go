@@ -301,7 +301,7 @@ func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 		values = c.load()
 	)
 
-	if values == nil {
+	if values == nil || len(values) == 0 {
 		goto NOTFOUND
 	}
 

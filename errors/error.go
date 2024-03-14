@@ -36,6 +36,7 @@ var (
 	ErrIllegalRequest        = New("illegal request")
 	ErrIllegalOperation      = New("illegal operation")
 	ErrInvalidPointer        = New("invalid pointer")
+	ErrNotFoundLocator       = New("not found locator")
 )
 
 // NewError 新建一个错误

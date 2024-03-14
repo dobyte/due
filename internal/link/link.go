@@ -84,6 +84,10 @@ func (l *Link) UnbindGate(ctx context.Context, uid int64) error {
 // 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (l *Link) BindNode(ctx context.Context, uid int64, name, nid string) error {
+	if l.opts.Locator == nil {
+		return errors.ErrNotFoundLocator
+	}
+
 	err := l.opts.Locator.BindNode(ctx, uid, name, nid)
 	if err != nil {
 		return err
@@ -98,6 +102,10 @@ func (l *Link) BindNode(ctx context.Context, uid int64, name, nid string) error 
 // 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (l *Link) UnbindNode(ctx context.Context, uid int64, name, nid string) error {
+	if l.opts.Locator == nil {
+		return errors.ErrNotFoundLocator
+	}
+
 	err := l.opts.Locator.UnbindNode(ctx, uid, name, nid)
 	if err != nil {
 		return err
@@ -164,6 +172,10 @@ func (l *Link) loadNodeSource(uid int64, name string) (string, bool) {
 
 // LocateGate 定位用户所在网关
 func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
+	if l.opts.Locator == nil {
+		return "", errors.ErrNotFoundLocator
+	}
+
 	if val, ok := l.gateSource.Load(uid); ok {
 		if gid := val.(string); gid != "" {
 			return gid, nil
@@ -186,6 +198,10 @@ func (l *Link) LocateGate(ctx context.Context, uid int64) (string, error) {
 
 // AskGate 检测用户是否在给定的网关上
 func (l *Link) AskGate(ctx context.Context, uid int64, gid string) (string, bool, error) {
+	if l.opts.Locator == nil {
+		return "", false, errors.ErrNotFoundLocator
+	}
+
 	if val, ok := l.gateSource.Load(uid); ok {
 		return val.(string), val.(string) == gid, nil
 	}
@@ -206,6 +222,10 @@ func (l *Link) AskGate(ctx context.Context, uid int64, gid string) (string, bool
 
 // LocateNode 定位用户所在节点
 func (l *Link) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	if l.opts.Locator == nil {
+		return "", errors.ErrNotFoundLocator
+	}
+
 	nid, ok := l.loadNodeSource(uid, name)
 	if ok {
 		return nid, nil
@@ -227,6 +247,10 @@ func (l *Link) LocateNode(ctx context.Context, uid int64, name string) (string, 
 
 // AskNode 检测用户是否在给定的节点上
 func (l *Link) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
+	if l.opts.Locator == nil {
+		return "", false, errors.ErrNotFoundLocator
+	}
+
 	if insID, ok := l.loadNodeSource(uid, name); ok {
 		return insID, insID == nid, nil
 	}
@@ -828,6 +852,10 @@ func (l *Link) watchServiceInstance(ctx context.Context, kind string) {
 
 // WatchUserLocate 监听用户定位
 func (l *Link) WatchUserLocate(ctx context.Context, kinds ...string) {
+	if l.opts.Locator == nil {
+		return
+	}
+
 	rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
 	watcher, err := l.opts.Locator.Watch(rctx, kinds...)
 	rcancel()

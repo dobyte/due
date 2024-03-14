@@ -65,10 +65,6 @@ func (m *Mesh) Init() {
 		log.Fatal("codec component is not injected")
 	}
 
-	if m.opts.locator == nil {
-		log.Fatal("locator component is not injected")
-	}
-
 	if m.opts.registry == nil {
 		log.Fatal("registry component is not injected")
 	}
