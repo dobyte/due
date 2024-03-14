@@ -37,9 +37,25 @@ func (c *Code) Code() int {
 	return c.code
 }
 
+// 替换新的错误码
+func (c *Code) WithCode(code int) *Code {
+	return &Code{
+		code:    code,
+		message: c.message,
+	}
+}
+
 // Message 返回错误码消息
 func (c *Code) Message() string {
 	return c.message
+}
+
+// 替换新的错误码消息
+func (c *Code) WithMessage(message string) *Code {
+	return &Code{
+		code:    c.code,
+		message: message,
+	}
 }
 
 // String 格式化错误码

@@ -155,7 +155,7 @@ func Lucky(probability float64, base ...float64) bool {
 }
 
 // Weight 权重随机
-func Weight(list []interface{}, fn func(v interface{}) float64) int {
+func Weight(fn func(v interface{}) float64, list ...interface{}) int {
 	if len(list) == 0 {
 		return -1
 	}
