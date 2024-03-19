@@ -12,7 +12,8 @@
 
 ### 1.介绍
 
-due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 其中，模块设计方面借鉴了[kratos](https://github.com/go-kratos/kratos)的模块设计思路，为开发者提供了较为灵活的集群构建方案。
+due是一款基于Go语言开发的轻量级分布式游戏服务器框架。
+其中，模块设计方面借鉴了[kratos](https://github.com/go-kratos/kratos)的模块设计思路，为开发者提供了较为灵活的集群构建方案。
 
 ![架构图](architecture.jpg)
 
@@ -42,13 +43,17 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。 �
 * 灵活：支持单体、分布式等多种架构方案。
 * 管理：提供master后台管理服相关接口支持。
 
-> 注：出于性能考虑，protobuf协议默认使用[gogo/protobuf](https://github.com/gogo/protobuf)进行编解码，在生成go代码时请使用gogo库的protoc-gen-xxxx。
+### 4.说明
 
-```bash
-go install github.com/gogo/protobuf/protoc-gen-gofast@latest
-```
+> 在due交流群中经常有小伙伴提及到Gate、Node、Mesh之间到底是个什么关系，这里就做一个统一的解答
 
-### 4.协议
+* Gate：网关服，主要用于管理客户端连接，接收客户端的路由消息，并分发路由消息到不同的的Node节点服。
+* Node:
+  节点服，作为整个集群系统的核心组件，主要用于核心逻辑业务的编写。Node节点服务可以根据业务需要做成有状态或无状态的节点，当作为无状态的节点时，Node节点与Mesh微服务基本无异；但当Node节点作为有状态节点时，Node节点便不能随意更新进行重启操作。故而Node与Mesh分离的业务场景的价值就体现出来了。
+* Mesh：微服务，主要用于无状态的业务逻辑编写。Mesh能做的功能Node一样可以完成，如何选择完全取决于自身业务场景，开发者可以根据自身业务场景灵活搭配。
+* Master：管理服，主要用于GM后台管理功能的开发。
+
+### 5.协议
 
 在due框架中，通信协议统一采用size+header+route+seq+message的格式：
 
@@ -120,7 +125,7 @@ heartbeat time: 8 bytes
 - 上行心跳包无需携带心跳数据，下行心跳包默认携带8 bytes的服务器时间（ns），可通过网络库配置进行设置是否携带下行包时间信息
 - 此参数由网络框架层自动打包，服务端开发者不关注此参数，客户端开发者需关注此参数
 
-### 5、相关工具链
+### 6、相关工具链
 
 1.安装protobuf编译器（使用场景：开发mesh微服务）
 
@@ -149,7 +154,7 @@ go install github.com/gogo/protobuf/protoc-gen-gofast@latest
 3.安装grpc代码生成工具（使用场景：使用[GRPC](https://grpc.io/)组件开发mesh微服务）
 
 ```shell
-go install github.com/rpcxio/protoc-gen-rpcx@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 ```
 
 4.安装rpcx代码生成工具（使用场景：使用[RPCX](https://rpcx.io/)组件开发mesh微服务）
@@ -170,7 +175,7 @@ go install github.com/dobyte/gorm-dao-generator@latest
 go install github.com/dobyte/mongo-dao-generator@latest
 ```
 
-### 6.配置中心
+### 7.配置中心
 
 1.功能介绍
 
@@ -182,7 +187,7 @@ go install github.com/dobyte/mongo-dao-generator@latest
 * [etcd](config/etcd/README-ZH.md)
 * [consul](config/consul/README-ZH.md)
 
-### 7.注册中心
+### 8.注册中心
 
 1.功能介绍
 
@@ -193,13 +198,13 @@ go install github.com/dobyte/mongo-dao-generator@latest
 * [etcd](registry/etcd/README-ZH.md)
 * [consul](registry/consul/README-ZH.md)
 
-### 8.网络
+### 9.网络
 
-### 9.快速开始
+### 10.快速开始
 
 下面我们就通过两段简单的代码来体验一下due的魅力，Let's go~~
 
-0.启动组件
+1.启动组件
 
 ```shell
 docker-compose up
@@ -207,7 +212,7 @@ docker-compose up
 
 > docker-compose.yaml文件已在docker目录中备好，可以直接取用
 
-1.获取框架
+2.获取框架
 
 ```shell
 go get -u github.com/dobyte/due/v2@latest
@@ -217,46 +222,46 @@ go get -u github.com/dobyte/due/registry/consul/v2@latest
 go get -u github.com/dobyte/due/transport/rpcx/v2@latest
 ```
 
-2.构建Gate服务器
+3.构建Gate服务器
 
 ```go
 package main
 
 import (
-    "github.com/dobyte/due/locate/redis/v2"
-    "github.com/dobyte/due/network/ws/v2"
-    "github.com/dobyte/due/registry/consul/v2"
-    "github.com/dobyte/due/transport/rpcx/v2"
-    "github.com/dobyte/due/v2"
-    "github.com/dobyte/due/v2/cluster/gate"
+	"github.com/dobyte/due/locate/redis/v2"
+	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/registry/consul/v2"
+	"github.com/dobyte/due/transport/rpcx/v2"
+	"github.com/dobyte/due/v2"
+	"github.com/dobyte/due/v2/cluster/gate"
 )
 
 func main() {
-    // 创建容器
-    container := due.NewContainer()
-    // 创建服务器
-    server := ws.NewServer()
-    // 创建用户定位器
-    locator := redis.NewLocator()
-    // 创建服务发现
-    registry := consul.NewRegistry()
-    // 创建RPC传输器
-    transporter := rpcx.NewTransporter()
-    // 创建网关组件
-    component := gate.NewGate(
-        gate.WithServer(server),
-        gate.WithLocator(locator),
-        gate.WithRegistry(registry),
-        gate.WithTransporter(transporter),
-    )
-    // 添加网关组件
-    container.Add(component)
-    // 启动容器
-    container.Serve()
+	// 创建容器
+	container := due.NewContainer()
+	// 创建服务器
+	server := ws.NewServer()
+	// 创建用户定位器
+	locator := redis.NewLocator()
+	// 创建服务发现
+	registry := consul.NewRegistry()
+	// 创建RPC传输器
+	transporter := rpcx.NewTransporter()
+	// 创建网关组件
+	component := gate.NewGate(
+		gate.WithServer(server),
+		gate.WithLocator(locator),
+		gate.WithRegistry(registry),
+		gate.WithTransporter(transporter),
+	)
+	// 添加网关组件
+	container.Add(component)
+	// 启动容器
+	container.Serve()
 }
 ```
 
-3.构建Node服务器
+4.构建Node服务器
 
 ```go
 package main
@@ -324,198 +329,142 @@ func greetHandler(ctx *node.Context) {
 }
 ```
 
-4.构建Mesh服务
-
-```go
-package main
-
-import (
-   "context"
-   "github.com/dobyte/due/locate/redis/v2"
-   "github.com/dobyte/due/registry/consul/v2"
-   "github.com/dobyte/due/transport/rpcx/v2"
-   "github.com/dobyte/due/v2"
-   "github.com/dobyte/due/v2/cluster/mesh"
-   "sync"
-)
-
-func main() {
-   // 创建容器
-   container := due.NewContainer()
-   // 创建用户定位器
-   locator := redis.NewLocator()
-   // 创建服务发现
-   registry := consul.NewRegistry()
-   // 创建RPC传输器
-   transporter := rpcx.NewTransporter()
-   // 创建服务组件
-   component := mesh.NewMesh(
-      mesh.WithLocator(locator),
-      mesh.WithRegistry(registry),
-      mesh.WithTransporter(transporter),
-   )
-   // 初始化服务
-   newWallet(component.Proxy()).Init()
-   // 添加服务组件
-   container.Add(component)
-   // 启动容器
-   container.Serve()
-}
-
-type IncrGoldArgs struct {
-   UID  int64 // 用户ID
-   Gold int64 // 增加金币
-}
-
-type IncrGoldReply struct {
-   Gold int64 // 用户金币
-}
-
-type Wallet struct {
-   proxy *mesh.Proxy
-   rw    sync.RWMutex
-   golds map[int64]int64
-}
-
-func newWallet(proxy *mesh.Proxy) *Wallet {
-   return &Wallet{
-      proxy: proxy,
-      golds: make(map[int64]int64),
-   }
-}
-
-func (s *Wallet) Init() {
-   s.proxy.AddServiceProvider("wallet", "Wallet", s)
-}
-
-// IncrGold 增加用户金币
-func (s *Wallet) IncrGold(ctx context.Context, args *IncrGoldArgs, reply IncrGoldReply) error {
-   s.rw.Lock()
-   defer s.rw.Unlock()
-
-   gold := s.golds[args.UID] + args.Gold
-
-   s.golds[args.UID] = gold
-
-   reply.Gold = gold
-
-   return nil
-}
-```
-
 5.构建测试客户端
 
 ```go
 package main
 
 import (
-    "github.com/dobyte/due/config"
-    "github.com/dobyte/due/log"
-    "github.com/dobyte/due/mode"
-    "github.com/dobyte/due/network"
-    "github.com/dobyte/due/network/ws"
-    "github.com/dobyte/due/packet"
+	"fmt"
+	"github.com/dobyte/due/eventbus/nats/v2"
+	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/cluster/client"
+	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xtime"
+	"time"
 )
 
-var handlers map[int32]handlerFunc
-
-type handlerFunc func(conn network.Conn, buffer []byte)
-
-func init() {
-    handlers = map[int32]handlerFunc{
-        1: greetHandler,
-    }
-}
+const greet = 1
 
 func main() {
-    // 创建客户端
-    client := ws.NewClient()
-    // 监听连接
-    client.OnConnect(func(conn network.Conn) {
-        log.Infof("connection is opened")
-    })
-    // 监听断开连接
-    client.OnDisconnect(func(conn network.Conn) {
-        log.Infof("connection is closed")
-    })
-    // 监听收到消息
-    client.OnReceive(func(conn network.Conn, msg []byte, msgType int) {
-        message, err := packet.UnpackMessage(msg)
-        if err != nil {
-            log.Errorf("unpack message failed: %v", err)
-            return
-        }
-
-        handler, ok := handlers[message.Route]
-        if !ok {
-            log.Errorf("the route handler is not registered, route:%v", message.Route)
-            return
-        }
-        handler(conn, message.Buffer)
-    })
-
-    conn, err := client.Dial()
-    if err != nil {
-        log.Fatalf("dial failed: %v", err)
-    }
-
-    if err = push(conn, 1, []byte("hello due~~")); err != nil {
-        log.Errorf("push message failed: %v", err)
-    }
-
-    select {}
+	// 初始化事件总线
+	eventbus.SetEventbus(nats.NewEventbus())
+	// 创建容器
+	container := due.NewContainer()
+	// 创建客户端组件
+	component := client.NewClient(
+		client.WithClient(ws.NewClient()),
+	)
+	// 初始化监听
+	initListen(component.Proxy())
+	// 添加客户端组件
+	container.Add(component)
+	// 启动容器
+	container.Serve()
 }
 
-func greetHandler(conn network.Conn, buffer []byte) {
-    log.Infof("received message from server: %s", string(buffer))
+// 初始化监听
+func initListen(proxy *client.Proxy) {
+	// 监听组件启动
+	proxy.AddHookListener(cluster.Start, startHandler)
+	// 监听连接建立
+	proxy.AddEventListener(cluster.Connect, connectHandler)
+	// 监听消息回复
+	proxy.AddRouteHandler(greet, greetHandler)
 }
 
-func push(conn network.Conn, route int32, buffer []byte) error {
-    msg, err := packet.PackMessage(&packet.Message{
-        Seq:    1,
-        Route:  route,
-        Buffer: buffer,
-    })
-    if err != nil {
-        return err
-    }
+// 组件启动处理器
+func startHandler(proxy *client.Proxy) {
+	if _, err := proxy.Dial(); err != nil {
+		log.Errorf("gate connect failed: %v", err)
+		return
+	}
+}
 
-    return conn.Push(msg)
+// 连接建立处理器
+func connectHandler(conn *client.Conn) {
+	doPushMessage(conn)
+}
+
+// 消息回复处理器
+func greetHandler(ctx *client.Context) {
+	res := &greetRes{}
+
+	if err := ctx.Parse(res); err != nil {
+		log.Errorf("invalid response message, err: %v", err)
+		return
+	}
+
+	if res.Code != 0 {
+		log.Errorf("node response failed, code: %d", res.Code)
+		return
+	}
+
+	log.Info(res.Message)
+
+	time.AfterFunc(time.Second, func() {
+		doPushMessage(ctx.Conn())
+	})
+}
+
+// 推送消息
+func doPushMessage(conn *client.Conn) {
+	err := conn.Push(&cluster.Message{
+		Route: 1,
+		Data: &greetReq{
+			Message: fmt.Sprintf("I'm client, and the current time is: %s", xtime.Now().Format(xtime.DatetimeLayout)),
+		},
+	})
+	if err != nil {
+		log.Errorf("push message failed: %v", err)
+	}
+}
+
+type greetReq struct {
+	Message string `json:"message"`
+}
+
+type greetRes struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 ```
 
-### 10.支持组件
+### 11.支持组件
 
 1. 日志组件
-   * zap: github.com/dobyte/due/log/zap
-   * logrus: github.com/dobyte/due/log/logrus
-   * aliyun: github.com/dobyte/due/log/aliyun
-   * tencent: github.com/dobyte/due/log/zap
+    * zap: github.com/dobyte/due/log/zap
+    * logrus: github.com/dobyte/due/log/logrus
+    * aliyun: github.com/dobyte/due/log/aliyun
+    * tencent: github.com/dobyte/due/log/zap
 2. 网络组件
-   * ws: github.com/dobyte/due/network/ws
-   * tcp: github.com/dobyte/due/network/tcp
+    * ws: github.com/dobyte/due/network/ws
+    * tcp: github.com/dobyte/due/network/tcp
 3. 注册发现
-   * etcd: github.com/dobyte/due/registry/etcd
-   * consul: github.com/dobyte/due/registry/consul
+    * etcd: github.com/dobyte/due/registry/etcd
+    * consul: github.com/dobyte/due/registry/consul
 4. 传输组件
-   * grpc: github.com/dobyte/due/transporter/grpc
-   * rpcx: github.com/dobyte/due/transporter/rpcx
+    * grpc: github.com/dobyte/due/transporter/grpc
+    * rpcx: github.com/dobyte/due/transporter/rpcx
 5. 定位组件
-   * redis: github.com/dobyte/due/locate/redis
+    * redis: github.com/dobyte/due/locate/redis
 6. 事件总线
-   * redis: github.com/dobyte/due/eventbus/redis
-   * nats: github.com/dobyte/due/eventbus/nats
-   * kafka: github.com/dobyte/due/eventbus/kafka
+    * redis: github.com/dobyte/due/eventbus/redis
+    * nats: github.com/dobyte/due/eventbus/nats
+    * kafka: github.com/dobyte/due/eventbus/kafka
 
-### 11.详细示例
+### 12.详细示例
 
-更多详细示例请点击[due-example](https://github.com/dobyte/due-example)
+更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples)
 
-### 12.其他客户端
+### 13.其他客户端
 
 [due-client-ts](https://github.com/dobyte/due-client-ts)
 
-### 13.交流与讨论
+### 14.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 
