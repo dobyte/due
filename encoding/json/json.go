@@ -8,7 +8,7 @@
 package json
 
 import (
-	jsoniter "github.com/json-iterator/go"
+	"github.com/bytedance/sonic"
 )
 
 const Name = "json"
@@ -24,12 +24,12 @@ func (codec) Name() string {
 
 // Marshal 编码
 func (codec) Marshal(v interface{}) ([]byte, error) {
-	return jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(v)
+	return sonic.Marshal(v)
 }
 
 // Unmarshal 解码
 func (codec) Unmarshal(data []byte, v interface{}) error {
-	return jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, v)
+	return sonic.Unmarshal(data, v)
 }
 
 // Marshal 编码
