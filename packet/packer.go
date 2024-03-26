@@ -20,6 +20,7 @@ type Packer interface {
 	ReadMessage(reader io.Reader) ([]byte, error)
 	// PackMessage 打包消息
 	PackMessage(message *Message) ([]byte, error)
+	ExtractRoute(data []byte) (int32, error)
 	// UnpackMessage 解包消息
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
@@ -157,6 +158,63 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (p *defaultPacker) ExtractRoute(data []byte) (int32, error) {
+	var (
+		ln     = len(data) - defaultSizeBytes - defaultHeaderBytes - p.opts.routeBytes - p.opts.seqBytes
+		reader = bytes.NewReader(data)
+		size   uint32
+		header uint8
+	)
+
+	if ln < 0 {
+		return 0, errors.ErrInvalidMessage
+	}
+
+	err := binary.Read(reader, p.opts.byteOrder, &size)
+	if err != nil {
+		return 0, err
+	}
+
+	if uint64(len(data))-defaultSizeBytes != uint64(size) {
+		return 0, errors.ErrInvalidMessage
+	}
+
+	err = binary.Read(reader, p.opts.byteOrder, &header)
+	if err != nil {
+		return 0, err
+	}
+
+	if header&dataBit != dataBit {
+		return 0, errors.ErrInvalidMessage
+	}
+
+	switch p.opts.routeBytes {
+	case 1:
+		var route int8
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return 0, err
+		} else {
+			return int32(route), nil
+		}
+	case 2:
+		var route int16
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return 0, err
+		} else {
+			return int32(route), nil
+		}
+	case 4:
+		var route int32
+		if err = binary.Read(reader, p.opts.byteOrder, &route); err != nil {
+			return 0, err
+		} else {
+			return route, nil
+		}
+	}
+
+	return 0, errors.ErrInvalidMessage
 }
 
 // UnpackMessage 解包消息

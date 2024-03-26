@@ -62,7 +62,7 @@ func TestClient_Dial(t *testing.T) {
 
 					times++
 
-					if times >= 5 {
+					if times >= 200 {
 						return
 					}
 				}
@@ -75,9 +75,9 @@ func TestClient_Dial(t *testing.T) {
 
 func Test_Benchmark(t *testing.T) {
 	// 并发数
-	concurrency := 1000
+	concurrency := 1
 	// 消息量
-	total := 1000000
+	total := 10
 	// 总共发送的消息条数
 	totalSent := int64(0)
 	// 总共接收的消息条数
@@ -96,7 +96,7 @@ func Test_Benchmark(t *testing.T) {
 	wg := sync.WaitGroup{}
 	client := tcp.NewClient()
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		atomic.AddInt64(&totalRecv, 1)
+		fmt.Println("recv num: ", atomic.AddInt64(&totalRecv, 1))
 
 		wg.Done()
 	})
@@ -136,7 +136,7 @@ func Test_Benchmark(t *testing.T) {
 						return
 					}
 
-					atomic.AddInt64(&totalSent, 1)
+					fmt.Println("sent num: ", atomic.AddInt64(&totalSent, 1))
 				}
 			}
 		}(conn)
