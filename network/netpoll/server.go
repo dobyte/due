@@ -6,14 +6,14 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/libp2p/go-reuseport"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"net"
 	"time"
 )
 
 type server struct {
 	opts              *serverOptions            // 配置
-	listeners         [10]net.Listener          // 监听器
+	listener          net.Listener              // 监听器
 	connMgr           *connMgr                  // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
@@ -53,51 +53,48 @@ func (s *server) Start() error {
 		return err
 	}
 
+	xcall.Go(s.serve)
+
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
-	s.serve()
 
 	return nil
 }
 
 // Stop 关闭服务器
-func (s *server) Stop() (err error) {
-	for _, ln := range s.listeners {
-		if ln != nil {
-			if e := ln.Close(); e != nil {
-				err = e
-			}
-		}
+func (s *server) Stop() error {
+	if err := s.listener.Close(); err != nil {
+		return err
 	}
 
 	s.connMgr.close()
 
-	return
+	if s.stopHandler != nil {
+		s.stopHandler()
+	}
+
+	return nil
 }
 
+// 初始化服务器
 func (s *server) init() error {
 	addr, err := net.ResolveTCPAddr(s.Protocol(), s.opts.addr)
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < len(s.listeners); i++ {
-		ln, err := reuseport.Listen(addr.Network(), addr.String())
-		if err != nil {
-			for n := 0; n < i; n++ {
-				s.listeners[n].Close()
-			}
-			return err
-		}
-
-		s.listeners[i] = ln
+	listener, err := netpoll.CreateListener(addr.Network(), addr.String())
+	if err != nil {
+		return err
 	}
+
+	s.listener = listener
 
 	return nil
 }
 
+// 接受请求
 func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
 	c, ok := s.connMgr.load(conn)
 	if !ok {
@@ -107,6 +104,7 @@ func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
 	return c.read()
 }
 
+// 打开连接
 func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
 	if err := s.connMgr.allocate(conn); err != nil {
 		log.Errorf("connection allocate error: %v", err)
@@ -119,19 +117,13 @@ func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context
 
 // 启动服务器
 func (s *server) serve() {
-	for i := range s.listeners {
-		eventLoop, err := netpoll.NewEventLoop(
-			s.onRequest,
-			netpoll.WithOnConnect(s.onConnect),
-			netpoll.WithReadTimeout(time.Second),
-		)
-		if err != nil {
-			log.Fatalf("tcp server start failed: %v", err)
-		}
+	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnConnect(s.onConnect), netpoll.WithReadTimeout(time.Second))
+	if err != nil {
+		log.Fatalf("tcp server start failed: %v", err)
+	}
 
-		if err = eventLoop.Serve(s.listeners[i]); err != nil {
-			log.Fatalf("tcp server start failed: %v", err)
-		}
+	if err = eventLoop.Serve(s.listener); err != nil {
+		log.Fatalf("tcp server start failed: %v", err)
 	}
 }
 

@@ -25,6 +25,7 @@ func TestClient_Dial(t *testing.T) {
 				t.Log("connection is closed")
 			})
 			client.OnReceive(func(conn network.Conn, msg []byte) {
+				fmt.Println(msg)
 				message, err := packet.UnpackMessage(msg)
 				if err != nil {
 					t.Error(err)
@@ -55,7 +56,8 @@ func TestClient_Dial(t *testing.T) {
 			for {
 				select {
 				case <-ticker.C:
-					if err = conn.Push(msg); err != nil {
+					fmt.Println(222)
+					if err = conn.Send(msg); err != nil {
 						t.Error(err)
 						return
 					}
@@ -75,28 +77,21 @@ func TestClient_Dial(t *testing.T) {
 
 func Test_Benchmark(t *testing.T) {
 	// 并发数
-	concurrency := 1
+	concurrency := 500
 	// 消息量
-	total := 10
+	total := 10000000
 	// 总共发送的消息条数
 	totalSent := int64(0)
 	// 总共接收的消息条数
 	totalRecv := int64(0)
 
-	// 准备消息
-	msg, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	wg := sync.WaitGroup{}
 	client := tcp.NewClient()
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-		fmt.Println("recv num: ", atomic.AddInt64(&totalRecv, 1))
+
+		atomic.AddInt64(&totalRecv, 1)
+
+		//fmt.Println("recv num: ", atomic.AddInt64(&totalRecv, 1))
 
 		wg.Done()
 	})
@@ -106,7 +101,7 @@ func Test_Benchmark(t *testing.T) {
 	chMsg := make(chan struct{}, total)
 
 	// 准备连接
-	conns := make([]network.Conn, concurrency)
+	conns := make([]network.Conn, 0, concurrency)
 	for i := 0; i < concurrency; i++ {
 		conn, err := client.Dial()
 		if err != nil {
@@ -115,7 +110,7 @@ func Test_Benchmark(t *testing.T) {
 			continue
 		}
 
-		conns[i] = conn
+		conns = append(conns, conn)
 		time.Sleep(time.Millisecond)
 	}
 
@@ -131,12 +126,25 @@ func Test_Benchmark(t *testing.T) {
 						return
 					}
 
-					if err = conn.Push(msg); err != nil {
+					// 准备消息
+					msg, err := packet.PackMessage(&packet.Message{
+						Seq:    1,
+						Route:  1,
+						Buffer: []byte("hello server~~"),
+					})
+					if err != nil {
 						t.Error(err)
 						return
 					}
 
-					fmt.Println("sent num: ", atomic.AddInt64(&totalSent, 1))
+					if err = conn.Send(msg); err != nil {
+						t.Error(err)
+						return
+					}
+
+					atomic.AddInt64(&totalSent, 1)
+
+					//fmt.Println("sent num: ", atomic.AddInt64(&totalSent, 1))
 				}
 			}
 		}(conn)

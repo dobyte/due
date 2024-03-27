@@ -68,6 +68,10 @@ func (s *server) Stop() error {
 
 	s.connMgr.close()
 
+	if s.stopHandler != nil {
+		s.stopHandler()
+	}
+
 	return nil
 }
 

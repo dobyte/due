@@ -20,20 +20,16 @@ type chWrite struct {
 
 // 执行写入操作
 func write(writer netpoll.Writer, msg []byte) error {
-	alloc, err := writer.Malloc(sizeBytes + len(msg))
-	if err != nil {
+	if _, err := writer.WriteBinary(msg); err != nil {
 		return err
 	}
-
-	binary.BigEndian.PutUint32(alloc, uint32(len(msg)))
-	copy(alloc[sizeBytes:], msg)
 
 	return writer.Flush()
 }
 
 // 执行读取操作
 func read(reader netpoll.Reader) ([]byte, error) {
-	buf, err := reader.Next(sizeBytes)
+	buf, err := reader.Peek(sizeBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -45,5 +41,5 @@ func read(reader netpoll.Reader) ([]byte, error) {
 		return nil, nil
 	}
 
-	return reader.Next(int(size))
+	return reader.Next(int(size) + sizeBytes)
 }

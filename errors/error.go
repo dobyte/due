@@ -12,6 +12,7 @@ var (
 	ErrInvalidGID            = New("invalid gate id")
 	ErrInvalidNID            = New("invalid node id")
 	ErrInvalidMessage        = New("invalid message")
+	ErrInvalidReader         = New("invalid reader")
 	ErrNotFoundSession       = New("not found session")
 	ErrInvalidSessionKind    = New("invalid session kind")
 	ErrReceiveTargetEmpty    = New("the receive target is empty")

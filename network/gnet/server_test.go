@@ -8,6 +8,7 @@
 package gnet_test
 
 import (
+	"fmt"
 	"github.com/dobyte/due/network/gnet/v2"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -69,11 +70,9 @@ func TestServer(t *testing.T) {
 func TestServer_Benchmark(t *testing.T) {
 	server := gnet.NewServer()
 	server.OnStart(func() {
-		t.Logf("server is started")
+		fmt.Println("server is started")
 	})
 	server.OnReceive(func(conn network.Conn, msg []byte) {
-		//fmt.Println(string(msg))
-
 		_, err := packet.UnpackMessage(msg)
 		if err != nil {
 			t.Error(err)
@@ -90,7 +89,7 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		if err = conn.Push(msg); err != nil {
+		if err = conn.Send(msg); err != nil {
 			t.Error(err)
 		}
 	})
@@ -102,7 +101,7 @@ func TestServer_Benchmark(t *testing.T) {
 	go func() {
 		err := http.ListenAndServe(":8089", nil)
 		if err != nil {
-			log.Errorf("pprof server start failed: %v", err)
+			fmt.Printf("pprof server start failed: %v\n", err)
 		}
 	}()
 

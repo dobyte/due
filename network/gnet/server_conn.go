@@ -15,6 +15,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/panjf2000/gnet/v2"
+	"io"
 	"net"
 	"sync/atomic"
 )
@@ -223,54 +224,64 @@ func (c *serverConn) forceClose() error {
 }
 
 // 读取消息
-func (c *serverConn) read() {
+func (c *serverConn) read() error {
 	if c.isClosed() {
-		return
+		return errors.ErrConnectionClosed
 	}
 
 	conn := c.conn
 
-	msg, err := packet.ReadMessage(conn)
-	if err != nil {
-		_ = c.forceClose()
-		return
+	if conn == nil {
+		return errors.ErrConnectionClosed
 	}
 
 	if c.connMgr.server.opts.heartbeatInterval > 0 {
 		atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
 	}
 
-	isHeartbeat, err := packet.CheckHeartbeat(msg)
-	if err != nil {
-		log.Errorf("check heartbeat message error: %v", err)
-		return
-	}
+	for {
+		msg, err := packet.ReadMessage(conn)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
 
-	// ignore heartbeat packet
-	if isHeartbeat {
-		// responsive heartbeat
-		if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
-			if heartbeat, err := packet.PackHeartbeat(); err != nil {
-				log.Errorf("pack heartbeat message error: %v", err)
-			} else {
-				if _, err = conn.Write(heartbeat); err != nil {
-					log.Errorf("write heartbeat message error: %v", err)
+			return err
+		}
+
+		// ignore empty packet
+		if len(msg) == 0 {
+			continue
+		}
+
+		isHeartbeat, err := packet.CheckHeartbeat(msg)
+		if err != nil {
+			log.Errorf("check heartbeat message error: %v", err)
+			continue
+		}
+
+		// ignore heartbeat packet
+		if isHeartbeat {
+			// responsive heartbeat
+			if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
+				if heartbeat, err := packet.PackHeartbeat(); err != nil {
+					log.Errorf("pack heartbeat message error: %v", err)
+				} else {
+					if _, err = conn.Write(heartbeat); err != nil {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
 				}
 			}
+
+			continue
 		}
-		return
+
+		if c.connMgr.server.receiveHandler != nil {
+			c.connMgr.server.receiveHandler(c, msg)
+		}
 	}
 
-	// ignore empty packet
-	if len(msg) == 0 {
-		return
-	}
-
-	if c.connMgr.server.receiveHandler != nil {
-		c.connMgr.server.receiveHandler(c, msg)
-	}
-
-	return
+	return nil
 }
 
 //// 写入消息

@@ -15,18 +15,28 @@ const (
 	heartbeatBit = 1 << 7 // 心跳标识
 )
 
+type NocopyReader interface {
+	// Next returns a slice containing the next n bytes from the buffer,
+	// advancing the buffer as if the bytes had been returned by Read.
+	Next(n int) (p []byte, err error)
+
+	// Peek returns the next n bytes without advancing the reader.
+	Peek(n int) (buf []byte, err error)
+}
+
 type Packer interface {
 	// ReadMessage 读取消息
-	ReadMessage(reader io.Reader) ([]byte, error)
+	ReadMessage(reader interface{}) ([]byte, error)
 	// PackMessage 打包消息
 	PackMessage(message *Message) ([]byte, error)
-	ExtractRoute(data []byte) (int32, error)
 	// UnpackMessage 解包消息
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
 	PackHeartbeat() ([]byte, error)
 	// CheckHeartbeat 检测心跳包
 	CheckHeartbeat(data []byte) (bool, error)
+	// ExtractRoute 提取路由
+	ExtractRoute(data []byte) (int32, error)
 }
 
 type defaultPacker struct {
@@ -71,7 +81,41 @@ func NewPacker(opts ...Option) Packer {
 }
 
 // ReadMessage 读取消息
-func (p *defaultPacker) ReadMessage(reader io.Reader) ([]byte, error) {
+func (p *defaultPacker) ReadMessage(reader interface{}) ([]byte, error) {
+	switch r := reader.(type) {
+	case io.Reader:
+		return p.copyReadMessage(r)
+	case NocopyReader:
+		return p.nocopyReadMessage(r)
+	default:
+		return nil, errors.ErrInvalidReader
+	}
+}
+
+// 无拷贝读取消息
+func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
+	buf, err := reader.Peek(defaultSizeBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	var size uint32
+
+	if p.opts.byteOrder == binary.BigEndian {
+		size = binary.BigEndian.Uint32(buf)
+	} else {
+		size = binary.LittleEndian.Uint32(buf)
+	}
+
+	if size == 0 {
+		return nil, nil
+	}
+
+	return reader.Next(int(size) + defaultSizeBytes)
+}
+
+// 拷贝读取消息
+func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
 	buf := make([]byte, defaultSizeBytes)
 
 	_, err := io.ReadFull(reader, buf)
@@ -79,7 +123,14 @@ func (p *defaultPacker) ReadMessage(reader io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	size := binary.BigEndian.Uint32(buf)
+	var size uint32
+
+	if p.opts.byteOrder == binary.BigEndian {
+		size = binary.BigEndian.Uint32(buf)
+	} else {
+		size = binary.LittleEndian.Uint32(buf)
+	}
+
 	if size == 0 {
 		return nil, nil
 	}
@@ -160,6 +211,7 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ExtractRoute 提取路由
 func (p *defaultPacker) ExtractRoute(data []byte) (int32, error) {
 	var (
 		ln     = len(data) - defaultSizeBytes - defaultHeaderBytes - p.opts.routeBytes - p.opts.seqBytes

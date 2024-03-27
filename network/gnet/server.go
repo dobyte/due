@@ -30,7 +30,7 @@ func NewServer(opts ...ServerOption) network.Server {
 	s := &server{}
 	s.opts = o
 	s.connMgr = newConnMgr(s)
-	s.engine = &engine{connMgr: newConnMgr(s)}
+	s.engine = &engine{server: s, connMgr: newConnMgr(s)}
 
 	return s
 }
@@ -44,10 +44,6 @@ func (s *server) Addr() string {
 func (s *server) Start() error {
 	if err := s.init(); err != nil {
 		return err
-	}
-
-	if s.startHandler != nil {
-		s.startHandler()
 	}
 
 	return nil

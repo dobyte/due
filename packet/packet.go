@@ -1,7 +1,5 @@
 package packet
 
-import "io"
-
 var globalPacker Packer
 
 func init() {
@@ -19,7 +17,7 @@ func GetPacker() Packer {
 }
 
 // ReadMessage 读取消息
-func ReadMessage(reader io.Reader) ([]byte, error) {
+func ReadMessage(reader interface{}) ([]byte, error) {
 	return globalPacker.ReadMessage(reader)
 }
 
@@ -41,4 +39,9 @@ func PackHeartbeat() ([]byte, error) {
 // CheckHeartbeat 检测心跳包
 func CheckHeartbeat(data []byte) (bool, error) {
 	return globalPacker.CheckHeartbeat(data)
+}
+
+// ExtractRoute 提取路由
+func ExtractRoute(data []byte) (int32, error) {
+	return globalPacker.ExtractRoute(data)
 }
