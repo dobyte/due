@@ -1,7 +1,9 @@
-package netpoll
+//go:build windows
+// +build windows
+
+package tcp
 
 import (
-	"github.com/cloudwego/netpoll"
 	"github.com/dobyte/due/v2/network"
 	"net"
 	"sync/atomic"
@@ -10,7 +12,6 @@ import (
 type client struct {
 	opts              *clientOptions            // 配置
 	id                int64                     // 连接ID
-	dialer            netpoll.Dialer            // 拨号器
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
@@ -41,12 +42,17 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := c.dialer.DialConnection(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout)
+	conn, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout)
 	if err != nil {
 		return nil, err
 	}
 
-	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
+	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
+}
+
+// Protocol 协议
+func (c *client) Protocol() string {
+	return protocol
 }
 
 // OnConnect 监听连接打开

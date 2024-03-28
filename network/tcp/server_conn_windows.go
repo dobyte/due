@@ -1,9 +1,5 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/11 10:49 上午
- * @Desc: TODO
- */
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -16,13 +12,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
 type serverConn struct {
-	rw                sync.RWMutex   // 锁
 	id                int64          // 连接ID
 	uid               int64          // 用户ID
 	state             int32          // 连接状态

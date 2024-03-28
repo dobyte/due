@@ -6,9 +6,11 @@ require github.com/dobyte/due/v2 v2.0.0
 
 require (
 	github.com/BurntSushi/toml v1.2.0 // indirect
+	github.com/bytedance/gopkg v0.0.0-20240315062850-21fc7a1671a8 // indirect
 	github.com/bytedance/sonic v1.11.3 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect
+	github.com/cloudwego/netpoll v0.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect

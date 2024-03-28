@@ -1,17 +1,16 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/11 10:02 上午
- * @Desc: TODO
- */
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
+// +build darwin netbsd freebsd openbsd dragonfly linux
 
 package tcp
 
 import (
+	"context"
+	"github.com/cloudwego/netpoll"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"net"
-	"time"
 )
 
 type server struct {
@@ -35,7 +34,7 @@ func NewServer(opts ...ServerOption) network.Server {
 
 	s := &server{}
 	s.opts = o
-	s.connMgr = newConnMgr(s)
+	s.connMgr = newServerConnMgr(s)
 
 	return s
 }
@@ -45,17 +44,22 @@ func (s *server) Addr() string {
 	return s.opts.addr
 }
 
+// Protocol 协议
+func (s *server) Protocol() string {
+	return protocol
+}
+
 // Start 启动服务器
 func (s *server) Start() error {
 	if err := s.init(); err != nil {
 		return err
 	}
 
+	xcall.Go(s.serve)
+
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
-	go s.serve()
 
 	return nil
 }
@@ -75,9 +79,54 @@ func (s *server) Stop() error {
 	return nil
 }
 
-// Protocol 协议
-func (s *server) Protocol() string {
-	return "tcp"
+// 初始化服务器
+func (s *server) init() error {
+	addr, err := net.ResolveTCPAddr(s.Protocol(), s.opts.addr)
+	if err != nil {
+		return err
+	}
+
+	listener, err := netpoll.CreateListener(addr.Network(), addr.String())
+	if err != nil {
+		return err
+	}
+
+	s.listener = listener
+
+	return nil
+}
+
+// 接受请求
+func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
+	c, ok := s.connMgr.load(conn)
+	if !ok {
+		return errors.New("invalid connection")
+	}
+
+	return c.read()
+}
+
+// 打开连接
+func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
+	if err := s.connMgr.allocate(conn); err != nil {
+		log.Errorf("connection allocate error: %v", err)
+		_ = conn.Close()
+		return nil
+	}
+
+	return ctx
+}
+
+// 启动服务器
+func (s *server) serve() {
+	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnConnect(s.onConnect))
+	if err != nil {
+		log.Fatalf("tcp server start failed: %v", err)
+	}
+
+	if err = eventLoop.Serve(s.listener); err != nil {
+		log.Fatalf("tcp server start failed: %v", err)
+	}
 }
 
 // OnStart 监听服务器启动
@@ -103,56 +152,4 @@ func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 // OnReceive 监听接收到消息
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
-}
-
-// 初始化TCP服务器
-func (s *server) init() error {
-	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
-	if err != nil {
-		return err
-	}
-
-	ln, err := net.ListenTCP(addr.Network(), addr)
-	if err != nil {
-		return err
-	}
-
-	s.listener = ln
-
-	return nil
-}
-
-// 等待连接
-func (s *server) serve() {
-	var tempDelay time.Duration
-
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
-				} else {
-					tempDelay *= 2
-				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
-				}
-
-				log.Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
-				time.Sleep(tempDelay)
-				continue
-			}
-
-			log.Errorf("tcp accept error: %v", err)
-			return
-		}
-
-		tempDelay = 0
-
-		if err = s.connMgr.allocate(conn); err != nil {
-			log.Errorf("connection allocate error: %v", err)
-			_ = conn.Close()
-		}
-	}
 }
