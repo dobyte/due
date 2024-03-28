@@ -3,119 +3,151 @@ package tcp_test
 import (
 	"fmt"
 	"github.com/dobyte/due/network/tcp/v2"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xrand"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestClient_Dial(t *testing.T) {
-	wg := sync.WaitGroup{}
-	for i := 0; i < 1; i++ {
-		wg.Add(1)
+func TestClient_Simple(t *testing.T) {
+	client := tcp.NewClient()
 
-		go func() {
-			client := tcp.NewClient()
-			client.OnConnect(func(conn network.Conn) {
-				t.Log("connection is opened")
-			})
-			client.OnDisconnect(func(conn network.Conn) {
-				t.Log("connection is closed")
-			})
-			client.OnReceive(func(conn network.Conn, msg []byte) {
-				fmt.Println(msg)
-				message, err := packet.UnpackMessage(msg)
-				if err != nil {
-					t.Error(err)
-					return
-				}
+	client.OnConnect(func(conn network.Conn) {
+		log.Info("connection is opened")
+	})
 
-				t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-			})
+	client.OnDisconnect(func(conn network.Conn) {
+		log.Info("connection is closed")
+	})
 
-			defer wg.Done()
+	client.OnReceive(func(conn network.Conn, msg []byte) {
+		message, err := packet.UnpackMessage(msg)
+		if err != nil {
+			log.Errorf("unpack message failed: %v", err)
+			return
+		}
 
-			conn, err := client.Dial()
-			if err != nil {
-				t.Fatal(err)
-			}
+		log.Infof("receive msg from server, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+	})
 
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			defer conn.Close()
+	conn, err := client.Dial()
+	if err != nil {
+		log.Fatalf("client dial failed: %v", err)
+	}
+	defer conn.Close()
 
-			times := 0
-			msg, _ := packet.PackMessage(&packet.Message{
+	counter := 0
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			msg, err := packet.PackMessage(&packet.Message{
 				Seq:    1,
 				Route:  1,
 				Buffer: []byte("hello server~~"),
 			})
-
-			for {
-				select {
-				case <-ticker.C:
-					fmt.Println(222)
-					if err = conn.Send(msg); err != nil {
-						t.Error(err)
-						return
-					}
-
-					times++
-
-					if times >= 200 {
-						return
-					}
-				}
+			if err != nil {
+				log.Errorf("pack message failed: %v", err)
+				continue
 			}
-		}()
-	}
 
-	wg.Wait()
+			if err = conn.Push(msg); err != nil {
+				log.Errorf("push message failed: %v", err)
+				return
+			}
+
+			counter++
+
+			if counter >= 200 {
+				return
+			}
+		}
+	}
 }
 
-func Test_Benchmark(t *testing.T) {
-	// 并发数
-	concurrency := 500
-	// 消息量
-	total := 10000000
-	// 总共发送的消息条数
-	totalSent := int64(0)
-	// 总共接收的消息条数
-	totalRecv := int64(0)
+func TestClient_Benchmark(t *testing.T) {
+	samples := []struct {
+		c    int // 并发数
+		n    int // 请求数
+		size int // 数据包大小
+	}{
+		{
+			c:    50,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    100,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    200,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    300,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    400,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    500,
+			n:    1000000,
+			size: 1024,
+		},
+		{
+			c:    1000,
+			n:    1000000,
+			size: 2 * 1024,
+		},
+	}
 
-	wg := sync.WaitGroup{}
+	for _, sample := range samples {
+		doPressureTest(sample.c, sample.n, sample.size)
+	}
+}
+
+// 执行压力测试
+func doPressureTest(c int, n int, size int) {
+	var (
+		wg        sync.WaitGroup
+		totalSent int64
+		totalRecv int64
+	)
+
 	client := tcp.NewClient()
+
 	client.OnReceive(func(conn network.Conn, msg []byte) {
-
 		atomic.AddInt64(&totalRecv, 1)
-
-		//fmt.Println("recv num: ", atomic.AddInt64(&totalRecv, 1))
 
 		wg.Done()
 	})
 
-	wg.Add(total)
+	buffer := []byte(xrand.Letters(size))
 
-	chMsg := make(chan struct{}, total)
+	chMsg := make(chan struct{}, n)
 
-	// 准备连接
-	conns := make([]network.Conn, 0, concurrency)
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < c; i++ {
 		conn, err := client.Dial()
 		if err != nil {
-			fmt.Println("connect failed", i, err)
+			log.Errorf("client dial failed: %v", err)
 			i--
 			continue
 		}
 
-		conns = append(conns, conn)
-		time.Sleep(time.Millisecond)
-	}
-
-	// 发送消息
-	for _, conn := range conns {
 		go func(conn network.Conn) {
 			defer conn.Close(true)
 
@@ -126,45 +158,47 @@ func Test_Benchmark(t *testing.T) {
 						return
 					}
 
-					// 准备消息
 					msg, err := packet.PackMessage(&packet.Message{
 						Seq:    1,
 						Route:  1,
-						Buffer: []byte("hello server~~"),
+						Buffer: buffer,
 					})
 					if err != nil {
-						t.Error(err)
+						log.Errorf("pack message failed: %v", err)
 						return
 					}
 
-					if err = conn.Send(msg); err != nil {
-						t.Error(err)
+					if err = conn.Push(msg); err != nil {
+						log.Errorf("push message failed: %v", err)
 						return
 					}
 
 					atomic.AddInt64(&totalSent, 1)
-
-					//fmt.Println("sent num: ", atomic.AddInt64(&totalSent, 1))
 				}
 			}
 		}(conn)
 	}
 
+	wg.Add(n)
+
 	startTime := time.Now().UnixNano()
 
-	for i := 0; i < total; i++ {
+	for i := 0; i < n; i++ {
 		chMsg <- struct{}{}
 	}
 
 	wg.Wait()
+
 	close(chMsg)
 
 	totalTime := float64(time.Now().UnixNano()-startTime) / float64(time.Second)
 
-	fmt.Printf("server               : %s\n", "tcp")
-	fmt.Printf("concurrency          : %d\n", concurrency)
+	fmt.Printf("server               : %s\n", client.Protocol())
+	fmt.Printf("concurrency          : %d\n", c)
 	fmt.Printf("latency              : %fs\n", totalTime)
-	fmt.Printf("sent     requests    : %d\n", totalSent)
+	fmt.Printf("data size            : %dkb\n", size/1024)
+	fmt.Printf("sent requests        : %d\n", totalSent)
 	fmt.Printf("received requests    : %d\n", totalRecv)
-	fmt.Printf("throughput  (TPS)    : %d\n", int64(float64(totalRecv)/totalTime))
+	fmt.Printf("throughput (TPS)     : %d\n", int64(float64(totalRecv)/totalTime))
+	fmt.Printf("--------------------------------\n")
 }
