@@ -42,3 +42,8 @@ func PackHeartbeat() ([]byte, error) {
 func CheckHeartbeat(data []byte) (bool, error) {
 	return globalPacker.CheckHeartbeat(data)
 }
+
+// IsNotNeedDeliverMsg 是否不需要传递的消息网关直接返回,比如心跳,握手等消息, return 是否不需要传递、消息内容
+func IsNotNeedDeliverMsg(data []byte) (bool, []byte, error) {
+	return globalPacker.IsNotNeedDeliverMsg(data)
+}

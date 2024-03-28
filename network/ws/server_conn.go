@@ -281,19 +281,20 @@ func (c *serverConn) read() {
 				continue
 			}
 
-			// check heartbeat packet
-			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			// check IsNotNeedDeliverMsg message
+			isNotDeliverMsg, msgBytes, err := packet.IsNotNeedDeliverMsg(msg)
+
 			if err != nil {
-				log.Errorf("check heartbeat message error: %v", err)
+				log.Errorf("check IsNotNeedDeliverMsg message error: %v", err)
 				continue
 			}
 
-			// ignore heartbeat packet
-			if isHeartbeat {
-				// responsive heartbeat
-				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
+			// ignore notNeedDeliverMsg packet and push to write channel include heartbeat
+			if isNotDeliverMsg {
+				// back msg
+				if len(msgBytes) > 0 {
 					c.rw.RLock()
-					c.chHighWrite <- chWrite{typ: heartbeatPacket}
+					c.chHighWrite <- chWrite{msg: msgBytes}
 					c.rw.RUnlock()
 				}
 				continue

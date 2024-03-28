@@ -26,6 +26,8 @@ type Packer interface {
 	PackHeartbeat() ([]byte, error)
 	// CheckHeartbeat 检测心跳包
 	CheckHeartbeat(data []byte) (bool, error)
+	// IsNotNeedDeliver 是否不需要传递的消息网关直接返回,比如心跳,握手等消息, return 是否不需要传递、消息内容
+	IsNotNeedDeliverMsg(data []byte) (bool, []byte, error)
 }
 
 type defaultPacker struct {
@@ -306,4 +308,17 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 	}
 
 	return header&heartbeatBit == heartbeatBit, nil
+}
+
+// IsNotNeedDeliverMsg 是否不需要传递的消息网关直接返回
+func (p *defaultPacker) IsNotNeedDeliverMsg(data []byte) (bool, []byte, error) {
+	isHeartbeat, err := p.CheckHeartbeat(data)
+	if err != nil {
+		return false, nil, err
+	}
+	if isHeartbeat {
+		heartbeat, err := p.PackHeartbeat()
+		return true, heartbeat, err
+	}
+	return false, nil, nil
 }
