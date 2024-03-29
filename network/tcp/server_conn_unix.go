@@ -232,7 +232,9 @@ func (c *serverConn) read() error {
 				log.Errorf("pack heartbeat message error: %v", err)
 			} else {
 				if err = write(conn.Writer(), heartbeat); err != nil {
-					log.Errorf("write heartbeat message error: %v", err)
+					if !errors.Is(err, netpoll.ErrConnClosed) {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
 				}
 			}
 		}
