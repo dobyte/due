@@ -4,9 +4,10 @@ import (
 	"context"
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/internal/link"
+	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/session"
-	"github.com/symsimmy/due/transport"
+	"strings"
 )
 
 var (
@@ -81,17 +82,22 @@ func (p *Proxy) Events() *Events {
 	return p.node.events
 }
 
-// NewServiceClient 新建微服务客户端
-// target参数可分为两种模式:
-// 直连模式: 	direct://127.0.0.1:8011
-// 服务发现模式: 	discovery://service_name
-func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
-	return p.node.opts.transporter.NewServiceClient(target)
-}
-
 // BindGate 绑定网关
 func (p *Proxy) BindGate(ctx context.Context, uid int64, gid string, cid int64) error {
 	return p.link.BindGate(ctx, uid, gid, cid)
+}
+
+func (p *Proxy) Ping(ctx context.Context, message string) (string, error) {
+	gateList, err := p.FetchGateList(ctx, cluster.Work)
+	if err != nil {
+		return "", err
+	}
+	var gid string
+	if len(gateList) > 0 {
+		gid = gateList[0].ID
+	}
+
+	return p.link.Ping(ctx, gid, message)
 }
 
 // UnbindGate 解绑网关
@@ -153,6 +159,16 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.link.FetchServiceList(ctx, cluster.Node, states...)
 }
 
+// FetchGameList 拉取游戏节点列表
+func (p *Proxy) FetchGameList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.link.FetchServiceAliasList(ctx, cluster.Node, "game", states...)
+}
+
+// FetchCenterList 拉取Center节点列表
+func (p *Proxy) FetchCenterList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.link.FetchServiceAliasList(ctx, cluster.Node, "center", states...)
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
 	return p.link.GetIP(ctx, args)
@@ -173,8 +189,53 @@ func (p *Proxy) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, erro
 	return p.link.Broadcast(ctx, args)
 }
 
+// BroadcastToGame 推送广播消息到游戏节点
+func (p *Proxy) BroadcastToGame(ctx context.Context, nodeList []*registry.ServiceInstance, message *Message) (int64, error) {
+	var total int64
+	for _, v := range nodeList {
+		err := p.Deliver(ctx, &DeliverArgs{
+			NID:     v.ID,
+			Message: message,
+		})
+
+		if err != nil {
+			return total, err
+		}
+
+		total++
+	}
+
+	return total, nil
+}
+
+// BroadcastDeliver 推送广播消息到node节点
+func (p *Proxy) BroadcastDeliver(ctx context.Context, kind link.DeliverKind, message *Message) error {
+	if strings.EqualFold("center", p.node.instance.Alias) {
+		log.Infof("[BroadcastDeliver] kind:%+v,message:%+v", kind, message)
+	}
+	return p.link.BroadcastDeliver(ctx, &link.BroadcastDeliverArgs{
+		Kind:    kind,
+		Message: message,
+	})
+}
+
+// MulticastDeliver 推送广播消息到node节点
+func (p *Proxy) MulticastDeliver(ctx context.Context, kind link.DeliverKind, targets []string, message *Message) error {
+	if strings.EqualFold("center", p.node.instance.Alias) {
+		log.Infof("[MulticastDeliver] kind:%+v,targets:%+v,message:%+v", kind, targets, message)
+	}
+	return p.link.MulticastDeliver(ctx, &link.MulticastDeliverArgs{
+		Kind:    kind,
+		Targets: targets,
+		Message: message,
+	})
+}
+
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
+	if strings.EqualFold("center", p.node.instance.Alias) {
+		log.Infof("[Deliver] CID:%+v,UID:%+v,NID:%+v,message.Seq:%+v,message.Route:%+v,message.Data:%+v", args.CID, args.UID, args.NID, args.Message.Seq, args.Message.Route, args.Message.Data)
+	}
 	if args.NID != p.GetNodeID() {
 		return p.link.Deliver(ctx, &link.DeliverArgs{
 			NID: args.NID,
@@ -193,8 +254,31 @@ func (p *Proxy) Deliver(ctx context.Context, args *DeliverArgs) error {
 	return nil
 }
 
+// BlockConn
+func (p *Proxy) BlockConn(ctx context.Context, onid string, nnid string, target uint64) {
+	p.link.BlockConn(ctx, onid, nnid, target)
+}
+
+// Stat 统计会话总数
+func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.link.Stat(ctx, kind)
+}
+
+// IsOnline 查看指定target是否在线
+func (p *Proxy) IsOnline(ctx context.Context, args *link.IsOnlineArgs) (bool, error) {
+	return p.link.IsOnline(ctx, args)
+}
+
+// GetID 获取conn的id
+func (p *Proxy) GetID(ctx context.Context, args *link.GetIdArgs) (int64, error) {
+	return p.link.GetID(ctx, args)
+}
+
 // Response 响应消息
 func (p *Proxy) Response(ctx context.Context, req *Request, message interface{}) error {
+	if strings.EqualFold("center", p.node.instance.Alias) {
+		log.Infof("[Response] CID:%+v,UID:%+v,GID:%+v,NID:%+v,message:%+v", req.CID, req.UID, req.GID, req.NID, message)
+	}
 	switch {
 	case req.GID != "":
 		return p.link.Push(ctx, &link.PushArgs{
@@ -237,4 +321,19 @@ func (p *Proxy) watch(ctx context.Context) {
 	p.link.WatchUserLocate(ctx, cluster.Gate, cluster.Node)
 
 	p.link.WatchServiceInstance(ctx, cluster.Gate, cluster.Node)
+}
+
+// GetServerIP 获取GRPC SERVER IP
+func (p *Proxy) GetServerIP() string {
+	return strings.Split(p.node.rpc.Endpoint().Address(), ":")[0]
+}
+
+// GetServerPort 获取GRPC SERVER Port
+func (p *Proxy) GetServerPort() string {
+	addr := strings.Split(p.node.rpc.Endpoint().Address(), ":")
+	if len(addr) == 2 {
+		return addr[1]
+	} else {
+		return ""
+	}
 }

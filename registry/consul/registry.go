@@ -2,7 +2,10 @@ package consul
 
 import (
 	"context"
+	"fmt"
 	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/encoding/json"
+	"github.com/symsimmy/due/log"
 	"net"
 	"net/url"
 	"strconv"
@@ -157,20 +160,10 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			case metaFieldState:
 				ins.State = cluster.State(v)
 			default:
-				route, err := strconv.Atoi(k)
-				if err != nil {
-					continue
+				if ins.MetaMap == nil {
+					ins.MetaMap = make(map[string]string)
 				}
-
-				stateful, err := strconv.ParseBool(v)
-				if err != nil {
-					continue
-				}
-
-				ins.Routes = append(ins.Routes, registry.Route{
-					ID:       int32(route),
-					Stateful: stateful,
-				})
+				ins.MetaMap[k] = v
 			}
 		}
 
@@ -181,6 +174,30 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			}
 
 			ins.Events = append(ins.Events, cluster.Event(event))
+		}
+
+		// get route in key/value
+		res, _, err := r.opts.client.KV().Get(fmt.Sprintf(routeKvFormat, ins.Alias, ins.ID), nil)
+		if res == nil || err != nil {
+			log.Warnf("get [%v]:[%v] route failed, caused by [%+v] or instance [%v] is not found", ins.Alias, ins.ID, err, ins.ID)
+			continue
+		}
+
+		var m map[int32]bool
+		err = json.Unmarshal(res.Value, &m)
+		if err != nil {
+			log.Warnf("unmarshal [%v]:[%v] route failed, caused by [%+v]", ins.Alias, ins.ID, err)
+			continue
+		}
+
+		for key, value := range m {
+			route := key
+			stateful := value
+
+			ins.Routes = append(ins.Routes, registry.Route{
+				ID:       route,
+				Stateful: stateful,
+			})
 		}
 
 		services = append(services, ins)

@@ -69,14 +69,20 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 				PermitWithoutStream: opts.KeepAliveEnforcementPolicyPermitWithoutStream,                  // Allow pings even when there are no active streams
 			}))
 
-		serverOpts = append(serverOpts, grpc.KeepaliveParams(
-			keepalive.ServerParameters{
-				MaxConnectionIdle:     time.Duration(opts.KeepAliveMaxConnectionIdle) * time.Second,     // If a client is idle for opts.KeepAliveMaxConnectionIdle seconds, send a GOAWAY
-				MaxConnectionAge:      time.Duration(opts.KeepAliveMaxConnectionAge) * time.Second,      // If any connection is alive for more than opts.KeepAliveMaxConnectionAge seconds, send a GOAWAY
-				MaxConnectionAgeGrace: time.Duration(opts.KeepAliveMaxConnectionAgeGrace) * time.Second, // Allow opts.KeepAliveMaxConnectionAgeGrace seconds for pending RPCs to complete before forcibly closing connections
-				Time:                  time.Duration(opts.KeepAliveTime) * time.Second,                  // Ping the client if it is idle for opts.KeepAliveTime seconds to ensure the connection is still active
-				Timeout:               time.Duration(opts.KeepAliveTimeout) * time.Second,               // Wait opts.KeepAliveTimeout second for the ping ack before assuming the connection is dead
-			}))
+		serverKP := keepalive.ServerParameters{
+			Time:                  time.Duration(opts.KeepAliveTime) * time.Second,                  // Ping the client if it is idle for opts.KeepAliveTime seconds to ensure the connection is still active
+			MaxConnectionAgeGrace: time.Duration(opts.KeepAliveMaxConnectionAgeGrace) * time.Second, // Allow opts.KeepAliveMaxConnectionAgeGrace seconds for pending RPCs to complete before forcibly closing connections
+			Timeout:               time.Duration(opts.KeepAliveTimeout) * time.Second,               // Wait opts.KeepAliveTimeout second for the ping ack before assuming the connection is dead
+		}
+
+		if opts.KeepAliveMaxConnectionAge > 0 {
+			serverKP.MaxConnectionAge = time.Duration(opts.KeepAliveMaxConnectionAge) * time.Second // If any connection is alive for more than opts.KeepAliveMaxConnectionAge seconds, send a GOAWAY
+		}
+
+		if opts.KeepAliveMaxConnectionIdle > 0 {
+			serverKP.MaxConnectionIdle = time.Duration(opts.KeepAliveMaxConnectionIdle) * time.Second // If a client is idle for opts.KeepAliveMaxConnectionIdle seconds, send a GOAWAY
+		}
+		serverOpts = append(serverOpts, grpc.KeepaliveParams(serverKP))
 	}
 
 	s := &Server{}

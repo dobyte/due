@@ -7,78 +7,134 @@ package pb;
 import "message.proto";
 
 service Gate {
-  // 绑定用户与连接
-  rpc Bind(BindRequest) returns (BindReply) {}
-  // 解绑用户与连接
-  rpc Unbind(UnbindRequest) returns (UnbindReply) {}
-  // 获取客户端IP
-  rpc GetIP(GetIPRequest) returns (GetIPReply) {}
-  // 断开连接
-  rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
-  // 推送消息
-  rpc Push(PushRequest) returns (PushReply) {}
-  // 推送组播消息
-  rpc Multicast(MulticastRequest) returns (MulticastReply) {}
-  // 推送广播消息
-  rpc Broadcast(BroadcastRequest) returns (BroadcastReply) {}
+    // 绑定用户与连接
+    rpc Bind(BindRequest) returns (BindReply) {}
+    // 解绑用户与连接
+    rpc Unbind(UnbindRequest) returns (UnbindReply) {}
+    // 获取客户端IP
+    rpc GetIP(GetIPRequest) returns (GetIPReply) {}
+    // 断开连接
+    rpc Disconnect(DisconnectRequest) returns (DisconnectReply) {}
+    // 是否在线
+    rpc IsOnline(IsOnlineRequest) returns (IsOnlineReply) {}
+    // 获取ID
+    rpc GetID(GetIdRequest) returns (GetIdReply) {}
+    // 推送广播消息
+    rpc Stat(StatRequest) returns (StatReply) {}
+    // 推送消息
+    rpc Push(stream PushRequest) returns (PushReply) {}
+    // 批量推送消息
+    rpc BatchPush(BatchPushRequest) returns (BatchPushReply) {}
+    // 推送组播消息
+    rpc Multicast(stream MulticastRequest) returns (MulticastReply) {}
+    // 批量推送组播消息
+    rpc BatchMulticast(BatchMulticastRequest) returns (BatchMulticastReply) {}
+    // 推送广播消息
+    rpc Broadcast(stream BroadcastRequest) returns (BroadcastReply) {}
+    // 批量推送广播消息
+    rpc BatchBroadcast(BatchBroadcastRequest) returns (BatchBroadcastReply) {}
 }
 
 message BindRequest {
-  int64 CID = 1; // 连接ID
-  int64 UID = 2; // 用户ID
+    int64 CID = 1;  // 连接ID
+    int64 UID = 2;  // 用户ID
 }
 
 message BindReply {
 }
 
 message UnbindRequest {
-  int64 UID = 1; // 用户ID
+    int64 UID = 1;  // 用户ID
 }
 
 message UnbindReply {
 }
 
 message GetIPRequest {
-  int32 Kind = 1; // 推送类型 1：CID 2：UID
-  int64 Target = 2; // 推送目标
+    int32 Kind   = 1;  // 推送类型 1：CID 2：UID
+    int64 Target = 2;  // 推送目标
 }
 
 message GetIPReply {
-  string IP = 1; // IP地址
+    string IP = 1;  // IP地址
 }
 
 message DisconnectRequest {
-  int32 Kind = 1; // 推送类型 1：CID 2：UID
-  int64 Target = 2; // 推送目标
-  bool IsForce = 3; // 是否强制断开连接
+    int32 Kind   = 1;  // 推送类型 1：CID 2：UID
+    int64 Target = 2;  // 推送目标
+    bool IsForce = 3;  // 是否强制断开连接
 }
 
 message DisconnectReply {
 }
 
 message PushRequest {
-  int32 Kind = 1; // 推送类型 1：CID 2：UID
-  int64 Target = 2; // 推送目标
-  Message Message = 3; // 消息
+    int32 Kind      = 1;  // 推送类型 1：CID 2：UID
+    int64 Target    = 2;  // 推送目标
+    Message Message = 3;  // 消息
 }
 
 message PushReply {}
 
+message BatchPushRequest {
+    repeated PushRequest request = 1;
+}
+
+message BatchPushReply {}
+
 message MulticastRequest {
-  int32 Kind = 1; // 推送类型 1：CID 2：UID
-  repeated int64 Targets = 2; // 推送目标
-  Message Message = 3; // 消息
+    int32 Kind             = 1;  // 推送类型 1：CID 2：UID
+    repeated int64 Targets = 2;  // 推送目标
+    Message Message        = 3;  // 消息
 }
 
 message MulticastReply {
-  int64 Total = 1; // 组播数量
+    int64 Total = 1;  // 组播数量
 }
 
+message BatchMulticastRequest {
+    repeated MulticastRequest request = 1;
+}
+
+message BatchMulticastReply {}
+
 message BroadcastRequest {
-  int32 Kind = 1; // 推送类型 1：CID 2：UID
-  Message Message = 2; // 消息
+    int32 Kind      = 1;  // 推送类型 1：CID 2：UID
+    Message Message = 2;  // 消息
 }
 
 message BroadcastReply {
-  int64 Total = 1; // 广播数量
+    int64 Total = 1;  // 广播数量
+}
+
+message BatchBroadcastRequest {
+    repeated BroadcastRequest request = 1;
+}
+
+message BatchBroadcastReply {}
+
+message StatRequest {
+    int32 Kind = 1;  // 推送类型 1：CID 2：UID
+}
+
+message StatReply {
+    int64 Total = 1;  // 会话数量
+}
+
+message IsOnlineRequest {
+    int32 Kind   = 1;  // 推送类型 1：CID 2：UID
+    int64 Target = 2;  // 推送目标
+}
+
+message IsOnlineReply {
+    bool IsOnline = 1;  // 是否在线
+}
+
+message GetIdRequest {
+    int32 Kind   = 1;  // 推送类型 1：CID 2：UID
+    int64 Target = 2;  // 推送目标
+}
+
+message GetIdReply {
+    int64 id = 1;  // conn的id
 }

@@ -9,11 +9,11 @@ package aliyun
 
 import (
 	"github.com/symsimmy/due/config"
-	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/utils"
 )
 
 const (
-	defaultLevel          = log.InfoLevel
+	defaultLevel          = utils.InfoLevel
 	defaultStdout         = true
 	defaultSyncout        = true
 	defaultTimeFormat     = "2006/01/02 15:04:05.000000"
@@ -56,13 +56,13 @@ type options struct {
 	topic           string // 主题标签，默认为空
 	source          string // 来源标签，默认为空
 
-	stdout         bool      // 是否输出到终端，debug模式下默认输出到终端
-	syncout        bool      // 是否同步输出到远端，debug模式下默认不输出到远端
-	level          log.Level // 输出的最低日志级别，默认Info
-	stackLevel     log.Level // 堆栈的最低输出级别，默认不输出堆栈
-	timeFormat     string    // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	callerSkip     int       // 调用者跳过的层级深度，默认为0
-	callerFullPath bool      // 是否启用调用文件全路径，默认全路径
+	stdout         bool        // 是否输出到终端，debug模式下默认输出到终端
+	syncout        bool        // 是否同步输出到远端，debug模式下默认不输出到远端
+	level          utils.Level // 输出的最低日志级别，默认Info
+	stackLevel     utils.Level // 堆栈的最低输出级别，默认不输出堆栈
+	timeFormat     string      // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	callerSkip     int         // 调用者跳过的层级深度，默认为0
+	callerFullPath bool        // 是否启用调用文件全路径，默认全路径
 }
 
 func defaultOptions() *options {
@@ -75,7 +75,7 @@ func defaultOptions() *options {
 	}
 
 	level := config.Get(aliyunLevelKey, config.Get(defaultLevelKey).String()).String()
-	if lvl := log.ParseLevel(level); lvl != log.NoneLevel {
+	if lvl := utils.ParseLevel(level); lvl != utils.NoneLevel {
 		opts.level = lvl
 	}
 
@@ -85,7 +85,7 @@ func defaultOptions() *options {
 	}
 
 	stackLevel := config.Get(aliyunStackLevelKey, config.Get(defaultStackLevelKey).String()).String()
-	if lvl := log.ParseLevel(stackLevel); lvl != log.NoneLevel {
+	if lvl := utils.ParseLevel(stackLevel); lvl != utils.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
@@ -149,12 +149,12 @@ func WithSyncout(enable bool) Option {
 }
 
 // WithLevel 设置输出的最低日志级别
-func WithLevel(level log.Level) Option {
+func WithLevel(level utils.Level) Option {
 	return func(o *options) { o.level = level }
 }
 
 // WithStackLevel 设置堆栈的最小输出级别
-func WithStackLevel(level log.Level) Option {
+func WithStackLevel(level utils.Level) Option {
 	return func(o *options) { o.stackLevel = level }
 }
 

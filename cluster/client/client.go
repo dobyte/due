@@ -2,12 +2,12 @@ package client
 
 import (
 	"context"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/component"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/network"
 	"github.com/symsimmy/due/packet"
-	"sync"
 )
 
 type RouteHandler func(req Request)
@@ -23,7 +23,7 @@ type Client struct {
 	events              map[cluster.Event]EventHandler
 	defaultRouteHandler RouteHandler
 	proxy               *proxy
-	rw                  sync.RWMutex
+	rw                  deadlock.RWMutex
 	state               cluster.State
 	conn                network.Conn
 }

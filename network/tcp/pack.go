@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -65,6 +66,11 @@ func unpack(packet []byte) (msg []byte, err error) {
 
 // 读取连接数据
 func readMsgFromConn(reader *bufio.Reader, maxMsgLength int) (msg []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
 	packet := make([]byte, msgLenBytes)
 	if _, err = io.ReadFull(reader, packet); err != nil {
 		return

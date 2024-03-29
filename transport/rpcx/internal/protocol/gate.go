@@ -69,3 +69,32 @@ type DisconnectRequest struct {
 type DisconnectReply struct {
 	Code int
 }
+
+type StatRequest struct {
+	Kind session.Kind // 推送类型 1：CID 2：UID
+}
+
+type StatReply struct {
+	Total int64 // 会话数量
+	Code  int
+}
+
+type IsOnlineRequest struct {
+	Kind   session.Kind // 推送类型 1：CID 2：UID
+	Target int64        // 推送目标
+}
+
+type IsOnlineReply struct {
+	IsOnline bool // 是否在线
+	Code     int
+}
+
+type GetIdRequest struct {
+	Kind   session.Kind // 推送类型 1：CID 2：UID
+	Target int64        // 推送目标
+}
+
+type GetIdReply struct {
+	Id   int64 // 是否在线
+	Code int
+}

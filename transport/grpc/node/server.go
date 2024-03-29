@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/transport"
-	"github.com/symsimmy/due/transport/grpc/internal/code"
+	"github.com/symsimmy/due/transport/grpc/code"
 	"github.com/symsimmy/due/transport/grpc/internal/pb"
 	"github.com/symsimmy/due/transport/grpc/internal/server"
 	"google.golang.org/grpc/codes"

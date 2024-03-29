@@ -1,18 +1,18 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/11 10:02 上午
- * @Desc: TODO
- */
-
 package tcp
 
 import (
 	"github.com/symsimmy/due/log"
 	"net"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/symsimmy/due/network"
+)
+
+const (
+	// max open file should at least be
+	_MaxOpenfile = uint64(1024 * 1024 * 1024)
 )
 
 type server struct {
@@ -104,6 +104,10 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 
 // 初始化TCP服务器
 func (s *server) init() error {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	// 在 GOTRACEBACK =crash时，输出所有的协程调用栈，并生成core
+	_ = os.Setenv("GOTRACEBACK", "crash")
+
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
 		return err

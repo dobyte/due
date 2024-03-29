@@ -28,7 +28,7 @@ func (codec) Name() string {
 func (codec) Marshal(v interface{}) ([]byte, error) {
 	msg, ok := v.(proto.Message)
 	if !ok {
-		return nil, errors.New("can't marshal a value that not implements proto.Message interface")
+		return nil, errors.New("can't marshal a value that not implements proto.Message biz")
 	}
 
 	return proto.Marshal(msg)

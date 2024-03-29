@@ -8,8 +8,8 @@
 package hook
 
 import (
+	"github.com/sasha-s/go-deadlock"
 	"io"
-	"sync"
 
 	"github.com/sirupsen/logrus"
 )
@@ -19,7 +19,7 @@ var _ logrus.Hook = NewWriterHook(nil)
 type WriterMap map[logrus.Level]io.Writer
 
 type WriterHook struct {
-	mu            sync.Mutex
+	mu            deadlock.Mutex
 	writers       WriterMap
 	defaultWriter io.Writer
 }

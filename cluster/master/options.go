@@ -5,6 +5,7 @@ import (
 	"github.com/symsimmy/due/config"
 	"github.com/symsimmy/due/crypto"
 	"github.com/symsimmy/due/encoding"
+	"github.com/symsimmy/due/internal/middleware/cat"
 	"github.com/symsimmy/due/locate"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/transport"
@@ -38,8 +39,9 @@ type options struct {
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
-	encryptor   crypto.Encryptor      // 消息加密器
-	decryptor   crypto.Decryptor      // 消息解密器
+	catServer   *cat.Server
+	encryptor   crypto.Encryptor // 消息加密器
+	decryptor   crypto.Decryptor // 消息解密器
 }
 
 func defaultOptions() *options {
@@ -118,6 +120,11 @@ func WithRegistry(r registry.Registry) Option {
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
+}
+
+// WithCatServer 设置cat server
+func WithCatServer(catServer *cat.Server) Option {
+	return func(o *options) { o.catServer = catServer }
 }
 
 // WithEncryptor 设置消息加密器

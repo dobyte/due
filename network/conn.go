@@ -53,5 +53,9 @@ type (
 		RemoteIP() (string, error)
 		// RemoteAddr 获取远端地址
 		RemoteAddr() (net.Addr, error)
+		// Block 阻塞conn数据
+		Block()
+		// Release 释放conn数据·
+		Release()
 	}
 )

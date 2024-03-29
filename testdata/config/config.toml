@@ -132,7 +132,7 @@ timezone = "Local"
     # 是否启用调用文件全路径
     callerFullPath = true
     # 是否启用分级存储
-    classifiedStorage = true
+    classifiedStorage = false
     # 阿里云SLS日志服务。以下配置项如果不存在，则会使用log域中的默认配置项；如果都未配置，则会使用系统默认配置
     [log.aliyun]
         # 服务域名，公网使用公网域名，内网使用私网域名
@@ -184,7 +184,7 @@ timezone = "Local"
         # 是否启用调用文件全路径
         callerFullPath = true
         # 是否启用分级存储
-        classifiedStorage = true
+        classifiedStorage = false
     # 腾讯云云CLS日志服务。以下配置项如果不存在，则会使用log域中的默认配置项；如果都未配置，则会使用系统默认配置
     [log.tencent]
         # 服务域名，公网使用公网域名，内网使用私网域名
@@ -230,7 +230,7 @@ timezone = "Local"
         # 是否启用调用文件全路径
         callerFullPath = true
         # 是否启用分级存储
-        classifiedStorage = true
+        classifiedStorage = false
 [registry]
     [registry.etcd]
         # 客户端连接地址

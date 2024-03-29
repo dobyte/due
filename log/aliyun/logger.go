@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/aliyun/aliyun-log-go-sdk/producer"
+	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/utils/xtime"
 	"os"
 	"sync"
@@ -47,7 +48,7 @@ func NewLogger(opts ...Option) *Logger {
 		logger: log.NewLogger(
 			log.WithFile(""),
 			log.WithLevel(o.level),
-			log.WithFormat(log.TextFormat),
+			log.WithFormat(utils.TextFormat),
 			log.WithStdout(o.stdout),
 			log.WithTimeFormat(o.timeFormat),
 			log.WithStackLevel(o.stackLevel),
@@ -70,13 +71,13 @@ func NewLogger(opts ...Option) *Logger {
 	return l
 }
 
-func (l *Logger) log(level log.Level, a ...interface{}) {
+func (l *Logger) log(level utils.Level, a ...interface{}) {
 	if level < l.opts.level {
 		return
 	}
 
 	e := l.logger.(interface {
-		Entity(log.Level, ...interface{}) *log.Entity
+		Entity(utils.Level, ...interface{}) *log.Entity
 	}).Entity(level, a...)
 
 	if l.opts.syncout {
@@ -133,64 +134,64 @@ func (l *Logger) Close() error {
 
 // Debug 打印调试日志
 func (l *Logger) Debug(a ...interface{}) {
-	l.log(log.DebugLevel, a...)
+	l.log(utils.DebugLevel, a...)
 }
 
 // Debugf 打印调试模板日志
 func (l *Logger) Debugf(format string, a ...interface{}) {
-	l.log(log.DebugLevel, fmt.Sprintf(format, a...))
+	l.log(utils.DebugLevel, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
 func (l *Logger) Info(a ...interface{}) {
-	l.log(log.InfoLevel, a...)
+	l.log(utils.InfoLevel, a...)
 }
 
 // Infof 打印信息模板日志
 func (l *Logger) Infof(format string, a ...interface{}) {
-	l.log(log.InfoLevel, fmt.Sprintf(format, a...))
+	l.log(utils.InfoLevel, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
 func (l *Logger) Warn(a ...interface{}) {
-	l.log(log.WarnLevel, a...)
+	l.log(utils.WarnLevel, a...)
 }
 
 // Warnf 打印警告模板日志
 func (l *Logger) Warnf(format string, a ...interface{}) {
-	l.log(log.WarnLevel, fmt.Sprintf(format, a...))
+	l.log(utils.WarnLevel, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
 func (l *Logger) Error(a ...interface{}) {
-	l.log(log.ErrorLevel, a...)
+	l.log(utils.ErrorLevel, a...)
 }
 
 // Errorf 打印错误模板日志
 func (l *Logger) Errorf(format string, a ...interface{}) {
-	l.log(log.ErrorLevel, fmt.Sprintf(format, a...))
+	l.log(utils.ErrorLevel, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
 func (l *Logger) Fatal(a ...interface{}) {
-	l.log(log.FatalLevel, a...)
+	l.log(utils.FatalLevel, a...)
 	l.Close()
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *Logger) Fatalf(format string, a ...interface{}) {
-	l.log(log.FatalLevel, fmt.Sprintf(format, a...))
+	l.log(utils.FatalLevel, fmt.Sprintf(format, a...))
 	l.Close()
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
 func (l *Logger) Panic(a ...interface{}) {
-	l.log(log.PanicLevel, a...)
+	l.log(utils.PanicLevel, a...)
 }
 
 // Panicf 打印Panic模板日志
 func (l *Logger) Panicf(format string, a ...interface{}) {
-	l.log(log.PanicLevel, fmt.Sprintf(format, a...))
+	l.log(utils.PanicLevel, fmt.Sprintf(format, a...))
 }

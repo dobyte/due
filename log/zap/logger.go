@@ -8,29 +8,15 @@
 package zap
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"os"
 
-	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/log/zap/internal/encoder"
-	"github.com/symsimmy/due/mode"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-var _ log.Logger = NewLogger()
-
-var levelMap map[zapcore.Level]log.Level
-
-func init() {
-	levelMap = map[zapcore.Level]log.Level{
-		zap.DebugLevel: log.DebugLevel,
-		zap.InfoLevel:  log.InfoLevel,
-		zap.WarnLevel:  log.WarnLevel,
-		zap.ErrorLevel: log.ErrorLevel,
-		zap.FatalLevel: log.FatalLevel,
-		zap.PanicLevel: log.PanicLevel,
-	}
-}
+var _ utils.Logger = NewLogger()
 
 type Logger struct {
 	logger *zap.SugaredLogger
@@ -48,7 +34,7 @@ func NewLogger(opts ...Option) *Logger {
 		terminalEncoder zapcore.Encoder
 	)
 	switch o.format {
-	case log.JsonFormat:
+	case utils.JsonFormat:
 		fileEncoder = encoder.NewJsonEncoder(o.timeFormat, o.callerFullPath)
 		terminalEncoder = fileEncoder
 	default:
@@ -59,17 +45,17 @@ func NewLogger(opts ...Option) *Logger {
 	options := make([]zap.Option, 0, 3)
 	options = append(options, zap.AddCaller())
 	switch o.stackLevel {
-	case log.DebugLevel:
+	case utils.DebugLevel:
 		options = append(options, zap.AddStacktrace(zapcore.DebugLevel), zap.AddCallerSkip(1+o.callerSkip))
-	case log.InfoLevel:
+	case utils.InfoLevel:
 		options = append(options, zap.AddStacktrace(zapcore.InfoLevel), zap.AddCallerSkip(1+o.callerSkip))
-	case log.WarnLevel:
+	case utils.WarnLevel:
 		options = append(options, zap.AddStacktrace(zapcore.WarnLevel), zap.AddCallerSkip(1+o.callerSkip))
-	case log.ErrorLevel:
+	case utils.ErrorLevel:
 		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel), zap.AddCallerSkip(1+o.callerSkip))
-	case log.FatalLevel:
+	case utils.FatalLevel:
 		options = append(options, zap.AddStacktrace(zapcore.FatalLevel), zap.AddCallerSkip(1+o.callerSkip))
-	case log.PanicLevel:
+	case utils.PanicLevel:
 		options = append(options, zap.AddStacktrace(zapcore.PanicLevel), zap.AddCallerSkip(1+o.callerSkip))
 	}
 
@@ -79,20 +65,20 @@ func NewLogger(opts ...Option) *Logger {
 	if o.file != "" {
 		if o.classifiedStorage {
 			cores = append(cores,
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.DebugLevel), l.buildLevelEnabler(log.DebugLevel)),
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.InfoLevel), l.buildLevelEnabler(log.InfoLevel)),
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.WarnLevel), l.buildLevelEnabler(log.WarnLevel)),
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.ErrorLevel), l.buildLevelEnabler(log.ErrorLevel)),
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.FatalLevel), l.buildLevelEnabler(log.FatalLevel)),
-				zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.PanicLevel), l.buildLevelEnabler(log.PanicLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.DebugLevel), Size: o.bufferSize * 2 * 1024}, l.buildLevelEnabler(utils.DebugLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.InfoLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.InfoLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.WarnLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.WarnLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.ErrorLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.ErrorLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.FatalLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.FatalLevel)),
+				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.PanicLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.PanicLevel)),
 			)
 		} else {
-			cores = append(cores, zapcore.NewCore(fileEncoder, l.buildWriteSyncer(log.NoneLevel), l.buildLevelEnabler(log.NoneLevel)))
+			cores = append(cores, zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.NoneLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.NoneLevel)))
 		}
 	}
 
-	if mode.IsDebugMode() && o.stdout {
-		cores = append(cores, zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(log.NoneLevel)))
+	if o.stdout {
+		cores = append(cores, zapcore.NewCore(terminalEncoder, zapcore.AddSync(os.Stdout), l.buildLevelEnabler(utils.NoneLevel)))
 	}
 
 	if len(cores) >= 0 {
@@ -102,8 +88,8 @@ func NewLogger(opts ...Option) *Logger {
 	return l
 }
 
-func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
-	writer, err := log.NewWriter(log.WriterOptions{
+func (l *Logger) buildWriteSyncer(level utils.Level) zapcore.WriteSyncer {
+	writer, err := utils.NewWriter(utils.WriterOptions{
 		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
@@ -117,12 +103,12 @@ func (l *Logger) buildWriteSyncer(level log.Level) zapcore.WriteSyncer {
 	return zapcore.AddSync(writer)
 }
 
-func (l *Logger) buildLevelEnabler(level log.Level) zapcore.LevelEnabler {
+func (l *Logger) buildLevelEnabler(level utils.Level) zapcore.LevelEnabler {
 	return zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		if v := levelMap[lvl]; l.opts.level != log.NoneLevel {
-			return v >= l.opts.level && (level == log.NoneLevel || (level >= l.opts.level && v >= level))
+		if v := levelMap[lvl]; l.opts.level != utils.NoneLevel {
+			return v >= l.opts.level && (level == utils.NoneLevel || (level >= l.opts.level && v >= level))
 		} else {
-			return level == log.NoneLevel || v >= level
+			return level == utils.NoneLevel || v >= level
 		}
 	})
 }
@@ -195,4 +181,8 @@ func (l *Logger) Sync() error {
 // Close 关闭日志
 func (l *Logger) Close() error {
 	return l.logger.Sync()
+}
+
+func (l *Logger) ChangeLevel(level string) {
+	l.opts.level = utils.ParseLevel(level)
 }

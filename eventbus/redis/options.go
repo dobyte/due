@@ -10,16 +10,16 @@ const (
 	defaultAddr       = "127.0.0.1:6379"
 	defaultDB         = 0
 	defaultMaxRetries = 3
-	defaultPrefix     = "due"
+	defaultPrefix     = "due_eventbus"
 )
 
 const (
-	defaultAddrsKey      = "config.eventbus.redis.addrs"
-	defaultDBKey         = "config.eventbus.redis.db"
-	defaultMaxRetriesKey = "config.eventbus.redis.maxRetries"
+	defaultAddrsKey      = "config.locate.redis.addrs"
+	defaultDBKey         = "config.locate.redis.db"
+	defaultMaxRetriesKey = "config.locate.redis.maxRetries"
 	defaultPrefixKey     = "config.eventbus.redis.prefix"
-	defaultUsernameKey   = "config.eventbus.redis.username"
-	defaultPasswordKey   = "config.eventbus.redis.password"
+	defaultUsernameKey   = "config.locate.redis.username"
+	defaultPasswordKey   = "config.locate.redis.password"
 )
 
 type Option func(o *options)

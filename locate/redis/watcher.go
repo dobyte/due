@@ -109,7 +109,7 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, insKinds ...clus
 			case *redis.Message:
 				event, err := unmarshal([]byte(v.Payload))
 				if err != nil {
-					log.Errorf("invalid payload, %s", v.Payload)
+					log.Errorf("channel %+v receive invalid payload, %s", v.Channel, v.Payload)
 					continue
 				}
 				wm.broadcast(event)

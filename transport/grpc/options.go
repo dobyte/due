@@ -13,8 +13,8 @@ const (
 	defaultClientPoolSize                                      = 10   // 默认客户端连接池大小
 	defaultServerKeepAliveEnforcementPolicyMinTime             = 5    // If a client pings more than once every 5 seconds, terminate the connection
 	defaultServerKeepAliveEnforcementPolicyPermitWithoutStream = true // Allow pings even when there are no active streams
-	defaultServerKeepAliveMaxConnectionIdle                    = 15   // If a client is idle for 15 seconds, send a GOAWAY
-	defaultServerKeepAliveMaxConnectionAge                     = 30   // If any connection is alive for more than 30 seconds, send a GOAWAY
+	defaultServerKeepAliveMaxConnectionIdle                    = -1   // If a client is idle for x seconds, send a GOAWAY
+	defaultServerKeepAliveMaxConnectionAge                     = -1   // If any connection is alive for more than x seconds, send a GOAWAY
 	defaultServerKeepAliveMaxConnectionAgeGrace                = 5    // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
 	defaultServerKeepAliveTime                                 = 5    // Ping the client if it is idle for 5 seconds to ensure the connection is still active
 	defaultServerKeepAliveTimeout                              = 1    // Wait 1 second for the ping ack before assuming the connection is dead

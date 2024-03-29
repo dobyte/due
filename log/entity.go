@@ -9,7 +9,9 @@ package log
 
 import (
 	"fmt"
+	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/internal/stack"
+	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/utils/xtime"
 	"path/filepath"
 	"runtime"
@@ -36,18 +38,18 @@ func newEntityPool(logger *defaultLogger) *EntityPool {
 	}
 }
 
-func (p *EntityPool) build(level Level, a ...interface{}) *Entity {
+func (p *EntityPool) build(level utils.Level, a ...interface{}) *Entity {
 	e := p.pool.Get().(*Entity)
 	e.pool = p
 
 	switch level {
-	case DebugLevel:
+	case utils.DebugLevel:
 		e.Color = gray
-	case WarnLevel:
+	case utils.WarnLevel:
 		e.Color = yellow
-	case ErrorLevel, FatalLevel, PanicLevel:
+	case utils.ErrorLevel, utils.FatalLevel, utils.PanicLevel:
 		e.Color = red
-	case InfoLevel:
+	case utils.InfoLevel:
 		e.Color = blue
 	default:
 		e.Color = blue
@@ -93,7 +95,7 @@ func (p *EntityPool) framesToCaller(frames []runtime.Frame) string {
 
 type Entity struct {
 	Color   int
-	Level   Level
+	Level   utils.Level
 	Time    string
 	Caller  string
 	Message string
@@ -130,4 +132,18 @@ func (e *Entity) Log() {
 		}
 		s.writer.Write(b)
 	}
+}
+
+func (p *EntityPool) buildErr(a ...interface{}) error {
+	var msg string
+	if c := len(a); c > 0 {
+		msg = fmt.Sprintf(strings.TrimSuffix(strings.Repeat("%v ", c), " "), a...)
+	}
+
+	msgt := strings.TrimSuffix(msg, "\n")
+
+	errr := errors.NewError(a)
+	err := fmt.Errorf("%s: %s", msgt, errr)
+
+	return err
 }

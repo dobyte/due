@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/utils/compress/gzip"
+	"github.com/symsimmy/due/utils/compress/snappy"
 	"sync"
 )
 
@@ -84,7 +86,19 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 		buf = bytes.NewBuffer(nil)
 	)
 
-	buf.Grow(p.opts.seqBytesLen + p.opts.routeBytesLen + p.opts.compressBytesLen + len(message.Buffer))
+	compress := message.Compress
+	buffer := message.Buffer
+	// 如果消息未压缩，同时消息大小大于阈值，则 pack 时进行压缩
+	if p.opts.compressEnable && !message.Compress && len(message.Buffer) > p.opts.compressThreshold {
+		compress = true
+		buffer, err = p.Encode(message.Buffer)
+		log.Infof("seq:%+v,route:%+v,data:%+v, compressed data:%+v,err:%+v", message.Seq, message.Route, message.Buffer, buffer, err)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	buf.Grow(p.opts.seqBytesLen + p.opts.routeBytesLen + p.opts.compressBytesLen + len(buffer))
 
 	switch p.opts.seqBytesLen {
 	case 1:
@@ -111,12 +125,12 @@ func (p *defaultPacker) Pack(message *Message) ([]byte, error) {
 	}
 
 	// write compress
-	err = binary.Write(buf, p.opts.byteOrder, message.Compress)
+	err = binary.Write(buf, p.opts.byteOrder, compress)
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buf, p.opts.byteOrder, message.Buffer)
+	err = binary.Write(buf, p.opts.byteOrder, buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -212,5 +226,44 @@ func (p *defaultPacker) Unpack(data []byte) (*Message, error) {
 		return nil, err
 	}
 
+	if p.opts.compressEnable && message.Compress {
+		got, err := p.Decode(message.Buffer)
+		if err != nil {
+			return nil, err
+		}
+
+		message.Compress = false
+		copy(message.Buffer, got)
+	}
+
 	return message, nil
+}
+
+func (p *defaultPacker) Encode(data []byte) (encodeData []byte, err error) {
+	switch p.opts.compressAlgorithm {
+	case "snappy":
+		encodeData, err = snappy.Encode(data)
+		return
+	case "gzip":
+		encodeData, err = gzip.Encode(data)
+		return
+	default:
+		err = errors.New("invalid compress algorithm")
+		return
+	}
+
+}
+
+func (p *defaultPacker) Decode(data []byte) (decodeData []byte, err error) {
+	switch p.opts.compressAlgorithm {
+	case "snappy":
+		decodeData, err = snappy.Decode(data)
+		return
+	case "gzip":
+		decodeData, err = gzip.Decode(data)
+		return
+	default:
+		err = errors.New("invalid compress algorithm")
+		return
+	}
 }

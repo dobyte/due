@@ -8,6 +8,7 @@
 package ws
 
 import (
+	"github.com/sasha-s/go-deadlock"
 	"github.com/symsimmy/due/network"
 	"sync"
 
@@ -15,7 +16,7 @@ import (
 )
 
 type connMgr struct {
-	mu     sync.Mutex                      // 连接读写锁
+	mu     deadlock.Mutex                  // 连接读写锁
 	id     int64                           // 连接ID
 	pool   sync.Pool                       // 连接池
 	conns  map[*websocket.Conn]*serverConn // 连接集合

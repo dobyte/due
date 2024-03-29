@@ -9,9 +9,14 @@ package gate
 
 import (
 	"context"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/internal/link"
+	"github.com/symsimmy/due/internal/prom"
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"
+	"strconv"
 	"time"
 
 	"github.com/symsimmy/due/component"
@@ -25,7 +30,7 @@ type Gate struct {
 	opts     *options
 	ctx      context.Context
 	cancel   context.CancelFunc
-	proxy    *proxy
+	proxy    *Proxy
 	instance *registry.ServiceInstance
 	rpc      transport.Server
 	session  *session.Session
@@ -80,6 +85,10 @@ func (g *Gate) Start() {
 
 	g.startRPCServer()
 
+	g.startPromServer()
+
+	g.startCatServer()
+
 	g.registerServiceInstance()
 
 	g.proxy.watch(g.ctx)
@@ -95,7 +104,24 @@ func (g *Gate) Destroy() {
 
 	g.stopRPCServer()
 
+	g.stopPromServer()
+
+	g.stopCatServer()
+
 	g.cancel()
+}
+
+// Proxy 获取节点代理
+func (n *Gate) Proxy() *Proxy {
+	return n.proxy
+}
+
+func (n *Gate) startPromServer() {
+	n.opts.promServer.Start()
+}
+
+func (n *Gate) stopPromServer() {
+	n.opts.promServer.Destroy()
 }
 
 // 启动网络服务器
@@ -118,6 +144,9 @@ func (g *Gate) stopNetworkServer() {
 
 // 处理连接打开
 func (g *Gate) handleConnect(conn network.Conn) {
+	// track gate online num
+	prom.GateServerTotalOnlinePlayerGauge.WithLabelValues(g.opts.id).Inc()
+
 	g.session.AddConn(conn)
 
 	cid, uid := conn.ID(), conn.UID()
@@ -128,27 +157,63 @@ func (g *Gate) handleConnect(conn network.Conn) {
 
 // 处理断开连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
+	// track gate online num
+	prom.GateServerTotalOnlinePlayerGauge.WithLabelValues(g.opts.id).Dec()
+
+	cid, uid := conn.ID(), conn.UID()
+	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
+	if userGateId, err := g.proxy.link.LocateGate(ctx, uid); err == nil {
+		// 判断uid 是否在当前 gate，如果不是则不发 disconnect 消息给 game server
+		if userGateId != g.opts.id {
+			log.Warnf("cid:%+v,uid:%+v login on another gate:%+v not this one:%+v,remove conn", cid, uid, userGateId, g.opts.id)
+			g.session.RemConn(conn)
+			cancel()
+			return
+		} else {
+			// 如果是在当前 gate 上，判断是否是已销毁的连接发送的断开连接消息
+			// 如果 cid < session中 conn 的 cid，说明是过期连接
+			// 不处理跳过
+			existsConn, err := g.session.Conn(session.User, conn.UID())
+			if err != nil {
+				log.Warnf("cid:%+v,uid:%+v get conn from session failed.err:%+v", conn.ID(), conn.UID(), err)
+				g.session.RemConn(conn)
+				cancel()
+				return
+			}
+
+			if existsConn.ID() > conn.ID() {
+				log.Warnf("uid:%+v disconnecting conn cid:%+v < exists conn cid:%+v,just skip.", conn.UID(), cid, existsConn.ID())
+				g.session.RemConn(conn)
+				cancel()
+				return
+			}
+		}
+
+	} else if errors.Is(err, link.ErrGateNotFoundUserSource) {
+
+	} else {
+		log.Warnf("cid:%+v,uid:%+v handleDisconnect locate gate failed.err:%+v", cid, uid, err)
+	}
+
 	g.session.RemConn(conn)
 
-	if cid, uid := conn.ID(), conn.UID(); uid != 0 {
-		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
+	if uid != 0 {
+		log.Infof("cid:%+v,uid:%+v unbind gate %+v", cid, uid, g.opts.id)
 		_ = g.proxy.unbindGate(ctx, cid, uid)
 		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
 		cancel()
 	} else {
-		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
 		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
 		cancel()
+	}
+	if conn.UID() > 0 {
+		log.Debugf("connection disconnected.cid:%+v, uid:%+v", conn.ID(), conn.UID())
 	}
 }
 
 // 处理接收到的消息
 func (g *Gate) handleReceive(conn network.Conn, data []byte, _ int) {
-	remoteAddr, _ := conn.RemoteAddr()
-	localAddr, _ := conn.LocalAddr()
 	cid, uid := conn.ID(), conn.UID()
-	log.Debugf("gate handle receive message.remoteAddr:%+v,localAddr%+v,cid:%+v,uid%+v,byte len:%+v,data:[%+v]",
-		remoteAddr, localAddr, cid, uid, len(data), data)
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
 	g.proxy.deliver(ctx, cid, uid, data)
 	cancel()
@@ -163,11 +228,11 @@ func (g *Gate) startRPCServer() {
 		log.Fatalf("rpc server create failed: %v", err)
 	}
 
-	go func() {
+	gopool.Go(func() {
 		if err = g.rpc.Start(); err != nil {
 			log.Fatalf("rpc server start failed: %v", err)
 		}
-	}()
+	})
 }
 
 // 停止RPC服务器
@@ -175,6 +240,14 @@ func (g *Gate) stopRPCServer() {
 	if err := g.rpc.Stop(); err != nil {
 		log.Errorf("rpc server stop failed: %v", err)
 	}
+}
+
+func (g *Gate) startCatServer() {
+	g.opts.catServer.Start()
+}
+
+func (g *Gate) stopCatServer() {
+	g.opts.catServer.Destroy()
 }
 
 // 注册服务实例
@@ -186,6 +259,13 @@ func (g *Gate) registerServiceInstance() {
 		Alias:    g.opts.name,
 		State:    cluster.Work,
 		Endpoint: g.rpc.Endpoint().String(),
+	}
+	if g.opts.promServer.Enable() {
+		metricsPort, err := strconv.Atoi(g.opts.promServer.GetMetricsPort())
+		if err != nil {
+			panic(err)
+		}
+		g.instance.MetricsPort = metricsPort
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)

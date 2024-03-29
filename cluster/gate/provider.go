@@ -3,8 +3,13 @@ package gate
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/internal/prom"
+	"github.com/symsimmy/due/internal/util"
+	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/packet"
 	"github.com/symsimmy/due/session"
+	"strconv"
+	"strings"
 )
 
 type provider struct {
@@ -27,6 +32,8 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 		_, _ = p.gate.session.Unbind(uid)
 	}
 
+	log.Infof("cid:%+v,uid:%+v bind to gate %+v.", cid, uid, p.gate.opts.id)
+
 	return err
 }
 
@@ -46,6 +53,8 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return err
 	}
 
+	log.Infof("cid:%+v,uid:%+v unbind to gate.", cid, uid)
+
 	return nil
 }
 
@@ -54,12 +63,45 @@ func (p *provider) GetIP(ctx context.Context, kind session.Kind, target int64) (
 	return p.gate.session.RemoteIP(kind, target)
 }
 
+// IsOnline 检测是否在线
+func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
+	return p.gate.session.Has(kind, target)
+}
+
+func (p *provider) GetID(ctx context.Context, kind session.Kind, target int64) (id int64, err error) {
+	return p.gate.session.ID(kind, target)
+}
+
+// ID 获取conn的ID
+func (p *provider) ID(ctx context.Context, kind session.Kind, target int64) (int64, error) {
+	return p.gate.session.ID(kind, target)
+}
+
 // Push 发送消息
 func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
 	msg, err := packet.Pack(message)
 	if err != nil {
 		return err
 	}
+
+	conn, err := p.gate.session.Conn(kind, target)
+	//if message.Route != 6014 && message.Route != 6514 && message.Route != 6515 {
+	if err != nil {
+		return err
+	}
+	log.Debugf("dispatch push message from server.Kind:%+v,Seq:%+v,Route:%+v,targets:%+v,len:%+v",
+		kind,
+		message.Seq,
+		message.Route,
+		conn.UID(),
+		len(message.Buffer),
+	)
+	//}
+	// track 发送client消息数量
+	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Inc()
+
+	// track 发送client消息大小
+	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
 
 	err = p.gate.session.Push(kind, target, msg)
 	if kind == session.User && err == session.ErrNotFoundSession {
@@ -78,12 +120,37 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 		return 0, nil
 	}
 
+	//if message.Route != 6014 && message.Route != 6514 && message.Route != 6515 {
+	stringSlice := make([]string, len(targets))
+
+	for i, v := range targets {
+		stringSlice[i] = strconv.FormatInt(v, 10)
+	}
+
+	targetsStr := strings.Join(stringSlice, ",")
+	log.Debugf("dispatch multicast message from server.Kind:%+v,Seq:%+v,Route:%+v,targets:%+v,len:%+v",
+		kind,
+		message.Seq,
+		message.Route,
+		targetsStr,
+		len(message.Buffer),
+	)
+	//}
+
 	msg, err := packet.Pack(message)
 	if err != nil {
 		return 0, err
 	}
 
-	return p.gate.session.Multicast(kind, targets, msg)
+	n, err := p.gate.session.Multicast(kind, targets, msg)
+
+	// track 发送client消息数量
+	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Add(float64(n))
+
+	// track 发送client消息大小
+	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
+
+	return n, err
 }
 
 // Broadcast 推送广播消息
@@ -92,8 +159,53 @@ func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message *pa
 	if err != nil {
 		return 0, err
 	}
+	//if message.Route != 6014 && message.Route != 6514 && message.Route != 6515 {
+	log.Debugf("dispatch broadcast message from server.Kind:%+v,Seq:%+v,Route:%+v,len:%+v",
+		kind,
+		message.Seq,
+		message.Route,
+		len(message.Buffer),
+	)
+	//}
 
-	return p.gate.session.Broadcast(kind, msg)
+	n, err := p.gate.session.Broadcast(kind, msg)
+
+	// track 发送client消息数量
+	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Add(float64(n))
+
+	// track 发送client消息大小
+	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
+
+	return n, err
+}
+
+// Block
+func (p *provider) Block(ctx context.Context, oNid string, nNid string, target uint64) {
+	log.Infof("block target[%v] oNid[%v] nNid[%v]", target, oNid, nNid)
+	conn, err := p.gate.session.Conn(session.User, int64(target))
+	if err != nil {
+		log.Warnf("block target[%v] oNid[%v] nNid[%v] err [%v]", target, oNid, nNid, err)
+		return
+	}
+	conn.Block()
+	p.gate.proxy.link.BindNode(ctx, int64(target), nNid)
+	// 触发服务器数据迁移
+	//p.gate.proxy.deliverN(ctx, oNid, &link.Message{Route: route.S2s_server_transport_request, Data: &pb.S2SServerTransportRequest{ONid: oNid, NNid: nNid, Uid: target}})
+}
+
+// Release
+func (p *provider) Release(ctx context.Context, target uint64) {
+	log.Infof("release target[%v]", target)
+	conn, err := p.gate.session.Conn(session.User, int64(target))
+	if err != nil {
+		log.Warnf("release target[%v] err[%v]", target, err)
+	}
+	conn.Release()
+}
+
+// Stat 统计会话总数
+func (p *provider) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.gate.session.Stat(kind)
 }
 
 // Disconnect 断开连接

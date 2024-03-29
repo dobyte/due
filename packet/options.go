@@ -12,18 +12,24 @@ const (
 )
 
 const (
-	defaultCompressBytesLen = 1
-	defaultSeqBytesLen      = 2
-	defaultRouteBytesLen    = 2
-	defaultBufferBytesLen   = 5000
+	defaultCompressBytesLen  = 1
+	defaultSeqBytesLen       = 2
+	defaultRouteBytesLen     = 2
+	defaultBufferBytesLen    = 5000
+	defaultCompressEnable    = false
+	defaultCompressAlgorithm = "snappy"
+	defaultThreshold         = 1024
 )
 
 const (
-	defaultEndianKey           = "config.packet.endian"
-	defaultSeqBytesLenKey      = "config.packet.seqBytesLen"
-	defaultRouteBytesLenKey    = "config.packet.routeBytesLen"
-	defaultBufferBytesLenKey   = "config.packet.bufferBytesLen"
-	defaultCompressBytesLenKey = "config.packet.compressBytesLen"
+	defaultEndianKey            = "config.packet.endian"
+	defaultSeqBytesLenKey       = "config.packet.seqBytesLen"
+	defaultRouteBytesLenKey     = "config.packet.routeBytesLen"
+	defaultBufferBytesLenKey    = "config.packet.bufferBytesLen"
+	defaultCompressBytesLenKey  = "config.packet.compressBytesLen"
+	defaultCompressEnableKey    = "config.packet.compress.enable"
+	defaultCompressAlgorithmKey = "config.packet.compress.algorithm"
+	defaultCompressThresholdKey = "config.packet.compress.threshold"
 )
 
 type options struct {
@@ -46,17 +52,32 @@ type options struct {
 	// 消息是否压缩字节长度（字节）
 	// 默认为1字节
 	compressBytesLen int
+
+	// 消息是否启用压缩算法
+	//默认为不启用，false
+	compressEnable bool
+
+	// 消息使用何种压缩算法
+	//默认为 snappy 算法，还有 klugzip 待选
+	compressAlgorithm string
+
+	// 消息压缩的启用阈值，大于这个阈值的消息均压缩，小于则不压缩
+	//默认为1024字节
+	compressThreshold int
 }
 
 type Option func(o *options)
 
 func defaultOptions() *options {
 	opts := &options{
-		byteOrder:        binary.LittleEndian,
-		seqBytesLen:      config.Get(defaultSeqBytesLenKey, defaultSeqBytesLen).Int(),
-		routeBytesLen:    config.Get(defaultRouteBytesLenKey, defaultRouteBytesLen).Int(),
-		bufferBytesLen:   config.Get(defaultBufferBytesLenKey, defaultBufferBytesLen).Int(),
-		compressBytesLen: config.Get(defaultCompressBytesLenKey, defaultCompressBytesLen).Int(),
+		byteOrder:         binary.LittleEndian,
+		seqBytesLen:       config.Get(defaultSeqBytesLenKey, defaultSeqBytesLen).Int(),
+		routeBytesLen:     config.Get(defaultRouteBytesLenKey, defaultRouteBytesLen).Int(),
+		bufferBytesLen:    config.Get(defaultBufferBytesLenKey, defaultBufferBytesLen).Int(),
+		compressBytesLen:  config.Get(defaultCompressBytesLenKey, defaultCompressBytesLen).Int(),
+		compressEnable:    config.Get(defaultCompressEnableKey, defaultCompressEnable).Bool(),
+		compressAlgorithm: config.Get(defaultCompressAlgorithmKey, defaultCompressAlgorithm).String(),
+		compressThreshold: config.Get(defaultCompressThresholdKey, defaultThreshold).Int(),
 	}
 
 	endian := config.Get(defaultEndianKey).String()

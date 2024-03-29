@@ -19,6 +19,14 @@ func init() {
 	logger = zap.NewLogger()
 }
 
+func BenchmarkLogger(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		logger.Info("info")
+		logger.Warn("warn")
+		logger.Error("error")
+	}
+}
+
 func TestNewLogger(t *testing.T) {
 	logger.Info("info")
 	logger.Warn("warn")

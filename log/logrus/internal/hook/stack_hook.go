@@ -10,16 +10,15 @@ package hook
 import (
 	"github.com/sirupsen/logrus"
 	"github.com/symsimmy/due/internal/stack"
-
-	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/utils"
 )
 
 type StackHook struct {
-	stackLevel log.Level
+	stackLevel utils.Level
 	callerSkip int
 }
 
-func NewStackHook(stackLevel log.Level, callerSkip int) *StackHook {
+func NewStackHook(stackLevel utils.Level, callerSkip int) *StackHook {
 	return &StackHook{stackLevel: stackLevel, callerSkip: callerSkip}
 }
 
@@ -28,24 +27,24 @@ func (h *StackHook) Levels() []logrus.Level {
 }
 
 func (h *StackHook) Fire(entry *logrus.Entry) error {
-	var level log.Level
+	var level utils.Level
 	switch entry.Level {
 	case logrus.DebugLevel:
-		level = log.DebugLevel
+		level = utils.DebugLevel
 	case logrus.InfoLevel:
-		level = log.InfoLevel
+		level = utils.InfoLevel
 	case logrus.WarnLevel:
-		level = log.WarnLevel
+		level = utils.WarnLevel
 	case logrus.ErrorLevel:
-		level = log.ErrorLevel
+		level = utils.ErrorLevel
 	case logrus.FatalLevel:
-		level = log.FatalLevel
+		level = utils.FatalLevel
 	case logrus.PanicLevel:
-		level = log.PanicLevel
+		level = utils.PanicLevel
 	}
 
 	var depth stack.Depth
-	if h.stackLevel != log.NoneLevel && level >= h.stackLevel {
+	if h.stackLevel != utils.NoneLevel && level >= h.stackLevel {
 		depth = stack.Full
 		entry.Data["stack_out"] = struct{}{}
 	} else {

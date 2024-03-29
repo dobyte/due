@@ -2,8 +2,8 @@ package consul
 
 import (
 	"context"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/symsimmy/due/registry"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -73,7 +73,7 @@ type watcherMgr struct {
 	serviceWaitIndex uint64
 
 	idx      int64
-	rw       sync.RWMutex
+	rw       deadlock.RWMutex
 	watchers map[int64]*watcher
 }
 

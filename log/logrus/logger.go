@@ -9,10 +9,11 @@ package logrus
 
 import (
 	"github.com/sirupsen/logrus"
+	"github.com/symsimmy/due/log"
+	"github.com/symsimmy/due/log/utils"
 	"io"
 	"os"
 
-	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/log/logrus/internal/formatter"
 	"github.com/symsimmy/due/log/logrus/internal/hook"
 	"github.com/symsimmy/due/mode"
@@ -34,22 +35,22 @@ func NewLogger(opts ...Option) *Logger {
 	l := &Logger{opts: o, logger: logrus.New()}
 
 	switch o.level {
-	case log.DebugLevel:
+	case utils.DebugLevel:
 		l.logger.SetLevel(logrus.DebugLevel)
-	case log.InfoLevel:
+	case utils.InfoLevel:
 		l.logger.SetLevel(logrus.InfoLevel)
-	case log.WarnLevel:
+	case utils.WarnLevel:
 		l.logger.SetLevel(logrus.WarnLevel)
-	case log.ErrorLevel:
+	case utils.ErrorLevel:
 		l.logger.SetLevel(logrus.ErrorLevel)
-	case log.FatalLevel:
+	case utils.FatalLevel:
 		l.logger.SetLevel(logrus.FatalLevel)
-	case log.PanicLevel:
+	case utils.PanicLevel:
 		l.logger.SetLevel(logrus.PanicLevel)
 	}
 
 	switch o.format {
-	case log.JsonFormat:
+	case utils.JsonFormat:
 		l.logger.SetFormatter(&formatter.JsonFormatter{
 			TimeFormat:     o.timeFormat,
 			CallerFullPath: o.callerFullPath,
@@ -66,15 +67,15 @@ func NewLogger(opts ...Option) *Logger {
 	if o.file != "" {
 		if o.classifiedStorage {
 			l.logger.AddHook(hook.NewWriterHook(hook.WriterMap{
-				logrus.DebugLevel: l.buildWriter(log.DebugLevel),
-				logrus.InfoLevel:  l.buildWriter(log.InfoLevel),
-				logrus.WarnLevel:  l.buildWriter(log.WarnLevel),
-				logrus.ErrorLevel: l.buildWriter(log.ErrorLevel),
-				logrus.FatalLevel: l.buildWriter(log.FatalLevel),
-				logrus.PanicLevel: l.buildWriter(log.PanicLevel),
+				logrus.DebugLevel: l.buildWriter(utils.DebugLevel),
+				logrus.InfoLevel:  l.buildWriter(utils.InfoLevel),
+				logrus.WarnLevel:  l.buildWriter(utils.WarnLevel),
+				logrus.ErrorLevel: l.buildWriter(utils.ErrorLevel),
+				logrus.FatalLevel: l.buildWriter(utils.FatalLevel),
+				logrus.PanicLevel: l.buildWriter(utils.PanicLevel),
 			}))
 		} else {
-			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(log.NoneLevel)))
+			l.logger.AddHook(hook.NewWriterHook(l.buildWriter(utils.NoneLevel)))
 		}
 	}
 
@@ -85,8 +86,8 @@ func NewLogger(opts ...Option) *Logger {
 	return l
 }
 
-func (l *Logger) buildWriter(level log.Level) io.Writer {
-	writer, err := log.NewWriter(log.WriterOptions{
+func (l *Logger) buildWriter(level utils.Level) io.Writer {
+	writer, err := utils.NewWriter(utils.WriterOptions{
 		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,

@@ -2,38 +2,12 @@ package log
 
 import (
 	"fmt"
-	"github.com/symsimmy/due/mode"
+	"github.com/symsimmy/due/internal/middleware/sentry_manager"
+	"github.com/symsimmy/due/log/utils"
 	"io"
 	"os"
 	"sync"
 )
-
-type Logger interface {
-	// Debug 打印调试日志
-	Debug(a ...interface{})
-	// Debugf 打印调试模板日志
-	Debugf(format string, a ...interface{})
-	// Info 打印信息日志
-	Info(a ...interface{})
-	// Infof 打印信息模板日志
-	Infof(format string, a ...interface{})
-	// Warn 打印警告日志
-	Warn(a ...interface{})
-	// Warnf 打印警告模板日志
-	Warnf(format string, a ...interface{})
-	// Error 打印错误日志
-	Error(a ...interface{})
-	// Errorf 打印错误模板日志
-	Errorf(format string, a ...interface{})
-	// Fatal 打印致命错误日志
-	Fatal(a ...interface{})
-	// Fatalf 打印致命错误模板日志
-	Fatalf(format string, a ...interface{})
-	// Panic 打印Panic日志
-	Panic(a ...interface{})
-	// Panicf 打印Panic模板日志
-	Panicf(format string, a ...interface{})
-}
 
 type defaultLogger struct {
 	opts       *options
@@ -41,9 +15,10 @@ type defaultLogger struct {
 	syncers    []syncer
 	bufferPool sync.Pool
 	entityPool *EntityPool
+	sentry     *sentry_manager.SentryManager
 }
 
-type enabler func(level Level) bool
+type enabler func(level utils.Level) bool
 
 type formatter interface {
 	format(e *Entity, isTerminal bool) []byte
@@ -55,7 +30,7 @@ type syncer struct {
 	enabler  enabler
 }
 
-var _ Logger = &defaultLogger{}
+var _ utils.Logger = &defaultLogger{}
 
 func NewLogger(opts ...Option) *defaultLogger {
 	o := defaultOptions()
@@ -67,56 +42,57 @@ func NewLogger(opts ...Option) *defaultLogger {
 	l.opts = o
 	l.syncers = make([]syncer, 0, 7)
 	l.entityPool = newEntityPool(l)
+	l.sentry = sentry_manager.NewSentryManager()
 
 	switch l.opts.format {
-	case TextFormat:
+	case utils.TextFormat:
 		l.formatter = newTextFormatter()
-	case JsonFormat:
+	case utils.JsonFormat:
 		l.formatter = newJsonFormatter()
 	}
 
 	if o.file != "" {
 		if o.classifiedStorage {
 			l.syncers = append(l.syncers, syncer{
-				writer:  l.buildWriter(DebugLevel),
-				enabler: l.buildEnabler(DebugLevel),
+				writer:  l.buildWriter(utils.DebugLevel),
+				enabler: l.buildEnabler(utils.DebugLevel),
 			}, syncer{
-				writer:  l.buildWriter(InfoLevel),
-				enabler: l.buildEnabler(InfoLevel),
+				writer:  l.buildWriter(utils.InfoLevel),
+				enabler: l.buildEnabler(utils.InfoLevel),
 			}, syncer{
-				writer:  l.buildWriter(WarnLevel),
-				enabler: l.buildEnabler(WarnLevel),
+				writer:  l.buildWriter(utils.WarnLevel),
+				enabler: l.buildEnabler(utils.WarnLevel),
 			}, syncer{
-				writer:  l.buildWriter(ErrorLevel),
-				enabler: l.buildEnabler(ErrorLevel),
+				writer:  l.buildWriter(utils.ErrorLevel),
+				enabler: l.buildEnabler(utils.ErrorLevel),
 			}, syncer{
-				writer:  l.buildWriter(FatalLevel),
-				enabler: l.buildEnabler(FatalLevel),
+				writer:  l.buildWriter(utils.FatalLevel),
+				enabler: l.buildEnabler(utils.FatalLevel),
 			}, syncer{
-				writer:  l.buildWriter(PanicLevel),
-				enabler: l.buildEnabler(PanicLevel),
+				writer:  l.buildWriter(utils.PanicLevel),
+				enabler: l.buildEnabler(utils.PanicLevel),
 			})
 		} else {
 			l.syncers = append(l.syncers, syncer{
-				writer:  l.buildWriter(NoneLevel),
-				enabler: l.buildEnabler(NoneLevel),
+				writer:  l.buildWriter(utils.NoneLevel),
+				enabler: l.buildEnabler(utils.NoneLevel),
 			})
 		}
 	}
 
-	if mode.IsDebugMode() && o.stdout {
+	if o.stdout {
 		l.syncers = append(l.syncers, syncer{
 			writer:   os.Stdout,
 			terminal: true,
-			enabler:  l.buildEnabler(NoneLevel),
+			enabler:  l.buildEnabler(utils.NoneLevel),
 		})
 	}
 
 	return l
 }
 
-func (l *defaultLogger) buildWriter(level Level) io.Writer {
-	w, err := NewWriter(WriterOptions{
+func (l *defaultLogger) buildWriter(level utils.Level) io.Writer {
+	w, err := utils.NewWriter(utils.WriterOptions{
 		Path:    l.opts.file,
 		Level:   level,
 		MaxAge:  l.opts.fileMaxAge,
@@ -130,75 +106,93 @@ func (l *defaultLogger) buildWriter(level Level) io.Writer {
 	return w
 }
 
-func (l *defaultLogger) buildEnabler(level Level) enabler {
-	return func(lvl Level) bool {
-		return lvl >= l.opts.level && (level == NoneLevel || (lvl >= level && level >= l.opts.level))
+func (l *defaultLogger) buildEnabler(level utils.Level) enabler {
+	return func(lvl utils.Level) bool {
+		return lvl >= l.opts.level && (level == utils.NoneLevel || (lvl >= level && level >= l.opts.level))
 	}
 }
 
 // Entity 构建日志实体
-func (l *defaultLogger) Entity(level Level, a ...interface{}) *Entity {
+func (l *defaultLogger) Entity(level utils.Level, a ...interface{}) *Entity {
 	return l.entityPool.build(level, a...)
 }
 
 // Debug 打印调试日志
 func (l *defaultLogger) Debug(a ...interface{}) {
-	l.Entity(DebugLevel, a...).Log()
+	l.Entity(utils.DebugLevel, a...).Log()
 }
 
 // Debugf 打印调试模板日志
 func (l *defaultLogger) Debugf(format string, a ...interface{}) {
-	l.Entity(DebugLevel, fmt.Sprintf(format, a...)).Log()
+	l.Entity(utils.DebugLevel, fmt.Sprintf(format, a...)).Log()
 }
 
 // Info 打印信息日志
 func (l *defaultLogger) Info(a ...interface{}) {
-	l.Entity(InfoLevel, a...).Log()
+	l.Entity(utils.InfoLevel, a...).Log()
 }
 
 // Infof 打印信息模板日志
 func (l *defaultLogger) Infof(format string, a ...interface{}) {
-	l.Entity(InfoLevel, fmt.Sprintf(format, a...)).Log()
+	l.Entity(utils.InfoLevel, fmt.Sprintf(format, a...)).Log()
 }
 
 // Warn 打印警告日志
 func (l *defaultLogger) Warn(a ...interface{}) {
-	l.Entity(WarnLevel, a...).Log()
+	l.Entity(utils.WarnLevel, a...).Log()
 }
 
 // Warnf 打印警告模板日志
 func (l *defaultLogger) Warnf(format string, a ...interface{}) {
-	l.Entity(WarnLevel, fmt.Sprintf(format, a...)).Log()
+	l.Entity(utils.WarnLevel, fmt.Sprintf(format, a...)).Log()
 }
 
 // Error 打印错误日志
 func (l *defaultLogger) Error(a ...interface{}) {
-	l.Entity(ErrorLevel, a...).Log()
+	entity := l.Entity(utils.ErrorLevel, a...)
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 }
 
 // Errorf 打印错误模板日志
 func (l *defaultLogger) Errorf(format string, a ...interface{}) {
-	l.Entity(ErrorLevel, fmt.Sprintf(format, a...)).Log()
+	entity := l.Entity(utils.ErrorLevel, fmt.Sprintf(format, a...))
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 }
 
 // Fatal 打印致命错误日志
 func (l *defaultLogger) Fatal(a ...interface{}) {
-	l.Entity(FatalLevel, a...).Log()
+	entity := l.Entity(utils.FatalLevel, a...)
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *defaultLogger) Fatalf(format string, a ...interface{}) {
-	l.Entity(FatalLevel, fmt.Sprintf(format, a...)).Log()
+	entity := l.Entity(utils.FatalLevel, fmt.Sprintf(format, a...))
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
 func (l *defaultLogger) Panic(a ...interface{}) {
-	l.Entity(PanicLevel, a...).Log()
+	entity := l.Entity(utils.PanicLevel, a...)
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 }
 
 // Panicf 打印Panic模板日志
 func (l *defaultLogger) Panicf(format string, a ...interface{}) {
-	l.Entity(PanicLevel, fmt.Sprintf(format, a...)).Log()
+	entity := l.Entity(utils.PanicLevel, fmt.Sprintf(format, a...))
+	entity.Log()
+	err := l.entityPool.buildErr(a)
+	l.sentry.CatchErrors(err)
 }

@@ -2,8 +2,8 @@ package tcp
 
 import (
 	"bufio"
+	"github.com/sasha-s/go-deadlock"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,7 +13,7 @@ import (
 )
 
 type clientConn struct {
-	rw      sync.RWMutex
+	rw      deadlock.RWMutex
 	id      int64         // 连接ID
 	uid     int64         // 用户ID
 	conn    net.Conn      // TCP源连接
@@ -22,6 +22,7 @@ type clientConn struct {
 	chWrite chan chWrite  // 写入队列
 	done    chan struct{} // 写入完成信号
 	reader  *bufio.Reader // 读取缓冲区
+	close   chan struct{} // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
@@ -34,6 +35,7 @@ func newClientConn(client *client, conn net.Conn) network.Conn {
 		client:  client,
 		chWrite: make(chan chWrite, 1024),
 		done:    make(chan struct{}),
+		close:   make(chan struct{}),
 	}
 
 	if c.client.connectHandler != nil {
@@ -182,8 +184,16 @@ func (c *clientConn) graceClose() (err error) {
 
 	c.rw.Lock()
 	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	err = c.conn.Close()
+	close(c.chWrite)
+	close(c.close)
+	close(c.done)
+	c.conn.Close()
+	c.conn = nil
 	c.rw.Unlock()
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
 
 	return
 }
@@ -218,7 +228,7 @@ func (c *clientConn) cleanup() {
 
 // 读取消息
 func (c *clientConn) read() {
-	c.reader = bufio.NewReader(c.conn)
+	c.reader = bufio.NewReaderSize(c.conn, 409600)
 	for {
 		msg, err := readMsgFromConn(c.reader, c.client.opts.maxMsgLen)
 		if err != nil {
@@ -278,6 +288,14 @@ func (c *clientConn) write() {
 			}
 		}
 	}
+}
+
+// Block 阻塞conn传来的消息
+func (c *clientConn) Block() {
+}
+
+// Release 释放conn传来的消息
+func (c *clientConn) Release() {
 }
 
 func (c *clientConn) doWrite(buf []byte) (err error) {

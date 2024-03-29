@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"github.com/symsimmy/due/cluster/gate"
+	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/packet"
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"
@@ -20,6 +21,8 @@ const (
 	serviceMethodMulticast  = "Multicast"
 	serviceMethodBroadcast  = "Broadcast"
 	serviceMethodDisconnect = "Disconnect"
+	serviceMethodStat       = "Stat"
+	serviceMethodIsOnline   = "IsOnline"
 )
 
 func NewServer(provider transport.GateProvider, opts *server.Options) (*server.Server, error) {
@@ -95,6 +98,57 @@ func (e *endpoint) GetIP(ctx context.Context, req *protocol.GetIPRequest, reply 
 	}
 
 	reply.IP = ip
+
+	return err
+}
+
+// GetID 获取ID
+func (e *endpoint) GetID(ctx context.Context, req *protocol.GetIdRequest, reply *protocol.GetIdReply) error {
+	id, err := e.provider.GetID(ctx, req.Kind, req.Target)
+	if err != nil {
+		switch err {
+		case errors.ErrInvalidSessionKind:
+			reply.Code = code.InvalidArgument
+		default:
+			reply.Code = code.Internal
+		}
+	}
+
+	reply.Id = id
+
+	return err
+}
+
+// IsOnline 检测是否在线
+func (e *endpoint) IsOnline(ctx context.Context, req *protocol.IsOnlineRequest, reply *protocol.IsOnlineReply) error {
+	isOnline, err := e.provider.IsOnline(ctx, req.Kind, req.Target)
+	if err != nil {
+		switch err {
+		case errors.ErrInvalidSessionKind:
+			reply.Code = code.InvalidArgument
+		default:
+			reply.Code = code.Internal
+		}
+	}
+
+	reply.IsOnline = isOnline
+
+	return err
+}
+
+// Stat 统计会话总数
+func (e *endpoint) Stat(ctx context.Context, req *protocol.StatRequest, reply *protocol.StatReply) error {
+	total, err := e.provider.Stat(ctx, req.Kind)
+	if err != nil {
+		switch err {
+		case errors.ErrInvalidSessionKind:
+			reply.Code = code.InvalidArgument
+		default:
+			reply.Code = code.Internal
+		}
+	}
+
+	reply.Total = total
 
 	return err
 }

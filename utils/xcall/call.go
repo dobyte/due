@@ -10,9 +10,9 @@ func Call(fn func()) {
 		if err := recover(); err != nil {
 			switch err.(type) {
 			case runtime.Error:
-				log.Panic(err)
+				log.Error(err)
 			default:
-				log.Panicf("panic error: %v", err)
+				log.Errorf("panic error: %v", err)
 			}
 		}
 	}()

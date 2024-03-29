@@ -54,6 +54,34 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 	return
 }
 
+func (c *Client) Stat(ctx context.Context, kind session.Kind) (total int64, miss bool, err error) {
+	req := &protocol.StatRequest{Kind: kind}
+	reply := &protocol.StatReply{}
+	err = c.cli.Call(ctx, ServicePath, serviceMethodStat, req, reply)
+	miss = reply.Code == code.NotFoundSession
+
+	total = reply.Total
+	return
+}
+
+func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (isOnline, miss bool, err error) {
+	req := &protocol.IsOnlineRequest{Kind: kind, Target: target}
+	reply := &protocol.IsOnlineReply{}
+	err = c.cli.Call(ctx, ServicePath, serviceMethodIsOnline, req, reply)
+	miss = reply.Code == code.NotFoundSession
+
+	isOnline = reply.IsOnline
+	return
+}
+
+func (c *Client) GetID(ctx context.Context, kind session.Kind, target int64) (id int64, err error) {
+	req := &protocol.GetIdRequest{Kind: kind, Target: target}
+	reply := &protocol.GetIdReply{}
+	err = c.cli.Call(ctx, ServicePath, serviceMethodIsOnline, req, reply)
+	id = reply.Id
+	return
+}
+
 // Push 推送消息
 func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *transport.Message) (miss bool, err error) {
 	req := &protocol.PushRequest{Kind: kind, Target: target, Message: &protocol.Message{

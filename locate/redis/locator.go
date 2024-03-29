@@ -127,7 +127,6 @@ func (l *Locator) publish(ctx context.Context, uid int64, insKind cluster.Kind, 
 	}
 
 	channel := fmt.Sprintf(channelEventKey, l.opts.prefix, string(insKind))
-
 	return l.opts.client.Publish(ctx, channel, msg).Err()
 }
 

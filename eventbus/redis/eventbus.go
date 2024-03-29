@@ -3,12 +3,12 @@ package redis
 import (
 	"context"
 	"github.com/go-redis/redis/v8"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/symsimmy/due/eventbus"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/task"
 	"github.com/symsimmy/due/utils/xconv"
 	"reflect"
-	"sync"
 )
 
 type Eventbus struct {
@@ -17,7 +17,7 @@ type Eventbus struct {
 	opts   *options
 	sub    *redis.PubSub
 
-	rw       sync.RWMutex
+	rw       deadlock.RWMutex
 	handlers map[string]map[uintptr]eventbus.EventHandler
 }
 

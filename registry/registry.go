@@ -46,7 +46,11 @@ type ServiceInstance struct {
 	// 服务路由ID
 	Routes []Route `json:"routes"`
 	// 服务器实体暴露端口
-	Endpoint string `json:"endpoint"`
+	Endpoint string            `json:"endpoint"`
+	MetaMap  map[string]string `json:"metaMap"`
+	// prometheus enable
+	// prometheus metrics暴露端口
+	MetricsPort int `json:"metricsPort"`
 }
 
 type Route struct {

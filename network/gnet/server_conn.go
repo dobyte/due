@@ -8,6 +8,7 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/symsimmy/due/errors"
+	"github.com/symsimmy/due/internal/prom"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/network"
 	"github.com/symsimmy/due/utils/xnet"
@@ -52,7 +53,7 @@ func (c *serverConn) Send(msg []byte, msgType ...int) error {
 
 	err = c.conn.AsyncWrite(buf, func(conn gnet.Conn, err error) error {
 		if err != nil {
-
+			prom.GateServerWriteErrorCounter.WithLabelValues(err.Error()).Inc()
 		}
 		return nil
 	})
@@ -379,10 +380,12 @@ func (c *serverConn) doWrite(buf []byte) (err error) {
 		return
 	}
 
+	start := time.Now()
 	err = c.conn.AsyncWrite(buf, func(conn gnet.Conn, err error) error {
 		if err != nil {
-
+			prom.GateServerWriteDurationSummary.WithLabelValues(err.Error()).Observe(float64(time.Since(start).Milliseconds()))
 		}
+		prom.GateServerWriteDurationSummary.WithLabelValues("0").Observe(float64(time.Since(start).Milliseconds()))
 		return nil
 	})
 

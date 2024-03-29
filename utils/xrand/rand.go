@@ -62,7 +62,7 @@ func Int(min, max int) int {
 		min, max = max, min
 	}
 
-	return rand.Intn(max+1-min) + min
+	return rand.Intn(max-min) + min
 }
 
 // Int32 生成[min,max]范围间的32位整数，
@@ -75,7 +75,7 @@ func Int32(min, max int32) int32 {
 		min, max = max, min
 	}
 
-	return rand.Int31n(max+1-min) + min
+	return rand.Int31n(max-min) + min
 }
 
 // Int64 生成[min,max]范围间的64位整数

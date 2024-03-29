@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+option go_package = "./pb";
+
+package pb;
+
+import "message.proto";
+
+message BindRequest {
+  int64 CID = 1;  // 连接ID
+  int64 UID = 2;  // 用户ID
+}
+
+message BindReply {
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingReply {
+  string reply = 1;
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message UnbindRequest {
+  int64 UID = 1;  // 用户ID
+}
+
+message UnbindReply {
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message GetIPRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  int64 Target = 2;  // 推送目标
+}
+
+message GetIPReply {
+  string IP = 1;  // IP地址
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message DisconnectRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  int64 Target = 2;  // 推送目标
+  bool IsForce = 3;  // 是否强制断开连接
+}
+
+message DisconnectReply {
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message PushRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  int64 Target = 2;  // 推送目标
+  Message Message = 3;  // 消息
+}
+
+message PushReply {
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message MulticastRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  repeated int64 Targets = 2;  // 推送目标
+  Message Message = 3;  // 消息
+}
+
+message MulticastReply {
+  int64 Total = 1;  // 组播数量
+}
+
+message BroadcastRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  Message Message = 2;  // 消息
+}
+
+message BroadcastReply {
+  int64 Total = 1;  // 广播数量
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message StatRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+}
+
+message StatReply {
+  int64 Total = 1;  // 会话数量
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message IsOnlineRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  int64 Target = 2;  // 推送目标
+}
+
+message IsOnlineReply {
+  bool IsOnline = 1;  // 是否在线
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message GetIdRequest {
+  int32 Kind = 1;  // 推送类型 1：CID 2：UID
+  int64 Target = 2;  // 推送目标
+}
+
+message GetIdReply {
+  int64 id = 1;  // conn的id
+  int32 ErrorCode = 20;
+  string ErrorMessage = 21;
+}
+
+message BlockConnRequest {
+  string o_nid = 1;
+  string n_nid = 2;
+  uint64 target = 3;
+}
+
+message ReleaseConnRequest {
+  uint64 target = 1;
+}

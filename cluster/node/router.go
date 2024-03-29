@@ -2,9 +2,18 @@ package node
 
 import (
 	"context"
+	"fmt"
+	"github.com/cat-go/cat"
 	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/internal/prom"
 	"github.com/symsimmy/due/log"
+	"strconv"
 	"sync"
+	"time"
+)
+
+const (
+	Handler = "handler"
 )
 
 type RouteHandler func(ctx *Context)
@@ -117,7 +126,16 @@ func (r *Router) close() {
 }
 
 func (r *Router) handle(ctx *Context) {
-	defer r.ctxPool.Put(ctx)
+	start := time.Now()
+	defer func() {
+		r.ctxPool.Put(ctx)
+		prom.ServerHandleDurationSummary.WithLabelValues(r.node.opts.id, strconv.FormatInt(int64(ctx.Request.Message.Route), 10)).Observe(float64(time.Now().Sub(start) / time.Millisecond))
+	}()
+
+	if cat.IsEnabled() {
+		t := cat.NewTransaction(Handler, fmt.Sprint(ctx.Request.Message.Route))
+		defer t.Complete()
+	}
 
 	route, ok := r.routes[ctx.Request.Message.Route]
 	if !ok && r.defaultRouteHandler == nil {

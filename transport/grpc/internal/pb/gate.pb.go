@@ -508,6 +508,92 @@ func (m *PushReply) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PushReply proto.InternalMessageInfo
 
+type BatchPushRequest struct {
+	Request              []*PushRequest `protobuf:"bytes,1,rep,name=request,proto3" json:"request,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
+}
+
+func (m *BatchPushRequest) Reset()         { *m = BatchPushRequest{} }
+func (m *BatchPushRequest) String() string { return proto.CompactTextString(m) }
+func (*BatchPushRequest) ProtoMessage()    {}
+func (*BatchPushRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{10}
+}
+func (m *BatchPushRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchPushRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchPushRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchPushRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchPushRequest.Merge(m, src)
+}
+func (m *BatchPushRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchPushRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchPushRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchPushRequest proto.InternalMessageInfo
+
+func (m *BatchPushRequest) GetRequest() []*PushRequest {
+	if m != nil {
+		return m.Request
+	}
+	return nil
+}
+
+type BatchPushReply struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *BatchPushReply) Reset()         { *m = BatchPushReply{} }
+func (m *BatchPushReply) String() string { return proto.CompactTextString(m) }
+func (*BatchPushReply) ProtoMessage()    {}
+func (*BatchPushReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{11}
+}
+func (m *BatchPushReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchPushReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchPushReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchPushReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchPushReply.Merge(m, src)
+}
+func (m *BatchPushReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchPushReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchPushReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchPushReply proto.InternalMessageInfo
+
 type MulticastRequest struct {
 	Kind                 int32    `protobuf:"varint,1,opt,name=Kind,proto3" json:"Kind,omitempty"`
 	Targets              []int64  `protobuf:"varint,2,rep,packed,name=Targets,proto3" json:"Targets,omitempty"`
@@ -521,7 +607,7 @@ func (m *MulticastRequest) Reset()         { *m = MulticastRequest{} }
 func (m *MulticastRequest) String() string { return proto.CompactTextString(m) }
 func (*MulticastRequest) ProtoMessage()    {}
 func (*MulticastRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_743bb58a714d8b7d, []int{10}
+	return fileDescriptor_743bb58a714d8b7d, []int{12}
 }
 func (m *MulticastRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -582,7 +668,7 @@ func (m *MulticastReply) Reset()         { *m = MulticastReply{} }
 func (m *MulticastReply) String() string { return proto.CompactTextString(m) }
 func (*MulticastReply) ProtoMessage()    {}
 func (*MulticastReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_743bb58a714d8b7d, []int{11}
+	return fileDescriptor_743bb58a714d8b7d, []int{13}
 }
 func (m *MulticastReply) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -618,6 +704,92 @@ func (m *MulticastReply) GetTotal() int64 {
 	return 0
 }
 
+type BatchMulticastRequest struct {
+	Request              []*MulticastRequest `protobuf:"bytes,1,rep,name=request,proto3" json:"request,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_unrecognized     []byte              `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
+}
+
+func (m *BatchMulticastRequest) Reset()         { *m = BatchMulticastRequest{} }
+func (m *BatchMulticastRequest) String() string { return proto.CompactTextString(m) }
+func (*BatchMulticastRequest) ProtoMessage()    {}
+func (*BatchMulticastRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{14}
+}
+func (m *BatchMulticastRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchMulticastRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchMulticastRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchMulticastRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchMulticastRequest.Merge(m, src)
+}
+func (m *BatchMulticastRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchMulticastRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchMulticastRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchMulticastRequest proto.InternalMessageInfo
+
+func (m *BatchMulticastRequest) GetRequest() []*MulticastRequest {
+	if m != nil {
+		return m.Request
+	}
+	return nil
+}
+
+type BatchMulticastReply struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *BatchMulticastReply) Reset()         { *m = BatchMulticastReply{} }
+func (m *BatchMulticastReply) String() string { return proto.CompactTextString(m) }
+func (*BatchMulticastReply) ProtoMessage()    {}
+func (*BatchMulticastReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{15}
+}
+func (m *BatchMulticastReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchMulticastReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchMulticastReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchMulticastReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchMulticastReply.Merge(m, src)
+}
+func (m *BatchMulticastReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchMulticastReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchMulticastReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchMulticastReply proto.InternalMessageInfo
+
 type BroadcastRequest struct {
 	Kind                 int32    `protobuf:"varint,1,opt,name=Kind,proto3" json:"Kind,omitempty"`
 	Message              *Message `protobuf:"bytes,2,opt,name=Message,proto3" json:"Message,omitempty"`
@@ -630,7 +802,7 @@ func (m *BroadcastRequest) Reset()         { *m = BroadcastRequest{} }
 func (m *BroadcastRequest) String() string { return proto.CompactTextString(m) }
 func (*BroadcastRequest) ProtoMessage()    {}
 func (*BroadcastRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_743bb58a714d8b7d, []int{12}
+	return fileDescriptor_743bb58a714d8b7d, []int{16}
 }
 func (m *BroadcastRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -684,7 +856,7 @@ func (m *BroadcastReply) Reset()         { *m = BroadcastReply{} }
 func (m *BroadcastReply) String() string { return proto.CompactTextString(m) }
 func (*BroadcastReply) ProtoMessage()    {}
 func (*BroadcastReply) Descriptor() ([]byte, []int) {
-	return fileDescriptor_743bb58a714d8b7d, []int{13}
+	return fileDescriptor_743bb58a714d8b7d, []int{17}
 }
 func (m *BroadcastReply) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -720,6 +892,390 @@ func (m *BroadcastReply) GetTotal() int64 {
 	return 0
 }
 
+type BatchBroadcastRequest struct {
+	Request              []*BroadcastRequest `protobuf:"bytes,1,rep,name=request,proto3" json:"request,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_unrecognized     []byte              `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
+}
+
+func (m *BatchBroadcastRequest) Reset()         { *m = BatchBroadcastRequest{} }
+func (m *BatchBroadcastRequest) String() string { return proto.CompactTextString(m) }
+func (*BatchBroadcastRequest) ProtoMessage()    {}
+func (*BatchBroadcastRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{18}
+}
+func (m *BatchBroadcastRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchBroadcastRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchBroadcastRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchBroadcastRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchBroadcastRequest.Merge(m, src)
+}
+func (m *BatchBroadcastRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchBroadcastRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchBroadcastRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchBroadcastRequest proto.InternalMessageInfo
+
+func (m *BatchBroadcastRequest) GetRequest() []*BroadcastRequest {
+	if m != nil {
+		return m.Request
+	}
+	return nil
+}
+
+type BatchBroadcastReply struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *BatchBroadcastReply) Reset()         { *m = BatchBroadcastReply{} }
+func (m *BatchBroadcastReply) String() string { return proto.CompactTextString(m) }
+func (*BatchBroadcastReply) ProtoMessage()    {}
+func (*BatchBroadcastReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{19}
+}
+func (m *BatchBroadcastReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BatchBroadcastReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BatchBroadcastReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BatchBroadcastReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BatchBroadcastReply.Merge(m, src)
+}
+func (m *BatchBroadcastReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *BatchBroadcastReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_BatchBroadcastReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BatchBroadcastReply proto.InternalMessageInfo
+
+type StatRequest struct {
+	Kind                 int32    `protobuf:"varint,1,opt,name=Kind,proto3" json:"Kind,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StatRequest) Reset()         { *m = StatRequest{} }
+func (m *StatRequest) String() string { return proto.CompactTextString(m) }
+func (*StatRequest) ProtoMessage()    {}
+func (*StatRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{20}
+}
+func (m *StatRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StatRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StatRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatRequest.Merge(m, src)
+}
+func (m *StatRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatRequest proto.InternalMessageInfo
+
+func (m *StatRequest) GetKind() int32 {
+	if m != nil {
+		return m.Kind
+	}
+	return 0
+}
+
+type StatReply struct {
+	Total                int64    `protobuf:"varint,1,opt,name=Total,proto3" json:"Total,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StatReply) Reset()         { *m = StatReply{} }
+func (m *StatReply) String() string { return proto.CompactTextString(m) }
+func (*StatReply) ProtoMessage()    {}
+func (*StatReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{21}
+}
+func (m *StatReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StatReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StatReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatReply.Merge(m, src)
+}
+func (m *StatReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatReply proto.InternalMessageInfo
+
+func (m *StatReply) GetTotal() int64 {
+	if m != nil {
+		return m.Total
+	}
+	return 0
+}
+
+type IsOnlineRequest struct {
+	Kind                 int32    `protobuf:"varint,1,opt,name=Kind,proto3" json:"Kind,omitempty"`
+	Target               int64    `protobuf:"varint,2,opt,name=Target,proto3" json:"Target,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *IsOnlineRequest) Reset()         { *m = IsOnlineRequest{} }
+func (m *IsOnlineRequest) String() string { return proto.CompactTextString(m) }
+func (*IsOnlineRequest) ProtoMessage()    {}
+func (*IsOnlineRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{22}
+}
+func (m *IsOnlineRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IsOnlineRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_IsOnlineRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *IsOnlineRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IsOnlineRequest.Merge(m, src)
+}
+func (m *IsOnlineRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *IsOnlineRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_IsOnlineRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IsOnlineRequest proto.InternalMessageInfo
+
+func (m *IsOnlineRequest) GetKind() int32 {
+	if m != nil {
+		return m.Kind
+	}
+	return 0
+}
+
+func (m *IsOnlineRequest) GetTarget() int64 {
+	if m != nil {
+		return m.Target
+	}
+	return 0
+}
+
+type IsOnlineReply struct {
+	IsOnline             bool     `protobuf:"varint,1,opt,name=IsOnline,proto3" json:"IsOnline,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *IsOnlineReply) Reset()         { *m = IsOnlineReply{} }
+func (m *IsOnlineReply) String() string { return proto.CompactTextString(m) }
+func (*IsOnlineReply) ProtoMessage()    {}
+func (*IsOnlineReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{23}
+}
+func (m *IsOnlineReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IsOnlineReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_IsOnlineReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *IsOnlineReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IsOnlineReply.Merge(m, src)
+}
+func (m *IsOnlineReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *IsOnlineReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_IsOnlineReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IsOnlineReply proto.InternalMessageInfo
+
+func (m *IsOnlineReply) GetIsOnline() bool {
+	if m != nil {
+		return m.IsOnline
+	}
+	return false
+}
+
+type GetIdRequest struct {
+	Kind                 int32    `protobuf:"varint,1,opt,name=Kind,proto3" json:"Kind,omitempty"`
+	Target               int64    `protobuf:"varint,2,opt,name=Target,proto3" json:"Target,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetIdRequest) Reset()         { *m = GetIdRequest{} }
+func (m *GetIdRequest) String() string { return proto.CompactTextString(m) }
+func (*GetIdRequest) ProtoMessage()    {}
+func (*GetIdRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{24}
+}
+func (m *GetIdRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetIdRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetIdRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetIdRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetIdRequest.Merge(m, src)
+}
+func (m *GetIdRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetIdRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetIdRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetIdRequest proto.InternalMessageInfo
+
+func (m *GetIdRequest) GetKind() int32 {
+	if m != nil {
+		return m.Kind
+	}
+	return 0
+}
+
+func (m *GetIdRequest) GetTarget() int64 {
+	if m != nil {
+		return m.Target
+	}
+	return 0
+}
+
+type GetIdReply struct {
+	Id                   int64    `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetIdReply) Reset()         { *m = GetIdReply{} }
+func (m *GetIdReply) String() string { return proto.CompactTextString(m) }
+func (*GetIdReply) ProtoMessage()    {}
+func (*GetIdReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_743bb58a714d8b7d, []int{25}
+}
+func (m *GetIdReply) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetIdReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetIdReply.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetIdReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetIdReply.Merge(m, src)
+}
+func (m *GetIdReply) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetIdReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetIdReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetIdReply proto.InternalMessageInfo
+
+func (m *GetIdReply) GetId() int64 {
+	if m != nil {
+		return m.Id
+	}
+	return 0
+}
+
 func init() {
 	proto.RegisterType((*BindRequest)(nil), "pb.BindRequest")
 	proto.RegisterType((*BindReply)(nil), "pb.BindReply")
@@ -731,46 +1287,71 @@ func init() {
 	proto.RegisterType((*DisconnectReply)(nil), "pb.DisconnectReply")
 	proto.RegisterType((*PushRequest)(nil), "pb.PushRequest")
 	proto.RegisterType((*PushReply)(nil), "pb.PushReply")
+	proto.RegisterType((*BatchPushRequest)(nil), "pb.BatchPushRequest")
+	proto.RegisterType((*BatchPushReply)(nil), "pb.BatchPushReply")
 	proto.RegisterType((*MulticastRequest)(nil), "pb.MulticastRequest")
 	proto.RegisterType((*MulticastReply)(nil), "pb.MulticastReply")
+	proto.RegisterType((*BatchMulticastRequest)(nil), "pb.BatchMulticastRequest")
+	proto.RegisterType((*BatchMulticastReply)(nil), "pb.BatchMulticastReply")
 	proto.RegisterType((*BroadcastRequest)(nil), "pb.BroadcastRequest")
 	proto.RegisterType((*BroadcastReply)(nil), "pb.BroadcastReply")
+	proto.RegisterType((*BatchBroadcastRequest)(nil), "pb.BatchBroadcastRequest")
+	proto.RegisterType((*BatchBroadcastReply)(nil), "pb.BatchBroadcastReply")
+	proto.RegisterType((*StatRequest)(nil), "pb.StatRequest")
+	proto.RegisterType((*StatReply)(nil), "pb.StatReply")
+	proto.RegisterType((*IsOnlineRequest)(nil), "pb.IsOnlineRequest")
+	proto.RegisterType((*IsOnlineReply)(nil), "pb.IsOnlineReply")
+	proto.RegisterType((*GetIdRequest)(nil), "pb.GetIdRequest")
+	proto.RegisterType((*GetIdReply)(nil), "pb.GetIdReply")
 }
 
 func init() { proto.RegisterFile("gate.proto", fileDescriptor_743bb58a714d8b7d) }
 
 var fileDescriptor_743bb58a714d8b7d = []byte{
-	// 476 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xdd, 0x8a, 0xd3, 0x40,
-	0x14, 0x6e, 0x7e, 0xda, 0xda, 0x13, 0xfb, 0x37, 0xae, 0x4b, 0x08, 0x52, 0xea, 0x80, 0x12, 0x10,
-	0x22, 0xae, 0x17, 0xc2, 0x5e, 0xd6, 0xe2, 0x12, 0xa4, 0x50, 0xc2, 0xe6, 0x42, 0xaf, 0x4c, 0xd2,
-	0x21, 0x06, 0x62, 0x12, 0x33, 0xd3, 0x8b, 0x7d, 0x13, 0x1f, 0xc9, 0x4b, 0x1f, 0x41, 0x2a, 0xbe,
-	0x87, 0x4c, 0x26, 0x69, 0xa6, 0x11, 0xd7, 0x65, 0xef, 0xe6, 0x7c, 0xe7, 0x7c, 0xe7, 0xcb, 0x39,
-	0xe7, 0x23, 0x00, 0x71, 0xc0, 0x88, 0x53, 0x94, 0x39, 0xcb, 0x91, 0x5a, 0x84, 0xd6, 0xf8, 0x0b,
-	0xa1, 0x34, 0x88, 0x6b, 0x08, 0xbf, 0x02, 0x63, 0x95, 0x64, 0x3b, 0x8f, 0x7c, 0xdd, 0x13, 0xca,
-	0xd0, 0x0c, 0xb4, 0xb7, 0xee, 0xda, 0x54, 0x96, 0x8a, 0xad, 0x79, 0xfc, 0xc9, 0x11, 0xdf, 0x5d,
-	0x9b, 0xaa, 0x40, 0x7c, 0x77, 0x8d, 0x0d, 0x18, 0x09, 0x4a, 0x91, 0xde, 0xe0, 0xa7, 0x30, 0xf6,
-	0xb3, 0xf0, 0xb4, 0x83, 0xdf, 0x76, 0xe0, 0xf5, 0x63, 0x30, 0x9a, 0x12, 0xce, 0xb8, 0x84, 0x87,
-	0x57, 0x84, 0xb9, 0xdb, 0x86, 0x80, 0x40, 0x7f, 0x9f, 0x64, 0xbb, 0x8a, 0xd1, 0xf7, 0xaa, 0x37,
-	0x3a, 0x87, 0xc1, 0x75, 0x50, 0xc6, 0x84, 0xd5, 0xba, 0x75, 0x84, 0x9f, 0x00, 0xd4, 0xdc, 0x22,
-	0xbd, 0x41, 0x13, 0x50, 0xdd, 0x6d, 0xc5, 0x1b, 0x79, 0xaa, 0xbb, 0xc5, 0x1f, 0x60, 0xbe, 0x4e,
-	0x68, 0x94, 0x67, 0x19, 0x89, 0xd8, 0x3d, 0xda, 0x23, 0x13, 0x86, 0x2e, 0x7d, 0x97, 0x97, 0x11,
-	0x31, 0xb5, 0xa5, 0x62, 0x3f, 0xf0, 0x9a, 0x10, 0xcf, 0x61, 0x2a, 0xb7, 0xe6, 0x73, 0x7c, 0x02,
-	0x63, 0xbb, 0xa7, 0x9f, 0xef, 0xa3, 0xf3, 0x0c, 0x86, 0x1b, 0x71, 0x85, 0x4a, 0xc7, 0xb8, 0x30,
-	0x9c, 0x22, 0x74, 0x6a, 0xc8, 0x6b, 0x72, 0x7c, 0xd1, 0x42, 0x81, 0xcb, 0xc5, 0x30, 0xdb, 0xec,
-	0x53, 0x96, 0x44, 0x01, 0xbd, 0x75, 0x36, 0x13, 0x86, 0x42, 0x85, 0x9a, 0xea, 0x52, 0xb3, 0x35,
-	0xaf, 0x09, 0xef, 0xaa, 0xfa, 0x1c, 0x26, 0x92, 0x10, 0xdf, 0xf3, 0x19, 0xf4, 0xaf, 0x73, 0x16,
-	0xa4, 0xf5, 0x51, 0x45, 0x80, 0x37, 0x30, 0x5b, 0x95, 0x79, 0xb0, 0xfb, 0xdf, 0x07, 0x49, 0xb2,
-	0xea, 0xed, 0xb2, 0x52, 0xbb, 0x7f, 0xca, 0x5e, 0xfc, 0x56, 0x41, 0xbf, 0x0a, 0x18, 0x41, 0x36,
-	0xe8, 0xdc, 0x86, 0x68, 0xca, 0xdb, 0x49, 0x1e, 0xb6, 0xc6, 0x2d, 0xc0, 0x17, 0xd7, 0x43, 0x0e,
-	0x0c, 0x84, 0x01, 0xd1, 0x9c, 0xa7, 0x4e, 0xfc, 0x6a, 0x4d, 0x65, 0x48, 0xd4, 0xbf, 0x80, 0x7e,
-	0xe5, 0x32, 0x34, 0xe3, 0x39, 0xd9, 0xac, 0xd6, 0x44, 0x42, 0x44, 0xf1, 0x25, 0x40, 0xeb, 0x0c,
-	0xf4, 0x98, 0xe7, 0xff, 0x32, 0xa1, 0xf5, 0xa8, 0x0b, 0x0b, 0xae, 0x0d, 0x3a, 0x3f, 0xb0, 0x18,
-	0x41, 0x32, 0x93, 0x18, 0xa1, 0xbd, 0x7d, 0x0f, 0xbd, 0x81, 0xd1, 0xf1, 0x28, 0xe8, 0xac, 0x5a,
-	0x60, 0xc7, 0x0c, 0x16, 0xea, 0xa0, 0x47, 0xe2, 0x71, 0xad, 0x82, 0xd8, 0x3d, 0x9a, 0x20, 0x9e,
-	0xee, 0x1e, 0xf7, 0x56, 0xe7, 0xdf, 0x0f, 0x0b, 0xe5, 0xc7, 0x61, 0xa1, 0xfc, 0x3c, 0x2c, 0x94,
-	0x6f, 0xbf, 0x16, 0xbd, 0x8f, 0xba, 0xf3, 0xb2, 0x08, 0xc3, 0x41, 0xf5, 0xdf, 0x78, 0xfd, 0x27,
-	0x00, 0x00, 0xff, 0xff, 0xfe, 0x83, 0xb1, 0xa6, 0x58, 0x04, 0x00, 0x00,
+	// 682 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x55, 0xcb, 0x6e, 0xd3, 0x40,
+	0x14, 0x8d, 0x1f, 0x69, 0x9a, 0x6b, 0x92, 0x38, 0xd3, 0x97, 0xb1, 0x50, 0x94, 0x5a, 0x02, 0x19,
+	0x2a, 0x19, 0x51, 0x90, 0x10, 0x95, 0xba, 0x09, 0x51, 0x2b, 0x0b, 0x45, 0x44, 0xa6, 0x59, 0xc0,
+	0x0a, 0x27, 0xb6, 0x52, 0x4b, 0xc1, 0x36, 0xb1, 0xb3, 0xe8, 0x9f, 0xf0, 0x3b, 0xec, 0x58, 0xf2,
+	0x09, 0x28, 0xfc, 0x08, 0x9a, 0x19, 0x3f, 0xc6, 0x76, 0x48, 0x51, 0xd8, 0x79, 0xee, 0xeb, 0xdc,
+	0x73, 0x67, 0xee, 0x31, 0xc0, 0xdc, 0x8e, 0x5d, 0x23, 0x5c, 0x06, 0x71, 0x80, 0xf8, 0x70, 0xaa,
+	0xb6, 0xbe, 0xb8, 0x51, 0x64, 0xcf, 0x13, 0x93, 0xf6, 0x02, 0xa4, 0x81, 0xe7, 0x3b, 0x96, 0xfb,
+	0x75, 0xe5, 0x46, 0x31, 0x92, 0x41, 0x78, 0x6b, 0x0e, 0x15, 0xae, 0xcf, 0xe9, 0x82, 0x85, 0x3f,
+	0xb1, 0x65, 0x62, 0x0e, 0x15, 0x9e, 0x5a, 0x26, 0xe6, 0x50, 0x93, 0xa0, 0x49, 0x53, 0xc2, 0xc5,
+	0x9d, 0x76, 0x0a, 0xad, 0x89, 0x3f, 0x2d, 0x56, 0x98, 0xe4, 0x15, 0x70, 0x7c, 0x0b, 0xa4, 0x34,
+	0x04, 0x67, 0x5c, 0xc0, 0x83, 0x6b, 0x37, 0x36, 0xc7, 0x69, 0x02, 0x02, 0xf1, 0x9d, 0xe7, 0x3b,
+	0x24, 0xa3, 0x6e, 0x91, 0x6f, 0x74, 0x0c, 0x7b, 0x37, 0xf6, 0x72, 0xee, 0xc6, 0x09, 0x6e, 0x72,
+	0xd2, 0x1e, 0x01, 0x24, 0xb9, 0xe1, 0xe2, 0x0e, 0xb5, 0x81, 0x37, 0xc7, 0x24, 0xaf, 0x69, 0xf1,
+	0xe6, 0x58, 0xfb, 0x08, 0xdd, 0xa1, 0x17, 0xcd, 0x02, 0xdf, 0x77, 0x67, 0xf1, 0x0e, 0xe5, 0x91,
+	0x02, 0x0d, 0x33, 0xba, 0x0a, 0x96, 0x33, 0x57, 0x11, 0xfa, 0x9c, 0xbe, 0x6f, 0xa5, 0x47, 0xad,
+	0x0b, 0x1d, 0xb6, 0x34, 0xe6, 0xf1, 0x19, 0xa4, 0xf1, 0x2a, 0xba, 0xdd, 0x05, 0xe7, 0x31, 0x34,
+	0x46, 0xf4, 0x16, 0x08, 0x8e, 0x74, 0x2e, 0x19, 0xe1, 0xd4, 0x48, 0x4c, 0x56, 0xea, 0xc3, 0x83,
+	0xa6, 0x08, 0x18, 0xee, 0x12, 0xe4, 0x81, 0x1d, 0xcf, 0x6e, 0x59, 0xcc, 0xa7, 0xd0, 0x58, 0xd2,
+	0x4f, 0x85, 0xeb, 0x0b, 0xba, 0x74, 0xde, 0xc1, 0x75, 0x98, 0x08, 0x2b, 0xf5, 0x6b, 0x32, 0xb4,
+	0x99, 0x74, 0x5c, 0x70, 0x0e, 0xf2, 0x68, 0xb5, 0x88, 0xbd, 0x99, 0x1d, 0x6d, 0x1d, 0x96, 0x02,
+	0x0d, 0xda, 0x76, 0xa4, 0xf0, 0x7d, 0x41, 0x17, 0xac, 0xf4, 0xf8, 0xaf, 0x34, 0x9e, 0x40, 0x9b,
+	0x01, 0xc2, 0x17, 0x77, 0x08, 0xf5, 0x9b, 0x20, 0xb6, 0x17, 0xc9, 0x2b, 0xa1, 0x07, 0xed, 0x1a,
+	0x8e, 0x48, 0x8b, 0x95, 0xae, 0x8c, 0x32, 0xcd, 0x43, 0x82, 0x53, 0x0a, 0xcb, 0xb9, 0x1e, 0xc1,
+	0x41, 0xb9, 0x10, 0x26, 0x3c, 0x02, 0x79, 0xb0, 0x0c, 0x6c, 0xe7, 0x3e, 0xc2, 0x0c, 0x2d, 0x7e,
+	0x3b, 0x2d, 0xa6, 0xdc, 0xfd, 0xb4, 0x2a, 0xd8, 0x9b, 0x69, 0x95, 0xc3, 0xaa, 0xb4, 0x8a, 0xa8,
+	0xda, 0x29, 0x48, 0x1f, 0x62, 0x7b, 0x1b, 0x23, 0xed, 0x14, 0x9a, 0x34, 0xe4, 0xef, 0x5d, 0x5e,
+	0x42, 0xc7, 0x8c, 0xde, 0xfb, 0x0b, 0xcf, 0x77, 0x77, 0x59, 0xcc, 0x33, 0x68, 0xe5, 0xe9, 0x18,
+	0x45, 0x85, 0xfd, 0xd4, 0x40, 0x0a, 0xec, 0x5b, 0xd9, 0x39, 0x55, 0x00, 0xe7, 0x3f, 0x14, 0xc0,
+	0xc9, 0x14, 0xc0, 0x73, 0x12, 0x22, 0xbc, 0xe7, 0x9c, 0x7f, 0xaf, 0x83, 0x78, 0x6d, 0xc7, 0x2e,
+	0xd2, 0x41, 0xc4, 0x1a, 0x85, 0xc8, 0x42, 0x30, 0x02, 0xa7, 0xb6, 0x72, 0x03, 0x1e, 0x5e, 0x0d,
+	0x19, 0xb0, 0x47, 0xd5, 0x09, 0x75, 0xb1, 0xab, 0x20, 0x66, 0x6a, 0x87, 0x35, 0xd1, 0xf8, 0x33,
+	0xa8, 0x13, 0x09, 0x42, 0x32, 0xf6, 0xb1, 0x4a, 0xa6, 0xb6, 0x19, 0x0b, 0x0d, 0xbe, 0x00, 0xc8,
+	0x65, 0x03, 0x1d, 0x61, 0x7f, 0x45, 0xa1, 0xd4, 0x83, 0xb2, 0x99, 0xe6, 0xbe, 0xca, 0x27, 0x88,
+	0x48, 0x48, 0xe9, 0x7e, 0xd4, 0x6e, 0xd1, 0x58, 0x68, 0x6f, 0x98, 0xb7, 0xe7, 0x54, 0xda, 0xcb,
+	0xb8, 0xe8, 0x20, 0xe2, 0x77, 0x41, 0xa7, 0xc4, 0x3c, 0x22, 0x3a, 0xa5, 0xec, 0xc9, 0x68, 0x35,
+	0xf4, 0x0c, 0x44, 0xac, 0x1c, 0xa8, 0x2c, 0x30, 0x34, 0x32, 0x17, 0x95, 0x9a, 0xce, 0xa1, 0xd7,
+	0xd0, 0xcc, 0xa4, 0x06, 0xd1, 0x37, 0x5d, 0x12, 0x2e, 0x15, 0x95, 0xac, 0x14, 0xe4, 0x0d, 0x34,
+	0xb3, 0x95, 0x45, 0x1b, 0x77, 0x9c, 0x26, 0x96, 0xf6, 0x1a, 0x63, 0x5e, 0x25, 0xf2, 0x96, 0xe7,
+	0x3f, 0xcc, 0x20, 0x2a, 0x45, 0x4e, 0x36, 0xb9, 0xb2, 0x16, 0xb2, 0xf5, 0x42, 0x1b, 0xf7, 0x31,
+	0xe9, 0xbd, 0xb8, 0x83, 0x6c, 0x0b, 0x79, 0x7e, 0xde, 0x42, 0xa5, 0xc8, 0xc9, 0x26, 0x17, 0xa9,
+	0x34, 0x38, 0xfe, 0xb1, 0xee, 0x71, 0x3f, 0xd7, 0x3d, 0xee, 0xd7, 0xba, 0xc7, 0x7d, 0xfb, 0xdd,
+	0xab, 0x7d, 0x12, 0x8d, 0xe7, 0xe1, 0x74, 0xba, 0x47, 0x7e, 0xd8, 0x2f, 0xff, 0x04, 0x00, 0x00,
+	0xff, 0xff, 0xcf, 0x02, 0xd1, 0xe5, 0xd1, 0x07, 0x00, 0x00,
 }
 
 func (m *BindRequest) Marshal() (dAtA []byte, err error) {
@@ -1117,6 +1698,74 @@ func (m *PushReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *BatchPushRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchPushRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchPushRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Request) > 0 {
+		for iNdEx := len(m.Request) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Request[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintGate(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BatchPushReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchPushReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchPushReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *MulticastRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1212,6 +1861,74 @@ func (m *MulticastReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *BatchMulticastRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchMulticastRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchMulticastRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Request) > 0 {
+		for iNdEx := len(m.Request) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Request[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintGate(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BatchMulticastReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchMulticastReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchMulticastReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *BroadcastRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1282,6 +1999,281 @@ func (m *BroadcastReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	if m.Total != 0 {
 		i = encodeVarintGate(dAtA, i, uint64(m.Total))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BatchBroadcastRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchBroadcastRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Request) > 0 {
+		for iNdEx := len(m.Request) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Request[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintGate(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BatchBroadcastReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BatchBroadcastReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BatchBroadcastReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *StatRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Kind != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Kind))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *StatReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StatReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Total != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Total))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *IsOnlineRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *IsOnlineRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IsOnlineRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Target != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Target))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Kind != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Kind))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *IsOnlineReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *IsOnlineReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IsOnlineReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.IsOnline {
+		i--
+		if m.IsOnline {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetIdRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetIdRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetIdRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Target != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Target))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Kind != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Kind))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetIdReply) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetIdReply) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetIdReply) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Id != 0 {
+		i = encodeVarintGate(dAtA, i, uint64(m.Id))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1457,6 +2449,36 @@ func (m *PushReply) Size() (n int) {
 	return n
 }
 
+func (m *BatchPushRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Request) > 0 {
+		for _, e := range m.Request {
+			l = e.Size()
+			n += 1 + l + sovGate(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchPushReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *MulticastRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1498,6 +2520,36 @@ func (m *MulticastReply) Size() (n int) {
 	return n
 }
 
+func (m *BatchMulticastRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Request) > 0 {
+		for _, e := range m.Request {
+			l = e.Size()
+			n += 1 + l + sovGate(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchMulticastReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *BroadcastRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1525,6 +2577,132 @@ func (m *BroadcastReply) Size() (n int) {
 	_ = l
 	if m.Total != 0 {
 		n += 1 + sovGate(uint64(m.Total))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchBroadcastRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Request) > 0 {
+		for _, e := range m.Request {
+			l = e.Size()
+			n += 1 + l + sovGate(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *BatchBroadcastReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *StatRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Kind != 0 {
+		n += 1 + sovGate(uint64(m.Kind))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *StatReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Total != 0 {
+		n += 1 + sovGate(uint64(m.Total))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *IsOnlineRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Kind != 0 {
+		n += 1 + sovGate(uint64(m.Kind))
+	}
+	if m.Target != 0 {
+		n += 1 + sovGate(uint64(m.Target))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *IsOnlineReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.IsOnline {
+		n += 2
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetIdRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Kind != 0 {
+		n += 1 + sovGate(uint64(m.Kind))
+	}
+	if m.Target != 0 {
+		n += 1 + sovGate(uint64(m.Target))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetIdReply) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Id != 0 {
+		n += 1 + sovGate(uint64(m.Id))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2307,6 +3485,142 @@ func (m *PushReply) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *BatchPushRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchPushRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchPushRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Request", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGate
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGate
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Request = append(m.Request, &PushRequest{})
+			if err := m.Request[len(m.Request)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchPushReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchPushReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchPushReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *MulticastRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2559,6 +3873,142 @@ func (m *MulticastReply) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *BatchMulticastRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchMulticastRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchMulticastRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Request", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGate
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGate
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Request = append(m.Request, &MulticastRequest{})
+			if err := m.Request[len(m.Request)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchMulticastReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchMulticastReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchMulticastReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *BroadcastRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2709,6 +4159,601 @@ func (m *BroadcastReply) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.Total |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchBroadcastRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchBroadcastRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchBroadcastRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Request", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGate
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthGate
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Request = append(m.Request, &BroadcastRequest{})
+			if err := m.Request[len(m.Request)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BatchBroadcastReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BatchBroadcastReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BatchBroadcastReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
+			}
+			m.Kind = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Kind |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			}
+			m.Total = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Total |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *IsOnlineRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IsOnlineRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IsOnlineRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
+			}
+			m.Kind = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Kind |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Target", wireType)
+			}
+			m.Target = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Target |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *IsOnlineReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IsOnlineReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IsOnlineReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsOnline", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsOnline = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetIdRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetIdRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetIdRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
+			}
+			m.Kind = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Kind |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Target", wireType)
+			}
+			m.Target = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Target |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGate(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthGate
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetIdReply) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGate
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetIdReply: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetIdReply: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			m.Id = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Id |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

@@ -6,7 +6,6 @@ import (
 	"github.com/symsimmy/due/internal/link"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/session"
-	"github.com/symsimmy/due/transport"
 )
 
 var (
@@ -48,14 +47,6 @@ func (p *Proxy) GetMasterName() string {
 	return p.master.opts.name
 }
 
-// NewServiceClient 新建微服务客户端
-// target参数可分为两种模式:
-// 直连模式: 	direct://127.0.0.1:8011
-// 服务发现模式: 	discovery://service_name
-func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
-	return p.master.opts.transporter.NewServiceClient(target)
-}
-
 // LocateGate 定位用户所在网关
 func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 	return p.link.LocateGate(ctx, uid)
@@ -74,6 +65,16 @@ func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
 	return p.link.FetchServiceList(ctx, cluster.Node, states...)
+}
+
+// FetchGameList 拉取游戏节点列表
+func (p *Proxy) FetchGameList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.link.FetchServiceAliasList(ctx, cluster.Node, "game", states...)
+}
+
+// FetchCenterList 拉取Center节点列表
+func (p *Proxy) FetchCenterList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.link.FetchServiceAliasList(ctx, cluster.Node, "center", states...)
 }
 
 // GetIP 获取客户端IP
@@ -110,12 +111,42 @@ func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *Messa
 	})
 }
 
+// BroadcastDeliver 推送广播消息到node节点
+func (p *Proxy) BroadcastDeliver(ctx context.Context, kind link.DeliverKind, message *Message) error {
+	return p.link.BroadcastDeliver(ctx, &link.BroadcastDeliverArgs{
+		Kind:    kind,
+		Message: message,
+	})
+}
+
+// MulticastDeliver 推送广播消息到node节点
+func (p *Proxy) MulticastDeliver(ctx context.Context, kind link.DeliverKind, targets []string, message *Message) error {
+	return p.link.MulticastDeliver(ctx, &link.MulticastDeliverArgs{
+		Kind:    kind,
+		Targets: targets,
+		Message: message,
+	})
+}
+
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, uid int64, message *Message) error {
 	return p.link.Deliver(ctx, &link.DeliverArgs{
 		UID:     uid,
 		Message: message,
 	})
+}
+
+// DeliverN 通过nodeId投递消息给节点处理
+func (p *Proxy) DeliverN(ctx context.Context, nid string, message *Message) error {
+	return p.link.Deliver(ctx, &link.DeliverArgs{
+		NID:     nid,
+		Message: message,
+	})
+}
+
+// BlockConn
+func (p *Proxy) BlockConn(ctx context.Context, onid string, nnid string, target uint64) {
+	p.link.BlockConn(ctx, onid, nnid, target)
 }
 
 // Disconnect 断开连接

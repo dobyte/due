@@ -14,6 +14,8 @@ const (
 	defaultHeartbeatCheck                 = true
 	defaultHeartbeatCheckInterval         = 10
 	defaultDeregisterCriticalServiceAfter = 30
+	defaultMetricsEnable                  = false
+	defaultFailuresBeforeCritical         = 3
 )
 
 const (
@@ -24,6 +26,8 @@ const (
 	defaultHeartbeatCheckKey                 = "config.registry.consul.heartbeatCheck"
 	defaultHeartbeatCheckIntervalKey         = "config.registry.consul.heartbeatCheckInterval"
 	defaultDeregisterCriticalServiceAfterKey = "config.registry.consul.deregisterCriticalServiceAfter"
+	defaultMetricsEnableKey                  = "config.metrics.prometheus.enable"
+	defaultFailuresBeforeCriticalKey         = "config.registry.consul.failuresBeforeCritical"
 )
 
 type Option func(o *options)
@@ -64,6 +68,11 @@ type options struct {
 	// 健康检测失败后自动注销服务时间（秒）
 	// 默认30秒
 	deregisterCriticalServiceAfter int
+
+	// metrics enable
+	metricsEnable bool
+
+	failuresBeforeCritical int
 }
 
 func defaultOptions() *options {
@@ -76,6 +85,8 @@ func defaultOptions() *options {
 		enableHeartbeatCheck:           config.Get(defaultHeartbeatCheckKey, defaultHeartbeatCheck).Bool(),
 		heartbeatCheckInterval:         config.Get(defaultHeartbeatCheckIntervalKey, defaultHeartbeatCheckInterval).Int(),
 		deregisterCriticalServiceAfter: config.Get(defaultDeregisterCriticalServiceAfterKey, defaultDeregisterCriticalServiceAfter).Int(),
+		metricsEnable:                  config.Get(defaultMetricsEnableKey, defaultMetricsEnable).Bool(),
+		failuresBeforeCritical:         config.Get(defaultFailuresBeforeCriticalKey, defaultFailuresBeforeCritical).Int(),
 	}
 }
 

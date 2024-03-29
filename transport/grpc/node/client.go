@@ -3,7 +3,7 @@ package node
 import (
 	"context"
 	"github.com/symsimmy/due/transport"
-	"github.com/symsimmy/due/transport/grpc/internal/code"
+	"github.com/symsimmy/due/transport/grpc/code"
 	"github.com/symsimmy/due/transport/grpc/internal/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"

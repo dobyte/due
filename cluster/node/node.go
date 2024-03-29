@@ -8,6 +8,7 @@ import (
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/utils/xcall"
+	"strconv"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -84,6 +85,10 @@ func (n *Node) Start() {
 
 	n.proxy.watch(n.ctx)
 
+	n.startPromServer()
+
+	n.startCatServer()
+
 	go n.dispatch()
 
 	n.debugPrint()
@@ -94,6 +99,10 @@ func (n *Node) Destroy() {
 	n.deregisterServiceInstance()
 
 	n.stopRPCServer()
+
+	n.stopPromServer()
+
+	n.stopCatServer()
 
 	n.events.close()
 
@@ -117,16 +126,36 @@ func (n *Node) dispatch() {
 			if !ok {
 				return
 			}
-			xcall.Call(func() {
-				n.events.handle(evt)
-			})
+			log.Debugf("node handle receive event [%v], with GID [%v], UID [%v], CID [%v]",
+				evt.Event, evt.GID, evt.UID, evt.CID)
+			if n.opts.asyncEventHandle {
+				go func() {
+					xcall.Call(func() {
+						n.events.handle(evt)
+					})
+				}()
+			} else {
+				xcall.Call(func() {
+					n.events.handle(evt)
+				})
+			}
 		case ctx, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
-			xcall.Call(func() {
-				n.router.handle(ctx)
-			})
+			log.Debugf("node handle receive route [%v] Seq:[%v] with GID [%v], NID [%v], UID [%v], CID [%v]",
+				ctx.Request.Message.Route, ctx.Request.Message.Seq, ctx.Request.GID, ctx.Request.NID, ctx.Request.UID, ctx.Request.CID)
+			if n.opts.asyncRouterHandle {
+				go func() {
+					xcall.Call(func() {
+						n.router.handle(ctx)
+					})
+				}()
+			} else {
+				xcall.Call(func() {
+					n.router.handle(ctx)
+				})
+			}
 		case handle, ok := <-n.fnChan:
 			if !ok {
 				return
@@ -134,6 +163,22 @@ func (n *Node) dispatch() {
 			xcall.Call(handle)
 		}
 	}
+}
+
+func (n *Node) startPromServer() {
+	n.opts.promServer.Start()
+}
+
+func (n *Node) stopPromServer() {
+	n.opts.promServer.Destroy()
+}
+
+func (n *Node) startCatServer() {
+	n.opts.catServer.Start()
+}
+
+func (n *Node) stopCatServer() {
+	n.opts.catServer.Destroy()
 }
 
 // 启动RPC服务器
@@ -183,6 +228,13 @@ func (n *Node) registerServiceInstance() {
 		Routes:   routes,
 		Events:   events,
 		Endpoint: n.rpc.Endpoint().String(),
+	}
+	if n.opts.promServer.Enable() {
+		metricsPort, err := strconv.Atoi(n.opts.promServer.GetMetricsPort())
+		if err != nil {
+			panic(err)
+		}
+		n.instance.MetricsPort = metricsPort
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)

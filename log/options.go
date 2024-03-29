@@ -2,18 +2,19 @@ package log
 
 import (
 	"github.com/symsimmy/due/config"
+	"github.com/symsimmy/due/log/utils"
 	"strings"
 	"time"
 )
 
 const (
 	defaultFile              = "./log/due.log"
-	defaultLevel             = InfoLevel
-	defaultFormat            = TextFormat
+	defaultLevel             = utils.InfoLevel
+	defaultFormat            = utils.TextFormat
 	defaultStdout            = true
 	defaultFileMaxAge        = 7 * 24 * time.Hour
 	defaultFileMaxSize       = 100
-	defaultFileCutRule       = CutByDay
+	defaultFileCutRule       = utils.CutByDay
 	defaultTimeFormat        = "2006/01/02 15:04:05.000000"
 	defaultCallerFullPath    = false
 	defaultClassifiedStorage = false
@@ -35,14 +36,14 @@ const (
 
 type options struct {
 	file              string        // 输出的文件路径，有文件路径才会输出到文件，否则只会输出到终端
-	level             Level         // 输出的最低日志级别，默认Info
-	format            Format        // 输出的日志格式，Text或者Json，默认Text
+	level             utils.Level   // 输出的最低日志级别，默认Info
+	format            utils.Format  // 输出的日志格式，Text或者Json，默认Text
 	stdout            bool          // 是否输出到终端，debug模式下默认输出到终端
 	timeFormat        string        // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	stackLevel        Level         // 堆栈的最低输出级别，默认不输出堆栈
+	stackLevel        utils.Level   // 堆栈的最低输出级别，默认不输出堆栈
 	fileMaxAge        time.Duration // 文件最大留存时间，默认7天
 	fileMaxSize       int64         // 文件最大尺寸限制，单位（MB），默认100MB
-	fileCutRule       CutRule       // 文件切割规则，默认按照天
+	fileCutRule       utils.CutRule // 文件切割规则，默认按照天
 	callerSkip        int           // 调用者跳过的层级深度
 	callerFullPath    bool          // 是否启用调用文件全路径，默认短路径
 	classifiedStorage bool          // 是否启用分级存储，默认不分级
@@ -70,16 +71,16 @@ func defaultOptions() *options {
 	}
 
 	level := config.Get(defaultLevelKey).String()
-	if lvl := ParseLevel(level); lvl != NoneLevel {
+	if lvl := utils.ParseLevel(level); lvl != utils.NoneLevel {
 		opts.level = lvl
 	}
 
 	format := config.Get(defaultFormatKey).String()
 	switch strings.ToLower(format) {
-	case JsonFormat.String():
-		opts.format = JsonFormat
-	case TextFormat.String():
-		opts.format = TextFormat
+	case utils.JsonFormat.String():
+		opts.format = utils.JsonFormat
+	case utils.TextFormat.String():
+		opts.format = utils.TextFormat
 	}
 
 	timeFormat := config.Get(defaultTimeFormatKey).String()
@@ -88,7 +89,7 @@ func defaultOptions() *options {
 	}
 
 	stackLevel := config.Get(defaultStackLevelKey).String()
-	if lvl := ParseLevel(stackLevel); lvl != NoneLevel {
+	if lvl := utils.ParseLevel(stackLevel); lvl != utils.NoneLevel {
 		opts.stackLevel = lvl
 	}
 
@@ -104,18 +105,18 @@ func defaultOptions() *options {
 
 	fileCutRule := config.Get(defaultFileCutRuleKey).String()
 	switch strings.ToLower(fileCutRule) {
-	case CutByYear.String():
-		opts.fileCutRule = CutByYear
-	case CutByMonth.String():
-		opts.fileCutRule = CutByMonth
-	case CutByDay.String():
-		opts.fileCutRule = CutByDay
-	case CutByHour.String():
-		opts.fileCutRule = CutByHour
-	case CutByMinute.String():
-		opts.fileCutRule = CutByMinute
-	case CutBySecond.String():
-		opts.fileCutRule = CutBySecond
+	case utils.CutByYear.String():
+		opts.fileCutRule = utils.CutByYear
+	case utils.CutByMonth.String():
+		opts.fileCutRule = utils.CutByMonth
+	case utils.CutByDay.String():
+		opts.fileCutRule = utils.CutByDay
+	case utils.CutByHour.String():
+		opts.fileCutRule = utils.CutByHour
+	case utils.CutByMinute.String():
+		opts.fileCutRule = utils.CutByMinute
+	case utils.CutBySecond.String():
+		opts.fileCutRule = utils.CutBySecond
 	}
 
 	opts.stdout = config.Get(defaultStdoutKey, defaultStdout).Bool()
@@ -131,12 +132,12 @@ func WithFile(file string) Option {
 }
 
 // WithLevel 设置输出的最低日志级别
-func WithLevel(level Level) Option {
+func WithLevel(level utils.Level) Option {
 	return func(o *options) { o.level = level }
 }
 
 // WithFormat 设置输出的日志格式
-func WithFormat(format Format) Option {
+func WithFormat(format utils.Format) Option {
 	return func(o *options) { o.format = format }
 }
 
@@ -151,7 +152,7 @@ func WithTimeFormat(format string) Option {
 }
 
 // WithStackLevel 设置堆栈的最小输出级别
-func WithStackLevel(level Level) Option {
+func WithStackLevel(level utils.Level) Option {
 	return func(o *options) { o.stackLevel = level }
 }
 
@@ -166,7 +167,7 @@ func WithFileMaxSize(size int64) Option {
 }
 
 // WithFileCutRule 设置文件切割规则
-func WithFileCutRule(cutRule CutRule) Option {
+func WithFileCutRule(cutRule utils.CutRule) Option {
 	return func(o *options) { o.fileCutRule = cutRule }
 }
 

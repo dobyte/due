@@ -15,6 +15,7 @@ require (
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lestrrat-go/strftime v1.0.6 // indirect
 	github.com/panjf2000/ants/v2 v2.7.1
+	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shamaton/msgpack/v2 v2.1.1
 	golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122 // indirect
 	golang.org/x/sync v0.1.0
