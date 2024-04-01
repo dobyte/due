@@ -4,6 +4,7 @@
 package tcp
 
 import (
+	"fmt"
 	"github.com/cloudwego/netpoll"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -63,6 +64,10 @@ func (c *serverConn) Send(msg []byte) error {
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) error {
+	if c == nil {
+		fmt.Println("conn nil")
+	}
+
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -73,7 +78,19 @@ func (c *serverConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	return write(conn.Writer(), msg)
+	writer := conn.Writer()
+
+	if writer == nil {
+		fmt.Println("writer nil")
+	}
+
+	if len(msg) == 0 || len(msg) > 4096 {
+		fmt.Println("msg nil", len(msg))
+	}
+
+	fmt.Println(len(msg))
+
+	return write(writer, msg)
 }
 
 // State 获取连接状态

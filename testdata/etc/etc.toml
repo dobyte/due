@@ -309,8 +309,6 @@ timezone = "Local"
             heartbeatInterval = "10s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
             heartbeatMechanism = "resp"
-            # 下行心跳是否携带服务器时间，默认为true
-            heartbeatWithServerTime = true
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
@@ -326,9 +324,13 @@ timezone = "Local"
             maxConnNum = 5000
             # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 10
+            # 心跳机制，默认resp
+            heartbeatMechanism = "resp"
         [network.tcp.client]
             # 拨号地址
             addr = "127.0.0.1:3553"
+            # 拨号超时时间，默认5s
+            timeout = "5s"
             # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 10
 [locate]

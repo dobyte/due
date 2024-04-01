@@ -84,10 +84,13 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		if err = conn.Push(msg); err != nil {
-			log.Errorf("push message failed: %v", err)
-			return
-		}
+		go func() {
+			if err = conn.Push(msg); err != nil {
+				log.Errorf("push message failed: %v", err)
+				return
+			}
+		}()
+
 	})
 
 	if err := server.Start(); err != nil {
