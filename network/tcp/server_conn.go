@@ -11,8 +11,6 @@ import (
 	"bufio"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/sasha-s/go-deadlock"
-	"github.com/symsimmy/due/internal/prom"
-	"github.com/symsimmy/due/internal/util"
 	"github.com/symsimmy/due/utils/xnet"
 	"github.com/symsimmy/due/utils/xtime"
 	"net"

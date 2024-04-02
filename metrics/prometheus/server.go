@@ -1,9 +1,8 @@
-package prommetrics
+package prometheus
 
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/symsimmy/due/internal/prom"
 	"github.com/symsimmy/due/log"
 	"net/http"
 	"strings"

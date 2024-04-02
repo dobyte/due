@@ -3,8 +3,6 @@ package gate
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/internal/prom"
-	"github.com/symsimmy/due/internal/util"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/packet"
 	"github.com/symsimmy/due/session"
@@ -85,7 +83,6 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, me
 	}
 
 	conn, err := p.gate.session.Conn(kind, target)
-	//if message.Route != 6014 && message.Route != 6514 && message.Route != 6515 {
 	if err != nil {
 		return err
 	}
@@ -96,12 +93,6 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, me
 		conn.UID(),
 		len(message.Buffer),
 	)
-	//}
-	// track 发送client消息数量
-	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Inc()
-
-	// track 发送client消息大小
-	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
 
 	err = p.gate.session.Push(kind, target, msg)
 	if kind == session.User && err == session.ErrNotFoundSession {
@@ -143,13 +134,6 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 	}
 
 	n, err := p.gate.session.Multicast(kind, targets, msg)
-
-	// track 发送client消息数量
-	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Add(float64(n))
-
-	// track 发送client消息大小
-	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
-
 	return n, err
 }
 
@@ -169,13 +153,6 @@ func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message *pa
 	//}
 
 	n, err := p.gate.session.Broadcast(kind, msg)
-
-	// track 发送client消息数量
-	prom.GateSendClientMsgCountCounter.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Add(float64(n))
-
-	// track 发送client消息大小
-	prom.GateSendClientMsgBytesGauge.WithLabelValues(p.gate.proxy.GetServerIP(), util.ToString(message.Route)).Set(float64(len(message.Buffer)))
-
 	return n, err
 }
 

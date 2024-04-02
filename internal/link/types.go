@@ -11,6 +11,18 @@ type GetIPArgs struct {
 	Target int64        // 会话目标，CID 或 UID
 }
 
+type IsOnlineArgs struct {
+	GID    string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind   session.Kind // 会话类型，session.Conn 或 session.User
+	Target int64        // 会话目标，CID 或 UID
+}
+
+type GetIdArgs struct {
+	GID    string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind   session.Kind // 会话类型，session.Conn 或 session.User
+	Target int64        // 会话目标，CID 或 UID
+}
+
 type Message struct {
 	Seq   int32       // 序列号
 	Route int32       // 路由ID
@@ -55,3 +67,22 @@ type DisconnectArgs struct {
 	Target  int64        // 会话目标，CID 或 UID
 	IsForce bool         // 是否强制断开
 }
+
+type MulticastDeliverArgs struct {
+	Kind    DeliverKind
+	Targets []string
+	Message interface{} // 消息
+}
+
+type BroadcastDeliverArgs struct {
+	Kind    DeliverKind
+	Message interface{} // 消息
+}
+
+const (
+	Gate DeliverKind = iota + 1
+	Center
+	Game
+)
+
+type DeliverKind int

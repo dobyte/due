@@ -13,9 +13,9 @@ import (
 	"github.com/symsimmy/due/crypto"
 	"github.com/symsimmy/due/encoding"
 	"github.com/symsimmy/due/hook"
-	"github.com/symsimmy/due/internal/middleware/cat"
 	"github.com/symsimmy/due/locate"
-	"github.com/symsimmy/due/metrics/prommetrics"
+	"github.com/symsimmy/due/metrics/cat"
+	"github.com/symsimmy/due/metrics/prometheus"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/utils/xuuid"
 	"time"
@@ -42,16 +42,16 @@ const (
 type Option func(o *options)
 
 type options struct {
-	id          string                 // 实例ID
-	name        string                 // 实例名称
-	ctx         context.Context        // 上下文
-	timeout     time.Duration          // RPC调用超时时间
-	server      network.Server         // 网关服务器
-	locator     locate.Locator         // 用户定位器
-	registry    registry.Registry      // 服务注册器
-	codec       encoding.Codec         // 编解码器
-	transporter transport.Transporter  // 消息传输器
-	promServer  prommetrics.PromServer // 埋点采集服务器
+	id          string                // 实例ID
+	name        string                // 实例名称
+	ctx         context.Context       // 上下文
+	timeout     time.Duration         // RPC调用超时时间
+	server      network.Server        // 网关服务器
+	locator     locate.Locator        // 用户定位器
+	registry    registry.Registry     // 服务注册器
+	codec       encoding.Codec        // 编解码器
+	transporter transport.Transporter // 消息传输器
+	promServer  prometheus.PromServer // 埋点采集服务器
 	catServer   *cat.Server
 	receiveHook []hook.ReceiveHook // 接受消息hook
 	encryptor   crypto.Encryptor   // 消息加密器
@@ -136,7 +136,7 @@ func WithTransporter(transporter transport.Transporter) Option {
 }
 
 // WithPromServer 设置prom server
-func WithPromServer(promServer *prommetrics.PromServer) Option {
+func WithPromServer(promServer *prometheus.PromServer) Option {
 	return func(o *options) { o.promServer = *promServer }
 }
 

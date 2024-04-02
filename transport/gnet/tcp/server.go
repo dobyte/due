@@ -7,11 +7,8 @@ import (
 	"github.com/panjf2000/gnet/v2"
 	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/internal/endpoint"
-	"github.com/symsimmy/due/internal/prom"
-	"github.com/symsimmy/due/internal/util"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/transport"
-	"time"
 )
 
 const scheme = "tcp"
@@ -70,14 +67,11 @@ func (s *Server) OnTraffic(c gnet.Conn) (action gnet.Action) {
 		if len(data.Data) <= 0 {
 			break
 		}
-		// 返回消息
-		start := time.Now()
 		v, err := s.receiveHandler(data.Route, data.Data)
-		prom.ServerRpcHandleDurationSummary.WithLabelValues(s.addr, util.ToString(data.Route)).Observe(float64(time.Since(start).Milliseconds()))
 
 		if err != nil {
 			log.Debugf("server receive messageId:[%+v],handler[route=%+v] failed.err:%+v", data.Route, data.MessageId, err)
-			prom.ServerReceiveHandleError.WithLabelValues(err.Error())
+
 			continue
 		}
 
@@ -86,11 +80,9 @@ func (s *Server) OnTraffic(c gnet.Conn) (action gnet.Action) {
 			if ok {
 				replyBytes, _ := proto.Marshal(reply)
 				packet, _ := codec.Encode(data.Route, data.MessageId, replyBytes)
-				start = time.Now()
 				_, err = c.Write(packet)
-				prom.ServerRpcWriteDurationSummary.WithLabelValues(s.addr, util.ToString(data.Route)).Observe(float64(time.Since(start).Milliseconds()))
 				if err != nil {
-					prom.ServerInternalWriteErrorCounter.WithLabelValues(err.Error()).Inc()
+
 				}
 			}
 		}

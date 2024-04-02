@@ -9,11 +9,10 @@ package gate
 
 import (
 	"context"
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/internal/link"
-	"github.com/symsimmy/due/internal/prom"
+	"github.com/symsimmy/due/metrics/prometheus"
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"
 	"strconv"
@@ -145,7 +144,7 @@ func (g *Gate) stopNetworkServer() {
 // 处理连接打开
 func (g *Gate) handleConnect(conn network.Conn) {
 	// track gate online num
-	prom.GateServerTotalOnlinePlayerGauge.WithLabelValues(g.opts.id).Inc()
+	prometheus.GateServerTotalOnlinePlayerGauge.WithLabelValues(g.opts.id).Inc()
 
 	g.session.AddConn(conn)
 
@@ -158,7 +157,6 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // 处理断开连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	// track gate online num
-	prom.GateServerTotalOnlinePlayerGauge.WithLabelValues(g.opts.id).Dec()
 
 	cid, uid := conn.ID(), conn.UID()
 	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
@@ -228,11 +226,11 @@ func (g *Gate) startRPCServer() {
 		log.Fatalf("rpc server create failed: %v", err)
 	}
 
-	gopool.Go(func() {
+	go func() {
 		if err = g.rpc.Start(); err != nil {
 			log.Fatalf("rpc server start failed: %v", err)
 		}
-	})
+	}()
 }
 
 // 停止RPC服务器

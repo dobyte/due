@@ -5,9 +5,9 @@ import (
 	"github.com/symsimmy/due/config"
 	"github.com/symsimmy/due/crypto"
 	"github.com/symsimmy/due/encoding"
-	"github.com/symsimmy/due/internal/middleware/cat"
 	"github.com/symsimmy/due/locate"
-	"github.com/symsimmy/due/metrics/prommetrics"
+	"github.com/symsimmy/due/metrics/cat"
+	"github.com/symsimmy/due/metrics/prometheus"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/utils/xuuid"
@@ -36,20 +36,20 @@ const (
 type Option func(o *options)
 
 type options struct {
-	id                string                 // 实例ID
-	name              string                 // 实例名称
-	ctx               context.Context        // 上下文
-	codec             encoding.Codec         // 编解码器
-	timeout           time.Duration          // RPC调用超时时间
-	locator           locate.Locator         // 用户定位器
-	registry          registry.Registry      // 服务注册器
-	transporter       transport.Transporter  // 消息传输器
-	promServer        prommetrics.PromServer // 埋点采集服务器
-	catServer         *cat.Server            // cat服务器
-	encryptor         crypto.Encryptor       // 消息加密器
-	decryptor         crypto.Decryptor       // 消息解密器
-	asyncEventHandle  bool                   // 异步处理连接事件
-	asyncRouterHandle bool                   // 异步处理消息事件
+	id                string                // 实例ID
+	name              string                // 实例名称
+	ctx               context.Context       // 上下文
+	codec             encoding.Codec        // 编解码器
+	timeout           time.Duration         // RPC调用超时时间
+	locator           locate.Locator        // 用户定位器
+	registry          registry.Registry     // 服务注册器
+	transporter       transport.Transporter // 消息传输器
+	promServer        prometheus.PromServer // 埋点采集服务器
+	catServer         *cat.Server           // cat服务器
+	encryptor         crypto.Encryptor      // 消息加密器
+	decryptor         crypto.Decryptor      // 消息解密器
+	asyncEventHandle  bool                  // 异步处理连接事件
+	asyncRouterHandle bool                  // 异步处理消息事件
 }
 
 func defaultOptions() *options {
@@ -133,7 +133,7 @@ func WithTransporter(transporter transport.Transporter) Option {
 }
 
 // WithPromServer 设置prom server
-func WithPromServer(promServer *prommetrics.PromServer) Option {
+func WithPromServer(promServer *prometheus.PromServer) Option {
 	return func(o *options) { o.promServer = *promServer }
 }
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"github.com/golang/protobuf/proto"
 	"github.com/symsimmy/due/errcode"
-	"github.com/symsimmy/due/internal/prom"
-	"github.com/symsimmy/due/internal/util"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/packet"
 	"github.com/symsimmy/due/session"
@@ -29,7 +27,6 @@ func NewServer(provider transport.GateProvider, opts *server.Options) (*server.S
 }
 
 func (e *endpoint) dispatch(methodName uint16, data []byte) (reply interface{}, err error) {
-	var route string
 	switch methodName {
 	case transport.Ping:
 		req := &pb.PingRequest{}
@@ -169,8 +166,6 @@ func (e *endpoint) dispatch(methodName uint16, data []byte) (reply interface{}, 
 		if err != nil {
 			return nil, err
 		}
-		// record route
-		route = util.ToString(req.Message.Route)
 		err = e.provider.Push(context.Background(), session.Kind(req.Kind), req.Target, &packet.Message{
 			Seq:    req.Message.Seq,
 			Route:  req.Message.Route,
@@ -188,8 +183,6 @@ func (e *endpoint) dispatch(methodName uint16, data []byte) (reply interface{}, 
 		if err != nil {
 			return nil, err
 		}
-		// record route
-		route = util.ToString(req.Message.Route)
 		_, err = e.provider.Multicast(context.Background(), session.Kind(req.Kind), req.Targets, &packet.Message{
 			Seq:    req.Message.Seq,
 			Route:  req.Message.Route,
@@ -207,8 +200,6 @@ func (e *endpoint) dispatch(methodName uint16, data []byte) (reply interface{}, 
 		if err != nil {
 			return
 		}
-		// record route
-		route = util.ToString(req.Message.Route)
 		_, err = e.provider.Broadcast(context.Background(), session.Kind(req.Kind), &packet.Message{
 			Seq:    req.Message.Seq,
 			Route:  req.Message.Route,
@@ -239,9 +230,6 @@ func (e *endpoint) dispatch(methodName uint16, data []byte) (reply interface{}, 
 
 		break
 	}
-
-	// metrics
-	prom.GateReceiveGameServerMsgCountCounter.WithLabelValues(util.ToString(methodName), route).Inc()
 
 	if err != nil {
 		log.Warnf("gate server dispatch methodName:%+v failed.error:%+v", methodName, err)

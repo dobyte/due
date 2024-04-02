@@ -2,7 +2,6 @@ package log
 
 import (
 	"fmt"
-	"github.com/symsimmy/due/internal/middleware/sentry_manager"
 	"github.com/symsimmy/due/log/utils"
 	"io"
 	"os"
@@ -15,7 +14,6 @@ type defaultLogger struct {
 	syncers    []syncer
 	bufferPool sync.Pool
 	entityPool *EntityPool
-	sentry     *sentry_manager.SentryManager
 }
 
 type enabler func(level utils.Level) bool
@@ -42,7 +40,6 @@ func NewLogger(opts ...Option) *defaultLogger {
 	l.opts = o
 	l.syncers = make([]syncer, 0, 7)
 	l.entityPool = newEntityPool(l)
-	l.sentry = sentry_manager.NewSentryManager()
 
 	switch l.opts.format {
 	case utils.TextFormat:
@@ -151,24 +148,18 @@ func (l *defaultLogger) Warnf(format string, a ...interface{}) {
 func (l *defaultLogger) Error(a ...interface{}) {
 	entity := l.Entity(utils.ErrorLevel, a...)
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 }
 
 // Errorf 打印错误模板日志
 func (l *defaultLogger) Errorf(format string, a ...interface{}) {
 	entity := l.Entity(utils.ErrorLevel, fmt.Sprintf(format, a...))
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 }
 
 // Fatal 打印致命错误日志
 func (l *defaultLogger) Fatal(a ...interface{}) {
 	entity := l.Entity(utils.FatalLevel, a...)
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 	os.Exit(1)
 }
 
@@ -176,8 +167,6 @@ func (l *defaultLogger) Fatal(a ...interface{}) {
 func (l *defaultLogger) Fatalf(format string, a ...interface{}) {
 	entity := l.Entity(utils.FatalLevel, fmt.Sprintf(format, a...))
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 	os.Exit(1)
 }
 
@@ -185,14 +174,10 @@ func (l *defaultLogger) Fatalf(format string, a ...interface{}) {
 func (l *defaultLogger) Panic(a ...interface{}) {
 	entity := l.Entity(utils.PanicLevel, a...)
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 }
 
 // Panicf 打印Panic模板日志
 func (l *defaultLogger) Panicf(format string, a ...interface{}) {
 	entity := l.Entity(utils.PanicLevel, fmt.Sprintf(format, a...))
 	entity.Log()
-	err := l.entityPool.buildErr(a)
-	l.sentry.CatchErrors(err)
 }

@@ -15,19 +15,22 @@ import (
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"
 	"golang.org/x/sync/errgroup"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
 var (
-	ErrInvalidGID         = errors.New("invalid gate id")
-	ErrInvalidNID         = errors.New("invalid node id")
-	ErrInvalidMessage     = errors.New("invalid message")
-	ErrInvalidSessionKind = errors.New("invalid session kind")
-	ErrNotFoundUserSource = errors.New("not found user source")
-	ErrReceiveTargetEmpty = errors.New("the receive target is empty")
-	ErrInvalidArgument    = errors.New("invalid argument")
+	ErrInvalidGID             = errors.New("invalid gate id")
+	ErrInvalidNID             = errors.New("invalid node id")
+	ErrInvalidMessage         = errors.New("invalid message")
+	ErrInvalidSessionKind     = errors.New("invalid session kind")
+	ErrNotFoundUserSource     = errors.New("not found user source")
+	ErrGateNotFoundUserSource = errors.New("gate not found user source")
+	ErrNodeNotFoundUserSource = errors.New("node not found user source")
+	ErrReceiveTargetEmpty     = errors.New("the receive target is empty")
+	ErrInvalidArgument        = errors.New("invalid argument")
 )
 
 type Link struct {
@@ -55,6 +58,20 @@ func NewLink(opts *Options) *Link {
 		gateDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 		nodeDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 	}
+}
+
+func (l *Link) Ping(ctx context.Context, gid string, message string) (string, error) {
+	client, err := l.getGateClientByGID(gid)
+	if err != nil {
+		return "", err
+	}
+
+	replyMessage, err := client.Ping(ctx, message)
+	if err != nil {
+		return "", err
+	}
+
+	return replyMessage, err
 }
 
 // BindGate 绑定网关
@@ -217,6 +234,23 @@ func (l *Link) AskNode(ctx context.Context, uid int64, nid string) (string, bool
 
 // FetchServiceList 拉取服务列表
 func (l *Link) FetchServiceList(ctx context.Context, kind cluster.Kind, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return l.FetchServiceAliasList(ctx, kind, "", states...)
+}
+
+func (l *Link) FetchServiceAliasIDs(ctx context.Context, kind cluster.Kind, alias string, states ...cluster.State) ([]string, error) {
+	instances, err := l.FetchServiceAliasList(ctx, kind, alias, states...)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(instances))
+	for i := range instances {
+		ids = append(ids, instances[i].ID)
+	}
+	return ids, nil
+}
+
+func (l *Link) FetchServiceAliasList(ctx context.Context, kind cluster.Kind, alias string, states ...cluster.State) ([]*registry.ServiceInstance, error) {
 	services, err := l.opts.Registry.Services(ctx, string(kind))
 	if err != nil {
 		return nil, err
@@ -234,7 +268,9 @@ func (l *Link) FetchServiceList(ctx context.Context, kind cluster.Kind, states .
 	list := make([]*registry.ServiceInstance, 0, len(services))
 	for i := range services {
 		if _, ok := mp[services[i].State]; ok {
-			list = append(list, services[i])
+			if len(alias) <= 0 || strings.EqualFold(services[i].Alias, alias) {
+				list = append(list, services[i])
+			}
 		}
 	}
 
@@ -456,6 +492,122 @@ func (l *Link) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error
 	return total, err
 }
 
+// IsOnline 获取指定target是否在线
+func (l *Link) IsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
+	switch args.Kind {
+	case session.Conn:
+		return l.directIsOnline(ctx, args.GID, args.Kind, args.Target)
+	case session.User:
+		if args.GID == "" {
+			return l.indirectIsOnline(ctx, args.Target)
+		} else {
+			return l.directIsOnline(ctx, args.GID, args.Kind, args.Target)
+		}
+	default:
+		return false, ErrInvalidSessionKind
+	}
+}
+
+// 直接获取IsOnline
+func (l *Link) directIsOnline(ctx context.Context, gid string, kind session.Kind, target int64) (bool, error) {
+	client, err := l.getGateClientByGID(gid)
+	if err != nil {
+		return false, err
+	}
+
+	isOnline, _, err := client.IsOnline(ctx, kind, target)
+	return isOnline, err
+}
+
+// 间接获取IsOnline
+func (l *Link) indirectIsOnline(ctx context.Context, uid int64) (bool, error) {
+	v, err := l.doGateRPC(ctx, uid, func(client transport.GateClient) (bool, interface{}, error) {
+		isOnline, miss, err := client.IsOnline(ctx, session.User, uid)
+		return miss, isOnline, err
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return v.(bool), nil
+}
+
+// Stat 统计会话总数
+func (l *Link) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	total := int64(0)
+	eg, ctx := errgroup.WithContext(ctx)
+	l.gateDispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			client, err := l.opts.Transporter.NewGateClient(ep)
+			if err != nil {
+				return err
+			}
+
+			n, miss, err := client.Stat(ctx, kind)
+			if miss {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+			atomic.AddInt64(&total, n)
+
+			return nil
+		})
+
+		return true
+	})
+
+	err := eg.Wait()
+
+	if total > 0 {
+		return total, nil
+	}
+
+	return total, err
+}
+
+// GetID 获取conn的id
+func (l *Link) GetID(ctx context.Context, args *GetIdArgs) (int64, error) {
+	switch args.Kind {
+	case session.Conn:
+		return l.directGetID(ctx, args.GID, args.Kind, args.Target)
+	case session.User:
+		if args.GID == "" {
+			return l.indirectGetID(ctx, args.Target)
+		} else {
+			return l.directGetID(ctx, args.GID, args.Kind, args.Target)
+		}
+	default:
+		return 0, ErrInvalidSessionKind
+	}
+}
+
+// 直接获取IsOnline
+func (l *Link) directGetID(ctx context.Context, gid string, kind session.Kind, target int64) (int64, error) {
+	client, err := l.getGateClientByGID(gid)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := client.GetID(ctx, kind, target)
+	return id, err
+}
+
+// 间接获取IsOnline
+func (l *Link) indirectGetID(ctx context.Context, uid int64) (int64, error) {
+	v, err := l.doGateRPC(ctx, uid, func(client transport.GateClient) (bool, interface{}, error) {
+		id, err := client.GetID(ctx, session.User, uid)
+		return err != nil, id, err
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return v.(int64), nil
+}
+
 // Disconnect 断开连接
 func (l *Link) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 	switch args.Kind {
@@ -491,6 +643,43 @@ func (l *Link) indirectDisconnect(ctx context.Context, uid int64, isForce bool) 
 	})
 
 	return err
+}
+
+func (l *Link) MulticastDeliver(ctx context.Context, args *MulticastDeliverArgs) error {
+	for _, target := range args.Targets {
+		_ = l.Deliver(ctx, &DeliverArgs{
+			NID:     target,
+			Message: args.Message,
+		})
+	}
+
+	return nil
+}
+
+func (l *Link) BroadcastDeliver(ctx context.Context, args *BroadcastDeliverArgs) error {
+	var instances []string
+	var err error
+	switch args.Kind {
+	case Center:
+		instances, err = l.FetchServiceAliasIDs(ctx, cluster.Node, "center")
+		break
+	case Game:
+		instances, err = l.FetchServiceAliasIDs(ctx, cluster.Node, "game")
+		break
+	}
+
+	if err != nil {
+		return err
+	}
+
+	for _, id := range instances {
+		err = l.Deliver(ctx, &DeliverArgs{
+			NID:     id,
+			Message: args.Message,
+		})
+	}
+
+	return nil
 }
 
 // Deliver 投递消息给节点处理
@@ -538,6 +727,49 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 		})
 		return err
 	}
+}
+
+func (l *Link) BlockConn(ctx context.Context, onid string, nnid string, target uint64) {
+	// 保留 为以后可能传多个target
+	//m := make(map[string]map[int64]struct{})
+	//for _, target := range targets {
+	//	gid, err := l.LocateGate(ctx, target)
+	//	if err != nil {
+	//		log.Warnf("uid:[%v] locate gate failed", target)
+	//		continue
+	//	}
+	//	if uids, ok := m[gid]; ok {
+	//		uids[target] = struct{}{}
+	//	} else {
+	//		m[gid] = map[int64]struct{}{target: {}}
+	//	}
+	//}
+	//
+	//for k, v := range m {
+	//	cli, err := l.getGateClientByGID(k)
+	//	if err != nil {
+	//		log.Warnf("gid:[%v] get gate client failed", k, err)
+	//		continue
+	//	}
+	//	var uids []int64
+	//	for target, _ := range v {
+	//		uids = append(uids, target)
+	//	}
+	//	cli.BlockConn(ctx, onid, nnid, uids)
+	//}
+
+	gid, err := l.LocateGate(ctx, int64(target))
+	if err != nil {
+		log.Warnf("uid:[%v] locate gate failed", target)
+		return
+	}
+
+	cli, err := l.getGateClientByGID(gid)
+	if err != nil {
+		log.Warnf("gid:[%v] get gate client failed", gid, err)
+		return
+	}
+	cli.BlockConn(ctx, onid, nnid, target)
 }
 
 // Trigger 触发事件

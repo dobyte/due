@@ -1,4 +1,4 @@
-package prommetrics
+package prometheus
 
 import (
 	"context"
