@@ -1,6 +1,6 @@
 module github.com/symsimmy/due/log/aliyun
 
-go 1.16
+go 1.21
 
 require (
 	github.com/aliyun/aliyun-log-go-sdk v0.1.37

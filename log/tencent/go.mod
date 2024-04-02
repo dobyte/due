@@ -1,6 +1,6 @@
 module github.com/symsimmy/due/log/tencent
 
-go 1.16
+go 1.21
 
 require (
 	github.com/symsimmy/due v0.0.4
