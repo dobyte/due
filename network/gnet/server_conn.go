@@ -6,6 +6,7 @@ package gnet
 import (
 	"encoding/binary"
 	"github.com/bytedance/gopkg/util/gopool"
+	"github.com/panjf2000/gnet/v2"
 	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/network"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // ID 获取连接ID
