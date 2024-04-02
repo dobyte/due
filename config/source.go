@@ -14,6 +14,8 @@ type Source interface {
 	Load() ([]*Configuration, error)
 	// Watch 监听配置项
 	Watch(ctx context.Context) (Watcher, error)
+	// Path 配置项路径
+	Path() string
 }
 
 // Configuration 配置项
@@ -30,6 +32,10 @@ type defaultSource struct {
 var _ Source = &defaultSource{}
 
 func NewSource(path string) Source {
+	if path == "" {
+		return nil
+	}
+
 	return &defaultSource{path: path}
 }
 
@@ -104,4 +110,9 @@ func (s *defaultSource) loadDir(path string) (cs []*Configuration, err error) {
 	})
 
 	return
+}
+
+// Path 配置项路径
+func (s *defaultSource) Path() string {
+	return s.path
 }

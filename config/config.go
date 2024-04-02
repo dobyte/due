@@ -1,23 +1,42 @@
 package config
 
 import (
+	"context"
+	"fmt"
 	"github.com/symsimmy/due/env"
 	"github.com/symsimmy/due/flag"
-	"github.com/symsimmy/due/common/value"
+	"github.com/symsimmy/due/value"
 )
 
 const (
-	dueConfigArgName  = "config"
-	dueConfigEnvName  = "DUE_CONFIG"
-	defaultConfigPath = "./config"
+	dueConfigArgName      = "config"
+	dueConfigEnvName      = "DUE_CONFIG"
+	defaultConfigPath     = "./config"
+	defaultConfigFileName = "default.toml"
+
+	defaultRemoteConfigEnvName = "DUE_REMOTE_CONFIG"
+	defaultRemoteConfig        = "apollo"
 )
 
 var globalReader Reader
 
 func init() {
-	path := flag.String(dueConfigArgName, defaultConfigPath)
-	path = env.Get(dueConfigEnvName, path).String()
-	SetReader(NewReader(WithSources(NewSource(path))))
+	// get path from command line
+	path := flag.String(dueConfigArgName, fmt.Sprintf("%v/%v", defaultConfigPath, defaultConfigFileName))
+
+	// overwrite path from env
+	var overwritePath string
+	localEnv := env.Get(dueConfigEnvName).String()
+	if localEnv != "" {
+		overwritePath = fmt.Sprintf("%v/%v", defaultConfigPath, localEnv)
+	}
+
+	remoteEnv := env.Get(defaultRemoteConfigEnvName, defaultRemoteConfig).String()
+
+	// set local reader
+	SetReader(NewReader(WithSources(NewSource(path), NewSource(overwritePath)), WithRemoteSources(remoteEnv)))
+
+	InitConsulConfig(context.Background())
 }
 
 // SetReader 设置配置读取器

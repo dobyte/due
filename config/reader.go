@@ -2,14 +2,15 @@ package config
 
 import (
 	"context"
+	"github.com/apolloconfig/agollo/v4/storage"
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/common/value"
+	"github.com/symsimmy/due/value"
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -20,15 +21,30 @@ type Reader interface {
 	Get(pattern string, def ...interface{}) value.Value
 	// Set 设置配置值
 	Set(pattern string, value interface{}) error
+	// AddChangeListener 设置配置变更监听
+	AddChangeListener(listener interface{})
+	// RemoveChangeListener 设置配置变更监听
+	RemoveChangeListener(listener interface{})
 	// Close 关闭配置监听
 	Close()
 }
+
+const (
+	Apollo = "apollo"
+
+	defaultApolloEnable = "true"
+
+	defaultApolloAppIdKey  = "config.apollo.appId"
+	defaultApolloHostKey   = "config.apollo.host"
+	defaultApolloPortKey   = "config.apollo.port"
+	defaultApolloEnableKey = "config.apollo.enable"
+)
 
 type defaultReader struct {
 	opts   *options
 	ctx    context.Context
 	cancel context.CancelFunc
-	mu     sync.Mutex
+	mu     deadlock.Mutex
 	idx    int64
 	values [2]map[string]interface{}
 }
@@ -57,24 +73,53 @@ func NewReader(opts ...Option) Reader {
 func (r *defaultReader) init() {
 	values := make(map[string]interface{})
 	for _, s := range r.opts.sources {
+		if s == nil {
+			continue
+		}
 		cs, err := s.Load()
 		if err != nil {
 			log.Printf("load configure failed: %v", err)
 			continue
 		}
+		log.Printf("load configure success: %v", s.Path())
 
 		for _, c := range cs {
-			v, err := r.opts.decoder(c)
+			value := make(map[string]interface{})
+			err := r.opts.decoder(c, &value)
 			if err != nil {
 				log.Printf("decode configure failed: %v", err)
 				continue
 			}
-
-			values[c.Name] = v
+			values = mergeMaps(values, value)
 		}
 	}
 
+	values = map[string]interface{}{"config": values}
 	r.store(values)
+
+	// set remote reader
+	for _, rs := range r.opts.remoteSources {
+		switch rs {
+		case Apollo:
+			apolloEnable := r.Get(defaultApolloEnableKey, defaultApolloEnable).Bool()
+			if !apolloEnable {
+				continue
+			}
+			apolloAppId := r.Get(defaultApolloAppIdKey).String()
+			apolloHost := r.Get(defaultApolloHostKey).String()
+			apolloPort := r.Get(defaultApolloPortKey).Int()
+			apollo := NewApolloReader(WithAppId(apolloAppId), WithHost(apolloHost), WithPort(apolloPort))
+			apollo.Range(func(key, value interface{}) bool {
+				if stringKey, ok := key.(string); ok {
+					r.Set(stringKey, value)
+				}
+				return true
+			})
+			apollo.client.AddChangeListener(&CustomChangeListener{defaultReader: r})
+			r.opts.remoteReaders = append(r.opts.remoteReaders, apollo)
+		default:
+		}
+	}
 }
 
 // 保存配置
@@ -108,6 +153,9 @@ func (r *defaultReader) copy() (map[string]interface{}, error) {
 // 监听配置源变化
 func (r *defaultReader) watch() {
 	for _, s := range r.opts.sources {
+		if s == nil {
+			continue
+		}
 		watcher, err := s.Watch(r.ctx)
 		if err != nil {
 			log.Printf("watching configure change failed: %v", err)
@@ -131,12 +179,12 @@ func (r *defaultReader) watch() {
 
 				values := make(map[string]interface{})
 				for _, c := range cs {
-					v, err := r.opts.decoder(c)
+					err := r.opts.decoder(c, values)
 					if err != nil {
 						continue
 					}
-					values[c.Name] = v
 				}
+				values = map[string]interface{}{"config": values}
 
 				func() {
 					r.mu.Lock()
@@ -156,6 +204,32 @@ func (r *defaultReader) watch() {
 				}()
 			}
 		}()
+	}
+}
+
+// AddChangeListener 设置配置变更监听
+func (r *defaultReader) AddChangeListener(listener interface{}) {
+	for _, r := range r.opts.remoteReaders {
+		switch v := r.(type) {
+		case *ApolloReader:
+			if l, ok := listener.(storage.ChangeListener); ok {
+				v.AddChangeListener(l)
+			}
+		default:
+		}
+	}
+}
+
+// RemoveChangeListener 取消配置变更监听
+func (r *defaultReader) RemoveChangeListener(listener interface{}) {
+	for _, r := range r.opts.remoteReaders {
+		switch v := r.(type) {
+		case *ApolloReader:
+			if l, ok := listener.(storage.ChangeListener); ok {
+				v.RemoveChangeListener(l)
+			}
+		default:
+		}
 	}
 }
 
@@ -370,4 +444,35 @@ func reviseKeys(keys []string, values map[string]interface{}) []string {
 	}
 
 	return keys
+}
+
+func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
+	for k, v := range b {
+		// If you use map[string]interface{}, ok is always false here.
+		// Because yaml.Unmarshal will give you map[string]interface{}.
+		if v, ok := v.(map[string]interface{}); ok {
+			if bv, ok := a[k]; ok {
+				if bv, ok := bv.(map[string]interface{}); ok {
+					a[k] = mergeMaps(bv, v)
+					continue
+				}
+			}
+		}
+		a[k] = v
+	}
+	return a
+}
+
+type CustomChangeListener struct {
+	defaultReader *defaultReader
+}
+
+func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
+	for key, value := range changeEvent.Changes {
+		c.defaultReader.Set(key, value.NewValue)
+	}
+}
+
+func (c *CustomChangeListener) OnNewestChange(event *storage.FullChangeEvent) {
+	//write your code here
 }

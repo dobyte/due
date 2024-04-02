@@ -12,12 +12,14 @@ import (
 
 type Option func(o *options)
 
-type Decoder func(configuration *Configuration) (interface{}, error)
+type Decoder func(configuration *Configuration, value interface{}) error
 
 type options struct {
-	ctx     context.Context
-	sources []Source
-	decoder Decoder
+	ctx           context.Context
+	sources       []Source
+	remoteSources []string
+	remoteReaders []interface{}
+	decoder       Decoder
 }
 
 // WithContext 设置上下文
@@ -35,30 +37,34 @@ func WithDecoder(decoder Decoder) Option {
 	return func(o *options) { o.decoder = decoder }
 }
 
+// WithRemoteSources 设置远程配置源
+func WithRemoteSources(remoteSources ...string) Option {
+	return func(o *options) { o.remoteSources = remoteSources[:] }
+}
+
 // 默认解码器
-func defaultDecoder(c *Configuration) (interface{}, error) {
+func defaultDecoder(c *Configuration, value interface{}) error {
 	switch strings.ToLower(c.Format) {
 	case "json":
-		return unmarshal(c.Content, json.Unmarshal)
+		return unmarshal(c.Content, value, json.Unmarshal)
 	case "xml":
-		return unmarshal(c.Content, xml.Unmarshal)
+		return unmarshal(c.Content, value, xml.Unmarshal)
 	case "yaml", "yml":
-		return unmarshal(c.Content, yaml.Unmarshal)
+		return unmarshal(c.Content, value, yaml.Unmarshal)
 	case "toml":
-		return unmarshal(c.Content, toml.Unmarshal)
+		return unmarshal(c.Content, value, toml.Unmarshal)
 	default:
-		return nil, errors.New("invalid encoding format")
+		return errors.New("invalid encoding format")
 	}
 }
 
-func unmarshal(content []byte, fn func(data []byte, v interface{}) error) (dest interface{}, err error) {
-	dest = make(map[string]interface{})
-	if err = fn(content, &dest); err == nil {
+func unmarshal(content []byte, value interface{}, fn func(data []byte, v interface{}) error) (err error) {
+	if err = fn(content, value); err == nil {
 		return
 	}
 
-	dest = make([]interface{}, 0)
-	err = fn(content, &dest)
+	value = make([]interface{}, 0)
+	err = fn(content, value)
 
 	return
 }
