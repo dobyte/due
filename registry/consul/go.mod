@@ -2,8 +2,6 @@ module github.com/symsimmy/due/registry/consul
 
 go 1.21
 
-toolchain go1.21.4
-
 require (
 	github.com/hashicorp/consul/api v1.26.1
 	github.com/sasha-s/go-deadlock v0.3.1

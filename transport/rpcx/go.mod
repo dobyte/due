@@ -2,8 +2,6 @@ module github.com/symsimmy/due/transport/rpcx
 
 go 1.21
 
-toolchain go1.21.5
-
 require (
 	github.com/smallnest/rpcx v1.8.11
 	github.com/symsimmy/due v0.0.8

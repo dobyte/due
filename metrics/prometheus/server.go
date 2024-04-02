@@ -41,20 +41,12 @@ func (s *PromServer) Start() {
 			}
 		}()
 		s.engine.GET("/metrics", s.promHandler(promhttp.Handler()))
-		s.engine.GET("/clear-metrics", s.clearPromMetricsHandler())
 	}
 }
 
 func (s *PromServer) promHandler(handler http.Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
-	}
-}
-
-func (s *PromServer) clearPromMetricsHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		log.Infof("receive clear prom metrics request.")
-		prom.ResetMetrics()
 	}
 }
 

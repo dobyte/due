@@ -2,8 +2,6 @@ module github.com/symsimmy/due/network/netpoll
 
 go 1.21
 
-toolchain go1.21.4
-
 require (
 	github.com/cloudwego/netpoll v0.4.1
 	github.com/libp2p/go-reuseport v0.3.0

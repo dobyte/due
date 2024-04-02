@@ -2,8 +2,6 @@ module github.com/symsimmy/due/network/tcp
 
 go 1.21
 
-toolchain go1.21.5
-
 require (
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/symsimmy/due v0.0.8

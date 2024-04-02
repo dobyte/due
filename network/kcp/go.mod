@@ -1,6 +1,6 @@
 module github.com/symsimmy/due/network/kcp
 
-go 1.18
+go 1.21
 
 require (
 	github.com/symsimmy/due v0.0.21

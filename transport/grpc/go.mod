@@ -2,8 +2,6 @@ module github.com/symsimmy/due/transport/grpc
 
 go 1.21
 
-toolchain go1.21.5
-
 require (
 	github.com/golang/protobuf v1.5.3
 	github.com/symsimmy/due v0.0.8
