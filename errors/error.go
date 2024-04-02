@@ -2,24 +2,8 @@ package errors
 
 import (
 	"fmt"
-	"github.com/symsimmy/due/errcode"
 	"github.com/symsimmy/due/internal/stack"
 	"strings"
-)
-
-var (
-	ErrTeamNotExists     = NewError(errcode.Team_no_exists, "team not exists")
-	ErrNoAuthority       = NewError(errcode.No_authority, "no authority")
-	ErrTeamTransferError = NewError(errcode.Team_transfer_error, "team transfer error")
-	ErrNotInTeam         = NewError(errcode.Not_in_team, "not in team")
-	ErrInTeam            = NewError(errcode.In_team, "in team")
-	ErrTeamMax           = NewError(errcode.Team_max, "team max")
-	ErrAppliedToJoin     = NewError(errcode.Applied_to_join, "applied to join")
-	ErrMongoNoDoc        = NewError(errcode.Not_found, "mongo: no documents in result")
-	ErrMongoOp           = NewError(errcode.Mongo_op_error, "mongo op failed")
-	ErrRedisOp           = NewError(errcode.Redis_op_error, "redis op failed")
-	ErrHasTeam           = NewError(errcode.Target_has_team, "target has team")
-	ErrNoExam            = NewError(errcode.Team_no_exam, "no exam id")
 )
 
 type Error struct {
