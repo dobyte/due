@@ -94,11 +94,15 @@ func (m *Master) Proxy() *Proxy {
 }
 
 func (m *Master) startCatServer() {
-	m.opts.catServer.Start()
+	if m.opts.catServer != nil {
+		m.opts.catServer.Start()
+	}
 }
 
 func (m *Master) stopCatServer() {
-	m.opts.catServer.Destroy()
+	if m.opts.catServer != nil {
+		m.opts.catServer.Destroy()
+	}
 }
 
 func (m *Master) debugPrint() {

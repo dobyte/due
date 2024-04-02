@@ -241,11 +241,15 @@ func (g *Gate) stopRPCServer() {
 }
 
 func (g *Gate) startCatServer() {
-	g.opts.catServer.Start()
+	if g.opts.catServer != nil {
+		g.opts.catServer.Start()
+	}
 }
 
 func (g *Gate) stopCatServer() {
-	g.opts.catServer.Destroy()
+	if g.opts.catServer != nil {
+		g.opts.catServer.Destroy()
+	}
 }
 
 // 注册服务实例

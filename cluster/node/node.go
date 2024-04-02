@@ -174,11 +174,15 @@ func (n *Node) stopPromServer() {
 }
 
 func (n *Node) startCatServer() {
-	n.opts.catServer.Start()
+	if n.opts.catServer != nil {
+		n.opts.catServer.Start()
+	}
 }
 
 func (n *Node) stopCatServer() {
-	n.opts.catServer.Destroy()
+	if n.opts.catServer != nil {
+		n.opts.catServer.Destroy()
+	}
 }
 
 // 启动RPC服务器
