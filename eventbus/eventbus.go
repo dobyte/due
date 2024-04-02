@@ -2,8 +2,8 @@ package eventbus
 
 import (
 	"context"
+	"github.com/symsimmy/due/common/value"
 	"github.com/symsimmy/due/encoding/json"
-	"github.com/symsimmy/due/internal/value"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/utils/xconv"
 	"github.com/symsimmy/due/utils/xtime"

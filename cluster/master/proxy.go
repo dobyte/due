@@ -3,7 +3,7 @@ package master
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/internal/link"
+	"github.com/symsimmy/due/common/link"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/session"
 )

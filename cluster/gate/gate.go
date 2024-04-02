@@ -11,7 +11,7 @@ import (
 	"context"
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/link"
+	"github.com/symsimmy/due/common/link"
 	"github.com/symsimmy/due/metrics/prometheus"
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"

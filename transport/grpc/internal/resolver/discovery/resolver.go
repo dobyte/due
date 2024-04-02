@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"context"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/registry"
 	"google.golang.org/grpc/resolver"

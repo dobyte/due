@@ -1,7 +1,7 @@
 package kcp_test
 
 import (
-	"github.com/symsimmy/due/internal/pb"
+	"github.com/symsimmy/due/common/pb"
 	"github.com/symsimmy/due/network"
 	"github.com/symsimmy/due/network/kcp"
 	"github.com/symsimmy/due/packet"

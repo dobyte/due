@@ -6,7 +6,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/transport"
 )

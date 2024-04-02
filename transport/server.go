@@ -3,7 +3,7 @@ package transport
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/packet"
 	"github.com/symsimmy/due/session"
 )

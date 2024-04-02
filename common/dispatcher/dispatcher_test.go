@@ -2,8 +2,8 @@ package dispatcher_test
 
 import (
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/internal/dispatcher"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/dispatcher"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/registry"
 	"testing"
 )

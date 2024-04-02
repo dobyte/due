@@ -4,9 +4,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/smallnest/rpcx/server"
+	"github.com/symsimmy/due/common/endpoint"
+	xnet "github.com/symsimmy/due/common/net"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/endpoint"
-	xnet "github.com/symsimmy/due/internal/net"
 )
 
 const scheme = "rpcx"

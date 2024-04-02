@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"github.com/symsimmy/due/cluster"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/registry"
 	"sync"

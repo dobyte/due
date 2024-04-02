@@ -9,8 +9,8 @@ package log
 
 import (
 	"fmt"
+	"github.com/symsimmy/due/common/stack"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/stack"
 	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/utils/xtime"
 	"path/filepath"

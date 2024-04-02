@@ -8,7 +8,7 @@
 package utils
 
 import (
-	"github.com/symsimmy/due/internal/net"
+	"github.com/symsimmy/due/common/net"
 	"io"
 	"path/filepath"
 	"strings"

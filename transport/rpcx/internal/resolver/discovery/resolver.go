@@ -3,7 +3,7 @@ package discovery
 import (
 	"context"
 	cli "github.com/smallnest/rpcx/client"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/registry"
 	"sync"

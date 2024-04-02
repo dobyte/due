@@ -9,7 +9,7 @@ package hook
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/symsimmy/due/internal/stack"
+	"github.com/symsimmy/due/common/stack"
 	"github.com/symsimmy/due/log/utils"
 )
 

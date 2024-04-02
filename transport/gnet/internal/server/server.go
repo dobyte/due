@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/symsimmy/due/internal/endpoint"
-	xnet "github.com/symsimmy/due/internal/net"
+	"github.com/symsimmy/due/common/endpoint"
+	xnet "github.com/symsimmy/due/common/net"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/transport/gnet/tcp"
 )

@@ -2,7 +2,7 @@ package errors
 
 import (
 	"fmt"
-	"github.com/symsimmy/due/internal/stack"
+	"github.com/symsimmy/due/common/stack"
 	"strings"
 )
 

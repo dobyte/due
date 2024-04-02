@@ -3,11 +3,11 @@ package link
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
+	"github.com/symsimmy/due/common/dispatcher"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/crypto"
 	"github.com/symsimmy/due/encoding"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/dispatcher"
-	"github.com/symsimmy/due/internal/endpoint"
 	"github.com/symsimmy/due/locate"
 	"github.com/symsimmy/due/log"
 	"github.com/symsimmy/due/packet"

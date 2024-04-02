@@ -5,7 +5,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
 	"github.com/symsimmy/due/errors"
-	"github.com/symsimmy/due/internal/value"
+	"github.com/symsimmy/due/common/value"
 	"log"
 	"strconv"
 	"strings"

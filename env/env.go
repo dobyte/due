@@ -1,7 +1,7 @@
 package env
 
 import (
-	"github.com/symsimmy/due/internal/value"
+	"github.com/symsimmy/due/common/value"
 	"os"
 )
 

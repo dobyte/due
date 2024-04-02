@@ -3,7 +3,7 @@ package node_test
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/transport/rpcx/node"
 	"testing"

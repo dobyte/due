@@ -3,7 +3,7 @@ package config
 import (
 	"github.com/symsimmy/due/env"
 	"github.com/symsimmy/due/flag"
-	"github.com/symsimmy/due/internal/value"
+	"github.com/symsimmy/due/common/value"
 )
 
 const (

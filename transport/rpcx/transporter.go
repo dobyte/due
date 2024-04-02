@@ -1,7 +1,7 @@
 package rpcx
 
 import (
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/registry"
 	"github.com/symsimmy/due/transport"
 	"github.com/symsimmy/due/transport/rpcx/gate"

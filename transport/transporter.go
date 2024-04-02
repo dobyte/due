@@ -1,7 +1,7 @@
 package transport
 
 import (
-	"github.com/symsimmy/due/internal/endpoint"
+	"github.com/symsimmy/due/common/endpoint"
 	"github.com/symsimmy/due/registry"
 )
 
