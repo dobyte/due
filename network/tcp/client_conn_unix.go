@@ -199,11 +199,6 @@ func (c *clientConn) close() error {
 // 读取消息
 func (c *clientConn) read() {
 	conn := c.conn
-
-	if conn == nil {
-		return
-	}
-
 	reader := conn.Reader()
 
 	for {
@@ -221,8 +216,6 @@ func (c *clientConn) read() {
 				_ = c.close()
 				return
 			}
-
-			_ = reader.Release()
 
 			// ignore empty packet
 			if len(msg) == 0 {

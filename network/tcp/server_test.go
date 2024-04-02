@@ -61,7 +61,9 @@ func TestServer_Simple(t *testing.T) {
 }
 
 func TestServer_Benchmark(t *testing.T) {
-	server := tcp.NewServer()
+	server := tcp.NewServer(
+		tcp.WithServerHeartbeatInterval(0),
+	)
 
 	server.OnStart(func() {
 		log.Info("server is started")
@@ -90,7 +92,6 @@ func TestServer_Benchmark(t *testing.T) {
 				return
 			}
 		}()
-
 	})
 
 	if err := server.Start(); err != nil {

@@ -4,8 +4,8 @@
 package tcp
 
 import (
-	"fmt"
 	"github.com/cloudwego/netpoll"
+	"github.com/cloudwego/netpoll/mux"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -22,6 +22,7 @@ type serverConn struct {
 	state             int32              // 连接状态
 	conn              netpoll.Connection // 源连接
 	connMgr           *serverConnMgr     // 连接管理
+	queue             *mux.ShardQueue    // nocopy api
 	lastHeartbeatTime int64              // 上次心跳时间
 }
 
@@ -53,44 +54,16 @@ func (c *serverConn) Send(msg []byte) error {
 		return err
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	return write(conn.Writer(), msg)
+	return c.doWrite(msg)
 }
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) error {
-	if c == nil {
-		fmt.Println("conn nil")
-	}
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	writer := conn.Writer()
-
-	if writer == nil {
-		fmt.Println("writer nil")
-	}
-
-	if len(msg) == 0 || len(msg) > 4096 {
-		fmt.Println("msg nil", len(msg))
-	}
-
-	fmt.Println(len(msg))
-
-	return write(writer, msg)
+	return c.doWrite(msg)
 }
 
 // State 获取连接状态
@@ -179,6 +152,7 @@ func (c *serverConn) init(id int64, conn netpoll.Connection, cm *serverConnMgr) 
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
+	c.queue = mux.NewShardQueue(mux.ShardSize, conn)
 	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
@@ -202,14 +176,8 @@ func (c *serverConn) checkState() error {
 }
 
 // 读取消息
-func (c *serverConn) read() error {
+func (c *serverConn) read(conn netpoll.Connection) error {
 	if c.isClosed() {
-		return errors.ErrConnectionClosed
-	}
-
-	conn := c.conn
-
-	if conn == nil {
 		return errors.ErrConnectionClosed
 	}
 
@@ -219,11 +187,6 @@ func (c *serverConn) read() error {
 	msg, err := packet.ReadMessage(reader)
 	if err != nil {
 		return err
-	}
-
-	if err = reader.Release(); err != nil {
-		log.Errorf("release failed: %v", err)
-		return nil
 	}
 
 	// ignore empty packet
@@ -248,7 +211,7 @@ func (c *serverConn) read() error {
 			if heartbeat, err := packet.PackHeartbeat(); err != nil {
 				log.Errorf("pack heartbeat message error: %v", err)
 			} else {
-				if err = write(conn.Writer(), heartbeat); err != nil {
+				if err = c.doWrite(heartbeat); err != nil {
 					if !errors.Is(err, netpoll.ErrConnClosed) {
 						log.Errorf("write heartbeat message error: %v", err)
 					}
@@ -270,21 +233,35 @@ func (c *serverConn) heartbeat() error {
 		return errors.ErrConnectionClosed
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
 	heartbeat, err := packet.PackHeartbeat()
 	if err != nil {
 		return err
 	}
 
-	return write(conn.Writer(), heartbeat)
+	return c.doWrite(heartbeat)
 }
 
 // 是否已关闭
 func (c *serverConn) isClosed() bool {
 	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
+}
+
+// 写入消息
+func (c *serverConn) doWrite(msg []byte) error {
+	writer := netpoll.NewLinkBuffer(len(msg))
+
+	_, err := writer.WriteBinary(msg)
+	if err != nil {
+		return err
+	}
+
+	if err = writer.Flush(); err != nil {
+		return err
+	}
+
+	c.queue.Add(func() (netpoll.Writer, bool) {
+		return writer, false
+	})
+
+	return nil
 }

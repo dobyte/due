@@ -82,9 +82,9 @@ func (cm *serverConnMgr) close() {
 }
 
 // 分配连接
-func (cm *serverConnMgr) allocate(c netpoll.Connection) error {
+func (cm *serverConnMgr) allocate(c netpoll.Connection) (*serverConn, error) {
 	if atomic.LoadInt64(&cm.total) >= int64(cm.server.opts.maxConnNum) {
-		return errors.ErrTooManyConnection
+		return nil, errors.ErrTooManyConnection
 	}
 
 	id := atomic.AddInt64(&cm.id, 1)
@@ -94,7 +94,7 @@ func (cm *serverConnMgr) allocate(c netpoll.Connection) error {
 	cm.partitions[index].store(c, conn)
 	atomic.AddInt64(&cm.total, 1)
 
-	return nil
+	return conn, nil
 }
 
 // 回收连接
@@ -156,7 +156,7 @@ func (p *partition) close() {
 	p.connections = nil
 }
 
-// 出发该分片内的所有连接心跳
+// 检测该分片内的所有连接心跳
 func (p *partition) heartbeat() {
 	p.rw.RLock()
 	defer p.rw.RUnlock()

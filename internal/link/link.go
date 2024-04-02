@@ -26,6 +26,7 @@ type Link struct {
 	gateSource     sync.Map                    // 用户来源网关
 	rw             sync.RWMutex                // 锁
 	nodeSources    map[int64]map[string]string // 用户来源节点
+	transponders   []*Transponder
 }
 
 type Options struct {
@@ -40,12 +41,19 @@ type Options struct {
 }
 
 func NewLink(opts *Options) *Link {
-	return &Link{
+	l := &Link{
 		opts:           opts,
 		gateDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 		nodeDispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 		nodeSources:    make(map[int64]map[string]string),
+		transponders:   make([]*Transponder, 100),
 	}
+
+	for i := 0; i < len(l.transponders); i++ {
+		l.transponders[i] = NewTransponder(l)
+	}
+
+	return l
 }
 
 // BindGate 绑定网关
@@ -623,13 +631,17 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 		_, err = client.Deliver(ctx, arguments)
 		return err
 	} else {
-		_, err := l.doNodeRPC(ctx, arguments.Message.Route, args.UID, func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error) {
-			miss, err := client.Deliver(ctx, arguments)
-			return miss, nil, err
-		})
-		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-			return err
-		}
+		//_, err := l.doNodeRPC(ctx, arguments.Message.Route, args.UID, func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error) {
+		//	miss, err := client.Deliver(ctx, arguments)
+		//	return miss, nil, err
+		//})
+		//if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+		//	return err
+		//}
+		//return nil
+
+		index := int(arguments.CID % int64(len(l.transponders)))
+		l.transponders[index].deliver(arguments)
 		return nil
 	}
 }

@@ -22,6 +22,9 @@ type NocopyReader interface {
 
 	// Peek returns the next n bytes without advancing the reader.
 	Peek(n int) (buf []byte, err error)
+
+	// Release the memory space occupied by all read slices.
+	Release() (err error)
 }
 
 type Packer interface {
@@ -111,7 +114,16 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 		return nil, nil
 	}
 
-	return reader.Next(int(size) + defaultSizeBytes)
+	buf, err = reader.Next(int(size) + defaultSizeBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = reader.Release(); err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // 拷贝读取消息

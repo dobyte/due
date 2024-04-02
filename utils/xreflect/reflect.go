@@ -20,6 +20,10 @@ func Value(i any) (reflect.Kind, reflect.Value) {
 
 // IsNil 检测值是否为nil
 func IsNil(v any) bool {
+	if v == nil {
+		return true
+	}
+
 	rv := reflect.ValueOf(v)
 	rk := rv.Kind()
 

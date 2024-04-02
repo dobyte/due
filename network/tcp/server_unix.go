@@ -6,7 +6,6 @@ package tcp
 import (
 	"context"
 	"github.com/cloudwego/netpoll"
-	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -96,19 +95,22 @@ func (s *server) init() error {
 	return nil
 }
 
-// 接受请求
-func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
-	c, ok := s.connMgr.load(conn)
-	if !ok {
-		return errors.New("invalid connection")
+var ctxKey struct{}
+
+func (s *server) onPrepare(conn netpoll.Connection) context.Context {
+	mc, err := s.connMgr.allocate(conn)
+	if err != nil {
+		log.Errorf("connection allocate error: %v", err)
+		_ = conn.Close()
+		return nil
 	}
 
-	return c.read()
+	return context.WithValue(context.Background(), ctxKey, mc)
 }
 
 // 打开连接
 func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
-	if err := s.connMgr.allocate(conn); err != nil {
+	if _, err := s.connMgr.allocate(conn); err != nil {
 		log.Errorf("connection allocate error: %v", err)
 		_ = conn.Close()
 		return nil
@@ -117,9 +119,16 @@ func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context
 	return ctx
 }
 
+// 接受请求
+func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
+	mc := ctx.Value(ctxKey).(*serverConn)
+
+	return mc.read(conn)
+}
+
 // 启动服务器
 func (s *server) serve() {
-	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnConnect(s.onConnect))
+	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnPrepare(s.onPrepare))
 	if err != nil {
 		log.Fatalf("tcp server start failed: %v", err)
 	}
