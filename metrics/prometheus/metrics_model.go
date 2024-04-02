@@ -10,6 +10,6 @@ var (
 		prometheus.GaugeOpts{
 			Name: GateServerTotalOnlinePlayer,
 		},
-		[]string{"custom_value_name", "gate_instance_id"},
+		[]string{"gate_instance_id"},
 	)
 )
