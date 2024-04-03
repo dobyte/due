@@ -136,7 +136,7 @@ func doPressureTest(c int, n int, size int) {
 		totalRecv int64
 	)
 
-	client := tcp.NewClient()
+	client := tcp.NewClient(tcp.WithClientHeartbeatInterval(0))
 
 	client.OnReceive(func(conn network.Conn, msg []byte) {
 		atomic.AddInt64(&totalRecv, 1)

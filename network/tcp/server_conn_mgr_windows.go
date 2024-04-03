@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -59,7 +59,7 @@ func (cm *serverConnMgr) allocate(c net.Conn) error {
 
 	id := atomic.AddInt64(&cm.id, 1)
 	conn := cm.pool.Get().(*serverConn)
-	conn.init(id, c, cm)
+	conn.init(cm, id, c)
 	index := int(reflect.ValueOf(conn.conn).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
 	atomic.AddInt64(&cm.total, 1)

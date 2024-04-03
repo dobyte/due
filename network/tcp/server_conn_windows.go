@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -164,7 +164,7 @@ func (c *serverConn) checkState() error {
 }
 
 // 初始化连接
-func (c *serverConn) init(id int64, conn net.Conn, cm *serverConnMgr) {
+func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm

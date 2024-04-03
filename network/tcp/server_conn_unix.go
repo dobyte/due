@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
+// +build darwin netbsd freebsd openbsd dragonfly linux
 
 package tcp
 
@@ -166,7 +166,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 }
 
 // 初始化连接
-func (c *serverConn) init(id int64, conn netpoll.Connection, cm *serverConnMgr) {
+func (c *serverConn) init(cm *serverConnMgr, id int64, conn netpoll.Connection) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm

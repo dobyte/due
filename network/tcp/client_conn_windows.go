@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -32,7 +32,7 @@ type clientConn struct {
 
 var _ network.Conn = &clientConn{}
 
-func newClientConn(id int64, conn net.Conn, client *client) network.Conn {
+func newClientConn(client *client, id int64, conn net.Conn) network.Conn {
 	c := &clientConn{
 		id:                id,
 		conn:              conn,

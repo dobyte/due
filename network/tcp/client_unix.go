@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
+// +build darwin netbsd freebsd openbsd dragonfly linux
 
 package tcp
 

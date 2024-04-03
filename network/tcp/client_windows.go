@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -47,7 +47,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
+	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
 }
 
 // Protocol 协议

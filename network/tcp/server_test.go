@@ -61,13 +61,6 @@ func TestServer_Simple(t *testing.T) {
 }
 
 func TestServer_Benchmark(t *testing.T) {
-	go func() {
-		err := http.ListenAndServe(":8089", nil)
-		if err != nil {
-			log.Errorf("pprof server start failed: %v", err)
-		}
-	}()
-
 	server := tcp.NewServer(
 		tcp.WithServerHeartbeatInterval(0),
 	)
@@ -102,6 +95,13 @@ func TestServer_Benchmark(t *testing.T) {
 	if err := server.Start(); err != nil {
 		log.Fatalf("start server failed: %v", err)
 	}
+
+	go func() {
+		err := http.ListenAndServe(":8089", nil)
+		if err != nil {
+			log.Errorf("pprof server start failed: %v", err)
+		}
+	}()
 
 	select {}
 }
