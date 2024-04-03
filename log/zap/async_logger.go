@@ -70,19 +70,38 @@ func NewAsyncLogger(opts ...Option) *AsyncLogger {
 
 	l := &AsyncLogger{opts: o}
 
+	var (
+		debugLevelSyncer = l.buildWriteSyncer(utils.DebugLevel)
+		infoLevelSyncer  = l.buildWriteSyncer(utils.InfoLevel)
+		warnLevelSyncer  = l.buildWriteSyncer(utils.WarnLevel)
+		errorLevelSyncer = l.buildWriteSyncer(utils.ErrorLevel)
+		fatalLevelSyncer = l.buildWriteSyncer(utils.FatalLevel)
+		panicLevelSyncer = l.buildWriteSyncer(utils.PanicLevel)
+		noneLevelSyncer  = l.buildWriteSyncer(utils.NoneLevel)
+	)
+	if o.bufferEnable {
+		debugLevelSyncer = &zapcore.BufferedWriteSyncer{WS: debugLevelSyncer, Size: o.bufferSize * 1024}
+		infoLevelSyncer = &zapcore.BufferedWriteSyncer{WS: infoLevelSyncer, Size: o.bufferSize * 1024}
+		warnLevelSyncer = &zapcore.BufferedWriteSyncer{WS: warnLevelSyncer, Size: o.bufferSize * 1024}
+		errorLevelSyncer = &zapcore.BufferedWriteSyncer{WS: errorLevelSyncer, Size: o.bufferSize * 1024}
+		fatalLevelSyncer = &zapcore.BufferedWriteSyncer{WS: fatalLevelSyncer, Size: o.bufferSize * 1024}
+		panicLevelSyncer = &zapcore.BufferedWriteSyncer{WS: panicLevelSyncer, Size: o.bufferSize * 1024}
+		noneLevelSyncer = &zapcore.BufferedWriteSyncer{WS: noneLevelSyncer, Size: o.bufferSize * 1024}
+	}
+
 	var cores []zapcore.Core
 	if o.file != "" {
 		if o.classifiedStorage {
 			cores = append(cores,
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.DebugLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.DebugLevel)),
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.InfoLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.InfoLevel)),
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.WarnLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.WarnLevel)),
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.ErrorLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.ErrorLevel)),
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.FatalLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.FatalLevel)),
-				zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.PanicLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.PanicLevel)),
+				zapcore.NewCore(fileEncoder, debugLevelSyncer, l.buildLevelEnabler(utils.DebugLevel)),
+				zapcore.NewCore(fileEncoder, infoLevelSyncer, l.buildLevelEnabler(utils.InfoLevel)),
+				zapcore.NewCore(fileEncoder, warnLevelSyncer, l.buildLevelEnabler(utils.WarnLevel)),
+				zapcore.NewCore(fileEncoder, errorLevelSyncer, l.buildLevelEnabler(utils.ErrorLevel)),
+				zapcore.NewCore(fileEncoder, fatalLevelSyncer, l.buildLevelEnabler(utils.FatalLevel)),
+				zapcore.NewCore(fileEncoder, panicLevelSyncer, l.buildLevelEnabler(utils.PanicLevel)),
 			)
 		} else {
-			cores = append(cores, zapcore.NewCore(fileEncoder, &zapcore.BufferedWriteSyncer{WS: l.buildWriteSyncer(utils.NoneLevel), Size: o.bufferSize * 1024}, l.buildLevelEnabler(utils.NoneLevel)))
+			cores = append(cores, zapcore.NewCore(fileEncoder, noneLevelSyncer, l.buildLevelEnabler(utils.NoneLevel)))
 		}
 	}
 

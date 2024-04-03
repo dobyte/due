@@ -30,6 +30,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace (
+	github.com/symsimmy/due/log/zap v0.0.0-20240329070121-49eff24d944a => ./log/zap
+)
+
 require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/apolloconfig/agollo/v4 v4.3.1
