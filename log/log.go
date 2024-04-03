@@ -11,18 +11,20 @@ import (
 )
 
 const (
-	enableAsyncLogKey = "ASYNC_LOG"
+	enableAsyncLogKey    = "ASYNC_LOG"
+	enableNoBufferLogKey = "BUFFER_LOG"
 )
 
 var globalLogger utils.Logger
 
 func init() {
 	enableAsyncLog := env.Get(enableAsyncLogKey, true).Bool()
+	enableBufferLog := env.Get(enableNoBufferLogKey, true).Bool()
 	if enableAsyncLog {
-		logger := zap.NewAsyncLogger(zap.WithCallerSkip(1))
+		logger := zap.NewAsyncLogger(zap.WithCallerSkip(1), zap.WithBufferEnable(enableBufferLog))
 		SetLogger(logger)
 	} else {
-		logger := zap.NewLogger(zap.WithCallerSkip(1))
+		logger := zap.NewLogger(zap.WithCallerSkip(1), zap.WithBufferEnable(enableBufferLog))
 		SetLogger(logger)
 	}
 }

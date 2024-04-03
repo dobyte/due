@@ -25,6 +25,7 @@ const (
 	defaultTimeFormat        = "2006/01/02 15:04:05.000000"
 	defaultCallerFullPath    = false
 	defaultClassifiedStorage = false
+	defaultBufferEnable      = true
 	defaultBufferSize        = 256
 	defaultAsyncOutputCaller = false
 )
@@ -72,8 +73,9 @@ type options struct {
 	callerSkip        int           // 调用者跳过的层级深度
 	callerFullPath    bool          // 是否启用调用文件全路径，默认短路径
 	classifiedStorage bool          // 是否启用分级存储，默认不分级
-	bufferSize        int           // KB
-	asyncOutputCaller bool          //异步log下输出行号
+	bufferEnable      bool
+	bufferSize        int  // KB
+	asyncOutputCaller bool //异步log下输出行号
 }
 
 type Option func(o *options)
@@ -90,6 +92,7 @@ func defaultOptions() *options {
 		fileCutRule:       defaultFileCutRule,
 		callerFullPath:    defaultCallerFullPath,
 		classifiedStorage: defaultClassifiedStorage,
+		bufferEnable:      defaultBufferEnable,
 		bufferSize:        defaultBufferSize,
 	}
 
@@ -216,6 +219,11 @@ func WithCallerFullPath(enable bool) Option {
 // 例如：InfoLevel级的日志将存储于due.debug.20220910.log、due.info.20220910.log两个日志文件中
 func WithClassifiedStorage(enable bool) Option {
 	return func(o *options) { o.classifiedStorage = enable }
+}
+
+// WithBufferEnable
+func WithBufferEnable(enable bool) Option {
+	return func(o *options) { o.bufferEnable = enable }
 }
 
 // WithBufferSize
