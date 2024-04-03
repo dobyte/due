@@ -13,7 +13,6 @@ import (
 	"github.com/aliyun/aliyun-log-go-sdk/producer"
 	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/utils/xtime"
-	"os"
 	"sync"
 
 	"github.com/symsimmy/due/log"
@@ -176,14 +175,14 @@ func (l *Logger) Errorf(format string, a ...interface{}) {
 func (l *Logger) Fatal(a ...interface{}) {
 	l.log(utils.FatalLevel, a...)
 	l.Close()
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *Logger) Fatalf(format string, a ...interface{}) {
 	l.log(utils.FatalLevel, fmt.Sprintf(format, a...))
 	l.Close()
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Panic 打印Panic日志

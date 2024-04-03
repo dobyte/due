@@ -160,14 +160,14 @@ func (l *defaultLogger) Errorf(format string, a ...interface{}) {
 func (l *defaultLogger) Fatal(a ...interface{}) {
 	entity := l.Entity(utils.FatalLevel, a...)
 	entity.Log()
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *defaultLogger) Fatalf(format string, a ...interface{}) {
 	entity := l.Entity(utils.FatalLevel, fmt.Sprintf(format, a...))
 	entity.Log()
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Panic 打印Panic日志

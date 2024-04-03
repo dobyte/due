@@ -6,7 +6,6 @@ import (
 	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/log/utils"
 	"github.com/symsimmy/due/log/zap"
-	"os"
 	"strings"
 )
 
@@ -82,13 +81,13 @@ func Errorf(format string, a ...interface{}) {
 // Fatal 打印致命错误日志
 func Fatal(a ...interface{}) {
 	globalLogger.Fatal(a...)
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func Fatalf(format string, a ...interface{}) {
 	globalLogger.Fatalf(format, a...)
-	os.Exit(1)
+	//os.Exit(1)
 }
 
 // Panic 打印Panic日志
