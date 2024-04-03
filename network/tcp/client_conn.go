@@ -1,3 +1,6 @@
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
+// +build darwin netbsd freebsd openbsd dragonfly linux
+
 package tcp
 
 import (
@@ -22,9 +25,9 @@ type clientConn struct {
 	state             int32         // 连接状态
 	client            *client       // 客户端
 	chWrite           chan chWrite  // 写入队列
-	lastHeartbeatTime int64         // 上次心跳时间
 	done              chan struct{} // 写入完成信号
 	close             chan struct{} // 关闭信号
+	lastHeartbeatTime int64         // 上次心跳时间
 }
 
 var _ network.Conn = &clientConn{}
@@ -36,9 +39,9 @@ func newClientConn(id int64, conn net.Conn, client *client) network.Conn {
 		state:             int32(network.ConnOpened),
 		client:            client,
 		chWrite:           make(chan chWrite, 4096),
-		lastHeartbeatTime: xtime.Now().UnixNano(),
 		done:              make(chan struct{}),
 		close:             make(chan struct{}),
+		lastHeartbeatTime: xtime.Now().UnixNano(),
 	}
 
 	xcall.Go(c.read)
@@ -73,31 +76,32 @@ func (c *clientConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *clientConn) Send(msg []byte) (err error) {
-	c.rw.RLock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.RUnlock()
-		return
+func (c *clientConn) Send(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
+	c.rw.RLock()
 	conn := c.conn
 	c.rw.RUnlock()
 
-	_, err = conn.Write(msg)
-	return
+	if conn == nil {
+		return errors.ErrConnectionClosed
+	}
+
+	_, err := conn.Write(msg)
+	return err
 }
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err = c.checkState(); err != nil {
 		return
 	}
 
+	c.rw.RLock()
 	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
+	c.rw.RUnlock()
 
 	return
 }
@@ -128,14 +132,19 @@ func (c *clientConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *clientConn) LocalAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.LocalAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.LocalAddr(), nil
 }
 
 // RemoteIP 获取远端IP
@@ -150,14 +159,19 @@ func (c *clientConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *clientConn) RemoteAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.RemoteAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.RemoteAddr(), nil
 }
 
 // 检测连接状态
@@ -173,58 +187,61 @@ func (c *clientConn) checkState() error {
 }
 
 // 优雅关闭
-func (c *clientConn) graceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *clientConn) graceClose() error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnHanged)) {
+		return errors.ErrConnectionNotOpened
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
+	c.rw.RLock()
 	c.chWrite <- chWrite{typ: closeSig}
-	c.rw.Unlock()
+	c.rw.RUnlock()
 
 	<-c.done
 
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+		return errors.ErrConnectionNotHanged
+	}
+
 	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
+
+	err := conn.Close()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 强制关闭
-func (c *clientConn) forceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *clientConn) forceClose() error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+			return errors.ErrConnectionClosed
+		}
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	c.rw.Lock()
 	close(c.chWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
+
+	err := conn.Close()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 读取消息

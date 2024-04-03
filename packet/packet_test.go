@@ -1,7 +1,9 @@
 package packet_test
 
 import (
+	"bytes"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xrand"
 	"testing"
 )
 
@@ -47,33 +49,79 @@ func TestPackHeartbeat(t *testing.T) {
 	t.Log(isHeartbeat)
 }
 
-func BenchmarkPack(b *testing.B) {
-	buffer := []byte("hello world")
+//
+//func BenchmarkPack(b *testing.B) {
+//	buffer := []byte("hello world")
+//
+//	for i := 0; i < b.N; i++ {
+//		_, err := packet.PackMessage(&packet.Message{
+//			Seq:    1,
+//			Route:  1,
+//			Buffer: buffer,
+//		})
+//		if err != nil {
+//			b.Fatal(err)
+//		}
+//	}
+//}
 
-	for i := 0; i < b.N; i++ {
-		_, err := packet.PackMessage(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: buffer,
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
+//func BenchmarkUnpack(b *testing.B) {
+//	buf, err := packet.PackMessage(&packet.Message{
+//		Seq:    1,
+//		Route:  1,
+//		Buffer: []byte("hello world"),
+//	})
+//	if err != nil {
+//		b.Fatal(err)
+//	}
+//
+//	for i := 0; i < b.N; i++ {
+//		_, err := packet.UnpackMessage(buf)
+//		if err != nil {
+//			b.Fatal(err)
+//		}
+//	}
+//}
 
-func BenchmarkUnpack(b *testing.B) {
-	buf, err := packet.PackMessage(&packet.Message{
+func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
+	buf, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
-		Buffer: []byte("hello world"),
+		Buffer: []byte(xrand.Letters(1024)),
 	})
 	if err != nil {
 		b.Fatal(err)
 	}
 
+	reader := bytes.NewReader(buf)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(buf)))
+
 	for i := 0; i < b.N; i++ {
-		_, err := packet.UnpackMessage(buf)
+		if _, err = packer.ReadMessage(reader); err != nil {
+			b.Fatal(err)
+		}
+
+		reader.Reset(buf)
+	}
+}
+
+func BenchmarkDefaultPacker_UnpackMessage(b *testing.B) {
+	buf, err := packer.PackMessage(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte(xrand.Letters(1024)),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(buf)))
+
+	for i := 0; i < b.N; i++ {
+		_, err := packer.UnpackMessage(buf)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -82,17 +82,35 @@ func (c *serverConn) close(isNeedRecycle bool) error {
 		return errors.ErrConnectionClosed
 	}
 
-	err := c.conn.Close()
+	conn, queue := c.conn, c.queue
 
-	if isNeedRecycle {
-		c.connMgr.recycle(c.conn)
-	}
-
-	c.conn = nil
+	_ = queue.Close()
+	err := conn.Close()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
+
+	if isNeedRecycle {
+		c.connMgr.recycle(conn)
+	}
+
+	return err
+}
+
+// 关闭连接
+func (c *serverConn) onClose(conn netpoll.Connection) error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		return errors.ErrConnectionClosed
+	}
+
+	err := c.queue.Close()
+
+	if c.connMgr.server.disconnectHandler != nil {
+		c.connMgr.server.disconnectHandler(c)
+	}
+
+	c.connMgr.recycle(conn)
 
 	return err
 }
@@ -156,7 +174,8 @@ func (c *serverConn) init(id int64, conn netpoll.Connection, cm *serverConnMgr) 
 	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
-	_ = conn.AddCloseCallback(func(_ netpoll.Connection) error { return c.Close() })
+
+	_ = conn.AddCloseCallback(c.onClose)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)

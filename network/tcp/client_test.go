@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xrand"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,6 +116,13 @@ func TestClient_Benchmark(t *testing.T) {
 		},
 	}
 
+	go func() {
+		err := http.ListenAndServe(":8090", nil)
+		if err != nil {
+			log.Errorf("pprof server start failed: %v", err)
+		}
+	}()
+
 	for _, sample := range samples {
 		doPressureTest(sample.c, sample.n, sample.size)
 	}
@@ -196,9 +204,31 @@ func doPressureTest(c int, n int, size int) {
 	fmt.Printf("server               : %s\n", client.Protocol())
 	fmt.Printf("concurrency          : %d\n", c)
 	fmt.Printf("latency              : %fs\n", totalTime)
-	fmt.Printf("data size            : %dkb\n", size/1024)
+	fmt.Printf("data size            : %s\n", convBytes(size))
 	fmt.Printf("sent requests        : %d\n", totalSent)
 	fmt.Printf("received requests    : %d\n", totalRecv)
 	fmt.Printf("throughput (TPS)     : %d\n", int64(float64(totalRecv)/totalTime))
 	fmt.Printf("--------------------------------\n")
+}
+
+func convBytes(bytes int) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+		TB = 1024 * GB
+	)
+
+	switch {
+	case bytes < KB:
+		return fmt.Sprintf("%.2fB", float64(bytes))
+	case bytes < MB:
+		return fmt.Sprintf("%.2fKB", float64(bytes)/KB)
+	case bytes < GB:
+		return fmt.Sprintf("%.2fMB", float64(bytes)/MB)
+	case bytes < TB:
+		return fmt.Sprintf("%.2fGB", float64(bytes)/GB)
+	default:
+		return fmt.Sprintf("%.2fTB", float64(bytes)/TB)
+	}
 }

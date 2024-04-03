@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -99,6 +99,10 @@ func (cm *serverConnMgr) allocate(c netpoll.Connection) (*serverConn, error) {
 
 // 回收连接
 func (cm *serverConnMgr) recycle(c netpoll.Connection) {
+	if c == nil {
+		return
+	}
+
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		cm.pool.Put(conn)

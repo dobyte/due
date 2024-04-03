@@ -61,6 +61,13 @@ func TestServer_Simple(t *testing.T) {
 }
 
 func TestServer_Benchmark(t *testing.T) {
+	go func() {
+		err := http.ListenAndServe(":8089", nil)
+		if err != nil {
+			log.Errorf("pprof server start failed: %v", err)
+		}
+	}()
+
 	server := tcp.NewServer(
 		tcp.WithServerHeartbeatInterval(0),
 	)
@@ -76,7 +83,7 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		msg, err = packet.PackMessage(&packet.Message{
+		data, err := packet.PackMessage(&packet.Message{
 			Seq:    message.Seq,
 			Route:  message.Route,
 			Buffer: message.Buffer,
@@ -86,24 +93,15 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		go func() {
-			if err = conn.Push(msg); err != nil {
-				log.Errorf("push message failed: %v", err)
-				return
-			}
-		}()
+		if err = conn.Push(data); err != nil {
+			log.Errorf("push message failed: %v", err)
+			return
+		}
 	})
 
 	if err := server.Start(); err != nil {
 		log.Fatalf("start server failed: %v", err)
 	}
-
-	go func() {
-		err := http.ListenAndServe(":8089", nil)
-		if err != nil {
-			log.Errorf("pprof server start failed: %v", err)
-		}
-	}()
 
 	select {}
 }

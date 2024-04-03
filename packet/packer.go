@@ -43,12 +43,14 @@ type Packer interface {
 }
 
 type defaultPacker struct {
-	opts      *options
-	once      sync.Once
-	heartbeat []byte
+	opts             *options
+	once             sync.Once
+	heartbeat        []byte
+	readerSizePool   sync.Pool
+	readerBufferPool sync.Pool
 }
 
-func NewPacker(opts ...Option) Packer {
+func NewPacker(opts ...Option) *defaultPacker {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
@@ -80,16 +82,22 @@ func NewPacker(opts ...Option) Packer {
 		p.heartbeat = buf.Bytes()
 	}
 
+	p.readerSizePool = sync.Pool{New: func() any { return make([]byte, defaultSizeBytes) }}
+
+	p.readerBufferPool = sync.Pool{New: func() any {
+		return make([]byte, defaultSizeBytes+defaultHeaderBytes+o.routeBytes+o.seqBytes+o.bufferBytes)
+	}}
+
 	return p
 }
 
 // ReadMessage 读取消息
 func (p *defaultPacker) ReadMessage(reader interface{}) ([]byte, error) {
 	switch r := reader.(type) {
-	case io.Reader:
-		return p.copyReadMessage(r)
 	case NocopyReader:
 		return p.nocopyReadMessage(r)
+	case io.Reader:
+		return p.copyReadMessage(r)
 	default:
 		return nil, errors.ErrInvalidReader
 	}
@@ -171,17 +179,17 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	}
 
 	if len(message.Buffer) > p.opts.bufferBytes {
-		return nil, errors.ErrBufferTooLarge
+		return nil, errors.ErrMessageTooLarge
 	}
 
 	var (
-		ln  = p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer) + defaultHeaderBytes
-		buf = &bytes.Buffer{}
+		size = defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer)
+		buf  = &bytes.Buffer{}
 	)
 
-	buf.Grow(ln + defaultSizeBytes)
+	buf.Grow(size + defaultSizeBytes)
 
-	err := binary.Write(buf, p.opts.byteOrder, int32(ln))
+	err := binary.Write(buf, p.opts.byteOrder, int32(size))
 	if err != nil {
 		return nil, err
 	}
@@ -284,13 +292,13 @@ func (p *defaultPacker) ExtractRoute(data []byte) (int32, error) {
 // UnpackMessage 解包消息
 func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 	var (
-		ln     = len(data) - defaultSizeBytes - defaultHeaderBytes - p.opts.routeBytes - p.opts.seqBytes
+		ln     = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
 		reader = bytes.NewReader(data)
 		size   uint32
 		header uint8
 	)
 
-	if ln < 0 {
+	if len(data)-ln < 0 {
 		return nil, errors.ErrInvalidMessage
 	}
 
@@ -312,7 +320,7 @@ func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 		return nil, errors.ErrInvalidMessage
 	}
 
-	message := &Message{Buffer: make([]byte, ln)}
+	message := &Message{}
 
 	switch p.opts.routeBytes {
 	case 1:
@@ -362,10 +370,7 @@ func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 		}
 	}
 
-	err = binary.Read(reader, p.opts.byteOrder, &message.Buffer)
-	if err != nil {
-		return nil, err
-	}
+	message.Buffer = data[ln:]
 
 	return message, nil
 }

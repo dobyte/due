@@ -1,5 +1,5 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
+//go:build windows
+// +build windows
 
 package tcp
 
@@ -100,7 +100,7 @@ var ctxKey struct{}
 func (s *server) onPrepare(conn netpoll.Connection) context.Context {
 	mc, err := s.connMgr.allocate(conn)
 	if err != nil {
-		log.Errorf("connection allocate error: %v", err)
+		log.Errorf("allocate connection failed: %v", err)
 		_ = conn.Close()
 		return nil
 	}
@@ -111,7 +111,7 @@ func (s *server) onPrepare(conn netpoll.Connection) context.Context {
 // 打开连接
 func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
 	if _, err := s.connMgr.allocate(conn); err != nil {
-		log.Errorf("connection allocate error: %v", err)
+		log.Errorf("allocate connection failed: %v", err)
 		_ = conn.Close()
 		return nil
 	}
