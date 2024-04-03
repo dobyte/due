@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"fmt"
 	"github.com/symsimmy/due/env"
 	"github.com/symsimmy/due/flag"
@@ -36,7 +35,7 @@ func init() {
 	// set local reader
 	SetReader(NewReader(WithSources(NewSource(path), NewSource(overwritePath)), WithRemoteSources(remoteEnv)))
 
-	InitConsulConfig(context.Background())
+	//InitConsulConfig(context.Background())
 }
 
 // SetReader 设置配置读取器
