@@ -3,18 +3,16 @@ package netpoll
 import (
 	"context"
 	"github.com/cloudwego/netpoll"
-	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"net"
-	"time"
 )
 
 type server struct {
 	opts              *serverOptions            // 配置
 	listener          net.Listener              // 监听器
-	connMgr           *connMgr                  // 连接管理器
+	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
@@ -32,7 +30,7 @@ func NewServer(opts ...ServerOption) network.Server {
 
 	s := &server{}
 	s.opts = o
-	s.connMgr = newConnMgr(s)
+	s.connMgr = newServerConnMgr(s)
 
 	return s
 }
@@ -44,7 +42,7 @@ func (s *server) Addr() string {
 
 // Protocol 协议
 func (s *server) Protocol() string {
-	return "tcp"
+	return protocol
 }
 
 // Start 启动服务器
@@ -94,20 +92,23 @@ func (s *server) init() error {
 	return nil
 }
 
-// 接受请求
-func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
-	c, ok := s.connMgr.load(conn)
-	if !ok {
-		return errors.New("invalid connection")
+var ctxKey struct{}
+
+func (s *server) onPrepare(conn netpoll.Connection) context.Context {
+	mc, err := s.connMgr.allocate(conn)
+	if err != nil {
+		log.Errorf("allocate connection failed: %v", err)
+		_ = conn.Close()
+		return nil
 	}
 
-	return c.read()
+	return context.WithValue(context.Background(), ctxKey, mc)
 }
 
 // 打开连接
 func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
-	if err := s.connMgr.allocate(conn); err != nil {
-		log.Errorf("connection allocate error: %v", err)
+	if _, err := s.connMgr.allocate(conn); err != nil {
+		log.Errorf("allocate connection failed: %v", err)
 		_ = conn.Close()
 		return nil
 	}
@@ -115,9 +116,16 @@ func (s *server) onConnect(ctx context.Context, conn netpoll.Connection) context
 	return ctx
 }
 
+// 接受请求
+func (s *server) onRequest(ctx context.Context, conn netpoll.Connection) error {
+	mc := ctx.Value(ctxKey).(*serverConn)
+
+	return mc.read(conn)
+}
+
 // 启动服务器
 func (s *server) serve() {
-	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnConnect(s.onConnect), netpoll.WithReadTimeout(time.Second))
+	eventLoop, err := netpoll.NewEventLoop(s.onRequest, netpoll.WithOnPrepare(s.onPrepare))
 	if err != nil {
 		log.Fatalf("tcp server start failed: %v", err)
 	}

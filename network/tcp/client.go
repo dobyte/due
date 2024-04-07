@@ -1,10 +1,6 @@
-//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
-// +build darwin netbsd freebsd openbsd dragonfly linux
-
 package tcp
 
 import (
-	"github.com/cloudwego/netpoll"
 	"github.com/dobyte/due/v2/network"
 	"net"
 	"sync/atomic"
@@ -43,7 +39,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := netpoll.DialConnection(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout)
+	conn, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout)
 	if err != nil {
 		return nil, err
 	}

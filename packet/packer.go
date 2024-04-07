@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"io"
@@ -25,6 +26,8 @@ type NocopyReader interface {
 
 	// Release the memory space occupied by all read slices.
 	Release() (err error)
+
+	Slice(n int) (r NocopyReader, err error)
 }
 
 type Packer interface {
@@ -122,7 +125,14 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 		return nil, nil
 	}
 
-	buf, err = reader.Next(int(size) + defaultSizeBytes)
+	n := int(defaultSizeBytes + size)
+
+	r, err := reader.Slice(n)
+	if err != nil {
+		return nil, err
+	}
+
+	buf, err = r.Next(n)
 	if err != nil {
 		return nil, err
 	}
@@ -424,6 +434,7 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 	}
 
 	if uint64(len(data))-defaultSizeBytes != uint64(size) {
+		fmt.Println(len(data), size)
 		return false, errors.ErrInvalidMessage
 	}
 

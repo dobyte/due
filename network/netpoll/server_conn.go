@@ -1,6 +1,10 @@
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly || linux
+// +build darwin netbsd freebsd openbsd dragonfly linux
+
 package netpoll
 
 import (
+	"fmt"
 	"github.com/cloudwego/netpoll"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -17,7 +21,7 @@ type serverConn struct {
 	uid               int64              // 用户ID
 	state             int32              // 连接状态
 	conn              netpoll.Connection // 源连接
-	connMgr           *connMgr           // 连接管理
+	connMgr           *serverConnMgr     // 连接管理
 	lastHeartbeatTime int64              // 上次心跳时间
 }
 
@@ -49,13 +53,7 @@ func (c *serverConn) Send(msg []byte) error {
 		return err
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	return write(conn.Writer(), msg)
+	return c.doWrite(msg)
 }
 
 // Push 发送消息（异步）
@@ -64,13 +62,7 @@ func (c *serverConn) Push(msg []byte) error {
 		return err
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
-	return write(conn.Writer(), msg)
+	return c.doWrite(msg)
 }
 
 // State 获取连接状态
@@ -80,19 +72,43 @@ func (c *serverConn) State() network.ConnState {
 
 // Close 关闭连接
 func (c *serverConn) Close(isForce ...bool) error {
+	return c.close(true)
+}
+
+// 关闭连接
+func (c *serverConn) close(isNeedRecycle bool) error {
 	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
 		return errors.ErrConnectionClosed
 	}
 
-	err := c.conn.Close()
-	c.connMgr.recycle(c.conn)
-	c.conn = nil
+	conn := c.conn
+
+	err := conn.Close()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
+	if isNeedRecycle {
+		c.connMgr.recycle(conn)
+	}
+
 	return err
+}
+
+// 关闭连接
+func (c *serverConn) onClose(conn netpoll.Connection) error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		return errors.ErrConnectionClosed
+	}
+
+	if c.connMgr.server.disconnectHandler != nil {
+		c.connMgr.server.disconnectHandler(c)
+	}
+
+	c.connMgr.recycle(conn)
+
+	return nil
 }
 
 // LocalIP 获取本地IP
@@ -146,7 +162,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 }
 
 // 初始化连接
-func (c *serverConn) init(id int64, conn netpoll.Connection, cm *connMgr) error {
+func (c *serverConn) init(cm *serverConnMgr, id int64, conn netpoll.Connection) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
@@ -154,17 +170,11 @@ func (c *serverConn) init(id int64, conn netpoll.Connection, cm *connMgr) error 
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 
-	if err := conn.AddCloseCallback(func(_ netpoll.Connection) error {
-		return c.Close()
-	}); err != nil {
-		return err
-	}
+	_ = conn.AddCloseCallback(c.onClose)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
 	}
-
-	return nil
 }
 
 // 检测连接状态
@@ -180,19 +190,12 @@ func (c *serverConn) checkState() error {
 }
 
 // 读取消息
-func (c *serverConn) read() error {
+func (c *serverConn) read(conn netpoll.Connection) error {
 	if c.isClosed() {
 		return errors.ErrConnectionClosed
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
 	reader := conn.Reader()
-	defer reader.Release()
 
 	// block reading messages from the client
 	msg, err := packet.ReadMessage(reader)
@@ -208,6 +211,7 @@ func (c *serverConn) read() error {
 	// check heartbeat packet
 	isHeartbeat, err := packet.CheckHeartbeat(msg)
 	if err != nil {
+		fmt.Println(msg)
 		log.Errorf("check heartbeat message error: %v", err)
 		return nil
 	}
@@ -222,8 +226,10 @@ func (c *serverConn) read() error {
 			if heartbeat, err := packet.PackHeartbeat(); err != nil {
 				log.Errorf("pack heartbeat message error: %v", err)
 			} else {
-				if err = write(conn.Writer(), heartbeat); err != nil {
-					log.Errorf("write heartbeat message error: %v", err)
+				if err = c.doWrite(heartbeat); err != nil {
+					if !errors.Is(err, netpoll.ErrConnClosed) {
+						log.Errorf("write heartbeat message error: %v", err)
+					}
 				}
 			}
 		}
@@ -242,114 +248,26 @@ func (c *serverConn) heartbeat() error {
 		return errors.ErrConnectionClosed
 	}
 
-	conn := c.conn
-
-	if conn == nil {
-		return errors.ErrConnectionClosed
-	}
-
 	heartbeat, err := packet.PackHeartbeat()
 	if err != nil {
 		return err
 	}
 
-	return write(conn.Writer(), heartbeat)
+	return c.doWrite(heartbeat)
 }
-
-//// 优雅关闭
-//func (c *serverConn) graceClose() (err error) {
-//	c.rw.Lock()
-//
-//	if err = c.checkState(); err != nil {
-//		c.rw.Unlock()
-//		return
-//	}
-//
-//	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
-//	c.chWrite <- chWrite{typ: closeSig}
-//	c.rw.Unlock()
-//
-//	<-c.done
-//
-//	c.rw.Lock()
-//	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-//	close(c.chWrite)
-//	close(c.done)
-//	c.conn.Close()
-//	c.connMgr.recycle(c.conn)
-//	c.conn = nil
-//	c.rw.Unlock()
-//
-//	if c.connMgr.server.disconnectHandler != nil {
-//		c.connMgr.server.disconnectHandler(c)
-//	}
-//
-//	return
-//}
-
-//// 写入消息
-//func (c *serverConn) write() {
-//	var ticker *time.Ticker
-//
-//	if c.connMgr.server.opts.heartbeatInterval > 0 {
-//		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
-//		defer ticker.Stop()
-//	} else {
-//		ticker = &time.Ticker{C: make(chan time.Time, 1)}
-//	}
-//
-//	for {
-//		select {
-//		case r, ok := <-c.chWrite:
-//			if !ok {
-//				return
-//			}
-//
-//			c.rw.RLock()
-//			if r.typ == closeSig {
-//				c.done <- struct{}{}
-//				c.rw.RUnlock()
-//				return
-//			}
-//
-//			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-//				c.rw.RUnlock()
-//				return
-//			}
-//
-//			err := write(c.conn.Writer(), r.msg)
-//			c.rw.RUnlock()
-//
-//			if err != nil {
-//				log.Errorf("write message error: %v", err)
-//			}
-//		case <-ticker.C:
-//			deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).Unix()
-//			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-//				log.Debugf("connection heartbeat timeout: %d", c.id)
-//				c.forceClose()
-//				return
-//			} else {
-//				c.rw.RLock()
-//
-//				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-//					c.rw.RUnlock()
-//					return
-//				}
-//
-//				// send heartbeat packet
-//				err := write(c.conn.Writer(), nil)
-//				c.rw.RUnlock()
-//
-//				if err != nil {
-//					log.Errorf("send heartbeat packet failed: %v", err)
-//				}
-//			}
-//		}
-//	}
-//}
 
 // 是否已关闭
 func (c *serverConn) isClosed() bool {
 	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
+}
+
+// 写入消息
+func (c *serverConn) doWrite(msg []byte) error {
+	writer := c.conn.Writer()
+
+	if _, err := writer.WriteBinary(msg); err != nil {
+		return err
+	}
+
+	return writer.Flush()
 }

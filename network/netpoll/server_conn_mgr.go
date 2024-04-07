@@ -10,11 +10,7 @@ import (
 	"time"
 )
 
-const (
-	partitions = 100
-)
-
-type connMgr struct {
+type serverConnMgr struct {
 	id         int64        // 连接ID
 	total      int64        // 总连接数
 	server     *server      // 服务器
@@ -22,11 +18,11 @@ type connMgr struct {
 	partitions []*partition // 连接管理
 }
 
-func newConnMgr(server *server) *connMgr {
-	cm := &connMgr{}
+func newServerConnMgr(server *server) *serverConnMgr {
+	cm := &serverConnMgr{}
 	cm.server = server
 	cm.pool = sync.Pool{New: func() interface{} { return &serverConn{} }}
-	cm.partitions = make([]*partition, partitions)
+	cm.partitions = make([]*partition, 100)
 
 	cm.init()
 
@@ -34,8 +30,8 @@ func newConnMgr(server *server) *connMgr {
 }
 
 // 初始化
-func (cm *connMgr) init() {
-	for i := 0; i < partitions; i++ {
+func (cm *serverConnMgr) init() {
+	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[netpoll.Connection]*serverConn)}
 	}
 
@@ -43,7 +39,7 @@ func (cm *connMgr) init() {
 }
 
 // 执行心跳
-func (cm *connMgr) heartbeat() {
+func (cm *serverConnMgr) heartbeat() {
 	if cm.server.opts.heartbeatMechanism != TickHeartbeat {
 		return
 	}
@@ -65,7 +61,7 @@ func (cm *connMgr) heartbeat() {
 }
 
 // 关闭连接
-func (cm *connMgr) close() {
+func (cm *serverConnMgr) close() {
 	var wg sync.WaitGroup
 
 	wg.Add(len(cm.partitions))
@@ -83,28 +79,27 @@ func (cm *connMgr) close() {
 }
 
 // 分配连接
-func (cm *connMgr) allocate(c netpoll.Connection) error {
+func (cm *serverConnMgr) allocate(c netpoll.Connection) (*serverConn, error) {
 	if atomic.LoadInt64(&cm.total) >= int64(cm.server.opts.maxConnNum) {
-		return errors.ErrTooManyConnection
+		return nil, errors.ErrTooManyConnection
 	}
 
 	id := atomic.AddInt64(&cm.id, 1)
 	conn := cm.pool.Get().(*serverConn)
-
-	if err := conn.init(id, c, cm); err != nil {
-		cm.pool.Put(conn)
-		return err
-	}
-
+	conn.init(cm, id, c)
 	index := int(reflect.ValueOf(conn.conn).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
 	atomic.AddInt64(&cm.total, 1)
 
-	return nil
+	return conn, nil
 }
 
 // 回收连接
-func (cm *connMgr) recycle(c netpoll.Connection) {
+func (cm *serverConnMgr) recycle(c netpoll.Connection) {
+	if c == nil {
+		return
+	}
+
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		cm.pool.Put(conn)
@@ -113,7 +108,7 @@ func (cm *connMgr) recycle(c netpoll.Connection) {
 }
 
 // 加载连接
-func (cm *connMgr) load(c netpoll.Connection) (*serverConn, bool) {
+func (cm *serverConnMgr) load(c netpoll.Connection) (*serverConn, bool) {
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	return cm.partitions[index].load(c)
 }
@@ -153,13 +148,20 @@ func (p *partition) delete(c netpoll.Connection) (*serverConn, bool) {
 
 // 关闭该分片内的所有连接
 func (p *partition) close() {
+	p.rw.Lock()
+	defer p.rw.Unlock()
+
 	for _, conn := range p.connections {
-		_ = conn.Close()
+		_ = conn.close(false)
 	}
+	p.connections = nil
 }
 
-// 出发该分片内的所有连接心跳
+// 检测该分片内的所有连接心跳
 func (p *partition) heartbeat() {
+	p.rw.RLock()
+	defer p.rw.RUnlock()
+
 	for _, conn := range p.connections {
 		_ = conn.heartbeat()
 	}

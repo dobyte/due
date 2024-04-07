@@ -1,54 +1,108 @@
 package netpoll
 
 import (
+	"context"
 	"github.com/cloudwego/netpoll"
+	"github.com/cloudwego/netpoll/mux"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
 type clientConn struct {
-	rw                sync.RWMutex
+	ctx               context.Context    // context
+	cancel            context.CancelFunc // cancel func
 	id                int64              // 连接ID
 	uid               int64              // 用户ID
 	conn              netpoll.Connection // TCP源连接
 	state             int32              // 连接状态
 	client            *client            // 客户端
-	chWrite           chan chWrite       // 写入队列
+	queue             *mux.ShardQueue    // nocopy api
 	lastHeartbeatTime int64              // 上次心跳时间
-	done              chan struct{}      // 写入完成信号
-	close             chan struct{}      // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
 
 func newClientConn(client *client, id int64, conn netpoll.Connection) network.Conn {
-	c := &clientConn{
-		id:                id,
-		conn:              conn,
-		state:             int32(network.ConnOpened),
-		client:            client,
-		chWrite:           make(chan chWrite, 10240),
-		lastHeartbeatTime: xtime.Now().Unix(),
-		done:              make(chan struct{}),
-		close:             make(chan struct{}),
-	}
+	c := &clientConn{}
+	c.id = id
+	c.conn = conn
+	c.state = int32(network.ConnOpened)
+	c.client = client
+	c.lastHeartbeatTime = xtime.Now().Unix()
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.queue = mux.NewShardQueue(mux.ShardSize, conn)
 
-	go c.read()
+	_ = conn.SetOnRequest(c.onRequest)
+	_ = conn.AddCloseCallback(c.onClose)
 
-	go c.write()
+	//xcall.Go(c.heartbeat)
 
 	if c.client.connectHandler != nil {
 		c.client.connectHandler(c)
 	}
 
 	return c
+}
+
+// 接受消息
+func (c *clientConn) onRequest(ctx context.Context, conn netpoll.Connection) error {
+	if c.isClosed() {
+		return errors.ErrConnectionClosed
+	}
+
+	reader := conn.Reader()
+
+	// block reading messages from the client
+	msg, err := packet.ReadMessage(reader)
+	if err != nil {
+		return err
+	}
+
+	// ignore empty packet
+	if len(msg) == 0 {
+		return nil
+	}
+
+	// check heartbeat packet
+	isHeartbeat, err := packet.CheckHeartbeat(msg)
+	if err != nil {
+		return err
+	}
+
+	if c.client.opts.heartbeatInterval > 0 {
+		atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+	}
+
+	if !isHeartbeat {
+		if c.client.receiveHandler != nil {
+			c.client.receiveHandler(c, msg)
+		}
+	}
+
+	return nil
+}
+
+// 关闭连接
+func (c *clientConn) onClose(_ netpoll.Connection) error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		return errors.ErrConnectionClosed
+	}
+
+	_ = c.queue.Close()
+	c.cancel()
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
+
+	return nil
 }
 
 // ID 获取连接ID
@@ -72,26 +126,21 @@ func (c *clientConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *clientConn) Send(msg []byte) (err error) {
-	if err = c.checkState(); err != nil {
-		return
+func (c *clientConn) Send(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
-	return write(c.conn.Writer(), msg)
+	return c.doWrite(msg)
 }
 
 // Push 发送消息（异步）
-func (c *clientConn) Push(msg []byte) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if err = c.checkState(); err != nil {
-		return
+func (c *clientConn) Push(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
-	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
-
-	return
+	return c.doWrite(msg)
 }
 
 // State 获取连接状态
@@ -101,11 +150,19 @@ func (c *clientConn) State() network.ConnState {
 
 // Close 关闭连接
 func (c *clientConn) Close(isForce ...bool) error {
-	if len(isForce) > 0 && isForce[0] {
-		return c.forceClose()
-	} else {
-		return c.graceClose()
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		return errors.ErrConnectionClosed
 	}
+
+	_ = c.queue.Close()
+	err := c.conn.Close()
+	c.cancel()
+
+	if c.client.disconnectHandler != nil {
+		c.client.disconnectHandler(c)
+	}
+
+	return err
 }
 
 // LocalIP 获取本地IP
@@ -170,79 +227,36 @@ func (c *clientConn) checkState() error {
 	}
 }
 
-// 优雅关闭
-func (c *clientConn) graceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
-	}
-
-	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
-	c.chWrite <- chWrite{typ: closeSig}
-	c.rw.Unlock()
-
-	<-c.done
-
-	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
-	close(c.close)
-	close(c.done)
-	c.conn.Close()
-	c.rw.Unlock()
-
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
-	}
-
-	return
-}
-
-// 强制关闭
-func (c *clientConn) forceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
-	}
-
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
-	close(c.chWrite)
-	close(c.close)
-	close(c.done)
-	c.conn.Close()
-	c.rw.Unlock()
-
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
-	}
-
-	return
-}
-
 // 读取消息
 func (c *clientConn) read() {
-	reader := c.conn.Reader()
-	reader.Release()
+	conn := c.conn
+	reader := conn.Reader()
 
 	for {
 		select {
-		case <-c.close:
+		case <-c.ctx.Done():
 			return
 		default:
-			// release memory
-			reader.Release()
-
 			// block reading messages from the server
-			msg, err := read(reader)
+			msg, err := packet.ReadMessage(reader)
 			if err != nil {
-				if c.conn.IsActive() {
-					log.Warnf("read message failed: %v", err)
+				if conn.IsActive() {
+					continue
 				}
-				_ = c.forceClose()
+
+				_ = c.Close()
+				return
+			}
+
+			// ignore empty packet
+			if len(msg) == 0 {
+				continue
+			}
+
+			// check heartbeat packet
+			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			if err != nil {
+				log.Errorf("check heartbeat message error: %v", err)
 				return
 			}
 
@@ -250,15 +264,8 @@ func (c *clientConn) read() {
 				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 			}
 
-			if len(msg) == 0 {
+			if isHeartbeat {
 				continue
-			}
-
-			switch c.State() {
-			case network.ConnHanged:
-				continue
-			case network.ConnClosed:
-				return
 			}
 
 			if c.client.receiveHandler != nil {
@@ -268,62 +275,36 @@ func (c *clientConn) read() {
 	}
 }
 
-// 写入消息
-func (c *clientConn) write() {
-	var ticker *time.Ticker
-
-	if c.client.opts.heartbeatInterval > 0 {
-		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
-		defer ticker.Stop()
-	} else {
-		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+// 心跳检测
+func (c *clientConn) heartbeat() {
+	if c.client.opts.heartbeatInterval <= 0 {
+		return
 	}
+
+	ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case r, ok := <-c.chWrite:
-			if !ok {
-				return
-			}
-
-			c.rw.RLock()
-			if r.typ == closeSig {
-				c.done <- struct{}{}
-				c.rw.RUnlock()
-				return
-			}
-
-			if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-				c.rw.RUnlock()
-				return
-			}
-
-			err := write(c.conn.Writer(), r.msg)
-			c.rw.RUnlock()
-
-			if err != nil {
-				log.Errorf("write message error: %v", err)
-			}
+		case <-c.ctx.Done():
+			return
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).Unix()
+
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				log.Debugf("connection heartbeat timeout")
-				_ = c.forceClose()
+				log.Warnf("connection heartbeat timeout")
+				_ = c.Close()
 				return
 			} else {
-				c.rw.RLock()
-
-				if atomic.LoadInt32(&c.state) == int32(network.ConnClosed) {
-					c.rw.RUnlock()
-					return
+				heartbeat, err := packet.PackHeartbeat()
+				if err != nil {
+					log.Warnf("pack heartbeat message failed: %v", err)
+					continue
 				}
 
 				// send heartbeat packet
-				err := write(c.conn.Writer(), nil)
-				c.rw.RUnlock()
-
-				if err != nil {
-					log.Errorf("send heartbeat packet failed: %v", err)
+				if err = c.doWrite(heartbeat); err != nil {
+					log.Warnf("send heartbeat message failed: %v", err)
 				}
 			}
 		}
@@ -333,4 +314,15 @@ func (c *clientConn) write() {
 // 是否已关闭
 func (c *clientConn) isClosed() bool {
 	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
+}
+
+// 写入消息
+func (c *clientConn) doWrite(msg []byte) error {
+	writer := c.conn.Writer()
+
+	if _, err := writer.WriteBinary(msg); err != nil {
+		return err
+	}
+
+	return writer.Flush()
 }
