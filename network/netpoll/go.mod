@@ -3,14 +3,13 @@ module github.com/dobyte/due/network/netpoll/v2
 go 1.20
 
 require (
-	github.com/cloudwego/netpoll v0.4.1
+	github.com/cloudwego/netpoll v0.6.0
 	github.com/dobyte/due/v2 v2.0.0
-	github.com/libp2p/go-reuseport v0.3.0
 )
 
 require (
 	github.com/BurntSushi/toml v1.2.0 // indirect
-	github.com/bytedance/gopkg v0.0.0-20220413063733-65bf48ffb3a7 // indirect
+	github.com/bytedance/gopkg v0.0.0-20240315062850-21fc7a1671a8 // indirect
 	github.com/bytedance/sonic v1.11.3 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect

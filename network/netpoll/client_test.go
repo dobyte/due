@@ -2,164 +2,160 @@ package netpoll_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/network/netpoll/v2"
+	tcp "github.com/dobyte/due/network/netpoll/v2"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xrand"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestClient_Dial(t *testing.T) {
-	client := netpoll.NewClient()
+func TestClient_Simple(t *testing.T) {
+	client := tcp.NewClient()
 
 	client.OnConnect(func(conn network.Conn) {
-		t.Log("connection is opened")
+		log.Info("connection is opened")
 	})
+
 	client.OnDisconnect(func(conn network.Conn) {
-		t.Log("connection is closed")
+		log.Info("connection is closed")
 	})
+
 	client.OnReceive(func(conn network.Conn, msg []byte) {
 		message, err := packet.UnpackMessage(msg)
 		if err != nil {
-			t.Error(err)
+			log.Errorf("unpack message failed: %v", err)
 			return
 		}
 
-		t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+		log.Infof("receive msg from server, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 	})
 
 	conn, err := client.Dial()
 	if err != nil {
-		t.Fatal(err)
+		log.Fatalf("client dial failed: %v", err)
 	}
-
 	defer conn.Close()
 
-	msg, _ := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
+	counter := 0
 
-	if err = conn.Push(msg); err != nil {
-		t.Fatal(err)
-	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 
-	time.Sleep(1 * time.Second)
-}
-
-func TestNewClient_Dial(t *testing.T) {
-	wg := sync.WaitGroup{}
-	for i := 0; i < 400; i++ {
-		wg.Add(1)
-
-		go func() {
-			client := netpoll.NewClient()
-			client.OnConnect(func(conn network.Conn) {
-				t.Log("connection is opened")
-			})
-			client.OnDisconnect(func(conn network.Conn) {
-				t.Log("connection is closed")
-			})
-			client.OnReceive(func(conn network.Conn, msg []byte) {
-				message, err := packet.UnpackMessage(msg)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-
-				t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-			})
-
-			defer wg.Done()
-
-			conn, err := client.Dial()
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			defer conn.Close()
-
-			times := 0
-			msg, _ := packet.PackMessage(&packet.Message{
+	for {
+		select {
+		case <-ticker.C:
+			msg, err := packet.PackMessage(&packet.Message{
 				Seq:    1,
 				Route:  1,
 				Buffer: []byte("hello server~~"),
 			})
-
-			for {
-				select {
-				case <-ticker.C:
-					if err = conn.Push(msg); err != nil {
-						t.Error(err)
-						return
-					}
-
-					times++
-
-					if times >= 5 {
-						return
-					}
-				}
+			if err != nil {
+				log.Errorf("pack message failed: %v", err)
+				continue
 			}
-		}()
-	}
 
-	wg.Wait()
+			if err = conn.Push(msg); err != nil {
+				log.Errorf("push message failed: %v", err)
+				return
+			}
+
+			counter++
+
+			if counter >= 200 {
+				return
+			}
+		}
+	}
 }
 
 func TestClient_Benchmark(t *testing.T) {
-	// 并发数
-	concurrency := 1000
-	// 消息量
-	total := 1000000
-	// 总共发送的消息条数
-	totalSent := int64(0)
-	// 总共接收的消息条数
-	totalRecv := int64(0)
-
-	// 准备消息
-	msg, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
-	if err != nil {
-		t.Fatal(err)
+	samples := []struct {
+		c    int // 并发数
+		n    int // 请求数
+		size int // 数据包大小
+	}{
+		{
+			c:    50,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    100,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    200,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    300,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    400,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    500,
+			n:    2000000,
+			size: 1024,
+		},
+		{
+			c:    1000,
+			n:    2000000,
+			size: 2 * 1024,
+		},
 	}
 
-	wg := sync.WaitGroup{}
-	client := netpoll.NewClient()
+	go func() {
+		err := http.ListenAndServe(":8090", nil)
+		if err != nil {
+			log.Errorf("pprof server start failed: %v", err)
+		}
+	}()
+
+	for _, sample := range samples {
+		doPressureTest(sample.c, sample.n, sample.size)
+	}
+}
+
+// 执行压力测试
+func doPressureTest(c int, n int, size int) {
+	var (
+		wg        sync.WaitGroup
+		totalSent int64
+		totalRecv int64
+	)
+
+	client := tcp.NewClient(tcp.WithClientHeartbeatInterval(0))
+
 	client.OnReceive(func(conn network.Conn, msg []byte) {
 		atomic.AddInt64(&totalRecv, 1)
 
 		wg.Done()
 	})
 
-	wg.Add(total)
+	buffer := []byte(xrand.Letters(size))
 
-	chMsg := make(chan struct{}, total)
+	chMsg := make(chan struct{}, n)
 
-	// 准备连接
-	conns := make([]network.Conn, concurrency)
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < c; i++ {
 		conn, err := client.Dial()
 		if err != nil {
-			fmt.Println("connect failed", i, err)
+			log.Errorf("client dial failed: %v", err)
 			i--
 			continue
 		}
 
-		conns[i] = conn
-		time.Sleep(time.Millisecond)
-	}
-
-	// 发送消息
-	for _, conn := range conns {
 		go func(conn network.Conn) {
 			defer conn.Close(true)
 
@@ -170,8 +166,18 @@ func TestClient_Benchmark(t *testing.T) {
 						return
 					}
 
-					if err = conn.Send(msg); err != nil {
-						t.Error(err)
+					msg, err := packet.PackMessage(&packet.Message{
+						Seq:    1,
+						Route:  1,
+						Buffer: buffer,
+					})
+					if err != nil {
+						log.Errorf("pack message failed: %v", err)
+						return
+					}
+
+					if err = conn.Push(msg); err != nil {
+						log.Errorf("push message failed: %v", err)
 						return
 					}
 
@@ -181,21 +187,48 @@ func TestClient_Benchmark(t *testing.T) {
 		}(conn)
 	}
 
+	wg.Add(n)
+
 	startTime := time.Now().UnixNano()
 
-	for i := 0; i < total; i++ {
+	for i := 0; i < n; i++ {
 		chMsg <- struct{}{}
 	}
 
 	wg.Wait()
+
 	close(chMsg)
 
 	totalTime := float64(time.Now().UnixNano()-startTime) / float64(time.Second)
 
-	fmt.Printf("server               : %s\n", "netpoll-tcp")
-	fmt.Printf("concurrency          : %d\n", concurrency)
+	fmt.Printf("server               : %s\n", client.Protocol())
+	fmt.Printf("concurrency          : %d\n", c)
 	fmt.Printf("latency              : %fs\n", totalTime)
-	fmt.Printf("sent     requests    : %d\n", totalSent)
+	fmt.Printf("data size            : %s\n", convBytes(size))
+	fmt.Printf("sent requests        : %d\n", totalSent)
 	fmt.Printf("received requests    : %d\n", totalRecv)
-	fmt.Printf("throughput  (TPS)    : %d\n", int64(float64(totalRecv)/totalTime))
+	fmt.Printf("throughput (TPS)     : %d\n", int64(float64(totalRecv)/totalTime))
+	fmt.Printf("--------------------------------\n")
+}
+
+func convBytes(bytes int) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+		TB = 1024 * GB
+	)
+
+	switch {
+	case bytes < KB:
+		return fmt.Sprintf("%.2fB", float64(bytes))
+	case bytes < MB:
+		return fmt.Sprintf("%.2fKB", float64(bytes)/KB)
+	case bytes < GB:
+		return fmt.Sprintf("%.2fMB", float64(bytes)/MB)
+	case bytes < TB:
+		return fmt.Sprintf("%.2fGB", float64(bytes)/GB)
+	default:
+		return fmt.Sprintf("%.2fTB", float64(bytes)/TB)
+	}
 }
