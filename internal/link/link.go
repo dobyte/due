@@ -49,9 +49,9 @@ func NewLink(opts *Options) *Link {
 		transponders:   make([]*Transponder, 100),
 	}
 
-	for i := 0; i < len(l.transponders); i++ {
-		l.transponders[i] = NewTransponder(l)
-	}
+	//for i := 0; i < len(l.transponders); i++ {
+	//	l.transponders[i] = NewTransponder(l)
+	//}
 
 	return l
 }
@@ -631,18 +631,18 @@ func (l *Link) Deliver(ctx context.Context, args *DeliverArgs) error {
 		_, err = client.Deliver(ctx, arguments)
 		return err
 	} else {
-		//_, err := l.doNodeRPC(ctx, arguments.Message.Route, args.UID, func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error) {
-		//	miss, err := client.Deliver(ctx, arguments)
-		//	return miss, nil, err
-		//})
-		//if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-		//	return err
-		//}
-		//return nil
-
-		index := int(arguments.CID % int64(len(l.transponders)))
-		l.transponders[index].deliver(arguments)
+		_, err := l.doNodeRPC(ctx, arguments.Message.Route, args.UID, func(ctx context.Context, client transport.NodeClient) (bool, interface{}, error) {
+			miss, err := client.Deliver(ctx, arguments)
+			return miss, nil, err
+		})
+		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+			return err
+		}
 		return nil
+
+		//index := int(arguments.CID % int64(len(l.transponders)))
+		//l.transponders[index].deliver(arguments)
+		//return nil
 	}
 }
 
