@@ -5,6 +5,7 @@ import (
 	"github.com/cloudwego/kitex/server"
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"net"
 )
 
 const scheme = "kitex"
@@ -27,9 +28,11 @@ func NewServer(opts *Options) (*Server, error) {
 		return nil, err
 	}
 
+	addr, _ := net.ResolveTCPAddr("tcp", listenAddr)
 	options := make([]server.Option, 0, len(opts.ServerOpts)+1)
 	options = append(options, opts.ServerOpts...)
 	options = append(options, server.WithCompatibleMiddlewareForUnary())
+	options = append(options, server.WithServiceAddr(addr))
 
 	s := &Server{}
 	s.listenAddr = listenAddr

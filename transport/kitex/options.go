@@ -42,5 +42,7 @@ func WithServerListenAddr(addr string) Option {
 
 // WithClientDiscovery 设置客户端服务发现组件
 func WithClientDiscovery(discovery registry.Discovery) Option {
-	return func(o *options) { o.client.Discovery = discovery }
+	return func(o *options) {
+		//o.client.Discovery = discovery
+	}
 }
