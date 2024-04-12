@@ -31,8 +31,9 @@ func NewServer(opts *Options) (*Server, error) {
 	addr, _ := net.ResolveTCPAddr("tcp", listenAddr)
 	options := make([]server.Option, 0, len(opts.ServerOpts)+1)
 	options = append(options, opts.ServerOpts...)
-	options = append(options, server.WithCompatibleMiddlewareForUnary())
+	//options = append(options, server.WithCompatibleMiddlewareForUnary())
 	options = append(options, server.WithServiceAddr(addr))
+	options = append(options, server.WithMuxTransport())
 
 	s := &Server{}
 	s.listenAddr = listenAddr

@@ -3,13 +3,11 @@ package gate
 import (
 	"context"
 	"github.com/cloudwego/kitex/client"
-	"github.com/cloudwego/kitex/pkg/connpool"
 	"github.com/dobyte/due/transport/kitex/v2/internal/protocol/gate"
 	inner "github.com/dobyte/due/transport/kitex/v2/internal/protocol/gate/gate"
 	"github.com/dobyte/due/transport/kitex/v2/internal/protocol/message"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
-	"time"
 )
 
 type Client struct {
@@ -17,12 +15,7 @@ type Client struct {
 }
 
 func NewClient(addr string) (*Client, error) {
-	cli, err := inner.NewClient("Gate", client.WithHostPorts(addr), client.WithLongConnection(connpool.IdleConfig{
-		MaxIdlePerAddress: 10,
-		MaxIdleGlobal:     100,
-		MaxIdleTimeout:    time.Minute,
-		MinIdlePerAddress: 2,
-	}))
+	cli, err := inner.NewClient("Gate", client.WithHostPorts(addr), client.WithMuxConnection(2))
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package drpc
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -55,6 +56,63 @@ func PackBindCMD(cid, uid int64) ([]byte, error) {
 	}
 
 	err = binary.Write(buf, binary.BigEndian, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// PackUnbindCMD 打包解绑命令
+func PackUnbindCMD(uid int64) ([]byte, error) {
+	buf := &bytes.Buffer{}
+
+	size := defaultHeaderBytes + 8
+
+	buf.Grow(defaultSizeBytes + size)
+
+	err := binary.Write(buf, binary.BigEndian, int32(size))
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.BigEndian, cmdUnbind)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.BigEndian, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// PackGetIPCMD 打包获取IP地址命令
+func PackGetIPCMD(kind session.Kind, target int64) ([]byte, error) {
+	buf := &bytes.Buffer{}
+
+	size := defaultHeaderBytes + 1 + 8
+
+	buf.Grow(defaultSizeBytes + size)
+
+	err := binary.Write(buf, binary.BigEndian, int32(size))
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.BigEndian, cmdUnbind)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.BigEndian, int8(kind))
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.BigEndian, target)
 	if err != nil {
 		return nil, err
 	}
