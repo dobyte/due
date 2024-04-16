@@ -8,6 +8,7 @@
 package xnet
 
 import (
+	"encoding/binary"
 	innernet "github.com/dobyte/due/v2/core/net"
 	"net"
 )
@@ -40,4 +41,22 @@ func FulfillAddr(addr string) string {
 // AssignRandPort 分配一个随机端口
 func AssignRandPort(ip ...string) (int, error) {
 	return innernet.AssignRandPort(ip...)
+}
+
+// IP2Long IP地址转换为长整型
+func IP2Long(ip string) uint32 {
+	v := net.ParseIP(ip).To4()
+
+	if len(v) == 0 {
+		return 0
+	}
+
+	return binary.BigEndian.Uint32(v)
+}
+
+// Long2IP 长整型转换为字符串地址
+func Long2IP(v uint32) string {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, v)
+	return ip.String()
 }
