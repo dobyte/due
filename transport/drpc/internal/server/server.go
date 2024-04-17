@@ -1,4 +1,4 @@
-package internal
+package server
 
 import (
 	xnet "github.com/dobyte/due/v2/core/net"

@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport/drpc/internal/client"
 	"github.com/dobyte/due/v2/transport/drpc/internal/codes"
@@ -17,6 +18,7 @@ type Client struct {
 	getIPPacker      *packet.GetIPPacker
 	statPacker       *packet.StatPacker
 	disconnectPacker *packet.DisconnectPacker
+	pushPacker       *packet.PushPacker
 }
 
 // Bind 绑定用户与连接
@@ -125,31 +127,37 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 }
 
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) (bool, error) {
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packets.Message) (bool, error) {
+	seq := atomic.AddUint64(&c.seq, 1)
+
+	buf, err := c.pushPacker.PackReq(seq, kind, target, message)
+	if err != nil {
+		return false, err
+	}
 
 }
 
 // AsyncPush 异步推送消息
-func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
+func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message *packets.Message) error {
 
 }
 
 // Multicast 推送组播消息
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error) {
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packets.Message) (total int64, err error) {
 
 }
 
 // AsyncMulticast 推送组播消息
-func (c *Client) AsyncMulticast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) error {
+func (c *Client) AsyncMulticast(ctx context.Context, kind session.Kind, targets []int64, message *packets.Message) error {
 
 }
 
 // Broadcast 推送广播消息
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *packet.Message) (total int64, err error) {
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *packets.Message) (total int64, err error) {
 
 }
 
 // AsyncBroadcast 推送广播消息
-func (c *Client) AsyncBroadcast(ctx context.Context, kind session.Kind, message *packet.Message) error {
+func (c *Client) AsyncBroadcast(ctx context.Context, kind session.Kind, message *packets.Message) error {
 
 }
