@@ -113,6 +113,8 @@ func (s *server) serve() {
 		CheckOrigin:       s.opts.checkOrigin,
 	}
 
+	log.Infof("running websocket server on ws://%+v", s.opts.addr)
+
 	http.HandleFunc(s.opts.path, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", 405)

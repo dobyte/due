@@ -34,7 +34,7 @@ func (s *PromServer) Init() {
 
 // Start 启动组件
 func (s *PromServer) Start() {
-	if s.opts.enable {
+	if s.opts != nil && s.opts.enable {
 		go func() {
 			if err := s.engine.Run(s.opts.addr); err != nil {
 				log.Errorf("http server startup failed: %v", err)
@@ -57,6 +57,9 @@ func (s *PromServer) Destroy() {
 
 // Enable 获取是否开启
 func (s *PromServer) Enable() bool {
+	if s.opts == nil {
+		return false
+	}
 	return s.opts.enable
 }
 

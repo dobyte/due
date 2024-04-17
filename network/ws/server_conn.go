@@ -31,6 +31,10 @@ type serverConn struct {
 	chWrite           chan chWrite    // 写入队列
 	done              chan struct{}   // 写入完成信号
 	lastHeartbeatTime int64           // 上次心跳时间
+	rBlock            chan struct{}
+	rRelease          chan struct{}
+	wBlock            chan struct{}
+	wRelease          chan struct{}
 }
 
 var _ network.Conn = &serverConn{}
@@ -168,6 +172,10 @@ func (c *serverConn) init(conn *websocket.Conn, cm *connMgr) {
 	c.conn = conn
 	c.connMgr = cm
 	c.chWrite = make(chan chWrite, 1024)
+	c.rBlock = make(chan struct{})
+	c.rRelease = make(chan struct{})
+	c.wBlock = make(chan struct{})
+	c.wRelease = make(chan struct{})
 	c.done = make(chan struct{})
 	c.lastHeartbeatTime = xtime.Now().Unix()
 	atomic.StoreInt64(&c.uid, 0)
@@ -291,6 +299,18 @@ func (c *serverConn) write() {
 
 	for {
 		select {
+		case <-c.wBlock:
+		inner:
+			for {
+				select {
+				case <-c.wRelease:
+					break inner
+				case <-time.After(3 * time.Second):
+					log.Warnf("block server write to client timeout")
+					_ = c.Close(true)
+					break inner
+				}
+			}
 		case write, ok := <-c.chWrite:
 			if !ok {
 				return
@@ -313,6 +333,18 @@ func (c *serverConn) write() {
 			}
 		}
 	}
+}
+
+// Block 阻塞conn传来的消息
+func (c *serverConn) Block() {
+	c.rBlock <- struct{}{}
+	c.wBlock <- struct{}{}
+}
+
+// Release 释放conn传来的消息
+func (c *serverConn) Release() {
+	c.rRelease <- struct{}{}
+	c.wRelease <- struct{}{}
 }
 
 func (c *serverConn) doWrite(write *chWrite) error {

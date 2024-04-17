@@ -10,8 +10,8 @@ package gate
 import (
 	"context"
 	"github.com/symsimmy/due/cluster"
-	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/common/link"
+	"github.com/symsimmy/due/errors"
 	"github.com/symsimmy/due/metrics/prometheus"
 	"github.com/symsimmy/due/session"
 	"github.com/symsimmy/due/transport"
@@ -82,6 +82,8 @@ func (g *Gate) Init() {
 func (g *Gate) Start() {
 	g.startNetworkServer()
 
+	g.startWsNetworkServer()
+
 	g.startRPCServer()
 
 	g.startPromServer()
@@ -100,6 +102,8 @@ func (g *Gate) Destroy() {
 	g.deregisterServiceInstance()
 
 	g.stopNetworkServer()
+
+	g.stopWsNetworkServer()
 
 	g.stopRPCServer()
 
@@ -138,6 +142,24 @@ func (g *Gate) startNetworkServer() {
 func (g *Gate) stopNetworkServer() {
 	if err := g.opts.server.Stop(); err != nil {
 		log.Errorf("network server stop failed: %v", err)
+	}
+}
+
+// 启动网络服务器
+func (g *Gate) startWsNetworkServer() {
+	g.opts.wsServer.OnConnect(g.handleConnect)
+	g.opts.wsServer.OnDisconnect(g.handleDisconnect)
+	g.opts.wsServer.OnReceive(g.handleReceive)
+
+	if err := g.opts.wsServer.Start(); err != nil {
+		log.Fatalf("ws network server start failed: %v", err)
+	}
+}
+
+// 停止网关服务器
+func (g *Gate) stopWsNetworkServer() {
+	if err := g.opts.wsServer.Stop(); err != nil {
+		log.Errorf("ws network server stop failed: %v", err)
 	}
 }
 

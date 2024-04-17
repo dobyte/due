@@ -294,6 +294,14 @@ func (c *clientConn) write() {
 	}
 }
 
+// Block 阻塞conn传来的消息
+func (c *clientConn) Block() {
+}
+
+// Release 释放conn传来的消息
+func (c *clientConn) Release() {
+}
+
 func (c *clientConn) doWrite(write *chWrite) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()

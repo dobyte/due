@@ -47,6 +47,7 @@ type options struct {
 	ctx         context.Context       // 上下文
 	timeout     time.Duration         // RPC调用超时时间
 	server      network.Server        // 网关服务器
+	wsServer    network.Server        // websocket 网关服务器
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
 	codec       encoding.Codec        // 编解码器
@@ -113,6 +114,13 @@ func WithContext(ctx context.Context) Option {
 // WithServer 设置服务器
 func WithServer(server network.Server) Option {
 	return func(o *options) { o.server = server }
+}
+
+// WithWsServer 设置websocket 服务器
+func WithWsServer(server network.Server) Option {
+	return func(o *options) {
+		o.wsServer = server
+	}
 }
 
 // WithTimeout 设置RPC调用超时时间
