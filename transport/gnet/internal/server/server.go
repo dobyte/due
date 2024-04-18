@@ -34,7 +34,7 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
-	s.server = tcp.NewServer(opts.Addr)
+	s.server = tcp.NewServer(listenAddr)
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 
 	return s, nil
