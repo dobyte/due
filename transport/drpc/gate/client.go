@@ -144,14 +144,24 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 
 // Push 推送消息
 func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packets.Message) (bool, error) {
-	//seq := atomic.AddUint64(&c.seq, 1)
-	//
-	//buf, err := c.pushPacker.PackReq(seq, kind, target, message)
-	//if err != nil {
-	//	return false, err
-	//}
+	seq := atomic.AddUint64(&c.seq, 1)
 
-	return false, nil
+	buf, err := c.pushPacker.PackReq(seq, kind, target, message)
+	if err != nil {
+		return false, err
+	}
+
+	data, err := c.client.Push(ctx, seq, buf, message.Buffer)
+	if err != nil {
+		return false, err
+	}
+
+	code, err := c.pushPacker.UnpackRes(data)
+	if err != nil {
+		return false, err
+	}
+
+	return code == codes.NotFoundSession, nil
 }
 
 // AsyncPush 异步推送消息

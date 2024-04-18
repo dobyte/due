@@ -46,6 +46,8 @@ type endpoint struct {
 func (e *endpoint) init(s *server.Server) {
 	// 注册绑定路由处理器
 	s.RegisterHandler(route.Bind, e.bind)
+	// 注册推送路由处理器
+	s.RegisterHandler(route.Push, e.push)
 }
 
 func (e *endpoint) bind(conn *server.Conn, data []byte) error {
@@ -73,6 +75,33 @@ func (e *endpoint) bind(conn *server.Conn, data []byte) error {
 	}
 
 	time.Sleep(5 * time.Second)
+
+	return conn.Send(buf)
+}
+
+func (e *endpoint) push(conn *server.Conn, data []byte) error {
+	seq, kind, target, message, err := e.pushPacker.UnpackReq(data)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(seq, kind, target, message.Seq, message.Route, string(message.Buffer))
+
+	var code int16
+
+	if err = e.provider.Push(context.Background(), kind, target, message); err != nil {
+		switch {
+		case errors.Is(err, errors.ErrNotFoundSession):
+			code = codes.NotFoundSession
+		default:
+			code = codes.NotFoundSession
+		}
+	}
+
+	buf, err := e.pushPacker.PackRes(seq, code)
+	if err != nil {
+		return err
+	}
 
 	return conn.Send(buf)
 }

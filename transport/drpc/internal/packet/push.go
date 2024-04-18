@@ -3,15 +3,17 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/errors"
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/transport/drpc/internal/route"
 	"io"
 	"sync"
 )
 
 const (
 	pushReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1 + 8 + 4 + 4
-	pushResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + 4
+	pushResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
 )
 
 type PushPacker struct {
@@ -49,7 +51,7 @@ func (p *PushPacker) PackReq(seq uint64, kind session.Kind, target int64, messag
 		return
 	}
 
-	if err = binary.Write(buf, binary.BigEndian, pushReq); err != nil {
+	if err = binary.Write(buf, binary.BigEndian, route.Push); err != nil {
 		return
 	}
 
@@ -95,11 +97,79 @@ func (p *PushPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, targ
 		return
 	}
 
+	kind = session.Kind(k)
+
 	if err = binary.Read(reader, binary.BigEndian, &target); err != nil {
 		return
 	}
 
-	kind = session.Kind(k)
+	message = &packets.Message{}
+
+	if err = binary.Read(reader, binary.BigEndian, &message.Route); err != nil {
+		return
+	}
+
+	if err = binary.Read(reader, binary.BigEndian, &message.Seq); err != nil {
+		return
+	}
+
+	message.Buffer = data[pushReqBytes:]
+
+	return
+}
+
+// PackRes 打包响应
+// size + header + route + seq + code
+func (p *PushPacker) PackRes(seq uint64, code int16) (buf *Buffer, err error) {
+	buf = p.resPool.Get().(*Buffer)
+	defer func() {
+		if err != nil {
+			buf.Recycle()
+		}
+	}()
+
+	size := pushResBytes - defaultSizeBytes
+
+	if err = binary.Write(buf, binary.BigEndian, int32(size)); err != nil {
+		return
+	}
+
+	if err = binary.Write(buf, binary.BigEndian, dataBit); err != nil {
+		return
+	}
+
+	if err = binary.Write(buf, binary.BigEndian, route.Push); err != nil {
+		return
+	}
+
+	if err = binary.Write(buf, binary.BigEndian, seq); err != nil {
+		return
+	}
+
+	if err = binary.Write(buf, binary.BigEndian, code); err != nil {
+		return
+	}
+
+	return
+}
+
+// UnpackRes 解包响应
+// size + header + route + seq + code
+func (p *PushPacker) UnpackRes(data []byte) (code int16, err error) {
+	if len(data) != pushResBytes {
+		err = errors.ErrInvalidMessage
+		return
+	}
+
+	reader := bytes.NewReader(data)
+
+	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+defaultSeqBytes, io.SeekStart); err != nil {
+		return
+	}
+
+	if err = binary.Read(reader, binary.BigEndian, &code); err != nil {
+		return
+	}
 
 	return
 }

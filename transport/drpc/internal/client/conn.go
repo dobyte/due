@@ -36,7 +36,7 @@ func newConn(conn net.Conn, ch ...chan chWrite) *Conn {
 }
 
 // 发送请求
-func (c *Conn) send(ctx context.Context, seq uint64, buf *packet.Buffer) *Call {
+func (c *Conn) send(ctx context.Context, seq uint64, buf *packet.Buffer, data []byte) *Call {
 	call := &Call{data: make(chan []byte)}
 
 	c.chWrite <- chWrite{
@@ -44,6 +44,7 @@ func (c *Conn) send(ctx context.Context, seq uint64, buf *packet.Buffer) *Call {
 		seq:  seq,
 		buf:  buf,
 		call: call,
+		data: data,
 	}
 
 	return call
@@ -67,6 +68,12 @@ func (c *Conn) write() {
 
 			if err != nil {
 				continue
+			}
+
+			if len(ch.data) > 0 {
+				if _, err = conn.Write(ch.data); err != nil {
+					continue
+				}
 			}
 		}
 	}

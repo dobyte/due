@@ -9,5 +9,6 @@ type chWrite struct {
 	ctx  context.Context
 	seq  uint64
 	buf  *packet.Buffer
+	data []byte
 	call *Call
 }

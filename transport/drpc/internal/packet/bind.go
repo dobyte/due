@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/transport/drpc/internal/route"
 	"io"
 	"sync"
 )
@@ -48,7 +49,7 @@ func (p *BindPacker) PackReq(seq uint64, cid, uid int64) (buf *Buffer, err error
 		return
 	}
 
-	if err = binary.Write(buf, binary.BigEndian, bindReq); err != nil {
+	if err = binary.Write(buf, binary.BigEndian, route.Bind); err != nil {
 		return
 	}
 
@@ -116,7 +117,7 @@ func (p *BindPacker) PackRes(seq uint64, code int16) (buf *Buffer, err error) {
 		return
 	}
 
-	if err = binary.Write(buf, binary.BigEndian, bindRes); err != nil {
+	if err = binary.Write(buf, binary.BigEndian, route.Bind); err != nil {
 		return
 	}
 

@@ -33,16 +33,27 @@ func TestTransporter_NewGateClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i := 0; i < 2; i++ {
-		go func() {
-			miss, err := client.Bind(context.Background(), 1, 2)
-			if err != nil {
-				t.Fatal(err)
-			}
+	//for i := 0; i < 2; i++ {
+	//	go func() {
+	//		miss, err := client.Bind(context.Background(), 1, 2)
+	//		if err != nil {
+	//			t.Fatal(err)
+	//		}
+	//
+	//		t.Log(miss)
+	//	}()
+	//}
 
-			t.Log(miss)
-		}()
+	_, err = client.Push(context.Background(), session.Conn, 1, &packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	fmt.Println("push ok")
 
 	time.Sleep(10 * time.Second)
 }
@@ -72,6 +83,8 @@ func (p *gateProvider) IsOnline(ctx context.Context, kind session.Kind, target i
 
 // Push 发送消息（异步）
 func (p *gateProvider) Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) error {
+	//fmt.Println(kind, target, message)
+
 	return nil
 }
 
