@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/errors"
 	"io"
 	"sync"
 )
@@ -66,7 +67,7 @@ func (p *UnbindPacker) PackReq(seq uint64, uid int64) (buf *Buffer, err error) {
 // 协议格式：size + header + route + seq + uid
 func (p *UnbindPacker) UnpackReq(data []byte) (seq uint64, uid int64, err error) {
 	if len(data) != unbindReqBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 
@@ -126,7 +127,7 @@ func (p *UnbindPacker) PackRes(seq uint64, code int16) (buf *Buffer, err error) 
 // size + header + route + seq + code
 func (p *UnbindPacker) UnpackRes(data []byte) (code int16, err error) {
 	if len(data) != unbindResBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 

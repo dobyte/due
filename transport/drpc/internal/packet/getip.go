@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport/drpc/internal/codes"
 	"github.com/dobyte/due/v2/utils/xnet"
@@ -73,7 +74,7 @@ func (p *GetIPPacker) PackReq(seq uint64, kind session.Kind, target int64) (buf 
 // 协议格式：size + header + route + seq + session kind + target
 func (p *GetIPPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, target int64, err error) {
 	if len(data) != getIPReqBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 
@@ -151,7 +152,7 @@ func (p *GetIPPacker) PackRes(seq uint64, code int16, ip ...string) (buf *Buffer
 // size + header + route + seq + code + [ip]
 func (p *GetIPPacker) UnpackRes(data []byte) (code int16, ip string, err error) {
 	if len(data) != getIPResBytes && len(data) != getIPResBytes-4 {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 

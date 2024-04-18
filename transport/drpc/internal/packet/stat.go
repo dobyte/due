@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"io"
 	"sync"
@@ -67,7 +68,7 @@ func (p *StatPacker) PackReq(seq uint64, kind session.Kind) (buf *Buffer, err er
 // 协议格式：size + header + route + seq + session kind + target
 func (p *StatPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, err error) {
 	if len(data) != statReqBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 
@@ -137,7 +138,7 @@ func (p *StatPacker) PackRes(seq uint64, total ...int64) (buf *Buffer, err error
 // size + header + route + seq + [total]
 func (p *StatPacker) UnpackRes(data []byte) (total int64, err error) {
 	if len(data) != statResBytes && len(data) != statResBytes-8 {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 

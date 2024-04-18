@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"fmt"
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport/drpc/internal/client"
@@ -21,6 +22,19 @@ type Client struct {
 	pushPacker       *packet.PushPacker
 }
 
+func NewClient() *Client {
+	c := &Client{}
+	c.client = client.NewClient()
+	c.bindPacker = packet.NewBindPacker()
+	c.unbindPacker = packet.NewUnbindPacker()
+	c.getIPPacker = packet.NewGetIPPacker()
+	c.statPacker = packet.NewStatPacker()
+	c.disconnectPacker = packet.NewDisconnectPacker()
+	c.pushPacker = packet.NewPushPacker()
+
+	return c
+}
+
 // Bind 绑定用户与连接
 func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
 	seq := atomic.AddUint64(&c.seq, 1)
@@ -34,6 +48,8 @@ func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	fmt.Println(data)
 
 	code, err := c.bindPacker.UnpackRes(data)
 	if err != nil {
@@ -128,36 +144,37 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 
 // Push 推送消息
 func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message *packets.Message) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.pushPacker.PackReq(seq, kind, target, message)
+	//if err != nil {
+	//	return false, err
+	//}
 
-	buf, err := c.pushPacker.PackReq(seq, kind, target, message)
-	if err != nil {
-		return false, err
-	}
-
+	return false, nil
 }
 
 // AsyncPush 异步推送消息
 func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message *packets.Message) error {
-
+	return nil
 }
 
 // Multicast 推送组播消息
 func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packets.Message) (total int64, err error) {
-
+	return
 }
 
 // AsyncMulticast 推送组播消息
 func (c *Client) AsyncMulticast(ctx context.Context, kind session.Kind, targets []int64, message *packets.Message) error {
-
+	return nil
 }
 
 // Broadcast 推送广播消息
 func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message *packets.Message) (total int64, err error) {
-
+	return
 }
 
 // AsyncBroadcast 推送广播消息
 func (c *Client) AsyncBroadcast(ctx context.Context, kind session.Kind, message *packets.Message) error {
-
+	return nil
 }

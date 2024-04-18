@@ -2,10 +2,13 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/transport/drpc/internal/packet"
 	"net"
 	"sync"
 )
+
+var reader = packet.NewReader()
 
 type Conn struct {
 	conn    net.Conn
@@ -25,12 +28,16 @@ func newConn(conn net.Conn, ch ...chan chWrite) *Conn {
 		c.chWrite = make(chan chWrite, 4096)
 	}
 
+	go c.write()
+
+	go c.read()
+
 	return c
 }
 
 // 发送请求
 func (c *Conn) send(ctx context.Context, seq uint64, buf *packet.Buffer) *Call {
-	call := &Call{done: make(chan struct{})}
+	call := &Call{data: make(chan []byte)}
 
 	c.chWrite <- chWrite{
 		ctx:  ctx,
@@ -53,13 +60,41 @@ func (c *Conn) write() {
 				return
 			}
 
+			c.pending[ch.seq] = ch.call
+
 			_, err := conn.Write(ch.buf.Bytes())
 			ch.buf.Recycle()
 
 			if err != nil {
 				continue
 			}
-
 		}
+	}
+}
+
+func (c *Conn) read() {
+	conn := c.conn
+
+	for {
+		isHeartbeat, _, seq, data, err := reader.ReadMessage(conn)
+		if err != nil {
+			// TODO：处理错误
+			return
+		}
+
+		fmt.Println(seq)
+
+		if isHeartbeat {
+			continue
+		}
+
+		call, ok := c.pending[seq]
+		if !ok {
+			continue
+		}
+
+		delete(c.pending, seq)
+
+		call.data <- data
 	}
 }

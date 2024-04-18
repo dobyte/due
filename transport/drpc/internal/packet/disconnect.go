@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"io"
 	"sync"
@@ -75,7 +76,7 @@ func (p *DisconnectPacker) PackReq(seq uint64, kind session.Kind, target int64, 
 // 协议格式：size + header + route + seq + session kind + target
 func (p *DisconnectPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, target int64, isForce bool, err error) {
 	if len(data) != disconnectReqBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 
@@ -147,7 +148,7 @@ func (p *DisconnectPacker) PackRes(seq uint64, code int16) (buf *Buffer, err err
 // size + header + route + seq + code
 func (p *DisconnectPacker) UnpackRes(data []byte) (code int16, err error) {
 	if len(data) != disconnectResBytes {
-		err = ErrInvalidPacket
+		err = errors.ErrInvalidMessage
 		return
 	}
 

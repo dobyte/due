@@ -3,7 +3,6 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"io"
@@ -434,7 +433,6 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 	}
 
 	if uint64(len(data))-defaultSizeBytes != uint64(size) {
-		fmt.Println(len(data), size)
 		return false, errors.ErrInvalidMessage
 	}
 

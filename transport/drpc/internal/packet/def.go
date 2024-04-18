@@ -1,7 +1,5 @@
 package packet
 
-import "github.com/dobyte/due/v2/errors"
-
 // 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
 // +---------------------------------------------------------------+-+-------------+-------------------------------+-------------------------------+
 // |                              size                             |h|   extcode   |             route             |              seq              |
@@ -47,8 +45,4 @@ const (
 	disconnectRes                 // 断开连接响应
 	pushReq                       // 推送消息请求
 	pushRes                       // 推送消息响应
-)
-
-var (
-	ErrInvalidPacket = errors.New("invalid packet data")
 )

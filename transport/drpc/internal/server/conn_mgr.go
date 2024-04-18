@@ -1,36 +1,45 @@
 package server
 
 import (
-	"github.com/dobyte/due/v2/utils/xcall"
 	"net"
 	"sync"
 )
 
 type connMgr struct {
-	rw    sync.RWMutex
-	conns map[net.Conn]*conn
+	server *Server
+	rw     sync.RWMutex
+	conns  map[net.Conn]*Conn
 }
 
-func newConnMgr() *connMgr {
+func newConnMgr(s *Server) *connMgr {
 	return &connMgr{
-		conns: make(map[net.Conn]*conn),
+		server: s,
+		conns:  make(map[net.Conn]*Conn),
 	}
+}
+
+func (cm *connMgr) allocate(cn net.Conn) error {
+	conn := newConn(cm, cn)
+	cm.rw.Lock()
+	cm.conns[cn] = conn
+	cm.rw.Unlock()
+	return nil
 }
 
 // 关闭连接
 func (cm *connMgr) close() {
-	var wg sync.WaitGroup
-
-	wg.Add(len(cm.partitions))
-
-	for i := range cm.conns {
-		c := cm.conns[i]
-
-		xcall.Go(func() {
-			c.close()
-			wg.Done()
-		})
-	}
-
-	wg.Wait()
+	//var wg sync.WaitGroup
+	//
+	//wg.Add(len(cm.partitions))
+	//
+	//for i := range cm.conns {
+	//	c := cm.conns[i]
+	//
+	//	xcall.Go(func() {
+	//		c.close()
+	//		wg.Done()
+	//	})
+	//}
+	//
+	//wg.Wait()
 }
