@@ -9,10 +9,13 @@ import (
 	"time"
 )
 
+const scheme = "drpc"
+
 type Server struct {
 	listener   net.Listener          // 监听器
 	listenAddr string                // 监听地址
 	exposeAddr string                // 暴露地址
+	endpoint   *endpoint.Endpoint    // 暴露端点
 	connMgr    *connMgr              // 连接管理器
 	reader     *packet.Reader        // 数据读取器
 	handlers   map[int8]RouteHandler // 路由处理器
@@ -33,6 +36,7 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
+	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.connMgr = newConnMgr(s)
 	s.reader = packet.NewReader()
 	s.handlers = make(map[int8]RouteHandler)
@@ -47,13 +51,12 @@ func (s *Server) Addr() string {
 
 // Scheme 协议
 func (s *Server) Scheme() string {
-	return "drpc"
+	return scheme
 }
 
 // Endpoint 获取服务端口
 func (s *Server) Endpoint() *endpoint.Endpoint {
-	//return s.endpoint
-	return nil
+	return s.endpoint
 }
 
 // Start 启动服务器

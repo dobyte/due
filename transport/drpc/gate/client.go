@@ -2,7 +2,7 @@ package gate
 
 import (
 	"context"
-	"fmt"
+	endpoints "github.com/dobyte/due/v2/core/endpoint"
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport/drpc/internal/client"
@@ -22,9 +22,9 @@ type Client struct {
 	pushPacker       *packet.PushPacker
 }
 
-func NewClient() *Client {
+func NewClient(ep *endpoints.Endpoint) *Client {
 	c := &Client{}
-	c.client = client.NewClient()
+	c.client = client.NewClient(ep)
 	c.bindPacker = packet.NewBindPacker()
 	c.unbindPacker = packet.NewUnbindPacker()
 	c.getIPPacker = packet.NewGetIPPacker()
@@ -48,8 +48,6 @@ func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-
-	fmt.Println(data)
 
 	code, err := c.bindPacker.UnpackRes(data)
 	if err != nil {
@@ -151,17 +149,19 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 		return false, err
 	}
 
-	data, err := c.client.Push(ctx, seq, buf, message.Buffer)
+	_, err = c.client.Push(ctx, seq, buf, message.Buffer)
 	if err != nil {
 		return false, err
 	}
 
-	code, err := c.pushPacker.UnpackRes(data)
-	if err != nil {
-		return false, err
-	}
+	return false, nil
 
-	return code == codes.NotFoundSession, nil
+	//code, err := c.pushPacker.UnpackRes(data)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//return code == codes.NotFoundSession, nil
 }
 
 // AsyncPush 异步推送消息

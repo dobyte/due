@@ -1,8 +1,9 @@
 package route
 
 const (
-	Bind int8 = iota + 1 // 绑定用户
-	Push                 // 推送消息
+	Bind    int8 = iota + 1 // 绑定用户
+	Push                    // 推送消息
+	Deliver                 // 投递消息
 
 	bindRes       // 绑定用户响应
 	unbindReq     // 解绑用户请求

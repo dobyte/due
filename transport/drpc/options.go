@@ -11,12 +11,12 @@ const (
 )
 
 const (
-	defaultServerAddrKey       = "etc.transport.rpcx.server.addr"
-	defaultServerKeyFileKey    = "etc.transport.rpcx.server.keyFile"
-	defaultServerCertFileKey   = "etc.transport.rpcx.server.certFile"
-	defaultClientPoolSizeKey   = "etc.transport.rpcx.client.poolSize"
-	defaultClientCertFileKey   = "etc.transport.rpcx.client.certFile"
-	defaultClientServerNameKey = "etc.transport.rpcx.client.serverName"
+	defaultServerAddrKey       = "etc.transport.drpc.server.addr"
+	defaultServerKeyFileKey    = "etc.transport.drpc.server.keyFile"
+	defaultServerCertFileKey   = "etc.transport.drpc.server.certFile"
+	defaultClientPoolSizeKey   = "etc.transport.drpc.client.poolSize"
+	defaultClientCertFileKey   = "etc.transport.drpc.client.certFile"
+	defaultClientServerNameKey = "etc.transport.drpc.client.serverName"
 )
 
 type Option func(o *options)
@@ -31,4 +31,9 @@ func defaultOptions() *options {
 	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
 
 	return opts
+}
+
+// WithServerListenAddr 设置RPC服务器监听地址
+func WithServerListenAddr(addr string) Option {
+	return func(o *options) { o.server.Addr = addr }
 }

@@ -2,7 +2,6 @@ package gate
 
 import (
 	"context"
-	"fmt"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/transport/drpc/internal/codes"
@@ -56,8 +55,6 @@ func (e *endpoint) bind(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	fmt.Println(seq, cid, uid)
-
 	var code int16
 
 	if err = e.provider.Bind(context.Background(), cid, uid); err != nil {
@@ -85,7 +82,7 @@ func (e *endpoint) push(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	fmt.Println(seq, kind, target, message.Seq, message.Route, string(message.Buffer))
+	//fmt.Println(seq, kind, target, message.Seq, message.Route, string(message.Buffer))
 
 	var code int16
 
