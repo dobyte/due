@@ -41,7 +41,7 @@ func NewClient(ep *endpoints.Endpoint) *Client {
 	return c
 }
 
-func (c *Client) Call(ctx context.Context, seq uint64, buf *packet.Buffer) ([]byte, error) {
+func (c *Client) Call(ctx context.Context, seq uint64, buf *packet.Writer) ([]byte, error) {
 	call := &Call{data: make(chan []byte)}
 
 	c.chWrite <- chWrite{
@@ -60,7 +60,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *packet.Buffer) ([]by
 }
 
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, seq uint64, buf *packet.Buffer, data []byte) ([]byte, error) {
+func (c *Client) Push(ctx context.Context, seq uint64, buf packet.IBuffer, data []byte) ([]byte, error) {
 	//c.stream.send(ctx, seq, buf, data)
 
 	index := atomic.AddInt64(&c.index, 1) % int64(len(c.conns))

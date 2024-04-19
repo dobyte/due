@@ -36,3 +36,25 @@ func TestUnbindPacker_Res(t *testing.T) {
 
 	t.Logf("code: %v", code)
 }
+
+func BenchmarkUnbindPacker_PackReq(b *testing.B) {
+	p := packet.NewUnbindPacker()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf, _ := p.PackReq(1, 2)
+		buf.Recycle()
+	}
+}
+
+func BenchmarkUnbindPacker_PackReq2(b *testing.B) {
+	p := packet.NewUnbindPacker()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf, _ := p.PackReq2(1, 2)
+		buf.Recycle()
+	}
+}

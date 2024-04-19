@@ -36,7 +36,7 @@ func (c *Conn) State() network.ConnState {
 	return network.ConnState(atomic.LoadInt32(&c.state))
 }
 
-func (c *Conn) Send(buf *packet.Buffer) error {
+func (c *Conn) Send(buf packet.IBuffer) error {
 	if err := c.checkState(); err != nil {
 		return err
 	}

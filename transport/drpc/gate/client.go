@@ -6,7 +6,6 @@ import (
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport/drpc/internal/client"
-	"github.com/dobyte/due/v2/transport/drpc/internal/codes"
 	"github.com/dobyte/due/v2/transport/drpc/internal/packet"
 	"sync/atomic"
 )
@@ -37,107 +36,114 @@ func NewClient(ep *endpoints.Endpoint) *Client {
 
 // Bind 绑定用户与连接
 func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.bindPacker.PackReq(seq, cid, uid)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//data, err := c.client.Call(ctx, seq, buf)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//code, err := c.bindPacker.UnpackRes(data)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//return code == codes.NotFoundSession, nil
 
-	buf, err := c.bindPacker.PackReq(seq, cid, uid)
-	if err != nil {
-		return false, err
-	}
-
-	data, err := c.client.Call(ctx, seq, buf)
-	if err != nil {
-		return false, err
-	}
-
-	code, err := c.bindPacker.UnpackRes(data)
-	if err != nil {
-		return false, err
-	}
-
-	return code == codes.NotFoundSession, nil
+	return false, nil
 }
 
 // Unbind 解绑用户与连接
 func (c *Client) Unbind(ctx context.Context, uid int64) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.unbindPacker.PackReq(seq, uid)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//data, err := c.client.Call(ctx, seq, buf)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//code, err := c.unbindPacker.UnpackRes(data)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//return code == codes.NotFoundSession, nil
 
-	buf, err := c.unbindPacker.PackReq(seq, uid)
-	if err != nil {
-		return false, err
-	}
-
-	data, err := c.client.Call(ctx, seq, buf)
-	if err != nil {
-		return false, err
-	}
-
-	code, err := c.unbindPacker.UnpackRes(data)
-	if err != nil {
-		return false, err
-	}
-
-	return code == codes.NotFoundSession, nil
+	return false, nil
 }
 
 // GetIP 获取客户端IP
 func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf, err := c.getIPPacker.PackReq(seq, kind, target)
-	if err != nil {
-		return "", false, err
-	}
-
-	data, err := c.client.Call(ctx, seq, buf)
-	if err != nil {
-		return "", false, err
-	}
-
-	code, ip, err := c.getIPPacker.UnpackRes(data)
-	if err != nil {
-		return "", false, err
-	}
-
-	return ip, code == codes.NotFoundSession, nil
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.getIPPacker.PackReq(seq, kind, target)
+	//if err != nil {
+	//	return "", false, err
+	//}
+	//
+	//data, err := c.client.Call(ctx, seq, buf)
+	//if err != nil {
+	//	return "", false, err
+	//}
+	//
+	//code, ip, err := c.getIPPacker.UnpackRes(data)
+	//if err != nil {
+	//	return "", false, err
+	//}
+	//
+	//return ip, code == codes.NotFoundSession, nil
+	return "", false, nil
 }
 
 // Stat 推送广播消息
 func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf, err := c.statPacker.PackReq(seq, kind)
-	if err != nil {
-		return 0, err
-	}
-
-	data, err := c.client.Call(ctx, seq, buf)
-	if err != nil {
-		return 0, err
-	}
-
-	return c.statPacker.UnpackRes(data)
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.statPacker.PackReq(seq, kind)
+	//if err != nil {
+	//	return 0, err
+	//}
+	//
+	//data, err := c.client.Call(ctx, seq, buf)
+	//if err != nil {
+	//	return 0, err
+	//}
+	//
+	//return c.statPacker.UnpackRes(data)
+	return 0, nil
 }
 
 // Disconnect 断开连接
 func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf, err := c.disconnectPacker.PackReq(seq, kind, target, isForce)
-	if err != nil {
-		return false, err
-	}
-
-	data, err := c.client.Call(ctx, seq, buf)
-	if err != nil {
-		return false, err
-	}
-
-	code, err := c.disconnectPacker.UnpackRes(data)
-	if err != nil {
-		return false, err
-	}
-
-	return code == codes.NotFoundSession, nil
+	//seq := atomic.AddUint64(&c.seq, 1)
+	//
+	//buf, err := c.disconnectPacker.PackReq(seq, kind, target, isForce)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//data, err := c.client.Call(ctx, seq, buf)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//code, err := c.disconnectPacker.UnpackRes(data)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//return code == codes.NotFoundSession, nil
+	return false, nil
 }
 
 // Push 推送消息

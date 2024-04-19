@@ -14,8 +14,9 @@ const (
 )
 
 type UnbindPacker struct {
-	reqPool *sync.Pool
-	resPool *sync.Pool
+	reqPool  *sync.Pool
+	resPool  *sync.Pool
+	reqPool2 *sync.Pool
 }
 
 func NewUnbindPacker() *UnbindPacker {
@@ -24,6 +25,8 @@ func NewUnbindPacker() *UnbindPacker {
 	p.reqPool.New = func() any { return NewBuffer(p.reqPool, unbindReqBytes) }
 	p.resPool = &sync.Pool{}
 	p.resPool.New = func() any { return NewBuffer(p.resPool, unbindResBytes) }
+	p.reqPool2 = &sync.Pool{}
+	p.reqPool2.New = func() any { return NewWriter(p.reqPool2, unbindReqBytes) }
 
 	return p
 }
@@ -59,6 +62,25 @@ func (p *UnbindPacker) PackReq(seq uint64, uid int64) (buf *Buffer, err error) {
 	if err = binary.Write(buf, binary.BigEndian, uid); err != nil {
 		return
 	}
+
+	return
+}
+
+func (p *UnbindPacker) PackReq2(seq uint64, uid int64) (writer *Writer, err error) {
+	writer = p.reqPool2.Get().(*Writer)
+	defer func() {
+		if err != nil {
+			writer.Recycle()
+		}
+	}()
+
+	size := unbindReqBytes - defaultSizeBytes
+
+	writer.WriteInt32s(binary.BigEndian, int32(size))
+	writer.WriteUint8s(dataBit)
+	writer.WriteInt8s(unbindReq)
+	writer.WriteUint64s(binary.BigEndian, seq)
+	writer.WriteInt64s(binary.BigEndian, uid)
 
 	return
 }

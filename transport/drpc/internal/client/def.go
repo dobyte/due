@@ -8,7 +8,7 @@ import (
 type chWrite struct {
 	ctx  context.Context
 	seq  uint64
-	buf  *packet.Buffer
+	buf  packet.IBuffer
 	data []byte
 	call *Call
 }

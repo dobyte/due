@@ -22,3 +22,8 @@ func (b *Buffer) Recycle() {
 	b.Reset()
 	b.pool.Put(b)
 }
+
+type IBuffer interface {
+	Recycle()
+	Bytes() []byte
+}

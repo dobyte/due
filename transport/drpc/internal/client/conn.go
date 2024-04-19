@@ -36,7 +36,7 @@ func newConn(conn net.Conn, ch ...chan chWrite) *Conn {
 }
 
 // 发送请求
-func (c *Conn) send(ctx context.Context, seq uint64, buf *packet.Buffer, data []byte) *Call {
+func (c *Conn) send(ctx context.Context, seq uint64, buf packet.IBuffer, data []byte) *Call {
 	call := &Call{data: make(chan []byte)}
 
 	c.chWrite <- chWrite{
