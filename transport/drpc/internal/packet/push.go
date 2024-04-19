@@ -108,6 +108,9 @@ func (p *PushPacker) PackReq(seq uint64, kind session.Kind, target int64, messag
 	return
 }
 
+// gate   ->     ga
+//
+
 // UnpackReq 解包请求
 // 协议格式：size + header + route + seq + session kind + target + client route + client seq + client data
 func (p *PushPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, target int64, message *packets.Message, err error) {

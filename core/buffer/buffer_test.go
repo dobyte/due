@@ -19,14 +19,6 @@ func TestNewBuffer(t *testing.T) {
 
 	binary.Write(buff, binary.BigEndian, int16(2))
 
-	err := binary.Write(buff, binary.BigEndian, &User{
-		ID:  9,
-		Age: 20,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	fmt.Println(buff.Bytes())
 
 	writer := buffer.NewWriter(2)
@@ -34,6 +26,10 @@ func TestNewBuffer(t *testing.T) {
 
 	fmt.Println(writer.Bytes())
 
+	writer.Reset()
+	writer.WriteInt16s(binary.BigEndian, int16(20))
+
+	fmt.Println(writer.Bytes())
 }
 
 func BenchmarkBuffer1(b *testing.B) {
