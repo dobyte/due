@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/core/buffer"
 	endpoints "github.com/dobyte/due/v2/core/endpoint"
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
@@ -168,6 +169,22 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 	//}
 	//
 	//return code == codes.NotFoundSession, nil
+}
+
+func (c *Client) Push2(ctx context.Context, kind session.Kind, target int64, buff *buffer.Buffer) (bool, error) {
+	seq := atomic.AddUint64(&c.seq, 1)
+
+	buf, err := c.pushPacker.PackReq3(seq, kind, target, buff)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = c.client.Push2(ctx, seq, buf, buff)
+	if err != nil {
+		return false, err
+	}
+
+	return false, nil
 }
 
 // AsyncPush 异步推送消息

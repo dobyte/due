@@ -361,12 +361,38 @@ func (l *Link) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (l *Link) directPush(ctx context.Context, args *PushArgs) error {
+	//buffer, err := l.toBuffer(args.Message.Data, true)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//data, err := packet.PackMessage(&packet.Message{
+	//	Seq:    args.Message.Seq,
+	//	Route:  args.Message.Route,
+	//	Buffer: buffer,
+	//})
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//client, err := l.getGateClientByGID(args.GID)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//_, err = client.Push(ctx, args.Kind, args.Target, &packet.Message{
+	//	Seq:    args.Message.Seq,
+	//	Route:  args.Message.Route,
+	//	Buffer: data,
+	//})
+	//return err
+
 	buffer, err := l.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
 
-	data, err := packet.PackMessage(&packet.Message{
+	buff, err := packet.PackMessage2(&packet.Message{
 		Seq:    args.Message.Seq,
 		Route:  args.Message.Route,
 		Buffer: buffer,
@@ -380,11 +406,7 @@ func (l *Link) directPush(ctx context.Context, args *PushArgs) error {
 		return err
 	}
 
-	_, err = client.Push(ctx, args.Kind, args.Target, &packet.Message{
-		Seq:    args.Message.Seq,
-		Route:  args.Message.Route,
-		Buffer: data,
-	})
+	_, err = client.Push2(ctx, args.Kind, args.Target, buff)
 	return err
 }
 

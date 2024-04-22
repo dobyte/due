@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 )
@@ -22,6 +23,7 @@ type GateClient interface {
 	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, miss bool, err error)
 	// Push 推送消息
 	Push(ctx context.Context, kind session.Kind, target int64, message *packet.Message) (miss bool, err error)
+	Push2(ctx context.Context, kind session.Kind, target int64, buff *buffer.Buffer) (bool, error)
 	// Multicast 推送组播消息
 	Multicast(ctx context.Context, kind session.Kind, targets []int64, message *packet.Message) (total int64, err error)
 	// Broadcast 推送广播消息

@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	packets "github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
@@ -96,6 +97,28 @@ func (p *PushPacker) PackReq(seq uint64, kind session.Kind, target int64, messag
 	}()
 
 	size := pushReqBytes - defaultSizeBytes + len(message.Buffer)
+
+	buf.WriteInt32s(binary.BigEndian, int32(size))
+	buf.WriteUint8s(dataBit)
+	buf.WriteInt8s(route.Push)
+	buf.WriteUint64s(binary.BigEndian, seq)
+	buf.WriteInt8s(int8(kind))
+	buf.WriteInt64s(binary.BigEndian, target)
+	//buf.WriteInt32s(binary.BigEndian, message.Route)
+	//buf.WriteInt32s(binary.BigEndian, message.Seq)
+
+	return
+}
+
+func (p *PushPacker) PackReq3(seq uint64, kind session.Kind, target int64, buff *buffer.Buffer) (buf *Writer, err error) {
+	buf = p.reqPool2.Get().(*Writer)
+	defer func() {
+		if err != nil {
+			buf.Recycle()
+		}
+	}()
+
+	size := pushReqBytes - defaultSizeBytes + buff.Len()
 
 	buf.WriteInt32s(binary.BigEndian, int32(size))
 	buf.WriteUint8s(dataBit)

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/transport/drpc/internal/packet"
 	"net"
 	"sync"
@@ -50,6 +51,21 @@ func (c *Conn) send(ctx context.Context, seq uint64, buf packet.IBuffer, data []
 	return call
 }
 
+// 发送请求
+func (c *Conn) send2(ctx context.Context, seq uint64, buf packet.IBuffer, buff *buffer.Buffer) *Call {
+	call := &Call{data: make(chan []byte)}
+
+	c.chWrite <- chWrite{
+		ctx:  ctx,
+		seq:  seq,
+		buf:  buf,
+		call: call,
+		buff: buff,
+	}
+
+	return call
+}
+
 // 执行写入操作
 func (c *Conn) write() {
 	conn := c.conn
@@ -74,6 +90,16 @@ func (c *Conn) write() {
 				if _, err = conn.Write(ch.data); err != nil {
 					continue
 				}
+			}
+
+			if ch.buff != nil {
+				ch.buff.Range(func(node *buffer.NocopyNode) bool {
+					if _, err = conn.Write(node.Bytes()); err != nil {
+						return false
+					} else {
+						return true
+					}
+				})
 			}
 		}
 	}

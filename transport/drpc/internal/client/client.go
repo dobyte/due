@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"github.com/dobyte/due/v2/core/buffer"
 	endpoints "github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/transport/drpc/internal/packet"
 	"net"
@@ -77,4 +78,12 @@ func (c *Client) Push(ctx context.Context, seq uint64, buf packet.IBuffer, data 
 	//case res := <-call.Done():
 	//	return res, nil
 	//}
+}
+
+func (c *Client) Push2(ctx context.Context, seq uint64, buf packet.IBuffer, buff *buffer.Buffer) ([]byte, error) {
+	index := atomic.AddInt64(&c.index, 1) % int64(len(c.conns))
+
+	c.conns[index].send2(ctx, seq, buf, buff)
+
+	return nil, nil
 }
