@@ -1,7 +1,8 @@
 package buffer
 
 type NocopyNode struct {
-	buff any
+	buf  any
+	pool *WriterPool
 	prev *NocopyNode
 	next *NocopyNode
 }
@@ -10,16 +11,25 @@ type NocopyNode struct {
 func (n *NocopyNode) Release() {
 	n.prev = nil
 	n.next = nil
-	n.buff = nil
+
+	switch b := n.buf.(type) {
+	case []byte:
+		n.buf = nil
+	case *Writer:
+		b.Reset()
+		if n.pool != nil {
+			n.pool.Put(b)
+		}
+	}
 }
 
 // Len 获取字节长度
 func (n *NocopyNode) Len() int {
-	if n.buff == nil {
+	if n.buf == nil {
 		return 0
 	}
 
-	switch b := n.buff.(type) {
+	switch b := n.buf.(type) {
 	case []byte:
 		return len(b)
 	case *Writer:
@@ -31,11 +41,11 @@ func (n *NocopyNode) Len() int {
 
 // Bytes 获取该节点的字节数据
 func (n *NocopyNode) Bytes() []byte {
-	if n.buff == nil {
+	if n.buf == nil {
 		return nil
 	}
 
-	switch b := n.buff.(type) {
+	switch b := n.buf.(type) {
 	case []byte:
 		return b
 	case *Writer:

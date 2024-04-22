@@ -39,6 +39,19 @@ func (w *Writer) Reset() {
 	w.off = 0
 }
 
+// Grow 增长空间
+func (w *Writer) Grow(n int) {
+	c := len(w.buf) + n
+
+	if c < 2*cap(w.buf) {
+		c = 2 * cap(w.buf)
+	}
+
+	buf := make([]byte, c)
+	copy(buf, w.buf[:w.off])
+	w.buf = buf
+}
+
 // 写数据，实现io.Writer
 func (w *Writer) Write(p []byte) (n int, err error) {
 	w.grow(len(p))
@@ -167,8 +180,9 @@ func (w *Writer) WriteBytes(values ...byte) {
 }
 
 // 执行扩容操作
-func (w *Writer) grow(size int) {
-	for i := 0; i < size-(len(w.buf)-w.off); i++ {
-		w.buf = append(w.buf, 0)
+func (w *Writer) grow(n int) {
+	if w.off+n < len(w.buf) {
+		return
 	}
+	w.Grow(n)
 }

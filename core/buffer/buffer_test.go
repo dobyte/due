@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/utils/xrand"
 	"testing"
 )
 
@@ -33,14 +34,15 @@ func TestNewBuffer(t *testing.T) {
 }
 
 func BenchmarkBuffer1(b *testing.B) {
-	buffer := &bytes.Buffer{}
-	buffer.Grow(8)
+	data := []byte(xrand.Letters(1024))
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		binary.Write(buffer, binary.BigEndian, int64(2))
-		buffer.Reset()
+		buff := &bytes.Buffer{}
+		buff.Grow(1024)
+		binary.Write(buff, binary.BigEndian, data)
+		buff.Reset()
 	}
 }
 
@@ -55,8 +57,20 @@ func BenchmarkBuffer2(b *testing.B) {
 	}
 }
 
+func BenchmarkNocopyBuffer_Malloc(b *testing.B) {
+	data := []byte(xrand.Letters(1024))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf := buffer.NewNocopyBuffer()
+		buf.Mount(data)
+		buf.Release()
+	}
+}
+
 func TestNewBuffer2(t *testing.T) {
-	buff := buffer.NewBuffer()
+	buff := buffer.NewNocopyBuffer()
 
 	writer1 := buff.Malloc(8)
 	writer1.WriteInt64s(binary.BigEndian, 2)
