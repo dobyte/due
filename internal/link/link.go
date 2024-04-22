@@ -366,6 +366,15 @@ func (l *Link) directPush(ctx context.Context, args *PushArgs) error {
 		return err
 	}
 
+	data, err := packet.PackMessage(&packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	})
+	if err != nil {
+		return err
+	}
+
 	client, err := l.getGateClientByGID(args.GID)
 	if err != nil {
 		return err
@@ -374,7 +383,7 @@ func (l *Link) directPush(ctx context.Context, args *PushArgs) error {
 	_, err = client.Push(ctx, args.Kind, args.Target, &packet.Message{
 		Seq:    args.Message.Seq,
 		Route:  args.Message.Route,
-		Buffer: buffer,
+		Buffer: data,
 	})
 	return err
 }

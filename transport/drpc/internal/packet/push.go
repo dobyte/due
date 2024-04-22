@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	pushReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1 + 8 + 4 + 4
+	//pushReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1 + 8 + 4 + 4
+	pushReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1 + 8
 	pushResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
 )
 
@@ -102,8 +103,8 @@ func (p *PushPacker) PackReq(seq uint64, kind session.Kind, target int64, messag
 	buf.WriteUint64s(binary.BigEndian, seq)
 	buf.WriteInt8s(int8(kind))
 	buf.WriteInt64s(binary.BigEndian, target)
-	buf.WriteInt32s(binary.BigEndian, message.Route)
-	buf.WriteInt32s(binary.BigEndian, message.Seq)
+	//buf.WriteInt32s(binary.BigEndian, message.Route)
+	//buf.WriteInt32s(binary.BigEndian, message.Seq)
 
 	return
 }
@@ -138,13 +139,13 @@ func (p *PushPacker) UnpackReq(data []byte) (seq uint64, kind session.Kind, targ
 
 	message = &packets.Message{}
 
-	if err = binary.Read(reader, binary.BigEndian, &message.Route); err != nil {
-		return
-	}
-
-	if err = binary.Read(reader, binary.BigEndian, &message.Seq); err != nil {
-		return
-	}
+	//if err = binary.Read(reader, binary.BigEndian, &message.Route); err != nil {
+	//	return
+	//}
+	//
+	//if err = binary.Read(reader, binary.BigEndian, &message.Seq); err != nil {
+	//	return
+	//}
 
 	message.Buffer = data[pushReqBytes:]
 

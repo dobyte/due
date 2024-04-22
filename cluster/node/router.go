@@ -29,7 +29,7 @@ func newRouter(node *Node) *Router {
 	return &Router{
 		node:    node,
 		routes:  make(map[int32]*routeEntity),
-		reqChan: make(chan *request, 4096),
+		reqChan: make(chan *request, 10240),
 		reqPool: sync.Pool{New: func() interface{} {
 			return &request{
 				ctx:     context.Background(),

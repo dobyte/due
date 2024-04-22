@@ -1,5 +1,7 @@
 package packet
 
+import "github.com/dobyte/due/v2/core/buffer"
+
 var globalPacker Packer
 
 func init() {
@@ -24,6 +26,11 @@ func ReadMessage(reader interface{}) ([]byte, error) {
 // PackMessage 打包消息
 func PackMessage(message *Message) ([]byte, error) {
 	return globalPacker.PackMessage(message)
+}
+
+// PackMessage2 打包消息
+func PackMessage2(message *Message) (*buffer.Buffer, error) {
+	return globalPacker.PackMessage2(message)
 }
 
 // UnpackMessage 解包消息

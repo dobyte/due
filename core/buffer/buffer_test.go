@@ -54,3 +54,22 @@ func BenchmarkBuffer2(b *testing.B) {
 		writer.Reset()
 	}
 }
+
+func TestNewBuffer2(t *testing.T) {
+	buff := buffer.NewBuffer()
+
+	writer1 := buff.Malloc(8)
+	writer1.WriteInt64s(binary.BigEndian, 2)
+
+	writer2 := buff.Malloc(8)
+	writer2.WriteInt64s(binary.BigEndian, 3)
+
+	t.Log(buff.Len())
+	t.Log(buff.Len())
+
+	buff.Range(func(node *buffer.NocopyNode) bool {
+		t.Log(node.Bytes())
+		node.Release()
+		return true
+	})
+}

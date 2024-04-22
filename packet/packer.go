@@ -3,6 +3,7 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"io"
@@ -34,6 +35,7 @@ type Packer interface {
 	ReadMessage(reader interface{}) ([]byte, error)
 	// PackMessage 打包消息
 	PackMessage(message *Message) ([]byte, error)
+	PackMessage2(message *Message) (*buffer.Buffer, error)
 	// UnpackMessage 解包消息
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
@@ -238,6 +240,53 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (p *defaultPacker) PackMessage2(message *Message) (*buffer.Buffer, error) {
+	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
+		return nil, errors.ErrRouteOverflow
+	}
+
+	if p.opts.seqBytes > 0 {
+		if message.Seq > int32(1<<(8*p.opts.seqBytes-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytes-1)) {
+			return nil, errors.ErrSeqOverflow
+		}
+	}
+
+	if len(message.Buffer) > p.opts.bufferBytes {
+		return nil, errors.ErrMessageTooLarge
+	}
+
+	var (
+		size = defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer)
+		buf  = buffer.NewBuffer()
+	)
+
+	writer := buf.Malloc(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)
+	writer.WriteInt32s(p.opts.byteOrder, int32(size))
+	writer.WriteInt8s(int8(dataBit))
+
+	switch p.opts.routeBytes {
+	case 1:
+		writer.WriteInt8s(int8(message.Route))
+	case 2:
+		writer.WriteInt16s(p.opts.byteOrder, int16(message.Route))
+	case 4:
+		writer.WriteInt32s(p.opts.byteOrder, message.Route)
+	}
+
+	switch p.opts.seqBytes {
+	case 1:
+		writer.WriteInt8s(int8(message.Seq))
+	case 2:
+		writer.WriteInt16s(p.opts.byteOrder, int16(message.Seq))
+	case 4:
+		writer.WriteInt32s(p.opts.byteOrder, message.Seq)
+	}
+
+	buf.Mount(message.Buffer)
+
+	return buf, nil
 }
 
 // ExtractRoute 提取路由
