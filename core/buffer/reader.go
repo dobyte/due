@@ -3,6 +3,7 @@ package buffer
 import (
 	"encoding/binary"
 	"github.com/dobyte/due/v2/errors"
+	"io"
 	"math"
 )
 
@@ -18,6 +19,26 @@ func NewReader(data []byte) *Reader {
 // Reset 重置
 func (r *Reader) Reset() {
 	r.off = 0
+}
+
+// Seek implements the io.Seeker interface.
+func (r *Reader) Seek(offset int64, whence int) (int64, error) {
+	var abs int64
+	switch whence {
+	case io.SeekStart:
+		abs = offset
+	case io.SeekCurrent:
+		abs = int64(r.off) + offset
+	case io.SeekEnd:
+		abs = int64(len(r.buf)) + offset
+	default:
+		return 0, errors.New("buffer.Reader.Seek: invalid whence")
+	}
+	if abs < 0 {
+		return 0, errors.New("buffer.Reader.Seek: negative position")
+	}
+	r.off = int(abs)
+	return abs, nil
 }
 
 // ReadBool 读取bool值

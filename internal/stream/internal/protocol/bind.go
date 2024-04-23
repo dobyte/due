@@ -1,9 +1,12 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/stream/internal/route"
+	"io"
 )
 
 const (
@@ -12,7 +15,7 @@ const (
 )
 
 // EncodeBindReq 编码绑定请求
-// 协议格式：size + header + route + seq + cid + uid
+// 协议：size + header + route + seq + cid + uid
 func EncodeBindReq(seq uint64, cid, uid int64) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(bindReqBytes)
@@ -25,12 +28,32 @@ func EncodeBindReq(seq uint64, cid, uid int64) buffer.Buffer {
 	return buf
 }
 
-func DecodeBindReq() {
+// DecodeBindReq 解码绑定请求
+// 协议：size + header + route + seq + cid + uid
+func DecodeBindReq(data []byte) (seq uint64, cid, uid int64, err error) {
+	reader := buffer.NewReader(data)
 
+	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+		return
+	}
+
+	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
+		return
+	}
+
+	if cid, err = reader.ReadInt64(binary.BigEndian); err != nil {
+		return
+	}
+
+	if uid, err = reader.ReadInt64(binary.BigEndian); err != nil {
+		return
+	}
+
+	return
 }
 
 // EncodeBindRes 编码绑定响应
-// size + header + route + seq + code
+// 协议：size + header + route + seq + code
 func EncodeBindRes(seq uint64, code int16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(bindResBytes)
@@ -41,4 +64,24 @@ func EncodeBindRes(seq uint64, code int16) buffer.Buffer {
 	writer.WriteInt16s(binary.BigEndian, code)
 
 	return buf
+}
+
+// DecodeBindRes 解码绑定响应
+// 协议：size + header + route + seq + code
+func DecodeBindRes(data []byte) (code int16, err error) {
+	if len(data) != bindResBytes {
+		return 0, errors.ErrInvalidMessage
+	}
+
+	reader := bytes.NewReader(data)
+
+	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+		return
+	}
+
+	if err = binary.Read(reader, binary.BigEndian, &code); err != nil {
+		return
+	}
+
+	return
 }
