@@ -10,8 +10,16 @@ type Writer struct {
 	off int
 }
 
-func NewWriter(cap int) *Writer {
-	return &Writer{buf: make([]byte, cap)}
+func NewWriter(cap ...int) *Writer {
+	w := &Writer{}
+
+	if len(cap) > 0 {
+		w.buf = make([]byte, cap[0])
+	} else {
+		w.buf = make([]byte, 0)
+	}
+
+	return w
 }
 
 // Len 返回数据长度
@@ -41,15 +49,7 @@ func (w *Writer) Reset() {
 
 // Grow 增长空间
 func (w *Writer) Grow(n int) {
-	c := len(w.buf) + n
-
-	if c < 2*cap(w.buf) {
-		c = 2 * cap(w.buf)
-	}
-
-	buf := make([]byte, c)
-	copy(buf, w.buf[:w.off])
-	w.buf = buf
+	w.growSlice(n)
 }
 
 // 写数据，实现io.Writer
@@ -184,5 +184,18 @@ func (w *Writer) grow(n int) {
 	if w.off+n < len(w.buf) {
 		return
 	}
-	w.Grow(n)
+
+	w.growSlice(n)
+}
+
+func (w *Writer) growSlice(n int) {
+	c := len(w.buf) + n
+
+	if c < 2*cap(w.buf) {
+		c = 2 * cap(w.buf)
+	}
+
+	buf := make([]byte, c)
+	copy(buf, w.buf[:w.off])
+	w.buf = buf
 }
