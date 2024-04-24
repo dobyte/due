@@ -21,4 +21,3 @@ func (b *Writer) Recycle() {
 	b.Reset()
 	b.pool.Put(b)
 }
-``
