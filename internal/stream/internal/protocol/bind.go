@@ -19,7 +19,7 @@ const (
 func EncodeBindReq(seq uint64, cid, uid int64) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(bindReqBytes)
-	writer.WriteInt32s(binary.BigEndian, int32(bindReqBytes-defaultSizeBytes))
+	writer.WriteUint32s(binary.BigEndian, uint32(bindReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Bind)
 	writer.WriteUint64s(binary.BigEndian, seq)
@@ -31,6 +31,11 @@ func EncodeBindReq(seq uint64, cid, uid int64) buffer.Buffer {
 // DecodeBindReq 解码绑定请求
 // 协议：size + header + route + seq + cid + uid
 func DecodeBindReq(data []byte) (seq uint64, cid, uid int64, err error) {
+	if len(data) != bindReqBytes {
+		err = errors.ErrInvalidMessage
+		return
+	}
+
 	reader := buffer.NewReader(data)
 
 	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
@@ -57,7 +62,7 @@ func DecodeBindReq(data []byte) (seq uint64, cid, uid int64, err error) {
 func EncodeBindRes(seq uint64, code int16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(bindResBytes)
-	writer.WriteInt32s(binary.BigEndian, int32(bindResBytes-defaultSizeBytes))
+	writer.WriteUint32s(binary.BigEndian, uint32(bindResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Bind)
 	writer.WriteUint64s(binary.BigEndian, seq)
@@ -70,7 +75,8 @@ func EncodeBindRes(seq uint64, code int16) buffer.Buffer {
 // 协议：size + header + route + seq + code
 func DecodeBindRes(data []byte) (code int16, err error) {
 	if len(data) != bindResBytes {
-		return 0, errors.ErrInvalidMessage
+		err = errors.ErrInvalidMessage
+		return
 	}
 
 	reader := bytes.NewReader(data)

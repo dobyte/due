@@ -41,10 +41,6 @@ func (n *NocopyNode) Len() int {
 
 // Bytes 获取该节点的字节数据
 func (n *NocopyNode) Bytes() []byte {
-	if n.buf == nil {
-		return nil
-	}
-
 	switch b := n.buf.(type) {
 	case []byte:
 		return b
@@ -53,4 +49,13 @@ func (n *NocopyNode) Bytes() []byte {
 	default:
 		return nil
 	}
+}
+
+// Next 下一个节点
+func (n *NocopyNode) Next() *NocopyNode {
+	if n == nil {
+		return nil
+	}
+
+	return n.next
 }

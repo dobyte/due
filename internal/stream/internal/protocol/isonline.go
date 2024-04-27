@@ -9,28 +9,28 @@ import (
 )
 
 const (
-	unbindReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 8
-	unbindResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
+	isOnlineReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 8
+	isOnlineResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
 )
 
-// EncodeUnbindReq 编码解绑请求
+// EncodeIsOnlineReq 编码检测用户是否在线请求
 // 协议：size + header + route + seq + uid
-func EncodeUnbindReq(seq uint64, uid int64) buffer.Buffer {
+func EncodeIsOnlineReq(seq uint64, uid int64) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(unbindReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(unbindReqBytes-defaultSizeBytes))
+	writer := buf.Malloc(isOnlineReqBytes)
+	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
-	writer.WriteUint8s(route.Unbind)
+	writer.WriteUint8s(route.IsOnline)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteInt64s(binary.BigEndian, uid)
 
 	return buf
 }
 
-// DecodeUnbindReq 解码解绑请求
+// DecodeIsOnlineReq 解码检测用户是否在线请求
 // 协议：size + header + route + seq + uid
-func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
-	if len(data) != unbindResBytes {
+func DecodeIsOnlineReq(data []byte) (seq uint64, uid int64, err error) {
+	if len(data) != isOnlineReqBytes {
 		err = errors.ErrInvalidMessage
 		return
 	}
@@ -52,31 +52,31 @@ func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
 	return
 }
 
-// EncodeUnbindRes 编码解绑响应
+// EncodeIsOnlineRes 编码检测用户是否在线响应
 // 协议：size + header + route + seq + code
-func EncodeUnbindRes(seq uint64, code int16) buffer.Buffer {
+func EncodeIsOnlineRes(seq uint64, code int16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(unbindResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(unbindResBytes-defaultSizeBytes))
+	writer := buf.Malloc(isOnlineResBytes)
+	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
-	writer.WriteUint8s(route.Unbind)
+	writer.WriteUint8s(route.IsOnline)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteInt16s(binary.BigEndian, code)
 
 	return buf
 }
 
-// DecodeUnbindRes 解码解绑响应
+// DecodeIsOnlineRes 解码检测用户是否在线响应
 // 协议：size + header + route + seq + code
-func DecodeUnbindRes(data []byte) (code int16, err error) {
-	if len(data) != unbindResBytes {
+func DecodeIsOnlineRes(data []byte) (code int16, err error) {
+	if len(data) != isOnlineResBytes {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+defaultSeqBytes, io.SeekStart); err != nil {
 		return
 	}
 

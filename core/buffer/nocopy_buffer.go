@@ -4,6 +4,7 @@ var defaultWriterPool = NewWriterPool([]int{32, 64, 128, 256, 512, 1024, 2048, 4
 
 type NocopyBuffer struct {
 	len  int
+	num  int
 	head *NocopyNode
 	tail *NocopyNode
 }
@@ -28,6 +29,11 @@ func (b *NocopyBuffer) Len() int {
 	b.len = n
 
 	return n
+}
+
+// Nodes 获取节点数
+func (b *NocopyBuffer) Nodes() int {
+	return b.num
 }
 
 // Mount 挂载数据到Buffer上
@@ -66,6 +72,23 @@ func (b *NocopyBuffer) Range(fn func(node *NocopyNode) bool) {
 	}
 }
 
+// Bytes 获取字节
+func (b *NocopyBuffer) Bytes() []byte {
+	switch b.num {
+	case 0:
+		return nil
+	case 1:
+		return b.head.Bytes()
+	default:
+		bytes := make([]byte, 0, b.Len())
+		for node := b.head; node != nil; {
+			bytes = append(bytes, node.Bytes()...)
+			node = node.next
+		}
+		return bytes
+	}
+}
+
 // Release 释放
 func (b *NocopyBuffer) Release() {
 	node := b.head
@@ -74,6 +97,8 @@ func (b *NocopyBuffer) Release() {
 		node.Release()
 		node = next
 	}
+	b.len = -1
+	b.num = 0
 	b.head = nil
 	b.tail = nil
 }
@@ -88,7 +113,7 @@ func (b *NocopyBuffer) addToTail(node *NocopyNode) {
 		b.tail.next.prev = b.tail
 		b.tail = node
 	}
-
+	b.num++
 	b.len = -1
 }
 
@@ -102,6 +127,6 @@ func (b *NocopyBuffer) addToHead(node *NocopyNode) {
 		b.head.prev = node
 		b.head = node
 	}
-
+	b.num++
 	b.len = -1
 }

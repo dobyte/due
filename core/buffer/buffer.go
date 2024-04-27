@@ -10,6 +10,8 @@ const (
 type Buffer interface {
 	// Len 获取字节长度
 	Len() int
+	// Bytes 获取所有字节（性能较低，不推荐使用）
+	Bytes() []byte
 	// Mount 挂载数据到Buffer上
 	Mount(data []byte, whence ...Whence)
 	// Malloc 分配一块内存给Writer

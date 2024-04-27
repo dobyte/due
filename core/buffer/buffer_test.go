@@ -92,7 +92,11 @@ func TestNewBuffer2(t *testing.T) {
 
 	buff.Range(func(node *buffer.NocopyNode) bool {
 		t.Log(node.Bytes())
-		node.Release()
 		return true
 	})
+
+	buff.Release()
+
+	fmt.Println(buff.Bytes())
+
 }
