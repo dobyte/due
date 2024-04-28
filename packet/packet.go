@@ -29,7 +29,7 @@ func PackMessage(message *Message) ([]byte, error) {
 }
 
 // PackMessage2 打包消息
-func PackMessage2(message *Message) (*buffer.Buffer, error) {
+func PackMessage2(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackMessage2(message)
 }
 

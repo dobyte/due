@@ -35,7 +35,7 @@ type Packer interface {
 	ReadMessage(reader interface{}) ([]byte, error)
 	// PackMessage 打包消息
 	PackMessage(message *Message) ([]byte, error)
-	PackMessage2(message *Message) (*buffer.Buffer, error)
+	PackMessage2(message *Message) (buffer.Buffer, error)
 	// UnpackMessage 解包消息
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
@@ -242,7 +242,7 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (p *defaultPacker) PackMessage2(message *Message) (*buffer.Buffer, error) {
+func (p *defaultPacker) PackMessage2(message *Message) (buffer.Buffer, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
 	}
@@ -259,7 +259,7 @@ func (p *defaultPacker) PackMessage2(message *Message) (*buffer.Buffer, error) {
 
 	var (
 		size = defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer)
-		buf  = buffer.NewBuffer()
+		buf  = buffer.NewNocopyBuffer()
 	)
 
 	writer := buf.Malloc(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)

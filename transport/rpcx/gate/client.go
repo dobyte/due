@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/code"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/protocol"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	cli "github.com/smallnest/rpcx/client"
@@ -52,6 +53,10 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 	err = c.cli.Call(ctx, ServicePath, serviceMethodPush, req, reply)
 	miss = reply.Code == code.NotFoundSession
 	return
+}
+
+func (c *Client) Push2(ctx context.Context, kind session.Kind, target int64, buff buffer.Buffer) (bool, error) {
+	return false, nil
 }
 
 // Multicast 推送组播消息
