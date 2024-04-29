@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"bytes"
 	"encoding/binary"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -79,13 +78,13 @@ func DecodeBindRes(data []byte) (code int16, err error) {
 		return
 	}
 
-	reader := bytes.NewReader(data)
+	reader := buffer.NewReader(data)
 
 	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
 		return
 	}
 
-	if err = binary.Read(reader, binary.BigEndian, &code); err != nil {
+	if code, err = reader.ReadInt16(binary.BigEndian); err != nil {
 		return
 	}
 
