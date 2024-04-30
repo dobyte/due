@@ -50,16 +50,15 @@ func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, e
 	}
 
 	var k uint8
-
 	if k, err = reader.ReadUint8(); err != nil {
 		return
+	} else {
+		kind = session.Kind(k)
 	}
 
 	if target, err = reader.ReadInt64(binary.BigEndian); err != nil {
 		return
 	}
-
-	kind = session.Kind(k)
 
 	return
 }
