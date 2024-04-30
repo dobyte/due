@@ -7,6 +7,13 @@ import (
 	"math"
 )
 
+const (
+	b8 = 1 << iota
+	b16
+	b32
+	b64
+)
+
 type Reader struct {
 	buf []byte
 	off int
@@ -121,6 +128,25 @@ func (r *Reader) ReadInt64(order binary.ByteOrder) (int64, error) {
 	return int64(order.Uint64(buf)), nil
 }
 
+// ReadInt64s 读取多个int64值
+func (r *Reader) ReadInt64s(order binary.ByteOrder, n int) ([]int64, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+
+	buf, err := r.slices(b64, n)
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]int64, 0, n)
+	for i := 0; i < len(buf); i += b64 {
+		values = append(values, int64(order.Uint64(buf[i:i+b64])))
+	}
+
+	return values, nil
+}
+
 // ReadUint64 读取uint64值
 func (r *Reader) ReadUint64(order binary.ByteOrder) (uint64, error) {
 	buf, err := r.slice(8)
@@ -129,6 +155,21 @@ func (r *Reader) ReadUint64(order binary.ByteOrder) (uint64, error) {
 	}
 
 	return order.Uint64(buf), nil
+}
+
+// ReadUint64s 读取多个uint64值
+func (r *Reader) ReadUint64s(order binary.ByteOrder, n int) ([]uint64, error) {
+	buf, err := r.slices(b64, n)
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]uint64, 0, n)
+	for i := 0; i < len(buf); i += b64 {
+		values = append(values, order.Uint64(buf[i:i+b64]))
+	}
+
+	return values, nil
 }
 
 // ReadFloat32 读取float32值
@@ -172,6 +213,19 @@ func (r *Reader) ReadString(n int) (string, error) {
 }
 
 func (r *Reader) slice(n int) ([]byte, error) {
+	if r.off+n > len(r.buf) {
+		return nil, errors.ErrUnexpectedEOF
+	}
+
+	buf := r.buf[r.off : r.off+n]
+	r.off += n
+
+	return buf, nil
+}
+
+func (r *Reader) slices(bit int, num int) ([]byte, error) {
+	n := bit * num
+
 	if r.off+n > len(r.buf) {
 		return nil, errors.ErrUnexpectedEOF
 	}
