@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	isOnlineReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 8
+	isOnlineReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b64
 	isOnlineResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
 )
 
@@ -54,21 +54,21 @@ func DecodeIsOnlineReq(data []byte) (seq uint64, uid int64, err error) {
 
 // EncodeIsOnlineRes 编码检测用户是否在线响应
 // 协议：size + header + route + seq + code
-func EncodeIsOnlineRes(seq uint64, code int16) buffer.Buffer {
+func EncodeIsOnlineRes(seq uint64, code uint16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(isOnlineResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.IsOnline)
 	writer.WriteUint64s(binary.BigEndian, seq)
-	writer.WriteInt16s(binary.BigEndian, code)
+	writer.WriteUint16s(binary.BigEndian, code)
 
 	return buf
 }
 
 // DecodeIsOnlineRes 解码检测用户是否在线响应
 // 协议：size + header + route + seq + code
-func DecodeIsOnlineRes(data []byte) (code int16, err error) {
+func DecodeIsOnlineRes(data []byte) (code uint16, err error) {
 	if len(data) != isOnlineResBytes {
 		err = errors.ErrInvalidMessage
 		return
@@ -80,7 +80,7 @@ func DecodeIsOnlineRes(data []byte) (code int16, err error) {
 		return
 	}
 
-	if code, err = reader.ReadInt16(binary.BigEndian); err != nil {
+	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
 		return
 	}
 

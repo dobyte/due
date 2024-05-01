@@ -92,73 +92,73 @@ func (w *Writer) WriteUint8s(values ...uint8) {
 
 // WriteInt16s 写入int16
 func (w *Writer) WriteInt16s(order binary.ByteOrder, values ...int16) {
-	w.grow(2 * len(values))
+	w.grow(b16 * len(values))
 	for _, v := range values {
 		order.PutUint16(w.buf[w.off:w.off+2], uint16(v))
-		w.off += 2
+		w.off += b16
 	}
 }
 
 // WriteUint16s 写入uint16
 func (w *Writer) WriteUint16s(order binary.ByteOrder, values ...uint16) {
-	w.grow(2 * len(values))
+	w.grow(b16 * len(values))
 	for _, v := range values {
-		order.PutUint16(w.buf[w.off:w.off+2], v)
-		w.off += 2
+		order.PutUint16(w.buf[w.off:w.off+b16], v)
+		w.off += b16
 	}
 }
 
 // WriteInt32s 写入int32
 func (w *Writer) WriteInt32s(order binary.ByteOrder, values ...int32) {
-	w.grow(4 * len(values))
+	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+4], uint32(v))
-		w.off += 4
+		order.PutUint32(w.buf[w.off:w.off+b32], uint32(v))
+		w.off += b32
 	}
 }
 
 // WriteUint32s 写入uint32
 func (w *Writer) WriteUint32s(order binary.ByteOrder, values ...uint32) {
-	w.grow(4 * len(values))
+	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+4], v)
-		w.off += 4
+		order.PutUint32(w.buf[w.off:w.off+b32], v)
+		w.off += b32
 	}
 }
 
 // WriteInt64s 写入int64
 func (w *Writer) WriteInt64s(order binary.ByteOrder, values ...int64) {
-	w.grow(8 * len(values))
+	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+8], uint64(v))
-		w.off += 8
+		order.PutUint64(w.buf[w.off:w.off+b64], uint64(v))
+		w.off += b64
 	}
 }
 
 // WriteUint64s 写入uint64
 func (w *Writer) WriteUint64s(order binary.ByteOrder, values ...uint64) {
-	w.grow(8 * len(values))
+	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+8], v)
-		w.off += 8
+		order.PutUint64(w.buf[w.off:w.off+b64], v)
+		w.off += b64
 	}
 }
 
 // WriteFloat32s 写入float32
 func (w *Writer) WriteFloat32s(order binary.ByteOrder, values ...float32) {
-	w.grow(4 * len(values))
+	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+4], math.Float32bits(v))
-		w.off += 4
+		order.PutUint32(w.buf[w.off:w.off+b32], math.Float32bits(v))
+		w.off += b32
 	}
 }
 
 // WriteFloat64s 写入float64
 func (w *Writer) WriteFloat64s(order binary.ByteOrder, values ...float64) {
-	w.grow(8 * len(values))
+	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+8], math.Float64bits(v))
-		w.off += 8
+		order.PutUint64(w.buf[w.off:w.off+b64], math.Float64bits(v))
+		w.off += b64
 	}
 }
 

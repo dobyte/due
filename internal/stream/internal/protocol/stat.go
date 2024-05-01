@@ -4,14 +4,15 @@ import (
 	"encoding/binary"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/stream/internal/codes"
 	"github.com/dobyte/due/v2/internal/stream/internal/route"
 	"github.com/dobyte/due/v2/session"
 	"io"
 )
 
 const (
-	statReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1
-	statResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 8
+	statReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8
+	statResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + b64
 )
 
 // EncodeStatReq 编码统计在线人数请求
@@ -56,11 +57,11 @@ func DecodeStatReq(data []byte) (seq uint64, kind session.Kind, err error) {
 }
 
 // EncodeStatRes 编码统计在线人数响应
-// 协议：size + header + route + seq + [total]
-func EncodeStatRes(seq uint64, total ...uint64) buffer.Buffer {
+// 协议：size + header + route + seq + code + [total]
+func EncodeStatRes(seq uint64, code uint16, total ...uint64) buffer.Buffer {
 	size := statResBytes - defaultSizeBytes
-	if len(total) == 0 || total[0] == 0 {
-		size -= 8
+	if code != codes.OK || len(total) == 0 || total[0] == 0 {
+		size -= b64
 	}
 
 	buf := buffer.NewNocopyBuffer()
@@ -69,8 +70,9 @@ func EncodeStatRes(seq uint64, total ...uint64) buffer.Buffer {
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Stat)
 	writer.WriteUint64s(binary.BigEndian, seq)
+	writer.WriteUint16s(binary.BigEndian, code)
 
-	if len(total) > 0 && total[0] != 0 {
+	if code == codes.OK && len(total) > 0 && total[0] != 0 {
 		writer.WriteUint64s(binary.BigEndian, total[0])
 	}
 
@@ -78,8 +80,8 @@ func EncodeStatRes(seq uint64, total ...uint64) buffer.Buffer {
 }
 
 // DecodeStatRes 解码统计在线人数响应
-// 协议：size + header + route + seq + [total]
-func DecodeStatRes(data []byte) (total uint64, err error) {
+// 协议：size + header + route + seq + code + [total]
+func DecodeStatRes(data []byte) (code uint16, total uint64, err error) {
 	if len(data) != statResBytes && len(data) != statResBytes-8 {
 		err = errors.ErrInvalidMessage
 		return

@@ -21,10 +21,11 @@ func TestDecodeStatReq(t *testing.T) {
 func TestDecodeStatRes(t *testing.T) {
 	buffer := protocol.EncodeStatRes(1, 2000)
 
-	total, err := protocol.DecodeStatRes(buffer.Bytes())
+	code, total, err := protocol.DecodeStatRes(buffer.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	t.Logf("code: %v", code)
 	t.Logf("total: %v", total)
 }

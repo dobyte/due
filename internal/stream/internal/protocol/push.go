@@ -61,21 +61,21 @@ func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, me
 
 // EncodePushRes 编码推送响应
 // 协议：size + header + route + seq + code
-func EncodePushRes(seq uint64, code int16) buffer.Buffer {
+func EncodePushRes(seq uint64, code uint16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(pushResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Push)
 	writer.WriteUint64s(binary.BigEndian, seq)
-	writer.WriteInt16s(binary.BigEndian, code)
+	writer.WriteUint16s(binary.BigEndian, code)
 
 	return buf
 }
 
 // DecodePushRes 解码推送响应
 // 协议：size + header + route + seq + code
-func DecodePushRes(data []byte) (code int16, err error) {
+func DecodePushRes(data []byte) (code uint16, err error) {
 	if len(data) != pushResBytes {
 		err = errors.ErrInvalidMessage
 		return
@@ -87,7 +87,7 @@ func DecodePushRes(data []byte) (code int16, err error) {
 		return
 	}
 
-	if code, err = reader.ReadInt16(binary.BigEndian); err != nil {
+	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
 		return
 	}
 

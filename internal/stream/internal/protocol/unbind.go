@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	unbindReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 8
+	unbindReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b64
 	unbindResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
 )
 
@@ -54,21 +54,21 @@ func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
 
 // EncodeUnbindRes 编码解绑响应
 // 协议：size + header + route + seq + code
-func EncodeUnbindRes(seq uint64, code int16) buffer.Buffer {
+func EncodeUnbindRes(seq uint64, code uint16) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(unbindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Unbind)
 	writer.WriteUint64s(binary.BigEndian, seq)
-	writer.WriteInt16s(binary.BigEndian, code)
+	writer.WriteUint16s(binary.BigEndian, code)
 
 	return buf
 }
 
 // DecodeUnbindRes 解码解绑响应
 // 协议：size + header + route + seq + code
-func DecodeUnbindRes(data []byte) (code int16, err error) {
+func DecodeUnbindRes(data []byte) (code uint16, err error) {
 	if len(data) != unbindResBytes {
 		err = errors.ErrInvalidMessage
 		return
@@ -80,7 +80,7 @@ func DecodeUnbindRes(data []byte) (code int16, err error) {
 		return
 	}
 
-	if code, err = reader.ReadInt16(binary.BigEndian); err != nil {
+	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
 		return
 	}
 

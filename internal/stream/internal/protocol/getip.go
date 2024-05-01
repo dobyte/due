@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	getIPReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + 1 + 8
-	getIPResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + 4
+	getIPReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8 + b64
+	getIPResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + b32
 )
 
 // EncodeGetIPReq 编码获取IP请求
@@ -65,7 +65,7 @@ func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, e
 
 // EncodeGetIPRes 编码获取IP响应
 // 协议：size + header + route + seq + code + [ip]
-func EncodeGetIPRes(seq uint64, code int16, ip ...string) buffer.Buffer {
+func EncodeGetIPRes(seq uint64, code uint16, ip ...string) buffer.Buffer {
 	size := getIPResBytes - defaultSizeBytes
 	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
 		size -= 4
@@ -77,7 +77,7 @@ func EncodeGetIPRes(seq uint64, code int16, ip ...string) buffer.Buffer {
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.GetIP)
 	writer.WriteUint64s(binary.BigEndian, seq)
-	writer.WriteInt16s(binary.BigEndian, code)
+	writer.WriteUint16s(binary.BigEndian, code)
 
 	if code == codes.OK && len(ip) > 0 && ip[0] != "" {
 		writer.WriteUint32s(binary.BigEndian, xnet.IP2Long(ip[0]))
@@ -86,7 +86,7 @@ func EncodeGetIPRes(seq uint64, code int16, ip ...string) buffer.Buffer {
 	return buf
 }
 
-func DecodeGetIPRes(data []byte) (code int16, ip string, err error) {
+func DecodeGetIPRes(data []byte) (code uint16, ip string, err error) {
 	if len(data) != getIPResBytes && len(data) != getIPResBytes-4 {
 		err = errors.ErrInvalidMessage
 		return
@@ -98,13 +98,12 @@ func DecodeGetIPRes(data []byte) (code int16, ip string, err error) {
 		return
 	}
 
-	if code, err = reader.ReadInt16(binary.BigEndian); err != nil {
+	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
 		return
 	}
 
 	if code == codes.OK && len(data) == getIPResBytes {
 		var v uint32
-
 		if v, err = reader.ReadUint32(binary.BigEndian); err != nil {
 			return
 		} else {
