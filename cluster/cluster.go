@@ -3,17 +3,26 @@ package cluster
 import "github.com/dobyte/due/v2/internal/link"
 
 const (
-	Master Kind = "master" // 管理服
-	Gate   Kind = "gate"   // 网关服
-	Node   Kind = "node"   // 节点服
-	Mesh   Kind = "mesh"   // 微服务
+	Gate   Kind = iota + 1 // 网关服
+	Node                   // 节点服
+	Mesh                   // 微服务
+	Master                 // 管理服
 )
 
 // Kind 集群实例类型
-type Kind string
+type Kind int
 
 func (k Kind) String() string {
-	return string(k)
+	switch k {
+	case Gate:
+		return "gate"
+	case Node:
+		return "node"
+	case Mesh:
+		return "mesh"
+	default:
+		return "master"
+	}
 }
 
 const (

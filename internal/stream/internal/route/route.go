@@ -1,7 +1,8 @@
 package route
 
 const (
-	Bind       uint8 = iota + 1 // 绑定用户
+	Handshake  uint8 = iota + 1 // 握手
+	Bind                        // 绑定用户
 	Unbind                      // 解绑用户
 	GetIP                       // 获取IP地址
 	Stat                        // 统计在线人数

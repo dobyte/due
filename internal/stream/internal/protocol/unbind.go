@@ -30,7 +30,7 @@ func EncodeUnbindReq(seq uint64, uid int64) buffer.Buffer {
 // DecodeUnbindReq 解码解绑请求
 // 协议：size + header + route + seq + uid
 func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
-	if len(data) != unbindResBytes {
+	if len(data) != unbindReqBytes {
 		err = errors.ErrInvalidMessage
 		return
 	}
