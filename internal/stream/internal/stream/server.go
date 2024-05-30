@@ -4,15 +4,15 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
-	"golang.org/x/crypto/openpgp/packet"
 	"net"
 	"time"
 )
 
 type Server struct {
-	listener   net.Listener // 监听器
-	listenAddr string       // 监听地址
-	exposeAddr string       // 暴露地址
+	listener   net.Listener          // 监听器
+	listenAddr string                // 监听地址
+	exposeAddr string                // 暴露地址
+	handlers   map[int8]RouteHandler // 路由处理器
 }
 
 func NewServer(opts *Options) (*Server, error) {
@@ -26,7 +26,6 @@ func NewServer(opts *Options) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.connMgr = newConnMgr(s)
-	s.reader = packet.NewReader()
 	s.handlers = make(map[int8]RouteHandler)
 
 	return s, nil
@@ -83,4 +82,9 @@ func (s *Server) Start() error {
 			_ = cn.Close()
 		}
 	}
+}
+
+// RegisterHandler 注册处理器
+func (s *Server) RegisterHandler(route int8, handler RouteHandler) {
+	s.handlers[route] = handler
 }
