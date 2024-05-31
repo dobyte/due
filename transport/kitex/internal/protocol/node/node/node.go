@@ -45,7 +45,7 @@ func serviceInfoForStreamClient() *kitex.ServiceInfo {
 	return nodeServiceInfoForStreamClient
 }
 
-// for stream client
+// for transporter client
 func serviceInfoForClient() *kitex.ServiceInfo {
 	return nodeServiceInfoForClient
 }

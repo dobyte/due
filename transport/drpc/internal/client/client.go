@@ -62,7 +62,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *packet.Writer) ([]by
 
 // Push 推送消息
 func (c *Client) Push(ctx context.Context, seq uint64, buf packet.IBuffer, data []byte) ([]byte, error) {
-	//c.stream.send(ctx, seq, buf, data)
+	//c.transporter.send(ctx, seq, buf, data)
 
 	index := atomic.AddInt64(&c.index, 1) % int64(len(c.conns))
 
@@ -70,7 +70,7 @@ func (c *Client) Push(ctx context.Context, seq uint64, buf packet.IBuffer, data 
 
 	return nil, nil
 
-	//call := c.stream.send(ctx, seq, buf, data)
+	//call := c.transporter.send(ctx, seq, buf, data)
 	//
 	//select {
 	//case <-ctx.Done():

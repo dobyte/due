@@ -87,7 +87,7 @@ func serviceInfoForStreamClient() *kitex.ServiceInfo {
 	return gateServiceInfoForStreamClient
 }
 
-// for stream client
+// for transporter client
 func serviceInfoForClient() *kitex.ServiceInfo {
 	return gateServiceInfoForClient
 }
