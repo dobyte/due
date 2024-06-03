@@ -2,33 +2,36 @@ package server
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
-	"sync"
 	"sync/atomic"
 )
 
 type Conn struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
-	rw                sync.RWMutex
-	conn              net.Conn // TCP源连接
-	state             int32    // 连接状态
-	connMgr           *ConnMgr // 连接管理
-	lastHeartbeatTime int64    // 上次心跳时间
+	server            *Server      // 连接管理
+	conn              net.Conn     // TCP源连接
+	state             int32        // 连接状态
+	lastHeartbeatTime int64        // 上次心跳时间
+	InsKind           cluster.Kind // 集群类型
+	InsID             string       // 集群ID
 }
 
-func newConn(cm *ConnMgr, conn net.Conn) *Conn {
+func newConn(server *Server, conn net.Conn) *Conn {
 	c := &Conn{}
-	c.ctx = context.Background()
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.conn = conn
-	c.connMgr = cm
+	c.server = server
 	c.state = connOpened
 
 	go c.read()
+
+	go c.process()
 
 	return c
 }
@@ -50,31 +53,23 @@ func (c *Conn) Send(buf buffer.Buffer) (err error) {
 	return
 }
 
-func (c *Conn) Close() {
-	c.conn.Close()
-}
-
 // 检测连接状态
 func (c *Conn) checkState() error {
-	//switch atomic.LoadInt32(&c.state) {
-	//case network.ConnHanged:
-	//	return errors.ErrConnectionHanged
-	//case network.ConnClosed:
-	//	return errors.ErrConnectionClosed
-	//default:
-	//	return nil
-	//}
-
-	return nil
+	if atomic.LoadInt32(&c.state) == connClosed {
+		return errors.ErrConnectionClosed
+	} else {
+		return nil
+	}
 }
 
-// 关闭
+// 关闭连接
 func (c *Conn) close() error {
 	if !atomic.CompareAndSwapInt32(&c.state, connOpened, connClosed) {
 		return errors.ErrConnectionClosed
 	}
 
 	c.cancel()
+	c.server.recycle(c.conn)
 
 	return c.conn.Close()
 }
@@ -90,18 +85,9 @@ func (c *Conn) read() {
 		default:
 			isHeartbeat, route, _, data, err := protocol.ReadMessage(conn)
 			if err != nil {
-				// TODO：处理错误
+				_ = c.close()
 				return
 			}
-
-			//switch atomic.LoadInt32(&c.state) {
-			//case network.ConnHanged:
-			//	continue
-			//case network.ConnClosed:
-			//	return
-			//default:
-			//	// ignore
-			//}
 
 			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
 
@@ -109,7 +95,7 @@ func (c *Conn) read() {
 				continue
 			}
 
-			handler, ok := c.connMgr.server.handlers[route]
+			handler, ok := c.server.handlers[route]
 			if !ok {
 				continue
 			}
@@ -119,4 +105,8 @@ func (c *Conn) read() {
 			}
 		}
 	}
+}
+
+func (c *Conn) process() {
+
 }

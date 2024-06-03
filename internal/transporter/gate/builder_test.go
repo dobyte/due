@@ -5,16 +5,17 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"testing"
 )
 
 func TestBuilder(t *testing.T) {
 	builder := gate.NewBuilder(&gate.Options{
-		InsID:   "a",
-		InsKind: cluster.Gate,
+		InsID:   xuuid.UUID(),
+		InsKind: cluster.Node,
 	})
 
-	client, err := builder.Build("192.168.1.10:49899")
+	client, err := builder.Build("127.0.0.1:49899")
 	if err != nil {
 		t.Fatal(err)
 	}

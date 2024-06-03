@@ -1,10 +1,13 @@
 package server
 
 import (
-	"fmt"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
+	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -12,7 +15,8 @@ type Server struct {
 	listener   net.Listener           // 监听器
 	listenAddr string                 // 监听地址
 	exposeAddr string                 // 暴露地址
-	connMgr    *ConnMgr               // 连接管理器
+	rw         sync.RWMutex           // 锁
+	conns      map[net.Conn]*Conn     // 连接
 	handlers   map[uint8]RouteHandler // 路由处理器
 }
 
@@ -25,8 +29,9 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
-	s.connMgr = newConnMgr(s)
+	s.conns = make(map[net.Conn]*Conn)
 	s.handlers = make(map[uint8]RouteHandler)
+	s.handlers[route.Handshake] = s.handshake
 
 	return s, nil
 }
@@ -53,7 +58,7 @@ func (s *Server) Start() error {
 	var tempDelay time.Duration
 
 	for {
-		cn, err := s.listener.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && e.Timeout() {
 				if tempDelay == 0 {
@@ -66,27 +71,49 @@ func (s *Server) Start() error {
 					tempDelay = time.Second
 				}
 
-				log.Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
+				log.Warnf("tcp accept connect error: %v; retrying in %v", err, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
 
-			log.Errorf("drpc accept error: %v", err)
+			log.Errorf("tcp accept connect error: %v", err)
 			return nil
 		}
 
 		tempDelay = 0
 
-		fmt.Println("new conn")
-
-		if err = s.connMgr.allocate(cn); err != nil {
-			log.Errorf("conn allocate error: %v", err)
-			_ = cn.Close()
-		}
+		s.allocate(conn)
 	}
 }
 
 // RegisterHandler 注册处理器
 func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 	s.handlers[route] = handler
+}
+
+// 分配连接
+func (s *Server) allocate(conn net.Conn) {
+	s.rw.Lock()
+	s.conns[conn] = newConn(s, conn)
+	s.rw.Unlock()
+}
+
+// 回收连接
+func (s *Server) recycle(conn net.Conn) {
+	s.rw.Lock()
+	delete(s.conns, conn)
+	s.rw.Unlock()
+}
+
+// 处理握手
+func (s *Server) handshake(conn *Conn, data []byte) error {
+	seq, insKind, insID, err := protocol.DecodeHandshakeReq(data)
+	if err != nil {
+		return err
+	}
+
+	conn.InsKind = insKind
+	conn.InsID = insID
+
+	return conn.Send(protocol.EncodeBindRes(seq, codes.ErrorToCode(err)))
 }

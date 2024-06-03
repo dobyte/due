@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -50,30 +51,35 @@ func (p *provider) Trigger(ctx context.Context, args *transport.TriggerArgs) (bo
 }
 
 // Deliver 投递消息
-func (p *provider) Deliver(ctx context.Context, args *transport.DeliverArgs) (bool, error) {
-	stateful, ok := p.node.router.CheckRouteStateful(args.Message.Route)
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message []byte) error {
+	msg, err := packet.UnpackMessage(message)
+	if err != nil {
+		return err
+	}
+
+	stateful, ok := p.node.router.CheckRouteStateful(msg.Route)
 	if !ok {
 		if ok = p.node.router.HasDefaultRouteHandler(); !ok {
-			return false, nil
+			return nil
 		}
 	}
 
 	if stateful {
-		if args.UID <= 0 {
-			return false, errors.ErrInvalidArgument
+		if uid <= 0 {
+			return errors.ErrInvalidArgument
 		}
 
-		_, ok, err := p.node.proxy.AskNode(ctx, args.UID, p.node.opts.name, p.node.opts.id)
+		_, ok, err = p.node.proxy.AskNode(ctx, uid, p.node.opts.name, p.node.opts.id)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		if !ok {
-			return true, errors.ErrNotFoundUserLocation
+			return errors.ErrNotFoundSession
 		}
 	}
 
-	p.node.router.deliver(args.GID, args.NID, args.CID, args.UID, args.Message.Seq, args.Message.Route, args.Message.Buffer)
+	p.node.router.deliver(gid, nid, cid, uid, msg.Seq, msg.Route, msg.Buffer)
 
-	return false, nil
+	return nil
 }

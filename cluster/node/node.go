@@ -4,15 +4,12 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"sync/atomic"
-	"time"
 )
-
-const timeout = 5 * time.Second
 
 type HookHandler func(proxy *Proxy)
 
@@ -27,7 +24,7 @@ type Node struct {
 	proxy       *Proxy
 	hooks       map[cluster.Hook]HookHandler
 	instance    *registry.ServiceInstance
-	transporter transport.Server
+	transporter *node.Server
 	fnChan      chan func()
 }
 
@@ -76,10 +73,6 @@ func (n *Node) Init() {
 
 	if n.opts.registry == nil {
 		log.Fatal("registry component is not injected")
-	}
-
-	if n.opts.transporter == nil {
-		log.Fatal("transporter component is not injected")
 	}
 
 	n.runHookFunc(cluster.Init)
@@ -155,18 +148,16 @@ func (n *Node) dispatch() {
 
 // 启动传输服务器
 func (n *Node) startTransporter() {
-	n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
-
-	transporter, err := n.opts.transporter.NewNodeServer(&provider{n})
+	transporter, err := node.NewServer("", &provider{node: n})
 	if err != nil {
-		log.Fatalf("transporter create failed: %v", err)
+		log.Fatalf("transport server create failed: %v", err)
 	}
 
 	n.transporter = transporter
 
 	go func() {
 		if err = n.transporter.Start(); err != nil {
-			log.Errorf("transporter start failed: %v", err)
+			log.Errorf("transport server start failed: %v", err)
 		}
 	}()
 }
@@ -196,7 +187,7 @@ func (n *Node) registerServiceInstance() {
 
 	n.instance = &registry.ServiceInstance{
 		ID:       n.opts.id,
-		Name:     string(cluster.Node),
+		Name:     cluster.Node.String(),
 		Kind:     cluster.Node.String(),
 		Alias:    n.opts.name,
 		State:    n.getState().String(),
@@ -205,7 +196,7 @@ func (n *Node) registerServiceInstance() {
 		Endpoint: n.transporter.Endpoint().String(),
 	}
 
-	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
@@ -215,7 +206,7 @@ func (n *Node) registerServiceInstance() {
 
 // 解注册服务实例
 func (n *Node) deregisterServiceInstance() {
-	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
@@ -242,7 +233,7 @@ func (n *Node) updateState(state cluster.State) error {
 	instance := n.instance
 	instance.State = state.String()
 
-	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
 	defer cancel()
 
 	err := n.opts.registry.Register(ctx, instance)
@@ -267,7 +258,7 @@ func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 
 func (n *Node) debugPrint() {
 	log.Debugf("node server startup successful")
-	log.Debugf("%s server listen on %s", n.transporter.Scheme(), n.transporter.Addr())
+	log.Debugf("transport server listen on %s", n.transporter.Addr())
 }
 
 // 执行钩子函数

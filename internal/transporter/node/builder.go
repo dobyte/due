@@ -1,4 +1,4 @@
-package gate
+package node
 
 import (
 	"github.com/dobyte/due/v2/cluster"

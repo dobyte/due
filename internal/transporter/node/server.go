@@ -2,6 +2,8 @@ package node
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
@@ -37,7 +39,11 @@ func (s *Server) trigger(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Trigger(context.Background(), cid, uid, event); seq == 0 {
+	if conn.InsKind != cluster.Gate {
+		return errors.ErrIllegalRequest
+	}
+
+	if err = s.provider.Trigger(context.Background(), conn.InsID, cid, uid, event); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeTriggerRes(seq, codes.ErrorToCode(err)))
@@ -51,7 +57,21 @@ func (s *Server) deliver(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Deliver(context.Background(), cid, uid, message); seq == 0 {
+	var (
+		gid string
+		nid string
+	)
+
+	switch conn.InsKind {
+	case cluster.Gate:
+		gid = conn.InsID
+	case cluster.Node:
+		nid = conn.InsID
+	default:
+		return errors.ErrIllegalRequest
+	}
+
+	if err = s.provider.Deliver(context.Background(), gid, nid, cid, uid, message); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeDeliverRes(seq, codes.ErrorToCode(err)))

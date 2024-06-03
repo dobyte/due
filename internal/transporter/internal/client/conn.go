@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
@@ -82,21 +81,21 @@ func (c *Conn) dial() {
 func (c *Conn) process(conn net.Conn) {
 	go c.read(conn)
 
-	//seq := uint64(1)
-	//
-	//cc := make(chan []byte)
-	//
-	//c.pending.Store(seq, cc)
-	//
-	//buf := protocol.EncodeHandshakeReq(seq, c.client.opts.InsKind, c.client.opts.InsID)
-	//
-	//defer buf.Release()
-	//
-	//if _, err := conn.Write(buf.Bytes()); err != nil {
-	//	return
-	//}
-	//
-	//<-cc
+	seq := uint64(1)
+
+	cc := make(chan []byte)
+
+	c.pending.Store(seq, cc)
+
+	buf := protocol.EncodeHandshakeReq(seq, c.client.opts.InsKind, c.client.opts.InsID)
+
+	defer buf.Release()
+
+	if _, err := conn.Write(buf.Bytes()); err != nil {
+		return
+	}
+
+	<-cc
 
 	go c.write(conn)
 }
@@ -106,7 +105,6 @@ func (c *Conn) read(conn net.Conn) {
 	for {
 		isHeartbeat, _, seq, data, err := protocol.ReadMessage(conn)
 		if err != nil {
-			fmt.Println("retry")
 			c.dial()
 			return
 		}
