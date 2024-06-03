@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
@@ -14,26 +15,28 @@ const (
 )
 
 type Conn struct {
-	client  *Client      // 客户端
-	chWrite chan chWrite // 写入队列
-	pending sync.Map     // 等待队列
+	client  *Client       // 客户端
+	chWrite chan *chWrite // 写入队列
+	pending sync.Map      // 等待队列
 }
 
-func NewConn(client *Client, ch ...chan chWrite) *Conn {
+func NewConn(client *Client, ch ...chan *chWrite) *Conn {
 	c := &Conn{}
 	c.client = client
 
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
 	} else {
-		c.chWrite = make(chan chWrite, 4096)
+		c.chWrite = make(chan *chWrite, 4096)
 	}
+
+	c.dial()
 
 	return c
 }
 
 // 发送
-func (c *Conn) send(ch chWrite) {
+func (c *Conn) send(ch *chWrite) {
 	c.chWrite <- ch
 }
 
@@ -79,21 +82,21 @@ func (c *Conn) dial() {
 func (c *Conn) process(conn net.Conn) {
 	go c.read(conn)
 
-	seq := uint64(1)
-
-	cc := make(chan []byte)
-
-	c.pending.Store(seq, cc)
-
-	buf := protocol.EncodeHandshakeReq(seq, c.client.opts.InsKind, c.client.opts.InsID)
-
-	defer buf.Release()
-
-	if _, err := conn.Write(buf.Bytes()); err != nil {
-		return
-	}
-
-	<-cc
+	//seq := uint64(1)
+	//
+	//cc := make(chan []byte)
+	//
+	//c.pending.Store(seq, cc)
+	//
+	//buf := protocol.EncodeHandshakeReq(seq, c.client.opts.InsKind, c.client.opts.InsID)
+	//
+	//defer buf.Release()
+	//
+	//if _, err := conn.Write(buf.Bytes()); err != nil {
+	//	return
+	//}
+	//
+	//<-cc
 
 	go c.write(conn)
 }
@@ -103,6 +106,7 @@ func (c *Conn) read(conn net.Conn) {
 	for {
 		isHeartbeat, _, seq, data, err := protocol.ReadMessage(conn)
 		if err != nil {
+			fmt.Println("retry")
 			c.dial()
 			return
 		}

@@ -20,10 +20,6 @@ func NewClient(cli *client.Client) *Client {
 	}
 }
 
-func (c *Client) doGenSeq() uint64 {
-	return atomic.AddUint64(&c.seq, 1)
-}
-
 // Bind 绑定用户与连接
 func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
 	seq := atomic.AddUint64(&c.seq, 1)

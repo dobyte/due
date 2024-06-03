@@ -23,6 +23,7 @@ type Conn struct {
 
 func newConn(cm *ConnMgr, conn net.Conn) *Conn {
 	c := &Conn{}
+	c.ctx = context.Background()
 	c.conn = conn
 	c.connMgr = cm
 	c.state = connOpened
@@ -47,6 +48,10 @@ func (c *Conn) Send(buf buffer.Buffer) (err error) {
 	})
 
 	return
+}
+
+func (c *Conn) Close() {
+	c.conn.Close()
 }
 
 // 检测连接状态
@@ -104,7 +109,7 @@ func (c *Conn) read() {
 				continue
 			}
 
-			handler, ok := c.connMgr.server.handlers[uint8(route)]
+			handler, ok := c.connMgr.server.handlers[route]
 			if !ok {
 				continue
 			}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
 	"net"
@@ -24,16 +25,15 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
-	//s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.connMgr = newConnMgr(s)
-	//s.handlers = make(map[int8]RouteHandler)
+	s.handlers = make(map[uint8]RouteHandler)
 
 	return s, nil
 }
 
 // Addr 监听地址
 func (s *Server) Addr() string {
-	return s.listenAddr
+	return s.exposeAddr
 }
 
 // Start 启动服务器
@@ -76,6 +76,8 @@ func (s *Server) Start() error {
 		}
 
 		tempDelay = 0
+
+		fmt.Println("new conn")
 
 		if err = s.connMgr.allocate(cn); err != nil {
 			log.Errorf("conn allocate error: %v", err)

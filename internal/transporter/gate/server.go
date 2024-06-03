@@ -75,6 +75,7 @@ func (s *Server) getIP(conn *server.Conn, data []byte) error {
 	if ip, err := s.provider.GetIP(context.Background(), kind, target); seq == 0 {
 		return err
 	} else {
+		defer conn.Close()
 		return conn.Send(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
 	}
 }

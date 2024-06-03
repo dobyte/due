@@ -20,16 +20,16 @@ type chWrite struct {
 }
 
 type Client struct {
-	opts    *Options     // 配置
-	conns   []*Conn      // 连接
-	chWrite chan chWrite // 写入队列
+	opts    *Options      // 配置
+	conns   []*Conn       // 连接
+	chWrite chan *chWrite // 写入队列
 }
 
 func NewClient(opts *Options) (*Client, error) {
 	c := &Client{}
 	c.opts = opts
 	c.conns = make([]*Conn, 0, ordered+unordered)
-	c.chWrite = make(chan chWrite, 4096)
+	c.chWrite = make(chan *chWrite, 4096)
 
 	for i := 0; i < ordered; i++ {
 		c.conns = append(c.conns, NewConn(c))
@@ -48,7 +48,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 
 	conn := c.conn(idx...)
 
-	conn.send(chWrite{
+	conn.send(&chWrite{
 		ctx:  ctx,
 		seq:  seq,
 		buf:  buf,
@@ -67,7 +67,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 func (c *Client) Send(ctx context.Context, buf buffer.Buffer, idx ...int64) error {
 	conn := c.conn(idx...)
 
-	conn.send(chWrite{
+	conn.send(&chWrite{
 		ctx: ctx,
 		buf: buf,
 	})

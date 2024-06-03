@@ -12,7 +12,7 @@ var sizePool = sync.Pool{New: func() any {
 }}
 
 // ReadMessage 读取消息
-func ReadMessage(reader io.Reader) (isHeartbeat bool, route int8, seq uint64, data []byte, err error) {
+func ReadMessage(reader io.Reader) (isHeartbeat bool, route uint8, seq uint64, data []byte, err error) {
 	buf := sizePool.Get().([]byte)
 
 	if _, err = io.ReadFull(reader, buf); err != nil {
@@ -41,11 +41,13 @@ func ReadMessage(reader io.Reader) (isHeartbeat bool, route int8, seq uint64, da
 
 	isHeartbeat = header&heartbeatBit == heartbeatBit
 
-	if !isHeartbeat {
-		route = int8(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes][0])
-
-		seq = binary.BigEndian.Uint64(data[defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+8])
+	if isHeartbeat {
+		return
 	}
+
+	route = data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes][0]
+
+	seq = binary.BigEndian.Uint64(data[defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+8])
 
 	return
 }
