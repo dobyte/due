@@ -16,7 +16,7 @@ const (
 
 // EncodeDisconnectReq 编码断连请求
 // 协议：size + header + route + seq + session kind + target + isForce
-func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, isForce bool) buffer.Buffer {
+func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-defaultSizeBytes))
@@ -25,14 +25,14 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, isForce bo
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
-	writer.WriteBools(isForce)
+	writer.WriteBools(force)
 
 	return buf
 }
 
 // DecodeDisconnectReq 解码端连请求
 // 协议：size + header + route + seq + session kind + target + isForce
-func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int64, isForce bool, err error) {
+func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int64, force bool, err error) {
 	if len(data) != disconnectReqBytes {
 		err = errors.ErrInvalidMessage
 		return
@@ -59,7 +59,7 @@ func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int
 		return
 	}
 
-	if isForce, err = reader.ReadBool(); err != nil {
+	if force, err = reader.ReadBool(); err != nil {
 		return
 	}
 

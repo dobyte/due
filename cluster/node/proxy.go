@@ -4,25 +4,33 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/link"
+	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 )
 
 type Proxy struct {
-	node *Node      // 节点
-	link *link.Link // 链接
+	node       *Node            // 节点
+	gateLinker *link.GateLinker // 网关链接器
+	nodeLinker *link.NodeLinker // 节点链接器
 }
 
 func newProxy(node *Node) *Proxy {
-	return &Proxy{node: node, link: link.NewLink(&link.Options{
-		NID:         node.opts.id,
-		Codec:       node.opts.codec,
-		Locator:     node.opts.locator,
-		Registry:    node.opts.registry,
-		Encryptor:   node.opts.encryptor,
-		Transporter: node.opts.transporter,
-	})}
+	opts := &link.Options{
+		InsID:     node.opts.id,
+		InsKind:   cluster.Node,
+		Codec:     node.opts.codec,
+		Locator:   node.opts.locator,
+		Registry:  node.opts.registry,
+		Encryptor: node.opts.encryptor,
+	}
+
+	return &Proxy{
+		node:       node,
+		gateLinker: link.NewGateLinker(node.opts.ctx, opts),
+		nodeLinker: link.NewNodeLinker(node.opts.ctx, opts),
+	}
 }
 
 // GetID 获取当前节点ID
@@ -90,17 +98,18 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 // 直连模式: 	direct://127.0.0.1:8011
 // 服务发现模式: 	discovery://service_name
 func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
-	return p.node.opts.transporter.NewServiceClient(target)
+	//return p.node.opts.transporter.NewServiceClient(target)
+	return nil, nil
 }
 
 // BindGate 绑定网关
-func (p *Proxy) BindGate(ctx context.Context, uid int64, gid string, cid int64) error {
-	return p.link.BindGate(ctx, uid, gid, cid)
+func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
+	return p.gateLinker.Bind(ctx, gid, cid, uid)
 }
 
 // UnbindGate 解绑网关
 func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
-	return p.link.UnbindGate(ctx, uid)
+	return p.gateLinker.Unbind(ctx, uid)
 }
 
 // BindNode 绑定节点
@@ -108,9 +117,9 @@ func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
 	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		return p.link.BindNode(ctx, uid, nameAndNID[0], nameAndNID[1])
+		return p.nodeLinker.Bind(ctx, uid, nameAndNID[0], nameAndNID[1])
 	} else {
-		return p.link.BindNode(ctx, uid, p.node.opts.name, p.node.opts.id)
+		return p.nodeLinker.Bind(ctx, uid, p.node.opts.name, p.node.opts.id)
 	}
 }
 
@@ -119,30 +128,30 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
 	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		return p.link.UnbindNode(ctx, uid, nameAndNID[0], nameAndNID[1])
+		return p.nodeLinker.Unbind(ctx, uid, nameAndNID[0], nameAndNID[1])
 	} else {
-		return p.link.UnbindNode(ctx, uid, p.node.opts.name, p.node.opts.id)
+		return p.nodeLinker.Unbind(ctx, uid, p.node.opts.name, p.node.opts.id)
 	}
 }
 
 // LocateGate 定位用户所在网关
 func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
-	return p.link.LocateGate(ctx, uid)
+	return p.gateLinker.Locate(ctx, uid)
 }
 
 // AskGate 检测用户是否在给定的网关上
-func (p *Proxy) AskGate(ctx context.Context, uid int64, gid string) (string, bool, error) {
-	return p.link.AskGate(ctx, uid, gid)
+func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
+	return p.gateLinker.Ask(ctx, gid, uid)
 }
 
 // LocateNode 定位用户所在节点
 func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
-	return p.link.LocateNode(ctx, uid, name)
+	return p.nodeLinker.Locate(ctx, uid, name)
 }
 
 // AskNode 检测用户是否在给定的节点上
 func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
-	return p.link.AskNode(ctx, uid, name, nid)
+	return p.nodeLinker.Ask(ctx, uid, name, nid)
 }
 
 // FetchGateList 拉取网关列表
@@ -167,57 +176,56 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
-	return p.link.GetIP(ctx, args)
-}
-
-// Push 推送消息
-func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
-	return p.link.Push(ctx, args)
-}
-
-// Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
-	return p.link.Multicast(ctx, args)
-}
-
-// Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
-	return p.link.Broadcast(ctx, args)
-}
-
-// Deliver 投递消息给节点处理
-func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
-	if args.NID != p.GetID() {
-		return p.link.Deliver(ctx, &link.DeliverArgs{
-			NID:     args.NID,
-			UID:     args.UID,
-			Message: args.Message,
-		})
-	} else {
-		p.node.router.deliver("", args.NID, 0, args.UID, args.Message.Seq, args.Message.Route, args.Message.Data)
-	}
-
-	return nil
+	return p.gateLinker.GetIP(ctx, args)
 }
 
 // Stat 统计会话总数
 func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	return p.link.Stat(ctx, kind)
+	return p.gateLinker.Stat(ctx, kind)
+}
+
+// IsOnline 检测是否在线
+func (p *Proxy) IsOnline(ctx context.Context, args *cluster.IsOnlineArgs) (bool, error) {
+	return p.gateLinker.IsOnline(ctx, args)
 }
 
 // Disconnect 断开连接
 func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) error {
-	return p.link.Disconnect(ctx, args)
+	return p.gateLinker.Disconnect(ctx, args)
+}
+
+// Push 推送消息
+func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
+	return p.gateLinker.Push(ctx, args)
+}
+
+// Multicast 推送组播消息
+func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
+	return p.gateLinker.Multicast(ctx, args)
+}
+
+// Broadcast 推送广播消息
+func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
+	return p.gateLinker.Broadcast(ctx, args)
+}
+
+// Deliver 投递消息给节点处理
+func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
+	if args.NID == p.GetID() {
+		p.node.router.deliver("", args.NID, 0, args.UID, args.Message.Seq, args.Message.Route, args.Message.Data)
+		return nil
+	}
+
+	return p.nodeLinker.Deliver(ctx, &types.DeliverArgs{
+		NID:     args.NID,
+		UID:     args.UID,
+		Async:   args.Async,
+		Route:   args.Message.Route,
+		Message: args.Message,
+	})
 }
 
 // Invoke 调用函数（线程安全）
 func (p *Proxy) Invoke(fn func()) {
 	p.node.fnChan <- fn
-}
-
-// 启动监听
-func (p *Proxy) watch(ctx context.Context) {
-	p.link.WatchUserLocate(ctx, cluster.Gate.String(), cluster.Node.String())
-
-	p.link.WatchServiceInstance(ctx, cluster.Gate.String(), cluster.Node.String())
 }

@@ -1,0 +1,599 @@
+package link
+
+import (
+	"context"
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/dispatcher"
+	"github.com/dobyte/due/v2/internal/link/types"
+	"github.com/dobyte/due/v2/internal/transporter/gate"
+	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/session"
+	"golang.org/x/sync/errgroup"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type GateLinker struct {
+	ctx        context.Context        // 上下文
+	opts       *Options               // 参数项
+	sources    sync.Map               // 用户源
+	builder    *gate.Builder          // 构建器
+	dispatcher *dispatcher.Dispatcher // 分发器
+}
+
+func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
+	l := &GateLinker{
+		ctx:        ctx,
+		opts:       opts,
+		builder:    gate.NewBuilder(&gate.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
+		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
+	}
+
+	go l.doWatchUserLocate()
+
+	go l.doWatchClusterInstance()
+
+	return l
+}
+
+// Ask 检测用户是否在给定的网关上
+func (l *GateLinker) Ask(ctx context.Context, gid string, uid int64) (string, bool, error) {
+	insID, err := l.Locate(ctx, uid)
+	if err != nil {
+		return "", false, err
+	}
+
+	return insID, insID == gid, nil
+}
+
+// Locate 定位用户所在网关
+func (l *GateLinker) Locate(ctx context.Context, uid int64) (string, error) {
+	if l.opts.Locator == nil {
+		return "", errors.ErrNotFoundLocator
+	}
+
+	if val, ok := l.sources.Load(uid); ok {
+		if gid := val.(string); gid != "" {
+			return gid, nil
+		}
+	}
+
+	gid, err := l.opts.Locator.LocateGate(ctx, uid)
+	if err != nil {
+		return "", err
+	}
+
+	if gid == "" {
+		return "", errors.ErrNotFoundUserLocation
+	}
+
+	l.sources.Store(uid, gid)
+
+	return gid, nil
+}
+
+// Bind 绑定网关
+func (l *GateLinker) Bind(ctx context.Context, gid string, cid, uid int64) error {
+	client, err := l.doBuildClient(gid)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Bind(ctx, cid, uid)
+	if err != nil {
+		return err
+	}
+
+	l.sources.Store(uid, gid)
+
+	return nil
+}
+
+// Unbind 解绑网关
+func (l *GateLinker) Unbind(ctx context.Context, uid int64) error {
+	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+		miss, err := client.Unbind(ctx, uid)
+		return miss, nil, err
+	})
+	if err != nil {
+		return err
+	}
+
+	l.sources.Delete(uid)
+
+	return nil
+}
+
+// GetIP 获取客户端IP
+func (l *GateLinker) GetIP(ctx context.Context, args *types.GetIPArgs) (string, error) {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectGetIP(ctx, args.GID, args.Kind, args.Target)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectGetIP(ctx, args.Target)
+		} else {
+			return l.doDirectGetIP(ctx, args.GID, args.Kind, args.Target)
+		}
+	default:
+		return "", errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接获取IP
+func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session.Kind, target int64) (string, error) {
+	client, err := l.doBuildClient(gid)
+	if err != nil {
+		return "", err
+	}
+
+	ip, _, err := client.GetIP(ctx, kind, target)
+	return ip, err
+}
+
+// 间接获取IP
+func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, error) {
+	v, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+		ip, miss, err := client.GetIP(ctx, session.User, uid)
+		return miss, ip, err
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return v.(string), nil
+}
+
+// Stat 统计会话总数
+func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	total := int64(0)
+	eg, ctx := errgroup.WithContext(ctx)
+
+	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			client, err := l.builder.Build(ep.Address())
+			if err != nil {
+				return err
+			}
+
+			n, err := client.Stat(ctx, kind)
+			if err != nil {
+				return err
+			}
+
+			atomic.AddInt64(&total, n)
+
+			return nil
+		})
+
+		return true
+	})
+
+	err := eg.Wait()
+
+	if total > 0 {
+		return total, nil
+	}
+
+	return total, err
+}
+
+// IsOnline 检测是否在线
+func (l *GateLinker) IsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectIsOnline(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectIsOnline(ctx, args)
+		} else {
+			return l.doDirectIsOnline(ctx, args)
+		}
+	default:
+		return false, errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接检测是否在线
+func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return false, err
+	}
+
+	_, isOnline, err := client.IsOnline(ctx, args.Kind, args.Target)
+	return isOnline, err
+}
+
+// 间接检测是否在线
+func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
+		return client.IsOnline(ctx, args.Kind, args.Target)
+	})
+
+	return v.(bool), err
+}
+
+// Disconnect 断开连接
+func (l *GateLinker) Disconnect(ctx context.Context, args *types.DisconnectArgs) error {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectDisconnect(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectDisconnect(ctx, args.Target, args.Force)
+		} else {
+			return l.doDirectDisconnect(ctx, args)
+		}
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接断开连接
+func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *types.DisconnectArgs) error {
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return err
+	}
+
+	if args.Async {
+		return client.AsyncDisconnect(ctx, args.Kind, args.Target, args.Force)
+	} else {
+		_, err = client.Disconnect(ctx, args.Kind, args.Target, args.Force)
+		return err
+	}
+}
+
+// 间接断开连接
+func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
+	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+		miss, err := client.Disconnect(ctx, session.User, uid, force)
+		return miss, nil, err
+	})
+
+	return err
+}
+
+// Push 推送消息
+func (l *GateLinker) Push(ctx context.Context, args *types.PushArgs) error {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectPush(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectPush(ctx, args)
+		} else {
+			return l.doDirectPush(ctx, args)
+		}
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接推送
+func (l *GateLinker) doDirectPush(ctx context.Context, args *types.PushArgs) error {
+	message, err := l.doPackMessage(args.Message, true)
+	if err != nil {
+		return err
+	}
+
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return err
+	}
+
+	if args.Async {
+		err = client.AsyncPush(ctx, args.Kind, args.Target, message)
+	} else {
+		_, err = client.Push(ctx, args.Kind, args.Target, message)
+	}
+
+	return err
+}
+
+// 间接推送
+func (l *GateLinker) doIndirectPush(ctx context.Context, args *types.PushArgs) error {
+	message, err := l.doPackMessage(args.Message, true)
+	if err != nil {
+		return err
+	}
+
+	_, err = l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
+		if args.Async {
+			err := client.AsyncPush(ctx, args.Kind, args.Target, message)
+			return false, nil, err
+		} else {
+			miss, err := client.Push(ctx, args.Kind, args.Target, message)
+			return miss, nil, err
+		}
+	})
+
+	return err
+}
+
+// Multicast 推送组播消息
+func (l *GateLinker) Multicast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectMulticast(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectMulticast(ctx, args)
+		} else {
+			return l.doDirectMulticast(ctx, args)
+		}
+	default:
+		return 0, errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接推送组播消息，只能推送到同一个网关服务器上
+func (l *GateLinker) doDirectMulticast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+	if len(args.Targets) == 0 {
+		return 0, errors.ErrReceiveTargetEmpty
+	}
+
+	message, err := l.doPackMessage(args.Message, true)
+	if err != nil {
+		return 0, err
+	}
+
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return 0, err
+	}
+
+	if args.Async {
+		return 0, client.AsyncMulticast(ctx, args.Kind, args.Targets, message)
+	} else {
+		return client.Multicast(ctx, args.Kind, args.Targets, message)
+	}
+}
+
+// 间接推送组播消息
+func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+	message, err := l.doPackMessage(args.Message, true)
+	if err != nil {
+		return 0, err
+	}
+
+	total := int64(0)
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, target := range args.Targets {
+		func(target int64) {
+			eg.Go(func() error {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+					if args.Async {
+						err := client.AsyncPush(ctx, args.Kind, target, message)
+						return false, nil, err
+					} else {
+						miss, err := client.Push(ctx, args.Kind, target, message)
+						return miss, nil, err
+					}
+				})
+				if err != nil {
+					return err
+				}
+
+				atomic.AddInt64(&total, 1)
+				return nil
+			})
+		}(target)
+	}
+
+	err = eg.Wait()
+
+	if total > 0 {
+		return total, nil
+	}
+
+	return 0, err
+}
+
+// Broadcast 推送广播消息
+func (l *GateLinker) Broadcast(ctx context.Context, args *types.BroadcastArgs) (int64, error) {
+	message, err := l.doPackMessage(args.Message, true)
+	if err != nil {
+		return 0, err
+	}
+
+	total := int64(0)
+	eg, ctx := errgroup.WithContext(ctx)
+	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			client, err := l.builder.Build(ep.Address())
+			if err != nil {
+				return err
+			}
+
+			if args.Async {
+				return client.AsyncBroadcast(ctx, args.Kind, message)
+			} else {
+				n, err := client.Broadcast(ctx, args.Kind, message)
+				if err != nil {
+					return err
+				}
+
+				atomic.AddInt64(&total, n)
+			}
+
+			return nil
+		})
+
+		return true
+	})
+
+	err = eg.Wait()
+
+	if total > 0 {
+		return total, nil
+	}
+
+	return total, err
+}
+
+// 执行RPC调用
+func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.Client) (bool, interface{}, error)) (interface{}, error) {
+	var (
+		err       error
+		gid       string
+		prev      string
+		client    *gate.Client
+		continued bool
+		reply     interface{}
+	)
+
+	for i := 0; i < 2; i++ {
+		if gid, err = l.Locate(ctx, uid); err != nil {
+			return nil, err
+		}
+
+		if gid == prev {
+			return reply, err
+		}
+
+		prev = gid
+
+		client, err = l.doBuildClient(gid)
+		if err != nil {
+			return nil, err
+		}
+
+		continued, reply, err = fn(client)
+		if continued {
+			l.sources.Delete(uid)
+			continue
+		}
+
+		break
+	}
+
+	return reply, err
+}
+
+// 构建网关客户端
+func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
+	if gid == "" {
+		return nil, errors.ErrInvalidGID
+	}
+
+	ep, err := l.dispatcher.FindEndpoint(gid)
+	if err != nil {
+		return nil, err
+	}
+
+	return l.builder.Build(ep.Address())
+}
+
+// 打包消息
+func (l *GateLinker) doPackMessage(message *types.Message, encrypt bool) ([]byte, error) {
+	buffer, err := l.toBuffer(message.Data, encrypt)
+	if err != nil {
+		return nil, err
+	}
+
+	return packet.PackMessage(&packet.Message{
+		Seq:    message.Seq,
+		Route:  message.Route,
+		Buffer: buffer,
+	})
+}
+
+// 消息转buffer
+func (l *GateLinker) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
+	if message == nil {
+		return nil, nil
+	}
+
+	if v, ok := message.([]byte); ok {
+		return v, nil
+	}
+
+	data, err := l.opts.Codec.Marshal(message)
+	if err != nil {
+		return nil, err
+	}
+
+	if encrypt && l.opts.Encryptor != nil {
+		return l.opts.Encryptor.Encrypt(data)
+	}
+
+	return data, nil
+}
+
+// WatchUserLocate 监听用户定位
+func (l *GateLinker) doWatchUserLocate() {
+	if l.opts.Locator == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	watcher, err := l.opts.Locator.Watch(ctx, cluster.Gate.String())
+	cancel()
+	if err != nil {
+		log.Fatalf("user locate event watch failed: %v", err)
+	}
+
+	go func() {
+		defer watcher.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// exec watch
+			}
+
+			events, err := watcher.Next()
+			if err != nil {
+				continue
+			}
+
+			for _, event := range events {
+				switch event.Type {
+				case locate.BindGate:
+					l.sources.Store(event.UID, event.InsID)
+				case locate.UnbindGate:
+					l.sources.Delete(event.UID)
+				default:
+					// ignore
+				}
+			}
+		}
+	}()
+}
+
+// 监听集群实例
+func (l *GateLinker) doWatchClusterInstance() {
+	ctx, cancel := context.WithTimeout(l.ctx, 3*time.Second)
+	watcher, err := l.opts.Registry.Watch(ctx, cluster.Gate.String())
+	cancel()
+	if err != nil {
+		log.Fatalf("the dispatcher instance watch failed: %v", err)
+	}
+
+	go func() {
+		defer watcher.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// exec watch
+			}
+
+			services, err := watcher.Next()
+			if err != nil {
+				continue
+			}
+
+			l.dispatcher.ReplaceServices(services...)
+		}
+	}()
+}

@@ -1,6 +1,8 @@
 package cluster
 
-import "github.com/dobyte/due/v2/internal/link"
+import (
+	"github.com/dobyte/due/v2/internal/link/types"
+)
 
 const (
 	Gate   Kind = iota + 1 // 网关服
@@ -94,16 +96,17 @@ func (h Hook) String() string {
 }
 
 type (
-	GetIPArgs      = link.GetIPArgs
-	PushArgs       = link.PushArgs
-	MulticastArgs  = link.MulticastArgs
-	BroadcastArgs  = link.BroadcastArgs
-	DisconnectArgs = link.DisconnectArgs
-	Message        = link.Message
+	GetIPArgs      = types.GetIPArgs
+	PushArgs       = types.PushArgs
+	MulticastArgs  = types.MulticastArgs
+	BroadcastArgs  = types.BroadcastArgs
+	IsOnlineArgs   = types.IsOnlineArgs
+	DisconnectArgs = types.DisconnectArgs
+	Message        = types.Message
+	DeliverArgs    struct {
+		NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
+		UID     int64    // 用户ID
+		Async   bool     // 是否异步
+		Message *Message // 消息
+	}
 )
-
-type DeliverArgs struct {
-	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
-	UID     int64    // 用户ID
-	Message *Message // 消息
-}

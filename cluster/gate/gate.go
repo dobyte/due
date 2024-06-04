@@ -11,11 +11,11 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
-	"github.com/dobyte/due/v2/transport"
 	"time"
 )
 
@@ -29,7 +29,7 @@ type Gate struct {
 	proxy       *proxy
 	instance    *registry.ServiceInstance
 	session     *session.Session
-	transporter transport.Server
+	transporter *gate.Server
 }
 
 func NewGate(opts ...Option) *Gate {
@@ -153,16 +153,16 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 
 // 启动传输服务器
 func (g *Gate) startTransporter() {
-	transporter, err := g.opts.transporter.NewGateServer(&provider{g})
+	transporter, err := gate.NewServer("", &provider{gate: g})
 	if err != nil {
-		log.Fatalf("transporter create failed: %v", err)
+		log.Fatalf("transport server create failed: %v", err)
 	}
 
 	g.transporter = transporter
 
 	go func() {
 		if err = g.transporter.Start(); err != nil {
-			log.Fatalf("transporter start failed: %v", err)
+			log.Errorf("transport server start failed: %v", err)
 		}
 	}()
 }
@@ -178,11 +178,11 @@ func (g *Gate) stopTransporter() {
 func (g *Gate) registerServiceInstance() {
 	g.instance = &registry.ServiceInstance{
 		ID:       g.opts.id,
-		Name:     string(cluster.Gate),
+		Name:     cluster.Gate.String(),
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    cluster.Work.String(),
-		Endpoint: g.transporter.Endpoint().String(),
+		Endpoint: g.transporter.Addr(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, timeout)

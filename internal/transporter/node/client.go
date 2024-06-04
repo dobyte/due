@@ -21,7 +21,7 @@ func NewClient(cli *client.Client) *Client {
 }
 
 // Trigger 触发事件
-func (c *Client) Trigger(ctx context.Context, cid, uid int64, event cluster.Event) (bool, error) {
+func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int64) (bool, error) {
 	seq := atomic.AddUint64(&c.seq, 1)
 
 	buf := protocol.EncodeTriggerReq(seq, event, cid, uid)
@@ -40,7 +40,7 @@ func (c *Client) Trigger(ctx context.Context, cid, uid int64, event cluster.Even
 }
 
 // AsyncTrigger 异步触发事件
-func (c *Client) AsyncTrigger(ctx context.Context, cid, uid int64, event cluster.Event) error {
+func (c *Client) AsyncTrigger(ctx context.Context, event cluster.Event, cid, uid int64) error {
 	return c.cli.Send(ctx, protocol.EncodeTriggerReq(0, event, cid, uid))
 }
 

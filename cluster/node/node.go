@@ -36,12 +36,12 @@ func NewNode(opts ...Option) *Node {
 
 	n := &Node{}
 	n.opts = o
+	n.ctx, n.cancel = context.WithCancel(o.ctx)
 	n.proxy = newProxy(n)
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
-	n.ctx, n.cancel = context.WithCancel(o.ctx)
 
 	n.setState(cluster.Shut)
 
@@ -85,8 +85,6 @@ func (n *Node) Start() {
 	n.startTransporter()
 
 	n.registerServiceInstance()
-
-	n.proxy.watch(n.ctx)
 
 	go n.dispatch()
 
@@ -193,7 +191,7 @@ func (n *Node) registerServiceInstance() {
 		State:    n.getState().String(),
 		Routes:   routes,
 		Events:   events,
-		Endpoint: n.transporter.Endpoint().String(),
+		Endpoint: n.transporter.Addr(),
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
