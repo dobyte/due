@@ -13,3 +13,12 @@ func TestParseAddr(t *testing.T) {
 
 	t.Log(listenAddr, exposeAddr)
 }
+
+func TestInternalIP(t *testing.T) {
+	ip, err := net.InternalIP()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(ip)
+}

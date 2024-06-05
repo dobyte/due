@@ -101,8 +101,3 @@ func WithLocator(locator locate.Locator) Option {
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
 }
-
-// WithTransporter 设置消息传输器
-func WithTransporter(transporter transport.Transporter) Option {
-	return func(o *options) { o.transporter = transporter }
-}

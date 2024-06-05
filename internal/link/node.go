@@ -6,7 +6,6 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/dispatcher"
-	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -33,9 +32,9 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 	}
 
-	go l.doWatchUserLocate()
+	l.doWatchUserLocate()
 
-	go l.doWatchClusterInstance()
+	l.doWatchClusterInstance()
 
 	return l
 }
@@ -126,13 +125,13 @@ func (l *NodeLinker) Unbind(ctx context.Context, uid int64, name, nid string) er
 }
 
 // Deliver 投递消息给节点处理
-func (l *NodeLinker) Deliver(ctx context.Context, args *types.DeliverArgs) error {
+func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	var message []byte
 
 	switch msg := args.Message.(type) {
 	case []byte:
 		message = msg
-	case *types.Message:
+	case *Message:
 		if m, err := l.doPackMessage(msg, false); err != nil {
 			return err
 		} else {
@@ -173,7 +172,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *types.DeliverArgs) error
 }
 
 // Trigger 触发事件
-func (l *NodeLinker) Trigger(ctx context.Context, args *types.TriggerArgs) error {
+func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 	event, err := l.dispatcher.FindEvent(int(args.Event))
 	if err != nil {
 		return err
@@ -210,6 +209,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 		prev      string
 		route     *dispatcher.Route
 		client    *node.Client
+		ep        *endpoint.Endpoint
 		continued bool
 		reply     interface{}
 	)
@@ -233,7 +233,12 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 			prev = nid
 		}
 
-		client, err = l.doBuildClient(nid)
+		ep, err = route.FindEndpoint(nid)
+		if err != nil {
+			return nil, err
+		}
+
+		client, err = l.builder.Build(ep.Address())
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +272,7 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 }
 
 // 打包消息
-func (l *NodeLinker) doPackMessage(message *types.Message, encrypt bool) ([]byte, error) {
+func (l *NodeLinker) doPackMessage(message *Message, encrypt bool) ([]byte, error) {
 	buffer, err := l.toBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
@@ -411,7 +416,7 @@ func (l *NodeLinker) doWatchClusterInstance() {
 		defer watcher.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-l.ctx.Done():
 				return
 			default:
 				// exec watch

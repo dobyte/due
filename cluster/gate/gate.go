@@ -16,10 +16,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
-	"time"
 )
-
-const timeout = 5 * time.Second
 
 type Gate struct {
 	component.Base
@@ -40,9 +37,9 @@ func NewGate(opts ...Option) *Gate {
 
 	g := &Gate{}
 	g.opts = o
+	g.ctx, g.cancel = context.WithCancel(o.ctx)
 	g.proxy = newProxy(g)
 	g.session = session.NewSession()
-	g.ctx, g.cancel = context.WithCancel(o.ctx)
 
 	return g
 }
@@ -69,21 +66,15 @@ func (g *Gate) Init() {
 	if g.opts.registry == nil {
 		log.Fatal("registry component is not injected")
 	}
-
-	if g.opts.transporter == nil {
-		log.Fatal("transporter component is not injected")
-	}
 }
 
 // Start 启动组件
 func (g *Gate) Start() {
 	g.startNetworkServer()
 
-	g.startTransporter()
+	g.startTransportServer()
 
 	g.registerServiceInstance()
-
-	g.proxy.watch(g.ctx)
 
 	g.debugPrint()
 }
@@ -94,7 +85,7 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
-	g.stopTransporter()
+	g.stopTransportServer()
 
 	g.cancel()
 }
@@ -152,8 +143,8 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 }
 
 // 启动传输服务器
-func (g *Gate) startTransporter() {
-	transporter, err := gate.NewServer("", &provider{gate: g})
+func (g *Gate) startTransportServer() {
+	transporter, err := gate.NewServer(":0", &provider{gate: g})
 	if err != nil {
 		log.Fatalf("transport server create failed: %v", err)
 	}
@@ -168,9 +159,9 @@ func (g *Gate) startTransporter() {
 }
 
 // 停止传输服务器
-func (g *Gate) stopTransporter() {
+func (g *Gate) stopTransportServer() {
 	if err := g.transporter.Stop(); err != nil {
-		log.Errorf("transporter stop failed: %v", err)
+		log.Errorf("transport server stop failed: %v", err)
 	}
 }
 
@@ -182,29 +173,29 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    cluster.Work.String(),
-		Endpoint: g.transporter.Addr(),
+		Endpoint: g.transporter.Endpoint().String(),
 	}
 
-	ctx, cancel := context.WithTimeout(g.ctx, timeout)
+	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register gate instance failed: %v", err)
+		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // 解注册服务实例
 func (g *Gate) deregisterServiceInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, timeout)
+	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
 	if err != nil {
-		log.Errorf("deregister gate instance failed: %v", err)
+		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }
 
 func (g *Gate) debugPrint() {
 	log.Debugf("gate server startup successful")
 	log.Debugf("%s server listen on %s", g.opts.server.Protocol(), g.opts.server.Addr())
-	log.Debugf("%s server listen on %s", g.transporter.Scheme(), g.transporter.Addr())
+	log.Debugf("transport server listen on %s", g.transporter.ListenAddr())
 }

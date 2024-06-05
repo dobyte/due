@@ -82,7 +82,7 @@ func (n *Node) Init() {
 func (n *Node) Start() {
 	n.setState(cluster.Work)
 
-	n.startTransporter()
+	n.startTransportServer()
 
 	n.registerServiceInstance()
 
@@ -101,7 +101,7 @@ func (n *Node) Destroy() {
 
 	n.deregisterServiceInstance()
 
-	n.stopTransporter()
+	n.stopTransportServer()
 
 	n.router.close()
 
@@ -145,7 +145,7 @@ func (n *Node) dispatch() {
 }
 
 // 启动传输服务器
-func (n *Node) startTransporter() {
+func (n *Node) startTransportServer() {
 	transporter, err := node.NewServer("", &provider{node: n})
 	if err != nil {
 		log.Fatalf("transport server create failed: %v", err)
@@ -161,9 +161,9 @@ func (n *Node) startTransporter() {
 }
 
 // 停止传输服务器
-func (n *Node) stopTransporter() {
+func (n *Node) stopTransportServer() {
 	if err := n.transporter.Stop(); err != nil {
-		log.Errorf("transporter stop failed: %v", err)
+		log.Errorf("transport server stop failed: %v", err)
 	}
 }
 
@@ -191,7 +191,7 @@ func (n *Node) registerServiceInstance() {
 		State:    n.getState().String(),
 		Routes:   routes,
 		Events:   events,
-		Endpoint: n.transporter.Addr(),
+		Endpoint: n.transporter.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
@@ -256,7 +256,7 @@ func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 
 func (n *Node) debugPrint() {
 	log.Debugf("node server startup successful")
-	log.Debugf("transport server listen on %s", n.transporter.Addr())
+	log.Debugf("transport server listen on %s", n.transporter.ListenAddr())
 }
 
 // 执行钩子函数

@@ -65,6 +65,7 @@ func InternalIP() (string, error) {
 	var (
 		addrs []net.Addr
 		ipnet net.IP
+		ip    string
 	)
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
@@ -94,13 +95,23 @@ func InternalIP() (string, error) {
 				continue
 			}
 
-			if ipv4 := ipnet.To4(); ipv4 != nil {
-				return ipv4.String(), nil
+			if ipv4 := ipnet.To4(); ipv4 != nil && ipv4.IsPrivate() {
+				if ipv4[0] == 192 && ipv4[1] == 168 {
+					return ipv4.String(), nil
+				}
+
+				if ip == "" {
+					ip = ipv4.String()
+				}
 			}
 		}
 	}
 
-	return "", errors.New("not found ip address")
+	if ip != "" {
+		return ip, nil
+	} else {
+		return "", errors.New("not found ip address")
+	}
 }
 
 // ExternalIP 获取外网IP地址

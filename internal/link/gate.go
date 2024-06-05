@@ -6,7 +6,6 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/dispatcher"
-	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -34,9 +33,9 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 	}
 
-	go l.doWatchUserLocate()
+	l.doWatchUserLocate()
 
-	go l.doWatchClusterInstance()
+	l.doWatchClusterInstance()
 
 	return l
 }
@@ -110,7 +109,7 @@ func (l *GateLinker) Unbind(ctx context.Context, uid int64) error {
 }
 
 // GetIP 获取客户端IP
-func (l *GateLinker) GetIP(ctx context.Context, args *types.GetIPArgs) (string, error) {
+func (l *GateLinker) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectGetIP(ctx, args.GID, args.Kind, args.Target)
@@ -184,7 +183,7 @@ func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (int64, error)
 }
 
 // IsOnline 检测是否在线
-func (l *GateLinker) IsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+func (l *GateLinker) IsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectIsOnline(ctx, args)
@@ -200,7 +199,7 @@ func (l *GateLinker) IsOnline(ctx context.Context, args *types.IsOnlineArgs) (bo
 }
 
 // 直接检测是否在线
-func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
 		return false, err
@@ -211,7 +210,7 @@ func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *types.IsOnlineA
 }
 
 // 间接检测是否在线
-func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *types.IsOnlineArgs) (bool, error) {
+func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
 	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
 		return client.IsOnline(ctx, args.Kind, args.Target)
 	})
@@ -220,7 +219,7 @@ func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *types.IsOnlin
 }
 
 // Disconnect 断开连接
-func (l *GateLinker) Disconnect(ctx context.Context, args *types.DisconnectArgs) error {
+func (l *GateLinker) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectDisconnect(ctx, args)
@@ -236,7 +235,7 @@ func (l *GateLinker) Disconnect(ctx context.Context, args *types.DisconnectArgs)
 }
 
 // 直接断开连接
-func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *types.DisconnectArgs) error {
+func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArgs) error {
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
 		return err
@@ -261,7 +260,7 @@ func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force 
 }
 
 // Push 推送消息
-func (l *GateLinker) Push(ctx context.Context, args *types.PushArgs) error {
+func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectPush(ctx, args)
@@ -277,7 +276,7 @@ func (l *GateLinker) Push(ctx context.Context, args *types.PushArgs) error {
 }
 
 // 直接推送
-func (l *GateLinker) doDirectPush(ctx context.Context, args *types.PushArgs) error {
+func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return err
@@ -298,7 +297,7 @@ func (l *GateLinker) doDirectPush(ctx context.Context, args *types.PushArgs) err
 }
 
 // 间接推送
-func (l *GateLinker) doIndirectPush(ctx context.Context, args *types.PushArgs) error {
+func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return err
@@ -318,7 +317,7 @@ func (l *GateLinker) doIndirectPush(ctx context.Context, args *types.PushArgs) e
 }
 
 // Multicast 推送组播消息
-func (l *GateLinker) Multicast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectMulticast(ctx, args)
@@ -334,7 +333,7 @@ func (l *GateLinker) Multicast(ctx context.Context, args *types.MulticastArgs) (
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
-func (l *GateLinker) doDirectMulticast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	if len(args.Targets) == 0 {
 		return 0, errors.ErrReceiveTargetEmpty
 	}
@@ -357,7 +356,7 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *types.Multicas
 }
 
 // 间接推送组播消息
-func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *types.MulticastArgs) (int64, error) {
+func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return 0, err
@@ -397,7 +396,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *types.Multic
 }
 
 // Broadcast 推送广播消息
-func (l *GateLinker) Broadcast(ctx context.Context, args *types.BroadcastArgs) (int64, error) {
+func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return 0, err
@@ -492,7 +491,7 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 }
 
 // 打包消息
-func (l *GateLinker) doPackMessage(message *types.Message, encrypt bool) ([]byte, error) {
+func (l *GateLinker) doPackMessage(message *Message, encrypt bool) ([]byte, error) {
 	buffer, err := l.toBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
@@ -582,7 +581,7 @@ func (l *GateLinker) doWatchClusterInstance() {
 		defer watcher.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-l.ctx.Done():
 				return
 			default:
 				// exec watch

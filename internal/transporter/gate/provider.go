@@ -18,10 +18,10 @@ type Provider interface {
 	Stat(ctx context.Context, kind session.Kind) (total int64, err error)
 	// Disconnect 断开连接
 	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error
-	// Push 发送消息（异步）
+	// Push 发送消息
 	Push(ctx context.Context, kind session.Kind, target int64, message []byte) error
-	// Multicast 推送组播消息（异步）
+	// Multicast 推送组播消息
 	Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (total int64, err error)
-	// Broadcast 推送广播消息（异步）
+	// Broadcast 推送广播消息
 	Broadcast(ctx context.Context, kind session.Kind, message []byte) (total int64, err error)
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
@@ -11,13 +12,16 @@ import (
 	"time"
 )
 
+const scheme = "drpc"
+
 type Server struct {
-	listener   net.Listener           // 监听器
-	listenAddr string                 // 监听地址
-	exposeAddr string                 // 暴露地址
-	rw         sync.RWMutex           // 锁
-	conns      map[net.Conn]*Conn     // 连接
-	handlers   map[uint8]RouteHandler // 路由处理器
+	listener    net.Listener           // 监听器
+	listenAddr  string                 // 监听地址
+	exposeAddr  string                 // 暴露地址
+	endpoint    *endpoint.Endpoint     // 暴露端点
+	handlers    map[uint8]RouteHandler // 路由处理器
+	rw          sync.RWMutex           // 锁
+	connections map[net.Conn]*Conn     // 连接
 }
 
 func NewServer(opts *Options) (*Server, error) {
@@ -29,16 +33,32 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
-	s.conns = make(map[net.Conn]*Conn)
+	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
+	s.connections = make(map[net.Conn]*Conn)
 	s.handlers = make(map[uint8]RouteHandler)
 	s.handlers[route.Handshake] = s.handshake
 
 	return s, nil
 }
 
-// Addr 监听地址
-func (s *Server) Addr() string {
+// Scheme 协议
+func (s *Server) Scheme() string {
+	return scheme
+}
+
+// ListenAddr 监听地址
+func (s *Server) ListenAddr() string {
+	return s.listenAddr
+}
+
+// ExposeAddr 暴露地址
+func (s *Server) ExposeAddr() string {
 	return s.exposeAddr
+}
+
+// Endpoint 暴露端点
+func (s *Server) Endpoint() *endpoint.Endpoint {
+	return s.endpoint
 }
 
 // Start 启动服务器
@@ -86,6 +106,22 @@ func (s *Server) Start() error {
 	}
 }
 
+// Stop 停止服务器
+func (s *Server) Stop() error {
+	if err := s.listener.Close(); err != nil {
+		return err
+	}
+
+	s.rw.Lock()
+	for _, conn := range s.connections {
+		_ = conn.close()
+	}
+	s.connections = nil
+	s.rw.Unlock()
+
+	return nil
+}
+
 // RegisterHandler 注册处理器
 func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 	s.handlers[route] = handler
@@ -94,14 +130,14 @@ func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 // 分配连接
 func (s *Server) allocate(conn net.Conn) {
 	s.rw.Lock()
-	s.conns[conn] = newConn(s, conn)
+	s.connections[conn] = newConn(s, conn)
 	s.rw.Unlock()
 }
 
 // 回收连接
 func (s *Server) recycle(conn net.Conn) {
 	s.rw.Lock()
-	delete(s.conns, conn)
+	delete(s.connections, conn)
 	s.rw.Unlock()
 }
 

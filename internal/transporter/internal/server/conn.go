@@ -63,13 +63,16 @@ func (c *Conn) checkState() error {
 }
 
 // 关闭连接
-func (c *Conn) close() error {
+func (c *Conn) close(isNeedRecycle ...bool) error {
 	if !atomic.CompareAndSwapInt32(&c.state, connOpened, connClosed) {
 		return errors.ErrConnectionClosed
 	}
 
 	c.cancel()
-	c.server.recycle(c.conn)
+
+	if len(isNeedRecycle) > 0 && isNeedRecycle[0] {
+		c.server.recycle(c.conn)
+	}
 
 	return c.conn.Close()
 }
@@ -85,7 +88,7 @@ func (c *Conn) read() {
 		default:
 			isHeartbeat, route, _, data, err := protocol.ReadMessage(conn)
 			if err != nil {
-				_ = c.close()
+				_ = c.close(true)
 				return
 			}
 

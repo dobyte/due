@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/link"
-	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
@@ -156,22 +155,25 @@ func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (strin
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	list := make([]string, 0, len(states))
-	for _, state := range states {
-		list = append(list, state.String())
-	}
-
-	return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
+	//list := make([]string, 0, len(states))
+	//for _, state := range states {
+	//	list = append(list, state.String())
+	//}
+	//
+	//return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
+	return nil, nil
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	list := make([]string, 0, len(states))
-	for _, state := range states {
-		list = append(list, state.String())
-	}
+	//list := make([]string, 0, len(states))
+	//for _, state := range states {
+	//	list = append(list, state.String())
+	//}
+	//
+	//return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
 
-	return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
+	return nil, nil
 }
 
 // GetIP 获取客户端IP
@@ -216,7 +218,7 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 		return nil
 	}
 
-	return p.nodeLinker.Deliver(ctx, &types.DeliverArgs{
+	return p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		NID:     args.NID,
 		UID:     args.UID,
 		Async:   args.Async,

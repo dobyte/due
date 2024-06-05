@@ -6,7 +6,6 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
-	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
@@ -100,7 +99,7 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, uid int64) (string, error) {
-	return p.link.GetIP(ctx, &types.GetIPArgs{
+	return p.link.GetIP(ctx, &link.GetIPArgs{
 		Kind:   session.User,
 		Target: uid,
 	})
@@ -108,7 +107,7 @@ func (p *Proxy) GetIP(ctx context.Context, uid int64) (string, error) {
 
 // Push 推送消息
 func (p *Proxy) Push(ctx context.Context, uid int64, message *cluster.Message) error {
-	return p.link.Push(ctx, &types.PushArgs{
+	return p.link.Push(ctx, &link.PushArgs{
 		Kind:    session.User,
 		Target:  uid,
 		Message: message,
@@ -117,7 +116,7 @@ func (p *Proxy) Push(ctx context.Context, uid int64, message *cluster.Message) e
 
 // Multicast 推送组播消息
 func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *cluster.Message) (int64, error) {
-	return p.link.Multicast(ctx, &types.MulticastArgs{
+	return p.link.Multicast(ctx, &link.MulticastArgs{
 		Kind:    session.User,
 		Targets: uids[:],
 		Message: message,
@@ -126,7 +125,7 @@ func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *cluster.Me
 
 // Broadcast 推送广播消息
 func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *cluster.Message) (int64, error) {
-	return p.link.Broadcast(ctx, &types.BroadcastArgs{
+	return p.link.Broadcast(ctx, &link.BroadcastArgs{
 		Kind:    kind,
 		Message: message,
 	})
@@ -134,7 +133,7 @@ func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *clust
 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, uid int64, message *cluster.Message) error {
-	return p.link.Deliver(ctx, &types.DeliverArgs{
+	return p.link.Deliver(ctx, &link.DeliverArgs{
 		UID:     uid,
 		Message: message,
 	})
@@ -147,7 +146,7 @@ func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 
 // Disconnect 断开连接
 func (p *Proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
-	return p.link.Disconnect(ctx, &types.DisconnectArgs{
+	return p.link.Disconnect(ctx, &link.DisconnectArgs{
 		Kind:    session.User,
 		Target:  uid,
 		IsForce: isForce,

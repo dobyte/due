@@ -5,7 +5,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
-	"github.com/dobyte/due/v2/internal/link/types"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/packet"
@@ -41,7 +40,7 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id)
 	if err != nil {
-		log.Errorf("user unbind failed, gid: %d, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
+		log.Errorf("user unbind failed, gid: %s, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
 	}
 
 	return err
@@ -53,7 +52,7 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 		log.Debugf("trigger event, event: %v cid: %d uid: %d", event.String(), cid, uid)
 	}
 
-	if err := p.nodeLinker.Trigger(ctx, &types.TriggerArgs{
+	if err := p.nodeLinker.Trigger(ctx, &link.TriggerArgs{
 		Event: event,
 		CID:   cid,
 		UID:   uid,
@@ -75,12 +74,12 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 		log.Debugf("deliver message, cid: %d uid: %d route: %d buffer: %s", cid, uid, msg.Route, string(msg.Buffer))
 	}
 
-	if err = p.nodeLinker.Deliver(ctx, &types.DeliverArgs{
+	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		CID:     cid,
 		UID:     uid,
 		Route:   msg.Route,
 		Message: message,
 	}); err != nil {
-		log.Errorf("deliver message failed, cid = %d uid = %d err = %v", cid, uid, err)
+		log.Errorf("deliver message failed, cid: %d uid: %d route: %d err: %v", cid, uid, msg.Route, err)
 	}
 }

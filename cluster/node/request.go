@@ -111,9 +111,9 @@ func (r *request) Context() context.Context {
 func (r *request) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return r.node.proxy.BindGate(r.ctx, uid[0], r.gid, r.cid)
+		return r.node.proxy.BindGate(r.ctx, r.gid, r.cid, uid[0])
 	case r.uid != 0:
-		return r.node.proxy.BindGate(r.ctx, r.uid, r.gid, r.cid)
+		return r.node.proxy.BindGate(r.ctx, r.gid, r.cid, r.uid)
 	default:
 		return errors.ErrIllegalOperation
 	}
@@ -199,15 +199,15 @@ func (r *request) Response(message interface{}) error {
 }
 
 // Disconnect 关闭来自网关的连接
-func (r *request) Disconnect(isForce ...bool) error {
+func (r *request) Disconnect(force ...bool) error {
 	if r.gid == "" {
 		return errors.ErrIllegalOperation
 	}
 
 	return r.node.proxy.Disconnect(r.ctx, &cluster.DisconnectArgs{
-		GID:     r.gid,
-		Kind:    session.Conn,
-		Target:  r.cid,
-		IsForce: len(isForce) > 0 && isForce[0],
+		GID:    r.gid,
+		Kind:   session.Conn,
+		Target: r.cid,
+		Force:  len(force) > 0 && force[0],
 	})
 }
