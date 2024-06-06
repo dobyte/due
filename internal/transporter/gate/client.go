@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
@@ -137,7 +138,7 @@ func (c *Client) AsyncDisconnect(ctx context.Context, kind session.Kind, target 
 }
 
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message []byte) (bool, error) {
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) (bool, error) {
 	seq := atomic.AddUint64(&c.seq, 1)
 
 	buf := protocol.EncodePushReq(seq, kind, target, message)
@@ -156,7 +157,7 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 }
 
 // AsyncPush 异步推送消息
-func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message []byte) error {
+func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
 }
 

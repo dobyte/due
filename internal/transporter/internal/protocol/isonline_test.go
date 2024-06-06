@@ -21,12 +21,13 @@ func TestDecodeIsOnlineReq(t *testing.T) {
 }
 
 func TestDecodeIsOnlineRes(t *testing.T) {
-	buffer := protocol.EncodeIsOnlineRes(1, codes.NotFoundSession)
+	buffer := protocol.EncodeIsOnlineRes(1, codes.NotFoundSession, false)
 
-	code, err := protocol.DecodeIsOnlineRes(buffer.Bytes())
+	code, isOnline, err := protocol.DecodeIsOnlineRes(buffer.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("code: %v", code)
+	t.Logf("isOnline: %v", isOnline)
 }

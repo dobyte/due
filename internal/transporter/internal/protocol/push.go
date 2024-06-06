@@ -16,16 +16,20 @@ const (
 
 // EncodePushReq 编码推送请求
 // 协议：size + header + route + seq + session kind + target + <message packet>
-func EncodePushReq(seq uint64, kind session.Kind, target int64, message []byte) buffer.Buffer {
+func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.Buffer) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(pushReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(pushReqBytes-defaultSizeBytes+len(message)))
+	writer.WriteUint32s(binary.BigEndian, uint32(pushReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Push)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
-	buf.Mount(message)
+	message.Range(func(node *buffer.NocopyNode) bool {
+		buf.Mount(node.Bytes())
+		return true
+	})
+	message.Release()
 
 	return buf
 }

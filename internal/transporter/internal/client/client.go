@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xrand"
 )
 
 const (
@@ -80,6 +79,6 @@ func (c *Client) conn(idx ...int64) *Conn {
 	if len(idx) > 0 {
 		return c.conns[idx[0]%ordered]
 	} else {
-		return c.conns[xrand.Int(ordered, unordered+ordered-1)]
+		return c.conns[0]
 	}
 }

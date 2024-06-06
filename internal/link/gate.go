@@ -277,7 +277,16 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
-	message, err := l.doPackMessage(args.Message, true)
+	buffer, err := l.toBuffer(args.Message.Data, true)
+	if err != nil {
+		return err
+	}
+
+	message, err := packet.PackMessage2(&packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	})
 	if err != nil {
 		return err
 	}
@@ -298,7 +307,16 @@ func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
 
 // 间接推送
 func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
-	message, err := l.doPackMessage(args.Message, true)
+	buffer, err := l.toBuffer(args.Message.Data, true)
+	if err != nil {
+		return err
+	}
+
+	message, err := packet.PackMessage2(&packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	})
 	if err != nil {
 		return err
 	}
@@ -357,7 +375,16 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 
 // 间接推送组播消息
 func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
-	message, err := l.doPackMessage(args.Message, true)
+	buffer, err := l.toBuffer(args.Message.Data, true)
+	if err != nil {
+		return 0, err
+	}
+
+	message, err := packet.PackMessage2(&packet.Message{
+		Seq:    args.Message.Seq,
+		Route:  args.Message.Route,
+		Buffer: buffer,
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -532,7 +559,7 @@ func (l *GateLinker) doWatchUserLocate() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(l.ctx, 3*time.Second)
 	watcher, err := l.opts.Locator.Watch(ctx, cluster.Gate.String())
 	cancel()
 	if err != nil {
@@ -543,7 +570,7 @@ func (l *GateLinker) doWatchUserLocate() {
 		defer watcher.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-l.ctx.Done():
 				return
 			default:
 				// exec watch

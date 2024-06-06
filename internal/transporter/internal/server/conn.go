@@ -43,12 +43,13 @@ func (c *Conn) Send(buf buffer.Buffer) (err error) {
 	}
 
 	buf.Range(func(node *buffer.NocopyNode) bool {
-		defer node.Release()
 		if _, err = c.conn.Write(node.Bytes()); err != nil {
 			return false
 		}
 		return true
 	})
+
+	buf.Release()
 
 	return
 }

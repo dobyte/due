@@ -367,7 +367,7 @@ func (l *NodeLinker) doWatchUserLocate() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(l.ctx, 3*time.Second)
 	watcher, err := l.opts.Locator.Watch(ctx, cluster.Node.String())
 	cancel()
 	if err != nil {
@@ -378,7 +378,7 @@ func (l *NodeLinker) doWatchUserLocate() {
 		defer watcher.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-l.ctx.Done():
 				return
 			default:
 				// exec watch
