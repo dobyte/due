@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ordered   = 10 // 有序连接数
-	unordered = 3  // 无序连接数
+	ordered   = 20 // 有序连接数
+	unordered = 10 // 无序连接数
 )
 
 type chWrite struct {
@@ -28,7 +28,7 @@ func NewClient(opts *Options) (*Client, error) {
 	c := &Client{}
 	c.opts = opts
 	c.conns = make([]*Conn, 0, ordered+unordered)
-	c.chWrite = make(chan *chWrite, 4096)
+	c.chWrite = make(chan *chWrite, 40960)
 
 	for i := 0; i < ordered; i++ {
 		c.conns = append(c.conns, NewConn(c))
@@ -79,6 +79,6 @@ func (c *Client) conn(idx ...int64) *Conn {
 	if len(idx) > 0 {
 		return c.conns[idx[0]%ordered]
 	} else {
-		return c.conns[0]
+		return c.conns[ordered]
 	}
 }

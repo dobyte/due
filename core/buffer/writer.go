@@ -45,6 +45,7 @@ func (w *Writer) Bytes() []byte {
 // Reset 复位
 func (w *Writer) Reset() {
 	w.off = 0
+	w.buf = w.buf[:0]
 }
 
 // Grow 增长空间

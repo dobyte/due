@@ -50,7 +50,7 @@ func (c *Client) Deliver(ctx context.Context, cid, uid int64, message []byte) (b
 
 	buf := protocol.EncodeDeliverReq(seq, cid, uid, message)
 
-	res, err := c.cli.Call(ctx, seq, buf)
+	res, err := c.cli.Call(ctx, seq, buf, cid)
 	if err != nil {
 		return false, err
 	}
@@ -65,5 +65,5 @@ func (c *Client) Deliver(ctx context.Context, cid, uid int64, message []byte) (b
 
 // AsyncDeliver 异步投递消息
 func (c *Client) AsyncDeliver(ctx context.Context, cid, uid int64, message []byte) error {
-	return c.cli.Send(ctx, protocol.EncodeDeliverReq(0, cid, uid, message))
+	return c.cli.Send(ctx, protocol.EncodeDeliverReq(0, cid, uid, message), cid)
 }

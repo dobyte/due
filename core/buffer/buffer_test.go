@@ -100,3 +100,11 @@ func TestNewBuffer2(t *testing.T) {
 	fmt.Println(buff.Bytes())
 
 }
+
+func TestNocopyBuffer_Malloc(t *testing.T) {
+	buff := buffer.NewNocopyBuffer()
+
+	buff.Malloc(10)
+
+	buff.Malloc(250)
+}

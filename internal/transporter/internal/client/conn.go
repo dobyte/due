@@ -26,7 +26,7 @@ func NewConn(client *Client, ch ...chan *chWrite) *Conn {
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
 	} else {
-		c.chWrite = make(chan *chWrite, 4096)
+		c.chWrite = make(chan *chWrite, 40960)
 	}
 
 	c.dial()
