@@ -36,12 +36,52 @@ func (b *NocopyBuffer) Nodes() int {
 	return b.num
 }
 
-// Mount 挂载数据到Buffer上
-func (b *NocopyBuffer) Mount(data []byte, whence ...Whence) {
-	if len(whence) > 0 && whence[0] == Head {
-		b.addToHead(&NocopyNode{buf: data})
-	} else {
-		b.addToTail(&NocopyNode{buf: data})
+// Mount 挂载块到Buffer上
+func (b *NocopyBuffer) Mount(block interface{}, whence ...Whence) {
+	switch v := block.(type) {
+	case []byte:
+		if len(whence) > 0 && whence[0] == Head {
+			b.addToHead(&NocopyNode{buf: v})
+		} else {
+			b.addToTail(&NocopyNode{buf: v})
+		}
+	case *NocopyBuffer:
+		if v == nil || v.head == nil {
+			return
+		}
+
+		b.num += v.num
+		b.len = -1
+
+		if len(whence) > 0 && whence[0] == Head {
+			if b.head != nil {
+				v.tail.next = b.head
+				b.head.prev = v.tail
+			}
+
+			b.head = v.head
+
+			if b.tail == nil {
+				b.tail = v.tail
+			}
+		} else {
+			if b.tail != nil {
+				v.head.prev = b.tail
+				b.tail.next = v.head
+			}
+
+			b.tail = v.tail
+
+			if b.head == nil {
+				b.head = v.head
+			}
+		}
+	case *NocopyNode:
+		if len(whence) > 0 && whence[0] == Head {
+			b.addToHead(v)
+		} else {
+			b.addToTail(v)
+		}
 	}
 }
 
@@ -105,6 +145,10 @@ func (b *NocopyBuffer) Release() {
 
 // 添加到尾部
 func (b *NocopyBuffer) addToTail(node *NocopyNode) {
+	if node == nil {
+		return
+	}
+
 	if b.head == nil {
 		b.head = node
 		b.tail = node
@@ -119,6 +163,10 @@ func (b *NocopyBuffer) addToTail(node *NocopyNode) {
 
 // 添加到头部
 func (b *NocopyBuffer) addToHead(node *NocopyNode) {
+	if node == nil {
+		return
+	}
+	
 	if b.head == nil {
 		b.head = node
 		b.tail = node

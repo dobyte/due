@@ -3,6 +3,7 @@ package link
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/dispatcher"
@@ -277,16 +278,7 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
-	buffer, err := l.toBuffer(args.Message.Data, true)
-	if err != nil {
-		return err
-	}
-
-	message, err := packet.PackMessage2(&packet.Message{
-		Seq:    args.Message.Seq,
-		Route:  args.Message.Route,
-		Buffer: buffer,
-	})
+	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
@@ -296,46 +288,25 @@ func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
 		return err
 	}
 
-	if args.Async {
-		err = client.AsyncPush(ctx, args.Kind, args.Target, message)
-	} else {
-		_, err = client.Push(ctx, args.Kind, args.Target, message)
-	}
-
-	return err
+	return client.Push(ctx, args.Kind, args.Target, message)
 }
 
 // 间接推送
 func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
-	buffer, err := l.toBuffer(args.Message.Data, true)
-	if err != nil {
-		return err
-	}
-
-	message, err := packet.PackMessage2(&packet.Message{
-		Seq:    args.Message.Seq,
-		Route:  args.Message.Route,
-		Buffer: buffer,
-	})
+	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
 
 	_, err = l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
-		if args.Async {
-			err := client.AsyncPush(ctx, args.Kind, args.Target, message)
-			return false, nil, err
-		} else {
-			miss, err := client.Push(ctx, args.Kind, args.Target, message)
-			return miss, nil, err
-		}
+		return false, nil, client.Push(ctx, args.Kind, args.Target, message)
 	})
 
 	return err
 }
 
 // Multicast 推送组播消息
-func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
+func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) error {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectMulticast(ctx, args)
@@ -346,91 +317,65 @@ func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64,
 			return l.doDirectMulticast(ctx, args)
 		}
 	default:
-		return 0, errors.ErrInvalidSessionKind
+		return errors.ErrInvalidSessionKind
 	}
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
-func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
+func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) error {
 	if len(args.Targets) == 0 {
-		return 0, errors.ErrReceiveTargetEmpty
+		return errors.ErrReceiveTargetEmpty
 	}
 
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	if args.Async {
-		return 0, client.AsyncMulticast(ctx, args.Kind, args.Targets, message)
-	} else {
-		return client.Multicast(ctx, args.Kind, args.Targets, message)
-	}
+	return client.Multicast(ctx, args.Kind, args.Targets, message)
 }
 
 // 间接推送组播消息
-func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
-	buffer, err := l.toBuffer(args.Message.Data, true)
-	if err != nil {
-		return 0, err
+func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) error {
+	if len(args.Targets) == 0 {
+		return errors.ErrReceiveTargetEmpty
 	}
 
-	message, err := packet.PackMessage2(&packet.Message{
-		Seq:    args.Message.Seq,
-		Route:  args.Message.Route,
-		Buffer: buffer,
-	})
+	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
+
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
 				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
-					if args.Async {
-						err := client.AsyncPush(ctx, args.Kind, target, message)
-						return false, nil, err
-					} else {
-						miss, err := client.Push(ctx, args.Kind, target, message)
-						return miss, nil, err
-					}
+					return false, nil, client.Push(ctx, args.Kind, target, message)
 				})
-				if err != nil {
-					return err
-				}
-
-				atomic.AddInt64(&total, 1)
-				return nil
+				return err
 			})
 		}(target)
 	}
 
-	err = eg.Wait()
-
-	if total > 0 {
-		return total, nil
-	}
-
-	return 0, err
+	return eg.Wait()
 }
 
 // Broadcast 推送广播消息
-func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
+func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
 	message, err := l.doPackMessage(args.Message, true)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
+
 	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
 			client, err := l.builder.Build(ep.Address())
@@ -438,30 +383,13 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 				return err
 			}
 
-			if args.Async {
-				return client.AsyncBroadcast(ctx, args.Kind, message)
-			} else {
-				n, err := client.Broadcast(ctx, args.Kind, message)
-				if err != nil {
-					return err
-				}
-
-				atomic.AddInt64(&total, n)
-			}
-
-			return nil
+			return client.Broadcast(ctx, args.Kind, message)
 		})
 
 		return true
 	})
 
-	err = eg.Wait()
-
-	if total > 0 {
-		return total, nil
-	}
-
-	return total, err
+	return eg.Wait()
 }
 
 // 执行RPC调用
@@ -518,16 +446,16 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 }
 
 // 打包消息
-func (l *GateLinker) doPackMessage(message *Message, encrypt bool) ([]byte, error) {
-	buffer, err := l.toBuffer(message.Data, encrypt)
+func (l *GateLinker) doPackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
+	buf, err := l.toBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
 
-	return packet.PackMessage(&packet.Message{
+	return packet.PackBuffer(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
-		Buffer: buffer,
+		Buffer: buf,
 	})
 }
 

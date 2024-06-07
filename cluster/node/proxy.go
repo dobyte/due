@@ -202,12 +202,12 @@ func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
 }
 
 // Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
+func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) error {
 	return p.gateLinker.Multicast(ctx, args)
 }
 
 // Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
+func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) error {
 	return p.gateLinker.Broadcast(ctx, args)
 }
 

@@ -108,3 +108,25 @@ func TestNocopyBuffer_Malloc(t *testing.T) {
 
 	buff.Malloc(250)
 }
+
+func TestNocopyBuffer_Mount(t *testing.T) {
+	buff1 := buffer.NewNocopyBuffer()
+
+	writer1 := buff1.Malloc(8)
+	writer1.WriteInt64s(binary.BigEndian, 1)
+
+	writer2 := buff1.Malloc(8)
+	writer2.WriteInt64s(binary.BigEndian, 2)
+
+	buff2 := buffer.NewNocopyBuffer()
+
+	writer3 := buff2.Malloc(8)
+	writer3.WriteInt64s(binary.BigEndian, 3)
+
+	writer4 := buff2.Malloc(8)
+	writer4.WriteInt64s(binary.BigEndian, 4)
+
+	buff1.Mount(buff2, buffer.Head)
+
+	fmt.Println(buff1.Bytes())
+}

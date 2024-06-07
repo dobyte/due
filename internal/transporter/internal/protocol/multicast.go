@@ -17,11 +17,11 @@ const (
 
 // EncodeMulticastReq 编码组播请求（最多组播65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + <message packet>
-func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message []byte) buffer.Buffer {
+func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message buffer.Buffer) buffer.Buffer {
 	size := multicastReqBytes + len(targets)*8
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(size)
-	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes+len(message)))
+	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Multicast)
 	writer.WriteUint64s(binary.BigEndian, seq)

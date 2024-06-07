@@ -23,14 +23,14 @@ func ReadMessage(reader interface{}) ([]byte, error) {
 	return globalPacker.ReadMessage(reader)
 }
 
+// PackBuffer 打包消息
+func PackBuffer(message *Message) (buffer.Buffer, error) {
+	return globalPacker.PackBuffer(message)
+}
+
 // PackMessage 打包消息
 func PackMessage(message *Message) ([]byte, error) {
 	return globalPacker.PackMessage(message)
-}
-
-// PackMessage2 打包消息
-func PackMessage2(message *Message) (buffer.Buffer, error) {
-	return globalPacker.PackMessage2(message)
 }
 
 // UnpackMessage 解包消息
@@ -46,9 +46,4 @@ func PackHeartbeat() ([]byte, error) {
 // CheckHeartbeat 检测心跳包
 func CheckHeartbeat(data []byte) (bool, error) {
 	return globalPacker.CheckHeartbeat(data)
-}
-
-// ExtractRoute 提取路由
-func ExtractRoute(data []byte) (int32, error) {
-	return globalPacker.ExtractRoute(data)
 }

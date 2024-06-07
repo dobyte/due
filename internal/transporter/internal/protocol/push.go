@@ -25,11 +25,7 @@ func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.B
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
-	message.Range(func(node *buffer.NocopyNode) bool {
-		buf.Mount(node.Bytes())
-		return true
-	})
-	message.Release()
+	buf.Mount(message)
 
 	return buf
 }

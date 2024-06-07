@@ -137,74 +137,17 @@ func (c *Client) AsyncDisconnect(ctx context.Context, kind session.Kind, target 
 	return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force))
 }
 
-// Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf := protocol.EncodePushReq(seq, kind, target, message)
-
-	res, err := c.cli.Call(ctx, seq, buf, target)
-	if err != nil {
-		return false, err
-	}
-
-	code, err := protocol.DecodePushRes(res)
-	if err != nil {
-		return false, err
-	}
-
-	return code == codes.NotFoundSession, nil
-}
-
-// AsyncPush 异步推送消息
-func (c *Client) AsyncPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
+// Push 异步推送消息
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
 }
 
 // Multicast 推送组播消息
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (int64, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf := protocol.EncodeMulticastReq(seq, kind, targets, message)
-
-	res, err := c.cli.Call(ctx, seq, buf)
-	if err != nil {
-		return 0, err
-	}
-
-	_, total, err := protocol.DecodeMulticastRes(res)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(total), nil
-}
-
-// AsyncMulticast 推送组播消息
-func (c *Client) AsyncMulticast(ctx context.Context, kind session.Kind, targets []int64, message []byte) error {
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeMulticastReq(0, kind, targets, message))
 }
 
 // Broadcast 推送广播消息
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message []byte) (int64, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf := protocol.EncodeBroadcastReq(seq, kind, message)
-
-	res, err := c.cli.Call(ctx, seq, buf)
-	if err != nil {
-		return 0, err
-	}
-
-	_, total, err := protocol.DecodeBroadcastRes(res)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(total), nil
-}
-
-// AsyncBroadcast 推送广播消息
-func (c *Client) AsyncBroadcast(ctx context.Context, kind session.Kind, message []byte) error {
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, message))
 }

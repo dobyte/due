@@ -177,7 +177,6 @@ func (r *request) Reply(message *cluster.Message) error {
 			Kind:    session.Conn,
 			Target:  r.cid,
 			Message: message,
-			Async:   true,
 		})
 	case r.nid != "":
 		return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{

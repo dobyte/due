@@ -17,10 +17,10 @@ const (
 
 // EncodeBroadcastReq 编码广播请求
 // 协议：size + header + route + seq + session kind + <message packet>
-func EncodeBroadcastReq(seq uint64, kind session.Kind, message []byte) buffer.Buffer {
+func EncodeBroadcastReq(seq uint64, kind session.Kind, message buffer.Buffer) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(broadcastReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-defaultSizeBytes+len(message)))
+	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Broadcast)
 	writer.WriteUint64s(binary.BigEndian, seq)
