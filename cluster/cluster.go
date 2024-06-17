@@ -155,14 +155,3 @@ type DeliverArgs struct {
 	Async   bool     // 是否异步
 	Message *Message // 消息
 }
-
-//type (
-//	GetIPArgs      = link.GetIPArgs
-//	PushArgs       = link.PushArgs
-//	MulticastArgs  = link.MulticastArgs
-//	BroadcastArgs  = link.BroadcastArgs
-//	IsOnlineArgs   = link.IsOnlineArgs
-//	DisconnectArgs = link.DisconnectArgs
-//	Message        = link.Message
-//
-//)

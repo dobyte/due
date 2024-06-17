@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,20 +14,26 @@ const (
 	maxRetryTimes = 5
 )
 
+const (
+	connClosed int32 = 0 // 连接关闭
+	connOpened int32 = 1 // 连接打开
+)
+
 type Conn struct {
-	client  *Client       // 客户端
+	cli     *Client       // 客户端
+	state   int32         // 连接状态
 	chWrite chan *chWrite // 写入队列
 	pending sync.Map      // 等待队列
 }
 
-func NewConn(client *Client, ch ...chan *chWrite) *Conn {
+func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 	c := &Conn{}
-	c.client = client
+	c.cli = cli
 
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
 	} else {
-		c.chWrite = make(chan *chWrite, 40960)
+		c.chWrite = make(chan *chWrite, 10240)
 	}
 
 	c.dial()
@@ -35,19 +42,27 @@ func NewConn(client *Client, ch ...chan *chWrite) *Conn {
 }
 
 // 发送
-func (c *Conn) send(ch *chWrite) {
+func (c *Conn) send(ch *chWrite) bool {
+	if atomic.LoadInt32(&c.state) == connClosed {
+		return false
+	}
+
 	c.chWrite <- ch
+
+	return true
 }
 
 // 拨号
 func (c *Conn) dial() {
+	atomic.StoreInt32(&c.state, connClosed)
+
 	var (
 		delay time.Duration
 		retry int
 	)
 
 	for {
-		conn, err := net.Dial("tcp", c.client.opts.Addr)
+		conn, err := net.Dial("tcp", c.cli.opts.Addr)
 		if err != nil {
 			retry++
 
@@ -79,6 +94,8 @@ func (c *Conn) dial() {
 
 // 处理连接
 func (c *Conn) process(conn net.Conn) {
+	atomic.StoreInt32(&c.state, connOpened)
+
 	go c.read(conn)
 
 	seq := uint64(1)
@@ -87,7 +104,7 @@ func (c *Conn) process(conn net.Conn) {
 
 	c.pending.Store(seq, cc)
 
-	buf := protocol.EncodeHandshakeReq(seq, c.client.opts.InsKind, c.client.opts.InsID)
+	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
 
 	defer buf.Release()
 

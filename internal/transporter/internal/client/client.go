@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/errors"
 )
 
 const (
@@ -19,23 +18,23 @@ type chWrite struct {
 }
 
 type Client struct {
-	opts    *Options      // 配置
-	conns   []*Conn       // 连接
-	chWrite chan *chWrite // 写入队列
+	opts        *Options      // 配置
+	chWrite     chan *chWrite // 写入队列
+	connections []*Conn       // 连接
 }
 
 func NewClient(opts *Options) (*Client, error) {
 	c := &Client{}
 	c.opts = opts
-	c.conns = make([]*Conn, 0, ordered+unordered)
-	c.chWrite = make(chan *chWrite, 40960)
+	c.chWrite = make(chan *chWrite, 10240)
+	c.connections = make([]*Conn, 0, ordered+unordered)
 
 	for i := 0; i < ordered; i++ {
-		c.conns = append(c.conns, NewConn(c))
+		c.connections = append(c.connections, newConn(c))
 	}
 
 	for i := 0; i < unordered; i++ {
-		c.conns = append(c.conns, NewConn(c, c.chWrite))
+		c.connections = append(c.connections, newConn(c, c.chWrite))
 	}
 
 	return c, nil
@@ -56,7 +55,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 
 	select {
 	case <-ctx.Done():
-		return nil, errors.New("timeout")
+		return nil, ctx.Err()
 	case data := <-call:
 		return data, nil
 	}
@@ -77,8 +76,8 @@ func (c *Client) Send(ctx context.Context, buf buffer.Buffer, idx ...int64) erro
 // 获取连接
 func (c *Client) conn(idx ...int64) *Conn {
 	if len(idx) > 0 {
-		return c.conns[idx[0]%ordered]
+		return c.connections[idx[0]%ordered]
 	} else {
-		return c.conns[ordered]
+		return c.connections[ordered]
 	}
 }
