@@ -56,7 +56,6 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 		Event: event,
 		CID:   cid,
 		UID:   uid,
-		Async: true,
 	}); err != nil && !errors.Is(err, errors.ErrNotFoundEvent) && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 		log.Warnf("trigger event failed, cid: %d, uid: %d, event: %v, err: %v", cid, uid, event.String(), err)
 	}

@@ -103,9 +103,9 @@ func (c *Conn) process(conn net.Conn) {
 
 	seq := uint64(1)
 
-	cc := make(chan []byte)
+	call := make(chan []byte)
 
-	c.pending.Store(seq, cc)
+	c.pending.Store(seq, call)
 
 	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
 
@@ -115,7 +115,7 @@ func (c *Conn) process(conn net.Conn) {
 		return
 	}
 
-	<-cc
+	<-call
 
 	go c.write(conn)
 }

@@ -147,21 +147,10 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 			return err
 		}
 
-		if args.Async {
-			return client.AsyncDeliver(ctx, args.CID, args.UID, message)
-		} else {
-			_, err = client.Deliver(ctx, args.CID, args.UID, message)
-			return err
-		}
+		return client.Deliver(ctx, args.CID, args.UID, message)
 	} else {
 		_, err := l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, interface{}, error) {
-			if args.Async {
-				err := client.AsyncDeliver(ctx, args.CID, args.UID, message)
-				return false, nil, err
-			} else {
-				miss, err := client.Deliver(ctx, args.CID, args.UID, message)
-				return miss, nil, err
-			}
+			return false, nil, client.Deliver(ctx, args.CID, args.UID, message)
 		})
 		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 			return err
@@ -187,12 +176,7 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 				return err
 			}
 
-			if args.Async {
-				return client.AsyncTrigger(ctx, args.Event, args.CID, args.UID)
-			} else {
-				_, err = client.Trigger(ctx, args.Event, args.CID, args.UID)
-				return err
-			}
+			return client.Trigger(ctx, args.Event, args.CID, args.UID)
 		})
 
 		return true

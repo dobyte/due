@@ -27,5 +27,4 @@ type TriggerArgs struct {
 	Event cluster.Event // 事件
 	CID   int64         // 连接ID
 	UID   int64         // 用户ID
-	Async bool          // 是否异步
 }

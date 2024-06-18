@@ -114,26 +114,7 @@ func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) 
 }
 
 // Disconnect 断开连接
-func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
-
-	buf := protocol.EncodeDisconnectReq(seq, kind, target, force)
-
-	res, err := c.cli.Call(ctx, seq, buf)
-	if err != nil {
-		return false, err
-	}
-
-	code, err := protocol.DecodeDisconnectRes(res)
-	if err != nil {
-		return false, err
-	}
-
-	return code == codes.NotFoundSession, nil
-}
-
-// AsyncDisconnect 异步断开连接
-func (c *Client) AsyncDisconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
+func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
 	return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force))
 }
 

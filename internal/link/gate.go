@@ -242,19 +242,13 @@ func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArg
 		return err
 	}
 
-	if args.Async {
-		return client.AsyncDisconnect(ctx, args.Kind, args.Target, args.Force)
-	} else {
-		_, err = client.Disconnect(ctx, args.Kind, args.Target, args.Force)
-		return err
-	}
+	return client.Disconnect(ctx, args.Kind, args.Target, args.Force)
 }
 
 // 间接断开连接
 func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
 	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
-		miss, err := client.Disconnect(ctx, session.User, uid, force)
-		return miss, nil, err
+		return false, nil, client.Disconnect(ctx, session.User, uid, force)
 	})
 
 	return err
