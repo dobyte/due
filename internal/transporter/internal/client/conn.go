@@ -3,7 +3,6 @@ package client
 import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -11,7 +10,8 @@ import (
 )
 
 const (
-	maxRetryTimes = 5
+	maxRetryTimes = 5                      // 最大重试次数
+	dialTimeout   = 500 * time.Millisecond // 拨号超时时间
 )
 
 const (
@@ -24,16 +24,20 @@ type Conn struct {
 	state   int32         // 连接状态
 	chWrite chan *chWrite // 写入队列
 	pending sync.Map      // 等待队列
+	done    chan struct{} // 关闭请求
+	builtin bool          // 是否内建
 }
 
 func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 	c := &Conn{}
 	c.cli = cli
+	c.done = make(chan struct{})
 
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
 	} else {
 		c.chWrite = make(chan *chWrite, 10240)
+		c.builtin = true
 	}
 
 	c.dial()
@@ -54,20 +58,20 @@ func (c *Conn) send(ch *chWrite) bool {
 
 // 拨号
 func (c *Conn) dial() {
-	atomic.StoreInt32(&c.state, connClosed)
-
 	var (
 		delay time.Duration
 		retry int
 	)
 
+	atomic.StoreInt32(&c.state, connClosed)
+
 	for {
-		conn, err := net.Dial("tcp", c.cli.opts.Addr)
+		conn, err := net.DialTimeout("tcp", c.cli.opts.Addr, dialTimeout)
 		if err != nil {
 			retry++
 
 			if retry >= maxRetryTimes {
-				log.Warnf("client dial error: %v; more than %d retries", err, retry)
+				c.close()
 				break
 			} else {
 				if delay == 0 {
@@ -80,7 +84,6 @@ func (c *Conn) dial() {
 					delay = time.Second
 				}
 
-				log.Warnf("client dial error: %v; retrying in %v", err, delay)
 				time.Sleep(delay)
 				continue
 			}
@@ -122,7 +125,7 @@ func (c *Conn) read(conn net.Conn) {
 	for {
 		isHeartbeat, _, seq, data, err := protocol.ReadMessage(conn)
 		if err != nil {
-			c.dial()
+			c.retry()
 			return
 		}
 
@@ -145,6 +148,8 @@ func (c *Conn) read(conn net.Conn) {
 func (c *Conn) write(conn net.Conn) {
 	for {
 		select {
+		case <-c.done:
+			return
 		case ch, ok := <-c.chWrite:
 			if !ok {
 				return
@@ -164,5 +169,20 @@ func (c *Conn) write(conn net.Conn) {
 
 			ch.buf.Release()
 		}
+	}
+}
+
+// 重试拨号
+func (c *Conn) retry() {
+	c.done <- struct{}{}
+	c.dial()
+}
+
+// 关闭连接
+func (c *Conn) close() {
+	c.cli.done()
+	c.done <- struct{}{}
+	if c.builtin {
+		close(c.chWrite)
 	}
 }

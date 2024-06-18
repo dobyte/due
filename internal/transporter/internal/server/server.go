@@ -96,7 +96,7 @@ func (s *Server) Start() error {
 				continue
 			}
 
-			log.Errorf("tcp accept connect error: %v", err)
+			log.Warnf("tcp accept connect error: %v", err)
 			return nil
 		}
 

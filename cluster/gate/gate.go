@@ -144,7 +144,7 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 
 // 启动传输服务器
 func (g *Gate) startTransportServer() {
-	transporter, err := gate.NewServer(":0", &provider{gate: g})
+	transporter, err := gate.NewServer(":9988", &provider{gate: g})
 	if err != nil {
 		log.Fatalf("transport server create failed: %v", err)
 	}

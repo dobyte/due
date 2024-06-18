@@ -146,7 +146,7 @@ func (n *Node) dispatch() {
 
 // 启动传输服务器
 func (n *Node) startTransportServer() {
-	transporter, err := node.NewServer("", &provider{node: n})
+	transporter, err := node.NewServer(":9987", &provider{node: n})
 	if err != nil {
 		log.Fatalf("transport server create failed: %v", err)
 	}

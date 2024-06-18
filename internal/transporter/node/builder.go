@@ -31,16 +31,12 @@ func (b *Builder) Build(addr string) (*Client, error) {
 	}
 
 	cli, err, _ := b.sfg.Do(addr, func() (interface{}, error) {
-		c, err := client.NewClient(&client.Options{
-			Addr:    addr,
-			InsID:   b.opts.InsID,
-			InsKind: b.opts.InsKind,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		cli := NewClient(c)
+		cli := NewClient(client.NewClient(&client.Options{
+			Addr:         addr,
+			InsID:        b.opts.InsID,
+			InsKind:      b.opts.InsKind,
+			CloseHandler: func() { b.clients.Delete(addr) },
+		}))
 
 		b.clients.Store(addr, cli)
 
