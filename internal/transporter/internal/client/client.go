@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ordered   = 20 // 有序连接数
-	unordered = 10 // 无序连接数
+	ordered   = 1 // 有序连接数
+	unordered = 1 // 无序连接数
 )
 
 type chWrite struct {
