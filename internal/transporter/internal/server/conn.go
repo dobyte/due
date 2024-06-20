@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
 	"sync/atomic"
@@ -96,16 +97,16 @@ func (c *Conn) read() {
 			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
 
 			if isHeartbeat {
-				continue
-			}
+				c.heartbeat(conn)
+			} else {
+				handler, ok := c.server.handlers[route]
+				if !ok {
+					continue
+				}
 
-			handler, ok := c.server.handlers[route]
-			if !ok {
-				continue
-			}
-
-			if err = handler(c, data); err != nil {
-				// TODO：处理错误
+				if err = handler(c, data); err != nil {
+					// TODO：处理错误
+				}
 			}
 		}
 	}
@@ -113,4 +114,11 @@ func (c *Conn) read() {
 
 func (c *Conn) process() {
 
+}
+
+// 响应心跳消息
+func (c *Conn) heartbeat(conn net.Conn) {
+	if _, err := conn.Write(protocol.Heartbeat()); err != nil {
+		log.Warnf("write heartbeat message error: %v", err)
+	}
 }

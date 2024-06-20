@@ -10,7 +10,7 @@ import (
 )
 
 type Proxy struct {
-	node       *Node            // 节点
+	node       *Node            // 节点服务器
 	gateLinker *link.GateLinker // 网关链接器
 	nodeLinker *link.NodeLinker // 节点链接器
 }

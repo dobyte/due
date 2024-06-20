@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
@@ -19,8 +18,9 @@ const (
 )
 
 const (
-	connClosed int32 = 0 // 连接关闭
-	connOpened int32 = 1 // 连接打开
+	connClosed   int32 = 0 // 连接关闭
+	connOpened   int32 = 1 // 连接打开
+	connRetrying int32 = 2 // 连接重试
 )
 
 type Conn struct {
@@ -30,14 +30,13 @@ type Conn struct {
 	pending           sync.Map      // 等待队列
 	done              chan struct{} // 关闭请求
 	builtin           bool          // 是否内建
-	conn              atomic.Value  // 源连接
 	lastHeartbeatTime int64         // 上次心跳时间
 }
 
 func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 	c := &Conn{}
 	c.cli = cli
-	c.done = make(chan struct{})
+	c.state = connClosed
 
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
@@ -69,18 +68,14 @@ func (c *Conn) dial() {
 		retry int
 	)
 
-	atomic.StoreInt32(&c.state, connClosed)
-
-	fmt.Println("dial")
-
 	for {
 		conn, err := net.DialTimeout("tcp", c.cli.opts.Addr, dialTimeout)
 		if err != nil {
 			retry++
 
 			if retry >= maxRetryTimes {
-				fmt.Println("destroy")
-				c.destroy()
+				log.Warnf("dial failed: %v", err)
+				c.close()
 				break
 			} else {
 				if delay == 0 {
@@ -106,12 +101,11 @@ func (c *Conn) dial() {
 
 // 处理连接
 func (c *Conn) process(conn net.Conn) {
-	fmt.Println("process")
 	atomic.StoreInt32(&c.state, connOpened)
 
 	c.done = make(chan struct{})
 
-	c.conn.Store(conn)
+	c.lastHeartbeatTime = xtime.Now().Unix()
 
 	go c.read(conn)
 
@@ -143,9 +137,11 @@ func (c *Conn) read(conn net.Conn) {
 		default:
 			isHeartbeat, _, seq, data, err := protocol.ReadMessage(conn)
 			if err != nil {
-				c.retry()
+				c.retry(conn)
 				return
 			}
+
+			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 
 			if isHeartbeat {
 				continue
@@ -165,29 +161,22 @@ func (c *Conn) read(conn net.Conn) {
 
 // 写入数据
 func (c *Conn) write(conn net.Conn) {
-	fmt.Println("write")
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-c.done:
-			fmt.Println("write done")
-			//if err := conn.Close(); err != nil {
-			//	log.Warnf("close conn error: %v", err)
-			//}
 			return
 		case <-ticker.C:
-			fmt.Println(22222)
-			deadline := xtime.Now().Add(-2 * heartbeatInterval).UnixNano()
-
+			deadline := xtime.Now().Add(-2 * heartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
-				c.retry()
+				c.retry(conn)
 				return
 			} else {
 				if _, err := conn.Write(protocol.Heartbeat()); err != nil {
 					log.Warnf("write heartbeat message error: %v", err)
-					c.retry()
+					c.retry(conn)
 					return
 				}
 			}
@@ -214,33 +203,25 @@ func (c *Conn) write(conn net.Conn) {
 }
 
 // 重试拨号
-func (c *Conn) retry() {
-	fmt.Println("retry")
+func (c *Conn) retry(conn net.Conn) {
+	if !atomic.CompareAndSwapInt32(&c.state, connOpened, connRetrying) {
+		return
+	}
+
+	_ = conn.Close()
+
 	close(c.done)
 
 	c.dial()
 }
 
-// 销毁连接
-func (c *Conn) destroy() {
+// 关闭连接
+func (c *Conn) close() {
 	c.cli.done()
 
-	close(c.done)
+	atomic.StoreInt32(&c.state, connClosed)
 
 	if c.builtin {
 		close(c.chWrite)
-	}
-}
-
-// 关闭连接
-func (c *Conn) close() {
-	fmt.Println("closed1")
-	close(c.done)
-	fmt.Println("closed2")
-
-	if conn := c.conn.Load(); conn != nil {
-		if err := conn.(net.Conn).Close(); err != nil {
-			log.Warnf("close conn error: %v", err)
-		}
 	}
 }
