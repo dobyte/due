@@ -19,10 +19,8 @@ func TestBuilder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	miss, err := client.Deliver(context.Background(), 1, 2, []byte("hello world"))
+	err = client.Deliver(context.Background(), 1, 2, []byte("hello world"))
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	t.Logf("miss: %v", miss)
 }

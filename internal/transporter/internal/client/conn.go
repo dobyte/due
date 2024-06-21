@@ -2,6 +2,7 @@ package client
 
 import (
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
@@ -45,14 +46,14 @@ func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 }
 
 // 发送
-func (c *Conn) send(ch *chWrite) bool {
+func (c *Conn) send(ch *chWrite) error {
 	if atomic.LoadInt32(&c.state) == def.ConnClosed {
-		return false
+		return errors.ErrConnectionClosed
 	}
 
 	c.chWrite <- ch
 
-	return true
+	return nil
 }
 
 // 拨号
@@ -216,4 +217,9 @@ func (c *Conn) close() {
 	if c.builtin {
 		close(c.chWrite)
 	}
+}
+
+// 取消回调
+func (c *Conn) cancel(seq uint64) {
+	c.pending.delete(seq)
 }

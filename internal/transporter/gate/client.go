@@ -23,7 +23,7 @@ func NewClient(cli *client.Client) *Client {
 
 // Bind 绑定用户与连接
 func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	seq := c.doGenSequence()
 
 	buf := protocol.EncodeBindReq(seq, cid, uid)
 
@@ -42,7 +42,7 @@ func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
 
 // Unbind 解绑用户与连接
 func (c *Client) Unbind(ctx context.Context, uid int64) (bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	seq := c.doGenSequence()
 
 	buf := protocol.EncodeUnbindReq(seq, uid)
 
@@ -61,7 +61,7 @@ func (c *Client) Unbind(ctx context.Context, uid int64) (bool, error) {
 
 // GetIP 获取客户端IP
 func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	seq := c.doGenSequence()
 
 	buf := protocol.EncodeGetIPReq(seq, kind, target)
 
@@ -80,7 +80,7 @@ func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (st
 
 // Stat 推送广播消息
 func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	seq := c.doGenSequence()
 
 	buf := protocol.EncodeStatReq(seq, kind)
 
@@ -96,7 +96,7 @@ func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 
 // IsOnline 检测是否在线
 func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, bool, error) {
-	seq := atomic.AddUint64(&c.seq, 1)
+	seq := c.doGenSequence()
 
 	buf := protocol.EncodeIsOnlineReq(seq, kind, target)
 
@@ -131,4 +131,13 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 // Broadcast 推送广播消息
 func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, message))
+}
+
+// 生成序列号，规避生成序列号为0的编号
+func (c *Client) doGenSequence() (seq uint64) {
+	for {
+		if seq = atomic.AddUint64(&c.seq, 1); seq != 0 {
+			return
+		}
+	}
 }

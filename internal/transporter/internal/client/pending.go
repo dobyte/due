@@ -26,6 +26,11 @@ func (p *pending) store(seq uint64, call chan []byte) {
 	p.partitions[int(seq%uint64(len(p.partitions)))].store(seq, call)
 }
 
+// 删除
+func (p *pending) delete(seq uint64) {
+	p.partitions[int(seq%uint64(len(p.partitions)))].delete(seq)
+}
+
 type partition struct {
 	mu    sync.Mutex             // 锁
 	calls map[uint64]chan []byte // 同步通道
@@ -48,5 +53,12 @@ func (p *partition) extract(seq uint64) (chan []byte, bool) {
 func (p *partition) store(seq uint64, call chan []byte) {
 	p.mu.Lock()
 	p.calls[seq] = call
+	p.mu.Unlock()
+}
+
+// 删除
+func (p *partition) delete(seq uint64) {
+	p.mu.Lock()
+	delete(p.calls, seq)
 	p.mu.Unlock()
 }

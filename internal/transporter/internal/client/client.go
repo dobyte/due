@@ -4,11 +4,16 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/core/buffer"
 	"sync"
+	"time"
 )
 
 const (
 	ordered   = 20 // 有序连接数
 	unordered = 10 // 无序连接数
+)
+
+const (
+	defaultTimeout = 3 * time.Second // 调用超时时间
 )
 
 type chWrite struct {
@@ -41,16 +46,25 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 
 	conn := c.load(idx...)
 
-	conn.send(&chWrite{
+	if err := conn.send(&chWrite{
 		ctx:  ctx,
 		seq:  seq,
 		buf:  buf,
 		call: call,
-	})
+	}); err != nil {
+		return nil, err
+	}
+
+	ctx1, cancel1 := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel1()
 
 	select {
 	case <-ctx.Done():
+		conn.cancel(seq)
 		return nil, ctx.Err()
+	case <-ctx1.Done():
+		conn.cancel(seq)
+		return nil, ctx1.Err()
 	case data := <-call:
 		return data, nil
 	}
@@ -60,12 +74,10 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 func (c *Client) Send(ctx context.Context, buf buffer.Buffer, idx ...int64) error {
 	conn := c.load(idx...)
 
-	conn.send(&chWrite{
+	return conn.send(&chWrite{
 		ctx: ctx,
 		buf: buf,
 	})
-
-	return nil
 }
 
 // 获取连接
