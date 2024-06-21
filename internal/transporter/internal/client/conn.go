@@ -2,32 +2,25 @@ package client
 
 import (
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
-	maxRetryTimes     = 5                      // 最大重试次数
-	dialTimeout       = 500 * time.Millisecond // 拨号超时时间
-	heartbeatInterval = 10 * time.Second       // 心跳间隔时间
-)
-
-const (
-	connClosed   int32 = 0 // 连接关闭
-	connOpened   int32 = 1 // 连接打开
-	connRetrying int32 = 2 // 连接重试
+	maxRetryTimes = 5                      // 最大重试次数
+	dialTimeout   = 500 * time.Millisecond // 拨号超时时间
 )
 
 type Conn struct {
 	cli               *Client       // 客户端
 	state             int32         // 连接状态
 	chWrite           chan *chWrite // 写入队列
-	pending           sync.Map      // 等待队列
+	pending           *pending      // 等待队列
 	done              chan struct{} // 关闭请求
 	builtin           bool          // 是否内建
 	lastHeartbeatTime int64         // 上次心跳时间
@@ -36,7 +29,8 @@ type Conn struct {
 func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 	c := &Conn{}
 	c.cli = cli
-	c.state = connClosed
+	c.state = def.ConnClosed
+	c.pending = newPending()
 
 	if len(ch) > 0 {
 		c.chWrite = ch[0]
@@ -52,7 +46,7 @@ func newConn(cli *Client, ch ...chan *chWrite) *Conn {
 
 // 发送
 func (c *Conn) send(ch *chWrite) bool {
-	if atomic.LoadInt32(&c.state) == connClosed {
+	if atomic.LoadInt32(&c.state) == def.ConnClosed {
 		return false
 	}
 
@@ -101,7 +95,7 @@ func (c *Conn) dial() {
 
 // 处理连接
 func (c *Conn) process(conn net.Conn) {
-	atomic.StoreInt32(&c.state, connOpened)
+	atomic.StoreInt32(&c.state, def.ConnOpened)
 
 	c.done = make(chan struct{})
 
@@ -113,7 +107,7 @@ func (c *Conn) process(conn net.Conn) {
 
 	call := make(chan []byte)
 
-	c.pending.Store(seq, call)
+	c.pending.store(seq, call)
 
 	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
 
@@ -147,21 +141,19 @@ func (c *Conn) read(conn net.Conn) {
 				continue
 			}
 
-			v, ok := c.pending.Load(seq)
+			call, ok := c.pending.extract(seq)
 			if !ok {
 				continue
 			}
 
-			c.pending.Delete(seq)
-
-			v.(chan []byte) <- data
+			call <- data
 		}
 	}
 }
 
 // 写入数据
 func (c *Conn) write(conn net.Conn) {
-	ticker := time.NewTicker(heartbeatInterval)
+	ticker := time.NewTicker(def.HeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -169,7 +161,7 @@ func (c *Conn) write(conn net.Conn) {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			deadline := xtime.Now().Add(-2 * heartbeatInterval).Unix()
+			deadline := xtime.Now().Add(-2 * def.HeartbeatInterval).Unix()
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 				c.retry(conn)
 				return
@@ -186,7 +178,7 @@ func (c *Conn) write(conn net.Conn) {
 			}
 
 			if ch.seq != 0 {
-				c.pending.Store(ch.seq, ch.call)
+				c.pending.store(ch.seq, ch.call)
 			}
 
 			ch.buf.Range(func(node *buffer.NocopyNode) bool {
@@ -204,7 +196,7 @@ func (c *Conn) write(conn net.Conn) {
 
 // 重试拨号
 func (c *Conn) retry(conn net.Conn) {
-	if !atomic.CompareAndSwapInt32(&c.state, connOpened, connRetrying) {
+	if !atomic.CompareAndSwapInt32(&c.state, def.ConnOpened, def.ConnRetrying) {
 		return
 	}
 
@@ -219,7 +211,7 @@ func (c *Conn) retry(conn net.Conn) {
 func (c *Conn) close() {
 	c.cli.done()
 
-	atomic.StoreInt32(&c.state, connClosed)
+	atomic.StoreInt32(&c.state, def.ConnClosed)
 
 	if c.builtin {
 		close(c.chWrite)
