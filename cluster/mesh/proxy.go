@@ -32,6 +32,16 @@ func newProxy(mesh *Mesh) *Proxy {
 	}
 }
 
+// GetID 获取当前实例ID
+func (p *Proxy) GetID() string {
+	return p.mesh.opts.id
+}
+
+// GetName 获取当前实例名称
+func (p *Proxy) GetName() string {
+	return p.mesh.opts.name
+}
+
 // AddServiceProvider 添加服务提供者
 func (p *Proxy) AddServiceProvider(name string, desc interface{}, provider interface{}) {
 	p.mesh.addServiceProvider(name, desc, provider)
@@ -46,8 +56,8 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 // target参数可分为两种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
 // 服务发现模式: 	discovery://service_name
-func (p *Proxy) NewMeshClient(target string) (transport.ServiceClient, error) {
-	return p.mesh.opts.transporter.NewMeshClient(target)
+func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
+	return p.mesh.opts.transporter.NewClient(target)
 }
 
 // BindGate 绑定网关
@@ -96,26 +106,12 @@ func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (strin
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	//list := make([]string, 0, len(states))
-	//for _, state := range states {
-	//	list = append(list, state.String())
-	//}
-	//
-	//return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
-
-	return nil, nil
+	return p.gateLinker.FetchGateList(ctx, states...)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	//list := make([]string, 0, len(states))
-	//for _, state := range states {
-	//	list = append(list, state.String())
-	//}
-	//
-	//return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
-
-	return nil, nil
+	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
 // GetIP 获取客户端IP

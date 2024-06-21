@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
@@ -92,13 +93,16 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 	p.node.addHookListener(hook, handler)
 }
 
-// NewServiceClient 新建微服务客户端
+// NewMeshClient 新建微服务客户端
 // target参数可分为两种模式:
-// 直连模式: 	direct://127.0.0.1:8011
+// 服务直连模式: 	direct://127.0.0.1:8011
 // 服务发现模式: 	discovery://service_name
-func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
-	//return p.node.opts.transporter.NewServiceClient(target)
-	return nil, nil
+func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
+	if p.node.opts.transporter == nil {
+		return nil, errors.ErrMissTransporter
+	}
+
+	return p.node.opts.transporter.NewClient(target)
 }
 
 // BindGate 绑定网关
@@ -155,25 +159,12 @@ func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (strin
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	//list := make([]string, 0, len(states))
-	//for _, state := range states {
-	//	list = append(list, state.String())
-	//}
-	//
-	//return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
-	return nil, nil
+	return p.gateLinker.FetchGateList(ctx, states...)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	//list := make([]string, 0, len(states))
-	//for _, state := range states {
-	//	list = append(list, state.String())
-	//}
-	//
-	//return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
-
-	return nil, nil
+	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
 // GetIP 获取客户端IP
@@ -221,7 +212,6 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	return p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		NID:     args.NID,
 		UID:     args.UID,
-		Async:   args.Async,
 		Route:   args.Message.Route,
 		Message: args.Message,
 	})

@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/registry"
 	"golang.org/x/sync/errgroup"
 	"sync"
 	"time"
@@ -183,6 +184,32 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 	})
 
 	return eg.Wait()
+}
+
+// FetchNodeList 拉取节点列表
+func (l *NodeLinker) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	services, err := l.opts.Registry.Services(ctx, cluster.Node.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if len(states) == 0 {
+		return services, nil
+	}
+
+	mp := make(map[string]struct{}, len(states))
+	for _, state := range states {
+		mp[state.String()] = struct{}{}
+	}
+
+	list := make([]*registry.ServiceInstance, 0, len(services))
+	for i := range services {
+		if _, ok := mp[services[i].State]; ok {
+			list = append(list, services[i])
+		}
+	}
+
+	return list, nil
 }
 
 // 执行节点RPC调用

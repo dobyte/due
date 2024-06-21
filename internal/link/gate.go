@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"golang.org/x/sync/errgroup"
 	"sync"
@@ -75,6 +76,32 @@ func (l *GateLinker) Locate(ctx context.Context, uid int64) (string, error) {
 	l.sources.Store(uid, gid)
 
 	return gid, nil
+}
+
+// FetchGateList 拉取网关列表
+func (l *GateLinker) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	services, err := l.opts.Registry.Services(ctx, cluster.Gate.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if len(states) == 0 {
+		return services, nil
+	}
+
+	mp := make(map[string]struct{}, len(states))
+	for _, state := range states {
+		mp[state.String()] = struct{}{}
+	}
+
+	list := make([]*registry.ServiceInstance, 0, len(services))
+	for i := range services {
+		if _, ok := mp[services[i].State]; ok {
+			list = append(list, services[i])
+		}
+	}
+
+	return list, nil
 }
 
 // Bind 绑定网关

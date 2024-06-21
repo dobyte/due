@@ -78,7 +78,6 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 		UID:     uid,
 		Route:   msg.Route,
 		Message: message,
-		Async:   true,
 	}); err != nil {
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute):

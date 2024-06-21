@@ -10,10 +10,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"golang.org/x/sync/errgroup"
 	"sync/atomic"
-	"time"
 )
-
-const timeout = 5 * time.Second
 
 type HookHandler func(proxy *Proxy)
 
@@ -80,11 +77,9 @@ func (m *Mesh) Init() {
 func (m *Mesh) Start() {
 	m.setState(cluster.Work)
 
-	m.startTransporter()
+	m.startTransportServer()
 
 	m.registerServiceInstances()
-
-	m.proxy.watch(m.ctx)
 
 	m.debugPrint()
 
@@ -97,7 +92,7 @@ func (m *Mesh) Destroy() {
 
 	m.deregisterServiceInstances()
 
-	m.stopTransporter()
+	m.stopTransportServer()
 
 	m.cancel()
 
@@ -110,12 +105,12 @@ func (m *Mesh) Proxy() *Proxy {
 }
 
 // 启动传输服务器
-func (m *Mesh) startTransporter() {
+func (m *Mesh) startTransportServer() {
 	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
 
-	transporter, err := m.opts.transporter.NewServiceServer()
+	transporter, err := m.opts.transporter.NewServer()
 	if err != nil {
-		log.Fatalf("transporter create failed: %v", err)
+		log.Fatalf("transport server create failed: %v", err)
 	}
 
 	m.transporter = transporter
@@ -129,15 +124,15 @@ func (m *Mesh) startTransporter() {
 
 	go func() {
 		if err = m.transporter.Start(); err != nil {
-			log.Fatalf("transporter start failed: %v", err)
+			log.Fatalf("transport server start failed: %v", err)
 		}
 	}()
 }
 
 // 停止传输服务器
-func (m *Mesh) stopTransporter() {
+func (m *Mesh) stopTransportServer() {
 	if err := m.transporter.Stop(); err != nil {
-		log.Errorf("transporter stop failed: %v", err)
+		log.Errorf("transport server stop failed: %v", err)
 	}
 }
 
@@ -173,14 +168,14 @@ func (m *Mesh) registerServiceInstances() {
 	for i := range m.instances {
 		instance := m.instances[i]
 		eg.Go(func() error {
-			rctx, rcancel := context.WithTimeout(ctx, timeout)
+			rctx, rcancel := context.WithTimeout(ctx, defaultTimeout)
 			defer rcancel()
 			return m.opts.registry.Register(rctx, instance)
 		})
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Fatalf("register mesh instance failed: %v", err)
+		log.Fatalf("register service instance failed: %v", err)
 	}
 }
 
@@ -190,14 +185,14 @@ func (m *Mesh) deregisterServiceInstances() {
 	for i := range m.instances {
 		instance := m.instances[i]
 		eg.Go(func() error {
-			dctx, dcancel := context.WithTimeout(ctx, timeout)
+			dctx, dcancel := context.WithTimeout(ctx, defaultTimeout)
 			defer dcancel()
 			return m.opts.registry.Deregister(dctx, instance)
 		})
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Errorf("deregister mesh instance failed: %v", err)
+		log.Errorf("deregister service instance failed: %v", err)
 	}
 }
 

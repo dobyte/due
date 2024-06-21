@@ -42,6 +42,7 @@ var (
 	ErrInvalidPointer        = New("invalid pointer")
 	ErrNotFoundLocator       = New("not found locator")
 	ErrUnexpectedEOF         = New("unexpected EOF")
+	ErrMissTransporter       = New("miss transporter")
 )
 
 // NewError 新建一个错误

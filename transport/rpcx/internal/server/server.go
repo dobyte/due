@@ -2,7 +2,6 @@ package server
 
 import (
 	"crypto/tls"
-	"fmt"
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
@@ -26,7 +25,7 @@ type Options struct {
 	ServerOpts []server.OptionFn
 }
 
-func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
+func NewServer(opts *Options) (*Server, error) {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
 	if err != nil {
 		return nil, err
@@ -49,7 +48,6 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.server = server.NewServer()
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
-	s.disabledServices = disabledServices
 
 	return s, nil
 }
@@ -84,12 +82,6 @@ func (s *Server) RegisterService(desc, ss interface{}) error {
 	name, ok := desc.(string)
 	if !ok {
 		return errors.New("invalid dispatcher desc")
-	}
-
-	for _, ds := range s.disabledServices {
-		if ds == name {
-			return errors.New(fmt.Sprintf("unable to register %s service name", ds))
-		}
 	}
 
 	return s.server.RegisterName(name, ss, "")

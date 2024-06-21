@@ -18,7 +18,7 @@ func (c *Client) Call(ctx context.Context, service, method string, args interfac
 	return c.cli.Call(ctx, service, method, args, reply)
 }
 
-// Client 获取RPCX客户端
+// Client 获取客户端
 func (c *Client) Client() interface{} {
 	return c.cli
 }

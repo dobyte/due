@@ -20,7 +20,6 @@ type DeliverArgs struct {
 	UID     int64       // 用户ID
 	Route   int32       // 路由
 	Message interface{} // 消息
-	Async   bool        // 是否异步；异步投递不会同步等待投递结果，性能更好
 }
 
 type TriggerArgs struct {

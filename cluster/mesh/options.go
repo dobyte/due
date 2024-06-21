@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"time"
 )
 
@@ -18,6 +19,7 @@ const (
 )
 
 const (
+	defaultIDKey      = "etc.cluster.mesh.id"
 	defaultNameKey    = "etc.cluster.mesh.name"
 	defaultCodecKey   = "etc.cluster.mesh.codec"
 	defaultTimeoutKey = "etc.cluster.mesh.timeout"
@@ -26,14 +28,15 @@ const (
 type Option func(o *options)
 
 type options struct {
+	id          string                // 实例ID
 	name        string                // 实例名称
 	ctx         context.Context       // 上下文
 	codec       encoding.Codec        // 编解码器
 	timeout     time.Duration         // RPC调用超时时间
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
-	transporter transport.Transporter // 消息传输器
 	encryptor   crypto.Encryptor      // 消息加密器
+	transporter transport.Transporter // 消息传输器
 }
 
 func defaultOptions() *options {
@@ -44,6 +47,12 @@ func defaultOptions() *options {
 		timeout: defaultTimeout,
 	}
 
+	if id := etc.Get(defaultIDKey).String(); id != "" {
+		opts.id = id
+	} else {
+		opts.id = xuuid.UUID()
+	}
+
 	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
 	}
@@ -52,8 +61,8 @@ func defaultOptions() *options {
 		opts.codec = encoding.Invoke(codec)
 	}
 
-	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
-		opts.timeout = time.Duration(timeout) * time.Second
+	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
+		opts.timeout = timeout
 	}
 
 	return opts

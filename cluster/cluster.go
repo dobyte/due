@@ -148,6 +148,5 @@ type DisconnectArgs struct {
 type DeliverArgs struct {
 	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
 	UID     int64    // 用户ID
-	Async   bool     // 是否异步
 	Message *Message // 消息
 }
