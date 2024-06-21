@@ -1,12 +1,8 @@
 package grpc
 
 import (
-	"github.com/dobyte/due/transport/grpc/v2/gate"
 	"github.com/dobyte/due/transport/grpc/v2/internal/client"
-	"github.com/dobyte/due/transport/grpc/v2/internal/pb"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
-	"github.com/dobyte/due/transport/grpc/v2/node"
-	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 	"sync"
@@ -34,51 +30,13 @@ func (t *Transporter) SetDefaultDiscovery(discovery registry.Discovery) {
 	}
 }
 
-// NewGateServer 新建网关服务器
-func (t *Transporter) NewGateServer(provider transport.GateProvider) (transport.Server, error) {
-	return gate.NewServer(provider, &t.opts.server)
+// NewServer 新建微服务服务器
+func (t *Transporter) NewServer() (transport.Server, error) {
+	return server.NewServer(&t.opts.server)
 }
 
-// NewNodeServer 新建节点服务器
-func (t *Transporter) NewNodeServer(provider transport.NodeProvider) (transport.Server, error) {
-	return node.NewServer(provider, &t.opts.server)
-}
-
-// NewServiceServer 新建微服务服务器
-func (t *Transporter) NewServiceServer() (transport.Server, error) {
-	return server.NewServer(&t.opts.server, pb.Gate_ServiceDesc.ServiceName, pb.Node_ServiceDesc.ServiceName)
-}
-
-// NewGateClient 新建网关客户端
-func (t *Transporter) NewGateClient(ep *endpoint.Endpoint) (transport.GateClient, error) {
-	t.once.Do(func() {
-		t.builder = client.NewBuilder(&t.opts.client)
-	})
-
-	cc, err := t.builder.Build(ep.Target())
-	if err != nil {
-		return nil, err
-	}
-
-	return gate.NewClient(cc), nil
-}
-
-// NewNodeClient 新建节点客户端
-func (t *Transporter) NewNodeClient(ep *endpoint.Endpoint) (transport.NodeClient, error) {
-	t.once.Do(func() {
-		t.builder = client.NewBuilder(&t.opts.client)
-	})
-
-	cc, err := t.builder.Build(ep.Target())
-	if err != nil {
-		return nil, err
-	}
-
-	return node.NewClient(cc), nil
-}
-
-// NewServiceClient 新建微服务客户端
-func (t *Transporter) NewServiceClient(target string) (transport.ServiceClient, error) {
+// NewClient 新建微服务客户端
+func (t *Transporter) NewClient(target string) (transport.Client, error) {
 	t.once.Do(func() {
 		t.builder = client.NewBuilder(&t.opts.client)
 	})

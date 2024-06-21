@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"google.golang.org/grpc"
@@ -13,11 +12,10 @@ import (
 const scheme = "grpc"
 
 type Server struct {
-	listenAddr       string
-	exposeAddr       string
-	endpoint         *endpoint.Endpoint
-	server           *grpc.Server
-	disabledServices []string
+	listenAddr string
+	exposeAddr string
+	endpoint   *endpoint.Endpoint
+	server     *grpc.Server
 }
 
 type Options struct {
@@ -27,7 +25,7 @@ type Options struct {
 	ServerOpts []grpc.ServerOption
 }
 
-func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
+func NewServer(opts *Options) (*Server, error) {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
 	if err != nil {
 		return nil, err
@@ -50,7 +48,6 @@ func NewServer(opts *Options, disabledServices ...string) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.server = grpc.NewServer(serverOpts...)
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
-	s.disabledServices = disabledServices
 
 	return s, nil
 }
@@ -96,12 +93,6 @@ func (s *Server) RegisterService(desc, service interface{}) error {
 	sd, ok := desc.(*grpc.ServiceDesc)
 	if !ok {
 		return errors.New("invalid dispatcher desc")
-	}
-
-	for _, ds := range s.disabledServices {
-		if ds == sd.ServiceName {
-			return errors.New(fmt.Sprintf("unable to register %s dispatcher name", ds))
-		}
 	}
 
 	s.server.RegisterService(sd, service)
