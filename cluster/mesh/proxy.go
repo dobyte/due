@@ -148,3 +148,13 @@ func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) erro
 func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) error {
 	return p.gateLinker.Broadcast(ctx, args)
 }
+
+// Deliver 投递消息给节点处理
+func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
+	return p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
+		NID:     args.NID,
+		UID:     args.UID,
+		Route:   args.Message.Route,
+		Message: args.Message,
+	})
+}

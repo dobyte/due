@@ -12,18 +12,26 @@ import (
 )
 
 type Proxy struct {
-	master *Master
-	link   *link.Link
+	master     *Master          // 管理服务器
+	gateLinker *link.GateLinker // 网关链接器
+	nodeLinker *link.NodeLinker // 节点链接器
 }
 
 func newProxy(master *Master) *Proxy {
-	return &Proxy{master: master, link: link.NewLink(&link.Options{
-		Codec:       master.opts.codec,
-		Locator:     master.opts.locator,
-		Registry:    master.opts.registry,
-		Encryptor:   master.opts.encryptor,
-		Transporter: master.opts.transporter,
-	})}
+	opts := &link.Options{
+		InsID:     master.opts.id,
+		InsKind:   cluster.Master,
+		Codec:     master.opts.codec,
+		Locator:   master.opts.locator,
+		Registry:  master.opts.registry,
+		Encryptor: master.opts.encryptor,
+	}
+
+	return &Proxy{
+		master:     master,
+		gateLinker: link.NewGateLinker(master.opts.ctx, opts),
+		nodeLinker: link.NewNodeLinker(master.opts.ctx, opts),
+	}
 }
 
 // GetID 获取当前管理节点ID
@@ -59,55 +67,60 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 	p.master.addHookListener(hook, handler)
 }
 
-// NewServiceClient 新建微服务客户端
+// NewMeshClient 新建微服务客户端
 // target参数可分为两种模式:
-// 直连模式: 	direct://127.0.0.1:8011
+// 服务直连模式: 	direct://127.0.0.1:8011
 // 服务发现模式: 	discovery://service_name
-func (p *Proxy) NewServiceClient(target string) (transport.ServiceClient, error) {
-	return p.master.opts.transporter.NewServiceClient(target)
+func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
+	return p.master.opts.transporter.NewClient(target)
 }
 
 // LocateGate 定位用户所在网关
 func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
-	return p.link.LocateGate(ctx, uid)
+	return p.gateLinker.Locate(ctx, uid)
 }
 
 // LocateNode 定位用户所在节点
 func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
-	return p.link.LocateNode(ctx, uid, name)
+	return p.nodeLinker.Locate(ctx, uid, name)
 }
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	list := make([]string, 0, len(states))
-	for _, state := range states {
-		list = append(list, state.String())
-	}
-
-	return p.link.FetchServiceList(ctx, cluster.Gate.String(), list...)
+	return p.gateLinker.FetchGateList(ctx, states...)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	list := make([]string, 0, len(states))
-	for _, state := range states {
-		list = append(list, state.String())
-	}
-
-	return p.link.FetchServiceList(ctx, cluster.Node.String(), list...)
+	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, uid int64) (string, error) {
-	return p.link.GetIP(ctx, &link.GetIPArgs{
+	return p.gateLinker.GetIP(ctx, &cluster.GetIPArgs{
 		Kind:   session.User,
 		Target: uid,
 	})
 }
 
+// Stat 统计会话总数
+func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+	return p.gateLinker.Stat(ctx, kind)
+}
+
+// IsOnline 检测是否在线
+func (p *Proxy) IsOnline(ctx context.Context, args *cluster.IsOnlineArgs) (bool, error) {
+	return p.gateLinker.IsOnline(ctx, args)
+}
+
+// Disconnect 断开连接
+func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) error {
+	return p.gateLinker.Disconnect(ctx, args)
+}
+
 // Push 推送消息
 func (p *Proxy) Push(ctx context.Context, uid int64, message *cluster.Message) error {
-	return p.link.Push(ctx, &link.PushArgs{
+	return p.gateLinker.Push(ctx, &cluster.PushArgs{
 		Kind:    session.User,
 		Target:  uid,
 		Message: message,
@@ -115,47 +128,18 @@ func (p *Proxy) Push(ctx context.Context, uid int64, message *cluster.Message) e
 }
 
 // Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *cluster.Message) (int64, error) {
-	return p.link.Multicast(ctx, &link.MulticastArgs{
+func (p *Proxy) Multicast(ctx context.Context, uids []int64, message *cluster.Message) error {
+	return p.gateLinker.Multicast(ctx, &cluster.MulticastArgs{
 		Kind:    session.User,
-		Targets: uids[:],
+		Targets: uids,
 		Message: message,
 	})
 }
 
 // Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *cluster.Message) (int64, error) {
-	return p.link.Broadcast(ctx, &link.BroadcastArgs{
+func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *cluster.Message) error {
+	return p.gateLinker.Broadcast(ctx, &cluster.BroadcastArgs{
 		Kind:    kind,
 		Message: message,
 	})
-}
-
-// Deliver 投递消息给节点处理
-func (p *Proxy) Deliver(ctx context.Context, uid int64, message *cluster.Message) error {
-	return p.link.Deliver(ctx, &link.DeliverArgs{
-		UID:     uid,
-		Message: message,
-	})
-}
-
-// Stat 统计会话总数
-func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	return p.link.Stat(ctx, kind)
-}
-
-// Disconnect 断开连接
-func (p *Proxy) Disconnect(ctx context.Context, uid int64, isForce bool) error {
-	return p.link.Disconnect(ctx, &link.DisconnectArgs{
-		Kind:    session.User,
-		Target:  uid,
-		IsForce: isForce,
-	})
-}
-
-// 启动监听
-func (p *Proxy) watch(ctx context.Context) {
-	p.link.WatchUserLocate(ctx, cluster.Gate.String(), cluster.Node.String())
-
-	p.link.WatchServiceInstance(ctx, cluster.Gate.String(), cluster.Node.String())
 }
