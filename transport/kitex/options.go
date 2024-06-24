@@ -1,7 +1,7 @@
 package kitex
 
 import (
-	"github.com/cloudwego/kitex/client"
+	"github.com/dobyte/due/transport/kitex/v2/internal/client"
 	"github.com/dobyte/due/transport/kitex/v2/internal/server"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
@@ -43,6 +43,6 @@ func WithServerListenAddr(addr string) Option {
 // WithClientDiscovery 设置客户端服务发现组件
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) {
-		//o.client.Discovery = discovery
+		o.client.Discovery = discovery
 	}
 }
