@@ -25,27 +25,21 @@ const (
 	defaultTimeoutKey = "etc.cluster.node.timeout"
 )
 
-const (
-	SingleThread SchedulingModel = "single-thread" // 单线程
-	MultiThread  SchedulingModel = "multi-thread"  // 多线程
-)
-
 // SchedulingModel 调度模型
 type SchedulingModel string
 
 type Option func(o *options)
 
 type options struct {
-	id              string                // 实例ID
-	name            string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
-	ctx             context.Context       // 上下文
-	codec           encoding.Codec        // 编解码器
-	timeout         time.Duration         // RPC调用超时时间
-	locator         locate.Locator        // 用户定位器
-	registry        registry.Registry     // 服务注册器
-	encryptor       crypto.Encryptor      // 消息加密器
-	transporter     transport.Transporter // 消息传输器
-	schedulingModel SchedulingModel       // 调度模型
+	id          string                // 实例ID
+	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
+	ctx         context.Context       // 上下文
+	codec       encoding.Codec        // 编解码器
+	timeout     time.Duration         // RPC调用超时时间
+	locator     locate.Locator        // 用户定位器
+	registry    registry.Registry     // 服务注册器
+	encryptor   crypto.Encryptor      // 消息加密器
+	transporter transport.Transporter // 消息传输器
 }
 
 func defaultOptions() *options {
@@ -117,7 +111,7 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
 }
 
-// WithSchedulingModel 设置调度模型
-func WithSchedulingModel(schedulingModel SchedulingModel) Option {
-	return func(o *options) { o.schedulingModel = schedulingModel }
+// WithTransporter 设置消息传输器
+func WithTransporter(transporter transport.Transporter) Option {
+	return func(o *options) { o.transporter = transporter }
 }

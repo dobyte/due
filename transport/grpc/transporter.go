@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+const name = "grpc"
+
 type Transporter struct {
 	opts    *options
 	once    sync.Once
@@ -21,6 +23,11 @@ func NewTransporter(opts ...Option) *Transporter {
 	}
 
 	return &Transporter{opts: o}
+}
+
+// Name 获取传输器组件名
+func (t *Transporter) Name() string {
+	return name
 }
 
 // SetDefaultDiscovery 设置默认的服务发现组件

@@ -16,6 +16,8 @@ import (
 	"sync"
 )
 
+const name = "etcd"
+
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
@@ -47,6 +49,11 @@ func NewRegistry(opts ...Option) *Registry {
 	}
 
 	return r
+}
+
+// Name 获取服务注册发现组件名
+func (r *Registry) Name() string {
+	return name
 }
 
 // Register 注册服务实例

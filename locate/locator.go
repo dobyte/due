@@ -12,6 +12,8 @@ import (
 )
 
 type Locator interface {
+	// Name 获取定位器组件名
+	Name() string
 	// Watch 监听用户定位变化
 	Watch(ctx context.Context, kinds ...string) (Watcher, error)
 	// BindGate 绑定网关

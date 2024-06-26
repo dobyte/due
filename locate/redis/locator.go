@@ -19,6 +19,8 @@ const (
 	clusterEventKey = "%s:locate:cluster:%s:event" // channel
 )
 
+const name = "redis"
+
 var _ locate.Locator = &Locator{}
 
 type Locator struct {
@@ -54,6 +56,11 @@ func NewLocator(opts ...Option) *Locator {
 	l.opts = o
 
 	return l
+}
+
+// Name 获取定位器组件名
+func (l *Locator) Name() string {
+	return name
 }
 
 // LocateGate 定位用户所在网关

@@ -221,3 +221,14 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 func (p *Proxy) Invoke(fn func()) {
 	p.node.fnChan <- fn
 }
+
+// 开始监听
+func (p *Proxy) watch() {
+	p.gateLinker.WatchUserLocate()
+
+	p.gateLinker.WatchClusterInstance()
+
+	p.nodeLinker.WatchUserLocate()
+
+	p.nodeLinker.WatchClusterInstance()
+}

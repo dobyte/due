@@ -33,10 +33,6 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 	}
 
-	l.doWatchUserLocate()
-
-	l.doWatchClusterInstance()
-
 	return l
 }
 
@@ -373,7 +369,7 @@ func (l *NodeLinker) doGetSource(uid int64, name string) (string, bool) {
 }
 
 // WatchUserLocate 监听用户定位
-func (l *NodeLinker) doWatchUserLocate() {
+func (l *NodeLinker) WatchUserLocate() {
 	if l.opts.Locator == nil {
 		return
 	}
@@ -414,8 +410,8 @@ func (l *NodeLinker) doWatchUserLocate() {
 	}()
 }
 
-// 监听集群实例
-func (l *NodeLinker) doWatchClusterInstance() {
+// WatchClusterInstance 监听集群实例
+func (l *NodeLinker) WatchClusterInstance() {
 	ctx, cancel := context.WithTimeout(l.ctx, 3*time.Second)
 	watcher, err := l.opts.Registry.Watch(ctx, cluster.Node.String())
 	cancel()

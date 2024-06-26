@@ -2,8 +2,10 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
@@ -86,9 +88,9 @@ func (n *Node) Start() {
 
 	n.registerServiceInstance()
 
-	go n.dispatch()
+	n.proxy.watch()
 
-	n.debugPrint()
+	go n.dispatch()
 
 	n.runHookFunc(cluster.Start)
 }
@@ -115,6 +117,32 @@ func (n *Node) Destroy() {
 // Proxy 获取节点代理
 func (n *Node) Proxy() *Proxy {
 	return n.proxy
+}
+
+// Info 组件信息
+func (n *Node) Info() {
+	infos := make([]string, 0)
+	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
+	infos = append(infos, fmt.Sprintf("Kind: %s", cluster.Node.String()))
+	infos = append(infos, fmt.Sprintf("Host: 0.0.0.0"))
+	infos = append(infos, fmt.Sprintf("Port: 9987"))
+	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
+	infos = append(infos, fmt.Sprintf("Locator: %s", n.opts.locator.Name()))
+	infos = append(infos, fmt.Sprintf("Registry: %s", n.opts.registry.Name()))
+
+	if n.opts.encryptor != nil {
+		infos = append(infos, fmt.Sprintf("Encryptor: %s", n.opts.encryptor.Name()))
+	} else {
+		infos = append(infos, "Encryptor: -")
+	}
+
+	if n.opts.transporter != nil {
+		infos = append(infos, fmt.Sprintf("Transporter: %s", n.opts.transporter.Name()))
+	} else {
+		infos = append(infos, "Transporter: -")
+	}
+
+	info.PrintComponentInfo(infos...)
 }
 
 // 分发处理消息

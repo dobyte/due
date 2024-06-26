@@ -5,6 +5,8 @@ type Component interface {
 	Name() string
 	// Init 初始化组件
 	Init()
+	// Info 组件信息
+	Info()
 	// Start 启动组件
 	Start()
 	// Restart 重启组件
@@ -21,6 +23,9 @@ func (b *Base) Name() string { return "base" }
 
 // Init 初始化组件
 func (b *Base) Init() {}
+
+// Info 组件信息
+func (b *Base) Info() {}
 
 // Start 启动组件
 func (b *Base) Start() {}

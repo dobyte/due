@@ -5,6 +5,8 @@ import (
 )
 
 type Registry interface {
+	// Name 获取服务注册发现组件名
+	Name() string
 	// Register 注册服务实例
 	Register(ctx context.Context, ins *ServiceInstance) error
 	// Deregister 解注册服务实例

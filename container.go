@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xfile"
@@ -32,10 +33,13 @@ func (c *Container) Add(components ...component.Component) {
 
 // Serve 启动容器
 func (c *Container) Serve() {
-	log.Debugf("Welcome to the due framework %s, Learn more at %s", Version, Website)
-
 	for _, comp := range c.components {
 		comp.Init()
+	}
+
+	info.PrintFrameworkInfo()
+	for _, comp := range c.components {
+		comp.Info()
 	}
 
 	for _, comp := range c.components {

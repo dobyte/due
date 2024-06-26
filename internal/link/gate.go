@@ -35,10 +35,6 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
 	}
 
-	l.doWatchUserLocate()
-
-	l.doWatchClusterInstance()
-
 	return l
 }
 
@@ -503,7 +499,7 @@ func (l *GateLinker) toBuffer(message interface{}, encrypt bool) ([]byte, error)
 }
 
 // WatchUserLocate 监听用户定位
-func (l *GateLinker) doWatchUserLocate() {
+func (l *GateLinker) WatchUserLocate() {
 	if l.opts.Locator == nil {
 		return
 	}
@@ -544,8 +540,8 @@ func (l *GateLinker) doWatchUserLocate() {
 	}()
 }
 
-// 监听集群实例
-func (l *GateLinker) doWatchClusterInstance() {
+// WatchClusterInstance 监听集群实例
+func (l *GateLinker) WatchClusterInstance() {
 	ctx, cancel := context.WithTimeout(l.ctx, 3*time.Second)
 	watcher, err := l.opts.Registry.Watch(ctx, cluster.Gate.String())
 	cancel()
