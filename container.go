@@ -38,6 +38,9 @@ func (c *Container) Serve() {
 	}
 
 	info.PrintFrameworkInfo()
+
+	info.PrintGlobalInfo()
+
 	for _, comp := range c.components {
 		comp.Info()
 	}

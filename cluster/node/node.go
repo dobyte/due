@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"sync/atomic"
@@ -125,7 +124,6 @@ func (n *Node) Info() {
 	infos := make([]string, 0)
 	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
 	infos = append(infos, fmt.Sprintf("Kind: %s", cluster.Node.String()))
-	infos = append(infos, fmt.Sprintf("Mode: %s", mode.GetMode()))
 	infos = append(infos, fmt.Sprintf("Host: 0.0.0.0"))
 	infos = append(infos, fmt.Sprintf("Port: 9987"))
 	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
@@ -144,7 +142,7 @@ func (n *Node) Info() {
 		infos = append(infos, "Transporter: -")
 	}
 
-	info.PrintComponentInfo(infos...)
+	info.PrintGroupInfo("Node", infos...)
 }
 
 // 分发处理消息
