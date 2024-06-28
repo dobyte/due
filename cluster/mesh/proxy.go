@@ -158,3 +158,14 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 		Message: args.Message,
 	})
 }
+
+// 开始监听
+func (p *Proxy) watch() {
+	p.gateLinker.WatchUserLocate()
+
+	p.gateLinker.WatchClusterInstance()
+
+	p.nodeLinker.WatchUserLocate()
+
+	p.nodeLinker.WatchClusterInstance()
+}

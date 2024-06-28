@@ -87,3 +87,10 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 		}
 	}
 }
+
+// 开始监听
+func (p *proxy) watch() {
+	p.nodeLinker.WatchUserLocate()
+
+	p.nodeLinker.WatchClusterInstance()
+}

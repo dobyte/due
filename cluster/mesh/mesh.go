@@ -2,8 +2,10 @@ package mesh
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
@@ -81,7 +83,9 @@ func (m *Mesh) Start() {
 
 	m.registerServiceInstances()
 
-	m.debugPrint()
+	m.proxy.watch()
+
+	m.printInfo()
 
 	m.runHookFunc(cluster.Start)
 }
@@ -206,11 +210,6 @@ func (m *Mesh) getState() cluster.State {
 	return cluster.State(atomic.LoadInt32(&m.state))
 }
 
-func (m *Mesh) debugPrint() {
-	log.Debugf("mesh server startup successful")
-	log.Debugf("%s server listen on %s", m.transporter.Scheme(), m.transporter.Addr())
-}
-
 // 执行钩子函数
 func (m *Mesh) runHookFunc(hook cluster.Hook) {
 	if handler, ok := m.hooks[hook]; ok {
@@ -223,7 +222,7 @@ func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
 	if m.getState() == cluster.Shut {
 		m.hooks[hook] = handler
 	} else {
-		log.Warnf("the mesh server is working, can't add hook handler")
+		log.Warnf("mesh server is working, can't add hook handler")
 	}
 }
 
@@ -236,6 +235,25 @@ func (m *Mesh) addServiceProvider(name string, desc, provider any) {
 			provider: provider,
 		})
 	} else {
-		log.Warnf("the mesh server is working, can't add service provider")
+		log.Warnf("mesh server is working, can't add service provider")
 	}
+}
+
+// 打印组件信息
+func (m *Mesh) printInfo() {
+	infos := make([]string, 0)
+	infos = append(infos, fmt.Sprintf("Name: %s", m.Name()))
+	infos = append(infos, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
+	infos = append(infos, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
+	infos = append(infos, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
+
+	if m.opts.encryptor != nil {
+		infos = append(infos, fmt.Sprintf("Encryptor: %s", m.opts.encryptor.Name()))
+	} else {
+		infos = append(infos, "Encryptor: -")
+	}
+
+	infos = append(infos, fmt.Sprintf("Transporter: %s", m.opts.transporter.Name()))
+
+	info.PrintBoxInfo("Mesh", infos...)
 }

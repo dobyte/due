@@ -80,6 +80,8 @@ func (g *Gate) Start() {
 
 	g.registerServiceInstance()
 
+	g.proxy.watch()
+
 	g.printInfo()
 }
 

@@ -98,12 +98,12 @@ func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
 }
 
-// WithTransporter 设置消息传输器
-func WithTransporter(transporter transport.Transporter) Option {
-	return func(o *options) { o.transporter = transporter }
-}
-
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) { o.encryptor = encryptor }
+}
+
+// WithTransporter 设置消息传输器
+func WithTransporter(transporter transport.Transporter) Option {
+	return func(o *options) { o.transporter = transporter }
 }
