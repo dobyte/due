@@ -31,10 +31,10 @@ type Client interface {
 type Transporter interface {
 	// Name 获取传输器组件名
 	Name() string
-	// SetDefaultDiscovery 设置默认的服务发现组件
-	SetDefaultDiscovery(discovery registry.Discovery)
 	// NewServer 新建传输服务器
 	NewServer() (Server, error)
 	// NewClient 新建传输务客户端
 	NewClient(target string) (Client, error)
+	// SetDefaultDiscovery 设置默认的服务发现组件
+	SetDefaultDiscovery(discovery registry.Discovery)
 }
