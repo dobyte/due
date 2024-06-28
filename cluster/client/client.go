@@ -2,9 +2,11 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -46,8 +48,7 @@ func NewClient(opts ...Option) *Client {
 	c.events = make(map[cluster.Event][]EventHandler)
 	c.hooks = make(map[cluster.Hook]HookHandler)
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
-
-	c.setState(cluster.Shut)
+	c.state = int32(cluster.Shut)
 
 	return c
 }
@@ -76,6 +77,8 @@ func (c *Client) Start() {
 
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
+
+	c.printInfo()
 
 	c.runHookFunc(cluster.Start)
 }
@@ -234,4 +237,20 @@ func (c *Client) runHookFunc(hook cluster.Hook) {
 	if handler, ok := c.hooks[hook]; ok {
 		handler(c.proxy)
 	}
+}
+
+// 打印组件信息
+func (c *Client) printInfo() {
+	infos := make([]string, 0)
+	infos = append(infos, fmt.Sprintf("Name: %s", c.Name()))
+	infos = append(infos, fmt.Sprintf("Codec: %s", c.opts.codec.Name()))
+	infos = append(infos, fmt.Sprintf("Protocol: %s", c.opts.client.Protocol()))
+
+	if c.opts.encryptor != nil {
+		infos = append(infos, fmt.Sprintf("Encryptor: %s", c.opts.encryptor.Name()))
+	} else {
+		infos = append(infos, "Encryptor: -")
+	}
+
+	info.PrintBoxInfo("Client", infos...)
 }
