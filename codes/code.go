@@ -37,7 +37,7 @@ func (c *Code) Code() int {
 	return c.code
 }
 
-// 替换新的错误码
+// WithCode 替换新的错误码
 func (c *Code) WithCode(code int) *Code {
 	return &Code{
 		code:    code,
@@ -50,7 +50,7 @@ func (c *Code) Message() string {
 	return c.message
 }
 
-// 替换新的错误码消息
+// WithMessage 替换新的错误码消息
 func (c *Code) WithMessage(message string) *Code {
 	return &Code{
 		code:    c.code,
@@ -88,18 +88,16 @@ func (c *Code) Err() error {
 	return &Error{code: c}
 }
 
-func (c *Code) ErrWith() {
-
-}
-
 type Error struct {
 	code *Code
 }
 
+// Error error interface implementation
 func (e *Error) Error() string {
 	return e.code.String()
 }
 
+// Convert 将错误信息转换为错误码
 func Convert(err error) *Code {
 	if err == nil {
 		return OK
