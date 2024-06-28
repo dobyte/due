@@ -14,6 +14,7 @@ import (
 
 const (
 	defaultName    = "node"          // 默认节点名称
+	defaultAddr    = ":0"            // 连接器监听地址
 	defaultCodec   = "proto"         // 默认编解码器名称
 	defaultTimeout = 3 * time.Second // 默认超时时间
 )
@@ -21,6 +22,7 @@ const (
 const (
 	defaultIDKey      = "etc.cluster.node.id"
 	defaultNameKey    = "etc.cluster.node.name"
+	defaultAddrKey    = "etc.cluster.node.addr"
 	defaultCodecKey   = "etc.cluster.node.codec"
 	defaultTimeoutKey = "etc.cluster.node.timeout"
 )
@@ -31,9 +33,10 @@ type SchedulingModel string
 type Option func(o *options)
 
 type options struct {
+	ctx         context.Context       // 上下文
 	id          string                // 实例ID
 	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
-	ctx         context.Context       // 上下文
+	addr        string                // 监听地址
 	codec       encoding.Codec        // 编解码器
 	timeout     time.Duration         // RPC调用超时时间
 	locator     locate.Locator        // 用户定位器
@@ -46,6 +49,7 @@ func defaultOptions() *options {
 	opts := &options{
 		ctx:     context.Background(),
 		name:    defaultName,
+		addr:    defaultAddr,
 		codec:   encoding.Invoke(defaultCodec),
 		timeout: defaultTimeout,
 	}
@@ -58,6 +62,10 @@ func defaultOptions() *options {
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
 		opts.name = name
+	}
+
+	if addr := etc.Get(defaultAddrKey).String(); addr != "" {
+		opts.addr = addr
 	}
 
 	if codec := etc.Get(defaultCodecKey).String(); codec != "" {
@@ -79,6 +87,11 @@ func WithID(id string) Option {
 // WithName 设置实例名称
 func WithName(name string) Option {
 	return func(o *options) { o.name = name }
+}
+
+// WithAddr 设置连接地址
+func WithAddr(addr string) Option {
+	return func(o *options) { o.addr = addr }
 }
 
 // WithCodec 设置编解码器

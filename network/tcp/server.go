@@ -137,7 +137,7 @@ func (s *server) serve() {
 				continue
 			}
 
-			log.Errorf("tcp accept error: %v", err)
+			log.Warnf("tcp accept error: %v", err)
 			return
 		}
 

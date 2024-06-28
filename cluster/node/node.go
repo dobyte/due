@@ -17,17 +17,17 @@ type HookHandler func(proxy *Proxy)
 
 type Node struct {
 	component.Base
-	opts        *options
-	ctx         context.Context
-	cancel      context.CancelFunc
-	state       int32
-	router      *Router
-	trigger     *Trigger
-	proxy       *Proxy
-	hooks       map[cluster.Hook]HookHandler
-	instance    *registry.ServiceInstance
-	transporter *node.Server
-	fnChan      chan func()
+	opts     *options
+	ctx      context.Context
+	cancel   context.CancelFunc
+	state    int32
+	router   *Router
+	trigger  *Trigger
+	proxy    *Proxy
+	hooks    map[cluster.Hook]HookHandler
+	instance *registry.ServiceInstance
+	linker   *node.Server
+	fnChan   chan func()
 }
 
 func NewNode(opts ...Option) *Node {
@@ -44,8 +44,7 @@ func NewNode(opts ...Option) *Node {
 	n.trigger = newTrigger(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
-
-	n.setState(cluster.Shut)
+	n.state = int32(cluster.Shut)
 
 	return n
 }
@@ -84,18 +83,20 @@ func (n *Node) Init() {
 func (n *Node) Start() {
 	n.setState(cluster.Work)
 
-	n.startTransportServer()
+	n.startLinkServer()
 
 	n.registerServiceInstance()
 
 	n.proxy.watch()
 
-	go n.dispatch()
+	n.dispatch()
+
+	n.printInfo()
 
 	n.runHookFunc(cluster.Start)
 }
 
-// Destroy 销毁网关服务器
+// Destroy 销毁节点服务器
 func (n *Node) Destroy() {
 	n.setState(cluster.Shut)
 
@@ -103,7 +104,7 @@ func (n *Node) Destroy() {
 
 	n.deregisterServiceInstance()
 
-	n.stopTransportServer()
+	n.stopLinkServer()
 
 	n.router.close()
 
@@ -119,79 +120,55 @@ func (n *Node) Proxy() *Proxy {
 	return n.proxy
 }
 
-// Info 组件信息
-func (n *Node) Info() {
-	infos := make([]string, 0)
-	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
-	infos = append(infos, fmt.Sprintf("Kind: %s", cluster.Node.String()))
-	infos = append(infos, fmt.Sprintf("Host: 0.0.0.0"))
-	infos = append(infos, fmt.Sprintf("Port: 9987"))
-	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
-	infos = append(infos, fmt.Sprintf("Locator: %s", n.opts.locator.Name()))
-	infos = append(infos, fmt.Sprintf("Registry: %s", n.opts.registry.Name()))
-
-	if n.opts.encryptor != nil {
-		infos = append(infos, fmt.Sprintf("Encryptor: %s", n.opts.encryptor.Name()))
-	} else {
-		infos = append(infos, "Encryptor: -")
-	}
-
-	if n.opts.transporter != nil {
-		infos = append(infos, fmt.Sprintf("Transporter: %s", n.opts.transporter.Name()))
-	} else {
-		infos = append(infos, "Transporter: -")
-	}
-
-	info.PrintGroupInfo("Node", infos...)
-}
-
 // 分发处理消息
 func (n *Node) dispatch() {
-	for {
-		select {
-		case evt, ok := <-n.trigger.receive():
-			if !ok {
-				return
-			}
-			xcall.Call(func() {
-				n.trigger.handle(evt)
-			})
-		case ctx, ok := <-n.router.receive():
-			if !ok {
-				return
-			}
-			xcall.Call(func() {
-				n.router.handle(ctx)
-			})
-		case handle, ok := <-n.fnChan:
-			if !ok {
-				return
-			}
-			xcall.Call(handle)
-		}
-	}
-}
-
-// 启动传输服务器
-func (n *Node) startTransportServer() {
-	transporter, err := node.NewServer(":9987", &provider{node: n})
-	if err != nil {
-		log.Fatalf("transport server create failed: %v", err)
-	}
-
-	n.transporter = transporter
-
 	go func() {
-		if err = n.transporter.Start(); err != nil {
-			log.Errorf("transport server start failed: %v", err)
+		for {
+			select {
+			case evt, ok := <-n.trigger.receive():
+				if !ok {
+					return
+				}
+				xcall.Call(func() {
+					n.trigger.handle(evt)
+				})
+			case ctx, ok := <-n.router.receive():
+				if !ok {
+					return
+				}
+				xcall.Call(func() {
+					n.router.handle(ctx)
+				})
+			case handle, ok := <-n.fnChan:
+				if !ok {
+					return
+				}
+				xcall.Call(handle)
+			}
 		}
 	}()
 }
 
-// 停止传输服务器
-func (n *Node) stopTransportServer() {
-	if err := n.transporter.Stop(); err != nil {
-		log.Errorf("transport server stop failed: %v", err)
+// 启动连接服务器
+func (n *Node) startLinkServer() {
+	linker, err := node.NewServer(n.opts.addr, &provider{node: n})
+	if err != nil {
+		log.Fatalf("link server create failed: %v", err)
+	}
+
+	n.linker = linker
+
+	go func() {
+		if err = n.linker.Start(); err != nil {
+			log.Fatalf("link server start failed: %v", err)
+		}
+	}()
+}
+
+// 停止连接服务器
+func (n *Node) stopLinkServer() {
+	if err := n.linker.Stop(); err != nil {
+		log.Errorf("link server stop failed: %v", err)
 	}
 }
 
@@ -219,14 +196,14 @@ func (n *Node) registerServiceInstance() {
 		State:    n.getState().String(),
 		Routes:   routes,
 		Events:   events,
-		Endpoint: n.transporter.Endpoint().String(),
+		Endpoint: n.linker.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
 	err := n.opts.registry.Register(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Fatalf("register node instance failed: %v", err)
+		log.Fatalf("node instance register failed: %v", err)
 	}
 }
 
@@ -236,7 +213,7 @@ func (n *Node) deregisterServiceInstance() {
 	err := n.opts.registry.Deregister(ctx, n.instance)
 	cancel()
 	if err != nil {
-		log.Errorf("deregister node instance failed: %v", err)
+		log.Errorf("node instance deregister failed: %v", err)
 	}
 }
 
@@ -278,13 +255,8 @@ func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 	if n.getState() == cluster.Shut {
 		n.hooks[hook] = handler
 	} else {
-		log.Warnf("the node server is working, can't add hook handler")
+		log.Warnf("node server is working, can't add hook handler")
 	}
-}
-
-func (n *Node) debugPrint() {
-	log.Debugf("node server startup successful")
-	log.Debugf("transport server listen on %s", n.transporter.ListenAddr())
 }
 
 // 执行钩子函数
@@ -292,4 +264,28 @@ func (n *Node) runHookFunc(hook cluster.Hook) {
 	if handler, ok := n.hooks[hook]; ok {
 		handler(n.proxy)
 	}
+}
+
+// 打印组件信息
+func (n *Node) printInfo() {
+	infos := make([]string, 0)
+	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
+	infos = append(infos, fmt.Sprintf("Link: %s", n.linker.ExposeAddr()))
+	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
+	infos = append(infos, fmt.Sprintf("Locator: %s", n.opts.locator.Name()))
+	infos = append(infos, fmt.Sprintf("Registry: %s", n.opts.registry.Name()))
+
+	if n.opts.encryptor != nil {
+		infos = append(infos, fmt.Sprintf("Encryptor: %s", n.opts.encryptor.Name()))
+	} else {
+		infos = append(infos, "Encryptor: -")
+	}
+
+	if n.opts.transporter != nil {
+		infos = append(infos, fmt.Sprintf("Transporter: %s", n.opts.transporter.Name()))
+	} else {
+		infos = append(infos, "Transporter: -")
+	}
+
+	info.PrintBoxInfo("Node", infos...)
 }

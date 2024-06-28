@@ -42,10 +42,6 @@ func (c *Container) Serve() {
 	info.PrintGlobalInfo()
 
 	for _, comp := range c.components {
-		comp.Info()
-	}
-
-	for _, comp := range c.components {
 		comp.Start()
 	}
 
@@ -69,7 +65,7 @@ func (c *Container) Serve() {
 	}
 
 	if err := eventbus.Close(); err != nil {
-		log.Errorf("eventbus close failed: %v", err)
+		log.Warnf("eventbus close failed: %v", err)
 	}
 
 	task.Release()

@@ -9,24 +9,28 @@ package gate
 
 import (
 	"context"
+	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
+	"strings"
 )
 
 type Gate struct {
 	component.Base
-	opts        *options
-	ctx         context.Context
-	cancel      context.CancelFunc
-	proxy       *proxy
-	instance    *registry.ServiceInstance
-	session     *session.Session
-	transporter *gate.Server
+	opts     *options
+	ctx      context.Context
+	cancel   context.CancelFunc
+	proxy    *proxy
+	instance *registry.ServiceInstance
+	session  *session.Session
+	linker   *gate.Server
 }
 
 func NewGate(opts ...Option) *Gate {
@@ -72,11 +76,11 @@ func (g *Gate) Init() {
 func (g *Gate) Start() {
 	g.startNetworkServer()
 
-	g.startTransportServer()
+	g.startLinkerServer()
 
 	g.registerServiceInstance()
 
-	g.debugPrint()
+	g.printInfo()
 }
 
 // Destroy 销毁组件
@@ -85,7 +89,7 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
-	g.stopTransportServer()
+	g.stopLinkerServer()
 
 	g.cancel()
 }
@@ -143,25 +147,25 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 }
 
 // 启动传输服务器
-func (g *Gate) startTransportServer() {
-	transporter, err := gate.NewServer(":9988", &provider{gate: g})
+func (g *Gate) startLinkerServer() {
+	transporter, err := gate.NewServer(g.opts.addr, &provider{gate: g})
 	if err != nil {
-		log.Fatalf("transport server create failed: %v", err)
+		log.Fatalf("link server create failed: %v", err)
 	}
 
-	g.transporter = transporter
+	g.linker = transporter
 
 	go func() {
-		if err = g.transporter.Start(); err != nil {
-			log.Errorf("transport server start failed: %v", err)
+		if err = g.linker.Start(); err != nil {
+			log.Errorf("link server start failed: %v", err)
 		}
 	}()
 }
 
 // 停止传输服务器
-func (g *Gate) stopTransportServer() {
-	if err := g.transporter.Stop(); err != nil {
-		log.Errorf("transport server stop failed: %v", err)
+func (g *Gate) stopLinkerServer() {
+	if err := g.linker.Stop(); err != nil {
+		log.Errorf("link server stop failed: %v", err)
 	}
 }
 
@@ -173,7 +177,7 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    cluster.Work.String(),
-		Endpoint: g.transporter.Endpoint().String(),
+		Endpoint: g.linker.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
@@ -194,8 +198,14 @@ func (g *Gate) deregisterServiceInstance() {
 	}
 }
 
-func (g *Gate) debugPrint() {
-	log.Debugf("gate server startup successful")
-	log.Debugf("%s server listen on %s", g.opts.server.Protocol(), g.opts.server.Addr())
-	log.Debugf("transport server listen on %s", g.transporter.ListenAddr())
+// 打印组件信息
+func (g *Gate) printInfo() {
+	infos := make([]string, 0)
+	infos = append(infos, fmt.Sprintf("Name: %s", g.Name()))
+	infos = append(infos, fmt.Sprintf("Link: %s", g.linker.ExposeAddr()))
+	infos = append(infos, fmt.Sprintf("Server: [%s] %s", strings.ToUpper(g.opts.server.Protocol()), net.FulfillAddr(g.opts.server.Addr())))
+	infos = append(infos, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
+	infos = append(infos, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
+
+	info.PrintBoxInfo("Gate", infos...)
 }
