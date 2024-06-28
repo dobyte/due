@@ -73,17 +73,17 @@ func (c *serverConn) Send(msg []byte) (err error) {
 }
 
 // Push 发送消息（异步）
-func (c *serverConn) Push(msg []byte) error {
+func (c *serverConn) Push(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err := c.checkState(); err != nil {
-		return err
+	if err = c.checkState(); err != nil {
+		return
 	}
 
 	c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return nil
+	return
 }
 
 // State 获取连接状态
@@ -112,14 +112,19 @@ func (c *serverConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *serverConn) LocalAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.LocalAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.LocalAddr(), nil
 }
 
 // RemoteIP 获取远端IP
@@ -134,18 +139,23 @@ func (c *serverConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.RemoteAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.RemoteAddr(), nil
 }
 
 // 初始化连接
-func (c *serverConn) init(id int64, conn *websocket.Conn, cm *serverConnMgr) {
+func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
@@ -179,64 +189,69 @@ func (c *serverConn) checkState() error {
 }
 
 // 优雅关闭
-func (c *serverConn) graceClose(isNeedRecycle bool) (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *serverConn) graceClose(isNeedRecycle bool) error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnHanged)) {
+		return errors.ErrConnectionNotOpened
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
+	c.rw.RLock()
 	c.chHighWrite <- chWrite{typ: closeSig}
-	c.rw.Unlock()
+	c.rw.RUnlock()
 
 	<-c.done
 
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+		return errors.ErrConnectionNotHanged
+	}
+
 	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chLowWrite)
 	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
-	if isNeedRecycle {
-		c.connMgr.recycle(c)
-	}
 	c.rw.Unlock()
+
+	err := conn.Close()
+
+	if isNeedRecycle {
+		c.connMgr.recycle(conn)
+	}
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 强制关闭
-func (c *serverConn) forceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *serverConn) forceClose() error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+			return errors.ErrConnectionClosed
+		}
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	c.rw.Lock()
 	close(c.chLowWrite)
 	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
-	c.connMgr.recycle(c)
 	c.rw.Unlock()
+
+	err := conn.Close()
+
+	c.connMgr.recycle(conn)
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 读取消息

@@ -16,8 +16,6 @@ import (
 	"net/http"
 )
 
-const protocol = "ws"
-
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
 
 type Server interface {

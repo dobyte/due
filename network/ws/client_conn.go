@@ -131,14 +131,19 @@ func (c *clientConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *clientConn) LocalAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.LocalAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.LocalAddr(), nil
 }
 
 // RemoteIP 获取远端IP
@@ -153,14 +158,19 @@ func (c *clientConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *clientConn) RemoteAddr() (net.Addr, error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	if err := c.checkState(); err != nil {
 		return nil, err
 	}
 
-	return c.conn.RemoteAddr(), nil
+	c.rw.RLock()
+	conn := c.conn
+	c.rw.RUnlock()
+
+	if conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
+	return conn.RemoteAddr(), nil
 }
 
 // 检测连接状态
@@ -176,60 +186,63 @@ func (c *clientConn) checkState() error {
 }
 
 // 优雅关闭
-func (c *clientConn) graceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *clientConn) graceClose() error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnHanged)) {
+		return errors.ErrConnectionNotOpened
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnHanged))
+	c.rw.RLock()
 	c.chHighWrite <- chWrite{typ: closeSig}
-	c.rw.Unlock()
+	c.rw.RUnlock()
 
 	<-c.done
 
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+		return errors.ErrConnectionNotHanged
+	}
+
 	c.rw.Lock()
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
 	close(c.chLowWrite)
 	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
+
+	err := conn.Close()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 强制关闭
-func (c *clientConn) forceClose() (err error) {
-	c.rw.Lock()
-
-	if err = c.checkState(); err != nil {
-		c.rw.Unlock()
-		return
+func (c *clientConn) forceClose() error {
+	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
+		if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+			return errors.ErrConnectionClosed
+		}
 	}
 
-	atomic.StoreInt32(&c.state, int32(network.ConnClosed))
+	c.rw.Lock()
 	close(c.chLowWrite)
 	close(c.chHighWrite)
 	close(c.close)
 	close(c.done)
-	err = c.conn.Close()
+	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
+
+	err := conn.Close()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
 
-	return
+	return err
 }
 
 // 读取消息

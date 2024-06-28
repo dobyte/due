@@ -46,6 +46,11 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
 }
 
+// Protocol 协议
+func (c *client) Protocol() string {
+	return protocol
+}
+
 // OnConnect 监听连接打开
 func (c *client) OnConnect(handler network.ConnectHandler) {
 	c.connectHandler = handler

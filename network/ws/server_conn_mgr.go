@@ -9,63 +9,113 @@ package ws
 
 import (
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
+	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 type serverConnMgr struct {
-	mu     sync.Mutex            // 连接读写锁
-	id     int64                 // 连接ID
-	pool   sync.Pool             // 连接池
-	conns  map[int64]*serverConn // 连接集合
-	server *server               // 服务器
+	id         int64        // 连接ID
+	total      int64        // 总连接数
+	server     *server      // 服务器
+	pool       sync.Pool    // 连接池
+	partitions []*partition // 连接管理
 }
 
 func newConnMgr(server *server) *serverConnMgr {
-	return &serverConnMgr{
-		server: server,
-		conns:  make(map[int64]*serverConn),
-		pool:   sync.Pool{New: func() interface{} { return &serverConn{} }},
+	cm := &serverConnMgr{}
+	cm.server = server
+	cm.pool = sync.Pool{New: func() interface{} { return &serverConn{} }}
+	cm.partitions = make([]*partition, 100)
+
+	for i := 0; i < len(cm.partitions); i++ {
+		cm.partitions[i] = &partition{connections: make(map[*websocket.Conn]*serverConn)}
 	}
+
+	return cm
 }
 
 // 关闭连接
 func (cm *serverConnMgr) close() {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	var wg sync.WaitGroup
 
-	for _, conn := range cm.conns {
-		_ = conn.graceClose(false)
+	wg.Add(len(cm.partitions))
+
+	for i := range cm.partitions {
+		p := cm.partitions[i]
+
+		xcall.Go(func() {
+			p.close()
+			wg.Done()
+		})
 	}
 
-	cm.conns = nil
+	wg.Wait()
 }
 
 // 分配连接
 func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
-	cm.mu.Lock()
-
-	if len(cm.conns) >= cm.server.opts.maxConnNum {
-		cm.mu.Unlock()
+	if atomic.LoadInt64(&cm.total) >= int64(cm.server.opts.maxConnNum) {
 		return errors.ErrTooManyConnection
 	}
 
-	cm.id++
-	id := cm.id
+	id := atomic.AddInt64(&cm.id, 1)
 	conn := cm.pool.Get().(*serverConn)
-	cm.conns[id] = conn
-	cm.mu.Unlock()
-
-	conn.init(id, c, cm)
+	conn.init(cm, id, c)
+	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
+	cm.partitions[index].store(c, conn)
+	atomic.AddInt64(&cm.total, 1)
 
 	return nil
 }
 
 // 回收连接
-func (cm *serverConnMgr) recycle(conn *serverConn) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+func (cm *serverConnMgr) recycle(c *websocket.Conn) {
+	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
+	if conn, ok := cm.partitions[index].delete(c); ok {
+		cm.pool.Put(conn)
+		atomic.AddInt64(&cm.total, -1)
+	}
+}
 
-	delete(cm.conns, conn.id)
-	cm.pool.Put(conn)
+type partition struct {
+	rw          sync.RWMutex
+	connections map[*websocket.Conn]*serverConn
+}
+
+// 存储连接
+func (p *partition) store(c *websocket.Conn, conn *serverConn) {
+	p.rw.Lock()
+	p.connections[c] = conn
+	p.rw.Unlock()
+}
+
+// 加载连接
+func (p *partition) load(c *websocket.Conn) (*serverConn, bool) {
+	p.rw.RLock()
+	conn, ok := p.connections[c]
+	p.rw.RUnlock()
+
+	return conn, ok
+}
+
+// 删除连接
+func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
+	p.rw.Lock()
+	conn, ok := p.connections[c]
+	if ok {
+		delete(p.connections, c)
+	}
+	p.rw.Unlock()
+
+	return conn, ok
+}
+
+// 关闭该分片内的所有连接
+func (p *partition) close() {
+	for _, conn := range p.connections {
+		_ = conn.Close()
+	}
 }

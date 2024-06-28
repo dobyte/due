@@ -7,27 +7,25 @@ import (
 )
 
 const (
-	defaultServerAddr                    = ":3553"
-	defaultServerPath                    = "/"
-	defaultServerMaxConnNum              = 5000
-	defaultServerCheckOrigin             = "*"
-	defaultServerHandshakeTimeout        = "10s"
-	defaultServerHeartbeatInterval       = "10s"
-	defaultServerHeartbeatMechanism      = "resp"
-	defaultServerHeartbeatWithServerTime = true
+	defaultServerAddr               = ":3553"
+	defaultServerPath               = "/"
+	defaultServerMaxConnNum         = 5000
+	defaultServerCheckOrigin        = "*"
+	defaultServerHandshakeTimeout   = "10s"
+	defaultServerHeartbeatInterval  = "10s"
+	defaultServerHeartbeatMechanism = "resp"
 )
 
 const (
-	defaultServerAddrKey                    = "etc.network.ws.server.addr"
-	defaultServerPathKey                    = "etc.network.ws.server.path"
-	defaultServerMaxConnNumKey              = "etc.network.ws.server.maxConnNum"
-	defaultServerCheckOriginsKey            = "etc.network.ws.server.origins"
-	defaultServerKeyFileKey                 = "etc.network.ws.server.keyFile"
-	defaultServerCertFileKey                = "etc.network.ws.server.certFile"
-	defaultServerHandshakeTimeoutKey        = "etc.network.ws.server.handshakeTimeout"
-	defaultServerHeartbeatIntervalKey       = "etc.network.ws.server.heartbeatInterval"
-	defaultServerHeartbeatMechanismKey      = "etc.network.ws.server.heartbeatMechanism"
-	defaultServerHeartbeatWithServerTimeKey = "etc.network.ws.server.heartbeatWithServerTime"
+	defaultServerAddrKey               = "etc.network.ws.server.addr"
+	defaultServerPathKey               = "etc.network.ws.server.path"
+	defaultServerMaxConnNumKey         = "etc.network.ws.server.maxConnNum"
+	defaultServerCheckOriginsKey       = "etc.network.ws.server.origins"
+	defaultServerKeyFileKey            = "etc.network.ws.server.keyFile"
+	defaultServerCertFileKey           = "etc.network.ws.server.certFile"
+	defaultServerHandshakeTimeoutKey   = "etc.network.ws.server.handshakeTimeout"
+	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
 )
 
 const (
@@ -42,16 +40,15 @@ type ServerOption func(o *serverOptions)
 type CheckOriginFunc func(r *http.Request) bool
 
 type serverOptions struct {
-	addr                    string             // 监听地址
-	maxConnNum              int                // 最大连接数
-	certFile                string             // 证书文件
-	keyFile                 string             // 秘钥文件
-	path                    string             // 路径，默认为"/"
-	checkOrigin             CheckOriginFunc    // 跨域检测
-	handshakeTimeout        time.Duration      // 握手超时时间，默认10s
-	heartbeatInterval       time.Duration      // 心跳间隔时间，默认10s
-	heartbeatMechanism      HeartbeatMechanism // 心跳机制，默认resp
-	heartbeatWithServerTime bool               // 下行心跳是否携带服务器时间，默认为true
+	addr               string             // 监听地址
+	maxConnNum         int                // 最大连接数
+	certFile           string             // 证书文件
+	keyFile            string             // 秘钥文件
+	path               string             // 路径，默认为"/"
+	checkOrigin        CheckOriginFunc    // 跨域检测
+	handshakeTimeout   time.Duration      // 握手超时时间，默认10s
+	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
+	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
 }
 
 func defaultServerOptions() *serverOptions {
@@ -72,16 +69,15 @@ func defaultServerOptions() *serverOptions {
 	}
 
 	return &serverOptions{
-		addr:                    etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		maxConnNum:              etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		path:                    etc.Get(defaultServerPathKey, defaultServerPath).String(),
-		checkOrigin:             checkOrigin,
-		keyFile:                 etc.Get(defaultServerKeyFileKey).String(),
-		certFile:                etc.Get(defaultServerCertFileKey).String(),
-		handshakeTimeout:        etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration(),
-		heartbeatInterval:       etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
-		heartbeatMechanism:      HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
-		heartbeatWithServerTime: etc.Get(defaultServerHeartbeatWithServerTimeKey, defaultServerHeartbeatWithServerTime).Bool(),
+		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
+		path:               etc.Get(defaultServerPathKey, defaultServerPath).String(),
+		checkOrigin:        checkOrigin,
+		keyFile:            etc.Get(defaultServerKeyFileKey).String(),
+		certFile:           etc.Get(defaultServerCertFileKey).String(),
+		handshakeTimeout:   etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration(),
+		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
+		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
 	}
 }
 
@@ -123,9 +119,4 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // WithServerHeartbeatMechanism 设置心跳机制
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
-}
-
-// WithServerHeartbeatWithServerTime 设置下行心跳是否携带服务器时间
-func WithServerHeartbeatWithServerTime(heartbeatWithServerTime bool) ServerOption {
-	return func(o *serverOptions) { o.heartbeatWithServerTime = heartbeatWithServerTime }
 }
