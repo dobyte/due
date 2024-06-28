@@ -1,4 +1,4 @@
-package chain
+package chains
 
 import "github.com/dobyte/due/v2/utils/xcall"
 

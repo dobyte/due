@@ -1,13 +1,13 @@
-package chain_test
+package chains_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/chain"
+	"github.com/dobyte/due/v2/core/chains"
 	"testing"
 )
 
 func TestNewChain(t *testing.T) {
-	c := chain.NewChain()
+	c := chains.NewChain()
 
 	defer c.FireTail()
 
