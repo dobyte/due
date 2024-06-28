@@ -19,7 +19,6 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
-	"strings"
 )
 
 type Gate struct {
@@ -205,7 +204,7 @@ func (g *Gate) printInfo() {
 	infos := make([]string, 0)
 	infos = append(infos, fmt.Sprintf("Name: %s", g.Name()))
 	infos = append(infos, fmt.Sprintf("Link: %s", g.linker.ExposeAddr()))
-	infos = append(infos, fmt.Sprintf("Server: [%s] %s", strings.ToUpper(g.opts.server.Protocol()), net.FulfillAddr(g.opts.server.Addr())))
+	infos = append(infos, fmt.Sprintf("Server: [%s] %s", g.opts.server.Protocol(), net.FulfillAddr(g.opts.server.Addr())))
 	infos = append(infos, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
 	infos = append(infos, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
 

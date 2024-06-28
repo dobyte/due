@@ -16,7 +16,7 @@ import (
 	"net/http"
 )
 
-const protocol = "websocket"
+const protocol = "ws"
 
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
 
