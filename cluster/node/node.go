@@ -20,7 +20,7 @@ type Node struct {
 	opts     *options
 	ctx      context.Context
 	cancel   context.CancelFunc
-	state    int32
+	state    atomic.Int32
 	router   *Router
 	trigger  *Trigger
 	proxy    *Proxy
@@ -44,7 +44,7 @@ func NewNode(opts ...Option) *Node {
 	n.trigger = newTrigger(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
-	n.state = int32(cluster.Shut)
+	n.state.Store(int32(cluster.Shut))
 
 	return n
 }
@@ -81,7 +81,9 @@ func (n *Node) Init() {
 
 // Start 启动节点
 func (n *Node) Start() {
-	n.setState(cluster.Work)
+	if n.state.Swap(int32(cluster.Work)) != int32(cluster.Shut) {
+		return
+	}
 
 	n.startLinkServer()
 
@@ -98,7 +100,9 @@ func (n *Node) Start() {
 
 // Destroy 销毁节点服务器
 func (n *Node) Destroy() {
-	n.setState(cluster.Shut)
+	if n.state.Swap(int32(cluster.Shut)) == int32(cluster.Shut) {
+		return
+	}
 
 	n.runHookFunc(cluster.Destroy)
 
@@ -217,37 +221,32 @@ func (n *Node) deregisterServiceInstance() {
 	}
 }
 
-// 设置状态
-func (n *Node) setState(state cluster.State) {
-	atomic.StoreInt32(&n.state, int32(state))
-}
-
 // 获取状态
 func (n *Node) getState() cluster.State {
-	return cluster.State(atomic.LoadInt32(&n.state))
+	return cluster.State(n.state.Load())
 }
 
 // 更新状态
-func (n *Node) updateState(state cluster.State) error {
-	if n.getState() == state {
-		return nil
+func (n *Node) updateState(state cluster.State) (err error) {
+	old := n.state.Swap(int32(state))
+
+	if old == int32(state) {
+		return
 	}
 
-	instance := n.instance
-	instance.State = state.String()
+	defer func() {
+		if err != nil {
+			n.instance.State = cluster.State(old).String()
+		}
+	}()
 
-	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
-	defer cancel()
-
-	err := n.opts.registry.Register(ctx, instance)
-	if err != nil {
-		return err
-	}
-
-	n.setState(state)
 	n.instance.State = state.String()
 
-	return nil
+	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
+	err = n.opts.registry.Register(ctx, n.instance)
+	cancel()
+
+	return
 }
 
 // 添加钩子监听器

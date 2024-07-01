@@ -114,6 +114,16 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
+// GetNodeState 获取节点状态
+func (p *Proxy) GetNodeState() (cluster.State, error) {
+	return p.nodeLinker.GetNodeState()
+}
+
+// SetNodeState 设置节点状态
+func (p *Proxy) SetNodeState(ctx context.Context, nid string, state cluster.State) error {
+	return p.nodeLinker.SetNodeState(ctx, nid, state)
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.gateLinker.GetIP(ctx, args)

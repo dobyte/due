@@ -43,6 +43,7 @@ var (
 	ErrNotFoundLocator       = New("not found locator")
 	ErrUnexpectedEOF         = New("unexpected EOF")
 	ErrMissTransporter       = New("miss transporter")
+	ErrUnknownError          = New("unknown error")
 )
 
 // NewError 新建一个错误

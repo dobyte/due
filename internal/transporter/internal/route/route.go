@@ -13,4 +13,5 @@ const (
 	Broadcast                   // 推送广播消息
 	Trigger                     // 触发事件
 	Deliver                     // 投递消息
+	SetState                    // 设置状态
 )
