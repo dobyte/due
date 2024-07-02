@@ -30,6 +30,25 @@ func (c *Client) Deliver(ctx context.Context, cid, uid int64, message []byte) er
 	return c.cli.Send(ctx, protocol.EncodeDeliverReq(0, cid, uid, message), cid)
 }
 
+// GetState 获取状态
+func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
+	seq := c.doGenSequence()
+
+	buf := protocol.EncodeGetStateReq(seq)
+
+	res, err := c.cli.Call(ctx, seq, buf)
+	if err != nil {
+		return 0, err
+	}
+
+	code, state, err := protocol.DecodeGetStateRes(res)
+	if err != nil {
+		return 0, err
+	}
+
+	return state, codes.CodeToError(code)
+}
+
 // SetState 设置状态
 func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	seq := c.doGenSequence()

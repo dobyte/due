@@ -208,18 +208,18 @@ func (l *NodeLinker) FetchNodeList(ctx context.Context, states ...cluster.State)
 	return list, nil
 }
 
-// GetNodeState 获取节点状态
-func (l *NodeLinker) GetNodeState(ctx context.Context, nid string) (cluster.State, error) {
+// GetState 获取节点状态
+func (l *NodeLinker) GetState(ctx context.Context, nid string) (cluster.State, error) {
 	client, err := l.doBuildClient(nid)
 	if err != nil {
 		return cluster.Shut, err
 	}
 
-	return client.SetState(ctx)
+	return client.GetState(ctx)
 }
 
-// SetNodeState 设置节点状态
-func (l *NodeLinker) SetNodeState(ctx context.Context, nid string, state cluster.State) error {
+// SetState 设置节点状态
+func (l *NodeLinker) SetState(ctx context.Context, nid string, state cluster.State) error {
 	client, err := l.doBuildClient(nid)
 	if err != nil {
 		return err

@@ -30,6 +30,8 @@ func NewServer(addr string, provider Provider) (*Server, error) {
 func (s *Server) init() {
 	s.RegisterHandler(route.Trigger, s.trigger)
 	s.RegisterHandler(route.Deliver, s.deliver)
+	s.RegisterHandler(route.GetState, s.getState)
+	s.RegisterHandler(route.SetState, s.setState)
 }
 
 // 触发事件
@@ -76,4 +78,28 @@ func (s *Server) deliver(conn *server.Conn, data []byte) error {
 	} else {
 		return conn.Send(protocol.EncodeDeliverRes(seq, codes.ErrorToCode(err)))
 	}
+}
+
+// 获取状态
+func (s *Server) getState(conn *server.Conn, data []byte) error {
+	seq, err := protocol.DecodeGetStateReq(data)
+	if err != nil {
+		return err
+	}
+
+	state, err := s.provider.GetState()
+
+	return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
+}
+
+// 设置状态
+func (s *Server) setState(conn *server.Conn, data []byte) error {
+	seq, state, err := protocol.DecodeSetStateReq(data)
+	if err != nil {
+		return err
+	}
+
+	err = s.provider.SetState(state)
+
+	return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
 }

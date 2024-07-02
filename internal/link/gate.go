@@ -132,6 +132,15 @@ func (l *GateLinker) Unbind(ctx context.Context, uid int64) error {
 	return nil
 }
 
+// GetState 获取网关状态
+func (l *GateLinker) GetState(ctx context.Context, gid string) (cluster.State, error) {
+
+}
+
+func (l *GateLinker) SetState(ctx context.Context, gid string, state cluster.State) error {
+
+}
+
 // GetIP 获取客户端IP
 func (l *GateLinker) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
 	switch args.Kind {
