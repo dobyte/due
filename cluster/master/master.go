@@ -69,7 +69,7 @@ func (m *Master) Start() {
 
 	m.opts.transporter.SetDefaultDiscovery(m.opts.registry)
 
-	m.proxy.watch(m.ctx)
+	m.proxy.watch()
 
 	m.debugPrint()
 
