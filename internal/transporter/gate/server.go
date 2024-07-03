@@ -162,3 +162,27 @@ func (s *Server) broadcast(conn *server.Conn, data []byte) error {
 		return conn.Send(protocol.EncodeBroadcastRes(seq, codes.ErrorToCode(err), uint64(total)))
 	}
 }
+
+// 获取状态
+func (s *Server) getState(conn *server.Conn, data []byte) error {
+	seq, err := protocol.DecodeGetStateReq(data)
+	if err != nil {
+		return err
+	}
+
+	state, err := s.provider.GetState()
+
+	return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
+}
+
+// 设置状态
+func (s *Server) setState(conn *server.Conn, data []byte) error {
+	seq, state, err := protocol.DecodeSetStateReq(data)
+	if err != nil {
+		return err
+	}
+
+	err = s.provider.SetState(state)
+
+	return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
+}

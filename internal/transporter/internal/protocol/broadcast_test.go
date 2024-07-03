@@ -1,22 +1,42 @@
 package protocol_test
 
 import (
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	"testing"
 )
 
 func TestEncodeBroadcastReq(t *testing.T) {
-	buffer := protocol.EncodeBroadcastReq(1, session.User, []byte("hello world"))
+	message, err := packet.PackMessage(&packet.Message{
+		Route:  1,
+		Seq:    2,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	t.Log(buffer.Bytes())
+	buf := protocol.EncodeBroadcastReq(1, session.User, buffer.NewNocopyBuffer(message))
+
+	t.Log(buf.Bytes())
 }
 
 func TestDecodeBroadcastReq(t *testing.T) {
-	buffer := protocol.EncodeBroadcastReq(1, session.User, []byte("hello world"))
+	message, err := packet.PackMessage(&packet.Message{
+		Route:  1,
+		Seq:    2,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	seq, kind, message, err := protocol.DecodeBroadcastReq(buffer.Bytes())
+	buf := protocol.EncodeBroadcastReq(1, session.User, buffer.NewNocopyBuffer(message))
+
+	seq, kind, message, err := protocol.DecodeBroadcastReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,15 +47,15 @@ func TestDecodeBroadcastReq(t *testing.T) {
 }
 
 func TestEncodeBroadcastRes(t *testing.T) {
-	buffer := protocol.EncodeBroadcastRes(1, codes.OK, 20)
+	buf := protocol.EncodeBroadcastRes(1, codes.OK, 20)
 
-	t.Log(buffer.Bytes())
+	t.Log(buf.Bytes())
 }
 
 func TestDecodeBroadcastRes(t *testing.T) {
-	buffer := protocol.EncodeBroadcastRes(1, codes.OK, 20)
+	buf := protocol.EncodeBroadcastRes(1, codes.OK, 20)
 
-	code, total, err := protocol.DecodeBroadcastRes(buffer.Bytes())
+	code, total, err := protocol.DecodeBroadcastRes(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}

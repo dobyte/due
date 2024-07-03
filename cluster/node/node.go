@@ -230,7 +230,7 @@ func (n *Node) getState() cluster.State {
 func (n *Node) updateState(state cluster.State) (err error) {
 	old := n.state.Swap(int32(state))
 
-	if old == int32(state) {
+	if cluster.State(old) == state {
 		return
 	}
 

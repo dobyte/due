@@ -2,6 +2,7 @@ package client
 
 import (
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/network"
 )
 
 type Proxy struct {
@@ -45,4 +46,9 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 // Dial 拨号
 func (p *Proxy) Dial(opts ...DialOption) (*Conn, error) {
 	return p.client.dial(opts...)
+}
+
+// Client 获取客户端
+func (p *Proxy) Client() network.Client {
+	return p.client.opts.client
 }

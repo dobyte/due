@@ -11,8 +11,14 @@ type NocopyBuffer struct {
 
 var _ Buffer = &NocopyBuffer{}
 
-func NewNocopyBuffer() *NocopyBuffer {
-	return &NocopyBuffer{len: -1}
+func NewNocopyBuffer(blocks ...interface{}) *NocopyBuffer {
+	buf := &NocopyBuffer{len: -1}
+
+	for _, block := range blocks {
+		buf.Mount(block)
+	}
+
+	return buf
 }
 
 // Len 获取字节长度
@@ -166,7 +172,7 @@ func (b *NocopyBuffer) addToHead(node *NocopyNode) {
 	if node == nil {
 		return
 	}
-	
+
 	if b.head == nil {
 		b.head = node
 		b.tail = node

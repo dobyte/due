@@ -80,3 +80,13 @@ func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64,
 
 	return nil
 }
+
+// GetState 获取状态
+func (p *provider) GetState() (cluster.State, error) {
+	return p.node.getState(), nil
+}
+
+// SetState 设置状态
+func (p *provider) SetState(state cluster.State) error {
+	return nil
+}

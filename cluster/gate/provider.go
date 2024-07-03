@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/session"
@@ -88,4 +89,14 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 // Broadcast 推送广播消息
 func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []byte) (int64, error) {
 	return p.gate.session.Broadcast(kind, message)
+}
+
+// GetState 获取状态
+func (p *provider) GetState() (cluster.State, error) {
+	return cluster.Work, nil
+}
+
+// SetState 设置状态
+func (p *provider) SetState(state cluster.State) error {
+	return nil
 }

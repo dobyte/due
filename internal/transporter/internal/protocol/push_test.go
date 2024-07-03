@@ -1,6 +1,7 @@
 package protocol_test
 
 import (
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestEncodePushReq(t *testing.T) {
-	message, err := packet.PackMessage2(&packet.Message{
+	message, err := packet.PackMessage(&packet.Message{
 		Route:  1,
 		Seq:    2,
 		Buffer: []byte("hello world"),
@@ -18,13 +19,13 @@ func TestEncodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buffer := protocol.EncodePushReq(1, session.User, 3, message)
+	buf := protocol.EncodePushReq(1, session.User, 3, buffer.NewNocopyBuffer(message))
 
-	t.Log(buffer.Bytes())
+	t.Log(buf.Bytes())
 }
 
 func TestDecodePushReq(t *testing.T) {
-	message, err := packet.PackMessage2(&packet.Message{
+	message, err := packet.PackMessage(&packet.Message{
 		Route:  1,
 		Seq:    2,
 		Buffer: []byte("hello world"),
@@ -33,9 +34,9 @@ func TestDecodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buffer := protocol.EncodePushReq(1, session.User, 3, message)
+	buf := protocol.EncodePushReq(1, session.User, 3, buffer.NewNocopyBuffer(message))
 
-	seq, kind, target, msg, err := protocol.DecodePushReq(buffer.Bytes())
+	seq, kind, target, msg, err := protocol.DecodePushReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
