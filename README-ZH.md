@@ -213,9 +213,9 @@ go install github.com/dobyte/mongo-dao-generator@latest
 
 2.支持组件
 
-* [TCP](network/tcp/README-ZH.md)
-* [KCP](network/kcp/README-ZH.md)
-* [WS](network/ws/README-ZH.md)
+* [tcp](network/tcp/README-ZH.md)
+* [kcp](network/kcp/README-ZH.md)
+* [ws](network/ws/README-ZH.md)
 
 
 ### 11.快速开始
