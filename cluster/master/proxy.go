@@ -95,6 +95,26 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
+// GetGateState 获取网关状态
+func (p *Proxy) GetGateState(ctx context.Context, gid string) (cluster.State, error) {
+	return p.gateLinker.GetState(ctx, gid)
+}
+
+// SetGateState 设置网关状态
+func (p *Proxy) SetGateState(ctx context.Context, gid string, state cluster.State) error {
+	return p.gateLinker.SetState(ctx, gid, state)
+}
+
+// GetNodeState 获取节点状态
+func (p *Proxy) GetNodeState(ctx context.Context, nid string) (cluster.State, error) {
+	return p.nodeLinker.GetState(ctx, nid)
+}
+
+// SetNodeState 设置节点状态
+func (p *Proxy) SetNodeState(ctx context.Context, nid string, state cluster.State) error {
+	return p.nodeLinker.SetState(ctx, nid, state)
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, uid int64) (string, error) {
 	return p.gateLinker.GetIP(ctx, &cluster.GetIPArgs{
@@ -142,4 +162,15 @@ func (p *Proxy) Broadcast(ctx context.Context, kind session.Kind, message *clust
 		Kind:    kind,
 		Message: message,
 	})
+}
+
+// 开始监听
+func (p *Proxy) watch() {
+	p.gateLinker.WatchUserLocate()
+
+	p.gateLinker.WatchClusterInstance()
+
+	p.nodeLinker.WatchUserLocate()
+
+	p.nodeLinker.WatchClusterInstance()
 }
