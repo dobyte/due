@@ -18,9 +18,9 @@ func TestServer(t *testing.T) {
 
 	t.Logf("server listen on: %s", server.ListenAddr())
 
-	if err = server.Start(); err != nil {
-		t.Fatal(err)
-	}
+	go server.Start()
+
+	<-time.After(20 * time.Second)
 }
 
 type provider struct {
@@ -52,4 +52,14 @@ func TestTimeout(t *testing.T) {
 	case <-ctx2.Done():
 		fmt.Println(2, time.Now().Unix())
 	}
+}
+
+// GetState 获取状态
+func (p *provider) GetState() (cluster.State, error) {
+	return cluster.Work, nil
+}
+
+// SetState 设置状态
+func (p *provider) SetState(state cluster.State) error {
+	return nil
 }

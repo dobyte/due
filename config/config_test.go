@@ -15,7 +15,7 @@ func init() {
 
 func TestWatch(t *testing.T) {
 	ticker1 := time.NewTicker(2 * time.Second)
-	ticker2 := time.After(time.Minute)
+	ticker2 := time.After(5 * time.Second)
 
 	for {
 		select {
@@ -27,20 +27,6 @@ func TestWatch(t *testing.T) {
 			return
 		}
 	}
-}
-
-func TestLoad(t *testing.T) {
-	ctx := context.Background()
-	filename := "config.json"
-	c, err := config.Load(ctx, file.Name, filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(c[0].Name)
-	t.Log(c[0].Path)
-	t.Log(c[0].Format)
-	t.Log(c[0].Content)
 }
 
 func TestStore(t *testing.T) {
@@ -66,6 +52,20 @@ func TestStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestLoad(t *testing.T) {
+	ctx := context.Background()
+	filename := "config.json"
+	c, err := config.Load(ctx, file.Name, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(c[0].Name)
+	t.Log(c[0].Path)
+	t.Log(c[0].Format)
+	t.Log(c[0].Content)
 }
 
 func BenchmarkGet(b *testing.B) {

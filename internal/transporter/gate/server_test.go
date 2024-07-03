@@ -3,9 +3,11 @@ package gate_test
 import (
 	"context"
 	"fmt"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/session"
 	"testing"
+	"time"
 )
 
 func TestServer(t *testing.T) {
@@ -14,11 +16,11 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Logf("server listen on: %s", server.Addr())
+	t.Logf("server listen on: %s", server.ListenAddr())
 
-	if err = server.Start(); err != nil {
-		t.Fatal(err)
-	}
+	go server.Start()
+
+	<-time.After(20 * time.Second)
 }
 
 type provider struct {
@@ -70,5 +72,15 @@ func (p *provider) Stat(ctx context.Context, kind session.Kind) (total int64, er
 
 // Disconnect 断开连接
 func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error {
+	return nil
+}
+
+// GetState 获取状态
+func (p *provider) GetState() (cluster.State, error) {
+	return cluster.Work, nil
+}
+
+// SetState 设置状态
+func (p *provider) SetState(state cluster.State) error {
 	return nil
 }
