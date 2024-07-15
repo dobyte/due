@@ -85,6 +85,10 @@ func (n *Node) Start() {
 		return
 	}
 
+	if n.opts.transporter != nil {
+		n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
+	}
+
 	n.startLinkServer()
 
 	n.registerServiceInstance()

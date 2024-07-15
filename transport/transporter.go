@@ -38,3 +38,5 @@ type Transporter interface {
 	// SetDefaultDiscovery 设置默认的服务发现组件
 	SetDefaultDiscovery(discovery registry.Discovery)
 }
+
+type NewMeshClient func(target string) (Client, error)
