@@ -39,4 +39,4 @@ type Transporter interface {
 	SetDefaultDiscovery(discovery registry.Discovery)
 }
 
-type NewClient func(target string) (Client, error)
+type NewMeshClient func(target string) (Client, error)
