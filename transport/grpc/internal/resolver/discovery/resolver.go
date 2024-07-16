@@ -3,8 +3,10 @@ package discovery
 import (
 	"context"
 	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/resolver"
 	"time"
 )
@@ -85,9 +87,10 @@ func (r *Resolver) updateServices(services []*registry.ServiceInstance) {
 		})
 	}
 
-	err := r.cc.UpdateState(state)
-	if err != nil {
-		log.Errorf("update client conn state failed: %v", err)
+	if err := r.cc.UpdateState(state); err != nil {
+		if !(len(state.Addresses) == 0 && errors.Is(err, balancer.ErrBadResolverState)) {
+			log.Errorf("update client conn state failed: %v", err)
+		}
 	}
 }
 

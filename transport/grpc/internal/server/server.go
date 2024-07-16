@@ -90,12 +90,14 @@ func (s *Server) Stop() error {
 
 // RegisterService 注册服务
 func (s *Server) RegisterService(desc, service interface{}) error {
-	sd, ok := desc.(*grpc.ServiceDesc)
-	if !ok {
+	switch sd := desc.(type) {
+	case grpc.ServiceDesc:
+		s.server.RegisterService(&sd, service)
+	case *grpc.ServiceDesc:
+		s.server.RegisterService(sd, service)
+	default:
 		return errors.New("invalid dispatcher desc")
 	}
-
-	s.server.RegisterService(sd, service)
 
 	return nil
 }
