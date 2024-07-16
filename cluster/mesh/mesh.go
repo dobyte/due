@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
-	"github.com/dobyte/due/v2/internal/info"
+	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"

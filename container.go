@@ -3,9 +3,9 @@ package due
 import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/eventbus"
-	"github.com/dobyte/due/v2/internal/info"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xfile"
