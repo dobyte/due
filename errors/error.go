@@ -188,16 +188,6 @@ func (e *Error) Error() (text string) {
 	return
 }
 
-// Is 返回当前错误是否等于目标错误
-func (e *Error) Is(target error) bool {
-	return Is(e, target)
-}
-
-// As 返回当前错误是否是某一类错误
-func (e *Error) As(target interface{}) bool {
-	return As(e, target)
-}
-
 // Code 返回错误码
 func (e *Error) Code() *codes.Code {
 	if e == nil {

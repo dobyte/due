@@ -108,13 +108,14 @@ func Convert(err error) *Code {
 	}
 
 	text := err.Error()
+	flag := "code error:"
+	index := strings.Index(text, flag)
 
-	after, found := strings.CutPrefix(text, "code error:")
-	if !found {
+	if index == -1 {
 		return Unknown
 	}
 
-	after, found = strings.CutPrefix(after, " code = ")
+	after, found := strings.CutPrefix(text[index+len(flag):], " code = ")
 	if !found {
 		return Unknown
 	}
