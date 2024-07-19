@@ -2,7 +2,7 @@ module github.com/dobyte/due/registry/consul/v2
 
 go 1.20
 
-require github.com/dobyte/due/v2 v2.0.0
+require github.com/dobyte/due/v2 v2.1.0
 
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
