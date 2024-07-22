@@ -46,6 +46,7 @@ func NewRegistry(opts ...Option) *Registry {
 		param := vo.NacosClientParam{
 			ServerConfigs: make([]constant.ServerConfig, 0, len(o.urls)),
 			ClientConfig: &constant.ClientConfig{
+				TimeoutMs:            uint64(r.opts.timeout.Microseconds()),
 				NamespaceId:          r.opts.namespaceId,
 				Endpoint:             r.opts.endpoint,
 				RegionId:             r.opts.regionId,
@@ -56,7 +57,7 @@ func NewRegistry(opts ...Option) *Registry {
 				Username:             r.opts.username,
 				Password:             r.opts.password,
 				LogDir:               r.opts.logDir,
-				LogLevel:             "warn",
+				LogLevel:             r.opts.logLevel,
 				NotLoadCacheAtStart:  true,
 				UpdateCacheWhenEmpty: true,
 			},
