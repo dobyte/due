@@ -12,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/task"
 	"github.com/jinzhu/copier"
 )
 
@@ -100,6 +101,12 @@ func (r *request) Clone() Context {
 			Data:  r.message.Data,
 		},
 	}
+}
+
+// Task 投递任务
+func (r *request) Task(fn func(ctx Context)) {
+	ctx := r.Clone()
+	task.AddTask(func() { fn(ctx) })
 }
 
 // Context 获取上下文

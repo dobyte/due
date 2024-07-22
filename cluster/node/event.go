@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
+	"github.com/dobyte/due/v2/task"
 )
 
 type event struct {
@@ -65,6 +66,12 @@ func (e *event) Clone() Context {
 		uid:   e.uid,
 		proxy: e.proxy,
 	}
+}
+
+// Task 投递任务
+func (e *event) Task(fn func(ctx Context)) {
+	ctx := e.Clone()
+	task.AddTask(func() { fn(ctx) })
 }
 
 // Proxy 获取代理API

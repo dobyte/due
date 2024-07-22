@@ -24,6 +24,8 @@ type Context interface {
 	Parse(v interface{}) error
 	// Clone 克隆Context
 	Clone() Context
+	// Task 投递任务
+	Task(fn func(ctx Context))
 	// Context 获取上下文
 	Context() context.Context
 	// BindGate 绑定网关
