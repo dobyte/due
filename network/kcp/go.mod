@@ -1,13 +1,10 @@
 module github.com/dobyte/due/network/kcp/v2
 
-go 1.21
-
-toolchain go1.22.1
+go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.0.0
+	github.com/dobyte/due/v2 v2.1.0
 	github.com/xtaci/kcp-go/v5 v5.6.8
-	golang.org/x/crypto v0.24.0
 )
 
 require (
@@ -29,6 +26,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	golang.org/x/arch v0.7.0 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -1,6 +1,6 @@
 module github.com/dobyte/due/registry/nacos/v2
 
-go 1.20
+go 1.22
 
 require (
 	github.com/dobyte/due/v2 v2.1.0
