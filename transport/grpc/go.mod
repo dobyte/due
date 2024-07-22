@@ -1,11 +1,9 @@
 module github.com/dobyte/due/transport/grpc/v2
 
-go 1.21
-
-toolchain go1.22.1
+go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.0.0
+	github.com/dobyte/due/v2 v2.1.0
 	google.golang.org/grpc v1.65.0
 )
 

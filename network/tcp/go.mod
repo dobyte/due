@@ -1,8 +1,8 @@
 module github.com/dobyte/due/network/tcp/v2
 
-go 1.20
+go 1.22
 
-require github.com/dobyte/due/v2 v2.0.0
+require github.com/dobyte/due/v2 v2.1.0
 
 require (
 	github.com/BurntSushi/toml v1.2.0 // indirect
