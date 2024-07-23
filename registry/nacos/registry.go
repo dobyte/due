@@ -41,8 +41,6 @@ func NewRegistry(opts ...Option) *Registry {
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
-		r.builtin = true
-
 		param := vo.NacosClientParam{
 			ServerConfigs: make([]constant.ServerConfig, 0, len(o.urls)),
 			ClientConfig: &constant.ClientConfig{
@@ -105,6 +103,7 @@ func NewRegistry(opts ...Option) *Registry {
 			}
 
 			o.client, r.err = clients.NewNamingClient(param)
+			r.builtin = true
 		}
 	}
 

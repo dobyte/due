@@ -96,10 +96,6 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 		return nil, err
 	}
 
-	//if err = wm.unsubscribe(); err != nil {
-	//	return nil, err
-	//}
-
 	return wm, nil
 }
 
