@@ -6,15 +6,16 @@ import (
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/mode"
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
+	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 type Http struct {
 	component.Base
-	opts   *options
-	engine *gin.Engine
-	proxy  *Proxy
+	opts  *options
+	app   *fiber.App
+	proxy *Proxy
 }
 
 func NewHttp(opts ...Option) *Http {
@@ -23,12 +24,14 @@ func NewHttp(opts ...Option) *Http {
 		opt(o)
 	}
 
-	gin.SetMode(gin.ReleaseMode)
-
 	h := &Http{}
 	h.opts = o
-	h.engine = gin.New()
 	h.proxy = newProxy(h)
+	h.app = fiber.New(fiber.Config{
+		ServerHeader: o.name,
+	})
+	h.app.Use(logger.New())
+	h.app.Use(recover.New())
 
 	return h
 }
@@ -59,25 +62,14 @@ func (h *Http) Start() {
 		h.opts.transporter.SetDefaultDiscovery(h.opts.registry)
 	}
 
-	switch mode.GetMode() {
-	case mode.DebugMode:
-		gin.SetMode(gin.DebugMode)
-	case mode.ReleaseMode:
-		gin.SetMode(gin.ReleaseMode)
-	case mode.TestMode:
-		gin.SetMode(gin.TestMode)
-	}
-
 	h.printInfo(exposeAddr)
 
 	go func() {
-		if h.opts.certFile != "" && h.opts.keyFile != "" {
-			err = h.engine.RunTLS(listenAddr, h.opts.certFile, h.opts.keyFile)
-		} else {
-			err = h.engine.Run(listenAddr)
-		}
-
-		if err != nil {
+		if err = h.app.Listen(listenAddr, fiber.ListenConfig{
+			CertFile:              h.opts.certFile,
+			CertKeyFile:           h.opts.keyFile,
+			DisableStartupMessage: true,
+		}); err != nil {
 			log.Fatal("http server startup failed: %v", err)
 		}
 	}()

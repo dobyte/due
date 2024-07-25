@@ -3,12 +3,7 @@ package http
 import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/transport"
-	"github.com/gin-gonic/gin"
 )
-
-type Router interface {
-	gin.IRouter
-}
 
 type Proxy struct {
 	http *Http
@@ -18,9 +13,9 @@ func newProxy(h *Http) *Proxy {
 	return &Proxy{http: h}
 }
 
-// Engine 获取GIN引擎
-func (p *Proxy) Engine() *gin.Engine {
-	return p.http.engine
+// Router 获取路由器
+func (p *Proxy) Router() Router {
+	return &router{app: p.http.app}
 }
 
 // NewMeshClient 新建微服务客户端

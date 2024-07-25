@@ -23,12 +23,10 @@ const (
 	defaultPassword    = ""
 	defaultLogDir      = "./run/nacos/config/log"
 	defaultLogLevel    = "info"
-	defaultPath        = ""
 )
 
 const (
 	defaultUrlsKey        = "etc.config.nacos.urls"
-	defaultPathKey        = "etc.config.nacos.path"
 	defaultClusterNameKey = "etc.config.nacos.clusterName"
 	defaultGroupNameKey   = "etc.config.nacos.groupName"
 	defaultTimeoutKey     = "etc.config.nacos.timeout"
@@ -55,10 +53,6 @@ type options struct {
 	// 服务器地址 [scheme://]ip:port[/nacos]
 	// 默认为[]string{http://127.0.0.1:8848/nacos}
 	urls []string
-
-	// 路径
-	// 默认为 /config
-	path string
 
 	// 外部客户端
 	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
@@ -126,7 +120,6 @@ func defaultOptions() *options {
 	return &options{
 		ctx:         context.Background(),
 		urls:        etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
-		path:        etc.Get(defaultPathKey, defaultPath).String(),
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
@@ -152,11 +145,6 @@ func WithContext(ctx context.Context) Option {
 // WithUrls 设置服务器地址
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
-}
-
-// WithPath 设置基础路径
-func WithPath(path string) Option {
-	return func(o *options) { o.path = path }
 }
 
 // WithClient 设置外部客户端

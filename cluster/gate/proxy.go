@@ -70,7 +70,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 	}
 
 	if mode.IsDebugMode() {
-		log.Debugf("deliver message, cid: %d uid: %d route: %d buffer: %s", cid, uid, msg.Route, string(msg.Buffer))
+		log.Debugf("deliver message, cid: %d uid: %d seq: %d route: %d buffer: %s", cid, uid, msg.Seq, msg.Route, string(msg.Buffer))
 	}
 
 	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
@@ -81,9 +81,9 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 	}); err != nil {
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute):
-			log.Debugf("deliver message failed, cid: %d uid: %d route: %d err: %v", cid, uid, msg.Route, err)
+			log.Debugf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
 		default:
-			log.Errorf("deliver message failed, cid: %d uid: %d route: %d err: %v", cid, uid, msg.Route, err)
+			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
 		}
 	}
 }
