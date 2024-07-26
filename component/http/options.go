@@ -4,7 +4,6 @@ import (
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
-	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -21,14 +20,11 @@ const (
 
 type Option func(o *options)
 
-type RouteHandler func(engine *gin.Engine)
-
 type options struct {
 	name        string                // HTTP服务名称
 	addr        string                // 监听地址
 	certFile    string                // 证书文件
 	keyFile     string                // 秘钥文件
-	handler     RouteHandler          // 路由处理器
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
 }
@@ -65,11 +61,6 @@ func WithAddr(addr string) Option {
 // WithCredentials 设置证书和秘钥
 func WithCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.keyFile, o.certFile = keyFile, certFile }
-}
-
-// WithRouteHandler 设置路由处理器
-func WithRouteHandler(handler RouteHandler) Option {
-	return func(o *options) { o.handler = handler }
 }
 
 // WithRegistry 设置服务注册器

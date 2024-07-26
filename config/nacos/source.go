@@ -2,7 +2,6 @@ package nacos
 
 import (
 	"context"
-	"fmt"
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -270,8 +269,6 @@ func (s *Source) search() {
 }
 
 func (s *Source) onChange(_, group, file, content string) {
-	fmt.Println("group:" + group + ", dataId:" + file + ", data:" + content)
-
 	configuration := conv(file, content)
 
 	s.rw.RLock()
