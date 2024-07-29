@@ -44,6 +44,10 @@ func (s *Source) Name() string {
 
 // Load 加载配置项
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
 	var prefix string
 
 	if s.opts.path != "" {
@@ -84,6 +88,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 // Store 保存配置项
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
+	if s.err != nil {
+		return s.err
+	}
+
 	var key string
 
 	if s.opts.path != "" {
@@ -102,6 +110,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 // Watch 监听配置项
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
 	return newWatcher(ctx, s)
 }
 

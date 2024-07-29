@@ -58,9 +58,6 @@ timezone = "Local"
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
-        # 调度器模型，默认为0。可选：0（单线程） | 1（多线程） | 2（多协程） | 3（actor）
-        scheduler = 0
-
     # 集群管理节点配置
     [cluster.master]
         # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
@@ -87,6 +84,28 @@ timezone = "Local"
         name = "client"
         # 编解码器。可选：json | proto
         codec = "proto"
+
+# http服务器配置
+[http]
+    # 服务器名称
+    name = "http"
+    # 服务器监听地址，默认为:8080
+    addr = ":8080"
+    # 秘钥文件
+    keyFile = ""
+    # 证书文件
+    certFile = ""
+    # swagger文档配置
+    [http.swagger]
+        # 是否启用文档
+        enable = true
+        # API文档标题
+        title = "API文档"
+        # URL访问基础路径
+        basePath = "/swagger"
+        # swagger文件路径
+        filePath = "./docs/swagger.json"
+
 [transport]
     # GRPC相关配置
     [transport.grpc]

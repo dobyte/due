@@ -67,6 +67,11 @@ func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
+// WithPath 设置基础路径
+func WithPath(path string) Option {
+	return func(o *options) { o.path = path }
+}
+
 // WithMode 设置读写模式
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
