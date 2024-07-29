@@ -5,11 +5,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-const RespPanic = "http response panic"
-
-type body struct {
-	Code int `json:"code"`
-	Data any `json:"data,omitempty"`
+type Resp struct {
+	Code int `json:"code"`           // 响应码
+	Data any `json:"data,omitempty"` // 响应数据
 }
 
 type Context interface {
@@ -18,8 +16,8 @@ type Context interface {
 	CTX() fiber.Ctx
 	// Proxy 获取代理API
 	Proxy() *Proxy
-	// Fail 失败响应
-	Fail(rst any) error
+	// Failure 失败响应
+	Failure(rst any) error
 	// Success 成功响应
 	Success(data ...any) error
 }
@@ -39,23 +37,23 @@ func (c *context) Proxy() *Proxy {
 	return c.proxy
 }
 
-// Fail 失败响应
-func (c *context) Fail(rst any) error {
+// Failure 失败响应
+func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
-		return c.JSON(&body{Code: codes.Convert(v).Code()})
+		return c.JSON(&Resp{Code: codes.Convert(v).Code()})
 	case *codes.Code:
-		return c.JSON(&body{Code: v.Code()})
+		return c.JSON(&Resp{Code: v.Code()})
 	default:
-		return c.JSON(&body{Code: codes.Unknown.Code()})
+		return c.JSON(&Resp{Code: codes.Unknown.Code()})
 	}
 }
 
 // Success 成功响应
 func (c *context) Success(data ...any) error {
 	if len(data) > 0 {
-		return c.JSON(&body{Code: codes.OK.Code(), Data: data[0]})
+		return c.JSON(&Resp{Code: codes.OK.Code(), Data: data[0]})
 	} else {
-		return c.JSON(&body{Code: codes.OK.Code()})
+		return c.JSON(&Resp{Code: codes.OK.Code()})
 	}
 }
