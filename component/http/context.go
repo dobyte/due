@@ -14,6 +14,8 @@ type body struct {
 
 type Context interface {
 	fiber.Ctx
+	// CTX 获取fiber.Ctx
+	CTX() fiber.Ctx
 	// Proxy 获取代理API
 	Proxy() *Proxy
 	// Fail 失败响应
@@ -25,6 +27,11 @@ type Context interface {
 type context struct {
 	fiber.Ctx
 	proxy *Proxy
+}
+
+// CTX 获取fiber.Ctx
+func (c *context) CTX() fiber.Ctx {
+	return c.Ctx
 }
 
 // Proxy 代理API

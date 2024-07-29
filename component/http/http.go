@@ -2,6 +2,7 @@ package http
 
 import (
 	"fmt"
+	"github.com/dobyte/due/component/http/v2/swagger"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
@@ -9,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
+	"strings"
 )
 
 type Http struct {
@@ -30,8 +32,6 @@ func NewHttp(opts ...Option) *Http {
 	h.app = fiber.New(fiber.Config{
 		ServerHeader: o.name,
 	})
-	h.app.Use(logger.New())
-	h.app.Use(recover.New())
 
 	return h
 }
@@ -43,7 +43,16 @@ func (h *Http) Name() string {
 
 // Init 初始化组件
 func (h *Http) Init() {
+	h.app.Use(logger.New())
+	h.app.Use(recover.New())
 
+	if h.opts.swagger.Enable {
+		h.app.Use(swagger.New(swagger.Config{
+			Title:    h.opts.swagger.Title,
+			BasePath: h.opts.swagger.BasePath,
+			FilePath: h.opts.swagger.FilePath,
+		}))
+	}
 }
 
 // Proxy 获取HTTP代理API
@@ -79,10 +88,17 @@ func (h *Http) printInfo(addr string) {
 	infos := make([]string, 0, 3)
 	infos = append(infos, fmt.Sprintf("Name: %s", h.Name()))
 
+	var baseUrl string
 	if h.opts.certFile != "" && h.opts.keyFile != "" {
-		infos = append(infos, fmt.Sprintf("Url: https://%s", addr))
+		baseUrl = fmt.Sprintf("https://%s", addr)
 	} else {
-		infos = append(infos, fmt.Sprintf("Url: http://%s", addr))
+		baseUrl = fmt.Sprintf("http://%s", addr)
+	}
+
+	infos = append(infos, fmt.Sprintf("Url: %s", baseUrl))
+
+	if h.opts.swagger.Enable {
+		infos = append(infos, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(h.opts.swagger.BasePath, "/")))
 	}
 
 	if h.opts.registry != nil {

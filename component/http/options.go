@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	defaultName = "http" // 默认HTTP服务名称
-	defaultAddr = ":0"   // 监听地址
+	defaultName = "http"  // 默认HTTP服务名称
+	defaultAddr = ":8080" // 监听地址
 )
 
 const (
@@ -16,6 +16,7 @@ const (
 	defaultAddrKey     = "etc.http.addr"
 	defaultKeyFileKey  = "etc.http.keyFile"
 	defaultCertFileKey = "etc.http.certFile"
+	defaultSwaggerKey  = "etc.http.swagger"
 )
 
 type Option func(o *options)
@@ -27,6 +28,14 @@ type options struct {
 	keyFile     string                // 秘钥文件
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
+	swagger     Swagger               // swagger配置
+}
+
+type Swagger struct {
+	Enable   bool   `json:"enable"`   // 是否启用
+	Title    string `json:"title"`    // 文档标题
+	FilePath string `json:"filePath"` // 文档路径
+	BasePath string `json:"basePath"` // 访问路径
 }
 
 func defaultOptions() *options {
@@ -35,6 +44,7 @@ func defaultOptions() *options {
 		addr:     defaultAddr,
 		keyFile:  etc.Get(defaultKeyFileKey).String(),
 		certFile: etc.Get(defaultCertFileKey).String(),
+		swagger:  Swagger{},
 	}
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
@@ -43,6 +53,10 @@ func defaultOptions() *options {
 
 	if addr := etc.Get(defaultAddrKey).String(); addr != "" {
 		opts.addr = addr
+	}
+
+	if err := etc.Get(defaultSwaggerKey).Scan(&opts.swagger); err != nil {
+		opts.swagger = Swagger{}
 	}
 
 	return opts
@@ -71,4 +85,9 @@ func WithRegistry(r registry.Registry) Option {
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
+}
+
+// WithSwagger 设置Swagger配置
+func WithSwagger(swagger Swagger) Option {
+	return func(o *options) { o.swagger = swagger }
 }
