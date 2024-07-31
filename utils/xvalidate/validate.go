@@ -5,6 +5,8 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -26,6 +28,34 @@ func IsMobile(mobile string) bool {
 	}
 
 	return matched
+}
+
+// IsIdCard 检测是否是身份证号（国内18位）
+// 感谢知乎网友提供：https://zhuanlan.zhihu.com/p/608188853
+func IsIdCard(idCard string) bool {
+	reg := regexp.MustCompile(`^[1-9]\d{5}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[1-2][0-9]|3[0-1])\d{3}([0-9Xx])$`)
+	if !reg.MatchString(idCard) {
+		return false
+	}
+
+	// 校验身份证号码校验码
+	factor := []int{7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2}
+	checkCodes := []string{"1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"}
+
+	sum := 0
+	for i := 0; i < 17; i++ {
+		num, _ := strconv.Atoi(string(idCard[i]))
+		sum += num * factor[i]
+	}
+
+	mod := sum % 11
+	checkCode := checkCodes[mod]
+
+	if strings.ToUpper(string(idCard[17])) != checkCode {
+		return false
+	}
+
+	return true
 }
 
 // IsAccount 检测是否是账号

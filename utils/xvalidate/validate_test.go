@@ -58,3 +58,7 @@ func TestIn(t *testing.T) {
 	t.Log(xvalidate.In([]string{"a", "b", "c"}, []string{"a", "b", "c"}))
 	t.Log(xvalidate.In([]string{"a", "b", "c"}, []string{"d", "f", "g"}))
 }
+
+func TestIsIdCard(t *testing.T) {
+	t.Log(xvalidate.IsIdCard("512301195011260279"))
+}
