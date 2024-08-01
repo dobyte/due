@@ -53,10 +53,27 @@ services:
       - '8600:8600/udp'
     volumes:
       - ./consul:/bitnami
+  nacos:
+    image: nacos/nacos-server:latest
+    container_name: dev-nacos
+    platform: linux/x86_64
+    restart: always
+    environment:
+      - PREFER_HOST_MODE=hostname
+      - MODE=standalone
+      - NACOS_AUTH_IDENTITY_KEY=serverIdentity
+      - NACOS_AUTH_IDENTITY_VALUE=security
+      - NACOS_AUTH_TOKEN=SecretKey012345678901234567890123456789012345678901234567890123456789
+    volumes:
+      - ./nacos:/home/nacos/logs
+    ports:
+      - '8848:8848'
+      - '9848:9848'
   redis-cluster:
     image: grokzen/redis-cluster:latest
     container_name: dev-redis-cluster
     platform: linux/x86_64
+    restart: always
     environment:
       - IP=0.0.0.0
       - STANDALONE=true

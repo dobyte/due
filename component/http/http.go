@@ -32,6 +32,15 @@ func NewHttp(opts ...Option) *Http {
 	h.app = fiber.New(fiber.Config{
 		ServerHeader: o.name,
 	})
+	h.app.Use(logger.New())
+	h.app.Use(recover.New())
+	if h.opts.swagger.Enable {
+		h.app.Use(swagger.New(swagger.Config{
+			Title:    h.opts.swagger.Title,
+			BasePath: h.opts.swagger.BasePath,
+			FilePath: h.opts.swagger.FilePath,
+		}))
+	}
 
 	return h
 }
@@ -42,18 +51,7 @@ func (h *Http) Name() string {
 }
 
 // Init 初始化组件
-func (h *Http) Init() {
-	h.app.Use(logger.New())
-	h.app.Use(recover.New())
-
-	if h.opts.swagger.Enable {
-		h.app.Use(swagger.New(swagger.Config{
-			Title:    h.opts.swagger.Title,
-			BasePath: h.opts.swagger.BasePath,
-			FilePath: h.opts.swagger.FilePath,
-		}))
-	}
-}
+func (h *Http) Init() {}
 
 // Proxy 获取HTTP代理API
 func (h *Http) Proxy() *Proxy {
