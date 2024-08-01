@@ -3,7 +3,7 @@
 ##### [English Document](README.md)
 
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
-[![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
+[![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/v2/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dobyte/due)](https://goreportcard.com/report/github.com/dobyte/due)
@@ -32,9 +32,9 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。
 
 * 网关：支持tcp、kcp、ws等协议的网关服务器。
 * 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
-* 注册：支持consul、etcd、k8s、nacos、servicecomb、zookeeper等多种服务注册中心。
-* 协议：支持json、protobuf（gogo/protobuf）、msgpack等多种通信协议。
-* 配置：支持json、yaml、toml、xml等多种文件格式。
+* 注册：支持consul、etcd、nacos等多种服务注册中心。
+* 协议：支持json、protobuf、msgpack等多种通信协议。
+* 配置：支持consul、etcd、nacos等多种配置中心；并支持json、yaml、toml、xml等多种文件格式。
 * 通信：支持grpc、rpcx等多种高性能通信方案。
 * 重启：支持服务器的平滑重启。
 * 事件：支持redis、nats、kafka、rabbitMQ等事件总线实现方案。
@@ -42,14 +42,13 @@ due是一款基于Go语言开发的轻量级分布式游戏服务器框架。
 * 服务：支持grpc、rpcx等多种微服务解决方案。
 * 灵活：支持单体、分布式等多种架构方案。
 * 管理：提供master后台管理服相关接口支持。
+* Web：提供http协议的fiber服务器及swagger文档解决方案。
+* 工具：提供[due-cli](https://github.com/dobyte/due-cli)脚手架工具箱，可快速构建集群项目。
 
 ### 4.下一期新功能规划
 
 * 实现框架层的滚动更新
 * 实现框架层的actor模型
-* 实现nacos注册中心和配置中心
-* 以组件的形式实现http协议解决方案
-* 提供due-cli脚手架工具箱
 
 ### 5.特殊说明
 
@@ -193,6 +192,7 @@ go install github.com/dobyte/mongo-dao-generator@latest
 * [file](config/file/README-ZH.md)
 * [etcd](config/etcd/README-ZH.md)
 * [consul](config/consul/README-ZH.md)
+* [nacos](config/nacos/README-ZH.md)
 
 ### 9.注册中心
 
@@ -204,6 +204,7 @@ go install github.com/dobyte/mongo-dao-generator@latest
 
 * [etcd](registry/etcd/README-ZH.md)
 * [consul](registry/consul/README-ZH.md)
+* [nacos](registry/nacos/README-ZH.md)
 
 ### 10.网络模块
 
@@ -633,29 +634,38 @@ throughput (TPS)     : 128969
 
 本测试结果仅供参考，详细测试用例代码请查看[due-benchmark](https://github.com/dobyte/due-benchmark)
 
-### 13.支持组件
+### 13.其他组件
 
 1. 日志组件
-    * zap: github.com/dobyte/due/log/zap
-    * logrus: github.com/dobyte/due/log/logrus
-    * aliyun: github.com/dobyte/due/log/aliyun
-    * tencent: github.com/dobyte/due/log/zap
+    * zap: github.com/dobyte/due/log/zap/v2
+    * logrus: github.com/dobyte/due/log/logrus/v2
+    * aliyun: github.com/dobyte/due/log/aliyun/v2
+    * tencent: github.com/dobyte/due/log/zap/v2
 2. 网络组件
-    * ws: github.com/dobyte/due/network/ws
-    * tcp: github.com/dobyte/due/network/tcp
-    * kcp: github.com/dobyte/due/network/kcp
+    * ws: github.com/dobyte/due/network/ws/v2
+    * tcp: github.com/dobyte/due/network/tcp/v2
+    * kcp: github.com/dobyte/due/network/kcp/v2
 3. 注册发现
-    * etcd: github.com/dobyte/due/registry/etcd
-    * consul: github.com/dobyte/due/registry/consul
+    * etcd: github.com/dobyte/due/registry/etcd/v2
+    * consul: github.com/dobyte/due/registry/consul/v2
+    * nacos: github.com/dobyte/due/registry/nacos/v2
 4. 传输组件
-    * grpc: github.com/dobyte/due/transporter/grpc
-    * rpcx: github.com/dobyte/due/transporter/rpcx
+    * grpc: github.com/dobyte/due/transporter/grpc/v2
+    * rpcx: github.com/dobyte/due/transporter/rpcx/v2
 5. 定位组件
-    * redis: github.com/dobyte/due/locate/redis
+    * redis: github.com/dobyte/due/locate/redis/v2
 6. 事件总线
-    * redis: github.com/dobyte/due/eventbus/redis
-    * nats: github.com/dobyte/due/eventbus/nats
-    * kafka: github.com/dobyte/due/eventbus/kafka
+    * redis: github.com/dobyte/due/eventbus/redis/v2
+    * nats: github.com/dobyte/due/eventbus/nats/v2
+    * kafka: github.com/dobyte/due/eventbus/kafka/v2
+7. Web组件
+    * http: github.com/dobyte/due/component/http/v2
+8. 配置中心
+   * etcd: github.com/dobyte/due/config/etcd/v2
+   * consul: github.com/dobyte/due/config/consul/v2
+   * nacos: github.com/dobyte/due/config/nacos/v2
+9. 缓存组件
+   * redis: github.com/dobyte/due/cache/redis/v2
 
 ### 14.详细示例
 
