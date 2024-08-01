@@ -31,6 +31,7 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		opts:       opts,
 		builder:    node.NewBuilder(&node.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
 		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
+		sources:    make(map[int64]map[string]string),
 	}
 
 	return l
