@@ -6,8 +6,6 @@ import (
 
 type Handler func(ctx Context) error
 
-type MiddlewareHandler func(ctx Context) error
-
 type Router interface {
 	// Get 添加GET请求处理器
 	Get(path string, handler Handler, middlewares ...Handler) Router

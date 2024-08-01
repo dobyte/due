@@ -29,6 +29,7 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
 	swagger     Swagger               // swagger配置
+	middlewares []any                 // 中间件
 }
 
 type Swagger struct {
@@ -90,4 +91,9 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithSwagger 设置Swagger配置
 func WithSwagger(swagger Swagger) Option {
 	return func(o *options) { o.swagger = swagger }
+}
+
+// WithMiddlewares 设置中间件
+func WithMiddlewares(middlewares ...any) Option {
+	return func(o *options) { o.middlewares = middlewares }
 }

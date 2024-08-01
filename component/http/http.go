@@ -8,6 +8,7 @@ import (
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"strings"
@@ -29,11 +30,22 @@ func NewHttp(opts ...Option) *Http {
 	h := &Http{}
 	h.opts = o
 	h.proxy = newProxy(h)
-	h.app = fiber.New(fiber.Config{
-		ServerHeader: o.name,
-	})
+	h.app = fiber.New(fiber.Config{ServerHeader: o.name})
 	h.app.Use(logger.New())
 	h.app.Use(recover.New())
+	h.app.Use(cors.New())
+
+	for i := range o.middlewares {
+		switch handler := o.middlewares[i].(type) {
+		case Handler:
+			h.app.Use(func(ctx fiber.Ctx) error {
+				return handler(&context{Ctx: ctx})
+			})
+		case fiber.Handler:
+			h.app.Use(handler)
+		}
+	}
+
 	if h.opts.swagger.Enable {
 		h.app.Use(swagger.New(swagger.Config{
 			Title:    h.opts.swagger.Title,
