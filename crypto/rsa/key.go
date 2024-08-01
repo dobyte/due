@@ -6,13 +6,13 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
+	"os"
+	"path"
+
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xpath"
-	"io"
-	"io/ioutil"
-	"os"
-	"path"
 )
 
 type Format int
@@ -174,7 +174,7 @@ func loadKey(key string) (*pem.Block, error) {
 	)
 
 	if xpath.IsFile(key) {
-		buffer, err = ioutil.ReadFile(key)
+		buffer, err = os.ReadFile(key)
 		if err != nil {
 			return nil, err
 		}
