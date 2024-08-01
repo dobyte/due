@@ -1,7 +1,5 @@
 # due
 
-##### [English Document](README.md)
-
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/v2/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
