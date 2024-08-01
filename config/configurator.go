@@ -2,11 +2,11 @@ package config
 
 import (
 	"context"
+	"dario.cat/mergo"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xreflect"
-	"github.com/imdario/mergo"
 	"github.com/jinzhu/copier"
 	"log"
 	"math"

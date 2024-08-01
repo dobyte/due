@@ -10,7 +10,7 @@ package proto
 import (
 	"errors"
 
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 const Name = "proto"

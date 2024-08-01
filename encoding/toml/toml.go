@@ -1,7 +1,6 @@
 package toml
 
 import (
-	"bytes"
 	"github.com/BurntSushi/toml"
 )
 
@@ -18,12 +17,7 @@ func (codec) Name() string {
 
 // Marshal 编码
 func (codec) Marshal(v interface{}) ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	err := toml.NewEncoder(buffer).Encode(v)
-	if err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
+	return toml.Marshal(v)
 }
 
 // Unmarshal 解码
