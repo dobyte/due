@@ -119,6 +119,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return s.err
 	}
 
+	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
+		return errors.ErrNoOperationPermission
+	}
+
 	_, err := s.opts.client.PublishConfig(vo.ConfigParam{
 		DataId:  file,
 		Group:   s.opts.groupName,

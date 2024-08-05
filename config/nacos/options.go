@@ -2,12 +2,14 @@ package nacos
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
 	"time"
 )
 
 const (
+	defaultMode        = config.ReadOnly
 	defaultUrl         = "http://127.0.0.1:8848/nacos"
 	defaultClusterName = "DEFAULT"
 	defaultGroupName   = "DEFAULT_GROUP"
@@ -26,6 +28,7 @@ const (
 )
 
 const (
+	defaultModeKey        = "etc.config.nacos.mode"
 	defaultUrlsKey        = "etc.config.nacos.urls"
 	defaultClusterNameKey = "etc.config.nacos.clusterName"
 	defaultGroupNameKey   = "etc.config.nacos.groupName"
@@ -49,6 +52,10 @@ type options struct {
 	// 上下文
 	// 默认context.Background
 	ctx context.Context
+
+	// 读写模式
+	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	mode config.Mode
 
 	// 服务器地址 [scheme://]ip:port[/nacos]
 	// 默认为[]string{http://127.0.0.1:8848/nacos}
@@ -119,6 +126,7 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:         context.Background(),
+		mode:        config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
 		urls:        etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
@@ -140,6 +148,11 @@ func defaultOptions() *options {
 // WithContext 设置context
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
+}
+
+// WithMode 设置读写模式
+func WithMode(mode config.Mode) Option {
+	return func(o *options) { o.mode = mode }
 }
 
 // WithUrls 设置服务器地址
