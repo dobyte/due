@@ -6,7 +6,7 @@ import (
 )
 
 func TestNow(t *testing.T) {
-	t.Log(xtime.Now().Format(xtime.DatetimeLayout))
+	t.Log(xtime.Now().Format(xtime.DateTime))
 }
 
 func TestToday(t *testing.T) {

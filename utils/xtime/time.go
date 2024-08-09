@@ -8,9 +8,29 @@ import (
 )
 
 const (
-	TimeLayout     = "15:04:05"
-	DateLayout     = "2006-01-02"
-	DatetimeLayout = "2006-01-02 15:04:05"
+	Layout      = time.Layout // The reference time, in numerical order.
+	ANSIC       = time.ANSIC
+	UnixDate    = time.UnixDate
+	RubyDate    = time.RubyDate
+	RFC822      = time.RFC822
+	RFC822Z     = time.RFC822Z
+	RFC850      = time.RFC850
+	RFC1123     = time.RFC1123
+	RFC1123Z    = time.RFC1123Z
+	RFC3339     = time.RFC3339
+	RFC3339Nano = time.RFC3339Nano
+	Kitchen     = time.Kitchen
+
+	Stamp      = time.Stamp
+	StampMilli = time.StampMilli
+	StampMicro = time.StampMicro
+	StampNano  = time.StampNano
+	DateTime   = time.DateTime
+	DateOnly   = time.DateOnly
+	TimeOnly   = time.TimeOnly
+)
+
+const (
 	TimeFormat     = "H:i:s"
 	DateFormat     = "Y-m-d"
 	DatetimeFormat = "Y-m-d H:i:s"
@@ -46,6 +66,8 @@ type TransformRule struct {
 	Tpl string
 }
 
+type Time = time.Time
+
 func init() {
 	timezone := etc.Get("etc.timezone", "Local").String()
 	if loc, err := time.LoadLocation(timezone); err != nil {
@@ -56,32 +78,32 @@ func init() {
 }
 
 // Parse 解析日期时间
-func Parse(layout string, value string) (time.Time, error) {
+func Parse(layout string, value string) (Time, error) {
 	return time.ParseInLocation(layout, value, location)
 }
 
 // Now 当前时间
-func Now() time.Time {
+func Now() Time {
 	return time.Now().In(location)
 }
 
 // Today 今天
-func Today() time.Time {
+func Today() Time {
 	return Now()
 }
 
 // Yesterday 昨天
-func Yesterday() time.Time {
+func Yesterday() Time {
 	return Day(-1)
 }
 
 // Tomorrow 明天
-func Tomorrow() time.Time {
+func Tomorrow() Time {
 	return Day(1)
 }
 
 // Transform 时间转换
-func Transform(t time.Time, rule ...[]TransformRule) string {
+func Transform(t Time, rule ...[]TransformRule) string {
 	var (
 		dur                = uint(Now().Unix() - t.In(location).Unix())
 		molecular     uint = 1
@@ -104,28 +126,32 @@ func Transform(t time.Time, rule ...[]TransformRule) string {
 }
 
 // Unix 时间戳转标准时间
-func Unix(sec, nsec int64) time.Time {
-	return time.Unix(sec, nsec).In(location)
+func Unix(sec int64, nsec ...int64) Time {
+	if len(nsec) > 0 {
+		return time.Unix(sec, nsec[0]).In(location)
+	} else {
+		return time.Unix(sec, 0).In(location)
+	}
 }
 
 // UnixMilli 时间戳（毫秒）转标准时间
-func UnixMilli(msec int64) time.Time {
+func UnixMilli(msec int64) Time {
 	return time.Unix(msec/1e3, (msec%1e3)*1e6).In(location)
 }
 
 // UnixMicro 时间戳（微秒）转标准时间
-func UnixMicro(usec int64) time.Time {
+func UnixMicro(usec int64) Time {
 	return time.Unix(usec/1e6, (usec%1e6)*1e3).In(location)
 }
 
 // UnixNano 时间戳（纳秒）转标准时间
-func UnixNano(nsec int64) time.Time {
+func UnixNano(nsec int64) Time {
 	return time.Unix(nsec/1e9, nsec%1e9).In(location)
 }
 
 // Day 获取某一天的当前时刻
 // offsetDays 偏移天数，例如：-1：前一天 0：当前 1：明天
-func Day(offset ...int) time.Time {
+func Day(offset ...int) Time {
 	now := Now()
 
 	if len(offset) > 0 {
@@ -137,7 +163,7 @@ func Day(offset ...int) time.Time {
 
 // DayHead 获取一天中的第一秒
 // offsetDays 偏移天数，例如：-1：前一天 0：当前 1：明天
-func DayHead(offset ...int) time.Time {
+func DayHead(offset ...int) Time {
 	date := Day(offset...)
 
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
@@ -145,7 +171,7 @@ func DayHead(offset ...int) time.Time {
 
 // DayTail 获取一天中的最后一秒
 // offsetDays 偏移天数，例如：-1：前一天 0：当前 1：明天
-func DayTail(offset ...int) time.Time {
+func DayTail(offset ...int) Time {
 	date := Day(offset...)
 
 	return time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
@@ -153,7 +179,7 @@ func DayTail(offset ...int) time.Time {
 
 // Week 获取一周中的当前时刻
 // offsetWeeks 偏移周数，例如：-1：上一周 0：本周 1：下一周
-func Week(offset ...int) time.Time {
+func Week(offset ...int) Time {
 	if len(offset) > 0 {
 		return Now().AddDate(0, 0, offset[0]*7)
 	} else {
@@ -163,7 +189,7 @@ func Week(offset ...int) time.Time {
 
 // WeekHead 获取一周中的第一天的第一秒
 // offsetWeeks 偏移周数，例如：-1：上一周 0：本周 1：下一周
-func WeekHead(offset ...int) time.Time {
+func WeekHead(offset ...int) Time {
 	var (
 		now        = Now()
 		offsetDays = int(time.Monday - now.Weekday())
@@ -184,7 +210,7 @@ func WeekHead(offset ...int) time.Time {
 
 // WeekTail 获取一周中的最后一天的最后一秒
 // offsetWeeks 偏移周数，例如：-1：上一周 0：本周 1：下一周
-func WeekTail(offset ...int) time.Time {
+func WeekTail(offset ...int) Time {
 	var (
 		now        = Now()
 		offsetDays = int(time.Sunday - now.Weekday() + 7)
@@ -201,7 +227,7 @@ func WeekTail(offset ...int) time.Time {
 
 // Month 获取某一月的当前时刻
 // offsetMonths 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-func Month(offset ...int) time.Time {
+func Month(offset ...int) Time {
 	now := Now()
 
 	if len(offset) == 0 || offset[0] == 0 {
@@ -241,7 +267,7 @@ func Month(offset ...int) time.Time {
 
 // MonthHead 获取一月中的第一天的第一秒
 // offset 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-func MonthHead(offset ...int) time.Time {
+func MonthHead(offset ...int) Time {
 	now := Now()
 
 	if len(offset) == 0 || offset[0] == 0 {
@@ -263,7 +289,7 @@ func MonthHead(offset ...int) time.Time {
 
 // MonthTail 获取一月中的最后一天的最后一秒
 // offset 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-func MonthTail(offset ...int) time.Time {
+func MonthTail(offset ...int) Time {
 	now := Now()
 
 	if len(offset) == 0 || offset[0] == 0 {
