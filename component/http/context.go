@@ -1,8 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"github.com/dobyte/due/v2/codes"
 	"github.com/gofiber/fiber/v3"
+	"io"
+	"net/http"
+	"net/url"
 )
 
 type Resp struct {
@@ -20,6 +24,8 @@ type Context interface {
 	Failure(rst any) error
 	// Success 成功响应
 	Success(data ...any) error
+	// StdRequest 获取标准请求（net/http）
+	StdRequest() *http.Request
 }
 
 type context struct {
@@ -56,4 +62,26 @@ func (c *context) Success(data ...any) error {
 	} else {
 		return c.JSON(&Resp{Code: codes.OK.Code()})
 	}
+}
+
+// StdRequest 获取标准请求（net/http）
+func (c *context) StdRequest() *http.Request {
+	req := c.Request()
+
+	std := &http.Request{}
+	std.Method = c.Method()
+	std.URL, _ = url.Parse(req.URI().String())
+	std.Proto = c.Protocol()
+	std.ProtoMajor, std.ProtoMinor, _ = http.ParseHTTPVersion(std.Proto)
+	std.Header = c.GetReqHeaders()
+	std.Host = c.Host()
+	std.ContentLength = int64(len(c.Body()))
+	std.RemoteAddr = c.Context().RemoteAddr().String()
+	std.RequestURI = string(req.RequestURI())
+
+	if req.Body() != nil {
+		std.Body = io.NopCloser(bytes.NewReader(req.Body()))
+	}
+
+	return std
 }
