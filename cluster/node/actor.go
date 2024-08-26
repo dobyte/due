@@ -6,8 +6,14 @@ import (
 )
 
 type Actor interface {
+	// ID 获取Actor编号
+	ID() string
+	// PID 获取Actor全局唯一识别号，实际为 Kind/ID
+	PID() string
 	// Kind 获取Actor类型
 	Kind() string
+	// Next 投递消息到Actor中进行处理
+	Next(ctx Context)
 	// Spawn 衍生出一个Actor
 	Spawn(creator Creator, args ...any) Actor
 	// Proxy 获取代理API
@@ -18,18 +24,26 @@ type Actor interface {
 	AddRouteHandler(route int32, handler RouteHandler)
 	// AddEventHandler 添加事件处理器
 	AddEventHandler(event cluster.Event, handler EventHandler)
-	// 投递消息到Actor中进行处理
-	deliver(ctx Context)
 }
 
 type Creator func(actor Actor, args ...any) Processor
 
 type actor struct {
+	opts      *actorOptions
 	routes    map[int32]RouteHandler         // 路由处理器
 	events    map[cluster.Event]EventHandler // 事件处理器
 	processor Processor                      // 处理器
 	mailbox   chan Context                   // 邮箱
 	fnChan    chan func()
+}
+
+// ID 获取Actor的ID
+func (a *actor) ID() string {
+	return a.opts.id
+}
+
+func (a *actor) PID() string {
+	return a.Kind() + "/" + a.ID()
 }
 
 // Kind 获取Actor类型
@@ -71,8 +85,8 @@ func (a *actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	a.events[event] = handler
 }
 
-// 投递消息到Actor中进行处理
-func (a *actor) deliver(ctx Context) {
+// Next 投递消息到Actor中进行处理
+func (a *actor) Next(ctx Context) {
 	a.mailbox <- ctx
 }
 

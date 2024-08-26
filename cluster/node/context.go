@@ -46,4 +46,6 @@ type Context interface {
 	Response(message interface{}) error
 	// Disconnect 关闭来自网关的连接
 	Disconnect(isForce ...bool) error
+	// Actor 获取Actor
+	Actor(kind string, id string) (Actor, bool)
 }
