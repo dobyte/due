@@ -128,7 +128,3 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
 }
-
-func WithEngine(engine func(engine *Engine)) Option {
-
-}

@@ -12,7 +12,7 @@ type EventHandler func(ctx Context)
 type Trigger struct {
 	node    *Node
 	events  map[cluster.Event]EventHandler
-	evtPool sync.Pool
+	evtPool *sync.Pool
 	evtChan chan *event
 }
 
@@ -20,13 +20,14 @@ func newTrigger(node *Node) *Trigger {
 	return &Trigger{
 		node:    node,
 		events:  make(map[cluster.Event]EventHandler, 3),
-		evtPool: sync.Pool{New: func() interface{} { return &event{proxy: node.proxy, ctx: context.Background()} }},
+		evtPool: &sync.Pool{New: func() interface{} { return &event{node: node, ctx: context.Background()} }},
 		evtChan: make(chan *event, 4096),
 	}
 }
 
 func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) {
 	evt := e.evtPool.Get().(*event)
+	evt.pool = e.evtPool
 	evt.kind = kind
 	evt.gid = gid
 	evt.cid = cid
@@ -42,8 +43,15 @@ func (e *Trigger) close() {
 	close(e.evtChan)
 }
 
+// 处理事件消息
 func (e *Trigger) handle(evt *event) {
-	defer e.evtPool.Put(evt)
+	version := evt.version.Add(1)
+
+	defer func() {
+		if evt.version.CompareAndSwap(version, 0) {
+			evt.recycle()
+		}
+	}()
 
 	handler, ok := e.events[evt.kind]
 	if !ok {

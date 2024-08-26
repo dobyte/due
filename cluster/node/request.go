@@ -14,6 +14,8 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"github.com/jinzhu/copier"
+	"sync"
+	"sync/atomic"
 )
 
 type request struct {
@@ -24,6 +26,8 @@ type request struct {
 	cid     int64            // 连接ID
 	uid     int64            // 用户ID
 	message *cluster.Message // 请求消息
+	pool    *sync.Pool       // 对象池
+	version atomic.Int32     // 对象版本号
 }
 
 // GID 获取网关ID
@@ -90,11 +94,12 @@ func (r *request) Parse(v interface{}) error {
 func (r *request) Clone() Context {
 	return &request{
 		node: r.node,
-		ctx:  context.Background(),
+		pool: r.pool,
 		gid:  r.gid,
 		nid:  r.nid,
 		cid:  r.cid,
 		uid:  r.uid,
+		ctx:  context.Background(),
 		message: &cluster.Message{
 			Seq:   r.message.Seq,
 			Route: r.message.Route,
@@ -105,8 +110,22 @@ func (r *request) Clone() Context {
 
 // Task 投递任务
 func (r *request) Task(fn func(ctx Context)) {
-	ctx := r.Clone()
-	task.AddTask(func() { fn(ctx) })
+	version := r.version.Add(1)
+
+	task.AddTask(func() {
+		defer func() {
+			if r.version.CompareAndSwap(version, 0) {
+				r.recycle()
+			}
+		}()
+
+		fn(r)
+	})
+}
+
+// Proxy 获取代理API
+func (r *request) Proxy() *Proxy {
+	return r.node.proxy
 }
 
 // Context 获取上下文
@@ -217,4 +236,9 @@ func (r *request) Disconnect(force ...bool) error {
 		Target: r.cid,
 		Force:  len(force) > 0 && force[0],
 	})
+}
+
+// 回收请求
+func (r *request) recycle() {
+	r.pool.Put(r)
 }

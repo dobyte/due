@@ -6,15 +6,19 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
+	"sync"
+	"sync/atomic"
 )
 
 type event struct {
-	proxy *Proxy
-	ctx   context.Context
-	gid   string
-	cid   int64
-	uid   int64
-	kind  cluster.Event
+	node    *Node           // 代理API
+	ctx     context.Context // 上下文
+	gid     string          // 网关ID
+	cid     int64           // 连接ID
+	uid     int64           // 用户ID
+	kind    cluster.Event   // 时间类型
+	pool    *sync.Pool      // 对象池
+	version atomic.Int32    // 对象版本号
 }
 
 // GID 获取网关ID
@@ -60,23 +64,33 @@ func (e *event) Parse(v interface{}) error {
 // Clone 克隆Context
 func (e *event) Clone() Context {
 	return &event{
-		ctx:   context.Background(),
-		gid:   e.gid,
-		cid:   e.cid,
-		uid:   e.uid,
-		proxy: e.proxy,
+		node: e.node,
+		pool: e.pool,
+		gid:  e.gid,
+		cid:  e.cid,
+		uid:  e.uid,
+		ctx:  context.Background(),
 	}
 }
 
 // Task 投递任务
 func (e *event) Task(fn func(ctx Context)) {
-	ctx := e.Clone()
-	task.AddTask(func() { fn(ctx) })
+	version := e.version.Add(1)
+
+	task.AddTask(func() {
+		defer func() {
+			if e.version.CompareAndSwap(version, 0) {
+				e.recycle()
+			}
+		}()
+
+		fn(e)
+	})
 }
 
 // Proxy 获取代理API
 func (e *event) Proxy() *Proxy {
-	return e.proxy
+	return e.node.proxy
 }
 
 // Context 获取上下文
@@ -88,9 +102,9 @@ func (e *event) Context() context.Context {
 func (e *event) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return e.proxy.BindGate(e.ctx, e.gid, e.cid, uid[0])
+		return e.node.proxy.BindGate(e.ctx, e.gid, e.cid, uid[0])
 	case e.uid != 0:
-		return e.proxy.BindGate(e.ctx, e.gid, e.cid, e.uid)
+		return e.node.proxy.BindGate(e.ctx, e.gid, e.cid, e.uid)
 	default:
 		return errors.ErrIllegalOperation
 	}
@@ -100,9 +114,9 @@ func (e *event) BindGate(uid ...int64) error {
 func (e *event) UnbindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return e.proxy.UnbindGate(e.ctx, uid[0])
+		return e.node.proxy.UnbindGate(e.ctx, uid[0])
 	case e.uid != 0:
-		return e.proxy.UnbindGate(e.ctx, e.uid)
+		return e.node.proxy.UnbindGate(e.ctx, e.uid)
 	default:
 		return errors.ErrIllegalOperation
 	}
@@ -112,9 +126,9 @@ func (e *event) UnbindGate(uid ...int64) error {
 func (e *event) BindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return e.proxy.BindNode(e.ctx, uid[0])
+		return e.node.proxy.BindNode(e.ctx, uid[0])
 	case e.uid != 0:
-		return e.proxy.BindNode(e.ctx, e.uid)
+		return e.node.proxy.BindNode(e.ctx, e.uid)
 	default:
 		return errors.ErrIllegalOperation
 	}
@@ -124,9 +138,9 @@ func (e *event) BindNode(uid ...int64) error {
 func (e *event) UnbindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return e.proxy.UnbindNode(e.ctx, uid[0])
+		return e.node.proxy.UnbindNode(e.ctx, uid[0])
 	case e.uid != 0:
-		return e.proxy.UnbindNode(e.ctx, e.uid)
+		return e.node.proxy.UnbindNode(e.ctx, e.uid)
 	default:
 		return errors.ErrIllegalOperation
 	}
@@ -134,7 +148,7 @@ func (e *event) UnbindNode(uid ...int64) error {
 
 // GetIP 获取客户端IP
 func (e *event) GetIP() (string, error) {
-	return e.proxy.GetIP(e.ctx, &cluster.GetIPArgs{
+	return e.node.proxy.GetIP(e.ctx, &cluster.GetIPArgs{
 		GID:    e.gid,
 		Kind:   session.Conn,
 		Target: e.cid,
@@ -143,7 +157,7 @@ func (e *event) GetIP() (string, error) {
 
 // Reply 回复消息
 func (e *event) Reply(message *cluster.Message) error {
-	return e.proxy.Push(e.ctx, &cluster.PushArgs{
+	return e.node.proxy.Push(e.ctx, &cluster.PushArgs{
 		GID:     e.gid,
 		Kind:    session.Conn,
 		Target:  e.cid,
@@ -158,10 +172,15 @@ func (e *event) Response(message interface{}) error {
 
 // Disconnect 关闭来自网关的连接
 func (e *event) Disconnect(force ...bool) error {
-	return e.proxy.Disconnect(e.ctx, &cluster.DisconnectArgs{
+	return e.node.proxy.Disconnect(e.ctx, &cluster.DisconnectArgs{
 		GID:    e.gid,
 		Kind:   session.Conn,
 		Target: e.cid,
 		Force:  len(force) > 0 && force[0],
 	})
+}
+
+// 回收事件
+func (e *event) recycle() {
+	e.pool.Put(e)
 }

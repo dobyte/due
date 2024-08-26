@@ -13,7 +13,7 @@ type Router struct {
 	node                *Node
 	routes              map[int32]*routeEntity
 	defaultRouteHandler RouteHandler
-	reqPool             sync.Pool
+	reqPool             *sync.Pool
 	reqChan             chan *request
 }
 
@@ -51,7 +51,7 @@ func newRouter(node *Node) *Router {
 		node:    node,
 		routes:  make(map[int32]*routeEntity),
 		reqChan: make(chan *request, 10240),
-		reqPool: sync.Pool{New: func() interface{} {
+		reqPool: &sync.Pool{New: func() interface{} {
 			return &request{
 				ctx:     context.Background(),
 				node:    node,
@@ -131,6 +131,7 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 
 func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data interface{}) {
 	req := r.reqPool.Get().(*request)
+	req.pool = r.reqPool
 	req.gid = gid
 	req.nid = nid
 	req.cid = cid
@@ -150,7 +151,13 @@ func (r *Router) close() {
 }
 
 func (r *Router) handle(req *request) {
-	defer r.reqPool.Put(req)
+	version := req.version.Add(1)
+
+	defer func() {
+		if req.version.CompareAndSwap(version, 0) {
+			req.recycle()
+		}
+	}()
 
 	route, ok := r.routes[req.message.Route]
 	if !ok && r.defaultRouteHandler == nil {

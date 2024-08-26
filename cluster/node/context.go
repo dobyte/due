@@ -26,6 +26,8 @@ type Context interface {
 	Clone() Context
 	// Task 投递任务
 	Task(fn func(ctx Context))
+	// Proxy 获取代理API
+	Proxy() *Proxy
 	// Context 获取上下文
 	Context() context.Context
 	// BindGate 绑定网关
