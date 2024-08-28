@@ -1,8 +1,8 @@
 package actor
 
 type options struct {
-	id   string // Actor的ID
-	kind string // Actor的类型
+	id   string // ID
+	args []any  // 参数
 }
 
 type Option func(o *options)
@@ -16,7 +16,7 @@ func WithID(id string) Option {
 	return func(o *options) { o.id = id }
 }
 
-// WithKind 设置Actor的类型
-func WithKind(kind string) Option {
-	return func(o *options) { o.kind = kind }
+// WithArgs 设置Actor的参数
+func WithArgs(args ...any) Option {
+	return func(o *options) { o.args = append(o.args, args...) }
 }

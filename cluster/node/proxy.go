@@ -222,6 +222,27 @@ func (p *Proxy) Invoke(fn func()) {
 	p.node.fnChan <- fn
 }
 
+// Spawn 衍生出一个Actor
+func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) Actor {
+	o := defaultActorOptions()
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	act := &actor{}
+	act.opts = o
+	act.proxy = p
+	act.routes = make(map[int32]RouteHandler)
+	act.events = make(map[cluster.Event]EventHandler, 3)
+	act.mailbox = make(chan Context, 4096)
+	act.processor = creator(act)
+	act.processor.Init()
+	act.dispatch()
+	act.processor.Start()
+
+	return act
+}
+
 // 开始监听
 func (p *Proxy) watch() {
 	p.gateLinker.WatchUserLocate()

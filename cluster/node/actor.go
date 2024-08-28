@@ -12,10 +12,12 @@ type Actor interface {
 	PID() string
 	// Kind 获取Actor类型
 	Kind() string
+	// Args 获取Actor参数
+	Args() []any
 	// Next 投递消息到Actor中进行处理
 	Next(ctx Context)
 	// Spawn 衍生出一个Actor
-	Spawn(creator Creator, args ...any) Actor
+	Spawn(creator Creator, opts ...ActorOption) Actor
 	// Proxy 获取代理API
 	Proxy() *Proxy
 	// Invoke 调用函数（Actor内线程安全）
@@ -30,6 +32,7 @@ type Creator func(actor Actor, args ...any) Processor
 
 type actor struct {
 	opts      *actorOptions
+	proxy     *Proxy
 	routes    map[int32]RouteHandler         // 路由处理器
 	events    map[cluster.Event]EventHandler // 事件处理器
 	processor Processor                      // 处理器
@@ -51,23 +54,19 @@ func (a *actor) Kind() string {
 	return a.processor.Kind()
 }
 
-// Spawn 衍生出一个Actor
-func (a *actor) Spawn(creator Creator, args ...any) Actor {
-	act := &actor{}
-	act.routes = make(map[int32]RouteHandler)
-	act.events = make(map[cluster.Event]EventHandler, 3)
-	act.mailbox = make(chan Context, 4096)
-	act.processor = creator(act, args...)
-	act.processor.Init()
-	act.dispatch()
-	act.processor.Start()
+// Args 获取Actor参数
+func (a *actor) Args() []any {
+	return a.opts.args
+}
 
-	return act
+// Spawn 衍生出一个Actor
+func (a *actor) Spawn(creator Creator, opts ...ActorOption) Actor {
+	return a.proxy.Spawn(creator, opts...)
 }
 
 // Proxy 获取代理API
 func (a *actor) Proxy() *Proxy {
-	return nil
+	return a.proxy
 }
 
 // Invoke 调用函数（Actor内线程安全）
