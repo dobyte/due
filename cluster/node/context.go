@@ -30,14 +30,6 @@ type Context interface {
 	Proxy() *Proxy
 	// Context 获取上下文
 	Context() context.Context
-	// BindGate 绑定网关
-	BindGate(uid ...int64) error
-	// UnbindGate 解绑网关
-	UnbindGate(uid ...int64) error
-	// BindNode 绑定节点
-	BindNode(uid ...int64) error
-	// UnbindNode 解绑节点
-	UnbindNode(uid ...int64) error
 	// GetIP 获取客户端IP
 	GetIP() (string, error)
 	// Reply 回复消息
@@ -46,6 +38,20 @@ type Context interface {
 	Response(message interface{}) error
 	// Disconnect 关闭来自网关的连接
 	Disconnect(isForce ...bool) error
+	// BindGate 绑定网关
+	BindGate(uid ...int64) error
+	// UnbindGate 解绑网关
+	UnbindGate(uid ...int64) error
+	// BindNode 绑定节点
+	BindNode(uid ...int64) error
+	// UnbindNode 解绑节点
+	UnbindNode(uid ...int64) error
+	// BindActor 绑定Actor
+	BindActor(kind, id string) error
+	// UnbindActor 解绑Actor
+	UnbindActor(kind string) error
+	// Next 消息下放
+	Next() error
 	// Actor 获取Actor
-	Actor(kind string, id string) (Actor, bool)
+	Actor(kind, id string) (Actor, bool)
 }

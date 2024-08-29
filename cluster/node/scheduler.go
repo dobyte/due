@@ -9,6 +9,12 @@ type scheduler struct {
 	relations map[int64]map[string]Actor
 }
 
+func newScheduler() *scheduler {
+	return &scheduler{
+		relations: make(map[int64]map[string]Actor),
+	}
+}
+
 // 为用户与Actor建立绑定关系
 func (s *scheduler) bind(uid int64, act Actor) {
 	s.rw.Lock()
