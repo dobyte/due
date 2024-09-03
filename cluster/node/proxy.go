@@ -167,6 +167,10 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
+func (p *Proxy) BindActor() {
+
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.gateLinker.GetIP(ctx, args)
@@ -223,24 +227,8 @@ func (p *Proxy) Invoke(fn func()) {
 }
 
 // Spawn 衍生出一个Actor
-func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) Actor {
-	o := defaultActorOptions()
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	act := &actor{}
-	act.opts = o
-	act.proxy = p
-	act.routes = make(map[int32]RouteHandler)
-	act.events = make(map[cluster.Event]EventHandler, 3)
-	act.mailbox = make(chan Context, 4096)
-	act.processor = creator(act)
-	act.processor.Init()
-	act.dispatch()
-	act.processor.Start()
-
-	return act
+func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) *Actor {
+	return p.node.scheduler.spawn(creator, opts...)
 }
 
 // 开始监听

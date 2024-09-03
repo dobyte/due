@@ -53,5 +53,5 @@ type Context interface {
 	// Next 消息下放
 	Next() error
 	// Actor 获取Actor
-	Actor(kind, id string) (Actor, bool)
+	Actor(kind, id string) (*Actor, bool)
 }

@@ -17,17 +17,18 @@ type HookHandler func(proxy *Proxy)
 
 type Node struct {
 	component.Base
-	opts     *options
-	ctx      context.Context
-	cancel   context.CancelFunc
-	state    atomic.Int32
-	router   *Router
-	trigger  *Trigger
-	proxy    *Proxy
-	hooks    map[cluster.Hook]HookHandler
-	instance *registry.ServiceInstance
-	linker   *node.Server
-	fnChan   chan func()
+	opts      *options
+	ctx       context.Context
+	cancel    context.CancelFunc
+	state     atomic.Int32
+	router    *Router
+	trigger   *Trigger
+	proxy     *Proxy
+	hooks     map[cluster.Hook]HookHandler
+	instance  *registry.ServiceInstance
+	linker    *node.Server
+	fnChan    chan func()
+	scheduler *Scheduler
 }
 
 func NewNode(opts ...Option) *Node {
@@ -42,6 +43,7 @@ func NewNode(opts ...Option) *Node {
 	n.proxy = newProxy(n)
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
+	n.scheduler = newScheduler(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.fnChan = make(chan func(), 4096)
 	n.state.Store(int32(cluster.Shut))

@@ -123,6 +123,11 @@ func (r *request) Task(fn func(ctx Context)) {
 	})
 }
 
+// Next 将消息下放
+func (r *request) Next() error {
+	return r.node.scheduler.dispatch(r)
+}
+
 // Proxy 获取代理API
 func (r *request) Proxy() *Proxy {
 	return r.node.proxy
@@ -179,6 +184,21 @@ func (r *request) UnbindNode(uid ...int64) error {
 	default:
 		return errors.ErrIllegalOperation
 	}
+}
+
+// BindActor 绑定Actor
+func (r *request) BindActor(kind, id string) error {
+	return r.node.scheduler.bindActor(r.uid, kind, id)
+}
+
+// UnbindActor 解绑Actor
+func (r *request) UnbindActor(kind string) error {
+	return r.node.scheduler.unbindActor(r.uid, kind)
+}
+
+// Actor 获取Actor
+func (r *request) Actor(kind, id string) (*Actor, bool) {
+	return r.node.scheduler.loadActor(kind, id)
 }
 
 // GetIP 获取客户端IP

@@ -5,34 +5,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-type Actor interface {
-	// ID 获取Actor编号
-	ID() string
-	// PID 获取Actor全局唯一识别号，实际为 Kind/ID
-	PID() string
-	// Kind 获取Actor类型
-	Kind() string
-	// Args 获取Actor参数
-	Args() []any
-	// Next 投递消息到Actor中进行处理
-	Next(ctx Context)
-	// Spawn 衍生出一个Actor
-	Spawn(creator Creator, opts ...ActorOption) Actor
-	// Proxy 获取代理API
-	Proxy() *Proxy
-	// Invoke 调用函数（Actor内线程安全）
-	Invoke(fn func())
-	// AddRouteHandler 添加路由处理器
-	AddRouteHandler(route int32, handler RouteHandler)
-	// AddEventHandler 添加事件处理器
-	AddEventHandler(event cluster.Event, handler EventHandler)
-}
+type Creator func(actor *Actor, args ...any) Processor
 
-type Creator func(actor Actor, args ...any) Processor
-
-type actor struct {
-	opts      *actorOptions
-	proxy     *Proxy
+type Actor struct {
+	opts      *actorOptions                  // 配置项
+	scheduler *Scheduler                     // 调度器
 	routes    map[int32]RouteHandler         // 路由处理器
 	events    map[cluster.Event]EventHandler // 事件处理器
 	processor Processor                      // 处理器
@@ -41,56 +18,52 @@ type actor struct {
 }
 
 // ID 获取Actor的ID
-func (a *actor) ID() string {
+func (a *Actor) ID() string {
 	return a.opts.id
 }
 
-func (a *actor) PID() string {
+// PID 获取Actor的唯一识别ID
+func (a *Actor) PID() string {
 	return a.Kind() + "/" + a.ID()
 }
 
 // Kind 获取Actor类型
-func (a *actor) Kind() string {
+func (a *Actor) Kind() string {
 	return a.processor.Kind()
 }
 
-// Args 获取Actor参数
-func (a *actor) Args() []any {
-	return a.opts.args
-}
-
 // Spawn 衍生出一个Actor
-func (a *actor) Spawn(creator Creator, opts ...ActorOption) Actor {
-	return a.proxy.Spawn(creator, opts...)
+func (a *Actor) Spawn(creator Creator, opts ...ActorOption) *Actor {
+	return a.scheduler.spawn(creator, opts...)
 }
 
 // Proxy 获取代理API
-func (a *actor) Proxy() *Proxy {
-	return a.proxy
+func (a *Actor) Proxy() *Proxy {
+	return a.scheduler.node.proxy
 }
 
 // Invoke 调用函数（Actor内线程安全）
-func (a *actor) Invoke(fn func()) {
+func (a *Actor) Invoke(fn func()) {
 	a.fnChan <- fn
 }
 
 // AddRouteHandler 添加路由处理器
-func (a *actor) AddRouteHandler(route int32, handler RouteHandler) {
+func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	a.routes[route] = handler
 }
 
 // AddEventHandler 添加事件处理器
-func (a *actor) AddEventHandler(event cluster.Event, handler EventHandler) {
+func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	a.events[event] = handler
 }
 
 // Next 投递消息到Actor中进行处理
-func (a *actor) Next(ctx Context) {
+func (a *Actor) Next(ctx Context) {
 	a.mailbox <- ctx
 }
 
 // 分发
-func (a *actor) dispatch() {
+func (a *Actor) dispatch() {
 	go func() {
 		for {
 			select {
