@@ -70,3 +70,9 @@ func (c *Chain) FireTail() {
 	c.head = nil
 	c.tail = nil
 }
+
+// Cancel 取消调用栈
+func (c *Chain) Cancel() {
+	c.head = nil
+	c.tail = nil
+}

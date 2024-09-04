@@ -151,16 +151,11 @@ func (r *Router) close() {
 }
 
 func (r *Router) handle(req *request) {
-	version := req.version.Add(1)
-
-	defer func() {
-		if req.version.CompareAndSwap(version, 0) {
-			req.recycle()
-		}
-	}()
+	version := req.incrVersion()
 
 	route, ok := r.routes[req.message.Route]
 	if !ok && r.defaultRouteHandler == nil {
+		req.compareVersionRecycle(version)
 		log.Warnf("message routing does not register handler function, route: %v", req.message.Route)
 		return
 	}
@@ -173,12 +168,17 @@ func (r *Router) handle(req *request) {
 				routeHandler: route.handler,
 			}
 			middleware.Next(req)
+			return
 		} else {
 			route.handler(req)
 		}
 	} else {
 		r.defaultRouteHandler(req)
 	}
+
+	req.compareVersionExecDefer(version)
+
+	req.compareVersionRecycle(version)
 }
 
 type RouterGroup struct {

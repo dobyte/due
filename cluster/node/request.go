@@ -10,6 +10,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
@@ -28,6 +29,7 @@ type request struct {
 	message *cluster.Message // 请求消息
 	pool    *sync.Pool       // 对象池
 	version atomic.Int32     // 对象版本号
+	chain   *chains.Chain    // 调用链
 }
 
 // GID 获取网关ID
@@ -90,6 +92,33 @@ func (r *request) Parse(v interface{}) error {
 	return r.node.opts.codec.Unmarshal(msg, v)
 }
 
+// Defer 添加defer延迟调用栈
+// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
+// 区别在于使用Defer方法可以对调用栈进行取消操作
+// 同时，在调用Task和Next方法是会自动取消调用栈
+// 也可通过Cancel方法进行手动取消
+func (r *request) Defer(fn func()) {
+	if r.chain == nil {
+		r.chain = chains.NewChain()
+	}
+
+	r.chain.AddToTail(fn)
+}
+
+// CancelDefer 取消Defer调用栈
+func (r *request) CancelDefer() {
+	if r.chain != nil {
+		r.chain.Cancel()
+	}
+}
+
+// 执行defer调用栈
+func (r *request) compareVersionExecDefer(version int32) {
+	if r.chain != nil && r.version.Load() == version {
+		r.chain.FireTail()
+	}
+}
+
 // Clone 克隆Context
 func (r *request) Clone() Context {
 	return &request{
@@ -109,21 +138,24 @@ func (r *request) Clone() Context {
 }
 
 // Task 投递任务
+// 推荐使用此方法替代task.AddTask和go func
+// 调用此方法会自动取消Defer调用栈的所有执行函数
 func (r *request) Task(fn func(ctx Context)) {
-	version := r.version.Add(1)
+	version := r.incrVersion()
+
+	r.CancelDefer()
 
 	task.AddTask(func() {
-		defer func() {
-			if r.version.CompareAndSwap(version, 0) {
-				r.recycle()
-			}
-		}()
+		defer r.compareVersionRecycle(version)
+
+		defer r.compareVersionExecDefer(version)
 
 		fn(r)
 	})
 }
 
-// Next 将消息下放
+// Next 消息下放
+// 调用此方法会自动取消Defer调用栈的所有执行函数
 func (r *request) Next() error {
 	return r.node.scheduler.dispatch(r)
 }
@@ -258,7 +290,19 @@ func (r *request) Disconnect(force ...bool) error {
 	})
 }
 
-// 回收请求
-func (r *request) recycle() {
-	r.pool.Put(r)
+// 增长版本号
+func (r *request) incrVersion() int32 {
+	return r.version.Add(1)
+}
+
+// 获取版本号
+func (r *request) loadVersion() int32 {
+	return r.version.Load()
+}
+
+// 比对版本号后进行回收对象
+func (r *request) compareVersionRecycle(version int32) {
+	if r.version.CompareAndSwap(version, 0) {
+		r.pool.Put(r)
+	}
 }

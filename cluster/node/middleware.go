@@ -26,6 +26,10 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 		return
 	}
 
+	version := ctx.incrVersion()
+
+	ctx.CancelDefer()
+
 	m.index += skip
 
 	if m.index >= len(m.middlewares) {
@@ -33,4 +37,8 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 	} else {
 		m.middlewares[m.index](m, ctx)
 	}
+
+	ctx.compareVersionExecDefer(version)
+
+	ctx.compareVersionRecycle(version)
 }

@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
@@ -19,6 +20,7 @@ type event struct {
 	kind    cluster.Event   // 时间类型
 	pool    *sync.Pool      // 对象池
 	version atomic.Int32    // 对象版本号
+	chain   *chains.Chain   // defer 调用链
 }
 
 // GID 获取网关ID
@@ -61,6 +63,33 @@ func (e *event) Parse(v interface{}) error {
 	return errors.NewError(errors.ErrIllegalOperation)
 }
 
+// Defer 添加defer延迟调用栈
+// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
+// 区别在于使用Defer方法可以对调用栈进行取消操作
+// 同时，在调用Task和Next方法是会自动取消调用栈
+// 也可通过Cancel方法进行手动取消
+func (e *event) Defer(fn func()) {
+	if e.chain == nil {
+		e.chain = chains.NewChain()
+	}
+
+	e.chain.AddToTail(fn)
+}
+
+// CancelDefer 取消Defer调用栈
+func (e *event) CancelDefer() {
+	if e.chain != nil {
+		e.chain.Cancel()
+	}
+}
+
+// 执行defer调用栈
+func (e *event) compareVersionExecDefer(version int32) {
+	if e.chain != nil && e.version.Load() == version {
+		e.chain.FireTail()
+	}
+}
+
 // Clone 克隆Context
 func (e *event) Clone() Context {
 	return &event{
@@ -74,21 +103,23 @@ func (e *event) Clone() Context {
 }
 
 // Task 投递任务
+// 调用此方法会自动取消Defer调用栈的所有执行函数
 func (e *event) Task(fn func(ctx Context)) {
-	version := e.version.Add(1)
+	version := e.incrVersion()
+
+	e.CancelDefer()
 
 	task.AddTask(func() {
-		defer func() {
-			if e.version.CompareAndSwap(version, 0) {
-				e.recycle()
-			}
-		}()
+		defer e.compareVersionRecycle(version)
+
+		defer e.compareVersionExecDefer(version)
 
 		fn(e)
 	})
 }
 
-// Next 将消息下放
+// Next 消息下放
+// 调用此方法会自动取消Defer调用栈的所有执行函数
 func (e *event) Next() error {
 	return nil
 	//return e.node.scheduler.dispatch(e)
@@ -201,7 +232,19 @@ func (e *event) Disconnect(force ...bool) error {
 	})
 }
 
-// 回收事件
-func (e *event) recycle() {
-	e.pool.Put(e)
+// 增长版本号
+func (e *event) incrVersion() int32 {
+	return e.version.Add(1)
+}
+
+// 获取版本号
+func (e *event) loadVersion() int32 {
+	return e.version.Load()
+}
+
+// 比对版本号后进行回收对象
+func (e *event) compareVersionRecycle(version int32) {
+	if e.version.CompareAndSwap(version, 0) {
+		e.pool.Put(e)
+	}
 }

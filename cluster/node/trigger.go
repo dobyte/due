@@ -45,13 +45,9 @@ func (e *Trigger) close() {
 
 // 处理事件消息
 func (e *Trigger) handle(evt *event) {
-	version := evt.version.Add(1)
+	version := evt.incrVersion()
 
-	defer func() {
-		if evt.version.CompareAndSwap(version, 0) {
-			evt.recycle()
-		}
-	}()
+	defer evt.compareVersionRecycle(version)
 
 	handler, ok := e.events[evt.kind]
 	if !ok {
@@ -59,6 +55,8 @@ func (e *Trigger) handle(evt *event) {
 	}
 
 	handler(evt)
+
+	evt.compareVersionExecDefer(version)
 }
 
 // AddEventHandler 添加事件处理器

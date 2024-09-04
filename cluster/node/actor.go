@@ -59,6 +59,10 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 
 // Next 投递消息到Actor中进行处理
 func (a *Actor) Next(ctx Context) {
+	ctx.incrVersion()
+
+	ctx.CancelDefer()
+
 	a.mailbox <- ctx
 }
 
@@ -72,9 +76,26 @@ func (a *Actor) dispatch() {
 					return
 				}
 
-				if handler, ok := a.routes[ctx.Route()]; ok {
-					xcall.Call(func() { handler(ctx) })
+				version := ctx.loadVersion()
+
+				if evt := ctx.Event(); evt > 0 {
+					if handler, ok := a.events[evt]; ok {
+						xcall.Call(func() { handler(ctx) })
+					}
+				} else {
+					if handler, ok := a.routes[ctx.Route()]; ok {
+						xcall.Call(func() { handler(ctx) })
+					}
 				}
+
+				ctx.compareVersionExecDefer(version)
+
+				ctx.compareVersionRecycle(version)
+			case handle, ok := <-a.fnChan:
+				if !ok {
+					return
+				}
+				xcall.Call(handle)
 			}
 		}
 	}()
