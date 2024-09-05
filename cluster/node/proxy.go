@@ -226,9 +226,14 @@ func (p *Proxy) Invoke(fn func()) {
 	p.node.fnChan <- fn
 }
 
-// Spawn 衍生出一个Actor
+// Spawn 衍生出一个新的Actor
 func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) *Actor {
 	return p.node.scheduler.spawn(creator, opts...)
+}
+
+// Actor 获取Actor
+func (p *Proxy) Actor(kind, id string) (*Actor, bool) {
+	return p.node.scheduler.loadActor(kind, id)
 }
 
 // 开始监听
