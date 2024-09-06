@@ -224,8 +224,8 @@ func (r *request) BindActor(kind, id string) error {
 }
 
 // UnbindActor 解绑Actor
-func (r *request) UnbindActor(kind string) error {
-	return r.node.scheduler.unbindActor(r.uid, kind)
+func (r *request) UnbindActor(kind string) {
+	r.node.scheduler.unbindActor(r.uid, kind)
 }
 
 // Actor 获取Actor

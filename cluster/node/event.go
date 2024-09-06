@@ -189,8 +189,8 @@ func (e *event) BindActor(kind, id string) error {
 }
 
 // UnbindActor 解绑Actor
-func (e *event) UnbindActor(kind string) error {
-	return e.node.scheduler.unbindActor(e.uid, kind)
+func (e *event) UnbindActor(kind string) {
+	e.node.scheduler.unbindActor(e.uid, kind)
 }
 
 // Actor 获取Actor

@@ -66,6 +66,11 @@ func (a *Actor) Next(ctx Context) {
 	a.mailbox <- ctx
 }
 
+// Destroy 销毁Actor
+func (a *Actor) Destroy() {
+
+}
+
 // 分发
 func (a *Actor) dispatch() {
 	go func() {

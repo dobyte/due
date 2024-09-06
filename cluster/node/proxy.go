@@ -167,8 +167,14 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
-func (p *Proxy) BindActor() {
+// BindActor 绑定Actor
+func (p *Proxy) BindActor(uid int64, kind, id string) error {
+	return p.node.scheduler.bindActor(uid, kind, id)
+}
 
+// UnbindActor 解绑Actor
+func (p *Proxy) UnbindActor(uid int64, kind string) {
+	p.node.scheduler.unbindActor(uid, kind)
 }
 
 // GetIP 获取客户端IP

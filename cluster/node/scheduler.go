@@ -10,6 +10,7 @@ type Scheduler struct {
 	node      *Node
 	actors    sync.Map
 	routes    sync.Map
+	kinds     sync.Map
 	rw        sync.RWMutex
 	relations map[int64]map[string]*Actor
 }
@@ -36,17 +37,28 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) *Actor {
 	act.mailbox = make(chan Context, 4096)
 	act.processor = creator(act, o.args...)
 	act.processor.Init()
-	s.actors.Store(act.PID(), act)
 	act.dispatch()
 	act.processor.Start()
+
+	if _, ok := s.kinds.Load(act.Kind()); !ok {
+		s.kinds.Store(act.Kind(), struct{}{})
+
+		for route := range act.routes {
+			s.routes.Store(route, act.Kind())
+		}
+	}
+
+	s.actors.Store(act.PID(), act)
 
 	return act
 }
 
 // 加载Actor
 func (s *Scheduler) loadActor(kind, id string) (*Actor, bool) {
-	actor, ok := s.actors.Load(kind + "/" + id)
-	return actor.(*Actor), ok
+	if actor, ok := s.actors.Load(kind + "/" + id); ok {
+		return actor.(*Actor), true
+	}
+	return nil, false
 }
 
 // 为用户与Actor建立绑定关系
@@ -75,15 +87,13 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 }
 
 // 解绑用户与Actor关系
-func (s *Scheduler) unbindActor(uid int64, kind string) error {
+func (s *Scheduler) unbindActor(uid int64, kind string) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
 	if relations, ok := s.relations[uid]; ok {
 		delete(relations, kind)
 	}
-
-	return nil
 }
 
 // 获取用户绑定的Actor

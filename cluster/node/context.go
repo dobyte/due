@@ -58,7 +58,7 @@ type Context interface {
 	// BindActor 绑定Actor
 	BindActor(kind, id string) error
 	// UnbindActor 解绑Actor
-	UnbindActor(kind string) error
+	UnbindActor(kind string)
 	// Next 消息下放
 	// 调用此方法会自动取消Defer调用栈的所有执行函数
 	Next() error
