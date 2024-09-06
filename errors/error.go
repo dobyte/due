@@ -44,6 +44,7 @@ var (
 	ErrUnexpectedEOF         = New("unexpected EOF")
 	ErrMissTransporter       = New("miss transporter")
 	ErrUnknownError          = New("unknown error")
+	ErrClientClosed          = New("client is closed")
 )
 
 // NewError 新建一个错误

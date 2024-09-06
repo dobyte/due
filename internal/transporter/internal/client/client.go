@@ -3,7 +3,9 @@ package client
 import (
 	"context"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,6 +30,7 @@ type Client struct {
 	chWrite     chan *chWrite  // 写入队列
 	connections []*Conn        // 连接
 	wg          sync.WaitGroup // 等待组
+	closed      atomic.Bool    // 已关闭
 }
 
 func NewClient(opts *Options) *Client {
@@ -42,6 +45,10 @@ func NewClient(opts *Options) *Client {
 
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ...int64) ([]byte, error) {
+	if c.closed.Load() {
+		return nil, errors.ErrClientClosed
+	}
+
 	call := make(chan []byte)
 
 	conn := c.load(idx...)
@@ -72,6 +79,10 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf buffer.Buffer, idx ...int64) error {
+	if c.closed.Load() {
+		return errors.ErrClientClosed
+	}
+
 	conn := c.load(idx...)
 
 	return conn.send(&chWrite{
@@ -112,6 +123,7 @@ func (c *Client) done() {
 // 等待客户端连接全部关闭
 func (c *Client) wait() {
 	c.wg.Wait()
+	c.closed.Store(true)
 	c.connections = nil
 	close(c.chWrite)
 
