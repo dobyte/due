@@ -46,7 +46,11 @@ func (s *Server) trigger(conn *server.Conn, data []byte) error {
 	}
 
 	if err = s.provider.Trigger(context.Background(), conn.InsID, cid, uid, event); seq == 0 {
-		return err
+		if errors.Is(err, errors.ErrNotFoundSession) {
+			return nil
+		} else {
+			return err
+		}
 	} else {
 		return conn.Send(protocol.EncodeTriggerRes(seq, codes.ErrorToCode(err)))
 	}

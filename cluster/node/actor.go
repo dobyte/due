@@ -33,7 +33,7 @@ func (a *Actor) Kind() string {
 }
 
 // Spawn 衍生出一个Actor
-func (a *Actor) Spawn(creator Creator, opts ...ActorOption) *Actor {
+func (a *Actor) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	return a.scheduler.spawn(creator, opts...)
 }
 
@@ -61,7 +61,7 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 func (a *Actor) Next(ctx Context) {
 	ctx.incrVersion()
 
-	ctx.CancelDefer()
+	ctx.Cancel()
 
 	a.mailbox <- ctx
 }
@@ -83,8 +83,8 @@ func (a *Actor) dispatch() {
 
 				version := ctx.loadVersion()
 
-				if evt := ctx.Event(); evt > 0 {
-					if handler, ok := a.events[evt]; ok {
+				if ctx.Kind() == Event {
+					if handler, ok := a.events[ctx.Event()]; ok {
 						xcall.Call(func() { handler(ctx) })
 					}
 				} else {

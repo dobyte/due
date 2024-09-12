@@ -17,7 +17,7 @@ type event struct {
 	gid     string          // 网关ID
 	cid     int64           // 连接ID
 	uid     int64           // 用户ID
-	kind    cluster.Event   // 时间类型
+	event   cluster.Event   // 时间类型
 	pool    *sync.Pool      // 对象池
 	version atomic.Int32    // 对象版本号
 	chain   *chains.Chain   // defer 调用链
@@ -55,7 +55,12 @@ func (e *event) Route() int32 {
 
 // Event 获取事件类型
 func (e *event) Event() cluster.Event {
-	return e.kind
+	return e.event
+}
+
+// Kind 上下文消息类型
+func (e *event) Kind() Kind {
+	return Event
 }
 
 // Parse 解析消息
@@ -68,16 +73,21 @@ func (e *event) Parse(v interface{}) error {
 // 区别在于使用Defer方法可以对调用栈进行取消操作
 // 同时，在调用Task和Next方法是会自动取消调用栈
 // 也可通过Cancel方法进行手动取消
-func (e *event) Defer(fn func()) {
+// bottom用于标识是否挂载到栈底部
+func (e *event) Defer(fn func(), bottom ...bool) {
 	if e.chain == nil {
 		e.chain = chains.NewChain()
 	}
 
-	e.chain.AddToTail(fn)
+	if len(bottom) > 0 && bottom[0] {
+		e.chain.AddToTail(fn)
+	} else {
+		e.chain.AddToHead(fn)
+	}
 }
 
-// CancelDefer 取消Defer调用栈
-func (e *event) CancelDefer() {
+// Cancel 取消Defer调用栈
+func (e *event) Cancel() {
 	if e.chain != nil {
 		e.chain.Cancel()
 	}
@@ -86,7 +96,7 @@ func (e *event) CancelDefer() {
 // 执行defer调用栈
 func (e *event) compareVersionExecDefer(version int32) {
 	if e.chain != nil && e.version.Load() == version {
-		e.chain.FireTail()
+		e.chain.FireHead()
 	}
 }
 
@@ -107,7 +117,7 @@ func (e *event) Clone() Context {
 func (e *event) Task(fn func(ctx Context)) {
 	version := e.incrVersion()
 
-	e.CancelDefer()
+	e.Cancel()
 
 	task.AddTask(func() {
 		defer e.compareVersionRecycle(version)
@@ -121,8 +131,7 @@ func (e *event) Task(fn func(ctx Context)) {
 // Next 消息下放
 // 调用此方法会自动取消Defer调用栈的所有执行函数
 func (e *event) Next() error {
-	return nil
-	//return e.node.scheduler.dispatch(e)
+	return e.node.scheduler.dispatch(e)
 }
 
 // Proxy 获取代理API
@@ -193,9 +202,19 @@ func (e *event) UnbindActor(kind string) {
 	e.node.scheduler.unbindActor(e.uid, kind)
 }
 
+// Spawn 衍生出一个新的Actor
+func (e *event) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
+	return e.node.scheduler.spawn(creator, opts...)
+}
+
+// Kill 杀死存在的一个Actor
+func (e *event) Kill(kind, id string) bool {
+	return e.node.scheduler.kill(kind, id)
+}
+
 // Actor 获取Actor
 func (e *event) Actor(kind, id string) (*Actor, bool) {
-	return e.node.scheduler.loadActor(kind, id)
+	return e.node.scheduler.load(kind, id)
 }
 
 // GetIP 获取客户端IP

@@ -28,7 +28,7 @@ func newTrigger(node *Node) *Trigger {
 func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) {
 	evt := e.evtPool.Get().(*event)
 	evt.pool = e.evtPool
-	evt.kind = kind
+	evt.event = kind
 	evt.gid = gid
 	evt.cid = cid
 	evt.uid = uid
@@ -49,7 +49,7 @@ func (e *Trigger) handle(evt *event) {
 
 	defer evt.compareVersionRecycle(version)
 
-	handler, ok := e.events[evt.kind]
+	handler, ok := e.events[evt.event]
 	if !ok {
 		return
 	}

@@ -233,13 +233,18 @@ func (p *Proxy) Invoke(fn func()) {
 }
 
 // Spawn 衍生出一个新的Actor
-func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) *Actor {
+func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	return p.node.scheduler.spawn(creator, opts...)
+}
+
+// Kill 杀死存在的一个Actor
+func (p *Proxy) Kill(kind, id string) bool {
+	return p.node.scheduler.kill(kind, id)
 }
 
 // Actor 获取Actor
 func (p *Proxy) Actor(kind, id string) (*Actor, bool) {
-	return p.node.scheduler.loadActor(kind, id)
+	return p.node.scheduler.load(kind, id)
 }
 
 // 开始监听

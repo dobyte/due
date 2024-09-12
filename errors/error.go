@@ -45,6 +45,10 @@ var (
 	ErrMissTransporter       = New("miss transporter")
 	ErrUnknownError          = New("unknown error")
 	ErrClientClosed          = New("client is closed")
+	ErrActorExists           = New("actor exists")
+	ErrMissDispatchStrategy  = New("missing dispatch strategy")
+	ErrUnregisterRoute       = New("unregistered route")
+	ErrNotBindActor          = New("not bind actor")
 )
 
 // NewError 新建一个错误

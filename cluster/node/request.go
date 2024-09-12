@@ -67,6 +67,11 @@ func (r *request) Event() cluster.Event {
 	return 0
 }
 
+// Kind 上下文消息类型
+func (r *request) Kind() Kind {
+	return Request
+}
+
 // Parse 解析消息
 func (r *request) Parse(v interface{}) error {
 	msg, ok := r.message.Data.([]byte)
@@ -97,16 +102,21 @@ func (r *request) Parse(v interface{}) error {
 // 区别在于使用Defer方法可以对调用栈进行取消操作
 // 同时，在调用Task和Next方法是会自动取消调用栈
 // 也可通过Cancel方法进行手动取消
-func (r *request) Defer(fn func()) {
+// bottom用于标识是否挂载到栈底部
+func (r *request) Defer(fn func(), bottom ...bool) {
 	if r.chain == nil {
 		r.chain = chains.NewChain()
 	}
 
-	r.chain.AddToTail(fn)
+	if len(bottom) > 0 && bottom[0] {
+		r.chain.AddToTail(fn)
+	} else {
+		r.chain.AddToHead(fn)
+	}
 }
 
-// CancelDefer 取消Defer调用栈
-func (r *request) CancelDefer() {
+// Cancel 取消Defer调用栈
+func (r *request) Cancel() {
 	if r.chain != nil {
 		r.chain.Cancel()
 	}
@@ -115,7 +125,7 @@ func (r *request) CancelDefer() {
 // 执行defer调用栈
 func (r *request) compareVersionExecDefer(version int32) {
 	if r.chain != nil && r.version.Load() == version {
-		r.chain.FireTail()
+		r.chain.FireHead()
 	}
 }
 
@@ -143,7 +153,7 @@ func (r *request) Clone() Context {
 func (r *request) Task(fn func(ctx Context)) {
 	version := r.incrVersion()
 
-	r.CancelDefer()
+	r.Cancel()
 
 	task.AddTask(func() {
 		defer r.compareVersionRecycle(version)
@@ -228,9 +238,19 @@ func (r *request) UnbindActor(kind string) {
 	r.node.scheduler.unbindActor(r.uid, kind)
 }
 
+// Spawn 衍生出一个新的Actor
+func (r *request) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
+	return r.node.scheduler.spawn(creator, opts...)
+}
+
+// Kill 杀死存在的一个Actor
+func (r *request) Kill(kind, id string) bool {
+	return r.node.scheduler.kill(kind, id)
+}
+
 // Actor 获取Actor
 func (r *request) Actor(kind, id string) (*Actor, bool) {
-	return r.node.scheduler.loadActor(kind, id)
+	return r.node.scheduler.load(kind, id)
 }
 
 // GetIP 获取客户端IP

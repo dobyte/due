@@ -28,7 +28,7 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 
 	version := ctx.incrVersion()
 
-	ctx.CancelDefer()
+	ctx.Cancel()
 
 	m.index += skip
 
