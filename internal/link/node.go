@@ -61,6 +61,12 @@ func (l *NodeLinker) Ask(ctx context.Context, uid int64, name, nid string) (stri
 	return insID, insID == nid, nil
 }
 
+// Has 检测是否存在某个节点
+func (l *NodeLinker) Has(nid string) bool {
+	_, err := l.dispatcher.FindEndpoint(nid)
+	return err == nil
+}
+
 // Locate 定位用户所在节点
 func (l *NodeLinker) Locate(ctx context.Context, uid int64, name string) (string, error) {
 	if l.opts.Locator == nil {

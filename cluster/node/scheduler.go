@@ -33,9 +33,11 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	act := &Actor{}
 	act.opts = o
 	act.scheduler = s
+	act.state.Store(started)
 	act.routes = make(map[int32]RouteHandler)
 	act.events = make(map[cluster.Event]EventHandler, 3)
 	act.mailbox = make(chan Context, 4096)
+	act.fnChan = make(chan func(), 4096)
 	act.processor = creator(act, o.args...)
 
 	s.mu.Lock()
@@ -131,8 +133,8 @@ func (s *Scheduler) unbindActor(uid int64, kind string) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	if relations, ok := s.relations[uid]; ok {
-		delete(relations, kind)
+	if _, ok := s.relations[uid]; ok {
+		delete(s.relations[uid], kind)
 	}
 }
 

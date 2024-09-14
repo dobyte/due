@@ -48,6 +48,12 @@ func (l *GateLinker) Ask(ctx context.Context, gid string, uid int64) (string, bo
 	return insID, insID == gid, nil
 }
 
+// Has 检测是否存在某个网关
+func (l *GateLinker) Has(gid string) bool {
+	_, err := l.dispatcher.FindEndpoint(gid)
+	return err == nil
+}
+
 // Locate 定位用户所在网关
 func (l *GateLinker) Locate(ctx context.Context, uid int64) (string, error) {
 	if l.opts.Locator == nil {
@@ -383,17 +389,17 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		return errors.ErrReceiveTargetEmpty
 	}
 
-	message, err := l.doPackMessage(args.Message, true)
-	if err != nil {
-		return err
-	}
-
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+				message, err := l.doPackMessage(args.Message, true)
+				if err != nil {
+					return err
+				}
+
+				_, err = l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
 					return false, nil, client.Push(ctx, args.Kind, target, message)
 				})
 				return err

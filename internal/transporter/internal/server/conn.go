@@ -140,7 +140,7 @@ func (c *Conn) process() {
 					continue
 				}
 
-				if err := handler(c, ch.data); err != nil {
+				if err := handler(c, ch.data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 					log.Warnf("process route %d message failed: %v", ch.route, err)
 				}
 			}

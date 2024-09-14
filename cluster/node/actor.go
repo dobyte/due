@@ -3,18 +3,27 @@ package node
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"sync"
+	"sync/atomic"
 )
 
 type Creator func(actor *Actor, args ...any) Processor
 
+const (
+	destroyed int32 = iota // 已销毁
+	started                // 已启动
+)
+
 type Actor struct {
 	opts      *actorOptions                  // 配置项
 	scheduler *Scheduler                     // 调度器
+	state     atomic.Int32                   // 状态
 	routes    map[int32]RouteHandler         // 路由处理器
 	events    map[cluster.Event]EventHandler // 事件处理器
 	processor Processor                      // 处理器
+	rw        sync.RWMutex                   // 锁
 	mailbox   chan Context                   // 邮箱
-	fnChan    chan func()
+	fnChan    chan func()                    // 调用函数
 }
 
 // ID 获取Actor的ID
@@ -44,6 +53,13 @@ func (a *Actor) Proxy() *Proxy {
 
 // Invoke 调用函数（Actor内线程安全）
 func (a *Actor) Invoke(fn func()) {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
+	if a.state.Load() != started {
+		return
+	}
+
 	a.fnChan <- fn
 }
 
@@ -59,6 +75,13 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 
 // Next 投递消息到Actor中进行处理
 func (a *Actor) Next(ctx Context) {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
+	if a.state.Load() != started {
+		return
+	}
+
 	ctx.incrVersion()
 
 	ctx.Cancel()
@@ -68,7 +91,18 @@ func (a *Actor) Next(ctx Context) {
 
 // Destroy 销毁Actor
 func (a *Actor) Destroy() {
+	if !a.state.CompareAndSwap(started, destroyed) {
+		return
+	}
 
+	a.processor.Destroy()
+
+	a.rw.Lock()
+	defer a.rw.Unlock()
+
+	close(a.mailbox)
+
+	close(a.fnChan)
 }
 
 // 分发
