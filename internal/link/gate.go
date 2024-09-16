@@ -389,12 +389,21 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		return errors.ErrReceiveTargetEmpty
 	}
 
+	buf, err := l.toBuffer(args.Message.Data, true)
+	if err != nil {
+		return err
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				message, err := l.doPackMessage(args.Message, true)
+				message, err := packet.PackBuffer(&packet.Message{
+					Seq:    args.Message.Seq,
+					Route:  args.Message.Route,
+					Buffer: buf,
+				})
 				if err != nil {
 					return err
 				}
@@ -412,7 +421,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 
 // Broadcast 推送广播消息
 func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
-	message, err := l.doPackMessage(args.Message, true)
+	buf, err := l.toBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
@@ -421,6 +430,15 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
 
 	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
+			message, err := packet.PackBuffer(&packet.Message{
+				Seq:    args.Message.Seq,
+				Route:  args.Message.Route,
+				Buffer: buf,
+			})
+			if err != nil {
+				return err
+			}
+
 			client, err := l.builder.Build(ep.Address())
 			if err != nil {
 				return err
