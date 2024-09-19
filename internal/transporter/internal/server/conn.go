@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -18,6 +19,7 @@ type Conn struct {
 	ctx               context.Context    // 上下文
 	cancel            context.CancelFunc // 取消函数
 	server            *Server            // 连接管理
+	rw                sync.RWMutex       // 锁
 	conn              net.Conn           // TCP源连接
 	state             int32              // 连接状态
 	chData            chan chData        // 消息处理通道
@@ -44,6 +46,9 @@ func newConn(server *Server, conn net.Conn) *Conn {
 
 // Send 发送消息
 func (c *Conn) Send(buf buffer.Buffer) (err error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if err = c.checkState(); err != nil {
 		return err
 	}
@@ -75,6 +80,9 @@ func (c *Conn) close(isNeedRecycle ...bool) error {
 		return errors.ErrConnectionClosed
 	}
 
+	c.rw.Lock()
+	defer c.rw.Unlock()
+
 	c.cancel()
 
 	close(c.chData)
@@ -101,11 +109,20 @@ func (c *Conn) read() {
 				return
 			}
 
+			c.rw.RLock()
+
+			if atomic.LoadInt32(&c.state) == def.ConnClosed {
+				c.rw.RUnlock()
+				return
+			}
+
 			c.chData <- chData{
 				isHeartbeat: isHeartbeat,
 				route:       route,
 				data:        data,
 			}
+
+			c.rw.RUnlock()
 		}
 	}
 }
@@ -150,6 +167,9 @@ func (c *Conn) process() {
 
 // 响应心跳消息
 func (c *Conn) heartbeat() {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if _, err := c.conn.Write(protocol.Heartbeat()); err != nil {
 		log.Warnf("write heartbeat message error: %v", err)
 	}
