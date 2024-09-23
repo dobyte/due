@@ -93,6 +93,11 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 	p.node.addHookListener(hook, handler)
 }
 
+// AddServiceProvider 添加服务提供者
+func (p *Proxy) AddServiceProvider(name string, desc interface{}, provider interface{}) {
+	p.node.addServiceProvider(name, desc, provider)
+}
+
 // NewMeshClient 新建微服务客户端
 // target参数可分为两种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011

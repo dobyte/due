@@ -15,7 +15,7 @@ func newPool(count int, target string, opts ...grpc.DialOption) (*Pool, error) {
 	p := &Pool{count: uint64(count), conns: make([]*grpc.ClientConn, count)}
 
 	for i := 0; i < count; i++ {
-		conn, err := grpc.Dial(target, opts...)
+		conn, err := grpc.NewClient(target, opts...)
 		if err != nil {
 			return nil, err
 		}
