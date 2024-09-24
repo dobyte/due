@@ -71,6 +71,8 @@ func NewLogger(opts ...Option) *Logger {
 		options = append(options, zap.AddStacktrace(zapcore.FatalLevel), zap.AddCallerSkip(1+o.callerSkip))
 	case log.PanicLevel:
 		options = append(options, zap.AddStacktrace(zapcore.PanicLevel), zap.AddCallerSkip(1+o.callerSkip))
+	default:
+		options = append(options, zap.AddCallerSkip(2))
 	}
 
 	l := &Logger{opts: o}
