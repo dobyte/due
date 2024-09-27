@@ -10,8 +10,9 @@ import (
 type Creator func(actor *Actor, args ...any) Processor
 
 const (
-	destroyed int32 = iota // 已销毁
+	unstart   int32 = iota // 未启动
 	started                // 已启动
+	destroyed              // 已销毁
 )
 
 type Actor struct {
@@ -65,12 +66,31 @@ func (a *Actor) Invoke(fn func()) {
 
 // AddRouteHandler 添加路由处理器
 func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
-	a.routes[route] = handler
+	switch a.state.Load() {
+	case unstart:
+		a.routes[route] = handler
+	case started:
+		a.rw.Lock()
+		a.routes[route] = handler
+		a.rw.Unlock()
+		a.scheduler.routes.Store(route, a.Kind())
+	default:
+		// ignore
+	}
 }
 
 // AddEventHandler 添加事件处理器
 func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
-	a.events[event] = handler
+	switch a.state.Load() {
+	case unstart:
+		a.events[event] = handler
+	case started:
+		a.rw.Lock()
+		a.events[event] = handler
+		a.rw.Unlock()
+	default:
+		// ignore
+	}
 }
 
 // Next 投递消息到Actor中进行处理
@@ -118,11 +138,19 @@ func (a *Actor) dispatch() {
 				version := ctx.loadVersion()
 
 				if ctx.Kind() == Event {
-					if handler, ok := a.events[ctx.Event()]; ok {
+					a.rw.RLock()
+					handler, ok := a.events[ctx.Event()]
+					a.rw.RUnlock()
+
+					if ok {
 						xcall.Call(func() { handler(ctx) })
 					}
 				} else {
-					if handler, ok := a.routes[ctx.Route()]; ok {
+					a.rw.RLock()
+					handler, ok := a.routes[ctx.Route()]
+					a.rw.RUnlock()
+
+					if ok {
 						xcall.Call(func() { handler(ctx) })
 					}
 				}
