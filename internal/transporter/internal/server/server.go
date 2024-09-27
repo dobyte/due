@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
@@ -115,7 +114,6 @@ func (s *Server) Stop() error {
 
 	s.rw.Lock()
 	for _, conn := range s.connections {
-		fmt.Println(3333333)
 		_ = conn.close()
 	}
 	s.connections = nil
