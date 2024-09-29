@@ -66,14 +66,17 @@ func (a *Actor) Invoke(fn func()) {
 
 // AddRouteHandler 添加路由处理器
 func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
 	switch a.state.Load() {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.rw.Lock()
-		a.routes[route] = handler
-		a.rw.Unlock()
-		a.scheduler.routes.Store(route, a.Kind())
+		a.fnChan <- func() {
+			a.routes[route] = handler
+			a.scheduler.routes.Store(route, a.Kind())
+		}
 	default:
 		// ignore
 	}
@@ -81,13 +84,16 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 
 // AddEventHandler 添加事件处理器
 func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
 	switch a.state.Load() {
 	case unstart:
 		a.events[event] = handler
 	case started:
-		a.rw.Lock()
-		a.events[event] = handler
-		a.rw.Unlock()
+		a.fnChan <- func() {
+			a.events[event] = handler
+		}
 	default:
 		// ignore
 	}
@@ -138,19 +144,11 @@ func (a *Actor) dispatch() {
 				version := ctx.loadVersion()
 
 				if ctx.Kind() == Event {
-					a.rw.RLock()
-					handler, ok := a.events[ctx.Event()]
-					a.rw.RUnlock()
-
-					if ok {
+					if handler, ok := a.events[ctx.Event()]; ok {
 						xcall.Call(func() { handler(ctx) })
 					}
 				} else {
-					a.rw.RLock()
-					handler, ok := a.routes[ctx.Route()]
-					a.rw.RUnlock()
-
-					if ok {
+					if handler, ok := a.routes[ctx.Route()]; ok {
 						xcall.Call(func() { handler(ctx) })
 					}
 				}
