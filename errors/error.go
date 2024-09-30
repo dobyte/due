@@ -49,6 +49,7 @@ var (
 	ErrMissDispatchStrategy  = New("missing dispatch strategy")
 	ErrUnregisterRoute       = New("unregistered route")
 	ErrNotBindActor          = New("not bind actor")
+	ErrNotFoundActor         = New("not found actor")
 )
 
 // NewError 新建一个错误

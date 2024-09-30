@@ -111,7 +111,7 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 
 	act, ok := s.load(kind, id)
 	if !ok {
-		return errors.New("actor not found")
+		return errors.ErrNotFoundActor
 	}
 
 	s.rw.Lock()
