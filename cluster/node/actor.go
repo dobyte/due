@@ -25,6 +25,7 @@ type Actor struct {
 	rw        sync.RWMutex                   // 锁
 	mailbox   chan Context                   // 邮箱
 	fnChan    chan func()                    // 调用函数
+	binds     sync.Map                       // 绑定的用户
 }
 
 // ID 获取Actor的ID
@@ -123,12 +124,30 @@ func (a *Actor) Destroy() {
 
 	a.processor.Destroy()
 
+	a.scheduler.batchUnbindActor(func(relations map[int64]map[string]*Actor) {
+		a.binds.Range(func(uid, _ any) bool {
+			delete(relations[uid.(int64)], a.Kind())
+			return true
+		})
+	})
+
 	a.rw.Lock()
 	defer a.rw.Unlock()
 
 	close(a.mailbox)
 
 	close(a.fnChan)
+}
+
+// 绑定用户
+func (a *Actor) bindUser(uid int64) {
+	a.binds.Store(uid, struct{}{})
+}
+
+// 解绑用户
+func (a *Actor) unbindUser(uid int64) bool {
+	_, ok := a.binds.LoadAndDelete(uid)
+	return ok
 }
 
 // 分发
