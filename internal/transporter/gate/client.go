@@ -116,7 +116,11 @@ func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) 
 
 // Disconnect 断开连接
 func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
-	return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force))
+	if force {
+		return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force))
+	} else {
+		return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force), target)
+	}
 }
 
 // Push 异步推送消息

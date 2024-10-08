@@ -18,7 +18,7 @@ type Provider interface {
 	// Stat 统计会话总数
 	Stat(ctx context.Context, kind session.Kind) (total int64, err error)
 	// Disconnect 断开连接
-	Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error
+	Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error
 	// Push 发送消息
 	Push(ctx context.Context, kind session.Kind, target int64, message []byte) error
 	// Multicast 推送组播消息

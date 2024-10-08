@@ -71,7 +71,7 @@ func (p *provider) Stat(ctx context.Context, kind session.Kind) (total int64, er
 }
 
 // Disconnect 断开连接
-func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error {
+func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
 	return nil
 }
 

@@ -92,9 +92,9 @@ func (c *serverConn) State() network.ConnState {
 }
 
 // Close 关闭连接
-func (c *serverConn) Close(isForce ...bool) error {
-	if len(isForce) > 0 && isForce[0] {
-		return c.forceClose()
+func (c *serverConn) Close(force ...bool) error {
+	if len(force) > 0 && force[0] {
+		return c.forceClose(true)
 	} else {
 		return c.graceClose(true)
 	}
@@ -195,7 +195,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	}
 
 	c.rw.RLock()
-	c.chHighWrite <- chWrite{typ: closeSig}
+	c.chLowWrite <- chWrite{typ: closeSig}
 	c.rw.RUnlock()
 
 	<-c.done
@@ -227,7 +227,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 }
 
 // 强制关闭
-func (c *serverConn) forceClose() error {
+func (c *serverConn) forceClose(isNeedRecycle bool) error {
 	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
 		if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
 			return errors.ErrConnectionClosed
@@ -245,7 +245,9 @@ func (c *serverConn) forceClose() error {
 
 	err := conn.Close()
 
-	c.connMgr.recycle(conn)
+	if isNeedRecycle {
+		c.connMgr.recycle(conn)
+	}
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
@@ -270,7 +272,7 @@ func (c *serverConn) read() {
 						log.Warnf("read message failed: %d %v", c.id, err)
 					}
 				}
-				_ = c.forceClose()
+				_ = c.forceClose(true)
 				return
 			}
 
@@ -415,7 +417,7 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn) bool {
 	deadline := xtime.Now().Add(-2 * c.connMgr.server.opts.heartbeatInterval).UnixNano()
 	if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
-		_ = c.forceClose()
+		_ = c.forceClose(true)
 		return false
 	} else {
 		if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {

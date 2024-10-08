@@ -16,7 +16,7 @@ func TestEncodeDisconnectReq(t *testing.T) {
 func TestDecodeDisconnectReq(t *testing.T) {
 	buffer := protocol.EncodeDisconnectReq(1, session.User, 3, false)
 
-	seq, kind, target, isForce, err := protocol.DecodeDisconnectReq(buffer.Bytes())
+	seq, kind, target, force, err := protocol.DecodeDisconnectReq(buffer.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestDecodeDisconnectReq(t *testing.T) {
 	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
 	t.Logf("target: %v", target)
-	t.Logf("isForce: %v", isForce)
+	t.Logf("force: %v", force)
 }
 
 func TestEncodeDisconnectRes(t *testing.T) {

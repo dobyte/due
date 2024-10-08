@@ -88,8 +88,8 @@ func (c *serverConn) State() network.ConnState {
 }
 
 // Close 关闭连接
-func (c *serverConn) Close(isForce ...bool) error {
-	if len(isForce) > 0 && isForce[0] {
+func (c *serverConn) Close(force ...bool) error {
+	if len(force) > 0 && force[0] {
 		return c.forceClose(true)
 	} else {
 		return c.graceClose(true)

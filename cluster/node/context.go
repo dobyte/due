@@ -49,7 +49,7 @@ type Context interface {
 	// Response 响应消息
 	Response(message interface{}) error
 	// Disconnect 关闭来自网关的连接
-	Disconnect(isForce ...bool) error
+	Disconnect(force ...bool) error
 	// BindGate 绑定网关
 	BindGate(uid ...int64) error
 	// UnbindGate 解绑网关

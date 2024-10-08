@@ -36,7 +36,7 @@ type (
 		// State 获取连接状态
 		State() ConnState
 		// Close 关闭连接
-		Close(isForce ...bool) error
+		Close(force ...bool) error
 		// LocalIP 获取本地IP
 		LocalIP() (string, error)
 		// LocalAddr 获取本地地址

@@ -15,7 +15,7 @@ const (
 )
 
 // EncodeDisconnectReq 编码断连请求
-// 协议：size + header + route + seq + session kind + target + isForce
+// 协议：size + header + route + seq + session kind + target + force
 func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) buffer.Buffer {
 	buf := buffer.NewNocopyBuffer()
 	writer := buf.Malloc(disconnectReqBytes)
@@ -31,7 +31,7 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool
 }
 
 // DecodeDisconnectReq 解码端连请求
-// 协议：size + header + route + seq + session kind + target + isForce
+// 协议：size + header + route + seq + session kind + target + force
 func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int64, force bool, err error) {
 	if len(data) != disconnectReqBytes {
 		err = errors.ErrInvalidMessage

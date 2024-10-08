@@ -62,8 +62,8 @@ func (p *provider) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 }
 
 // Disconnect 断开连接
-func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, isForce bool) error {
-	return p.gate.session.Close(kind, target, isForce)
+func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
+	return p.gate.session.Close(kind, target, force)
 }
 
 // Push 发送消息

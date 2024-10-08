@@ -179,7 +179,7 @@ func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 }
 
 // Close 关闭会话
-func (s *Session) Close(kind Kind, target int64, isForce ...bool) error {
+func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -188,7 +188,7 @@ func (s *Session) Close(kind Kind, target int64, isForce ...bool) error {
 		return err
 	}
 
-	return conn.Close(isForce...)
+	return conn.Close(force...)
 }
 
 // Send 发送消息（同步）

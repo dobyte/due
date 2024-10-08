@@ -109,8 +109,8 @@ func (c *clientConn) State() network.ConnState {
 }
 
 // Close 关闭连接
-func (c *clientConn) Close(isForce ...bool) error {
-	if len(isForce) > 0 && isForce[0] {
+func (c *clientConn) Close(force ...bool) error {
+	if len(force) > 0 && force[0] {
 		return c.forceClose()
 	} else {
 		return c.graceClose()

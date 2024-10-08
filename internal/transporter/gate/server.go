@@ -109,12 +109,12 @@ func (s *Server) isOnline(conn *server.Conn, data []byte) error {
 
 // 断开连接
 func (s *Server) disconnect(conn *server.Conn, data []byte) error {
-	seq, kind, target, isForce, err := protocol.DecodeDisconnectReq(data)
+	seq, kind, target, force, err := protocol.DecodeDisconnectReq(data)
 	if err != nil {
 		return err
 	}
 
-	if err = s.provider.Disconnect(context.Background(), kind, target, isForce); seq == 0 {
+	if err = s.provider.Disconnect(context.Background(), kind, target, force); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeDisconnectRes(seq, codes.ErrorToCode(err)))
