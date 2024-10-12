@@ -173,18 +173,18 @@ func (g *Gate) stopLinkerServer() {
 // 注册服务实例
 func (g *Gate) registerServiceInstance() {
 	g.instance = &registry.ServiceInstance{
-		ID:       g.opts.id,
-		Name:     cluster.Gate.String(),
-		Kind:     cluster.Gate.String(),
-		Alias:    g.opts.name,
-		State:    cluster.Work.String(),
-		Endpoint: g.linker.Endpoint().String(),
+		ID:    g.opts.id,
+		Name:  cluster.Gate.String(),
+		Kind:  cluster.Gate.String(),
+		Alias: g.opts.name,
+		State: cluster.Work.String(),
+		Link:  g.linker.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
-	err := g.opts.registry.Register(ctx, g.instance)
-	cancel()
-	if err != nil {
+	defer cancel()
+
+	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
@@ -192,9 +192,9 @@ func (g *Gate) registerServiceInstance() {
 // 解注册服务实例
 func (g *Gate) deregisterServiceInstance() {
 	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
-	err := g.opts.registry.Deregister(ctx, g.instance)
 	defer cancel()
-	if err != nil {
+
+	if err := g.opts.registry.Deregister(ctx, g.instance); err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }

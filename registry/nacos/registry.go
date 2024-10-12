@@ -215,6 +215,7 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 		ins.Kind = instance.Metadata[metaFieldKind]
 		ins.Alias = instance.Metadata[metaFieldAlias]
 		ins.State = instance.Metadata[metaFieldState]
+		ins.Link = instance.Metadata[metaFieldLink]
 		ins.Endpoint = instance.Metadata[metaFieldEndpoint]
 		ins.Routes = make([]registry.Route, 0)
 		ins.Events = make([]int, 0)

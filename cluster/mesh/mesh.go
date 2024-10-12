@@ -120,8 +120,7 @@ func (m *Mesh) startTransportServer() {
 	m.transporter = transporter
 
 	for _, entity := range m.services {
-		err = m.transporter.RegisterService(entity.desc, entity.provider)
-		if err != nil {
+		if err = m.transporter.RegisterService(entity.desc, entity.provider); err != nil {
 			log.Fatalf("register service failed: %v", err)
 		}
 	}

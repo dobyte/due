@@ -19,6 +19,7 @@ const (
 	metaFieldState    = "state"
 	metaFieldRoutes   = "routes"
 	metaFieldEvents   = "events"
+	metaFieldLink     = "link"
 	metaFieldEndpoint = "endpoint"
 )
 
@@ -32,7 +33,12 @@ func newRegistrar(registry *Registry) *registrar {
 
 // 注册服务
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
-	host, port, err := r.parseHostPort(ins.Endpoint)
+	endpoint := ins.Link
+	if endpoint == "" {
+		endpoint = ins.Endpoint
+	}
+
+	host, port, err := r.parseHostPort(endpoint)
 	if err != nil {
 		return err
 	}
@@ -65,6 +71,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 			metaFieldState:    ins.State,
 			metaFieldRoutes:   string(routes),
 			metaFieldEvents:   string(events),
+			metaFieldLink:     ins.Link,
 			metaFieldEndpoint: ins.Endpoint,
 		},
 	}
@@ -83,7 +90,12 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 // 解注册服务
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	host, port, err := r.parseHostPort(ins.Endpoint)
+	endpoint := ins.Link
+	if endpoint == "" {
+		endpoint = ins.Endpoint
+	}
+
+	host, port, err := r.parseHostPort(endpoint)
 	if err != nil {
 		return err
 	}

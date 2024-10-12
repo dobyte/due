@@ -4,8 +4,6 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/hashicorp/consul/api"
-	"net"
-	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -139,19 +137,6 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			Routes: make([]registry.Route, 0, len(entry.Service.Meta)),
 		}
 
-		for scheme, addr := range entry.Service.TaggedAddresses {
-			if scheme == "lan_ipv4" || scheme == "wan_ipv4" || scheme == "lan_ipv6" || scheme == "wan_ipv6" {
-				continue
-			}
-			ins.Endpoint = (&url.URL{
-				Scheme: scheme,
-				Host:   net.JoinHostPort(addr.Address, strconv.Itoa(addr.Port)),
-			}).String()
-		}
-		if ins.Endpoint == "" {
-			continue
-		}
-
 		for k, v := range entry.Service.Meta {
 			switch k {
 			case metaFieldKind:
@@ -160,6 +145,10 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				ins.Alias = v
 			case metaFieldState:
 				ins.State = v
+			case metaFieldLink:
+				ins.Link = v
+			case metaFieldEndpoint:
+				ins.Endpoint = v
 			default:
 				route, err := strconv.Atoi(k)
 				if err != nil {
