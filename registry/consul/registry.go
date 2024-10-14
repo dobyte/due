@@ -2,9 +2,9 @@ package consul
 
 import (
 	"context"
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/hashicorp/consul/api"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -132,9 +132,11 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 	services := make([]*registry.ServiceInstance, 0, len(entries))
 	for _, entry := range entries {
 		ins := &registry.ServiceInstance{
-			ID:     entry.Service.ID,
-			Name:   entry.Service.Service,
-			Routes: make([]registry.Route, 0, len(entry.Service.Meta)),
+			ID:       entry.Service.ID,
+			Name:     entry.Service.Service,
+			Routes:   make([]registry.Route, 0),
+			Events:   make([]int, 0),
+			Services: make([]string, 0),
 		}
 
 		for k, v := range entry.Service.Meta {
@@ -145,36 +147,21 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				ins.Alias = v
 			case metaFieldState:
 				ins.State = v
-			case metaFieldLink:
-				ins.Link = v
+			case metaFieldRoutes:
+				if err = json.Unmarshal([]byte(v), &ins.Routes); err != nil {
+					continue
+				}
+			case metaFieldEvents:
+				if err = json.Unmarshal([]byte(v), &ins.Events); err != nil {
+					continue
+				}
+			case metaFieldServices:
+				if err = json.Unmarshal([]byte(v), &ins.Services); err != nil {
+					continue
+				}
 			case metaFieldEndpoint:
 				ins.Endpoint = v
-			default:
-				route, err := strconv.Atoi(k)
-				if err != nil {
-					continue
-				}
-
-				attr, err := strconv.Atoi(v)
-				if err != nil {
-					continue
-				}
-
-				ins.Routes = append(ins.Routes, registry.Route{
-					ID:       int32(route),
-					Stateful: attr&stateful == stateful,
-					Internal: attr&internal == internal,
-				})
 			}
-		}
-
-		for _, v := range entry.Service.Tags {
-			event, err := strconv.Atoi(v)
-			if err != nil {
-				continue
-			}
-
-			ins.Events = append(ins.Events, event)
 		}
 
 		services = append(services, ins)

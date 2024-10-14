@@ -43,6 +43,8 @@ var (
 	ErrNotFoundLocator       = New("not found locator")
 	ErrUnexpectedEOF         = New("unexpected EOF")
 	ErrMissTransporter       = New("miss transporter")
+	ErrMissDiscovery         = New("miss discovery")
+	ErrNotFoundDirectAddress = New("not found direct address")
 	ErrUnknownError          = New("unknown error")
 	ErrClientClosed          = New("client is closed")
 	ErrActorExists           = New("actor exists")

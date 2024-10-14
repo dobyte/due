@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
 	"net"
 	"net/url"
@@ -18,7 +19,9 @@ const (
 	metaFieldKind     = "kind"
 	metaFieldAlias    = "alias"
 	metaFieldState    = "state"
-	metaFieldLink     = "link"
+	metaFieldRoutes   = "routes"
+	metaFieldEvents   = "events"
+	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
 )
 
@@ -49,75 +52,43 @@ func newRegistrar(registry *Registry) *registrar {
 
 // 注册服务
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
-	registration := &api.AgentServiceRegistration{
-		ID:              ins.ID,
-		Name:            ins.Name,
-		Tags:            make([]string, 0, len(ins.Events)),
-		Meta:            make(map[string]string, len(ins.Routes)+5),
-		TaggedAddresses: make(map[string]api.ServiceAddress),
+	raw, err := url.Parse(ins.Endpoint)
+	if err != nil {
+		return err
 	}
 
-	if ins.Endpoint != "" {
-		scheme, host, port, err := r.parseHostPort(ins.Endpoint)
-		if err != nil {
-			return err
-		}
-
-		registration.Address = host
-		registration.Port = port
-		registration.TaggedAddresses[scheme] = api.ServiceAddress{Address: host, Port: port}
-
-		if r.registry.opts.enableHealthCheck {
-			registration.Checks = append(registration.Checks, &api.AgentServiceCheck{
-				TCP:                            host,
-				Interval:                       fmt.Sprintf("%ds", r.registry.opts.healthCheckInterval),
-				Timeout:                        fmt.Sprintf("%ds", r.registry.opts.healthCheckTimeout),
-				DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", r.registry.opts.deregisterCriticalServiceAfter),
-			})
-		}
+	host, p, err := net.SplitHostPort(raw.Host)
+	if err != nil {
+		return err
 	}
 
-	if ins.Link != "" {
-		scheme, host, port, err := r.parseHostPort(ins.Link)
-		if err != nil {
-			return err
-		}
-
-		registration.Address = host
-		registration.Port = port
-		registration.TaggedAddresses[scheme] = api.ServiceAddress{Address: host, Port: port}
-
-		if r.registry.opts.enableHealthCheck {
-			registration.Checks = append(registration.Checks, &api.AgentServiceCheck{
-				TCP:                            host,
-				Interval:                       fmt.Sprintf("%ds", r.registry.opts.healthCheckInterval),
-				Timeout:                        fmt.Sprintf("%ds", r.registry.opts.healthCheckTimeout),
-				DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", r.registry.opts.deregisterCriticalServiceAfter),
-			})
-		}
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		return err
 	}
 
+	registration := &api.AgentServiceRegistration{}
+	registration.ID = ins.ID
+	registration.Name = ins.Name
+	registration.Address = host
+	registration.Port = port
+	registration.TaggedAddresses = map[string]api.ServiceAddress{raw.Scheme: {Address: host, Port: port}}
+	registration.Meta = make(map[string]string, 7)
 	registration.Meta[metaFieldKind] = ins.Kind
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
-	registration.Meta[metaFieldLink] = ins.Link
 	registration.Meta[metaFieldEndpoint] = ins.Endpoint
-	for _, route := range ins.Routes {
-		attr := 0
+	registration.Meta[metaFieldRoutes] = xconv.Json(ins.Routes)
+	registration.Meta[metaFieldEvents] = xconv.Json(ins.Events)
+	registration.Meta[metaFieldServices] = xconv.Json(ins.Services)
 
-		if route.Internal {
-			attr |= internal
-		}
-
-		if route.Stateful {
-			attr |= stateful
-		}
-
-		registration.Meta[strconv.Itoa(int(route.ID))] = strconv.Itoa(attr)
-	}
-
-	for _, event := range ins.Events {
-		registration.Tags = append(registration.Tags, strconv.Itoa(event))
+	if r.registry.opts.enableHealthCheck {
+		registration.Checks = append(registration.Checks, &api.AgentServiceCheck{
+			TCP:                            raw.Host,
+			Interval:                       fmt.Sprintf("%ds", r.registry.opts.healthCheckInterval),
+			Timeout:                        fmt.Sprintf("%ds", r.registry.opts.healthCheckTimeout),
+			DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", r.registry.opts.deregisterCriticalServiceAfter),
+		})
 	}
 
 	if r.registry.opts.enableHeartbeatCheck {
@@ -128,7 +99,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		})
 	}
 
-	if err := r.registry.opts.client.Agent().ServiceRegister(registration); err != nil {
+	if err = r.registry.opts.client.Agent().ServiceRegister(registration); err != nil {
 		return err
 	}
 
@@ -203,23 +174,4 @@ func (r *registrar) heartbeat(ctx context.Context, insID string) {
 			return
 		}
 	}
-}
-
-func (r *registrar) parseHostPort(endpoint string) (string, string, int, error) {
-	raw, err := url.Parse(endpoint)
-	if err != nil {
-		return "", "", 0, err
-	}
-
-	host, p, err := net.SplitHostPort(raw.Host)
-	if err != nil {
-		return "", "", 0, err
-	}
-
-	port, err := strconv.Atoi(p)
-	if err != nil {
-		return "", "", 0, err
-	}
-
-	return raw.Scheme, host, port, nil
 }

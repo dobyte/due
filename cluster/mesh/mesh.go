@@ -9,8 +9,6 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
-	"github.com/dobyte/due/v2/utils/xuuid"
-	"golang.org/x/sync/errgroup"
 	"sync/atomic"
 )
 
@@ -21,9 +19,10 @@ type Mesh struct {
 	opts        *options
 	ctx         context.Context
 	cancel      context.CancelFunc
-	state       int32
+	state       atomic.Int32
 	proxy       *Proxy
 	services    []*serviceEntity
+	instance    *registry.ServiceInstance
 	instances   []*registry.ServiceInstance
 	hooks       map[cluster.Hook]HookHandler
 	transporter transport.Server
@@ -47,8 +46,7 @@ func NewMesh(opts ...Option) *Mesh {
 	m.instances = make([]*registry.ServiceInstance, 0)
 	m.proxy = newProxy(m)
 	m.ctx, m.cancel = context.WithCancel(o.ctx)
-
-	m.setState(cluster.Shut)
+	m.state.Store(int32(cluster.Shut))
 
 	return m
 }
@@ -77,7 +75,9 @@ func (m *Mesh) Init() {
 
 // Start 启动
 func (m *Mesh) Start() {
-	m.setState(cluster.Work)
+	if m.state.Swap(int32(cluster.Work)) != int32(cluster.Shut) {
+		return
+	}
 
 	m.startTransportServer()
 
@@ -92,15 +92,17 @@ func (m *Mesh) Start() {
 
 // Destroy 销毁网关服务器
 func (m *Mesh) Destroy() {
-	m.setState(cluster.Shut)
+	if m.state.Swap(int32(cluster.Shut)) == int32(cluster.Shut) {
+		return
+	}
+
+	m.runHookFunc(cluster.Destroy)
 
 	m.deregisterServiceInstances()
 
 	m.stopTransportServer()
 
 	m.cancel()
-
-	m.runHookFunc(cluster.Destroy)
 }
 
 // Proxy 获取节点代理
@@ -141,72 +143,41 @@ func (m *Mesh) stopTransportServer() {
 
 // 注册服务实例
 func (m *Mesh) registerServiceInstances() {
-	var (
-		id       string
-		check    = make(map[string]struct{}, len(m.services))
-		endpoint = m.transporter.Endpoint().String()
-		state    = m.getState().String()
-	)
-
-	for _, entity := range m.services {
-		for {
-			id = xuuid.UUID()
-			if _, ok := check[id]; !ok {
-				check[id] = struct{}{}
-				break
-			}
-		}
-
-		m.instances = append(m.instances, &registry.ServiceInstance{
-			ID:       id,
-			Name:     entity.name,
-			Kind:     cluster.Mesh.String(),
-			Alias:    entity.name,
-			State:    state,
-			Endpoint: endpoint,
-		})
+	m.instance = &registry.ServiceInstance{
+		ID:       m.opts.id,
+		Name:     cluster.Mesh.String(),
+		Kind:     cluster.Mesh.String(),
+		Alias:    m.opts.name,
+		State:    m.getState().String(),
+		Endpoint: m.transporter.Endpoint().String(),
+		Services: make([]string, 0, len(m.services)),
 	}
 
-	eg, ctx := errgroup.WithContext(m.ctx)
-	for i := range m.instances {
-		instance := m.instances[i]
-		eg.Go(func() error {
-			rctx, rcancel := context.WithTimeout(ctx, defaultTimeout)
-			defer rcancel()
-			return m.opts.registry.Register(rctx, instance)
-		})
+	for _, item := range m.services {
+		m.instance.Services = append(m.instance.Services, item.name)
 	}
 
-	if err := eg.Wait(); err != nil {
-		log.Fatalf("register service instance failed: %v", err)
+	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	defer cancel()
+
+	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
+		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // 解注册服务实例
 func (m *Mesh) deregisterServiceInstances() {
-	eg, ctx := errgroup.WithContext(m.ctx)
-	for i := range m.instances {
-		instance := m.instances[i]
-		eg.Go(func() error {
-			dctx, dcancel := context.WithTimeout(ctx, defaultTimeout)
-			defer dcancel()
-			return m.opts.registry.Deregister(dctx, instance)
-		})
-	}
+	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	defer cancel()
 
-	if err := eg.Wait(); err != nil {
-		log.Errorf("deregister service instance failed: %v", err)
+	if err := m.opts.registry.Deregister(ctx, m.instance); err != nil {
+		log.Errorf("deregister cluster instance failed: %v", err)
 	}
-}
-
-// 设置状态
-func (m *Mesh) setState(state cluster.State) {
-	atomic.StoreInt32(&m.state, int32(state))
 }
 
 // 获取状态
 func (m *Mesh) getState() cluster.State {
-	return cluster.State(atomic.LoadInt32(&m.state))
+	return cluster.State(m.state.Load())
 }
 
 // 执行钩子函数

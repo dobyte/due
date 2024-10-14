@@ -40,7 +40,7 @@ func NewBuilder(opts *Options) *Builder {
 	}
 
 	resolvers := make([]resolver.Builder, 0, 2)
-	resolvers = append(resolvers, direct.NewBuilder())
+	resolvers = append(resolvers, direct.NewBuilder(opts.Discovery))
 	if opts.Discovery != nil {
 		resolvers = append(resolvers, discovery.NewBuilder(opts.Discovery))
 	}

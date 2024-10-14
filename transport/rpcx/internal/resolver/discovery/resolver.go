@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const defaultTimeout = 10 * time.Second
+
 type Resolver struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -41,15 +43,15 @@ func newResolver(dis registry.Discovery, servicePath string) (*Resolver, error) 
 }
 
 func (r *Resolver) init() error {
-	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
-	watcher, err := r.dis.Watch(ctx, r.servicePath)
+	ctx, cancel := context.WithTimeout(r.ctx, defaultTimeout)
+	services, err := r.dis.Services(ctx, r.servicePath)
 	cancel()
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-	services, err := r.dis.Services(ctx, r.servicePath)
+	ctx, cancel = context.WithTimeout(r.ctx, defaultTimeout)
+	watcher, err := r.dis.Watch(ctx, r.servicePath)
 	cancel()
 	if err != nil {
 		return err

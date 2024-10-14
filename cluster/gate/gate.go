@@ -173,12 +173,12 @@ func (g *Gate) stopLinkerServer() {
 // 注册服务实例
 func (g *Gate) registerServiceInstance() {
 	g.instance = &registry.ServiceInstance{
-		ID:    g.opts.id,
-		Name:  cluster.Gate.String(),
-		Kind:  cluster.Gate.String(),
-		Alias: g.opts.name,
-		State: cluster.Work.String(),
-		Link:  g.linker.Endpoint().String(),
+		ID:       g.opts.id,
+		Name:     cluster.Gate.String(),
+		Kind:     cluster.Gate.String(),
+		Alias:    g.opts.name,
+		State:    cluster.Work.String(),
+		Endpoint: g.linker.Endpoint().String(),
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)

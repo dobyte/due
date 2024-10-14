@@ -86,10 +86,10 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	endpoints := make(map[string]*endpoint.Endpoint)
 
 	for _, service := range services {
-		ep, err := endpoint.ParseEndpoint(service.Link)
+		ep, err := endpoint.ParseEndpoint(service.Endpoint)
 		if err != nil {
 			log.Errorf("service endpoint parse failed, insID: %s kind: %s name: %s alias: %s endpoint: %s err: %v",
-				service.ID, service.Kind, service.Name, service.Alias, service.Link, err)
+				service.ID, service.Kind, service.Name, service.Alias, service.Endpoint, err)
 			continue
 		}
 

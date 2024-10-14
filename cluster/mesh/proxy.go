@@ -55,6 +55,7 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 // NewMeshClient 新建微服务客户端
 // target参数可分为两种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
+// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	return p.mesh.opts.transporter.NewClient(target)

@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"golang.org/x/sync/errgroup"
 	"sync/atomic"
 )
 
@@ -33,7 +34,7 @@ type Node struct {
 	proxy       *Proxy
 	hooks       map[cluster.Hook]HookHandler
 	services    []*serviceEntity
-	instance    *registry.ServiceInstance
+	instances   []*registry.ServiceInstance
 	linker      *node.Server
 	fnChan      chan func()
 	scheduler   *Scheduler
@@ -55,6 +56,7 @@ func NewNode(opts ...Option) *Node {
 	n.scheduler = newScheduler(n)
 	n.hooks = make(map[cluster.Hook]HookHandler)
 	n.services = make([]*serviceEntity, 0)
+	n.instances = make([]*registry.ServiceInstance, 0)
 	n.fnChan = make(chan func(), 4096)
 	n.state.Store(int32(cluster.Shut))
 
@@ -95,10 +97,6 @@ func (n *Node) Init() {
 func (n *Node) Start() {
 	if n.state.Swap(int32(cluster.Work)) != int32(cluster.Shut) {
 		return
-	}
-
-	if n.opts.transporter != nil {
-		n.opts.transporter.SetDefaultDiscovery(n.opts.registry)
 	}
 
 	n.startLinkServer()
@@ -241,18 +239,11 @@ func (n *Node) stopTransportServer() {
 
 // 注册服务实例
 func (n *Node) registerServiceInstances() {
-	n.instance = &registry.ServiceInstance{}
-	n.instance.ID = n.opts.id
-	n.instance.Name = cluster.Node.String()
-	n.instance.Kind = cluster.Node.String()
-	n.instance.Alias = n.opts.name
-	n.instance.State = n.getState().String()
-	n.instance.Routes = make([]registry.Route, 0, len(n.router.routes))
-	n.instance.Events = make([]int, 0, len(n.trigger.events))
-	n.instance.Link = n.linker.Endpoint().String()
+	routes := make([]registry.Route, 0, len(n.router.routes))
+	events := make([]int, 0, len(n.trigger.events))
 
 	for _, entity := range n.router.routes {
-		n.instance.Routes = append(n.instance.Routes, registry.Route{
+		routes = append(routes, registry.Route{
 			ID:       entity.route,
 			Stateful: entity.stateful,
 			Internal: entity.internal,
@@ -260,29 +251,73 @@ func (n *Node) registerServiceInstances() {
 	}
 
 	for evt := range n.trigger.events {
-		n.instance.Events = append(n.instance.Events, int(evt))
+		events = append(events, int(evt))
 	}
+
+	n.instances = append(n.instances, &registry.ServiceInstance{
+		ID:       n.opts.id,
+		Name:     cluster.Node.String(),
+		Kind:     cluster.Node.String(),
+		Alias:    n.opts.name,
+		State:    n.getState().String(),
+		Routes:   routes,
+		Events:   events,
+		Endpoint: n.linker.Endpoint().String(),
+	})
 
 	if n.transporter != nil {
-		n.instance.Endpoint = n.transporter.Endpoint().String()
+		services := make([]string, 0, len(n.services))
+		for _, item := range n.services {
+			services = append(services, item.name)
+		}
+
+		n.instances = append(n.instances, &registry.ServiceInstance{
+			ID:       n.opts.id,
+			Name:     cluster.Mesh.String(),
+			Kind:     cluster.Mesh.String(),
+			Alias:    n.opts.name,
+			State:    n.getState().String(),
+			Services: services,
+			Endpoint: n.transporter.Endpoint().String(),
+		})
 	}
 
-	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
-	defer cancel()
-
-	if err := n.opts.registry.Register(ctx, n.instance); err != nil {
-		log.Fatalf("register cluster instance failed: %v", err)
+	if err := n.doRegisterServiceInstances(); err != nil {
+		log.Fatalf("register cluster instances failed: %v", err)
 	}
 }
 
 // 解注册服务实例
 func (n *Node) deregisterServiceInstances() {
-	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
-	defer cancel()
-
-	if err := n.opts.registry.Deregister(ctx, n.instance); err != nil {
-		log.Errorf("deregister cluster instance failed: %v", err)
+	eg, ctx := errgroup.WithContext(n.ctx)
+	for i := range n.instances {
+		instance := n.instances[i]
+		eg.Go(func() error {
+			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			defer cancel()
+			return n.opts.registry.Deregister(ctx, instance)
+		})
 	}
+
+	if err := eg.Wait(); err != nil {
+		log.Errorf("deregister cluster instances failed: %v", err)
+	}
+}
+
+// 执行注册操作
+func (n *Node) doRegisterServiceInstances() error {
+	eg, ctx := errgroup.WithContext(n.ctx)
+
+	for i := range n.instances {
+		instance := n.instances[i]
+		eg.Go(func() error {
+			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			defer cancel()
+			return n.opts.registry.Register(ctx, instance)
+		})
+	}
+
+	return eg.Wait()
 }
 
 // 获取状态
@@ -292,26 +327,13 @@ func (n *Node) getState() cluster.State {
 
 // 更新状态
 func (n *Node) updateState(state cluster.State) (err error) {
-	old := n.state.Swap(int32(state))
+	n.state.Swap(int32(state))
 
-	if cluster.State(old) == state {
-		return
+	for _, instance := range n.instances {
+		instance.State = state.String()
 	}
 
-	defer func() {
-		if err != nil {
-			n.instance.State = cluster.State(old).String()
-		}
-	}()
-
-	n.instance.State = state.String()
-
-	ctx, cancel := context.WithTimeout(n.ctx, defaultTimeout)
-	defer cancel()
-
-	err = n.opts.registry.Register(ctx, n.instance)
-
-	return
+	return n.doRegisterServiceInstances()
 }
 
 // 添加钩子监听器

@@ -46,8 +46,8 @@ type ServiceInstance struct {
 	Events []int `json:"events"`
 	// 服务路由ID
 	Routes []Route `json:"routes"`
-	// 网关、节点实体暴露端口
-	Link string `json:"link"`
+	// 服务路由列表
+	Services []string `json:"services"`
 	// 微服务实体暴露端口
 	Endpoint string `json:"endpoint"`
 }
