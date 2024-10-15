@@ -20,7 +20,7 @@ type Builder struct {
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
 	rw        sync.RWMutex
-	services  []*registry.ServiceInstance
+	instances []*registry.ServiceInstance
 	resolvers map[string]*Resolver
 }
 
@@ -45,11 +45,11 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 	r := newResolver(b, target.URL.Host, cc)
 
 	b.rw.Lock()
-	services := b.services
+	instances := b.instances
 	b.resolvers[target.URL.Host] = r
 	b.rw.Unlock()
 
-	r.updateServices(services)
+	r.updateInstances(instances)
 
 	return r, nil
 }
@@ -96,14 +96,14 @@ func (b *Builder) watch() {
 	}
 }
 
-func (b *Builder) updateServices(services []*registry.ServiceInstance) {
+func (b *Builder) updateServices(instances []*registry.ServiceInstance) {
 	b.rw.Lock()
 	defer b.rw.Unlock()
 
-	b.services = services
+	b.instances = instances
 
 	for _, r := range b.resolvers {
-		r.updateServices(services)
+		r.updateInstances(instances)
 	}
 }
 

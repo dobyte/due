@@ -23,7 +23,7 @@ func newResolver(builder *Builder, serviceName string, cc resolver.ClientConn) *
 	}
 }
 
-func (r *Resolver) updateServices(instances []*registry.ServiceInstance) {
+func (r *Resolver) updateInstances(instances []*registry.ServiceInstance) {
 	state := resolver.State{Addresses: make([]resolver.Address, 0, len(instances))}
 	for _, instance := range instances {
 		exists := false

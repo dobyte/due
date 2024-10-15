@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
@@ -10,72 +9,21 @@ import (
 	"time"
 )
 
-const defaultTimeout = 10 * time.Second
-
 type Resolver struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	dis         registry.Discovery
-	servicePath string
-	watcher     registry.Watcher
+	builder     *Builder
+	serviceName string
 	filter      cli.ServiceDiscoveryFilter
-
-	prw   sync.RWMutex
-	pairs []*cli.KVPair
-
-	cmu   sync.RWMutex
-	chans []chan []*cli.KVPair
+	prw         sync.RWMutex
+	pairs       []*cli.KVPair
+	cmu         sync.RWMutex
+	chans       []chan []*cli.KVPair
 }
 
-func newResolver(dis registry.Discovery, servicePath string) (*Resolver, error) {
-	r := &Resolver{}
-	r.dis = dis
-	r.servicePath = servicePath
-	r.ctx, r.cancel = context.WithCancel(context.Background())
-
-	if err := r.init(); err != nil {
-		return nil, err
+func newResolver(builder *Builder, serviceName string) *Resolver {
+	return &Resolver{
+		builder:     builder,
+		serviceName: serviceName,
 	}
-
-	go r.watch()
-
-	return r, nil
-}
-
-func (r *Resolver) init() error {
-	ctx, cancel := context.WithTimeout(r.ctx, defaultTimeout)
-	services, err := r.dis.Services(ctx, r.servicePath)
-	cancel()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel = context.WithTimeout(r.ctx, defaultTimeout)
-	watcher, err := r.dis.Watch(ctx, r.servicePath)
-	cancel()
-	if err != nil {
-		return err
-	}
-
-	r.watcher = watcher
-	r.pairs = make([]*cli.KVPair, 0, len(services))
-
-	for _, service := range services {
-		ep, err := endpoint.ParseEndpoint(service.Endpoint)
-		if err != nil {
-			log.Errorf("parse discovery endpoint failed: %v", err)
-			continue
-		}
-
-		pair := &cli.KVPair{Key: "tcp@" + ep.Address()}
-		if r.filter != nil && !r.filter(pair) {
-			continue
-		}
-
-		r.pairs = append(r.pairs, pair)
-	}
-
-	return nil
 }
 
 // GetServices returns the servers
@@ -104,11 +52,11 @@ func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 	chans := make([]chan []*cli.KVPair, 0, len(r.chans))
 	for _, c := range r.chans {
 		if c == ch {
-			continue
+			close(c)
+		} else {
+			chans = append(chans, c)
 		}
-		chans = append(chans, c)
 	}
-
 	r.chans = chans
 }
 
@@ -122,58 +70,61 @@ func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
 }
 
 func (r *Resolver) Close() {
-	r.cancel()
+	r.builder.removeResolver(r.serviceName)
 
-	if err := r.watcher.Stop(); err != nil {
-		log.Errorf("dispatcher watcher stop failed: %v", err)
+	r.cmu.RLock()
+	for _, c := range r.chans {
+		close(c)
 	}
+	r.cmu.RUnlock()
 }
 
-func (r *Resolver) watch() {
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		default:
-			// exec watch
+func (r *Resolver) updateInstances(instances []*registry.ServiceInstance) {
+	pairs := make([]*cli.KVPair, 0, len(instances))
+
+	for _, instance := range instances {
+		exists := false
+
+		for _, service := range instance.Services {
+			if service == r.serviceName {
+				exists = true
+				break
+			}
 		}
-		services, err := r.watcher.Next()
-		if err != nil {
+
+		if !exists {
 			continue
 		}
 
-		pairs := make([]*cli.KVPair, 0, len(services))
-		for _, service := range services {
-			ep, err := endpoint.ParseEndpoint(service.Endpoint)
-			if err != nil {
-				log.Errorf("parse discovery endpoint failed: %v", err)
-				continue
-			}
-
-			pair := &cli.KVPair{Key: "tcp@" + ep.Address()}
-			if r.filter != nil && !r.filter(pair) {
-				continue
-			}
-
-			pairs = append(pairs, pair)
+		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
+		if err != nil {
+			log.Errorf("parse discovery endpoint failed: %v", err)
+			continue
 		}
 
-		r.prw.Lock()
-		r.pairs = pairs
-		r.prw.Unlock()
-
-		r.cmu.RLock()
-		for _, ch := range r.chans {
-			go func(ch chan []*cli.KVPair) {
-				defer func() { recover() }()
-
-				select {
-				case ch <- pairs:
-				case <-time.After(time.Minute):
-					log.Warn("chan is full and new change has been dropped")
-				}
-			}(ch)
+		pair := &cli.KVPair{Key: "tcp@" + ep.Address()}
+		if r.filter != nil && !r.filter(pair) {
+			continue
 		}
-		r.cmu.RUnlock()
+
+		pairs = append(pairs, pair)
 	}
+
+	r.prw.Lock()
+	r.pairs = pairs
+	r.prw.Unlock()
+
+	r.cmu.RLock()
+	for _, ch := range r.chans {
+		go func(ch chan []*cli.KVPair) {
+			defer func() { recover() }()
+
+			select {
+			case ch <- pairs:
+			case <-time.After(time.Minute):
+				log.Warn("chan is full and new change has been dropped")
+			}
+		}(ch)
+	}
+	r.cmu.RUnlock()
 }
