@@ -34,6 +34,10 @@ type Transporter interface {
 	// NewServer 新建传输服务器
 	NewServer() (Server, error)
 	// NewClient 新建传输务客户端
+	// target参数可分为三种模式:
+	// 服务直连模式: 	direct://127.0.0.1:8011
+	// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+	// 服务发现模式: 	discovery://service_name
 	NewClient(target string) (Client, error)
 	// SetDefaultDiscovery 设置默认的服务发现组件
 	SetDefaultDiscovery(discovery registry.Discovery)
