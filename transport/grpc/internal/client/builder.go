@@ -12,10 +12,10 @@ import (
 )
 
 type Builder struct {
-	err      error
-	opts     *Options
-	dialOpts []grpc.DialOption
-	pools    sync.Map
+	err         error
+	opts        *Options
+	dialOpts    []grpc.DialOption
+	connections sync.Map
 }
 
 type Options struct {
@@ -54,26 +54,21 @@ func NewBuilder(opts *Options) *Builder {
 
 // Build 构建连接
 func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
-	if b.err != nil {
-		return nil, b.err
-	}
-
-	val, ok := b.pools.Load(target)
+	c, ok := b.connections.Load(target)
 	if ok {
-		return val.(*Pool).Get(), nil
+		return c.(*grpc.ClientConn), nil
 	}
 
-	size := b.opts.PoolSize
-	if size <= 0 {
-		size = 10
-	}
-
-	pool, err := newPool(size, target, b.dialOpts...)
+	cc, err := grpc.NewClient(target, b.dialOpts...)
 	if err != nil {
 		return nil, err
 	}
 
-	b.pools.Store(target, pool)
+	if c, ok = b.connections.LoadOrStore(target, cc); ok {
+		_ = cc.Close()
 
-	return pool.Get(), nil
+		return c.(*grpc.ClientConn), nil
+	} else {
+		return cc, nil
+	}
 }

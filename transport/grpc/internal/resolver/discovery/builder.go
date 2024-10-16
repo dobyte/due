@@ -42,14 +42,25 @@ func NewBuilder(dis registry.Discovery) *Builder {
 }
 
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
-	r := newResolver(b, target.URL.Host, cc)
+	b.rw.RLock()
+	r, ok := b.resolvers[target.URL.Host]
+	b.rw.RUnlock()
+
+	if ok {
+		return r, nil
+	}
 
 	b.rw.Lock()
-	instances := b.instances
-	b.resolvers[target.URL.Host] = r
-	b.rw.Unlock()
+	defer b.rw.Unlock()
 
-	r.updateInstances(instances)
+	if r, ok = b.resolvers[target.URL.Host]; ok {
+		return r, nil
+	}
+
+	r = newResolver(b, target.URL.Host, cc)
+	r.updateInstances(b.instances)
+
+	b.resolvers[target.URL.Host] = r
 
 	return r, nil
 }
@@ -74,7 +85,7 @@ func (b *Builder) init() error {
 	}
 
 	b.watcher = watcher
-	b.updateServices(services)
+	b.updateInstances(services)
 
 	return nil
 }
@@ -92,11 +103,11 @@ func (b *Builder) watch() {
 			continue
 		}
 
-		b.updateServices(services)
+		b.updateInstances(services)
 	}
 }
 
-func (b *Builder) updateServices(instances []*registry.ServiceInstance) {
+func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	b.rw.Lock()
 	defer b.rw.Unlock()
 

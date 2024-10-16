@@ -52,6 +52,8 @@ func (r *Resolver) updateInstances(instances []*registry.ServiceInstance) {
 	}
 
 	if err := r.cc.UpdateState(state); err != nil {
+		r.cc.ReportError(err)
+
 		if !(len(state.Addresses) == 0 && errors.Is(err, balancer.ErrBadResolverState)) {
 			log.Errorf("update client conn state failed: %v", err)
 		}
