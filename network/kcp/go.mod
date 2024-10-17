@@ -3,7 +3,7 @@ module github.com/dobyte/due/network/kcp/v2
 go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.2.0
+	github.com/dobyte/due/v2 v2.1.1
 	github.com/xtaci/kcp-go/v5 v5.6.18
 )
 

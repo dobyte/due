@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.1
 
 require (
-	github.com/dobyte/due/v2 v2.2.0
+	github.com/dobyte/due/v2 v2.1.1
 	github.com/hashicorp/consul/api v1.29.5
 )
 
