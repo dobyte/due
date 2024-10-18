@@ -16,6 +16,8 @@ import (
 var logger = zap.NewLogger(
 	zap.WithStackLevel(log.DebugLevel),
 	zap.WithFormat(log.JsonFormat),
+	// 注意(非强制): zap.WithFormat(log.JsonFormat) 设置为 log.TextFormat 时, 新增 zap.WithCallerSkip(1) 选项配置, 控制台
+	// 才会打印调用者堆栈信息
 )
 
 func TestNewLogger(t *testing.T) {
