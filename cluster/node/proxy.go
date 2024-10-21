@@ -193,6 +193,16 @@ func (p *Proxy) UnbindActor(uid int64, kind string) {
 	p.node.scheduler.unbindActor(uid, kind)
 }
 
+// PackMessage 打包消息
+func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
+	buf, err := p.gateLinker.PackMessage(message, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.gateLinker.GetIP(ctx, args)

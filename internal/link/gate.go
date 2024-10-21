@@ -321,7 +321,7 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
-	message, err := l.doPackMessage(args.Message, true)
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
@@ -336,7 +336,7 @@ func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
 
 // 间接推送
 func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
-	message, err := l.doPackMessage(args.Message, true)
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
@@ -370,7 +370,7 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 		return errors.ErrReceiveTargetEmpty
 	}
 
-	message, err := l.doPackMessage(args.Message, true)
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
@@ -506,8 +506,8 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 	return l.builder.Build(ep.Address())
 }
 
-// 打包消息
-func (l *GateLinker) doPackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
+// PackMessage 打包消息
+func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
 	buf, err := l.toBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err

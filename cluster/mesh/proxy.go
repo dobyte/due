@@ -115,6 +115,16 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	return p.nodeLinker.FetchNodeList(ctx, states...)
 }
 
+// PackMessage 打包消息
+func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
+	buf, err := p.gateLinker.PackMessage(message, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.gateLinker.GetIP(ctx, args)
