@@ -203,6 +203,11 @@ func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// PackBuffer 打包Buffer
+func (p *Proxy) PackBuffer(message any) ([]byte, error) {
+	return p.gateLinker.PackBuffer(message, true)
+}
+
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	return p.gateLinker.GetIP(ctx, args)

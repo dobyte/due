@@ -389,7 +389,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		return errors.ErrReceiveTargetEmpty
 	}
 
-	buf, err := l.toBuffer(args.Message.Data, true)
+	buf, err := l.PackBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
@@ -421,7 +421,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 
 // Broadcast 推送广播消息
 func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
-	buf, err := l.toBuffer(args.Message.Data, true)
+	buf, err := l.PackBuffer(args.Message.Data, true)
 	if err != nil {
 		return err
 	}
@@ -508,7 +508,7 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 
 // PackMessage 打包消息
 func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
-	buf, err := l.toBuffer(message.Data, encrypt)
+	buf, err := l.PackBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
@@ -520,8 +520,8 @@ func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer,
 	})
 }
 
-// 消息转buffer
-func (l *GateLinker) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
+// PackBuffer 消息转buffer
+func (l *GateLinker) PackBuffer(message interface{}, encrypt bool) ([]byte, error) {
 	if message == nil {
 		return nil, nil
 	}
