@@ -1,10 +1,8 @@
 package node
 
 import (
-	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
-	"sync"
 )
 
 type EventHandler func(ctx Context)
@@ -12,7 +10,6 @@ type EventHandler func(ctx Context)
 type Trigger struct {
 	node    *Node
 	events  map[cluster.Event]EventHandler
-	evtPool *sync.Pool
 	evtChan chan *event
 }
 
@@ -20,14 +17,12 @@ func newTrigger(node *Node) *Trigger {
 	return &Trigger{
 		node:    node,
 		events:  make(map[cluster.Event]EventHandler, 3),
-		evtPool: &sync.Pool{New: func() interface{} { return &event{node: node, ctx: context.Background()} }},
 		evtChan: make(chan *event, 4096),
 	}
 }
 
 func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) {
-	evt := e.evtPool.Get().(*event)
-	evt.pool = e.evtPool
+	evt := e.node.evtPool.Get().(*event)
 	evt.event = kind
 	evt.gid = gid
 	evt.cid = cid

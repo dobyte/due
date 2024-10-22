@@ -7,7 +7,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
-	"sync"
 	"sync/atomic"
 )
 
@@ -18,7 +17,6 @@ type event struct {
 	cid     int64           // 连接ID
 	uid     int64           // 用户ID
 	event   cluster.Event   // 时间类型
-	pool    *sync.Pool      // 对象池
 	version atomic.Int32    // 对象版本号
 	chain   *chains.Chain   // defer 调用链
 }
@@ -104,7 +102,6 @@ func (e *event) compareVersionExecDefer(version int32) {
 func (e *event) Clone() Context {
 	return &event{
 		node: e.node,
-		pool: e.pool,
 		gid:  e.gid,
 		cid:  e.cid,
 		uid:  e.uid,
@@ -264,6 +261,6 @@ func (e *event) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
-		e.pool.Put(e)
+		e.node.evtPool.Put(e)
 	}
 }

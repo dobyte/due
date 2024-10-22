@@ -15,7 +15,6 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"github.com/jinzhu/copier"
-	"sync"
 	"sync/atomic"
 )
 
@@ -27,7 +26,6 @@ type request struct {
 	cid     int64            // 连接ID
 	uid     int64            // 用户ID
 	message *cluster.Message // 请求消息
-	pool    *sync.Pool       // 对象池
 	version atomic.Int32     // 对象版本号
 	chain   *chains.Chain    // 调用链
 }
@@ -133,7 +131,6 @@ func (r *request) compareVersionExecDefer(version int32) {
 func (r *request) Clone() Context {
 	return &request{
 		node: r.node,
-		pool: r.pool,
 		gid:  r.gid,
 		nid:  r.nid,
 		cid:  r.cid,
@@ -323,6 +320,6 @@ func (r *request) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
-		r.pool.Put(r)
+		r.node.reqPool.Put(r)
 	}
 }

@@ -1,10 +1,8 @@
 package node
 
 import (
-	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
-	"sync"
 )
 
 type RouteHandler func(ctx Context)
@@ -13,7 +11,6 @@ type Router struct {
 	node                *Node
 	routes              map[int32]*routeEntity
 	defaultRouteHandler RouteHandler
-	reqPool             *sync.Pool
 	reqChan             chan *request
 }
 
@@ -51,13 +48,6 @@ func newRouter(node *Node) *Router {
 		node:    node,
 		routes:  make(map[int32]*routeEntity),
 		reqChan: make(chan *request, 10240),
-		reqPool: &sync.Pool{New: func() interface{} {
-			return &request{
-				ctx:     context.Background(),
-				node:    node,
-				message: &cluster.Message{},
-			}
-		}},
 	}
 }
 
@@ -130,8 +120,7 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 }
 
 func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data interface{}) {
-	req := r.reqPool.Get().(*request)
-	req.pool = r.reqPool
+	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
 	req.nid = nid
 	req.cid = cid

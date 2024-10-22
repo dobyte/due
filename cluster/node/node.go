@@ -12,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"golang.org/x/sync/errgroup"
+	"sync"
 	"sync/atomic"
 )
 
@@ -29,6 +30,8 @@ type Node struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	state       atomic.Int32
+	evtPool     *sync.Pool
+	reqPool     *sync.Pool
 	router      *Router
 	trigger     *Trigger
 	proxy       *Proxy
@@ -59,6 +62,19 @@ func NewNode(opts ...Option) *Node {
 	n.instances = make([]*registry.ServiceInstance, 0)
 	n.fnChan = make(chan func(), 4096)
 	n.state.Store(int32(cluster.Shut))
+	n.evtPool = &sync.Pool{New: func() interface{} {
+		return &event{
+			ctx:  context.Background(),
+			node: n,
+		}
+	}}
+	n.reqPool = &sync.Pool{New: func() interface{} {
+		return &request{
+			ctx:     context.Background(),
+			node:    n,
+			message: &cluster.Message{},
+		}
+	}}
 
 	return n
 }

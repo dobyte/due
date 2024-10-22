@@ -116,6 +116,18 @@ func (a *Actor) Next(ctx Context) {
 	a.mailbox <- ctx
 }
 
+// Deliver 投递消息到Actor中进行处理
+func (a *Actor) Deliver(uid int64, message *cluster.Message) {
+	req := a.scheduler.node.reqPool.Get().(*request)
+	req.nid = a.scheduler.node.opts.id
+	req.uid = uid
+	req.message.Seq = message.Seq
+	req.message.Route = message.Route
+	req.message.Data = message.Data
+
+	a.Next(req)
+}
+
 // Destroy 销毁Actor
 func (a *Actor) Destroy() {
 	if !a.state.CompareAndSwap(started, destroyed) {
