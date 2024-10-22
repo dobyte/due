@@ -274,11 +274,17 @@ func (r *request) Reply(message *cluster.Message) error {
 			Message: message,
 		})
 	case r.nid != "":
-		return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{
-			NID:     r.nid,
-			UID:     r.uid,
-			Message: message,
-		})
+		if r.nid == r.node.opts.id {
+			r.node.router.deliver(r.gid, r.nid, r.cid, r.uid, message.Seq, message.Route, message.Data)
+
+			return nil
+		} else {
+			return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{
+				NID:     r.nid,
+				UID:     r.uid,
+				Message: message,
+			})
+		}
 	default:
 		return errors.ErrIllegalOperation
 	}
