@@ -263,6 +263,11 @@ func (r *request) GetIP() (string, error) {
 	})
 }
 
+// Deliver 投递消息给节点处理
+func (r *request) Deliver(args *cluster.DeliverArgs) error {
+	return r.node.proxy.Deliver(r.ctx, args)
+}
+
 // Reply 回复消息
 func (r *request) Reply(message *cluster.Message) error {
 	switch {
@@ -274,17 +279,11 @@ func (r *request) Reply(message *cluster.Message) error {
 			Message: message,
 		})
 	case r.nid != "":
-		if r.nid == r.node.opts.id {
-			r.node.router.deliver(r.gid, r.nid, r.cid, r.uid, message.Seq, message.Route, message.Data)
-
-			return nil
-		} else {
-			return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{
-				NID:     r.nid,
-				UID:     r.uid,
-				Message: message,
-			})
-		}
+		return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{
+			NID:     r.nid,
+			UID:     r.uid,
+			Message: message,
+		})
 	default:
 		return errors.ErrIllegalOperation
 	}
