@@ -36,8 +36,6 @@ func NewBuilder(dis registry.Discovery) *Builder {
 		log.Fatalf("init client builder failed: %v", err)
 	}
 
-	go b.watch()
-
 	return b
 }
 
@@ -86,6 +84,8 @@ func (b *Builder) init() error {
 
 	b.watcher = watcher
 	b.updateInstances(services)
+
+	go b.watch()
 
 	return nil
 }

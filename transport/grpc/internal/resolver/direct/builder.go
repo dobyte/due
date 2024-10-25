@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/resolver"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -23,7 +22,6 @@ type Builder struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
-	state     atomic.Bool
 	rw        sync.RWMutex
 	addresses map[string]string
 }
@@ -36,6 +34,10 @@ func NewBuilder(dis registry.Discovery) *Builder {
 	b.ctx, b.cancel = context.WithCancel(context.Background())
 	b.addresses = make(map[string]string)
 
+	if err := b.init(); err != nil {
+		log.Fatalf("init client builder failed: %v", err)
+	}
+
 	return b
 }
 
@@ -43,10 +45,6 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 	addr := target.URL.Host
 
 	if _, _, err := net.SplitHostPort(target.URL.Host); err != nil {
-		if err = b.init(); err != nil {
-			return nil, err
-		}
-
 		b.rw.RLock()
 		address, ok := b.addresses[target.URL.Host]
 		b.rw.RUnlock()
@@ -70,10 +68,6 @@ func (b *Builder) Scheme() string {
 
 func (b *Builder) init() error {
 	if b.dis == nil {
-		return errors.ErrMissDiscovery
-	}
-
-	if b.state.CompareAndSwap(false, true) == true {
 		return nil
 	}
 
