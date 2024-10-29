@@ -1,6 +1,11 @@
 package kcp
 
 import (
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -9,10 +14,6 @@ import (
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/xtaci/kcp-go/v5"
-	"net"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type serverConn struct {
@@ -166,7 +167,7 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *kcp.UDPSession) {
 	conn.SetWriteDelay(false)
 	conn.SetNoDelay(1, 10, 2, 1)
 	conn.SetMtu(1500)
-	//conn.SetWindowSize(config.SndWnd, config.RcvWnd)
+	// conn.SetWindowSize(config.SndWnd, config.RcvWnd)
 	conn.SetACKNoDelay(true)
 
 	xcall.Go(c.read)
@@ -198,6 +199,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 
 	c.rw.RLock()
 	c.chWrite <- chWrite{typ: closeSig}
+	c.close <- struct{}{}
 	c.rw.RUnlock()
 
 	<-c.done
