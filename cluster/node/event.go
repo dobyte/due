@@ -223,6 +223,11 @@ func (e *event) GetIP() (string, error) {
 	})
 }
 
+// Deliver 投递消息给节点处理
+func (e *event) Deliver(args *cluster.DeliverArgs) error {
+	return e.node.proxy.Deliver(e.ctx, args)
+}
+
 // Reply 回复消息
 func (e *event) Reply(message *cluster.Message) error {
 	return e.node.proxy.Push(e.ctx, &cluster.PushArgs{

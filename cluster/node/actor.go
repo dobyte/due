@@ -116,7 +116,7 @@ func (a *Actor) Next(ctx Context) {
 	a.mailbox <- ctx
 }
 
-// Deliver 投递消息到Actor中进行处理
+// Deliver 投递消息到当前Actor中进行处理
 func (a *Actor) Deliver(uid int64, message *cluster.Message) {
 	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
@@ -126,6 +126,11 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) {
 	req.message.Data = message.Data
 
 	a.Next(req)
+}
+
+// Push 推送消息到本地Node队列上进行处理
+func (a *Actor) Push(uid int64, message *cluster.Message) {
+	a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, message.Data)
 }
 
 // Destroy 销毁Actor

@@ -245,9 +245,8 @@ func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) erro
 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
-	if args.NID == p.GetID() {
-		p.node.router.deliver("", args.NID, 0, args.UID, args.Message.Seq, args.Message.Route, args.Message.Data)
-		return nil
+	if args.NID == p.node.opts.id {
+		return errors.ErrIllegalOperation
 	}
 
 	return p.nodeLinker.Deliver(ctx, &link.DeliverArgs{

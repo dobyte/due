@@ -76,7 +76,7 @@ func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64,
 		}
 	}
 
-	p.node.router.deliver(gid, nid, cid, uid, msg.Seq, msg.Route, msg.Buffer)
+	p.node.router.deliver(gid, nid, "", cid, uid, msg.Seq, msg.Route, msg.Buffer)
 
 	return nil
 }

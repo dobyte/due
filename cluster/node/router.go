@@ -119,10 +119,11 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	return group
 }
 
-func (r *Router) deliver(gid, nid string, cid, uid int64, seq, route int32, data interface{}) {
+func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data interface{}) {
 	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
 	req.nid = nid
+	req.pid = pid
 	req.cid = cid
 	req.uid = uid
 	req.message.Seq = seq

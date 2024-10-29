@@ -96,7 +96,12 @@ func (s *Scheduler) remove(kind, id string) (*Actor, bool) {
 
 // 加载Actor
 func (s *Scheduler) load(kind, id string) (*Actor, bool) {
-	if actor, ok := s.actors.Load(kind + "/" + id); ok {
+	return s.doLoad(kind + "/" + id)
+}
+
+// 执行加载Actor
+func (s *Scheduler) doLoad(pid string) (*Actor, bool) {
+	if actor, ok := s.actors.Load(pid); ok {
 		return actor.(*Actor), true
 	}
 

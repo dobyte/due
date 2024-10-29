@@ -23,6 +23,7 @@ type request struct {
 	ctx     context.Context  // 上下文
 	gid     string           // 来源网关ID
 	nid     string           // 来源节点ID
+	pid     string           // 来源Actor ID
 	cid     int64            // 连接ID
 	uid     int64            // 用户ID
 	message *cluster.Message // 请求消息
@@ -271,14 +272,25 @@ func (r *request) Deliver(args *cluster.DeliverArgs) error {
 // Reply 回复消息
 func (r *request) Reply(message *cluster.Message) error {
 	switch {
-	case r.gid != "":
+	case r.gid != "": // 来源于网关
 		return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
 			GID:     r.gid,
 			Kind:    session.Conn,
 			Target:  r.cid,
 			Message: message,
 		})
-	case r.nid != "":
+	case r.pid != "": // 来源于Actor
+		if actor, ok := r.node.scheduler.doLoad(r.pid); ok {
+			actor.Deliver(r.uid, message)
+			return nil
+		} else {
+			return errors.ErrIllegalOperation
+		}
+	case r.nid != "": // 来源于其他Node
+		if r.nid == r.node.opts.id {
+			return nil
+		}
+
 		return r.node.proxy.Deliver(r.ctx, &cluster.DeliverArgs{
 			NID:     r.nid,
 			UID:     r.uid,

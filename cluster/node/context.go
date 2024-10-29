@@ -44,6 +44,8 @@ type Context interface {
 	Context() context.Context
 	// GetIP 获取客户端IP
 	GetIP() (string, error)
+	// Deliver 投递消息给节点处理
+	Deliver(args *cluster.DeliverArgs) error
 	// Reply 回复消息
 	Reply(message *cluster.Message) error
 	// Response 响应消息
