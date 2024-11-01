@@ -135,8 +135,17 @@ func (a *Actor) Push(uid int64, message *cluster.Message) {
 
 // Destroy 销毁Actor
 func (a *Actor) Destroy() {
-	if !a.state.CompareAndSwap(started, destroyed) {
+	if !a.destroy() {
 		return
+	}
+
+	a.scheduler.remove(a.Kind(), a.ID())
+}
+
+// 销毁Actor
+func (a *Actor) destroy() bool {
+	if !a.state.CompareAndSwap(started, destroyed) {
+		return false
 	}
 
 	a.processor.Destroy()
@@ -154,6 +163,8 @@ func (a *Actor) Destroy() {
 	close(a.mailbox)
 
 	close(a.fnChan)
+
+	return true
 }
 
 // 绑定用户

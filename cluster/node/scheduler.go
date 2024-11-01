@@ -74,9 +74,7 @@ func (s *Scheduler) kill(kind, id string) bool {
 		return false
 	}
 
-	act.Destroy()
-
-	return true
+	return act.destroy()
 }
 
 // 移除Actor
