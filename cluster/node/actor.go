@@ -117,20 +117,34 @@ func (a *Actor) Next(ctx Context) {
 }
 
 // Deliver 投递消息到当前Actor中进行处理
-func (a *Actor) Deliver(uid int64, message *cluster.Message) {
+func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
+	buf, err := a.scheduler.node.proxy.PackBuffer(message.Data)
+	if err != nil {
+		return err
+	}
+
 	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
 	req.uid = uid
 	req.message.Seq = message.Seq
 	req.message.Route = message.Route
-	req.message.Data = message.Data
+	req.message.Data = buf
 
 	a.Next(req)
+
+	return nil
 }
 
 // Push 推送消息到本地Node队列上进行处理
-func (a *Actor) Push(uid int64, message *cluster.Message) {
-	a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, message.Data)
+func (a *Actor) Push(uid int64, message *cluster.Message) error {
+	buf, err := a.scheduler.node.proxy.PackBuffer(message.Data)
+	if err != nil {
+		return err
+	}
+
+	a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, buf)
+
+	return nil
 }
 
 // Destroy 销毁Actor
