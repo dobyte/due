@@ -170,12 +170,12 @@ func (n *Node) dispatch() {
 				xcall.Call(func() {
 					n.trigger.handle(evt)
 				})
-			case ctx, ok := <-n.router.receive():
+			case req, ok := <-n.router.receive():
 				if !ok {
 					return
 				}
 				xcall.Call(func() {
-					n.router.handle(ctx)
+					n.router.handle(req)
 				})
 			case handle, ok := <-n.fnChan:
 				if !ok {

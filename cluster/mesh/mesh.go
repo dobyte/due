@@ -42,6 +42,7 @@ func NewMesh(opts ...Option) *Mesh {
 
 	m := &Mesh{}
 	m.opts = o
+	m.hooks = make(map[cluster.Hook]HookHandler)
 	m.services = make([]*serviceEntity, 0)
 	m.instances = make([]*registry.ServiceInstance, 0)
 	m.proxy = newProxy(m)
