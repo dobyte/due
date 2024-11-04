@@ -281,11 +281,10 @@ func (r *request) Reply(message *cluster.Message) error {
 		})
 	case r.pid != "": // 来源于Actor
 		if actor, ok := r.node.scheduler.doLoad(r.pid); ok {
-			actor.Deliver(r.uid, message)
-			return nil
-		} else {
-			return errors.ErrIllegalOperation
+			return actor.Deliver(r.uid, message)
 		}
+
+		return nil
 	case r.nid != "": // 来源于其他Node
 		if r.nid == r.node.opts.id {
 			return nil
