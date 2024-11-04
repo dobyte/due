@@ -24,7 +24,7 @@ type Mesh struct {
 	services    []*serviceEntity
 	instance    *registry.ServiceInstance
 	instances   []*registry.ServiceInstance
-	hooks       map[cluster.Hook]HookHandler
+	hooks       map[cluster.Hook][]HookHandler
 	transporter transport.Server
 }
 
@@ -42,7 +42,7 @@ func NewMesh(opts ...Option) *Mesh {
 
 	m := &Mesh{}
 	m.opts = o
-	m.hooks = make(map[cluster.Hook]HookHandler)
+	m.hooks = make(map[cluster.Hook][]HookHandler)
 	m.services = make([]*serviceEntity, 0)
 	m.instances = make([]*registry.ServiceInstance, 0)
 	m.proxy = newProxy(m)
@@ -183,15 +183,17 @@ func (m *Mesh) getState() cluster.State {
 
 // 执行钩子函数
 func (m *Mesh) runHookFunc(hook cluster.Hook) {
-	if handler, ok := m.hooks[hook]; ok {
-		handler(m.proxy)
+	if handlers, ok := m.hooks[hook]; ok {
+		for _, handler := range handlers {
+			handler(m.proxy)
+		}
 	}
 }
 
 // 添加钩子监听器
 func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
 	if m.getState() == cluster.Shut {
-		m.hooks[hook] = handler
+		m.hooks[hook] = append(m.hooks[hook], handler)
 	} else {
 		log.Warnf("mesh server is working, can't add hook handler")
 	}

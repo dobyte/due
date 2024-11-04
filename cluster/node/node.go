@@ -35,7 +35,7 @@ type Node struct {
 	router      *Router
 	trigger     *Trigger
 	proxy       *Proxy
-	hooks       map[cluster.Hook]HookHandler
+	hooks       map[cluster.Hook][]HookHandler
 	services    []*serviceEntity
 	instances   []*registry.ServiceInstance
 	linker      *node.Server
@@ -57,7 +57,7 @@ func NewNode(opts ...Option) *Node {
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
 	n.scheduler = newScheduler(n)
-	n.hooks = make(map[cluster.Hook]HookHandler)
+	n.hooks = make(map[cluster.Hook][]HookHandler)
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
 	n.fnChan = make(chan func(), 4096)
@@ -355,7 +355,7 @@ func (n *Node) updateState(state cluster.State) (err error) {
 // 添加钩子监听器
 func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 	if n.getState() == cluster.Shut {
-		n.hooks[hook] = handler
+		n.hooks[hook] = append(n.hooks[hook], handler)
 	} else {
 		log.Warnf("node server is working, can't add hook handler")
 	}
@@ -363,8 +363,10 @@ func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 
 // 执行钩子函数
 func (n *Node) runHookFunc(hook cluster.Hook) {
-	if handler, ok := n.hooks[hook]; ok {
-		handler(n.proxy)
+	if handlers, ok := n.hooks[hook]; ok {
+		for _, handler := range handlers {
+			handler(n.proxy)
+		}
 	}
 }
 
