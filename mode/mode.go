@@ -2,10 +2,12 @@ package mode
 
 import (
 	"github.com/dobyte/due/v2/env"
+	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/flag"
 )
 
 const (
+	dueModeEtcName = "etc.mode"
 	dueModeArgName = "mode"
 	dueModeEnvName = "DUE_MODE"
 )
@@ -21,9 +23,11 @@ const (
 
 var dueMode string
 
+// 优先级： env < etc < arg
 func init() {
-	mode := flag.String(dueModeArgName, DebugMode)
-	mode = env.Get(dueModeEnvName, mode).String()
+	mode := env.Get(dueModeEnvName, DebugMode).String()
+	mode = etc.Get(dueModeEtcName, mode).String()
+	mode = flag.String(dueModeArgName, mode)
 	SetMode(mode)
 }
 
