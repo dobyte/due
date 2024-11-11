@@ -10,8 +10,9 @@ import (
 )
 
 type Resp struct {
-	Code int `json:"code"`           // 响应码
-	Data any `json:"data,omitempty"` // 响应数据
+	Code    int    `json:"code"`           // 响应码
+	Message string `json:"message"`        // 响应消息
+	Data    any    `json:"data,omitempty"` // 响应数据
 }
 
 type Context interface {
@@ -47,20 +48,22 @@ func (c *context) Proxy() *Proxy {
 func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
-		return c.JSON(&Resp{Code: codes.Convert(v).Code()})
+		code := codes.Convert(v)
+
+		return c.JSON(&Resp{Code: code.Code(), Message: code.Message()})
 	case *codes.Code:
-		return c.JSON(&Resp{Code: v.Code()})
+		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	default:
-		return c.JSON(&Resp{Code: codes.Unknown.Code()})
+		return c.JSON(&Resp{Code: codes.Unknown.Code(), Message: codes.Unknown.Message()})
 	}
 }
 
 // Success 成功响应
 func (c *context) Success(data ...any) error {
 	if len(data) > 0 {
-		return c.JSON(&Resp{Code: codes.OK.Code(), Data: data[0]})
+		return c.JSON(&Resp{Code: codes.OK.Code(), Message: codes.OK.Message(), Data: data[0]})
 	} else {
-		return c.JSON(&Resp{Code: codes.OK.Code()})
+		return c.JSON(&Resp{Code: codes.OK.Code(), Message: codes.OK.Message()})
 	}
 }
 
