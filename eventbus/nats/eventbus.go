@@ -75,6 +75,10 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 
 // Unsubscribe 取消订阅
 func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler eventbus.EventHandler) error {
+	if eb.err != nil {
+		return eb.err
+	}
+
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
@@ -95,6 +99,11 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 
 // Close 停止监听
 func (eb *Eventbus) Close() error {
+	if eb.err != nil {
+		return eb.err
+	}
+
 	eb.opts.conn.Close()
+
 	return nil
 }
