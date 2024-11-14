@@ -34,7 +34,6 @@ func defaultOptions() *options {
 	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
 	opts.server.KeyFile = etc.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
-	opts.client.PoolSize = etc.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
 	opts.client.CertFile = etc.Get(defaultClientCertFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
 
@@ -54,11 +53,6 @@ func WithServerCredentials(certFile, keyFile string) Option {
 // WithServerOptions 设置服务器选项
 func WithServerOptions(opts ...grpc.ServerOption) Option {
 	return func(o *options) { o.server.ServerOpts = opts }
-}
-
-// WithClientPoolSize 设置客户端连接池大小
-func WithClientPoolSize(size int) Option {
-	return func(o *options) { o.client.PoolSize = size }
 }
 
 // WithClientCredentials 设置客户端证书和校验域名

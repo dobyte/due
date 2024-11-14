@@ -19,7 +19,6 @@ type Builder struct {
 }
 
 type Options struct {
-	PoolSize   int
 	CertFile   string
 	ServerName string
 	Discovery  registry.Discovery
