@@ -3,7 +3,7 @@ module github.com/dobyte/due/crypto/ecc/v2
 go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.2.1
+	github.com/dobyte/due/v2 v2.2.2
 	github.com/ethereum/go-ethereum v1.12.0
 )
 

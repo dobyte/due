@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/IBM/sarama v1.43.3
-	github.com/dobyte/due/v2 v2.2.1
+	github.com/dobyte/due/v2 v2.2.2
 )
 
 require (
