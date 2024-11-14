@@ -33,30 +33,30 @@ type Watcher interface {
 
 type ServiceInstance struct {
 	// 服务实体ID，每个服务实体ID唯一
-	ID string `json:"id"`
+	ID string `json:"id,omitempty"`
 	// 服务实体名
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 	// 服务实体类型
-	Kind string `json:"kind"`
+	Kind string `json:"kind,omitempty"`
 	// 服务实体别名
-	Alias string `json:"alias"`
+	Alias string `json:"alias,omitempty"`
 	// 服务实例状态
-	State string `json:"state"`
+	State string `json:"state,omitempty"`
 	// 服务事件集合
-	Events []int `json:"events"`
+	Events []int `json:"events,omitempty"`
 	// 服务路由ID
-	Routes []Route `json:"routes"`
+	Routes []Route `json:"routes,omitempty"`
 	// 服务路由列表
-	Services []string `json:"services"`
+	Services []string `json:"services,omitempty"`
 	// 微服务实体暴露端口
-	Endpoint string `json:"endpoint"`
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 type Route struct {
 	// 路由ID
-	ID int32 `json:"id"`
+	ID int32 `json:"i,omitempty"`
 	// 是否有状态
-	Stateful bool `json:"stateful"`
+	Stateful bool `json:"s,omitempty"`
 	// 是否内部路由
-	Internal bool `json:"internal"`
+	Internal bool `json:"n,omitempty"`
 }

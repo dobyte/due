@@ -58,6 +58,14 @@ func TestRegistry_Register(t *testing.T) {
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
+	for i := 0; i < 100; i++ {
+		ins.Routes = append(ins.Routes, registry.Route{
+			ID:       int32(i),
+			Stateful: true,
+			Internal: true,
+		})
+	}
+
 	if err = reg.Register(ctx, ins); err != nil {
 		t.Fatal(err)
 	}

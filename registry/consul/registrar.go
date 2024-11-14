@@ -78,9 +78,12 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
 	registration.Meta[metaFieldEndpoint] = ins.Endpoint
-	registration.Meta[metaFieldRoutes] = xconv.Json(ins.Routes)
 	registration.Meta[metaFieldEvents] = xconv.Json(ins.Events)
 	registration.Meta[metaFieldServices] = xconv.Json(ins.Services)
+
+	for field, value := range marshalMetaRoutes(ins.Routes) {
+		registration.Meta[field] = value
+	}
 
 	if r.registry.opts.enableHealthCheck {
 		registration.Checks = append(registration.Checks, &api.AgentServiceCheck{

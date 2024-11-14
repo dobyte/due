@@ -134,7 +134,7 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 		ins := &registry.ServiceInstance{
 			ID:       entry.Service.ID,
 			Name:     entry.Service.Service,
-			Routes:   make([]registry.Route, 0),
+			Routes:   unmarshalMetaRoutes(entry.Service.Meta),
 			Events:   make([]int, 0),
 			Services: make([]string, 0),
 		}
@@ -147,10 +147,6 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				ins.Alias = v
 			case metaFieldState:
 				ins.State = v
-			case metaFieldRoutes:
-				if err = json.Unmarshal([]byte(v), &ins.Routes); err != nil {
-					continue
-				}
 			case metaFieldEvents:
 				if err = json.Unmarshal([]byte(v), &ins.Events); err != nil {
 					continue
