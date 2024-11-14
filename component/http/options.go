@@ -16,6 +16,7 @@ const (
 	defaultAddrKey     = "etc.http.addr"
 	defaultKeyFileKey  = "etc.http.keyFile"
 	defaultCertFileKey = "etc.http.certFile"
+	defaultCorsKey     = "etc.http.cors"
 	defaultSwaggerKey  = "etc.http.swagger"
 )
 
@@ -28,11 +29,23 @@ type options struct {
 	keyFile     string                // 秘钥文件
 	registry    registry.Registry     // 服务注册器
 	transporter transport.Transporter // 消息传输器
-	swagger     Swagger               // swagger配置
+	corsOpts    CorsOptions           // 跨域配置
+	swagOpts    SwagOptions           // swagger配置
 	middlewares []any                 // 中间件
 }
 
-type Swagger struct {
+type CorsOptions struct {
+	Enable              bool     `json:"enable"`              // 是否启用
+	AllowOrigins        []string `json:"allowOrigins"`        // 允许跨域的请求源。默认为[]，即为允许所有请求源
+	AllowMethods        []string `json:"allowMethods"`        // 允许跨域的请求方法。默认为["GET", "POST", "HEAD", "PUT", "DELETE", "PATCH"]
+	AllowHeaders        []string `json:"allowHeaders"`        // 允许跨域的请求头部。默认为[]，即为允许所有请求头部
+	AllowCredentials    bool     `json:"allowCredentials"`    // 当允许所有源时，根据CORS规范不允许携带凭据。默认为false
+	ExposeHeaders       []string `json:"exposeHeaders"`       // 允许暴露给客户端的头部。默认为[]，即为允许暴露所有头部
+	MaxAge              int      `json:"maxAge"`              // 浏览器缓存预检请求结果的时间。默认为0
+	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"` // 是否允许来自私有网络的请求。设置为true时，响应头Access-Control-Allow-Private-Network会被设置为true。默认为false
+}
+
+type SwagOptions struct {
 	Enable   bool   `json:"enable"`   // 是否启用
 	Title    string `json:"title"`    // 文档标题
 	FilePath string `json:"filePath"` // 文档路径
@@ -45,7 +58,8 @@ func defaultOptions() *options {
 		addr:     defaultAddr,
 		keyFile:  etc.Get(defaultKeyFileKey).String(),
 		certFile: etc.Get(defaultCertFileKey).String(),
-		swagger:  Swagger{},
+		corsOpts: CorsOptions{},
+		swagOpts: SwagOptions{},
 	}
 
 	if name := etc.Get(defaultNameKey).String(); name != "" {
@@ -56,8 +70,12 @@ func defaultOptions() *options {
 		opts.addr = addr
 	}
 
-	if err := etc.Get(defaultSwaggerKey).Scan(&opts.swagger); err != nil {
-		opts.swagger = Swagger{}
+	if err := etc.Get(defaultCorsKey).Scan(&opts.corsOpts); err != nil {
+		opts.corsOpts = CorsOptions{}
+	}
+
+	if err := etc.Get(defaultSwaggerKey).Scan(&opts.swagOpts); err != nil {
+		opts.swagOpts = SwagOptions{}
 	}
 
 	return opts
@@ -88,9 +106,14 @@ func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
 }
 
-// WithSwagger 设置Swagger配置
-func WithSwagger(swagger Swagger) Option {
-	return func(o *options) { o.swagger = swagger }
+// WithCorsOptions 设置跨域配置
+func WithCorsOptions(corsOpts CorsOptions) Option {
+	return func(o *options) { o.corsOpts = corsOpts }
+}
+
+// WithSwagOptions 设置swagger配置
+func WithSwagOptions(swagOpts SwagOptions) Option {
+	return func(o *options) { o.swagOpts = swagOpts }
 }
 
 // WithMiddlewares 设置中间件

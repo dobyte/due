@@ -32,8 +32,30 @@ func NewServer(opts ...Option) *Server {
 	s.proxy = newProxy(s)
 	s.app = fiber.New(fiber.Config{ServerHeader: o.name})
 	s.app.Use(logger.New())
-	s.app.Use(recover.New())
-	s.app.Use(cors.New())
+
+	s.app.Use(recover.New(recover.Config{
+		EnableStackTrace: true,
+	}))
+
+	if s.opts.corsOpts.Enable {
+		s.app.Use(cors.New(cors.Config{
+			AllowOrigins:        s.opts.corsOpts.AllowOrigins,
+			AllowMethods:        s.opts.corsOpts.AllowMethods,
+			AllowHeaders:        s.opts.corsOpts.AllowHeaders,
+			AllowCredentials:    s.opts.corsOpts.AllowCredentials,
+			ExposeHeaders:       s.opts.corsOpts.ExposeHeaders,
+			MaxAge:              s.opts.corsOpts.MaxAge,
+			AllowPrivateNetwork: s.opts.corsOpts.AllowPrivateNetwork,
+		}))
+	}
+
+	if s.opts.swagOpts.Enable {
+		s.app.Use(swagger.New(swagger.Config{
+			Title:    s.opts.swagOpts.Title,
+			BasePath: s.opts.swagOpts.BasePath,
+			FilePath: s.opts.swagOpts.FilePath,
+		}))
+	}
 
 	for i := range o.middlewares {
 		switch handler := o.middlewares[i].(type) {
@@ -44,14 +66,6 @@ func NewServer(opts ...Option) *Server {
 		case fiber.Handler:
 			s.app.Use(handler)
 		}
-	}
-
-	if s.opts.swagger.Enable {
-		s.app.Use(swagger.New(swagger.Config{
-			Title:    s.opts.swagger.Title,
-			BasePath: s.opts.swagger.BasePath,
-			FilePath: s.opts.swagger.FilePath,
-		}))
 	}
 
 	return s
@@ -107,8 +121,8 @@ func (s *Server) printInfo(addr string) {
 
 	infos = append(infos, fmt.Sprintf("Url: %s", baseUrl))
 
-	if s.opts.swagger.Enable {
-		infos = append(infos, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagger.BasePath, "/")))
+	if s.opts.swagOpts.Enable {
+		infos = append(infos, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagOpts.BasePath, "/")))
 	}
 
 	if s.opts.registry != nil {

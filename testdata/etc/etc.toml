@@ -82,6 +82,8 @@ mode = "debug"
         id = ""
         # 实例名称
         name = "gate"
+        # 内建RPC服务器监听地址。不填写默认随机监听
+        addr = ":0"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
     # 集群节点配置
@@ -90,7 +92,9 @@ mode = "debug"
         id = ""
         # 实例名称
         name = "node"
-        # 编解码器。可选：json | proto
+        # 内建RPC服务器监听地址。不填写默认随机监听
+        addr = ":0"
+        # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
@@ -100,7 +104,7 @@ mode = "debug"
         id = ""
         # 实例名称
         name = "master"
-        # 编解码器。可选：json | proto
+        # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
         # 加密器。可选：rsa | ecc
         encryptor = "ecc"
@@ -110,7 +114,7 @@ mode = "debug"
     [cluster.mesh]
         # 实例名称
         name = "mesh"
-        # 编解码器。可选：json | proto
+        # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
     # 集群客户端配置，常用于调试使用
     [cluster.client]
@@ -118,7 +122,7 @@ mode = "debug"
         id = ""
         # 实例名称
         name = "client"
-        # 编解码器。可选：json | proto
+        # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
 
 # http服务器配置
@@ -131,6 +135,24 @@ mode = "debug"
     keyFile = ""
     # 证书文件
     certFile = ""
+    # 跨域配置
+    [http.cors]
+        # 是否启用跨域
+        enable = false
+        # 允许跨域的请求源。默认为[]，即为允许所有请求源
+        allowOrigins = []
+        # 允许跨域的请求方法。默认为["GET", "POST", "HEAD", "PUT", "DELETE", "PATCH"]
+        allowMethods = []
+        # 允许跨域的请求头部。默认为[]，即为允许所有请求头部
+        allowHeaders = []
+        # 当允许所有源时，根据CORS规范不允许携带凭据。默认为false
+        allowCredentials = false
+        # 允许暴露给客户端的头部。默认为[]，即为允许暴露所有头部
+        exposeHeaders = []
+        # 浏览器缓存预检请求结果的时间。默认为0
+        maxAge = 0
+        # 是否允许来自私有网络的请求。设置为true时，响应头Access-Control-Allow-Private-Network会被设置为true。默认为false
+        allowPrivateNetwork = false
     # swagger文档配置
     [http.swagger]
         # 是否启用文档
@@ -159,8 +181,6 @@ mode = "debug"
             certFile = ""
             # 证书域名
             serverName = ""
-            # 连接池大小，默认为10
-            poolSize = 10
     # RPCX相关配置
     [transport.rpcx]
         # RPCX服务器相关配置
