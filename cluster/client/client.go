@@ -28,11 +28,12 @@ type Client struct {
 	cancel              context.CancelFunc
 	routes              map[int32][]RouteHandler
 	events              map[cluster.Event][]EventHandler
-	hooks               map[cluster.Hook]HookHandler
 	defaultRouteHandler RouteHandler
 	proxy               *Proxy
 	state               int32
 	conns               sync.Map
+	rw                  sync.RWMutex
+	hooks               map[cluster.Hook][]HookHandler
 }
 
 func NewClient(opts ...Option) *Client {
@@ -46,7 +47,7 @@ func NewClient(opts ...Option) *Client {
 	c.proxy = newProxy(c)
 	c.routes = make(map[int32][]RouteHandler)
 	c.events = make(map[cluster.Event][]EventHandler)
-	c.hooks = make(map[cluster.Hook]HookHandler)
+	c.hooks = make(map[cluster.Hook][]HookHandler)
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
 	c.state = int32(cluster.Shut)
 
@@ -215,10 +216,17 @@ func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 
 // 添加钩子监听器
 func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
-	if c.getState() == cluster.Shut {
-		c.hooks[hook] = handler
-	} else {
-		log.Warnf("client is working, can't add hook handler")
+	switch hook {
+	case cluster.Destroy:
+		c.rw.Lock()
+		c.hooks[hook] = append(c.hooks[hook], handler)
+		c.rw.Unlock()
+	default:
+		if c.getState() == cluster.Shut {
+			c.hooks[hook] = append(c.hooks[hook], handler)
+		} else {
+			log.Warnf("server is working, can't add hook handler")
+		}
 	}
 }
 
@@ -234,8 +242,25 @@ func (c *Client) getState() cluster.State {
 
 // 执行钩子函数
 func (c *Client) runHookFunc(hook cluster.Hook) {
-	if handler, ok := c.hooks[hook]; ok {
-		handler(c.proxy)
+	c.rw.RLock()
+
+	if handlers, ok := c.hooks[hook]; ok {
+		wg := &sync.WaitGroup{}
+		wg.Add(len(handlers))
+
+		for i := range handlers {
+			handler := handlers[i]
+			xcall.Go(func() {
+				handler(c.proxy)
+				wg.Done()
+			})
+		}
+
+		c.rw.RUnlock()
+
+		wg.Wait()
+	} else {
+		c.rw.RUnlock()
 	}
 }
 

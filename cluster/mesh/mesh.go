@@ -9,6 +9,8 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xcall"
+	"sync"
 	"sync/atomic"
 )
 
@@ -21,11 +23,12 @@ type Mesh struct {
 	cancel      context.CancelFunc
 	state       atomic.Int32
 	proxy       *Proxy
+	transporter transport.Server
 	services    []*serviceEntity
 	instance    *registry.ServiceInstance
 	instances   []*registry.ServiceInstance
+	rw          sync.RWMutex
 	hooks       map[cluster.Hook][]HookHandler
-	transporter transport.Server
 }
 
 type serviceEntity struct {
@@ -183,19 +186,41 @@ func (m *Mesh) getState() cluster.State {
 
 // 执行钩子函数
 func (m *Mesh) runHookFunc(hook cluster.Hook) {
+	m.rw.RLock()
+
 	if handlers, ok := m.hooks[hook]; ok {
-		for _, handler := range handlers {
-			handler(m.proxy)
+		wg := &sync.WaitGroup{}
+		wg.Add(len(handlers))
+
+		for i := range handlers {
+			handler := handlers[i]
+			xcall.Go(func() {
+				handler(m.proxy)
+				wg.Done()
+			})
 		}
+
+		m.rw.RUnlock()
+
+		wg.Wait()
+	} else {
+		m.rw.RUnlock()
 	}
 }
 
 // 添加钩子监听器
 func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
-	if m.getState() == cluster.Shut {
+	switch hook {
+	case cluster.Destroy:
+		m.rw.Lock()
 		m.hooks[hook] = append(m.hooks[hook], handler)
-	} else {
-		log.Warnf("mesh server is working, can't add hook handler")
+		m.rw.Unlock()
+	default:
+		if m.getState() == cluster.Shut {
+			m.hooks[hook] = append(m.hooks[hook], handler)
+		} else {
+			log.Warnf("server is working, can't add hook handler")
+		}
 	}
 }
 

@@ -35,13 +35,14 @@ type Node struct {
 	router      *Router
 	trigger     *Trigger
 	proxy       *Proxy
-	hooks       map[cluster.Hook][]HookHandler
 	services    []*serviceEntity
 	instances   []*registry.ServiceInstance
 	linker      *node.Server
 	fnChan      chan func()
 	scheduler   *Scheduler
 	transporter transport.Server
+	rw          sync.RWMutex
+	hooks       map[cluster.Hook][]HookHandler
 }
 
 func NewNode(opts ...Option) *Node {
@@ -352,20 +353,42 @@ func (n *Node) updateState(state cluster.State) (err error) {
 	return n.doRegisterServiceInstances()
 }
 
-// 添加钩子监听器
-func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
-	if n.getState() == cluster.Shut {
-		n.hooks[hook] = append(n.hooks[hook], handler)
+// 执行钩子函数
+func (n *Node) runHookFunc(hook cluster.Hook) {
+	n.rw.RLock()
+
+	if handlers, ok := n.hooks[hook]; ok {
+		wg := &sync.WaitGroup{}
+		wg.Add(len(handlers))
+
+		for i := range handlers {
+			handler := handlers[i]
+			xcall.Go(func() {
+				handler(n.proxy)
+				wg.Done()
+			})
+		}
+
+		n.rw.RUnlock()
+
+		wg.Wait()
 	} else {
-		log.Warnf("node server is working, can't add hook handler")
+		n.rw.RUnlock()
 	}
 }
 
-// 执行钩子函数
-func (n *Node) runHookFunc(hook cluster.Hook) {
-	if handlers, ok := n.hooks[hook]; ok {
-		for _, handler := range handlers {
-			handler(n.proxy)
+// 添加钩子监听器
+func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
+	switch hook {
+	case cluster.Destroy:
+		n.rw.Lock()
+		n.hooks[hook] = append(n.hooks[hook], handler)
+		n.rw.Unlock()
+	default:
+		if n.getState() == cluster.Shut {
+			n.hooks[hook] = append(n.hooks[hook], handler)
+		} else {
+			log.Warnf("server is working, can't add hook handler")
 		}
 	}
 }
@@ -379,7 +402,7 @@ func (n *Node) addServiceProvider(name string, desc, provider any) {
 			provider: provider,
 		})
 	} else {
-		log.Warnf("node server is working, can't add service provider")
+		log.Warnf("server is working, can't add service provider")
 	}
 }
 
