@@ -125,22 +125,42 @@ func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 // 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
+	name, nid := p.node.opts.name, p.node.opts.id
+
 	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		return p.nodeLinker.Bind(ctx, uid, nameAndNID[0], nameAndNID[1])
-	} else {
-		return p.nodeLinker.Bind(ctx, uid, p.node.opts.name, p.node.opts.id)
+		name, nid = nameAndNID[0], nameAndNID[1]
 	}
+
+	if err := p.nodeLinker.Bind(ctx, uid, name, nid); err != nil {
+		return err
+	}
+
+	if nid == p.node.opts.id {
+		p.node.wg.Add(1)
+	}
+
+	return nil
 }
 
 // UnbindNode 解绑节点
 // 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
+	name, nid := p.node.opts.name, p.node.opts.id
+
 	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		return p.nodeLinker.Unbind(ctx, uid, nameAndNID[0], nameAndNID[1])
-	} else {
-		return p.nodeLinker.Unbind(ctx, uid, p.node.opts.name, p.node.opts.id)
+		name, nid = nameAndNID[0], nameAndNID[1]
 	}
+
+	if err := p.nodeLinker.Unbind(ctx, uid, name, nid); err != nil {
+		return err
+	}
+
+	if nid == p.node.opts.id {
+		p.node.wg.Done()
+	}
+
+	return nil
 }
 
 // LocateGate 定位用户所在网关
@@ -259,6 +279,7 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 
 // Invoke 调用函数（线程安全）
 func (p *Proxy) Invoke(fn func()) {
+	p.node.wg.Add(1)
 	p.node.fnChan <- fn
 }
 

@@ -41,6 +41,7 @@ type Node struct {
 	fnChan      chan func()
 	scheduler   *Scheduler
 	transporter transport.Server
+	wg          *sync.WaitGroup
 	rw          sync.RWMutex
 	hooks       map[cluster.Hook][]HookHandler
 }
@@ -63,6 +64,7 @@ func NewNode(opts ...Option) *Node {
 	n.instances = make([]*registry.ServiceInstance, 0)
 	n.fnChan = make(chan func(), 4096)
 	n.state.Store(int32(cluster.Shut))
+	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() interface{} {
 		return &event{
 			ctx:  context.Background(),
@@ -112,7 +114,7 @@ func (n *Node) Init() {
 
 // Start 启动节点
 func (n *Node) Start() {
-	if n.state.Swap(int32(cluster.Work)) != int32(cluster.Shut) {
+	if !n.state.CompareAndSwap(int32(cluster.Shut), int32(cluster.Work)) {
 		return
 	}
 
@@ -131,9 +133,24 @@ func (n *Node) Start() {
 	n.runHookFunc(cluster.Start)
 }
 
+// Close 关闭节点
+func (n *Node) Close() {
+	if !n.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
+		if !n.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
+			return
+		}
+	}
+
+	n.registerServiceInstances()
+
+	n.runHookFunc(cluster.Close)
+
+	n.wg.Wait()
+}
+
 // Destroy 销毁节点服务器
 func (n *Node) Destroy() {
-	if n.state.Swap(int32(cluster.Shut)) == int32(cluster.Shut) {
+	if !n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
 		return
 	}
 
@@ -182,7 +199,10 @@ func (n *Node) dispatch() {
 				if !ok {
 					return
 				}
-				xcall.Call(handle)
+				xcall.Call(func() {
+					handle()
+					n.wg.Done()
+				})
 			}
 		}
 	}()

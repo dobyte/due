@@ -54,7 +54,7 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 			Name:     "gate-2",
 			Kind:     cluster.Node.String(),
 			Alias:    "gate-2",
-			State:    cluster.Work.String(),
+			State:    cluster.Hang.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8002", false).String(),
 			Events:   []int{int(cluster.Disconnect)},
 			Routes: []registry.Route{{
@@ -71,10 +71,17 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 
 	d.ReplaceServices(instance1, instance2, instance3)
 
-	event, err := d.FindEvent(int(cluster.Disconnect))
+	route, err := d.FindRoute(1)
 	if err != nil {
 		t.Errorf("find event failed: %v", err)
 	} else {
-		t.Log(event.FindEndpoint())
+		t.Log(route.FindEndpoint())
 	}
+
+	//event, err := d.FindEvent(int(cluster.Disconnect))
+	//if err != nil {
+	//	t.Errorf("find event failed: %v", err)
+	//} else {
+	//	t.Log(event.FindEndpoint())
+	//}
 }

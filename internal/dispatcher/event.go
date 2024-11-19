@@ -7,12 +7,14 @@ type Event struct {
 
 func newEvent(dispatcher *Dispatcher, event int) *Event {
 	return &Event{
-		abstract: abstract{
-			dispatcher:  dispatcher,
-			endpointMap: make(map[string]*serviceEndpoint),
-			endpointArr: make([]*serviceEndpoint, 0),
-		},
 		event: event,
+		abstract: abstract{
+			dispatcher: dispatcher,
+			endpoints1: make([]*serviceEndpoint, 0),
+			endpoints2: make(map[string]*serviceEndpoint),
+			endpoints3: make([]*serviceEndpoint, 0),
+			endpoints4: make(map[string]*serviceEndpoint),
+		},
 	}
 }
 

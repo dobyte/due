@@ -101,7 +101,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 				route = newRoute(d, item.ID, service.Alias, item.Stateful, item.Internal)
 				routes[item.ID] = route
 			}
-			route.addEndpoint(service.ID, ep)
+			route.addEndpoint(service.ID, service.State, ep)
 		}
 
 		for _, evt := range service.Events {
@@ -110,7 +110,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 				event = newEvent(d, evt)
 				events[evt] = event
 			}
-			event.addEndpoint(service.ID, ep)
+			event.addEndpoint(service.ID, service.State, ep)
 		}
 	}
 

@@ -47,6 +47,10 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 		return nil, errors.ErrActorExists
 	}
 
+	if act.opts.wait {
+		s.node.wg.Add(1)
+	}
+
 	act.processor.Init()
 
 	if _, ok := s.kinds.Load(act.Kind()); !ok {
@@ -74,7 +78,13 @@ func (s *Scheduler) kill(kind, id string) bool {
 		return false
 	}
 
-	return act.destroy()
+	ok = act.destroy()
+
+	if act.opts.wait {
+		s.node.wg.Done()
+	}
+
+	return ok
 }
 
 // 移除Actor

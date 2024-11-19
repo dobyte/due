@@ -15,9 +15,11 @@ func newRoute(dispatcher *Dispatcher, id int32, group string, stateful, internal
 		stateful: stateful,
 		internal: internal,
 		abstract: abstract{
-			dispatcher:  dispatcher,
-			endpointMap: make(map[string]*serviceEndpoint),
-			endpointArr: make([]*serviceEndpoint, 0),
+			dispatcher: dispatcher,
+			endpoints1: make([]*serviceEndpoint, 0),
+			endpoints2: make(map[string]*serviceEndpoint),
+			endpoints3: make([]*serviceEndpoint, 0),
+			endpoints4: make(map[string]*serviceEndpoint),
 		},
 	}
 }

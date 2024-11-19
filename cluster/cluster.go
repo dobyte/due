@@ -31,7 +31,7 @@ const (
 	Shut State = iota // 关闭（节点已经关闭，无法正常访问该节点）
 	Work              // 工作（节点正常工作，可以分配更多玩家到该节点）
 	Busy              // 繁忙（节点资源紧张，不建议分配更多玩家到该节点上）
-	Hang              // 挂起（节点即将关闭，正处于资源回收中）
+	Hang              // 挂起（节点即将销毁，正处于资源回收中）
 )
 
 // State 集群实例状态
@@ -73,9 +73,9 @@ func (e Event) String() string {
 }
 
 const (
-	Init    Hook = iota // 初始化组件
+	Init    Hook = iota // 初始组件
 	Start               // 启动组件
-	Restart             // 重启组件
+	Close               // 关闭组件
 	Destroy             // 销毁组件
 )
 
@@ -86,8 +86,8 @@ func (h Hook) String() string {
 	switch h {
 	case Start:
 		return "start"
-	case Restart:
-		return "restart"
+	case Close:
+		return "close"
 	case Destroy:
 		return "destroy"
 	default:
