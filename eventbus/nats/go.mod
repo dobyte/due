@@ -3,7 +3,7 @@ module github.com/dobyte/due/eventbus/nats/v2
 go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.2.2
+	github.com/dobyte/due/v2 v2.2.3
 	github.com/nats-io/nats.go v1.37.0
 )
 

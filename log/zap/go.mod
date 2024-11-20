@@ -3,7 +3,7 @@ module github.com/dobyte/due/log/zap/v2
 go 1.22
 
 require (
-	github.com/dobyte/due/v2 v2.2.2
+	github.com/dobyte/due/v2 v2.2.3
 	go.uber.org/zap v1.27.0
 )
 
