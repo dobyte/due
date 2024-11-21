@@ -56,8 +56,13 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 		Event: event,
 		CID:   cid,
 		UID:   uid,
-	}); err != nil && !errors.Is(err, errors.ErrNotFoundEvent) && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-		log.Warnf("trigger event failed, cid: %d, uid: %d, event: %v, err: %v", cid, uid, event.String(), err)
+	}); err != nil {
+		switch {
+		case errors.Is(err, errors.ErrNotFoundEvent), errors.Is(err, errors.ErrNotFoundUserLocation):
+			log.Warnf("trigger event failed, cid: %d, uid: %d, event: %v, err: %v", cid, uid, event.String(), err)
+		default:
+			log.Errorf("trigger event failed, cid: %d, uid: %d, event: %v, err: %v", cid, uid, event.String(), err)
+		}
 	}
 }
 
@@ -80,8 +85,8 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
 		Message: message,
 	}); err != nil {
 		switch {
-		case errors.Is(err, errors.ErrNotFoundRoute):
-			log.Debugf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
+		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
+			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
 		default:
 			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
 		}
