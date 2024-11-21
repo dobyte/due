@@ -19,6 +19,11 @@ import (
 	"time"
 )
 
+const (
+	defaultPIDKey                 = "etc.pid"                 // 进程文件路径
+	defaultShutdownMaxWaitTimeKey = "etc.shutdownMaxWaitTime" // 容器关闭最大等待时间
+)
+
 type Container struct {
 	components []component.Component
 }
@@ -74,7 +79,7 @@ func (c *Container) doCloseComponents() {
 		g.Add(comp.Close)
 	}
 
-	g.Run(context.Background(), etc.Get("etc.shutdownTimeout", 0).Duration())
+	g.Run(context.Background(), etc.Get(defaultShutdownMaxWaitTimeKey).Duration())
 }
 
 // 销毁所有组件
@@ -123,7 +128,7 @@ func (c *Container) doClearModules() {
 
 // 保存进程号
 func (c *Container) doSaveProcessID() {
-	filename := etc.Get("etc.pid").String()
+	filename := etc.Get(defaultPIDKey).String()
 	if filename == "" {
 		return
 	}
