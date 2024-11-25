@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
+	"time"
 )
 
 type Proxy struct {
@@ -281,6 +282,27 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 func (p *Proxy) Invoke(fn func()) {
 	p.node.wg.Add(1)
 	p.node.fnChan <- fn
+}
+
+// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
+func (p *Proxy) AfterFunc(d time.Duration, f func()) *Timer {
+	p.node.wg.Add(1)
+	timer := time.AfterFunc(d, func() {
+		f()
+		p.node.wg.Done()
+	})
+
+	return &Timer{node: p.node, timer: timer}
+}
+
+// AfterInvoke 延迟调用（线程安全）
+func (p *Proxy) AfterInvoke(d time.Duration, f func()) *Timer {
+	p.node.wg.Add(1)
+	timer := time.AfterFunc(d, func() {
+		p.node.fnChan <- f
+	})
+
+	return &Timer{node: p.node, timer: timer}
 }
 
 // Spawn 衍生出一个新的Actor
