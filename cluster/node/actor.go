@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Creator func(actor *Actor, args ...any) Processor
@@ -65,6 +66,36 @@ func (a *Actor) Invoke(fn func()) {
 	a.fnChan <- fn
 }
 
+// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
+func (a *Actor) AfterFunc(d time.Duration, f func()) *Timer {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
+	if a.state.Load() != started {
+		return nil
+	}
+
+	timer := time.AfterFunc(d, f)
+
+	return &Timer{timer: timer}
+}
+
+// AfterInvoke 延迟调用（线程安全）
+func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
+	if a.state.Load() != started {
+		return nil
+	}
+
+	timer := time.AfterFunc(d, func() {
+		a.fnChan <- f
+	})
+
+	return &Timer{timer: timer}
+}
+
 // AddRouteHandler 添加路由处理器
 func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	a.rw.RLock()
@@ -108,6 +139,8 @@ func (a *Actor) Next(ctx Context) {
 	if a.state.Load() != started {
 		return
 	}
+
+	ctx.storeActor(a)
 
 	ctx.incrVersion()
 

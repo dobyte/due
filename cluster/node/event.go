@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"sync/atomic"
+	"time"
 )
 
 type event struct {
@@ -19,6 +20,7 @@ type event struct {
 	event   cluster.Event   // 时间类型
 	version atomic.Int32    // 对象版本号
 	chain   *chains.Chain   // defer 调用链
+	actor   atomic.Value    // 当前Actor
 }
 
 // GID 获取网关ID
@@ -116,12 +118,16 @@ func (e *event) Task(fn func(ctx Context)) {
 
 	e.Cancel()
 
+	e.node.wg.Add(1)
+
 	task.AddTask(func() {
 		defer e.compareVersionRecycle(version)
 
 		defer e.compareVersionExecDefer(version)
 
 		fn(e)
+
+		e.node.wg.Done()
 	})
 }
 
@@ -214,6 +220,39 @@ func (e *event) Actor(kind, id string) (*Actor, bool) {
 	return e.node.scheduler.load(kind, id)
 }
 
+// Invoke 调用函数（线程安全）
+// ctx在全局的处理器中，调用的就是proxy.Invoke
+// ctx在Actor的处理器中，调用的就是actor.Invoke
+func (e *event) Invoke(fn func()) {
+	if actor := e.actor.Load().(*Actor); actor != nil {
+		actor.Invoke(fn)
+	} else {
+		e.node.proxy.Invoke(fn)
+	}
+}
+
+// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
+// ctx在全局的处理器中，调用的就是proxy.AfterFunc
+// ctx在Actor的处理器中，调用的就是actor.AfterFunc
+func (e *event) AfterFunc(d time.Duration, f func()) *Timer {
+	if actor := e.actor.Load().(*Actor); actor != nil {
+		return actor.AfterFunc(d, f)
+	} else {
+		return e.node.proxy.AfterFunc(d, f)
+	}
+}
+
+// AfterInvoke 延迟调用（线程安全）
+// ctx在全局的处理器中，调用的就是proxy.AfterInvoke
+// ctx在Actor的处理器中，调用的就是actor.AfterInvoke
+func (e *event) AfterInvoke(d time.Duration, f func()) *Timer {
+	if actor := e.actor.Load().(*Actor); actor != nil {
+		return actor.AfterInvoke(d, f)
+	} else {
+		return e.node.proxy.AfterInvoke(d, f)
+	}
+}
+
 // GetIP 获取客户端IP
 func (e *event) GetIP() (string, error) {
 	return e.node.proxy.GetIP(e.ctx, &cluster.GetIPArgs{
@@ -251,6 +290,11 @@ func (e *event) Disconnect(force ...bool) error {
 		Target: e.cid,
 		Force:  len(force) > 0 && force[0],
 	})
+}
+
+// 保存当前Actor
+func (e *event) storeActor(actor *Actor) {
+	e.actor.Store(actor)
 }
 
 // 增长版本号

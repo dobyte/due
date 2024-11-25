@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"time"
 )
 
 type Context interface {
@@ -73,6 +74,20 @@ type Context interface {
 	Kill(kind, id string) bool
 	// Actor 获取Actor
 	Actor(kind, id string) (*Actor, bool)
+	// Invoke 调用函数（线程安全）
+	// ctx在全局的处理器中，调用的就是proxy.Invoke
+	// ctx在Actor的处理器中，调用的就是actor.Invoke
+	Invoke(fn func())
+	// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
+	// ctx在全局的处理器中，调用的就是proxy.AfterFunc
+	// ctx在Actor的处理器中，调用的就是actor.AfterFunc
+	AfterFunc(d time.Duration, f func()) *Timer
+	// AfterInvoke 延迟调用（线程安全）
+	// ctx在全局的处理器中，调用的就是proxy.AfterInvoke
+	// ctx在Actor的处理器中，调用的就是actor.AfterInvoke
+	AfterInvoke(d time.Duration, f func()) *Timer
+	// 保存当前Actor
+	storeActor(actor *Actor)
 	// 增长版本号
 	incrVersion() int32
 	// 获取版本号
