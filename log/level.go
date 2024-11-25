@@ -34,10 +34,9 @@ func (l Level) String() string {
 		return "ERROR"
 	case FatalLevel:
 		return "FATAL"
-	case PanicLevel:
+	default:
 		return "PANIC"
 	}
-	return "NONE"
 }
 
 func ParseLevel(level string) Level {

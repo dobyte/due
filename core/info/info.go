@@ -25,7 +25,7 @@ const (
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
 	website           = "https://github.com/dobyte/due"
-	version           = "v2.2.3"
+	version           = "v2.2.4"
 	global            = "Global"
 )
 

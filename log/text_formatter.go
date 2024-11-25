@@ -9,7 +9,7 @@ package log
 
 import (
 	"bytes"
-	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -33,29 +33,27 @@ func (f *textFormatter) format(e *Entity, isTerminal bool) []byte {
 	level := e.Level.String()[:4]
 
 	if isTerminal {
-		fmt.Fprintf(b, "\x1b[%dm%s\x1b[0m[%s]", e.Color, level, e.Time)
+		b.WriteString("\x1b[" + strconv.Itoa(e.Color) + "m" + level + "\x1b[0m[" + e.Time + "]")
 	} else {
-		fmt.Fprintf(b, "%s[%s]", level, e.Time)
+		b.WriteString(level + "[" + e.Time + "]")
 	}
 
 	if e.Caller != "" {
-		fmt.Fprint(b, " "+e.Caller)
+		b.WriteString(" " + e.Caller)
 	}
 
 	if e.Message != "" {
-		fmt.Fprint(b, " "+e.Message)
+		b.WriteString(" " + e.Message)
 	}
 
 	if len(e.Frames) > 0 {
-		fmt.Fprint(b, "\n")
-		fmt.Fprint(b, "Stack:")
+		b.WriteString("\nStack:")
 		for i, frame := range e.Frames {
-			fmt.Fprintf(b, "\n%d.%s\n", i+1, frame.Function)
-			fmt.Fprintf(b, "\t%s:%d", frame.File, frame.Line)
+			b.WriteString("\n" + strconv.Itoa(i+1) + "." + frame.Function + "\n\t" + frame.File + ":" + strconv.Itoa(frame.Line))
 		}
 	}
 
-	fmt.Fprintf(b, "\n")
+	b.WriteByte('\n')
 
 	return b.Bytes()
 }

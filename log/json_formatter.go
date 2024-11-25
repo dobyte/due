@@ -9,7 +9,7 @@ package log
 
 import (
 	"bytes"
-	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -40,32 +40,33 @@ func (f *jsonFormatter) format(e *Entity, isTerminal bool) []byte {
 		f.bufferPool.Put(b)
 	}()
 
-	fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyLevel, e.Level.String()[:4])
-	fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyTime, e.Time)
+	level := e.Level.String()[:4]
+
+	b.WriteString(`{"` + fieldKeyLevel + `":"` + level + `","` + fieldKeyTime + `":"` + e.Time + `"`)
 
 	if e.Caller != "" {
-		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyFile, e.Caller)
+		b.WriteString(`,"` + fieldKeyFile + `":"` + e.Caller + `"`)
 	}
 
 	if e.Message != "" {
-		fmt.Fprintf(b, `,"%s":"%s"`, fieldKeyMsg, e.Message)
+		b.WriteString(`,"` + fieldKeyMsg + `":"` + e.Message + `"`)
 	}
 
 	if len(e.Frames) > 0 {
-		fmt.Fprintf(b, `,"%s":[`, fieldKeyStack)
+		b.WriteString(`,"` + fieldKeyStack + `":[`)
 
 		for i, frame := range e.Frames {
 			if i == 0 {
-				fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
+				b.WriteString(`{"` + fieldKeyStackFunc + `":"` + frame.Function + `"`)
 			} else {
-				fmt.Fprintf(b, `,{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
+				b.WriteString(`,{"` + fieldKeyStackFunc + `":"` + frame.Function + `"`)
 			}
-			fmt.Fprintf(b, `,"%s":"%s:%d"}`, fieldKeyStackFile, frame.File, frame.Line)
+			b.WriteString(`,"` + fieldKeyStackFile + `":"` + frame.File + `:` + strconv.Itoa(frame.Line) + `"}`)
 		}
-
-		fmt.Fprint(b, "]")
+		b.WriteString(`]`)
 	}
-	fmt.Fprint(b, "}\n")
+
+	b.WriteString("}\n")
 
 	return b.Bytes()
 }

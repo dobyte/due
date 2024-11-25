@@ -144,7 +144,7 @@ func (l *defaultLogger) buildEnabler(level Level) enabler {
 
 // BuildEntity 构建日志实体
 func (l *defaultLogger) BuildEntity(level Level, isNeedStack bool, a ...interface{}) *Entity {
-	return l.entityPool.build(level, isNeedStack, a)
+	return l.entityPool.build(level, isNeedStack, a...)
 }
 
 // 打印日志
