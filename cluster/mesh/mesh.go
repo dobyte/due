@@ -242,7 +242,13 @@ func (m *Mesh) printInfo() {
 	infos := make([]string, 0)
 	infos = append(infos, fmt.Sprintf("Name: %s", m.Name()))
 	infos = append(infos, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
-	infos = append(infos, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
+
+	if m.opts.locator != nil {
+		infos = append(infos, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
+	} else {
+		infos = append(infos, "Locator: -")
+	}
+
 	infos = append(infos, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
 
 	if m.opts.encryptor != nil {
