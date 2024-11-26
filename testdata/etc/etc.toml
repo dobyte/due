@@ -1,6 +1,6 @@
 # 进程号
 pid = "./run/cluster.pid"
-# 开发模式。支持模式：debug、test、release（模式优先级：环境变量 < 配置文件 < 运行参数）
+# 开发模式。支持模式：debug、test、release（设置优先级：配置文件 < 环境变量 < 运行参数 < mode.SetMode()）
 mode = "debug"
 # 统一时区设置。项目中的时间获取请使用xtime.Now()
 timezone = "Local"

@@ -25,10 +25,12 @@ type Code struct {
 	message string
 }
 
-func NewCode(code int, message string) *Code {
-	return &Code{
-		code:    code,
-		message: message,
+// NewCode 新建一个错误码
+func NewCode(code int, message ...string) *Code {
+	if len(message) > 0 {
+		return &Code{code: code, message: message[0]}
+	} else {
+		return &Code{code: code}
 	}
 }
 

@@ -59,7 +59,7 @@ var (
 // text : 文本字符串
 // code : 错误码
 // error: 原生错误
-func NewError(args ...interface{}) *Error {
+func NewError(args ...any) *Error {
 	e := &Error{}
 
 	for _, arg := range args {
@@ -81,7 +81,7 @@ func NewError(args ...interface{}) *Error {
 // text : 文本字符串
 // code : 错误码
 // error: 原生错误
-func NewErrorWithStack(args ...interface{}) *Error {
+func NewErrorWithStack(args ...any) *Error {
 	e := &Error{stack: stack.Callers(1, stack.Full)}
 
 	for _, arg := range args {

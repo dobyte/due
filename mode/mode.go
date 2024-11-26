@@ -23,10 +23,10 @@ const (
 
 var dueMode string
 
-// 优先级： env < etc < arg
+// 优先级： 配置文件 < 环境变量 < 运行参数 < mode.SetMode()
 func init() {
-	mode := env.Get(dueModeEnvName, DebugMode).String()
-	mode = etc.Get(dueModeEtcName, mode).String()
+	mode := etc.Get(dueModeEtcName, DebugMode).String()
+	mode = env.Get(dueModeEnvName, mode).String()
 	mode = flag.String(dueModeArgName, mode)
 	SetMode(mode)
 }
