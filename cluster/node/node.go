@@ -363,7 +363,7 @@ func (n *Node) getState() cluster.State {
 }
 
 // 更新状态
-func (n *Node) updateState(state cluster.State) (err error) {
+func (n *Node) setState(state cluster.State) error {
 	n.state.Swap(int32(state))
 
 	for _, instance := range n.instances {

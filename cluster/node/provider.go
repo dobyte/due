@@ -88,5 +88,5 @@ func (p *provider) GetState() (cluster.State, error) {
 
 // SetState 设置状态
 func (p *provider) SetState(state cluster.State) error {
-	return nil
+	return p.node.setState(state)
 }

@@ -51,7 +51,7 @@ func (p *Proxy) GetState() cluster.State {
 
 // SetState 设置当前节点状态
 func (p *Proxy) SetState(state cluster.State) error {
-	return p.node.updateState(state)
+	return p.node.setState(state)
 }
 
 // Router 路由器
