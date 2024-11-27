@@ -14,6 +14,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
+	"github.com/dobyte/due/v2/transport"
 	"github.com/jinzhu/copier"
 	"sync/atomic"
 	"time"
@@ -360,6 +361,15 @@ func (r *request) Disconnect(force ...bool) error {
 		Target: r.cid,
 		Force:  len(force) > 0 && force[0],
 	})
+}
+
+// NewMeshClient 新建微服务客户端
+// target参数可分为三种种模式:
+// 服务直连模式: 	direct://127.0.0.1:8011
+// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+// 服务发现模式: 	discovery://service_name
+func (r *request) NewMeshClient(target string) (transport.Client, error) {
+	return r.node.proxy.NewMeshClient(target)
 }
 
 // 保存当前Actor
