@@ -14,16 +14,16 @@ import (
 // config配置中心的配置信息可通过master管理服进行动态修改。
 
 const (
-	dueEtcArgName  = "etc"
 	dueEtcEnvName  = "DUE_ETC"
+	dueEtcArgName  = "etc"
 	defaultEtcPath = "./etc"
 )
 
 var globalConfigurator config.Configurator
 
 func init() {
-	path := flag.String(dueEtcArgName, defaultEtcPath)
-	path = env.Get(dueEtcEnvName, path).String()
+	path := env.Get(dueEtcEnvName, defaultEtcPath).String()
+	path = flag.String(dueEtcArgName, path)
 	globalConfigurator = config.NewConfigurator(config.WithSources(core.NewSource(path, config.ReadOnly)))
 }
 
