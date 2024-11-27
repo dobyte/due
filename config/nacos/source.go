@@ -123,13 +123,19 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	_, err := s.opts.client.PublishConfig(vo.ConfigParam{
+	data := string(content)
+
+	ok, err := s.opts.client.PublishConfig(vo.ConfigParam{
 		DataId:  file,
 		Group:   s.opts.groupName,
-		Content: string(content),
+		Content: data,
 	})
 	if err != nil {
 		return err
+	}
+
+	if ok {
+		s.onChange(s.opts.namespaceId, s.opts.groupName, file, data)
 	}
 
 	return nil
@@ -272,7 +278,7 @@ func (s *Source) search() {
 	}
 }
 
-func (s *Source) onChange(_, group, file, content string) {
+func (s *Source) onChange(_, _, file, content string) {
 	configuration := conv(file, content)
 
 	s.rw.RLock()
