@@ -49,8 +49,7 @@ func (w *watcher) init() (err error) {
 	w.plan.Handler = w.planHandler
 
 	xcall.Go(func() {
-		err = w.plan.RunWithClientAndHclog(w.source.opts.client, nil)
-		if err != nil {
+		if err = w.plan.RunWithClientAndHclog(w.source.opts.client, nil); err != nil {
 			log.Fatalf("create watcher failed: %v", err)
 		}
 	})
@@ -70,21 +69,27 @@ func (w *watcher) planHandler(idx uint64, raw interface{}) {
 
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		fullPath := kv.Key
-		path := strings.TrimPrefix(fullPath, w.source.opts.path)
-		file := filepath.Base(fullPath)
-		ext := filepath.Ext(file)
-		configs = append(configs, &config.Configuration{
-			Path:     path,
-			File:     file,
-			Name:     strings.TrimSuffix(file, ext),
-			Format:   strings.TrimPrefix(ext, "."),
-			Content:  kv.Value,
-			FullPath: fullPath,
-		})
+		configs = append(configs, w.parseKV(kv.Key, kv.Value))
 	}
 
 	w.chWatch <- configs
+}
+
+// 解析KV
+func (w *watcher) parseKV(key string, value []byte) *config.Configuration {
+	fullPath := key
+	path := strings.TrimPrefix(fullPath, w.source.opts.path)
+	file := filepath.Base(fullPath)
+	ext := filepath.Ext(file)
+
+	return &config.Configuration{
+		Path:     path,
+		File:     file,
+		Name:     strings.TrimSuffix(file, ext),
+		Format:   strings.TrimPrefix(ext, "."),
+		Content:  value,
+		FullPath: fullPath,
+	}
 }
 
 // Next 返回配置列表
