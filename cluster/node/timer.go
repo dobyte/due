@@ -11,7 +11,7 @@ type Timer struct {
 func (t *Timer) Stop() (ok bool) {
 	defer func() {
 		if ok && t.node != nil {
-			t.node.wg.Add(-1)
+			t.node.doneWait()
 		}
 	}()
 

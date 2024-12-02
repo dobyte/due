@@ -48,7 +48,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	if act.opts.wait {
-		s.node.wg.Add(1)
+		s.node.addWait()
 	}
 
 	act.processor.Init()
@@ -81,7 +81,7 @@ func (s *Scheduler) kill(kind, id string) bool {
 	ok = act.destroy()
 
 	if act.opts.wait {
-		s.node.wg.Done()
+		s.node.doneWait()
 	}
 
 	return ok

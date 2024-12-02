@@ -201,7 +201,7 @@ func (n *Node) dispatch() {
 				}
 				xcall.Call(func() {
 					handle()
-					n.wg.Done()
+					n.doneWait()
 				})
 			}
 		}
@@ -448,4 +448,16 @@ func (n *Node) printInfo() {
 	}
 
 	info.PrintBoxInfo("Node", infos...)
+}
+
+func (n *Node) doneWait() {
+	if n.getState() != cluster.Shut {
+		n.wg.Done()
+	}
+}
+
+func (n *Node) addWait() {
+	if n.getState() != cluster.Shut {
+		n.wg.Add(1)
+	}
 }

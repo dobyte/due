@@ -137,7 +137,7 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 	}
 
 	if nid == p.node.opts.id {
-		p.node.wg.Add(1)
+		p.node.addWait()
 	}
 
 	return nil
@@ -158,7 +158,7 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 	}
 
 	if nid == p.node.opts.id {
-		p.node.wg.Done()
+		p.node.doneWait()
 	}
 
 	return nil
@@ -280,16 +280,17 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 
 // Invoke 调用函数（线程安全）
 func (p *Proxy) Invoke(fn func()) {
-	p.node.wg.Add(1)
+	p.node.addWait()
 	p.node.fnChan <- fn
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 func (p *Proxy) AfterFunc(d time.Duration, f func()) *Timer {
-	p.node.wg.Add(1)
+	p.node.addWait()
+
 	timer := time.AfterFunc(d, func() {
 		f()
-		p.node.wg.Done()
+		p.node.doneWait()
 	})
 
 	return &Timer{node: p.node, timer: timer}
@@ -297,7 +298,8 @@ func (p *Proxy) AfterFunc(d time.Duration, f func()) *Timer {
 
 // AfterInvoke 延迟调用（线程安全）
 func (p *Proxy) AfterInvoke(d time.Duration, f func()) *Timer {
-	p.node.wg.Add(1)
+	p.node.addWait()
+
 	timer := time.AfterFunc(d, func() {
 		p.node.fnChan <- f
 	})
