@@ -2,9 +2,13 @@ package writer
 
 import (
 	"bufio"
+	"compress/gzip"
 	"fmt"
+	"github.com/dobyte/due/v2/utils/xfile"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,12 +28,14 @@ type Writer struct {
 	fileDir  string
 	fileName string
 	fileExt  string
+	gzipExt  string
 	loc      *time.Location
 	size     int64
-	no       int64
 	mu       sync.Mutex
 	file     *os.File
 	writer   *bufio.Writer
+	tag      string
+	version  int64
 	acc      atomic.Int64
 	chWrite  chan []byte
 	flushing bool
@@ -49,8 +55,13 @@ func NewWriter(opts ...Option) *Writer {
 }
 
 func (w *Writer) init() {
-	path, file := filepath.Split(w.opts.filePath)
+	if loc, err := time.LoadLocation(w.opts.timezone); err != nil {
+		w.loc = time.Local
+	} else {
+		w.loc = loc
+	}
 
+	path, file := filepath.Split(w.opts.filePath)
 	list := strings.Split(file, ".")
 	switch c := len(list); c {
 	case 1:
@@ -60,12 +71,15 @@ func (w *Writer) init() {
 	}
 
 	w.fileDir = path
+	w.gzipExt = ".tar.gz"
 	w.chWrite = make(chan []byte, 4096)
 
-	if loc, err := time.LoadLocation(w.opts.timezone); err != nil {
-		w.loc = time.Local
-	} else {
-		w.loc = loc
+	if err := w.sureFileMark(); err != nil {
+		return
+	}
+
+	if err := w.tryRotateFile(); err != nil {
+		return
 	}
 }
 
@@ -161,59 +175,81 @@ func (w *Writer) flushToFile(b ...[]byte) (n int, err error) {
 // 打开文件
 func (w *Writer) openFile() error {
 	if _, err := os.Stat(w.fileDir); err != nil {
-		if err = os.MkdirAll(filepath.Dir(w.opts.filePath), 0755); err != nil {
+		if err = os.MkdirAll(filepath.Dir(w.opts.filePath), 0644); err != nil {
 			return err
 		}
 	}
 
-	f, err := os.OpenFile(w.opts.filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	if tag := w.makeFileTag(w.now()); tag == w.tag {
+		w.version++
+	} else {
+		w.tag = tag
+		w.version = 1
+	}
+
+	file, err := os.OpenFile(w.opts.filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
 
-	fi, err := f.Stat()
+	fi, err := file.Stat()
 	if err != nil {
 		return err
 	}
 
 	w.size += fi.Size()
-	w.file = f
+	w.file = file
 
 	if w.writer == nil {
-		w.writer = bufio.NewWriter(f)
+		w.writer = bufio.NewWriter(file)
 	} else {
-		w.writer.Reset(f)
+		w.writer.Reset(file)
 	}
 
 	return nil
 }
 
+// 尝试翻滚文件
+func (w *Writer) tryRotateFile() error {
+	fi, err := xfile.Stat(w.opts.filePath)
+	if err != nil {
+		return err
+	}
+
+	tag := w.makeFileTag(fi.CreateTime())
+
+	if tag == w.tag {
+		return nil
+	}
+
+	filePath := filepath.Join(w.fileDir, w.makeFileName(tag, w.version, w.fileExt))
+
+	if err = os.Rename(w.opts.filePath, filePath); err != nil {
+		return err
+	}
+
+	if !w.opts.compress {
+		return nil
+	}
+
+	gzipPath := filepath.Join(w.fileDir, w.makeFileName(tag, w.version, w.gzipExt))
+
+	return w.compressFile(gzipPath, filePath)
+}
+
 // 翻滚文件
-func (w *Writer) rotateFile(t time.Time, id int) error {
+func (w *Writer) rotateFile() error {
+	if w.file == nil {
+		return nil
+	}
+
 	if err := w.file.Close(); err != nil {
 		return err
 	}
 
-	var newFileName string
+	filePath := filepath.Join(w.fileDir, w.makeFileName(w.tag, w.version, w.fileExt))
 
-	switch w.opts.fileRotate {
-	case FileRotateByYear:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("2006"), id, w.fileExt)
-	case FileRotateByMonth:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("200601"), id, w.fileExt)
-	case FileRotateByDay:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("20060102"), id, w.fileExt)
-	case FileRotateByHour:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("2006010215"), id, w.fileExt)
-	case FileRotateByMinute:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("200601021504"), id, w.fileExt)
-	case FileRotateBySecond:
-		newFileName = fmt.Sprintf("%s.%s.%d%s", w.fileName, t.Format("20060102150405"), id, w.fileExt)
-	default:
-		newFileName = fmt.Sprintf("%s.%d%s", w.fileName, id, w.fileExt)
-	}
-
-	if err := os.Rename(w.opts.filePath, filepath.Join(w.fileDir, newFileName)); err != nil {
+	if err := os.Rename(w.opts.filePath, filePath); err != nil {
 		return err
 	}
 
@@ -223,8 +259,111 @@ func (w *Writer) rotateFile(t time.Time, id int) error {
 }
 
 // 压缩文件
-func (w *Writer) compressFile() {
+func (w *Writer) compressFile(dst, src string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
 
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	dstWriter := gzip.NewWriter(dstFile)
+	srcReader := bufio.NewReader(srcFile)
+
+	if _, err = io.Copy(dstWriter, srcReader); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// 确定文件
+func (w *Writer) sureFileMark() error {
+	entries, err := os.ReadDir(w.fileDir)
+	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		return err
+	}
+
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+
+		if entry.IsDir() {
+			continue
+		}
+
+		fileName := entry.Name()
+
+		if len(fileName) < len(w.fileName)+len(w.fileExt)+1 {
+			continue
+		}
+
+		if w.fileName != fileName[0:len(w.fileName)] {
+			continue
+		}
+
+		if w.fileExt != fileName[len(fileName)-len(w.fileExt):] {
+			continue
+		}
+
+		tags := strings.Split(fileName[len(w.fileName):len(fileName)-len(w.fileExt)], ".")
+
+		switch len(tags) {
+		case 2:
+			if version, err := strconv.ParseInt(tags[1], 10, 64); err != nil {
+				continue
+			} else {
+				w.version = version
+			}
+		case 3:
+			if version, err := strconv.ParseInt(tags[2], 10, 64); err != nil {
+				continue
+			} else {
+				w.tag = tags[1]
+				w.version = version
+			}
+		default:
+			continue
+		}
+
+		break
+	}
+
+	return nil
+}
+
+// 生成文件名称
+func (w *Writer) makeFileName(tag string, version int64, fileExt string) string {
+	if tag == "" {
+		return fmt.Sprintf("%s.%d%s", w.fileName, version, fileExt)
+	} else {
+		return fmt.Sprintf("%s.%s.%d%s", w.fileName, tag, version, fileExt)
+	}
+}
+
+// 生成文件标签
+func (w *Writer) makeFileTag(t time.Time) string {
+	switch w.opts.fileRotate {
+	case FileRotateByYear:
+		return t.Format("2006")
+	case FileRotateByMonth:
+		return t.Format("200601")
+	case FileRotateByDay:
+		return t.Format("20060102")
+	case FileRotateByHour:
+		return t.Format("2006010215")
+	case FileRotateByMinute:
+		return t.Format("200601021504")
+	case FileRotateBySecond:
+		return t.Format("20060102150405")
+	default:
+		return ""
+	}
 }
 
 // 获取当前时间
