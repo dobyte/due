@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"github.com/dobyte/due/v2/eventbus"
-	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/go-redis/redis/v8"
 	"strings"
@@ -111,8 +110,6 @@ func (eb *Eventbus) watch() {
 		}
 
 		switch v := iface.(type) {
-		case *redis.Subscription:
-			log.Debugf("channel subscribe succeeded, %s", v.Channel)
 		case *redis.Message:
 			topic := eb.parseChannelKey(v.Channel)
 
