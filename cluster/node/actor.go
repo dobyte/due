@@ -90,6 +90,10 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
 	}
 
 	timer := time.AfterFunc(d, func() {
+		if a.state.Load() != started {
+			return
+		}
+
 		a.fnChan <- f
 	})
 
