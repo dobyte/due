@@ -68,28 +68,34 @@ func (a *Actor) Invoke(fn func()) {
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 func (a *Actor) AfterFunc(d time.Duration, f func()) *Timer {
-	a.rw.RLock()
-	defer a.rw.RUnlock()
-
 	if a.state.Load() != started {
 		return nil
 	}
 
-	timer := time.AfterFunc(d, f)
+	timer := time.AfterFunc(d, func() {
+		a.rw.RLock()
+		defer a.rw.RUnlock()
+
+		if a.state.Load() != started {
+			return
+		}
+
+		f()
+	})
 
 	return &Timer{timer: timer}
 }
 
 // AfterInvoke 延迟调用（线程安全）
 func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
-	a.rw.RLock()
-	defer a.rw.RUnlock()
-
 	if a.state.Load() != started {
 		return nil
 	}
 
 	timer := time.AfterFunc(d, func() {
+		a.rw.RLock()
+		defer a.rw.RUnlock()
+
 		if a.state.Load() != started {
 			return
 		}
