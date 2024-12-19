@@ -1,6 +1,8 @@
 module github.com/dobyte/due/transport/grpc/v2
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.3
@@ -25,7 +27,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect

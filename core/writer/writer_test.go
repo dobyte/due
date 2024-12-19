@@ -12,6 +12,7 @@ func TestWriter_Write(t *testing.T) {
 	w := writer.NewWriter(
 		writer.WithFileMaxSize(2*writer.KB),
 		writer.WithFileRotate(writer.FileRotateByMinute),
+		writer.WithCompress(true),
 	)
 
 	if _, err := w.Write([]byte(str)); err != nil {

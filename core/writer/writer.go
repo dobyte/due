@@ -2,9 +2,9 @@ package writer
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"github.com/dobyte/due/v2/utils/xfile"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"os"
 	"path/filepath"
@@ -71,7 +71,7 @@ func (w *Writer) init() {
 	}
 
 	w.fileDir = path
-	w.gzipExt = ".tar.gz"
+	w.gzipExt = ".gz"
 	w.chWrite = make(chan []byte, 4096)
 
 	if err := w.sureFileMark(); err != nil {
@@ -259,25 +259,43 @@ func (w *Writer) rotateFile() error {
 }
 
 // 压缩文件
-func (w *Writer) compressFile(dst, src string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
+func (w *Writer) compressFile(dst, src string) (err error) {
+	var (
+		srcFile *os.File
+		dstFile *os.File
+	)
+
+	if srcFile, err = os.Open(src); err != nil {
+		return
+	}
+
+	defer func() {
+		_ = srcFile.Close()
+
+		if err == nil {
+			_ = os.Remove(src)
+		}
+	}()
+
+	if dstFile, err = os.Create(dst); err != nil {
 		return err
 	}
 
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
+	defer func() {
+		_ = dstFile.Close()
+	}()
 
 	dstWriter := gzip.NewWriter(dstFile)
-	srcReader := bufio.NewReader(srcFile)
 
-	if _, err = io.Copy(dstWriter, srcReader); err != nil {
-		return err
+	defer func() {
+		_ = dstWriter.Close()
+	}()
+
+	if _, err = io.Copy(dstWriter, bufio.NewReader(srcFile)); err != nil {
+		return
 	}
 
-	return nil
+	return
 }
 
 // 确定文件
@@ -307,11 +325,18 @@ func (w *Writer) sureFileMark() error {
 			continue
 		}
 
-		if w.fileExt != fileName[len(fileName)-len(w.fileExt):] {
+		var tags []string
+
+		switch {
+		case w.fileExt == fileName[len(fileName)-len(w.fileExt):]:
+			tags = strings.Split(fileName[len(w.fileName):len(fileName)-len(w.fileExt)], ".")
+		case w.gzipExt == fileName[len(fileName)-len(w.gzipExt):]:
+			tags = strings.Split(fileName[len(w.fileName):len(fileName)-len(w.gzipExt)], ".")
+		default:
 			continue
 		}
 
-		tags := strings.Split(fileName[len(w.fileName):len(fileName)-len(w.fileExt)], ".")
+		fmt.Println("-----------------", tags)
 
 		switch len(tags) {
 		case 2:

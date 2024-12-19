@@ -1,6 +1,8 @@
 module github.com/dobyte/due/registry/etcd/v2
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.3
@@ -32,7 +34,7 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	google.golang.org/genproto v0.0.0-20241015192408-796eee8c2d53 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241015192408-796eee8c2d53 // indirect

@@ -1,6 +1,8 @@
 module github.com/dobyte/due/log/zap/v2
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.3
@@ -23,7 +25,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
