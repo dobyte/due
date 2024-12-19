@@ -1,4 +1,4 @@
-# due 一站式分布式游戏服务器解决方案
+# due 基于Go语言开发的高性能分布式游戏服务器框架
 
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
 [![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/v2/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
@@ -10,8 +10,9 @@
 
 ### 1.介绍
 
-due是一款基于Go语言开发的轻量级分布式游戏服务器框架。
+due是一款基于Go语言开发的轻量级、高性能分布式游戏服务器框架。
 其中，模块设计方面借鉴了[kratos](https://github.com/go-kratos/kratos)的模块设计思路，旨在为游戏服务器开发提供完善、高效、标准化的解决方案。
+框架自创建至今已在多个企业级游戏项目中上线实践过，稳定性有充分的保障。
 
 ![架构图](architecture.jpg)
 
@@ -372,7 +373,7 @@ func greetHandler(ctx node.Context) {
    log.Info(req.Message)
 
    res.Code = codes.OK.Code()
-   res.Message = fmt.Sprintf("I'm server, and the current time is: %s", xtime.Now().Format(xtime.DatetimeLayout))
+   res.Message = fmt.Sprintf("I'm server, and the current time is: %s", xtime.Now().Format(xtime.DateTime))
 }
 ```
 
@@ -489,7 +490,7 @@ func doPushMessage(conn *client.Conn) {
    err := conn.Push(&cluster.Message{
       Route: 1,
       Data: &greetReq{
-         Message: fmt.Sprintf("I'm client, and the current time is: %s", xtime.Now().Format(xtime.DatetimeLayout)),
+         Message: fmt.Sprintf("I'm client, and the current time is: %s", xtime.Now().Format(xtime.DateTime)),
       },
    })
    if err != nil {
@@ -667,16 +668,30 @@ throughput (TPS)     : 128969
 9. 缓存组件
    * redis: github.com/dobyte/due/cache/redis/v2
 
-### 14.详细示例
-
-更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples)
-
-### 15.其他客户端
+### 14.其他客户端
 
 * [due-client-ts](https://github.com/dobyte/due-client-ts)
 * [due-client-shape](https://github.com/dobyte/due-client-shape)
 
-### 16.交流与讨论
+### 15.详细示例
+
+- [due-examples](https://github.com/dobyte/due-examples)
+- [due-chat](https://github.com/dobyte/due-chat)
+
+### 16.三方示例
+
+<ul>
+   <li style="line-height:30px;padding: 5px 0;">
+      <a style="line-height: 30px;float: left;" href="https://github.com/Zekiee"><img alt="Zekiee" src="https://avatars.githubusercontent.com/u/69623693?v=4" style="width:30px;height:30px;display:block;border-radius:50%;"></a>
+      <a style="line-height: 30px;float: left;margin-left: 10px;" href="https://github.com/Zekiee/due-game-example">due-game-example</a>
+   </li>
+   <li style="line-height:30px;padding: 5px 0;">
+      <a style="line-height: 30px;float: left;" href="https://github.com/lingfan"><img alt="lingfan" src="https://avatars.githubusercontent.com/u/455872?v=4" style="width:30px;height:30px;display:block;border-radius:50%;"></a>
+      <a style="line-height: 30px;float: left;margin-left: 10px;" href="https://github.com/lingfan/due-v2-example">due-v2-example</a>
+   </li>
+</ul>
+
+### 17.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 
