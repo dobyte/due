@@ -1,4 +1,4 @@
-package writer
+package log
 
 type FileRotate int
 

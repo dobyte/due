@@ -52,6 +52,7 @@ var (
 	ErrUnregisterRoute       = New("unregistered route")
 	ErrNotBindActor          = New("not bind actor")
 	ErrNotFoundActor         = New("not found actor")
+	ErrWriterClosing         = New("writer is closing")
 )
 
 // NewError 新建一个错误

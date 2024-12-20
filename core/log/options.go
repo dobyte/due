@@ -1,4 +1,4 @@
-package writer
+package log
 
 const (
 	defaultFilePath    = "./log/due.log"

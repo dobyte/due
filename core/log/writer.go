@@ -1,8 +1,9 @@
-package writer
+package log
 
 import (
 	"bufio"
 	"fmt"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xfile"
 	gzip "github.com/klauspost/pgzip"
 	"io"
@@ -23,22 +24,27 @@ const (
 	TB
 )
 
+const gzipExt = ".gz"
+
 type Writer struct {
-	opts     *options
-	fileDir  string
-	fileName string
-	fileExt  string
-	gzipExt  string
-	loc      *time.Location
-	size     int64
-	mu       sync.Mutex
-	file     *os.File
-	writer   *bufio.Writer
-	tag      string
-	version  int64
-	acc      atomic.Int64
-	chWrite  chan []byte
-	flushing bool
+	opts        *options
+	fileDir     string
+	fileName    string
+	fileExt     string
+	gzipExt     string
+	loc         *time.Location
+	mu          sync.Mutex
+	size        int64
+	file        *os.File
+	writer      *bufio.Writer
+	tag         string
+	version     int64
+	acc         atomic.Int64
+	chWrite     chan []byte
+	closing     atomic.Bool
+	flushing    bool
+	compressing bool
+	wg          sync.WaitGroup
 }
 
 func NewWriter(opts ...Option) *Writer {
@@ -71,20 +77,35 @@ func (w *Writer) init() {
 	}
 
 	w.fileDir = path
-	w.gzipExt = ".gz"
+	w.gzipExt = gzipExt
 	w.chWrite = make(chan []byte, 4096)
 
 	if err := w.sureFileMark(); err != nil {
 		return
 	}
 
-	if err := w.tryRotateFile(); err != nil {
+	fi, err := xfile.Stat(w.opts.filePath)
+	if err != nil {
+		return
+	}
+
+	tag := w.makeFileTag(fi.CreateTime())
+
+	if tag == w.tag {
+		return
+	}
+
+	if err = w.doRotateFile(tag, w.version); err != nil {
 		return
 	}
 }
 
 // 写入数据
 func (w *Writer) Write(p []byte) (n int, err error) {
+	if w.closing.Load() {
+		return 0, errors.ErrWriterClosing
+	}
+
 	if w.mu.TryLock() {
 		defer w.mu.Unlock()
 
@@ -104,13 +125,19 @@ func (w *Writer) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.file == nil {
-		return nil
+	if !w.closing.CompareAndSwap(false, true) {
+		return errors.ErrWriterClosing
 	}
 
 	_, _ = w.flushToFile()
 
+	w.wg.Wait()
+
 	close(w.chWrite)
+
+	if w.file == nil {
+		return nil
+	}
 
 	return w.file.Close()
 }
@@ -133,25 +160,36 @@ HEAD:
 
 // 写入将缓冲区数据写入文件
 func (w *Writer) flushToFile(b ...[]byte) (n int, err error) {
-	if w.file == nil {
-		if err = w.openFile(); err != nil {
-			return
+	acc := w.acc.Load()
+
+	if acc > 0 || (len(b) > 0 && len(b[0]) > 0) {
+		if w.file == nil {
+			if err = w.openFile(); err != nil {
+				return
+			}
 		}
 	}
 
-	if acc := w.acc.Load(); acc > 0 {
+	if acc > 0 {
 		w.flushing = true
 
 		defer func() {
 			w.flushing = false
 		}()
 
+		var size int
+
 		for p := range w.chWrite {
-			if _, err = w.writer.Write(p); err != nil {
+			if size, err = w.writer.Write(p); err != nil {
 				return
 			}
 
+			w.size += int64(size)
 			w.acc.Add(-1)
+
+			if err = w.tryRotateFile(); err != nil {
+				return
+			}
 
 			acc--
 
@@ -166,7 +204,11 @@ func (w *Writer) flushToFile(b ...[]byte) (n int, err error) {
 			return
 		}
 
+		w.size += int64(n)
+
 		_ = w.writer.Flush()
+
+		_ = w.tryRotateFile()
 	}
 
 	return
@@ -197,7 +239,7 @@ func (w *Writer) openFile() error {
 		return err
 	}
 
-	w.size += fi.Size()
+	w.size = fi.Size()
 	w.file = file
 
 	if w.writer == nil {
@@ -211,30 +253,11 @@ func (w *Writer) openFile() error {
 
 // 尝试翻滚文件
 func (w *Writer) tryRotateFile() error {
-	fi, err := xfile.Stat(w.opts.filePath)
-	if err != nil {
-		return err
+	if w.size >= w.opts.fileMaxSize {
+		return w.rotateFile()
 	}
 
-	tag := w.makeFileTag(fi.CreateTime())
-
-	if tag == w.tag {
-		return nil
-	}
-
-	filePath := filepath.Join(w.fileDir, w.makeFileName(tag, w.version, w.fileExt))
-
-	if err = os.Rename(w.opts.filePath, filePath); err != nil {
-		return err
-	}
-
-	if !w.opts.compress {
-		return nil
-	}
-
-	gzipPath := filepath.Join(w.fileDir, w.makeFileName(tag, w.version, w.gzipExt))
-
-	return w.compressFile(gzipPath, filePath)
+	return nil
 }
 
 // 翻滚文件
@@ -247,15 +270,36 @@ func (w *Writer) rotateFile() error {
 		return err
 	}
 
-	filePath := filepath.Join(w.fileDir, w.makeFileName(w.tag, w.version, w.fileExt))
+	return w.doRotateFile(w.tag, w.version)
+}
 
-	if err := os.Rename(w.opts.filePath, filePath); err != nil {
-		return err
+// 处理翻转文件
+func (w *Writer) doRotateFile(tag string, version int64) (err error) {
+	filePath := filepath.Join(w.fileDir, w.makeFileName(tag, version, w.fileExt))
+
+	if err = os.Rename(w.opts.filePath, filePath); err != nil {
+		return
 	}
 
-	w.size = 0
+	if err = w.openFile(); err != nil {
+		return
+	}
 
-	return w.openFile()
+	if !w.opts.compress {
+		return
+	}
+
+	gzipPath := filepath.Join(w.fileDir, w.makeFileName(tag, version, w.gzipExt))
+
+	w.wg.Add(1)
+
+	go func() {
+		_ = w.compressFile(gzipPath, filePath)
+
+		w.wg.Done()
+	}()
+
+	return
 }
 
 // 压缩文件
@@ -308,9 +352,7 @@ func (w *Writer) sureFileMark() error {
 		return err
 	}
 
-	for i := len(entries) - 1; i >= 0; i-- {
-		entry := entries[i]
-
+	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
@@ -336,30 +378,45 @@ func (w *Writer) sureFileMark() error {
 			continue
 		}
 
-		fmt.Println("-----------------", tags)
-
 		switch len(tags) {
 		case 2:
 			if version, err := strconv.ParseInt(tags[1], 10, 64); err != nil {
 				continue
 			} else {
-				w.version = version
+				w.filterFileMark("", version)
 			}
 		case 3:
 			if version, err := strconv.ParseInt(tags[2], 10, 64); err != nil {
 				continue
 			} else {
-				w.tag = tags[1]
-				w.version = version
+				w.filterFileMark(tags[1], version)
 			}
 		default:
-			continue
+			// ignore
 		}
+	}
 
-		break
+	if tag := w.makeFileTag(w.now()); tag != w.tag {
+		w.tag = tag
+		w.version = 0
 	}
 
 	return nil
+}
+
+// 过滤文件标识
+func (w *Writer) filterFileMark(tag string, version int64) {
+	switch {
+	case tag > w.tag:
+		w.tag = tag
+		w.version = version
+	case tag == w.tag:
+		if version > w.version {
+			w.version = version
+		}
+	default:
+		// ignore
+	}
 }
 
 // 生成文件名称
