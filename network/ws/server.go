@@ -109,7 +109,7 @@ func (s *server) serve() {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
-		EnableCompression: true,
+		EnableCompression: false,
 		CheckOrigin:       s.opts.checkOrigin,
 	}
 
