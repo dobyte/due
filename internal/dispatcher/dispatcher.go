@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"sync"
 )
 
@@ -84,6 +85,8 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	routes := make(map[int32]*Route, len(services))
 	events := make(map[int]*Event, len(services))
 	endpoints := make(map[string]*endpoint.Endpoint)
+
+	log.Debugf("services change: %v", xconv.Json(services))
 
 	for _, service := range services {
 		ep, err := endpoint.ParseEndpoint(service.Endpoint)
