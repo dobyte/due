@@ -11,7 +11,6 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
-	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"time"
 
@@ -35,15 +34,14 @@ const (
 type Option func(o *options)
 
 type options struct {
-	ctx         context.Context       // 上下文
-	id          string                // 实例ID
-	name        string                // 实例名称
-	addr        string                // 监听地址
-	timeout     time.Duration         // RPC调用超时时间
-	server      network.Server        // 网关服务器
-	locator     locate.Locator        // 用户定位器
-	registry    registry.Registry     // 服务注册器
-	transporter transport.Transporter // 消息传输器
+	ctx      context.Context   // 上下文
+	id       string            // 实例ID
+	name     string            // 实例名称
+	addr     string            // 监听地址
+	timeout  time.Duration     // RPC调用超时时间
+	server   network.Server    // 网关服务器
+	locator  locate.Locator    // 用户定位器
+	registry registry.Registry // 服务注册器
 }
 
 func defaultOptions() *options {
