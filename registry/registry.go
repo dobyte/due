@@ -50,6 +50,8 @@ type ServiceInstance struct {
 	Services []string `json:"services,omitempty"`
 	// 微服务实体暴露端口
 	Endpoint string `json:"endpoint,omitempty"`
+	// 微服务路由加权轮询权重
+	Weight int `json:"weight,omitempty"`
 }
 
 type Route struct {

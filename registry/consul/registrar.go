@@ -21,6 +21,7 @@ const (
 	metaFieldState    = "state"
 	metaFieldRoutes   = "routes"
 	metaFieldEvents   = "events"
+	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
 )
@@ -79,6 +80,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration.Meta[metaFieldState] = ins.State
 	registration.Meta[metaFieldEndpoint] = ins.Endpoint
 	registration.Meta[metaFieldEvents] = xconv.Json(ins.Events)
+	registration.Meta[metaFieldWeight] = xconv.String(ins.Weight)
 	registration.Meta[metaFieldServices] = xconv.Json(ins.Services)
 
 	for field, value := range marshalMetaRoutes(ins.Routes) {

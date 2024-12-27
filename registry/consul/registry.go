@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
 	"sync"
 	"time"
@@ -147,6 +148,8 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				ins.Alias = v
 			case metaFieldState:
 				ins.State = v
+			case metaFieldWeight:
+				ins.Weight = xconv.Int(v)
 			case metaFieldEvents:
 				if err = json.Unmarshal([]byte(v), &ins.Events); err != nil {
 					continue

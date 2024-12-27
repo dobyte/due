@@ -10,6 +10,7 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"net"
 	"net/url"
 	"strconv"
@@ -219,6 +220,7 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 		ins.Routes = make([]registry.Route, 0)
 		ins.Events = make([]int, 0)
 		ins.Services = make([]string, 0)
+		ins.Weight = xconv.Int(instance.Metadata[metaFieldWeight])
 
 		if v := instance.Metadata[metaFieldRoutes]; v != "" {
 			if err := json.Unmarshal([]byte(v), &ins.Routes); err != nil {

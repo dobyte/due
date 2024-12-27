@@ -23,6 +23,7 @@ type Dispatcher struct {
 	routes    map[int32]*Route
 	events    map[int]*Event
 	endpoints map[string]*endpoint.Endpoint
+	instances map[string]*registry.ServiceInstance
 }
 
 func NewDispatcher(strategy BalanceStrategy) *Dispatcher {
@@ -85,6 +86,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	routes := make(map[int32]*Route, len(services))
 	events := make(map[int]*Event, len(services))
 	endpoints := make(map[string]*endpoint.Endpoint)
+	instances := make(map[string]*registry.ServiceInstance, len(services))
 
 	log.Debugf("services change: %v", xconv.Json(services))
 
@@ -97,6 +99,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 		}
 
 		endpoints[service.ID] = ep
+		instances[service.ID] = service
 
 		for _, item := range service.Routes {
 			route, ok := routes[item.ID]
@@ -121,5 +124,15 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	d.routes = routes
 	d.events = events
 	d.endpoints = endpoints
+	d.instances = instances
+	
+	if d.strategy == WeightRoundRobin {
+        for _, route := range routes {
+            route.initWRRQueue()
+        }
+        for _, event := range events {
+			event.initWRRQueue()
+		}
+	}
 	d.rw.Unlock()
 }
