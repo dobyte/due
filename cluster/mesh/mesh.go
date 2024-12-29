@@ -153,6 +153,7 @@ func (m *Mesh) registerServiceInstances() {
 		Kind:     cluster.Mesh.String(),
 		Alias:    m.opts.name,
 		State:    m.getState().String(),
+		Weight:   m.opts.weight,
 		Endpoint: m.transporter.Endpoint().String(),
 		Services: make([]string, 0, len(m.services)),
 	}
