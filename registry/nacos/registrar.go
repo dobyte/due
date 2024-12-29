@@ -5,6 +5,7 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 	"net"
 	"net/url"
@@ -19,6 +20,7 @@ const (
 	metaFieldState    = "state"
 	metaFieldRoutes   = "routes"
 	metaFieldEvents   = "events"
+	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
 )
@@ -73,6 +75,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 			metaFieldEvents:   string(events),
 			metaFieldServices: string(services),
 			metaFieldEndpoint: ins.Endpoint,
+			metaFieldWeight:   xconv.String(ins.Weight),
 		},
 	}
 

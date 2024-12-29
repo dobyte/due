@@ -22,6 +22,7 @@ const (
 	defaultName    = "gate"          // 默认名称
 	defaultAddr    = ":0"            // 连接器监听地址
 	defaultTimeout = 3 * time.Second // 默认超时时间
+	defaultWeight  = 1               // 默认权重
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 	defaultNameKey    = "etc.cluster.gate.name"
 	defaultAddrKey    = "etc.cluster.gate.addr"
 	defaultTimeoutKey = "etc.cluster.gate.timeout"
+	defaultWeightKey  = "etc.cluster.gate.weight"
 )
 
 type Option func(o *options)
@@ -39,6 +41,7 @@ type options struct {
 	name     string            // 实例名称
 	addr     string            // 监听地址
 	timeout  time.Duration     // RPC调用超时时间
+	weight   int               // 权重
 	server   network.Server    // 网关服务器
 	locator  locate.Locator    // 用户定位器
 	registry registry.Registry // 服务注册器
@@ -50,6 +53,7 @@ func defaultOptions() *options {
 		name:    defaultName,
 		addr:    defaultAddr,
 		timeout: defaultTimeout,
+		weight:  defaultWeight,
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -68,6 +72,10 @@ func defaultOptions() *options {
 
 	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
 		opts.timeout = timeout
+	}
+
+	if weight := etc.Get(defaultWeightKey).Int(); weight > 0 {
+		opts.weight = weight
 	}
 
 	return opts
@@ -106,4 +114,9 @@ func WithLocator(locator locate.Locator) Option {
 // WithRegistry 设置服务注册器
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
+}
+
+// WithWeight 设置权重
+func WithWeight(weight int) Option {
+	return func(o *options) { o.weight = weight }
 }

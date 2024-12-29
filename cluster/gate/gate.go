@@ -210,6 +210,7 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    g.getState().String(),
+		Weight:   g.opts.weight,
 		Endpoint: g.linker.Endpoint().String(),
 	}
 

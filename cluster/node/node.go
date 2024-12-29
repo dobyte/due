@@ -300,6 +300,7 @@ func (n *Node) registerServiceInstances() {
 		Routes:   routes,
 		Events:   events,
 		Endpoint: n.linker.Endpoint().String(),
+		Weight:   n.opts.weight,
 	})
 
 	if n.transporter != nil {
@@ -316,6 +317,7 @@ func (n *Node) registerServiceInstances() {
 			State:    n.getState().String(),
 			Services: services,
 			Endpoint: n.transporter.Endpoint().String(),
+			Weight:   n.opts.weight,
 		})
 	}
 

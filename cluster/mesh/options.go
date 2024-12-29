@@ -16,6 +16,7 @@ const (
 	defaultName    = "mesh"          // 默认节点名称
 	defaultCodec   = "proto"         // 默认编解码器名称
 	defaultTimeout = 3 * time.Second // 默认超时时间
+	defaultWeight  = 1               // 默认权重
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 	defaultNameKey    = "etc.cluster.mesh.name"
 	defaultCodecKey   = "etc.cluster.mesh.codec"
 	defaultTimeoutKey = "etc.cluster.mesh.timeout"
+	defaultWeightKey  = "etc.cluster.mesh.weight"
 )
 
 type Option func(o *options)
@@ -37,6 +39,7 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	encryptor   crypto.Encryptor      // 消息加密器
 	transporter transport.Transporter // 消息传输器
+	weight      int                   // 权重
 }
 
 func defaultOptions() *options {
@@ -45,6 +48,7 @@ func defaultOptions() *options {
 		name:    defaultName,
 		codec:   encoding.Invoke(defaultCodec),
 		timeout: defaultTimeout,
+		weight:  defaultWeight,
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -63,6 +67,10 @@ func defaultOptions() *options {
 
 	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
 		opts.timeout = timeout
+	}
+
+	if weight := etc.Get(defaultWeightKey).Int(); weight > 0 {
+		opts.weight = weight
 	}
 
 	return opts
@@ -106,4 +114,9 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
+}
+
+// WithWeight 设置权重
+func WithWeight(weight int) Option {
+	return func(o *options) { o.weight = weight }
 }
