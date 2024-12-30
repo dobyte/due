@@ -12,10 +12,21 @@ import (
 )
 
 type Config struct {
-	Title    string // 文档标题
-	FilePath string // 文档路径
-	BasePath string // 访问路径
+	Title            string // 文档标题
+	FilePath         string // 文档路径
+	BasePath         string // 访问路径
+	SwaggerBundleUrl string // swagger-ui-bundle.js地址
+	SwaggerPresetUrl string // swagger-ui-preset.js地址
+	SwaggerStylesUrl string // swagger-ui.css地址
 }
+
+const (
+	defaultSwaggerBundleUrl = "https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui-bundle.min.js"
+	defaultSwaggerPresetUrl = "https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui-standalone-preset.min.js"
+	defaultSwaggerStylesUrl = "https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui.min.css"
+	swaggerFavicon32Latest  = "https://unpkg.com/swagger-ui-dist/favicon-32x32.png"
+	swaggerFavicon16Latest  = "https://unpkg.com/swagger-ui-dist/favicon-16x16.png"
+)
 
 func New(cfg Config) fiber.Handler {
 	// Verify Swagger file exists
@@ -56,15 +67,27 @@ func New(cfg Config) fiber.Handler {
 		}
 	})
 
-	// Define UI Options
-	swaggerUIOpts := middleware.SwaggerUIOpts{
-		SpecURL: specURL,
-		Path:    cfg.BasePath,
-		Title:   cfg.Title,
+	if cfg.SwaggerBundleUrl == "" {
+		cfg.SwaggerBundleUrl = defaultSwaggerBundleUrl
+	}
+
+	if cfg.SwaggerPresetUrl == "" {
+		cfg.SwaggerPresetUrl = defaultSwaggerPresetUrl
+	}
+
+	if cfg.SwaggerStylesUrl == "" {
+		cfg.SwaggerStylesUrl = defaultSwaggerStylesUrl
 	}
 
 	// Create UI middleware
-	middlewareHandler := adaptor.HTTPHandler(middleware.SwaggerUI(swaggerUIOpts, swaggerSpecHandler))
+	middlewareHandler := adaptor.HTTPHandler(middleware.SwaggerUI(middleware.SwaggerUIOpts{
+		SpecURL:          specURL,
+		Path:             cfg.BasePath,
+		Title:            cfg.Title,
+		SwaggerURL:       cfg.SwaggerBundleUrl,
+		SwaggerPresetURL: cfg.SwaggerPresetUrl,
+		SwaggerStylesURL: cfg.SwaggerStylesUrl,
+	}, swaggerSpecHandler))
 
 	// Return new handler
 	return func(c fiber.Ctx) error {
