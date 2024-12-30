@@ -5,7 +5,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/utils/xconv"
 	"sync"
 )
 
@@ -88,8 +87,6 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	endpoints := make(map[string]*endpoint.Endpoint)
 	instances := make(map[string]*registry.ServiceInstance, len(services))
 
-	log.Debugf("services change: %v", xconv.Json(services))
-
 	for _, service := range services {
 		ep, err := endpoint.ParseEndpoint(service.Endpoint)
 		if err != nil {
@@ -125,12 +122,12 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	d.events = events
 	d.endpoints = endpoints
 	d.instances = instances
-	
+
 	if d.strategy == WeightRoundRobin {
-        for _, route := range routes {
-            route.initWRRQueue()
-        }
-        for _, event := range events {
+		for _, route := range routes {
+			route.initWRRQueue()
+		}
+		for _, event := range events {
 			event.initWRRQueue()
 		}
 	}
