@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"sync"
 )
 
@@ -210,6 +211,7 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 
 	act, ok := s.loadActor(uid, kind.(string))
 	if !ok {
+		log.Errorf("dispatch request failed, uid = %v route = %v kind = %v", uid, ctx.Route(), kind)
 		return errors.ErrNotBindActor
 	}
 
