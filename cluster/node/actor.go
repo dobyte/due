@@ -117,7 +117,10 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case started:
 		a.fnChan <- func() {
 			a.routes[route] = handler
-			a.scheduler.routes.Store(route, a.Kind())
+
+			if a.opts.dispatch {
+				a.scheduler.routes.Store(route, a.Kind())
+			}
 		}
 	default:
 		// ignore

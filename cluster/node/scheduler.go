@@ -54,11 +54,13 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 
 	act.processor.Init()
 
-	if _, ok := s.kinds.Load(act.Kind()); !ok {
-		s.kinds.Store(act.Kind(), struct{}{})
+	if act.opts.dispatch {
+		if _, ok := s.kinds.Load(act.Kind()); !ok {
+			s.kinds.Store(act.Kind(), struct{}{})
 
-		for route := range act.routes {
-			s.routes.Store(route, act.Kind())
+			for route := range act.routes {
+				s.routes.Store(route, act.Kind())
+			}
 		}
 	}
 
@@ -222,8 +224,11 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 
 // 分发事件
 func (s *Scheduler) dispatchEvent(ctx Context) error {
-	s.actors.Range(func(_, act any) bool {
-		act.(*Actor).Next(ctx)
+	s.actors.Range(func(_, actor any) bool {
+		if act := actor.(*Actor); act.opts.dispatch {
+			act.Next(ctx)
+		}
+
 		return true
 	})
 
