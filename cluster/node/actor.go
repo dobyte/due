@@ -41,7 +41,7 @@ func (a *Actor) PID() string {
 
 // Kind 获取Actor类型
 func (a *Actor) Kind() string {
-	return a.processor.Kind()
+	return a.opts.kind
 }
 
 // Spawn 衍生出一个Actor

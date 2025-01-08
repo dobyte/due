@@ -2,6 +2,7 @@ package node
 
 type actorOptions struct {
 	id       string // Actor编号
+	kind     string // Actor类型
 	args     []any  // 传递到Processor中的参数
 	wait     bool   // 是否需要等待
 	dispatch bool   // 是否接受调度器调度
@@ -16,6 +17,11 @@ func defaultActorOptions() *actorOptions {
 // WithActorID 设置Actor编号
 func WithActorID(id string) ActorOption {
 	return func(o *actorOptions) { o.id = id }
+}
+
+// WithActorKind 设置Actor类型
+func WithActorKind(kind string) ActorOption {
+	return func(o *actorOptions) { o.kind = kind }
 }
 
 // WithActorArgs 设置传递到Processor中的参数
