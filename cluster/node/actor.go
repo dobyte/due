@@ -224,6 +224,8 @@ func (a *Actor) destroy() bool {
 
 	close(a.fnChan)
 
+	a.processor = nil
+
 	return true
 }
 
