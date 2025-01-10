@@ -390,6 +390,7 @@ func (r *request) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
+		r.message.Data = nil
 		r.node.reqPool.Put(r)
 	}
 }
