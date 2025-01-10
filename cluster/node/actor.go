@@ -224,6 +224,10 @@ func (a *Actor) destroy() bool {
 
 	close(a.fnChan)
 
+	clear(a.routes)
+
+	clear(a.events)
+
 	a.processor = nil
 
 	return true
