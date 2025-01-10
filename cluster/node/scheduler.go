@@ -68,7 +68,8 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 
 	s.mu.Unlock()
 
-	act.dispatch()
+	go act.dispatch()
+	
 	act.processor.Start()
 
 	return act, nil

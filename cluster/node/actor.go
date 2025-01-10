@@ -246,35 +246,34 @@ func (a *Actor) unbindUser(uid int64) bool {
 
 // 分发
 func (a *Actor) dispatch() {
-	go func() {
-		for {
-			select {
-			case ctx, ok := <-a.mailbox:
-				if !ok {
-					return
-				}
-
-				version := ctx.loadVersion()
-
-				if ctx.Kind() == Event {
-					if handler, ok := a.events[ctx.Event()]; ok {
-						xcall.Call(func() { handler(ctx) })
-					}
-				} else {
-					if handler, ok := a.routes[ctx.Route()]; ok {
-						xcall.Call(func() { handler(ctx) })
-					}
-				}
-
-				ctx.compareVersionExecDefer(version)
-
-				ctx.compareVersionRecycle(version)
-			case handle, ok := <-a.fnChan:
-				if !ok {
-					return
-				}
-				xcall.Call(handle)
+	for {
+		select {
+		case ctx, ok := <-a.mailbox:
+			if !ok {
+				return
 			}
+
+			version := ctx.loadVersion()
+
+			if ctx.Kind() == Event {
+				if handler, ok := a.events[ctx.Event()]; ok {
+					xcall.Call(func() { handler(ctx) })
+				}
+			} else {
+				if handler, ok := a.routes[ctx.Route()]; ok {
+					xcall.Call(func() { handler(ctx) })
+				}
+			}
+
+			ctx.compareVersionExecDefer(version)
+
+			ctx.compareVersionRecycle(version)
+		case handle, ok := <-a.fnChan:
+			if !ok {
+				return
+			}
+
+			xcall.Call(handle)
 		}
-	}()
+	}
 }
