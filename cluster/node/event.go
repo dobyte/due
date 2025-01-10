@@ -320,6 +320,12 @@ func (e *event) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
+		if e.chain != nil {
+			e.chain.Cancel()
+		}
+
+		e.actor.Store((*Actor)(nil))
+
 		e.node.evtPool.Put(e)
 	}
 }

@@ -391,6 +391,13 @@ func (r *request) loadVersion() int32 {
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
 		r.message.Data = nil
+
+		if r.chain != nil {
+			r.chain.Cancel()
+		}
+
+		r.actor.Store((*Actor)(nil))
+
 		r.node.reqPool.Put(r)
 	}
 }
