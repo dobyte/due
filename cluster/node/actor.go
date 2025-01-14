@@ -1,7 +1,6 @@
 package node
 
 import (
-	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"sync"
@@ -170,13 +169,9 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 		return err
 	}
 
-	//req := a.scheduler.node.reqPool.Get().(*request)
-	req := &request{}
-	req.node = a.scheduler.node
-	req.ctx = context.Background()
+	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
 	req.uid = uid
-	req.message = &cluster.Message{}
 	req.message.Seq = message.Seq
 	req.message.Route = message.Route
 	req.message.Data = buf

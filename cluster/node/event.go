@@ -122,11 +122,11 @@ func (e *event) Task(fn func(ctx Context)) {
 	e.node.addWait()
 
 	task.AddTask(func() {
-		defer e.compareVersionRecycle(version)
-
-		defer e.compareVersionExecDefer(version)
-
 		fn(e)
+
+		e.compareVersionExecDefer(version)
+
+		e.compareVersionRecycle(version)
 
 		e.node.doneWait()
 	})
@@ -320,13 +320,17 @@ func (e *event) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
-		if e.chain != nil {
-			e.chain.Cancel()
-			e.chain = nil
-		}
-
-		e.actor.Store((*Actor)(nil))
-
+		e.reset()
 		e.node.evtPool.Put(e)
 	}
+}
+
+// 重置事件对象
+func (e *event) reset() {
+	if e.chain != nil {
+		e.chain.Cancel()
+		e.chain = nil
+	}
+
+	e.actor.Store((*Actor)(nil))
 }

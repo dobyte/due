@@ -126,7 +126,7 @@ func (r *request) Cancel() {
 
 // 执行defer调用栈
 func (r *request) compareVersionExecDefer(version int32) {
-	if r.chain != nil && r.version.Load() == version {
+	if r.chain != nil && r.loadVersion() == version {
 		r.chain.FireHead()
 	}
 }
@@ -159,11 +159,11 @@ func (r *request) Task(fn func(ctx Context)) {
 	r.node.addWait()
 
 	task.AddTask(func() {
-		defer r.compareVersionRecycle(version)
-
-		defer r.compareVersionExecDefer(version)
-
 		fn(r)
+
+		r.compareVersionExecDefer(version)
+
+		r.compareVersionRecycle(version)
 
 		r.node.doneWait()
 	})
@@ -390,14 +390,15 @@ func (r *request) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
-		//r.reset()
-		//r.node.reqPool.Put(r)
+		r.reset()
+		r.node.reqPool.Put(r)
 	}
 }
 
 // 重置请求对象
 func (r *request) reset() {
-	r.message = &cluster.Message{}
+	r.message.Data = nil
+
 	r.actor.Store((*Actor)(nil))
 
 	if r.chain != nil {
