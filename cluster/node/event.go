@@ -322,6 +322,7 @@ func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
 		if e.chain != nil {
 			e.chain.Cancel()
+			e.chain = nil
 		}
 
 		e.actor.Store((*Actor)(nil))

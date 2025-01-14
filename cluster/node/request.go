@@ -29,7 +29,7 @@ type request struct {
 	cid     int64            // 连接ID
 	uid     int64            // 用户ID
 	message *cluster.Message // 请求消息
-	version atomic.Int32     // 对象版本号
+	version atomic.Int32     // 版本号
 	chain   *chains.Chain    // 调用链
 	actor   atomic.Value     // 当前Actor
 }
@@ -390,14 +390,18 @@ func (r *request) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
-		r.message.Data = nil
+		//r.reset()
+		//r.node.reqPool.Put(r)
+	}
+}
 
-		if r.chain != nil {
-			r.chain.Cancel()
-		}
+// 重置请求对象
+func (r *request) reset() {
+	r.message = &cluster.Message{}
+	r.actor.Store((*Actor)(nil))
 
-		r.actor.Store((*Actor)(nil))
-
-		r.node.reqPool.Put(r)
+	if r.chain != nil {
+		r.chain.Cancel()
+		r.chain = nil
 	}
 }

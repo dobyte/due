@@ -9,7 +9,7 @@ import (
 func TestNewChain(t *testing.T) {
 	c := chains.NewChain()
 
-	defer c.FireTail()
+	defer c.FireHead()
 
 	c.AddToHead(func() {
 		fmt.Println(1111)

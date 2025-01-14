@@ -126,7 +126,7 @@ func (n *Node) Start() {
 
 	n.proxy.watch()
 
-	n.dispatch()
+	go n.dispatch()
 
 	n.printInfo()
 
@@ -178,34 +178,32 @@ func (n *Node) Proxy() *Proxy {
 
 // 分发处理消息
 func (n *Node) dispatch() {
-	go func() {
-		for {
-			select {
-			case evt, ok := <-n.trigger.receive():
-				if !ok {
-					return
-				}
-				xcall.Call(func() {
-					n.trigger.handle(evt)
-				})
-			case req, ok := <-n.router.receive():
-				if !ok {
-					return
-				}
-				xcall.Call(func() {
-					n.router.handle(req)
-				})
-			case handle, ok := <-n.fnChan:
-				if !ok {
-					return
-				}
-				xcall.Call(func() {
-					handle()
-					n.doneWait()
-				})
+	for {
+		select {
+		case evt, ok := <-n.trigger.receive():
+			if !ok {
+				return
 			}
+			xcall.Call(func() {
+				n.trigger.handle(evt)
+			})
+		case req, ok := <-n.router.receive():
+			if !ok {
+				return
+			}
+			xcall.Call(func() {
+				n.router.handle(req)
+			})
+		case handle, ok := <-n.fnChan:
+			if !ok {
+				return
+			}
+			xcall.Call(func() {
+				handle()
+				n.doneWait()
+			})
 		}
-	}()
+	}
 }
 
 // 启动连接服务器

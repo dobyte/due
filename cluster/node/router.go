@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
 )
@@ -120,12 +121,16 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 }
 
 func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data interface{}) {
-	req := r.node.reqPool.Get().(*request)
+	//req := r.node.reqPool.Get().(*request)
+	req := &request{}
+	req.node = r.node
+	req.ctx = context.Background()
 	req.gid = gid
 	req.nid = nid
 	req.pid = pid
 	req.cid = cid
 	req.uid = uid
+	req.message = &cluster.Message{}
 	req.message.Seq = seq
 	req.message.Route = route
 	req.message.Data = data

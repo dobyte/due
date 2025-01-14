@@ -9,17 +9,13 @@ type Timer struct {
 
 // Stop 停止定时器
 func (t *Timer) Stop() (ok bool) {
-	defer func() {
-		if ok && t.node != nil {
-			t.node.doneWait()
-		}
-	}()
-
 	if t == nil {
 		return
 	}
 
-	ok = t.timer.Stop()
+	if ok = t.timer.Stop(); ok && t.node != nil {
+		t.node.doneWait()
+	}
 
 	return
 }

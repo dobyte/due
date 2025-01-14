@@ -43,12 +43,12 @@ func (c *Chain) AddToTail(fn func()) {
 
 // FireHead 从头部开始执行
 func (c *Chain) FireHead() {
-	head := c.head
-
-	for head != nil {
+	for head := c.head; head != nil; {
 		xcall.Call(head.fn)
 		next := head.next
+		head.prev = nil
 		head.next = nil
+		head.fn = nil
 		head = next
 	}
 
@@ -58,12 +58,12 @@ func (c *Chain) FireHead() {
 
 // FireTail 从尾部开始执行
 func (c *Chain) FireTail() {
-	tail := c.tail
-
-	for tail != nil {
+	for tail := c.tail; tail != nil; {
 		xcall.Call(tail.fn)
 		prev := tail.prev
 		tail.prev = nil
+		tail.next = nil
+		tail.fn = nil
 		tail = prev
 	}
 
