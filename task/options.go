@@ -11,9 +11,9 @@ const (
 )
 
 const (
-	defaultSizeKey         = "etc.taskPool.size"         // 任务池大小
-	defaultNonblockingKey  = "etc.taskPool.nonblocking"  // 是否非阻塞
-	defaultDisablePurgeKey = "etc.taskPool.disablePurge" // 是否禁用清除
+	defaultSizeKey         = "etc.task.size"         // 任务池大小
+	defaultNonblockingKey  = "etc.task.nonblocking"  // 是否非阻塞
+	defaultDisablePurgeKey = "etc.task.disablePurge" // 是否禁用清除
 )
 
 type options struct {
