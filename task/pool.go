@@ -16,7 +16,7 @@ type Pool interface {
 var globalPool Pool
 
 func init() {
-	SetPool(NewPool())
+	//SetPool(NewPool())
 }
 
 type defaultPool struct {
@@ -65,12 +65,11 @@ func GetPool() Pool {
 // AddTask 添加任务
 func AddTask(task func()) {
 	if globalPool == nil {
-		go xcall.Call(task)
+		xcall.Go(task)
 		return
 	}
 
-	err := globalPool.AddTask(task)
-	if err != nil {
+	if err := globalPool.AddTask(task); err != nil {
 		xcall.Go(task)
 		log.Warnf("add task to the task pool failed: %v", err)
 		return
