@@ -141,7 +141,7 @@ func (n *Node) Close() {
 		}
 	}
 
-	n.registerServiceInstances()
+	n.refreshServiceInstances()
 
 	n.runHookFunc(cluster.Close)
 
@@ -324,6 +324,13 @@ func (n *Node) registerServiceInstances() {
 	}
 }
 
+// 刷新服务实例状态
+func (n *Node) refreshServiceInstances() {
+	if err := n.doRefreshServiceInstances(); err != nil {
+		log.Errorf("refresh cluster instances failed: %v", err)
+	}
+}
+
 // 解注册服务实例
 func (n *Node) deregisterServiceInstances() {
 	eg, ctx := errgroup.WithContext(n.ctx)
@@ -357,6 +364,15 @@ func (n *Node) doRegisterServiceInstances() error {
 	return eg.Wait()
 }
 
+// 执行刷新实例状态操作
+func (n *Node) doRefreshServiceInstances() error {
+	for _, instance := range n.instances {
+		instance.State = n.getState().String()
+	}
+
+	return n.doRegisterServiceInstances()
+}
+
 // 获取状态
 func (n *Node) getState() cluster.State {
 	return cluster.State(n.state.Load())
@@ -364,13 +380,9 @@ func (n *Node) getState() cluster.State {
 
 // 更新状态
 func (n *Node) setState(state cluster.State) error {
-	n.state.Swap(int32(state))
+	n.state.Store(int32(state))
 
-	for _, instance := range n.instances {
-		instance.State = state.String()
-	}
-
-	return n.doRegisterServiceInstances()
+	return n.doRefreshServiceInstances()
 }
 
 // 执行钩子函数

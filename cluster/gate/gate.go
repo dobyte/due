@@ -102,7 +102,7 @@ func (g *Gate) Close() {
 		}
 	}
 
-	g.registerServiceInstance()
+	g.refreshServiceInstance()
 
 	g.wg.Wait()
 }
@@ -219,6 +219,22 @@ func (g *Gate) registerServiceInstance() {
 
 	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
+	}
+}
+
+// 刷新服务实例状态
+func (g *Gate) refreshServiceInstance() {
+	if g.instance == nil {
+		return
+	}
+
+	g.instance.State = g.getState().String()
+
+	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
+	defer cancel()
+
+	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
+		log.Fatalf("refresh cluster instance failed: %v", err)
 	}
 }
 

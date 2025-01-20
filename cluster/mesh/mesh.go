@@ -26,7 +26,6 @@ type Mesh struct {
 	transporter transport.Server
 	services    []*serviceEntity
 	instance    *registry.ServiceInstance
-	instances   []*registry.ServiceInstance
 	rw          sync.RWMutex
 	hooks       map[cluster.Hook][]HookHandler
 }
@@ -47,7 +46,6 @@ func NewMesh(opts ...Option) *Mesh {
 	m.opts = o
 	m.hooks = make(map[cluster.Hook][]HookHandler)
 	m.services = make([]*serviceEntity, 0)
-	m.instances = make([]*registry.ServiceInstance, 0)
 	m.proxy = newProxy(m)
 	m.ctx, m.cancel = context.WithCancel(o.ctx)
 	m.state.Store(int32(cluster.Shut))
@@ -85,7 +83,7 @@ func (m *Mesh) Start() {
 
 	m.startTransportServer()
 
-	m.registerServiceInstances()
+	m.registerServiceInstance()
 
 	m.proxy.watch()
 
@@ -94,7 +92,20 @@ func (m *Mesh) Start() {
 	m.runHookFunc(cluster.Start)
 }
 
-// Destroy 销毁网关服务器
+// Close 关闭
+func (m *Mesh) Close() {
+	if !m.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
+		if !m.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
+			return
+		}
+	}
+
+	m.refreshServiceInstance()
+
+	m.runHookFunc(cluster.Close)
+}
+
+// Destroy 销毁
 func (m *Mesh) Destroy() {
 	if m.state.Swap(int32(cluster.Shut)) == int32(cluster.Shut) {
 		return
@@ -102,7 +113,7 @@ func (m *Mesh) Destroy() {
 
 	m.runHookFunc(cluster.Destroy)
 
-	m.deregisterServiceInstances()
+	m.deregisterServiceInstance()
 
 	m.stopTransportServer()
 
@@ -146,7 +157,7 @@ func (m *Mesh) stopTransportServer() {
 }
 
 // 注册服务实例
-func (m *Mesh) registerServiceInstances() {
+func (m *Mesh) registerServiceInstance() {
 	m.instance = &registry.ServiceInstance{
 		ID:       m.opts.id,
 		Name:     cluster.Mesh.String(),
@@ -170,8 +181,24 @@ func (m *Mesh) registerServiceInstances() {
 	}
 }
 
+// 刷新服务实例状态
+func (m *Mesh) refreshServiceInstance() {
+	if m.instance == nil {
+		return
+	}
+
+	m.instance.State = m.getState().String()
+
+	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	defer cancel()
+
+	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
+		log.Fatalf("refresh cluster instance failed: %v", err)
+	}
+}
+
 // 解注册服务实例
-func (m *Mesh) deregisterServiceInstances() {
+func (m *Mesh) deregisterServiceInstance() {
 	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
 	defer cancel()
 

@@ -13,7 +13,10 @@ import (
 	"github.com/dobyte/due/registry/nacos/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
+	"golang.org/x/sync/errgroup"
 	"testing"
 	"time"
 )
@@ -48,7 +51,7 @@ func TestRegistry_Register1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	ins.State = cluster.Busy.String()
 	rctx, rcancel = context.WithTimeout(ctx, 2*time.Second)
@@ -162,4 +165,110 @@ func TestRegistry_Watch(t *testing.T) {
 	}()
 
 	time.Sleep(60 * time.Second)
+}
+
+func TestMultipleNodeRegister(t *testing.T) {
+	for i := 0; i < 5; i++ {
+		go func(i int) {
+			n := newNode(xconv.String(i))
+			n.start()
+		}(i)
+	}
+
+	time.Sleep(10 * time.Second)
+}
+
+const (
+	defaultTimeout = 3 * time.Second // 默认超时时间
+)
+
+type node struct {
+	id        string
+	ctx       context.Context
+	registry  registry.Registry
+	instances []*registry.ServiceInstance
+}
+
+func newNode(id string) *node {
+	n := &node{}
+	n.id = id
+	n.ctx = context.Background()
+	n.registry = nacos.NewRegistry()
+	n.instances = make([]*registry.ServiceInstance, 0)
+
+	n.instances = append(n.instances, &registry.ServiceInstance{
+		ID:    id,
+		Name:  cluster.Node.String(),
+		Kind:  cluster.Node.String(),
+		Alias: fmt.Sprintf("node-%s", id),
+		State: cluster.Work.String(),
+		Routes: []registry.Route{
+			{ID: 1, Stateful: true, Internal: false},
+			{ID: 2, Stateful: true, Internal: false},
+			{ID: 3, Stateful: true, Internal: false},
+			{ID: 4, Stateful: true, Internal: false},
+		},
+		Endpoint: fmt.Sprintf("grpc://%s:%d", id, port),
+	})
+
+	return n
+}
+
+func (n *node) start() {
+	n.watch()
+
+	if err := n.register(); err != nil {
+		log.Fatalf("register cluster instances failed: %v", err)
+	}
+
+}
+
+// 执行注册操作
+func (n *node) register() error {
+	eg, ctx := errgroup.WithContext(n.ctx)
+
+	for i := range n.instances {
+		instance := n.instances[i]
+		eg.Go(func() error {
+			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			defer cancel()
+			return n.registry.Register(ctx, instance)
+		})
+	}
+
+	return eg.Wait()
+}
+
+func (n *node) watch() {
+	ctx, cancel := context.WithTimeout(n.ctx, 3*time.Second)
+	watcher, err := n.registry.Watch(ctx, cluster.Node.String())
+	cancel()
+	if err != nil {
+		log.Fatalf("the dispatcher instance watch failed: %v", err)
+	}
+
+	go func() {
+		defer watcher.Stop()
+		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			default:
+				// exec watch
+			}
+
+			services, err := watcher.Next()
+			if err != nil {
+				continue
+			}
+
+			fmt.Printf("node: %v services: %v\n", n.id, len(services))
+
+			for _, service := range services {
+				fmt.Printf("service id: %v\n", service.ID)
+			}
+
+			fmt.Println()
+		}
+	}()
 }
