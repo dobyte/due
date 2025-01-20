@@ -16,7 +16,7 @@ type Pool interface {
 var globalPool Pool
 
 func init() {
-	//SetPool(NewPool())
+	SetPool(NewPool())
 }
 
 type defaultPool struct {
