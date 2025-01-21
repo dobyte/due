@@ -14,3 +14,20 @@ testdata/log/
 # Go workspace
 go.work
 go.work.sum
+
+# log file
+*.log
+*.log_lock
+*.log_symlink
+
+# log gzip file
+*.gz
+
+# goland idea
+.idea
+
+# project run dir
+*run/
+
+# executable files
+*.exe
