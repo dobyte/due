@@ -4,8 +4,9 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
-	"sync/atomic"
+	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 )
 
 type serviceEndpoint struct {
@@ -22,16 +23,16 @@ type abstract struct {
 	endpoints3 []*serviceEndpoint          // 所有端口（包含work、busy状态的实例）
 	endpoints4 map[string]*serviceEndpoint // 所有端口（包含work、busy状态的实例）
 	// 加权轮询相关字段
-	currentQueue *wrrQueue    // 当前队列
-	nextQueue    *wrrQueue    // 下一个队列
-	step        int           // GCD步长
-	wrrMu       sync.Mutex    // 加权轮询锁
+	currentQueue *wrrQueue  // 当前队列
+	nextQueue    *wrrQueue  // 下一个队列
+	step         int        // GCD步长
+	wrrMu        sync.Mutex // 加权轮询锁
 }
 
 // 加权轮询队列节点
 type wrrEntry struct {
-	weight    int           // 当前权重
-	orgWeight int           // 原始权重
+	weight    int // 当前权重
+	orgWeight int // 原始权重
 	endpoint  *serviceEndpoint
 	next      *wrrEntry
 }
@@ -114,8 +115,8 @@ func (a *abstract) directDispatch(insID string) (*endpoint.Endpoint, error) {
 
 // 随机分配
 func (a *abstract) randomDispatch() (*endpoint.Endpoint, error) {
-	for _, sep := range a.endpoints4 {
-		return sep.endpoint, nil
+	if n := len(a.endpoints3); n > 0 {
+		return a.endpoints3[rand.IntN(n)].endpoint, nil
 	}
 
 	return nil, errors.ErrNotFoundEndpoint
@@ -134,44 +135,44 @@ func (a *abstract) roundRobinDispatch() (*endpoint.Endpoint, error) {
 
 // 加权轮询分配
 func (a *abstract) weightRoundRobinDispatch() (*endpoint.Endpoint, error) {
-    a.wrrMu.Lock()
-    defer a.wrrMu.Unlock()
+	a.wrrMu.Lock()
+	defer a.wrrMu.Unlock()
 
-    // 如果当前队列为空，交换当前队列和下一个队列
-    if a.currentQueue.isEmpty() {
-        a.currentQueue, a.nextQueue = a.nextQueue, a.currentQueue
-    }
+	// 如果当前队列为空，交换当前队列和下一个队列
+	if a.currentQueue.isEmpty() {
+		a.currentQueue, a.nextQueue = a.nextQueue, a.currentQueue
+	}
 
-    // 从当前队列中取出一个节点
-    entry := a.currentQueue.pop()
-    if entry == nil {
-        return nil, errors.ErrNotFoundEndpoint
-    }
+	// 从当前队列中取出一个节点
+	entry := a.currentQueue.pop()
+	if entry == nil {
+		return nil, errors.ErrNotFoundEndpoint
+	}
 
-    // 减少当前权重
-    entry.weight -= a.step
+	// 减少当前权重
+	entry.weight -= a.step
 
-    // 如果权重大于0，放回当前队列
-    if entry.weight > 0 {
-        a.currentQueue.push(entry)
-    } else {
-        // 重置权重并放入下一个队列
-        entry.weight = entry.orgWeight
-        a.nextQueue.push(entry)
-    }
+	// 如果权重大于0，放回当前队列
+	if entry.weight > 0 {
+		a.currentQueue.push(entry)
+	} else {
+		// 重置权重并放入下一个队列
+		entry.weight = entry.orgWeight
+		a.nextQueue.push(entry)
+	}
 
-    return entry.endpoint.endpoint, nil
+	return entry.endpoint.endpoint, nil
 }
 
 // 初始化 WRR 队列
 func (a *abstract) initWRRQueue() {
-    a.currentQueue = &wrrQueue{}
-    a.nextQueue = &wrrQueue{}
-    
-    // 计算最大公约数作为步长
-    a.step = 0
-    for _, sep := range a.endpoints4 {
-        weight := a.dispatcher.instances[sep.insID].Weight
+	a.currentQueue = &wrrQueue{}
+	a.nextQueue = &wrrQueue{}
+
+	// 计算最大公约数作为步长
+	a.step = 0
+	for _, sep := range a.endpoints4 {
+		weight := a.dispatcher.instances[sep.insID].Weight
 		if a.step == 0 {
 			a.step = weight
 		} else {
@@ -184,8 +185,8 @@ func (a *abstract) initWRRQueue() {
 			orgWeight: weight,
 			endpoint:  sep,
 		}
-        a.currentQueue.push(entry)
-    }
+		a.currentQueue.push(entry)
+	}
 }
 
 // 判断队列是否为空
@@ -195,36 +196,36 @@ func (q *wrrQueue) isEmpty() bool {
 
 // 将节点加入队列尾部
 func (q *wrrQueue) push(entry *wrrEntry) {
-    entry.next = nil
-    
-    if q.tail == nil {
-        // 空队列
-        q.head = entry
-        q.tail = entry
-        return
-    }
-    
-    // 添加到队列尾部
-    q.tail.next = entry
-    q.tail = entry
+	entry.next = nil
+
+	if q.tail == nil {
+		// 空队列
+		q.head = entry
+		q.tail = entry
+		return
+	}
+
+	// 添加到队列尾部
+	q.tail.next = entry
+	q.tail = entry
 }
 
 // 从队列头部取出节点
 func (q *wrrQueue) pop() *wrrEntry {
-    if q.head == nil {
-        return nil
-    }
-    
-    entry := q.head
-    q.head = entry.next
-    
-    if q.head == nil {
-        // 队列已空
-        q.tail = nil
-    }
-    
-    entry.next = nil
-    return entry
+	if q.head == nil {
+		return nil
+	}
+
+	entry := q.head
+	q.head = entry.next
+
+	if q.head == nil {
+		// 队列已空
+		q.tail = nil
+	}
+
+	entry.next = nil
+	return entry
 }
 
 // 计算最大公约数
