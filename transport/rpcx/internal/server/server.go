@@ -46,7 +46,7 @@ func NewServer(opts *Options) (*Server, error) {
 	s := &Server{}
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
-	s.server = server.NewServer()
+	s.server = server.NewServer(serverOpts...)
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, isSecure)
 
 	return s, nil
