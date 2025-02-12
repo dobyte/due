@@ -32,6 +32,7 @@ type Option func(o *options)
 type options struct {
 	id          string                // 实例ID
 	name        string                // 实例名称
+	weight      int                   // 权重
 	ctx         context.Context       // 上下文
 	codec       encoding.Codec        // 编解码器
 	timeout     time.Duration         // RPC调用超时时间
@@ -39,7 +40,6 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	encryptor   crypto.Encryptor      // 消息加密器
 	transporter transport.Transporter // 消息传输器
-	weight      int                   // 权重
 }
 
 func defaultOptions() *options {

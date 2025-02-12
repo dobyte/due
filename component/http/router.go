@@ -28,7 +28,7 @@ type Router interface {
 	// Add 添加路由处理器
 	Add(methods []string, path string, handler any, middlewares ...any) Router
 	// Group 路由组
-	Group(prefix string, handlers ...any) Router
+	Group(prefix string, middlewares ...any) Router
 }
 
 type router struct {

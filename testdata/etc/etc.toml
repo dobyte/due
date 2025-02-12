@@ -80,7 +80,7 @@ shutdownMaxWaitTime = "0s"
 [cluster]
     # 集群网关配置
     [cluster.gate]
-        # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
+        # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
         id = ""
         # 实例名称
         name = "gate"
@@ -90,7 +90,7 @@ shutdownMaxWaitTime = "0s"
         timeout = "3s"
     # 集群节点配置
     [cluster.node]
-        # 实例ID，节点集群中唯一。不填写默认自动生成唯一的实例ID
+        # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
         id = ""
         # 实例名称
         name = "node"
@@ -100,27 +100,19 @@ shutdownMaxWaitTime = "0s"
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
-    # 集群管理节点配置
-    [cluster.master]
-        # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
-        id = ""
-        # 实例名称
-        name = "master"
-        # 编解码器。可选：json | proto。默认为proto
-        codec = "proto"
-        # 加密器。可选：rsa | ecc
-        encryptor = "ecc"
-        # 解密器。可选：rsa | ecc
-        decryptor = "ecc"
     # 集群网格配置
     [cluster.mesh]
+        # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
+        id = ""
         # 实例名称
         name = "mesh"
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
+        #
+        weight = 0
     # 集群客户端配置，常用于调试使用
     [cluster.client]
-        # 实例ID，网关集群中唯一。不填写默认自动生成唯一的实例ID
+        # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
         id = ""
         # 实例名称
         name = "client"
