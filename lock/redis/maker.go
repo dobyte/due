@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
+	"github.com/dobyte/due/v2/utils/xuuid"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -18,12 +19,16 @@ func NewMaker() *Maker {
 
 // Make 制造一个Locker
 func (m *Maker) Make(name string) lock.Locker {
-	l := &Locker{
-		maker: m,
-		name:  name,
+	return &Locker{
+		maker:   m,
+		name:    name,
+		version: xuuid.UUID(),
 	}
+}
 
-	return l
+// 执行获取锁操作
+func (m *Maker) acquire(ctx context.Context, name, version string) error {
+
 }
 
 // 执行释放锁操作
