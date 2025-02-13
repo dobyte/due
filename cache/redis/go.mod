@@ -1,8 +1,6 @@
 module github.com/dobyte/due/cache/redis/v2
 
-go 1.22.0
-
-toolchain go1.22.9
+go 1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.3
