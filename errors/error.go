@@ -53,6 +53,7 @@ var (
 	ErrNotBindActor          = New("not bind actor")
 	ErrNotFoundActor         = New("not found actor")
 	ErrWriterClosing         = New("writer is closing")
+	ErrDeadlineExceeded      = New("deadline exceeded")
 )
 
 // NewError 新建一个错误

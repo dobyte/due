@@ -10,7 +10,7 @@ type Locker struct {
 
 // Acquire 获取锁
 func (l *Locker) Acquire(ctx context.Context) error {
-
+	return l.maker.acquire(ctx, l.name, l.version)
 }
 
 // Release 释放锁
