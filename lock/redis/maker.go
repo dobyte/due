@@ -10,8 +10,9 @@ import (
 )
 
 type Maker struct {
-	opts   *options
-	script *redis.Script
+	opts          *options
+	releaseScript *redis.Script
+	renewalScript *redis.Script
 }
 
 func NewMaker(opts ...Option) *Maker {
@@ -32,6 +33,8 @@ func NewMaker(opts ...Option) *Maker {
 
 	m := &Maker{}
 	m.opts = o
+	m.releaseScript = redis.NewScript(releaseScript)
+	m.renewalScript = redis.NewScript(renewalScript)
 
 	return m
 }
@@ -76,7 +79,21 @@ func (m *Maker) acquire(ctx context.Context, name, version string) error {
 
 // 执行释放锁操作
 func (m *Maker) release(ctx context.Context, name, version string) error {
-	rst, err := m.script.Run(ctx, m.opts.client, []string{name}, version).StringSlice()
+	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{name}, version).StringSlice()
+	if err != nil {
+		return err
+	}
+
+	if rst[0] != "OK" {
+		return errors.ErrIllegalOperation
+	}
+
+	return nil
+}
+
+// 执行续租锁操作
+func (m *Maker) renewal(ctx context.Context, name, version string) error {
+	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{name}, version, m.opts.expiration).StringSlice()
 	if err != nil {
 		return err
 	}
