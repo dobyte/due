@@ -60,7 +60,7 @@ func (m *Maker) Make(name string) lock.Locker {
 }
 
 // 执行获取锁操作
-func (m *Maker) acquire(ctx context.Context, key, version string) error {
+func (m *Maker) acquire(ctx context.Context, key, version string, try ...bool) error {
 	var retries int
 
 	for {
@@ -74,6 +74,10 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 
 		if val == "OK" {
 			return nil
+		}
+
+		if len(try) > 0 && try[0] {
+			return errors.ErrIllegalOperation
 		}
 
 		if m.opts.acquireMaxRetries > 0 {

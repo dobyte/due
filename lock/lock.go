@@ -11,7 +11,7 @@ type Maker interface {
 
 type Locker interface {
 	// Acquire 获取锁
-	Acquire(ctx context.Context) error
+	Acquire(ctx context.Context, try ...bool) error
 	// Release 释放锁
 	Release(ctx context.Context) error
 }

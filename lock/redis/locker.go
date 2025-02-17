@@ -15,8 +15,8 @@ type Locker struct {
 }
 
 // Acquire 获取锁
-func (l *Locker) Acquire(ctx context.Context) error {
-	if err := l.maker.acquire(ctx, l.key, l.version); err != nil {
+func (l *Locker) Acquire(ctx context.Context, try ...bool) error {
+	if err := l.maker.acquire(ctx, l.key, l.version, try...); err != nil {
 		return err
 	}
 
