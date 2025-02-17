@@ -7,7 +7,7 @@ timezone = "Local"
 # 容器关闭最大等待时间。支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0
 shutdownMaxWaitTime = "0s"
 
-# 任务池
+# 任务池模块
 [task]
     # 任务池大小(goroutine)
     size = 100000
@@ -16,7 +16,7 @@ shutdownMaxWaitTime = "0s"
     # 是否禁用清除。
     disablePurge = true
 
-# 配置中心
+# 配置中心模块
 [config]
     # 文件配置
     [config.file]
@@ -77,6 +77,7 @@ shutdownMaxWaitTime = "0s"
         # 日志输出级别，可选：debug、info、warn、error。默认为info
         logLevel = "info"
 
+# 分布式集群模块
 [cluster]
     # 集群网关配置
     [cluster.gate]
@@ -100,6 +101,8 @@ shutdownMaxWaitTime = "0s"
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
+        # 节点权重，用于集群节点的负载均衡策略
+        weight = 0
     # 集群网格配置
     [cluster.mesh]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -108,8 +111,6 @@ shutdownMaxWaitTime = "0s"
         name = "mesh"
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
-        #
-        weight = 0
     # 集群客户端配置，常用于调试使用
     [cluster.client]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -119,7 +120,7 @@ shutdownMaxWaitTime = "0s"
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
 
-# http服务器配置
+# http服务器模块
 [http]
     # 服务器名称
     name = "http"
@@ -158,6 +159,7 @@ shutdownMaxWaitTime = "0s"
         # swagger文件路径
         filePath = "./docs/swagger.json"
 
+# 传输模块
 [transport]
     # GRPC相关配置
     [transport.grpc]
@@ -195,9 +197,27 @@ shutdownMaxWaitTime = "0s"
             poolSize = 10
 
 # 框架默认打包器统一采用以下的打包格式，自定义打包器可自行定义打包规则
-# -------------------------
-# | route | seq | message |
-# -------------------------
+# 心跳包
+# ------------------------------------------------------------------------------
+# | size(4 byte) = (1 byte + 8 byte) | header(1 byte) | heartbeat time(8 byte) |
+# ------------------------------------------------------------------------------
+#
+#  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+# +---------------------------------------------------------------+-+-------------+---------------------------------------------------------------+
+# |                              size                             |h|   extcode   |                      heartbeat time (ns)                      |
+# +---------------------------------------------------------------+-+-------------+---------------------------------------------------------------+
+
+# 数据包
+# -----------------------------------------------------------------------------------------------------------------------
+# | size(4 byte) = (1 byte + n byte + m byte + x byte) | header(1 byte) | route(n byte) | seq(m byte) | message(x byte) |
+# -----------------------------------------------------------------------------------------------------------------------
+#
+#  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+# +---------------------------------------------------------------+-+-------------+-------------------------------+-------------------------------+
+# |                              size                             |h|   extcode   |             route             |              seq              |
+# +---------------------------------------------------------------+-+-------------+-------------------------------+-------------------------------+
+# |                                                                message data ...                                                               |
+# +-----------------------------------------------------------------------------------------------------------------------------------------------+
 [packet]
     # 字节序，默认为big。可选：little | big
     byteOrder = "big"
@@ -207,6 +227,8 @@ shutdownMaxWaitTime = "0s"
     seqBytes = 2
     # 消息字节数，默认为5000字节
     bufferBytes = 5000
+
+# 日志模块
 [log]
     # 日志输出文件
     file = "../../testdata/log/due.log"
@@ -328,6 +350,8 @@ shutdownMaxWaitTime = "0s"
         callerFullPath = true
         # 是否启用分级存储
         classifiedStorage = true
+
+# 注册中心模块
 [registry]
     [registry.etcd]
         # 客户端连接地址，默认为["127.0.0.1:2379"]
@@ -388,6 +412,8 @@ shutdownMaxWaitTime = "0s"
         logDir = "./run/nacos/naming/log"
         # 日志输出级别，可选：debug、info、warn、error。默认为info
         logLevel = "info"
+
+# 网络模块
 [network]
     [network.ws]
         [network.ws.server]
@@ -433,6 +459,8 @@ shutdownMaxWaitTime = "0s"
             timeout = "5s"
             # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 10
+
+# 用户定位器模块
 [locate]
     [locate.redis]
         # 客户端连接地址
@@ -448,6 +476,7 @@ shutdownMaxWaitTime = "0s"
         # key前缀
         prefix = "due"
 
+# 缓存模块
 [cache]
     [cache.redis]
         # 客户端连接地址
@@ -470,6 +499,30 @@ shutdownMaxWaitTime = "0s"
         minExpiration = "1h"
         # 最大过期时间，默认为24h
         maxExpiration = "24h"
+
+# 分布式锁
+[lock]
+    [lock.redis]
+        # 客户端连接地址
+        addrs = ["127.0.0.1:6379"]
+        # 数据库号
+        db = 5
+        # 用户名
+        username = ""
+        # 密码
+        password = ""
+        # 最大重试次数
+        maxRetries = 3
+        # key前缀
+        prefix = "lock"
+        # 锁过期时间（自动续约），默认为3s
+        expiration = "3s"
+        # 循环获取锁的频率间隔时间，默认为100ms
+        acquireInterval = "100ms"
+        # 循环获取锁的最大重试次数，默认为0，<=0则为无限次
+        acquireMaxRetries = 0
+
+# 加密模块
 [crypto]
     # RSA设置
     [crypto.rsa]
@@ -537,6 +590,8 @@ shutdownMaxWaitTime = "0s"
             delimiter = " "
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
+
+# 事件总线模块
 [eventbus]
     [eventbus.nats]
         # 客户端连接地址，默认为nats://127.0.0.1:4222
