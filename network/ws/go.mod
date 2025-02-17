@@ -3,7 +3,7 @@ module github.com/dobyte/due/network/ws/v2
 go 1.22.9
 
 require (
-	github.com/dobyte/due/v2 v2.2.5
+	github.com/dobyte/due/v2 v2.2.4
 	github.com/gorilla/websocket v1.5.3
 )
 

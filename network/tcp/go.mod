@@ -2,7 +2,7 @@ module github.com/dobyte/due/network/tcp/v2
 
 go 1.22.9
 
-require github.com/dobyte/due/v2 v2.2.5
+require github.com/dobyte/due/v2 v2.2.4
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
