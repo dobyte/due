@@ -93,7 +93,7 @@ func (m *Maker) release(ctx context.Context, name, version string) error {
 
 // 执行续租锁操作
 func (m *Maker) renewal(ctx context.Context, name, version string) error {
-	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{name}, version, m.opts.expiration).StringSlice()
+	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{name}, version, m.opts.expiration.Milliseconds()).StringSlice()
 	if err != nil {
 		return err
 	}

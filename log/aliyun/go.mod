@@ -1,8 +1,6 @@
 module github.com/dobyte/due/log/aliyun/v2
 
-go 1.22.0
-
-toolchain go1.22.9
+go 1.22.9
 
 require (
 	github.com/aliyun/aliyun-log-go-sdk v0.1.83
@@ -16,7 +14,6 @@ require (
 	github.com/bytedance/sonic/loader v0.2.2 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect

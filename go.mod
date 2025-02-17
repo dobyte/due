@@ -1,6 +1,6 @@
 module github.com/dobyte/due/v2
 
-go 1.22.0
+go 1.22.9
 
 require (
 	dario.cat/mergo v1.0.1

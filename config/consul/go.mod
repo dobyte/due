@@ -1,12 +1,10 @@
 module github.com/dobyte/due/config/consul/v2
 
-go 1.22.0
-
-toolchain go1.22.1
+go 1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.5
-	github.com/hashicorp/consul/api v1.29.5
+	github.com/hashicorp/consul/api v1.30.0
 )
 
 require (
@@ -16,7 +14,6 @@ require (
 	github.com/bytedance/sonic v1.12.8 // indirect
 	github.com/bytedance/sonic/loader v0.2.2 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect

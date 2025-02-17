@@ -1,12 +1,11 @@
 module github.com/dobyte/due/registry/nacos/v2
 
-go 1.22.0
-
-toolchain go1.22.9
+go 1.22.9
 
 require (
 	github.com/dobyte/due/v2 v2.2.5
 	github.com/nacos-group/nacos-sdk-go/v2 v2.2.7
+	golang.org/x/sync v0.11.0
 )
 
 require (
@@ -24,7 +23,6 @@ require (
 	github.com/bytedance/sonic/loader v0.2.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
@@ -49,7 +47,6 @@ require (
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
