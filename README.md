@@ -43,14 +43,15 @@ due是一款基于Go语言开发的轻量级、高性能分布式游戏服务器
 * 加密：支持rsa、ecc等多种加密方案。
 * 服务：支持grpc、rpcx等多种微服务解决方案。
 * 灵活：支持单体、分布式等多种架构方案。
-* 管理：提供master后台管理服相关接口支持。
 * Web：提供http协议的fiber服务器及swagger文档解决方案。
 * 工具：提供[due-cli](https://github.com/dobyte/due-cli)脚手架工具箱，可快速构建集群项目。
+* 缓存：支持redis、memcache等多种常用的缓存方案。
 * Actor：提供完善actor模型解决方案。
+* 分布式锁：支持redis、memcache等多种分布式锁解决方案。
 
 ### 4.下一期新功能规划
 
-* 实现框架层的分布式锁
+* 高性能日志库
 
 ### 5.特殊说明
 
@@ -155,7 +156,7 @@ $ protoc --version  # Ensure compiler version is 3+
 2.安装protobuf go代码生成工具（使用场景：开发mesh微服务）
 
 ```shell
-go install github.com/gogo/protobuf/protoc-gen-gofast@latest
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 ```
 
 3.安装grpc代码生成工具（使用场景：使用[GRPC](https://grpc.io/)组件开发mesh微服务）
