@@ -29,7 +29,7 @@ const renewalScript = `
 		return {'NO'}
 	end
 
-	redis.call('PEXPIRE', KEYS[1])
+	redis.call('PEXPIRE', KEYS[1], ARGV[2])
 
 	return {'OK'}
 `

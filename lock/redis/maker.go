@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"github.com/go-redis/redis/v8"
 	"time"
@@ -19,6 +20,10 @@ func NewMaker(opts ...Option) *Maker {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	if o.expiration <= 0 {
+		o.expiration = xconv.Duration(defaultExpiration)
 	}
 
 	if o.client == nil {
@@ -41,19 +46,25 @@ func NewMaker(opts ...Option) *Maker {
 
 // Make 制造一个Locker
 func (m *Maker) Make(name string) lock.Locker {
-	return &Locker{
-		maker:   m,
-		name:    name,
-		version: xuuid.UUID(),
+	l := &Locker{}
+	l.maker = m
+	l.version = xuuid.UUID()
+
+	if m.opts.prefix == "" {
+		l.key = name
+	} else {
+		l.key = m.opts.prefix + ":" + name
 	}
+
+	return l
 }
 
 // 执行获取锁操作
-func (m *Maker) acquire(ctx context.Context, name, version string) error {
+func (m *Maker) acquire(ctx context.Context, key, version string) error {
 	var retries int
 
 	for {
-		val, err := m.opts.client.SetArgs(ctx, name, version, redis.SetArgs{
+		val, err := m.opts.client.SetArgs(ctx, key, version, redis.SetArgs{
 			Mode: "NX",
 			TTL:  m.opts.expiration,
 		}).Result()
@@ -78,8 +89,8 @@ func (m *Maker) acquire(ctx context.Context, name, version string) error {
 }
 
 // 执行释放锁操作
-func (m *Maker) release(ctx context.Context, name, version string) error {
-	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{name}, version).StringSlice()
+func (m *Maker) release(ctx context.Context, key, version string) error {
+	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{key}, version).StringSlice()
 	if err != nil {
 		return err
 	}
@@ -92,8 +103,8 @@ func (m *Maker) release(ctx context.Context, name, version string) error {
 }
 
 // 执行续租锁操作
-func (m *Maker) renewal(ctx context.Context, name, version string) error {
-	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{name}, version, m.opts.expiration.Milliseconds()).StringSlice()
+func (m *Maker) renewal(ctx context.Context, key, version string) error {
+	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{key}, version, m.opts.expiration.Milliseconds()).StringSlice()
 	if err != nil {
 		return err
 	}

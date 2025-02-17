@@ -8,7 +8,7 @@ import (
 
 type Locker struct {
 	maker   *Maker
-	name    string
+	key     string
 	version string
 	rw      sync.RWMutex
 	timer   *time.Timer
@@ -16,7 +16,7 @@ type Locker struct {
 
 // Acquire 获取锁
 func (l *Locker) Acquire(ctx context.Context) error {
-	if err := l.maker.acquire(ctx, l.name, l.version); err != nil {
+	if err := l.maker.acquire(ctx, l.key, l.version); err != nil {
 		return err
 	}
 
@@ -27,20 +27,28 @@ func (l *Locker) Acquire(ctx context.Context) error {
 
 // Release 释放锁
 func (l *Locker) Release(ctx context.Context) error {
-	if err := l.maker.release(ctx, l.name, l.version); err != nil {
-		return err
-	}
+	var ok bool
 
 	l.rw.RLock()
-	l.timer.Stop()
+	if ok = l.timer != nil; ok {
+		l.timer.Stop()
+	}
 	l.rw.RUnlock()
+
+	if !ok {
+		return nil
+	}
+
+	if err := l.maker.release(ctx, l.key, l.version); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 // 续租锁
 func (l *Locker) renewal() {
-	if err := l.maker.renewal(context.Background(), l.name, l.version); err != nil {
+	if err := l.maker.renewal(context.Background(), l.key, l.version); err != nil {
 		return
 	}
 
