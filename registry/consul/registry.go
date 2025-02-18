@@ -56,7 +56,9 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	v, ok := r.registrars.Load(ins.ID)
+	insID := makeInsID(ins)
+
+	v, ok := r.registrars.Load(insID)
 	if ok {
 		return v.(*registrar).register(ctx, ins)
 	}
@@ -67,19 +69,21 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return err
 	}
 
-	r.registrars.Store(ins.ID, reg)
+	r.registrars.Store(insID, reg)
 
 	return nil
 }
 
 // Deregister 解注册服务实例
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	v, ok := r.registrars.Load(ins.ID)
+	insID := makeInsID(ins)
+
+	v, ok := r.registrars.Load(insID)
 	if ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
-	return r.opts.client.Agent().ServiceDeregister(ins.ID)
+	return r.opts.client.Agent().ServiceDeregister(insID)
 }
 
 // Services 获取服务实例列表
@@ -133,7 +137,6 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 	services := make([]*registry.ServiceInstance, 0, len(entries))
 	for _, entry := range entries {
 		ins := &registry.ServiceInstance{
-			ID:       entry.Service.ID,
 			Name:     entry.Service.Service,
 			Routes:   unmarshalMetaRoutes(entry.Service.Meta),
 			Events:   make([]int, 0),
@@ -142,6 +145,8 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 
 		for k, v := range entry.Service.Meta {
 			switch k {
+			case metaFieldID:
+				ins.ID = v
 			case metaFieldKind:
 				ins.Kind = v
 			case metaFieldAlias:

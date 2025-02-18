@@ -16,6 +16,7 @@ import (
 const (
 	checkIDFormat     = "service:%s"
 	checkUpdateOutput = "passed"
+	metaFieldID       = "id"
 	metaFieldKind     = "kind"
 	metaFieldAlias    = "alias"
 	metaFieldState    = "state"
@@ -24,11 +25,6 @@ const (
 	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
-)
-
-const (
-	stateful = 1 << iota
-	internal
 )
 
 type registrar struct {
@@ -68,13 +64,16 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
+	insID := makeInsID(ins)
+
 	registration := &api.AgentServiceRegistration{}
-	registration.ID = ins.ID
+	registration.ID = insID
 	registration.Name = ins.Name
 	registration.Address = host
 	registration.Port = port
 	registration.TaggedAddresses = map[string]api.ServiceAddress{raw.Scheme: {Address: host, Port: port}}
 	registration.Meta = make(map[string]string, 7)
+	registration.Meta[metaFieldID] = ins.ID
 	registration.Meta[metaFieldKind] = ins.Kind
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
@@ -98,7 +97,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	if r.registry.opts.enableHeartbeatCheck {
 		registration.Checks = append(registration.Checks, &api.AgentServiceCheck{
-			CheckID:                        fmt.Sprintf(checkIDFormat, ins.ID),
+			CheckID:                        fmt.Sprintf(checkIDFormat, insID),
 			TTL:                            fmt.Sprintf("%ds", r.registry.opts.heartbeatCheckInterval),
 			DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", r.registry.opts.deregisterCriticalServiceAfter),
 		})
@@ -109,7 +108,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	if r.registry.opts.enableHeartbeatCheck {
-		r.chHeartbeat <- ins.ID
+		r.chHeartbeat <- insID
 	}
 
 	return nil
@@ -120,9 +119,11 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 	r.cancel()
 	close(r.chHeartbeat)
 
-	r.registry.registrars.Delete(ins.ID)
+	insID := makeInsID(ins)
 
-	return r.registry.opts.client.Agent().ServiceDeregister(ins.ID)
+	r.registry.registrars.Delete(insID)
+
+	return r.registry.opts.client.Agent().ServiceDeregister(insID)
 }
 
 // 心跳检测
