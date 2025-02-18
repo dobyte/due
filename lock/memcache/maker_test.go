@@ -1,15 +1,16 @@
-package redis_test
+package memcache_test
 
 import (
 	"context"
-	"github.com/dobyte/due/lock/redis/v2"
+	"github.com/dobyte/due/lock/memcache/v2"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestMaker_Make(t *testing.T) {
-	maker := redis.NewMaker()
+	maker := memcache.NewMaker()
 
 	locker := maker.Make("lockName")
 
@@ -17,7 +18,30 @@ func TestMaker_Make(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer locker.Release(context.Background())
+	go func() {
+		timer := time.NewTicker(500 * time.Millisecond)
+		defer timer.Stop()
+
+		for {
+			<-timer.C
+
+			item, err := maker.Get("lock:lockName")
+			if err != nil {
+				t.Log(err)
+				continue
+			}
+
+			t.Log(time.Now(), xconv.String(item.Value))
+		}
+	}()
+
+	go func() {
+		time.AfterFunc(3*time.Second, func() {
+			locker.Release(context.Background())
+		})
+	}()
+
+	//defer locker.Release(context.Background())
 
 	time.Sleep(20 * time.Second)
 }
@@ -26,7 +50,7 @@ func TestMaker_Parallel_Make(t *testing.T) {
 	var (
 		wg     sync.WaitGroup
 		ctx    = context.Background()
-		maker  = redis.NewMaker()
+		maker  = memcache.NewMaker()
 		locker = maker.Make("lockName")
 	)
 
