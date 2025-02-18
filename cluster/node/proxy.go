@@ -95,7 +95,7 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 }
 
 // AddServiceProvider 添加服务提供者
-func (p *Proxy) AddServiceProvider(name string, desc interface{}, provider interface{}) {
+func (p *Proxy) AddServiceProvider(name string, desc, provider interface{}) {
 	p.node.addServiceProvider(name, desc, provider)
 }
 

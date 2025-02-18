@@ -440,7 +440,8 @@ func (n *Node) addServiceProvider(name string, desc, provider any) {
 
 // 打印组件信息
 func (n *Node) printInfo() {
-	infos := make([]string, 0)
+	infos := make([]string, 0, 8)
+	infos = append(infos, fmt.Sprintf("ID: %s", n.opts.id))
 	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
 	infos = append(infos, fmt.Sprintf("Link: %s", n.linker.ExposeAddr()))
 	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))

@@ -255,7 +255,8 @@ func (g *Gate) getState() cluster.State {
 
 // 打印组件信息
 func (g *Gate) printInfo() {
-	infos := make([]string, 0)
+	infos := make([]string, 0, 6)
+	infos = append(infos, fmt.Sprintf("ID: %s", g.opts.id))
 	infos = append(infos, fmt.Sprintf("Name: %s", g.Name()))
 	infos = append(infos, fmt.Sprintf("Link: %s", g.linker.ExposeAddr()))
 	infos = append(infos, fmt.Sprintf("Server: [%s] %s", g.opts.server.Protocol(), net.FulfillAddr(g.opts.server.Addr())))
