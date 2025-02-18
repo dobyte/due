@@ -148,7 +148,3 @@ func (m *Maker) swap(ctx context.Context, key, version string, expiration int32)
 
 	return nil
 }
-
-func (m *Maker) Get(key string) (*memcache.Item, error) {
-	return m.opts.client.Get(key)
-}
