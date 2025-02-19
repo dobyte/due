@@ -66,17 +66,21 @@ func NewNode(opts ...Option) *Node {
 	n.state.Store(int32(cluster.Shut))
 	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() interface{} {
-		return &event{
-			ctx:  context.Background(),
-			node: n,
-		}
+		evt := &event{}
+		evt.ctx = context.Background()
+		evt.node = n
+		evt.actor.Store((*Actor)(nil))
+
+		return evt
 	}}
 	n.reqPool = &sync.Pool{New: func() interface{} {
-		return &request{
-			ctx:     context.Background(),
-			node:    n,
-			message: &cluster.Message{},
-		}
+		req := &request{}
+		req.ctx = context.Background()
+		req.node = n
+		req.message = &cluster.Message{}
+		req.actor.Store((*Actor)(nil))
+
+		return req
 	}}
 
 	return n
