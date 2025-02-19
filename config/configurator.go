@@ -96,7 +96,7 @@ func (c *defaultConfigurator) init() {
 
 			v, err := c.opts.decoder(cc.Format, cc.Content)
 			if err != nil {
-				if err != errors.ErrInvalidFormat {
+				if !errors.Is(err, errors.ErrInvalidFormat) {
 					log.Printf("decode configure failed: %v", err)
 				}
 				continue
@@ -473,7 +473,7 @@ func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...s
 	}
 
 	for _, cc := range configs {
-		cc.decoder = c.opts.decoder
+		cc.decoder, cc.scanner = c.opts.decoder, c.opts.scanner
 	}
 
 	return configs, nil
