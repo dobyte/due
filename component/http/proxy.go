@@ -15,7 +15,7 @@ func newProxy(s *Server) *Proxy {
 
 // Router 获取路由器
 func (p *Proxy) Router() Router {
-	return &router{app: p.server.app}
+	return &router{app: p.server.app, proxy: p}
 }
 
 // NewMeshClient 新建微服务客户端

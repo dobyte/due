@@ -61,7 +61,7 @@ func NewServer(opts ...Option) *Server {
 		switch handler := o.middlewares[i].(type) {
 		case Handler:
 			s.app.Use(func(ctx fiber.Ctx) error {
-				return handler(&context{Ctx: ctx})
+				return handler(&context{Ctx: ctx, proxy: s.proxy})
 			})
 		case fiber.Handler:
 			s.app.Use(handler)

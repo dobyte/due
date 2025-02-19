@@ -32,7 +32,8 @@ type Router interface {
 }
 
 type router struct {
-	app *fiber.App
+	app   *fiber.App
+	proxy *Proxy
 }
 
 // Get 添加GET请求处理器
@@ -96,7 +97,7 @@ func (r *router) Add(methods []string, path string, handler any, middlewares ...
 			handlers = append(handlers, h)
 		case Handler:
 			handlers = append(handlers, func(ctx fiber.Ctx) error {
-				return h(&context{Ctx: ctx})
+				return h(&context{Ctx: ctx, proxy: r.proxy})
 			})
 		}
 	}
@@ -106,7 +107,7 @@ func (r *router) Add(methods []string, path string, handler any, middlewares ...
 		r.app.Add(methods, path, h, handlers...)
 	case Handler:
 		r.app.Add(methods, path, func(ctx fiber.Ctx) error {
-			return h(&context{Ctx: ctx})
+			return h(&context{Ctx: ctx, proxy: r.proxy})
 		}, handlers...)
 	}
 
@@ -124,15 +125,16 @@ func (r *router) Group(prefix string, middlewares ...any) Router {
 			handlers = append(handlers, h)
 		case Handler:
 			handlers = append(handlers, func(ctx fiber.Ctx) error {
-				return h(&context{Ctx: ctx})
+				return h(&context{Ctx: ctx, proxy: r.proxy})
 			})
 		}
 	}
 
-	return &routeGroup{router: r.app.Group(prefix, handlers...)}
+	return &routeGroup{proxy: r.proxy, router: r.app.Group(prefix, handlers...)}
 }
 
 type routeGroup struct {
+	proxy  *Proxy
 	router fiber.Router
 }
 
@@ -197,7 +199,7 @@ func (r *routeGroup) Add(methods []string, path string, handler any, middlewares
 			handlers = append(handlers, h)
 		case Handler:
 			handlers = append(handlers, func(ctx fiber.Ctx) error {
-				return h(&context{Ctx: ctx})
+				return h(&context{Ctx: ctx, proxy: r.proxy})
 			})
 		}
 	}
@@ -207,7 +209,7 @@ func (r *routeGroup) Add(methods []string, path string, handler any, middlewares
 		r.router.Add(methods, path, h, handlers...)
 	case Handler:
 		r.router.Add(methods, path, func(ctx fiber.Ctx) error {
-			return h(&context{Ctx: ctx})
+			return h(&context{Ctx: ctx, proxy: r.proxy})
 		}, handlers...)
 	}
 
@@ -225,10 +227,10 @@ func (r *routeGroup) Group(prefix string, middlewares ...any) Router {
 			handlers = append(handlers, h)
 		case Handler:
 			handlers = append(handlers, func(ctx fiber.Ctx) error {
-				return h(&context{Ctx: ctx})
+				return h(&context{Ctx: ctx, proxy: r.proxy})
 			})
 		}
 	}
 
-	return &routeGroup{router: r.router.Group(prefix, handlers...)}
+	return &routeGroup{router: r.router.Group(prefix, handlers...), proxy: r.proxy}
 }
