@@ -65,12 +65,11 @@ func (w *watcher) Stop() error {
 }
 
 type watcherMgr struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	locator *Locator
-	key     string
-	sub     *redis.PubSub
-
+	ctx      context.Context
+	cancel   context.CancelFunc
+	locator  *Locator
+	key      string
+	sub      *redis.PubSub
 	rw       sync.RWMutex
 	idx      int64
 	watchers map[int64]*watcher
