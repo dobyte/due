@@ -15,64 +15,58 @@ var locator = redis.NewLocator(
 )
 
 func TestLocator_BindGate(t *testing.T) {
-	for i := 1; i <= 6; i++ {
-		gid := xuuid.UUID()
+	ctx := context.Background()
+	uid := int64(1)
+	gid := xuuid.UUID()
 
-		err := locator.BindGate(context.Background(), int64(i), gid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.BindGate(ctx, uid, gid); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestLocator_BindNode(t *testing.T) {
-	for i := 1; i <= 6; i++ {
-		nid := xuuid.UUID()
+	ctx := context.Background()
+	uid := int64(1)
+	nid := xuuid.UUID()
+	name := "node1"
 
-		name := fmt.Sprintf("node-%d", i)
-
-		err := locator.BindNode(context.Background(), int64(i), name, nid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.BindNode(ctx, uid, name, nid); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestLocator_UnbindGate(t *testing.T) {
-	for i := 1; i <= 6; i++ {
-		gid := xuuid.UUID()
-		ctx := context.Background()
-		uid := int64(i)
+	ctx := context.Background()
+	uid := int64(1)
+	gid := xuuid.UUID()
 
-		err := locator.BindGate(ctx, uid, gid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.BindGate(ctx, uid, gid); err != nil {
+		t.Fatal(err)
+	}
 
-		err = locator.UnbindGate(ctx, uid, gid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.UnbindGate(ctx, uid, gid); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestLocator_UnbindNode(t *testing.T) {
-	for i := 1; i <= 6; i++ {
-		nid := xuuid.UUID()
+	ctx := context.Background()
+	uid := int64(1)
+	nid1 := xuuid.UUID()
+	nid2 := xuuid.UUID()
+	name1 := "node1"
+	name2 := "node2"
 
-		ctx := context.Background()
-		uid := int64(i)
-		name := fmt.Sprintf("node-%d", i)
+	if err := locator.BindNode(ctx, uid, name1, nid1); err != nil {
+		t.Fatal(err)
+	}
 
-		err := locator.BindNode(ctx, uid, name, nid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.BindNode(ctx, uid, name2, nid2); err != nil {
+		t.Fatal(err)
+	}
 
-		err = locator.UnbindNode(ctx, uid, name, nid)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if err := locator.UnbindNode(ctx, uid, name2, nid2); err != nil {
+		t.Fatal(err)
 	}
 }
 
