@@ -43,11 +43,11 @@ type Event struct {
 	// 事件类型
 	Type EventType `json:"type"`
 	// 实例ID
-	InsID string `json:"ins_id"`
+	InsID string `json:"insID"`
 	// 实例类型
-	InsKind string `json:"ins_kind"`
+	InsKind string `json:"insKind"`
 	// 实例名称
-	InsName string `json:"ins_name"`
+	InsName string `json:"insName"`
 }
 
 type EventType int
