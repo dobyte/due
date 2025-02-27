@@ -51,7 +51,7 @@ func Has(ctx context.Context, key string) (bool, error) {
 
 // Get 获取缓存值
 func Get(ctx context.Context, key string, def ...interface{}) Result {
-	return globalCache.Get(ctx, key, def)
+	return globalCache.Get(ctx, key, def...)
 }
 
 // Set 设置缓存值

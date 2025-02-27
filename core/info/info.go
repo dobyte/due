@@ -25,7 +25,7 @@ const (
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
 	website           = "https://github.com/dobyte/due"
-	version           = "v2.2.5"
+	version           = "v2.2.6"
 	global            = "Global"
 )
 
@@ -38,7 +38,7 @@ func PrintFrameworkInfo() {
 }
 
 func PrintGlobalInfo() {
-	PrintBoxInfo("Global",
+	PrintBoxInfo(global,
 		fmt.Sprintf("PID: %d", syscall.Getpid()),
 		fmt.Sprintf("Mode: %s", mode.GetMode()),
 	)
