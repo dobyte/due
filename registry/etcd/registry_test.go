@@ -31,6 +31,7 @@ func TestRegistry_Register1(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cnt := 0
 	ctx := context.Background()
 	ins := &registry.ServiceInstance{
 		ID:       "test-1",
@@ -41,34 +42,23 @@ func TestRegistry_Register1(t *testing.T) {
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
 	}
 
-	rctx, rcancel := context.WithTimeout(ctx, 2*time.Second)
-	err = reg.Register(rctx, ins)
-	rcancel()
-	if err != nil {
-		t.Fatal(err)
+	for {
+		if cnt%2 == 0 {
+			ins.State = cluster.Work.String()
+		} else {
+			ins.State = cluster.Busy.String()
+		}
+
+		if err = reg.Register(ctx, ins); err != nil {
+			t.Fatal(err)
+		} else {
+			t.Logf("register: %v", ins)
+		}
+
+		cnt++
+
+		time.Sleep(2 * time.Second)
 	}
-
-	time.Sleep(2 * time.Second)
-
-	ins.State = cluster.Busy.String()
-	rctx, rcancel = context.WithTimeout(ctx, 2*time.Second)
-	err = reg.Register(rctx, ins)
-	rcancel()
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log("register")
-	}
-
-	time.Sleep(20 * time.Second)
-
-	if err = reg.Deregister(ctx, ins); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log("deregister")
-	}
-
-	time.Sleep(40 * time.Second)
 }
 
 func TestRegistry_Register2(t *testing.T) {
@@ -138,7 +128,7 @@ func TestRegistry_Watch(t *testing.T) {
 				return
 			}
 
-			fmt.Println("goroutine 1: new event entity")
+			//fmt.Println("goroutine 1: new event entity")
 
 			for _, service := range services {
 				t.Logf("goroutine 1: %+v", service)
@@ -154,7 +144,7 @@ func TestRegistry_Watch(t *testing.T) {
 				return
 			}
 
-			fmt.Println("goroutine 2: new event entity")
+			//fmt.Println("goroutine 2: new event entity")
 
 			for _, service := range services {
 				t.Logf("goroutine 2: %+v", service)
@@ -162,5 +152,7 @@ func TestRegistry_Watch(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(60 * time.Second)
+	//time.Sleep(60 * time.Second)
+
+	select {}
 }
