@@ -125,7 +125,10 @@ func (c *Client) wait() {
 	c.wg.Wait()
 	c.closed.Store(true)
 	c.connections = nil
-	close(c.chWrite)
+
+	time.AfterFunc(time.Second, func() {
+		close(c.chWrite)
+	})
 
 	if c.opts.CloseHandler != nil {
 		c.opts.CloseHandler()

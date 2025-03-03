@@ -215,7 +215,9 @@ func (c *Conn) close() {
 	atomic.StoreInt32(&c.state, def.ConnClosed)
 
 	if c.builtin {
-		close(c.chWrite)
+		time.AfterFunc(time.Second, func() {
+			close(c.chWrite)
+		})
 	}
 }
 
