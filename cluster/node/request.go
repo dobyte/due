@@ -133,7 +133,7 @@ func (r *request) compareVersionExecDefer(version int32) {
 
 // Clone 克隆Context
 func (r *request) Clone() Context {
-	return &request{
+	c := &request{
 		node: r.node,
 		gid:  r.gid,
 		nid:  r.nid,
@@ -146,6 +146,10 @@ func (r *request) Clone() Context {
 			Data:  r.message.Data,
 		},
 	}
+
+	c.actor.Store(r.actor.Load())
+
+	return c
 }
 
 // Task 投递任务

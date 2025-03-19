@@ -103,13 +103,17 @@ func (e *event) compareVersionExecDefer(version int32) {
 
 // Clone 克隆Context
 func (e *event) Clone() Context {
-	return &event{
+	c := &event{
 		node: e.node,
 		gid:  e.gid,
 		cid:  e.cid,
 		uid:  e.uid,
 		ctx:  context.Background(),
 	}
+
+	c.actor.Store(e.actor.Load())
+
+	return c
 }
 
 // Task 投递任务
