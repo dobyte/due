@@ -27,6 +27,16 @@ type clientConn struct {
 	lastHeartbeatTime int64         // 上次心跳时间
 }
 
+// GetWorkerPool 获取工作池
+func (c *clientConn) GetWorkerPool() *network.WorkerPool {
+	return nil
+}
+
+// GetWorkerID 获取工作ID
+func (c *clientConn) GetWorkerID() int32 {
+	return 0
+}
+
 var _ network.Conn = &clientConn{}
 
 func newClientConn(client *client, id int64, conn net.Conn) network.Conn {

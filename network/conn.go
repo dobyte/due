@@ -45,5 +45,9 @@ type (
 		RemoteIP() (string, error)
 		// RemoteAddr 获取远端地址
 		RemoteAddr() (net.Addr, error)
+		// GetWorkerPool 获取工作池
+		GetWorkerPool() *WorkerPool
+		// GetWorkerID 获取工作ID
+		GetWorkerID() int32
 	}
 )

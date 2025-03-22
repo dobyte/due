@@ -16,16 +16,28 @@ import (
 )
 
 type serverConn struct {
-	rw                sync.RWMutex    // 锁
-	id                int64           // 连接ID
-	uid               int64           // 用户ID
-	state             int32           // 连接状态
-	conn              *kcp.UDPSession // UDP源连接
-	connMgr           *serverConnMgr  // 连接管理
-	chWrite           chan chWrite    // 写入队列
-	lastHeartbeatTime int64           // 上次心跳时间
-	done              chan struct{}   // 写入完成信号
-	close             chan struct{}   // 关闭信号
+	rw                sync.RWMutex        // 锁
+	id                int64               // 连接ID
+	uid               int64               // 用户ID
+	state             int32               // 连接状态
+	conn              *kcp.UDPSession     // UDP源连接
+	connMgr           *serverConnMgr      // 连接管理
+	wp                *network.WorkerPool // 工作池
+	workerID          int32               // 工作ID
+	chWrite           chan chWrite        // 写入队列
+	lastHeartbeatTime int64               // 上次心跳时间
+	done              chan struct{}       // 写入完成信号
+	close             chan struct{}       // 关闭信号
+}
+
+// GetWorkerPool 获取工作池
+func (c *serverConn) GetWorkerPool() *network.WorkerPool {
+	return c.wp
+}
+
+// GetWorkerID 获取工作ID
+func (c *serverConn) GetWorkerID() int32 {
+	return c.workerID
 }
 
 var _ network.Conn = &serverConn{}
@@ -155,6 +167,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *kcp.UDPSession) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
+	c.wp = cm.server.wp
+	c.workerID = network.BindWorker(c)
 	c.chWrite = make(chan chWrite, 4096)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
@@ -211,6 +225,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	close(c.close)
 	close(c.done)
 	conn := c.conn
+	network.RecycleWorker(c)
 	c.conn = nil
 	c.rw.Unlock()
 
@@ -240,6 +255,7 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 	close(c.close)
 	close(c.done)
 	conn := c.conn
+	network.RecycleWorker(c)
 	c.conn = nil
 	c.rw.Unlock()
 
@@ -309,9 +325,12 @@ func (c *serverConn) read() {
 			if len(msg) == 0 {
 				continue
 			}
-
-			if c.connMgr.server.receiveHandler != nil {
-				c.connMgr.server.receiveHandler(c, msg)
+			if c.wp.IsOpen() {
+				c.wp.AddTask(network.TaskPool.Get(c, msg))
+			} else {
+				if c.connMgr.server.receiveHandler != nil {
+					c.connMgr.server.receiveHandler(c, msg)
+				}
 			}
 		}
 	}

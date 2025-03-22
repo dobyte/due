@@ -15,16 +15,18 @@ import (
 )
 
 type serverConn struct {
-	id                int64          // 连接ID
-	uid               int64          // 用户ID
-	state             int32          // 连接状态
-	connMgr           *serverConnMgr // 连接管理
-	rw                sync.RWMutex   // 读写锁
-	conn              net.Conn       // TCP源连接
-	chWrite           chan chWrite   // 写入队列
-	done              chan struct{}  // 写入完成信号
-	close             chan struct{}  // 关闭信号
-	lastHeartbeatTime int64          // 上次心跳时间
+	id                int64               // 连接ID
+	uid               int64               // 用户ID
+	state             int32               // 连接状态
+	connMgr           *serverConnMgr      // 连接管理
+	wp                *network.WorkerPool // 工作池
+	workerID          int32               // 工作ID
+	rw                sync.RWMutex        // 读写锁
+	conn              net.Conn            // TCP源连接
+	chWrite           chan chWrite        // 写入队列
+	done              chan struct{}       // 写入完成信号
+	close             chan struct{}       // 关闭信号
+	lastHeartbeatTime int64               // 上次心跳时间
 }
 
 var _ network.Conn = &serverConn{}
@@ -149,6 +151,16 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
+// GetWorkerPool 获取工作池
+func (c *serverConn) GetWorkerPool() *network.WorkerPool {
+	return c.wp
+}
+
+// GetWorkerID 获取工作ID
+func (c *serverConn) GetWorkerID() int32 {
+	return c.workerID
+}
+
 // 检测连接状态
 func (c *serverConn) checkState() error {
 	switch network.ConnState(atomic.LoadInt32(&c.state)) {
@@ -166,6 +178,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.id = id
 	c.conn = conn
 	c.connMgr = cm
+	c.wp = cm.server.wp
+	c.workerID = network.BindWorker(c)
 	c.chWrite = make(chan chWrite, 4096)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
@@ -203,6 +217,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	close(c.close)
 	close(c.done)
 	conn := c.conn
+	network.RecycleWorker(c)
 	c.conn = nil
 	c.rw.Unlock()
 
@@ -232,6 +247,7 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 	close(c.close)
 	close(c.done)
 	conn := c.conn
+	network.RecycleWorker(c)
 	c.conn = nil
 	c.rw.Unlock()
 
@@ -301,9 +317,12 @@ func (c *serverConn) read() {
 			if len(msg) == 0 {
 				continue
 			}
-
-			if c.connMgr.server.receiveHandler != nil {
-				c.connMgr.server.receiveHandler(c, msg)
+			if c.wp.IsOpen() {
+				c.wp.AddTask(network.TaskPool.Get(c, msg))
+			} else {
+				if c.connMgr.server.receiveHandler != nil {
+					c.connMgr.server.receiveHandler(c, msg)
+				}
 			}
 		}
 	}

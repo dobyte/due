@@ -29,6 +29,16 @@ type clientConn struct {
 	close             chan struct{}   // 关闭信号
 }
 
+// GetWorkerPool 获取工作池
+func (c *clientConn) GetWorkerPool() *network.WorkerPool {
+	return nil
+}
+
+// GetWorkerID 获取工作ID
+func (c *clientConn) GetWorkerID() int32 {
+	return 0
+}
+
 var _ network.Conn = &clientConn{}
 
 func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {

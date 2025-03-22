@@ -11,6 +11,7 @@ type server struct {
 	opts              *serverOptions            // 配置
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
+	wp                *network.WorkerPool       // 工作池
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
@@ -29,7 +30,7 @@ func NewServer(opts ...ServerOption) network.Server {
 	s := &server{}
 	s.opts = o
 	s.connMgr = newServerConnMgr(s)
-
+	s.wp = network.NewWorkerPool()
 	return s
 }
 
@@ -47,7 +48,7 @@ func (s *server) Start() error {
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
+	s.wp.StartWorkerPool(s.receiveHandler)
 	go s.serve()
 
 	return nil
