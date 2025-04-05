@@ -189,6 +189,16 @@ func (r *request) Context() context.Context {
 	return r.ctx
 }
 
+// SetValue 为上下文设置值
+func (r *request) SetValue(key, val any) {
+	r.ctx = context.WithValue(r.ctx, key, val)
+}
+
+// GetValue 获取上下文中的值
+func (r *request) GetValue(key any) any {
+	return r.ctx.Value(key)
+}
+
 // BindGate 绑定网关
 func (r *request) BindGate(uid ...int64) error {
 	switch {
@@ -394,6 +404,10 @@ func (r *request) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
+		if r.node.router.postRouteHandler != nil {
+			r.node.router.postRouteHandler(r)
+		}
+
 		r.reset()
 		r.node.reqPool.Put(r)
 	}

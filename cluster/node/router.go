@@ -10,8 +10,10 @@ type RouteHandler func(ctx Context)
 type Router struct {
 	node                *Node
 	routes              map[int32]*routeEntity
-	defaultRouteHandler RouteHandler
 	reqChan             chan *request
+	defaultRouteHandler RouteHandler
+	preRouteHandler     RouteHandler
+	postRouteHandler    RouteHandler
 }
 
 type routeEntity struct {
@@ -97,6 +99,26 @@ func (r *Router) HasDefaultRouteHandler() bool {
 	return r.defaultRouteHandler != nil
 }
 
+// SetPreRouteHandler 设置前置路由处理器
+func (r *Router) SetPreRouteHandler(handler RouteHandler) {
+	if r.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't set pre-route handler")
+		return
+	}
+
+	r.preRouteHandler = handler
+}
+
+// SetPostRouteHandler 设置后置路由处理器
+func (r *Router) SetPostRouteHandler(handler RouteHandler) {
+	if r.node.getState() != cluster.Shut {
+		log.Warnf("the node server is working, can't set post-route handler")
+		return
+	}
+
+	r.postRouteHandler = handler
+}
+
 // CheckRouteStateful 是否为有状态路由
 func (r *Router) CheckRouteStateful(route int32) (stateful bool, exist bool) {
 	if entity, ok := r.routes[route]; ok {
@@ -148,6 +170,10 @@ func (r *Router) handle(req *request) {
 		req.compareVersionRecycle(version)
 		log.Warnf("message routing does not register handler function, route: %v", req.message.Route)
 		return
+	}
+
+	if r.preRouteHandler != nil {
+		r.preRouteHandler(req)
 	}
 
 	if ok {

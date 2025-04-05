@@ -152,6 +152,16 @@ func (e *event) Context() context.Context {
 	return e.ctx
 }
 
+// SetValue 为上下文设置值
+func (e *event) SetValue(key, val any) {
+	e.ctx = context.WithValue(e.ctx, key, val)
+}
+
+// GetValue 获取上下文中的值
+func (e *event) GetValue(key any) any {
+	return e.ctx.Value(key)
+}
+
 // BindGate 绑定网关
 func (e *event) BindGate(uid ...int64) error {
 	switch {

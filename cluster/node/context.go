@@ -44,6 +44,10 @@ type Context interface {
 	Proxy() *Proxy
 	// Context 获取上下文
 	Context() context.Context
+	// SetValue 为上下文设置值
+	SetValue(key, val any)
+	// GetValue 获取上下文中的值
+	GetValue(key any) any
 	// GetIP 获取客户端IP
 	GetIP() (string, error)
 	// Deliver 投递消息给节点处理
