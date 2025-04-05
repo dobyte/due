@@ -9,15 +9,13 @@ import (
 )
 
 const (
-	defaultServerAddr     = ":0" // 默认服务器地址
-	defaultClientPoolSize = 10   // 默认客户端连接池大小
+	defaultServerAddr = ":0" // 默认服务器地址
 )
 
 const (
 	defaultServerAddrKey       = "etc.transport.grpc.server.addr"
 	defaultServerKeyFileKey    = "etc.transport.grpc.server.keyFile"
 	defaultServerCertFileKey   = "etc.transport.grpc.server.certFile"
-	defaultClientPoolSizeKey   = "etc.transport.grpc.client.poolSize"
 	defaultClientCertFileKey   = "etc.transport.grpc.client.certFile"
 	defaultClientServerNameKey = "etc.transport.grpc.client.serverName"
 )

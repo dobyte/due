@@ -28,14 +28,13 @@ type Options struct {
 func NewBuilder(opts *Options) *Builder {
 	b := &Builder{opts: opts}
 
-	var creds credentials.TransportCredentials
+	var cred credentials.TransportCredentials
 	if opts.CertFile != "" && opts.ServerName != "" {
-		creds, b.err = credentials.NewClientTLSFromFile(opts.CertFile, opts.ServerName)
-		if b.err != nil {
+		if cred, b.err = credentials.NewClientTLSFromFile(opts.CertFile, opts.ServerName); b.err != nil {
 			return b
 		}
 	} else {
-		creds = insecure.NewCredentials()
+		cred = insecure.NewCredentials()
 	}
 
 	resolvers := make([]resolver.Builder, 0, 2)
@@ -45,7 +44,8 @@ func NewBuilder(opts *Options) *Builder {
 	}
 
 	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+2)
-	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(creds))
+	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
+	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(cred))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
 
 	return b
