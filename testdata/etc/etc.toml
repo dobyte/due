@@ -440,7 +440,7 @@ shutdownMaxWaitTime = "0s"
             url = "ws://127.0.0.1:3553"
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
-            # 心跳间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
     [network.tcp]
         [network.tcp.server]
@@ -448,17 +448,17 @@ shutdownMaxWaitTime = "0s"
             addr = ":3553"
             # 服务器最大连接数
             maxConnNum = 5000
-            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
             # 心跳机制，默认resp
             heartbeatMechanism = "resp"
         [network.tcp.client]
             # 拨号地址
             addr = "127.0.0.1:3553"
-            # 拨号超时时间，默认5s
+            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
             timeout = "5s"
-            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 10
+            # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
 
 # 用户定位器模块
 [locate]
