@@ -680,6 +680,7 @@ throughput (TPS)     : 128969
 
 - [due-examples](https://github.com/dobyte/due-examples)
 - [due-chat](https://github.com/dobyte/due-chat)
+- [due高性能分布式游戏服务器商业实战案例-斗地主服务器 (付费项目，购买请联系框架作者)](https://github.com/dobyte/due-doudizhu-server)
 
 ### 16.三方示例
 
