@@ -9,7 +9,6 @@ package etcd
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -126,17 +125,10 @@ func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watch
 					switch ev.Type {
 					case mvccpb.PUT:
 						if service, err := unmarshal(ev.Kv.Value); err == nil {
-							log.Debugf("%s is added", service.Alias)
 							w.serviceInstances.Store(service.ID, service)
 						}
 					case mvccpb.DELETE:
 						if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-							v, ok := w.serviceInstances.Load(parts[3])
-							if ok {
-								service := v.(*registry.ServiceInstance)
-								log.Debugf("%s is deleted", service.Alias)
-							}
-
 							w.serviceInstances.Delete(parts[3])
 						}
 					}
