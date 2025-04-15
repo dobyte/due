@@ -80,7 +80,7 @@ func (b *Builder) init() error {
 	}
 
 	b.watcher = watcher
-	b.updateStates(instances)
+	b.updateInstances(instances)
 
 	go b.watch()
 
@@ -100,11 +100,11 @@ func (b *Builder) watch() {
 			continue
 		}
 
-		b.updateStates(instances)
+		b.updateInstances(instances)
 	}
 }
 
-func (b *Builder) updateStates(instances []*registry.ServiceInstance) {
+func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	states := make(map[string]*resolver.State, len(instances))
 	for _, instance := range instances {
 		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
