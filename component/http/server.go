@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
@@ -103,7 +104,7 @@ func (s *Server) Start() {
 			CertKeyFile:           s.opts.keyFile,
 			DisableStartupMessage: true,
 		}); err != nil {
-			log.Fatal("http server startup failed: %v", err)
+			log.Fatalf("http server startup failed: %v", errors.Unwrap(errors.Unwrap(err)))
 		}
 	}()
 }
