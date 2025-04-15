@@ -112,7 +112,7 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 		size = 10
 	}
 
-	pool := cli.NewOneClientPool(size, cli.Failtry, cli.RandomSelect, dis, b.dialOpts)
+	pool := cli.NewOneClientPool(size, cli.Failtry, cli.RoundRobin, dis, b.dialOpts)
 	b.pools.Store(target, pool)
 
 	return pool.Get(), nil

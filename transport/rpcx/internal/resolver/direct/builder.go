@@ -54,7 +54,7 @@ func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
 		address, ok := b.addresses[target.Host]
 		b.rw.RUnlock()
 		if !ok {
-			return nil, errors.ErrNotFoundDirectAddress
+			return nil, errors.ErrNotFoundServiceAddress
 		}
 
 		addr = address
