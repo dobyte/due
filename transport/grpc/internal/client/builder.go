@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/discovery"
 	"github.com/dobyte/due/v2/registry"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -15,6 +16,7 @@ type Builder struct {
 	err         error
 	opts        *Options
 	dialOpts    []grpc.DialOption
+	sfg         singleflight.Group
 	connections sync.Map
 }
 
@@ -47,27 +49,30 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(cred))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
+	b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
 
 	return b
 }
 
 // Build 构建连接
 func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
-	c, ok := b.connections.Load(target)
-	if ok {
+	if c, ok := b.connections.Load(target); ok {
 		return c.(*grpc.ClientConn), nil
 	}
 
-	cc, err := grpc.NewClient(target, b.dialOpts...)
+	c, err, _ := b.sfg.Do(target, func() (interface{}, error) {
+		cc, err := grpc.NewClient(target, b.dialOpts...)
+		if err != nil {
+			return nil, err
+		}
+
+		b.connections.Store(target, cc)
+
+		return cc, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if c, ok = b.connections.LoadOrStore(target, cc); ok {
-		_ = cc.Close()
-
-		return c.(*grpc.ClientConn), nil
-	} else {
-		return cc, nil
-	}
+	return c.(*grpc.ClientConn), nil
 }

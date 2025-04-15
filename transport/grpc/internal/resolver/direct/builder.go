@@ -23,7 +23,8 @@ type Builder struct {
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
 	rw        sync.RWMutex
-	addresses map[string]string
+	states    map[string]*resolver.State
+	resolvers sync.Map
 }
 
 var _ resolver.Builder = &Builder{}
@@ -32,7 +33,6 @@ func NewBuilder(dis registry.Discovery) *Builder {
 	b := &Builder{}
 	b.dis = dis
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-	b.addresses = make(map[string]string)
 
 	if err := b.init(); err != nil {
 		log.Fatalf("init client builder failed: %v", err)
@@ -42,24 +42,30 @@ func NewBuilder(dis registry.Discovery) *Builder {
 }
 
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
-	addr := target.URL.Host
-
-	if _, _, err := net.SplitHostPort(target.URL.Host); err != nil {
-		b.rw.RLock()
-		address, ok := b.addresses[target.URL.Host]
-		b.rw.RUnlock()
-		if !ok {
-			return nil, errors.ErrNotFoundDirectAddress
+	if _, _, err := net.SplitHostPort(target.URL.Host); err == nil {
+		if err = cc.UpdateState(resolver.State{Addresses: []resolver.Address{{Addr: target.URL.Host}}}); err != nil {
+			return nil, err
 		}
 
-		addr = address
-	}
+		return &Resolver{}, nil
+	} else {
+		b.rw.RLock()
+		state, ok := b.states[target.URL.Host]
+		b.rw.RUnlock()
+		if !ok {
+			return nil, errors.ErrNotFoundServiceAddress
+		}
 
-	if err := cc.UpdateState(resolver.State{Addresses: []resolver.Address{{Addr: addr}}}); err != nil {
-		return nil, err
-	}
+		if err = cc.UpdateState(*state); err != nil {
+			return nil, err
+		}
 
-	return newResolver(), nil
+		r := &Resolver{builder: b, target: target, cc: cc}
+
+		b.resolvers.Store(target.URL.Host, r)
+
+		return r, nil
+	}
 }
 
 func (b *Builder) Scheme() string {
@@ -111,7 +117,7 @@ func (b *Builder) watch() {
 }
 
 func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
-	addresses := make(map[string]string, len(instances))
+	states := make(map[string]*resolver.State, len(instances))
 	for _, instance := range instances {
 		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
 		if err != nil {
@@ -119,10 +125,42 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 			continue
 		}
 
-		addresses[instance.ID] = ep.Address()
+		if state, ok := states[instance.ID]; ok {
+			state.Addresses = append(state.Addresses, resolver.Address{Addr: ep.Address()})
+		} else {
+			states[instance.ID] = &resolver.State{Addresses: []resolver.Address{{Addr: ep.Address()}}}
+		}
 	}
 
 	b.rw.Lock()
-	b.addresses = addresses
+	b.states = states
 	b.rw.Unlock()
+
+	b.resolvers.Range(func(_, value any) bool {
+		r := value.(*Resolver)
+
+		if state, ok := states[r.target.URL.Host]; ok {
+			r.updateState(*state)
+		} else {
+			b.removeResolver(r)
+		}
+
+		return true
+	})
+}
+
+func (b *Builder) updateResolver(r *Resolver) {
+	b.rw.RLock()
+	states := b.states
+	b.rw.RUnlock()
+
+	if state, ok := states[r.target.URL.Host]; ok {
+		r.updateState(*state)
+	} else {
+		b.resolvers.Delete(r.target.URL.Host)
+	}
+}
+
+func (b *Builder) removeResolver(r *Resolver) {
+	b.resolvers.Delete(r.target.URL.Host)
 }

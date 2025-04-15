@@ -3,6 +3,8 @@ package discovery
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"google.golang.org/grpc/resolver"
@@ -20,8 +22,8 @@ type Builder struct {
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
 	rw        sync.RWMutex
-	instances []*registry.ServiceInstance
-	resolvers map[string]*Resolver
+	states    map[string]*resolver.State
+	resolvers sync.Map
 }
 
 var _ resolver.Builder = &Builder{}
@@ -30,7 +32,6 @@ func NewBuilder(dis registry.Discovery) *Builder {
 	b := &Builder{}
 	b.dis = dis
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-	b.resolvers = make(map[string]*Resolver)
 
 	if err := b.init(); err != nil {
 		log.Fatalf("init client builder failed: %v", err)
@@ -41,24 +42,20 @@ func NewBuilder(dis registry.Discovery) *Builder {
 
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
 	b.rw.RLock()
-	r, ok := b.resolvers[target.URL.Host]
+	state, ok := b.states[target.URL.Host]
 	b.rw.RUnlock()
 
-	if ok {
-		return r, nil
+	if !ok {
+		return nil, errors.ErrNotFoundServiceAddress
 	}
 
-	b.rw.Lock()
-	defer b.rw.Unlock()
-
-	if r, ok = b.resolvers[target.URL.Host]; ok {
-		return r, nil
+	if err := cc.UpdateState(*state); err != nil {
+		return nil, err
 	}
 
-	r = newResolver(b, target.URL.Host, cc)
-	r.updateInstances(b.instances)
+	r := &Resolver{builder: b, target: target, cc: cc}
 
-	b.resolvers[target.URL.Host] = r
+	b.resolvers.Store(target.URL.Host, r)
 
 	return r, nil
 }
@@ -69,7 +66,7 @@ func (b *Builder) Scheme() string {
 
 func (b *Builder) init() error {
 	ctx, cancel := context.WithTimeout(b.ctx, defaultTimeout)
-	services, err := b.dis.Services(ctx, cluster.Mesh.String())
+	instances, err := b.dis.Services(ctx, cluster.Mesh.String())
 	cancel()
 	if err != nil {
 		return err
@@ -83,7 +80,7 @@ func (b *Builder) init() error {
 	}
 
 	b.watcher = watcher
-	b.updateInstances(services)
+	b.updateStates(instances)
 
 	go b.watch()
 
@@ -98,28 +95,62 @@ func (b *Builder) watch() {
 		default:
 			// exec watch
 		}
-		services, err := b.watcher.Next()
+		instances, err := b.watcher.Next()
 		if err != nil {
 			continue
 		}
 
-		b.updateInstances(services)
+		b.updateStates(instances)
 	}
 }
 
-func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
-	b.rw.Lock()
-	defer b.rw.Unlock()
+func (b *Builder) updateStates(instances []*registry.ServiceInstance) {
+	states := make(map[string]*resolver.State, len(instances))
+	for _, instance := range instances {
+		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
+		if err != nil {
+			log.Errorf("parse discovery endpoint failed: %v", err)
+			continue
+		}
 
-	b.instances = instances
-
-	for _, r := range b.resolvers {
-		r.updateInstances(instances)
+		for _, service := range instance.Services {
+			if state, ok := states[service]; ok {
+				state.Addresses = append(state.Addresses, resolver.Address{Addr: ep.Address(), ServerName: service})
+			} else {
+				states[service] = &resolver.State{Addresses: []resolver.Address{{Addr: ep.Address(), ServerName: service}}}
+			}
+		}
 	}
-}
 
-func (b *Builder) removeResolver(servicePath string) {
 	b.rw.Lock()
-	delete(b.resolvers, servicePath)
+	b.states = states
 	b.rw.Unlock()
+
+	b.resolvers.Range(func(_, value any) bool {
+		r := value.(*Resolver)
+
+		if state, ok := states[r.target.URL.Host]; ok {
+			r.updateState(*state)
+		} else {
+			b.removeResolver(r)
+		}
+
+		return true
+	})
+}
+
+func (b *Builder) updateResolver(r *Resolver) {
+	b.rw.RLock()
+	states := b.states
+	b.rw.RUnlock()
+
+	if state, ok := states[r.target.URL.Host]; ok {
+		r.updateState(*state)
+	} else {
+		b.resolvers.Delete(r.target.URL.Host)
+	}
+}
+
+func (b *Builder) removeResolver(r *Resolver) {
+	b.resolvers.Delete(r.target.URL.Host)
 }
