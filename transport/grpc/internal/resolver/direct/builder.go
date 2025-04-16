@@ -78,16 +78,18 @@ func (b *Builder) init() error {
 	}
 
 	ctx, cancel := context.WithTimeout(b.ctx, defaultTimeout)
-	instances, err := b.dis.Services(ctx, cluster.Mesh.String())
+	watcher, err := b.dis.Watch(ctx, cluster.Mesh.String())
 	cancel()
 	if err != nil {
 		return err
 	}
 
 	ctx, cancel = context.WithTimeout(b.ctx, defaultTimeout)
-	watcher, err := b.dis.Watch(ctx, cluster.Mesh.String())
+	instances, err := b.dis.Services(ctx, cluster.Mesh.String())
 	cancel()
 	if err != nil {
+		_ = watcher.Stop()
+
 		return err
 	}
 
