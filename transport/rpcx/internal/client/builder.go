@@ -11,19 +11,21 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
 	proto "github.com/smallnest/rpcx/protocol"
+	"golang.org/x/sync/singleflight"
 	"net/url"
 	"os"
 	"sync"
 )
 
-const defaultBuilder = "direct"
+const defaultPoolSize = 10
 
 type Builder struct {
 	err      error
 	opts     *Options
 	dialOpts cli.Option
-	pools    sync.Map
 	builders map[string]resolver.Builder
+	sfg      singleflight.Group
+	pools    sync.Map
 }
 
 type Options struct {
@@ -82,38 +84,36 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 		return nil, err
 	}
 
-	if u.Scheme == "" {
-		u.Scheme = defaultBuilder
-		target = u.String()
-	}
-
 	val, ok := b.pools.Load(target)
 	if ok {
 		return val.(*cli.OneClientPool).Get(), nil
 	}
 
-	var builder resolver.Builder
-	if u.Scheme == "" {
-		builder, ok = b.builders[defaultBuilder]
-	} else {
-		builder, ok = b.builders[u.Scheme]
-	}
-	if !ok {
-		return nil, errors.New("missing resolver")
-	}
+	val, err, _ = b.sfg.Do(target, func() (interface{}, error) {
+		builder, ok := b.builders[u.Scheme]
+		if !ok {
+			return nil, errors.ErrMissingResolver
+		}
 
-	dis, err := builder.Build(u)
+		dis, err := builder.Build(u)
+		if err != nil {
+			return nil, err
+		}
+
+		size := b.opts.PoolSize
+		if size <= 0 {
+			size = defaultPoolSize
+		}
+
+		pool := cli.NewOneClientPool(size, cli.Failtry, cli.RoundRobin, dis, b.dialOpts)
+
+		b.pools.Store(target, pool)
+
+		return pool, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	size := b.opts.PoolSize
-	if size <= 0 {
-		size = 10
-	}
-
-	pool := cli.NewOneClientPool(size, cli.Failtry, cli.RoundRobin, dis, b.dialOpts)
-	b.pools.Store(target, pool)
-
-	return pool.Get(), nil
+	return val.(*cli.OneClientPool).Get(), nil
 }

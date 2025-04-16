@@ -3,6 +3,8 @@ package discovery
 import (
 	"context"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/endpoint"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
@@ -21,21 +23,18 @@ type Builder struct {
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
 	rw        sync.RWMutex
-	instances []*registry.ServiceInstance
-	resolvers map[string]*Resolver
+	pairs     map[string][]*cli.KVPair
+	resolvers sync.Map
 }
 
 func NewBuilder(dis registry.Discovery) *Builder {
 	b := &Builder{}
 	b.dis = dis
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-	b.resolvers = make(map[string]*Resolver)
 
 	if err := b.init(); err != nil {
 		log.Fatalf("init client builder failed: %v", err)
 	}
-
-	go b.watch()
 
 	return b
 }
@@ -45,35 +44,47 @@ func (b *Builder) Scheme() string {
 }
 
 func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
-	r := newResolver(b, target.Host)
+	b.rw.RLock()
+	pairs, ok := b.pairs[target.Host]
+	b.rw.RUnlock()
 
-	b.rw.Lock()
-	instances := b.instances
-	b.resolvers[target.Host] = r
-	b.rw.Unlock()
+	if !ok {
+		return nil, errors.ErrNotFoundServiceAddress
+	}
 
-	r.updateInstances(instances)
+	r := newResolver(target.Host, b)
+	r.updateState(pairs)
+
+	b.resolvers.Store(target.Host, r)
 
 	return r, nil
 }
 
 func (b *Builder) init() error {
-	ctx, cancel := context.WithTimeout(b.ctx, defaultTimeout)
-	services, err := b.dis.Services(ctx, cluster.Mesh.String())
-	cancel()
-	if err != nil {
-		return err
+	if b.dis == nil {
+		return errors.ErrMissingDiscovery
 	}
 
-	ctx, cancel = context.WithTimeout(b.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(b.ctx, defaultTimeout)
 	watcher, err := b.dis.Watch(ctx, cluster.Mesh.String())
 	cancel()
 	if err != nil {
 		return err
 	}
 
+	ctx, cancel = context.WithTimeout(b.ctx, defaultTimeout)
+	instances, err := b.dis.Services(ctx, cluster.Mesh.String())
+	cancel()
+	if err != nil {
+		_ = watcher.Stop()
+
+		return err
+	}
+
 	b.watcher = watcher
-	b.updateInstances(services)
+	b.updateInstances(instances)
+
+	go b.watch()
 
 	return nil
 }
@@ -96,18 +107,31 @@ func (b *Builder) watch() {
 }
 
 func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
-	b.rw.Lock()
-	defer b.rw.Unlock()
+	pairs := make(map[string][]*cli.KVPair, len(instances))
+	for _, instance := range instances {
+		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
+		if err != nil {
+			log.Errorf("parse discovery endpoint failed: %v", err)
+			continue
+		}
 
-	b.instances = instances
-
-	for _, r := range b.resolvers {
-		r.updateInstances(instances)
+		for _, service := range instance.Services {
+			pairs[service] = append(pairs[service], &cli.KVPair{Key: "tcp@" + ep.Address()})
+		}
 	}
+
+	b.rw.Lock()
+	b.pairs = pairs
+	b.rw.Unlock()
+
+	b.resolvers.Range(func(_, value any) bool {
+		r := value.(*Resolver)
+		r.updateState(pairs[r.name])
+
+		return true
+	})
 }
 
-func (b *Builder) removeResolver(servicePath string) {
-	b.rw.Lock()
-	delete(b.resolvers, servicePath)
-	b.rw.Unlock()
+func (b *Builder) removeResolver(r *Resolver) {
+	b.resolvers.Delete(r.name)
 }

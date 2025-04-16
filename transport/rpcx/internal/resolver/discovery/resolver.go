@@ -1,28 +1,26 @@
 package discovery
 
 import (
-	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
 	"sync"
 	"time"
 )
 
 type Resolver struct {
-	builder     *Builder
-	serviceName string
-	filter      cli.ServiceDiscoveryFilter
-	prw         sync.RWMutex
-	pairs       []*cli.KVPair
-	cmu         sync.RWMutex
-	chans       []chan []*cli.KVPair
+	builder *Builder
+	name    string
+	filter  cli.ServiceDiscoveryFilter
+	prw     sync.RWMutex
+	pairs   []*cli.KVPair
+	crw     sync.RWMutex
+	chans   []chan []*cli.KVPair
 }
 
-func newResolver(builder *Builder, serviceName string) *Resolver {
+func newResolver(name string, builder *Builder) *Resolver {
 	return &Resolver{
-		builder:     builder,
-		serviceName: serviceName,
+		name:    name,
+		builder: builder,
 	}
 }
 
@@ -36,28 +34,32 @@ func (r *Resolver) GetServices() []*cli.KVPair {
 
 // WatchService returns a nil chan.
 func (r *Resolver) WatchService() chan []*cli.KVPair {
-	r.cmu.Lock()
-	defer r.cmu.Unlock()
-
 	ch := make(chan []*cli.KVPair, 10)
+
+	r.crw.Lock()
 	r.chans = append(r.chans, ch)
+	r.crw.Unlock()
+
 	return ch
 }
 
 // RemoveWatcher remove a non-nil chan.
 func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
-	r.cmu.Lock()
-	defer r.cmu.Unlock()
+	r.crw.Lock()
+	defer r.crw.Unlock()
 
-	chans := make([]chan []*cli.KVPair, 0, len(r.chans))
+	i := -1
+
 	for _, c := range r.chans {
 		if c == ch {
 			close(c)
 		} else {
-			chans = append(chans, c)
+			i++
+			r.chans[i] = c
 		}
 	}
-	r.chans = chans
+
+	r.chans = r.chans[:i+1]
 }
 
 // Clone clone a new resolver
@@ -70,51 +72,34 @@ func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
 }
 
 func (r *Resolver) Close() {
-	r.builder.removeResolver(r.serviceName)
+	r.builder.removeResolver(r)
 
-	r.cmu.RLock()
+	r.crw.RLock()
 	for _, c := range r.chans {
 		close(c)
 	}
-	r.cmu.RUnlock()
+	r.crw.RUnlock()
 }
 
-func (r *Resolver) updateInstances(instances []*registry.ServiceInstance) {
-	pairs := make([]*cli.KVPair, 0, len(instances))
+func (r *Resolver) updateState(list []*cli.KVPair) {
+	var pairs []*cli.KVPair
 
-	for _, instance := range instances {
-		exists := false
-
-		for _, service := range instance.Services {
-			if service == r.serviceName {
-				exists = true
-				break
+	if r.filter != nil {
+		pairs = make([]*cli.KVPair, 0, len(list))
+		for _, pair := range list {
+			if r.filter(pair) {
+				pairs = append(pairs, pair)
 			}
 		}
-
-		if !exists {
-			continue
-		}
-
-		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
-		if err != nil {
-			log.Errorf("parse discovery endpoint failed: %v", err)
-			continue
-		}
-
-		pair := &cli.KVPair{Key: "tcp@" + ep.Address()}
-		if r.filter != nil && !r.filter(pair) {
-			continue
-		}
-
-		pairs = append(pairs, pair)
+	} else {
+		pairs = list
 	}
 
 	r.prw.Lock()
 	r.pairs = pairs
 	r.prw.Unlock()
 
-	r.cmu.RLock()
+	r.crw.RLock()
 	for _, ch := range r.chans {
 		go func(ch chan []*cli.KVPair) {
 			defer func() { recover() }()
@@ -126,5 +111,5 @@ func (r *Resolver) updateInstances(instances []*registry.ServiceInstance) {
 			}
 		}(ch)
 	}
-	r.cmu.RUnlock()
+	r.crw.RUnlock()
 }
