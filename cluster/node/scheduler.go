@@ -69,7 +69,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	s.mu.Unlock()
 
 	go act.dispatch()
-	
+
 	act.processor.Start()
 
 	return act, nil
@@ -210,7 +210,7 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 	uid := ctx.UID()
 
 	if uid == 0 {
-		return errors.ErrMissDispatchStrategy
+		return errors.ErrMissingDispatchStrategy
 	}
 
 	kind, ok := s.routes.Load(ctx.Route())
