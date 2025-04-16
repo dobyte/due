@@ -106,7 +106,7 @@ func (p *Proxy) AddServiceProvider(name string, desc, provider interface{}) {
 // 服务发现模式: 	discovery://service_name
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	if p.node.opts.transporter == nil {
-		return nil, errors.ErrMissTransporter
+		return nil, errors.ErrMissingTransporter
 	}
 
 	return p.node.opts.transporter.NewClient(target)
