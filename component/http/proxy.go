@@ -25,7 +25,7 @@ func (p *Proxy) Router() Router {
 // 服务发现模式: 	discovery://service_name
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	if p.server.opts.transporter == nil {
-		return nil, errors.ErrMissTransporter
+		return nil, errors.ErrMissingTransporter
 	}
 
 	return p.server.opts.transporter.NewClient(target)

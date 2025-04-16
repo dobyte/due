@@ -79,7 +79,7 @@ func (c *context) StdRequest() *http.Request {
 	std.Header = c.GetReqHeaders()
 	std.Host = c.Host()
 	std.ContentLength = int64(len(c.Body()))
-	std.RemoteAddr = c.Context().RemoteAddr().String()
+	std.RemoteAddr = c.RequestCtx().RemoteAddr().String()
 	std.RequestURI = string(req.RequestURI())
 
 	if req.Body() != nil {
