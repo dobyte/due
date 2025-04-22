@@ -15,6 +15,7 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
 	"sync/atomic"
 	"time"
@@ -163,13 +164,15 @@ func (r *request) Task(fn func(ctx Context)) {
 	r.node.addWait()
 
 	task.AddTask(func() {
+		defer func() {
+			r.compareVersionExecDefer(version)
+
+			r.compareVersionRecycle(version)
+
+			r.node.doneWait()
+		}()
+
 		fn(r)
-
-		r.compareVersionExecDefer(version)
-
-		r.compareVersionRecycle(version)
-
-		r.node.doneWait()
 	})
 }
 
@@ -203,7 +206,13 @@ func (r *request) GetValue(key any) any {
 func (r *request) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return r.node.proxy.BindGate(r.ctx, r.gid, r.cid, uid[0])
+		if err := r.node.proxy.BindGate(r.ctx, r.gid, r.cid, uid[0]); err != nil {
+			return err
+		}
+
+		r.uid = uid[0]
+
+		return nil
 	case r.uid != 0:
 		return r.node.proxy.BindGate(r.ctx, r.gid, r.cid, r.uid)
 	default:
@@ -405,7 +414,7 @@ func (r *request) loadVersion() int32 {
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
 		if r.node.router.postRouteHandler != nil {
-			r.node.router.postRouteHandler(r)
+			xcall.Call(func() { r.node.router.postRouteHandler(r) })
 		}
 
 		r.reset()

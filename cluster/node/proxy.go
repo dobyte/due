@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"time"
 )
 
@@ -289,7 +290,8 @@ func (p *Proxy) AfterFunc(d time.Duration, f func()) *Timer {
 	p.node.addWait()
 
 	timer := time.AfterFunc(d, func() {
-		f()
+		xcall.Call(f)
+
 		p.node.doneWait()
 	})
 

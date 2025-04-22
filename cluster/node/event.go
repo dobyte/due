@@ -126,13 +126,15 @@ func (e *event) Task(fn func(ctx Context)) {
 	e.node.addWait()
 
 	task.AddTask(func() {
+		defer func() {
+			e.compareVersionExecDefer(version)
+
+			e.compareVersionRecycle(version)
+
+			e.node.doneWait()
+		}()
+
 		fn(e)
-
-		e.compareVersionExecDefer(version)
-
-		e.compareVersionRecycle(version)
-
-		e.node.doneWait()
 	})
 }
 
@@ -166,7 +168,13 @@ func (e *event) GetValue(key any) any {
 func (e *event) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
-		return e.node.proxy.BindGate(e.ctx, e.gid, e.cid, uid[0])
+		if err := e.node.proxy.BindGate(e.ctx, e.gid, e.cid, uid[0]); err != nil {
+			return err
+		}
+
+		e.uid = uid[0]
+
+		return nil
 	case e.uid != 0:
 		return e.node.proxy.BindGate(e.ctx, e.gid, e.cid, e.uid)
 	default:

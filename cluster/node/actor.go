@@ -259,14 +259,16 @@ func (a *Actor) dispatch() {
 			if ctx.Kind() == Event {
 				if handler, ok := a.events[ctx.Event()]; ok {
 					xcall.Call(func() { handler(ctx) })
+
+					ctx.compareVersionExecDefer(version)
 				}
 			} else {
 				if handler, ok := a.routes[ctx.Route()]; ok {
 					xcall.Call(func() { handler(ctx) })
+
+					ctx.compareVersionExecDefer(version)
 				}
 			}
-
-			ctx.compareVersionExecDefer(version)
 
 			ctx.compareVersionRecycle(version)
 		case handle, ok := <-a.fnChan:

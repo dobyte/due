@@ -188,24 +188,22 @@ func (n *Node) dispatch() {
 			if !ok {
 				return
 			}
-			xcall.Call(func() {
-				n.trigger.handle(evt)
-			})
+
+			n.trigger.handle(evt)
 		case req, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
-			xcall.Call(func() {
-				n.router.handle(req)
-			})
+
+			n.router.handle(req)
 		case handle, ok := <-n.fnChan:
 			if !ok {
 				return
 			}
-			xcall.Call(func() {
-				handle()
-				n.doneWait()
-			})
+
+			xcall.Call(handle)
+
+			n.doneWait()
 		}
 	}
 }

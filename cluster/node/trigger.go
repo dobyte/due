@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type EventHandler func(ctx Context)
@@ -42,16 +43,13 @@ func (e *Trigger) close() {
 func (e *Trigger) handle(evt *event) {
 	version := evt.incrVersion()
 
-	defer evt.compareVersionRecycle(version)
+	if handler, ok := e.events[evt.event]; ok {
+		xcall.Call(func() { handler(evt) })
 
-	handler, ok := e.events[evt.event]
-	if !ok {
-		return
+		evt.compareVersionExecDefer(version)
 	}
 
-	handler(evt)
-
-	evt.compareVersionExecDefer(version)
+	evt.compareVersionRecycle(version)
 }
 
 // AddEventHandler 添加事件处理器

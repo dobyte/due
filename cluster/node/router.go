@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type RouteHandler func(ctx Context)
@@ -11,9 +12,9 @@ type Router struct {
 	node                *Node
 	routes              map[int32]*routeEntity
 	reqChan             chan *request
-	defaultRouteHandler RouteHandler
 	preRouteHandler     RouteHandler
 	postRouteHandler    RouteHandler
+	defaultRouteHandler RouteHandler
 }
 
 type routeEntity struct {
@@ -173,23 +174,19 @@ func (r *Router) handle(req *request) {
 	}
 
 	if r.preRouteHandler != nil {
-		r.preRouteHandler(req)
+		xcall.Call(func() { r.preRouteHandler(req) })
 	}
 
 	if ok {
 		if len(route.middlewares) > 0 {
-			middleware := &Middleware{
-				index:        -1,
-				middlewares:  route.middlewares,
-				routeHandler: route.handler,
-			}
+			middleware := &Middleware{index: -1, middlewares: route.middlewares, routeHandler: route.handler}
 			middleware.Next(req)
 			return
 		} else {
-			route.handler(req)
+			xcall.Call(func() { route.handler(req) })
 		}
 	} else {
-		r.defaultRouteHandler(req)
+		xcall.Call(func() { r.defaultRouteHandler(req) })
 	}
 
 	req.compareVersionExecDefer(version)
