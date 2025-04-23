@@ -119,11 +119,7 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 	r.cancel()
 	close(r.chHeartbeat)
 
-	insID := makeInsID(ins)
-
-	r.registry.registrars.Delete(insID)
-
-	return r.registry.opts.client.Agent().ServiceDeregister(insID)
+	return r.registry.opts.client.Agent().ServiceDeregister(makeInsID(ins))
 }
 
 // 心跳检测

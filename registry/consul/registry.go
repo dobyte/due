@@ -76,14 +76,15 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 
 // Deregister 解注册服务实例
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	insID := makeInsID(ins)
+	if r.err != nil {
+		return r.err
+	}
 
-	v, ok := r.registrars.Load(insID)
-	if ok {
+	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
-	return r.opts.client.Agent().ServiceDeregister(insID)
+	return nil
 }
 
 // Services 获取服务实例列表
