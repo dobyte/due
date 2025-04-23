@@ -6,11 +6,11 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
-	"github.com/dobyte/due/v2/utils/xconv"
 	"net"
 	"net/url"
 	"strconv"
@@ -122,7 +122,9 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	v, ok := r.registrars.Load(ins.ID)
+	insID := makeInsID(ins)
+
+	v, ok := r.registrars.Load(insID)
 	if ok {
 		return v.(*registrar).register(ctx, ins)
 	}
@@ -133,7 +135,7 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return err
 	}
 
-	r.registrars.Store(ins.ID, reg)
+	r.registrars.Store(insID, reg)
 
 	return nil
 }
@@ -144,7 +146,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return r.err
 	}
 
-	if v, ok := r.registrars.Load(ins.ID); ok {
+	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
