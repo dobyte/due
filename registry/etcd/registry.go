@@ -62,7 +62,9 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	v, ok := r.registrars.Load(ins.ID)
+	insID := makeInsID(ins)
+
+	v, ok := r.registrars.Load(insID)
 	if ok {
 		return v.(*registrar).register(ctx, ins)
 	}
@@ -73,7 +75,7 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return err
 	}
 
-	r.registrars.Store(ins.ID, reg)
+	r.registrars.Store(insID, reg)
 
 	return nil
 }
@@ -84,15 +86,11 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return r.err
 	}
 
-	v, ok := r.registrars.Load(ins.ID)
-	if ok {
+	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
-	key := fmt.Sprintf("/%s/%s/%s", r.opts.namespace, ins.Name, ins.ID)
-	_, err := r.opts.client.Delete(ctx, key)
-
-	return err
+	return nil
 }
 
 // Watch 监听相同服务名的服务实例变化

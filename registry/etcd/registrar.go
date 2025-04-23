@@ -93,20 +93,21 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 }
 
 // 解注册服务
-func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) (err error) {
+func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	r.cancel()
 	close(r.chHeartbeat)
 
-	r.registry.registrars.Delete(ins.ID)
-
 	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
-	_, err = r.kv.Delete(ctx, key)
 
-	if r.lease != nil {
-		_ = r.lease.Close()
+	if _, err := r.kv.Delete(ctx, key); err != nil {
+		return err
 	}
 
-	return
+	if r.lease != nil {
+		return r.lease.Close()
+	}
+
+	return nil
 }
 
 // 写入KV
