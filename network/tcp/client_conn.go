@@ -92,13 +92,14 @@ func (c *clientConn) Send(msg []byte) error {
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
 	if err = c.checkState(); err != nil {
 		return
 	}
 
-	c.rw.RLock()
 	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
-	c.rw.RUnlock()
 
 	return
 }
