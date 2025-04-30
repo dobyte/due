@@ -1,8 +1,8 @@
 # OS general
 */.DS_Store
 
-## Docker container's temp data
-#docker/*/
+# Docker container's temp data
+docker/*/
 
 # Test data
 testdata/log/
