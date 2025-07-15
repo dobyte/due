@@ -65,6 +65,16 @@ shutdownMaxWaitTime = "0s"
     name = "http"
     # 服务器监听地址，默认为:8080
     addr = ":8080"
+    # 是否启用控制台输出，默认为false
+    console = false
+    # body大小，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为4 * 1024 * 1024
+    bodyLimit = "4M"
+    # 最大并发连接数，默认为256 * 1024
+    concurrency = 262144
+    # 是否启用严格路由模式，默认为false，启用后"/foo"与"/foo/"为两个不同的路由
+    strictRouting = false
+    # 是否区分路由大小写，默认为false， 启用后"/FoO"与"/foo"为两个不同的路由
+    caseSensitive = false
     # 秘钥文件
     keyFile = ""
     # 证书文件

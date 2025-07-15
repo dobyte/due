@@ -34,9 +34,9 @@ type options struct {
 	addr          string                // 监听地址
 	console       bool                  // 是否启用控制台输出
 	bodyLimit     int                   // body大小，默认为4 * 1024 * 1024
+	concurrency   int                   // 最大并发连接数，默认为256 * 1024
 	strictRouting bool                  // 是否启用严格路由模式，默认为false，启用后"/foo"与"/foo/"为两个不同的路由
 	caseSensitive bool                  // 是否区分路由大小写，默认为false， 启用后"/FoO"与"/foo"为两个不同的路由
-	concurrency   int                   // 最大并发连接数，默认为256 * 1024
 	certFile      string                // 证书文件
 	keyFile       string                // 秘钥文件
 	registry      registry.Registry     // 服务注册器
@@ -69,7 +69,7 @@ func defaultOptions() *options {
 		name:          etc.Get(defaultNameKey, defaultName).String(),
 		addr:          etc.Get(defaultAddrKey, defaultAddr).String(),
 		console:       etc.Get(defaultConsoleKey).Bool(),
-		bodyLimit:     etc.Get(defaultBodyLimitKey, defaultBodyLimit).Int(),
+		bodyLimit:     int(etc.Get(defaultBodyLimitKey, defaultBodyLimit).B()),
 		concurrency:   etc.Get(defaultConcurrencyKey, defaultConcurrency).Int(),
 		strictRouting: etc.Get(defaultStrictRoutingKey).Bool(),
 		caseSensitive: etc.Get(defaultCaseSensitiveKey).Bool(),
