@@ -7,31 +7,43 @@ import (
 )
 
 const (
-	defaultName = "http"  // 默认HTTP服务名称
-	defaultAddr = ":8080" // 监听地址
+	defaultName        = "http"          // 默认HTTP服务名称
+	defaultAddr        = ":8080"         // 默认监听地址
+	defaultBodyLimit   = 4 * 1024 * 1024 // 默认body大小
+	defaultConcurrency = 256 * 1024      // 默认最大并发连接数
 )
 
 const (
-	defaultNameKey     = "etc.http.name"
-	defaultAddrKey     = "etc.http.addr"
-	defaultKeyFileKey  = "etc.http.keyFile"
-	defaultCertFileKey = "etc.http.certFile"
-	defaultCorsKey     = "etc.http.cors"
-	defaultSwaggerKey  = "etc.http.swagger"
+	defaultNameKey          = "etc.http.name"
+	defaultAddrKey          = "etc.http.addr"
+	defaultConsoleKey       = "etc.http.console"
+	defaultBodyLimitKey     = "etc.http.bodyLimit"
+	defaultConcurrencyKey   = "etc.http.concurrency"
+	defaultStrictRoutingKey = "etc.http.strictRouting"
+	defaultCaseSensitiveKey = "etc.http.caseSensitive"
+	defaultKeyFileKey       = "etc.http.keyFile"
+	defaultCertFileKey      = "etc.http.certFile"
+	defaultCorsKey          = "etc.http.cors"
+	defaultSwaggerKey       = "etc.http.swagger"
 )
 
 type Option func(o *options)
 
 type options struct {
-	name        string                // HTTP服务名称
-	addr        string                // 监听地址
-	certFile    string                // 证书文件
-	keyFile     string                // 秘钥文件
-	registry    registry.Registry     // 服务注册器
-	transporter transport.Transporter // 消息传输器
-	corsOpts    CorsOptions           // 跨域配置
-	swagOpts    SwagOptions           // swagger配置
-	middlewares []any                 // 中间件
+	name          string                // HTTP服务名称
+	addr          string                // 监听地址
+	console       bool                  // 是否启用控制台输出
+	bodyLimit     int                   // body大小，默认为4 * 1024 * 1024
+	strictRouting bool                  // 是否启用严格路由模式，默认为false，启用后"/foo"与"/foo/"为两个不同的路由
+	caseSensitive bool                  // 是否区分路由大小写，默认为false， 启用后"/FoO"与"/foo"为两个不同的路由
+	concurrency   int                   // 最大并发连接数，默认为256 * 1024
+	certFile      string                // 证书文件
+	keyFile       string                // 秘钥文件
+	registry      registry.Registry     // 服务注册器
+	transporter   transport.Transporter // 消息传输器
+	corsOpts      CorsOptions           // 跨域配置
+	swagOpts      SwagOptions           // swagger配置
+	middlewares   []any                 // 中间件
 }
 
 type CorsOptions struct {
@@ -54,20 +66,17 @@ type SwagOptions struct {
 
 func defaultOptions() *options {
 	opts := &options{
-		name:     defaultName,
-		addr:     defaultAddr,
-		keyFile:  etc.Get(defaultKeyFileKey).String(),
-		certFile: etc.Get(defaultCertFileKey).String(),
-		corsOpts: CorsOptions{},
-		swagOpts: SwagOptions{},
-	}
-
-	if name := etc.Get(defaultNameKey).String(); name != "" {
-		opts.name = name
-	}
-
-	if addr := etc.Get(defaultAddrKey).String(); addr != "" {
-		opts.addr = addr
+		name:          etc.Get(defaultNameKey, defaultName).String(),
+		addr:          etc.Get(defaultAddrKey, defaultAddr).String(),
+		console:       etc.Get(defaultConsoleKey).Bool(),
+		bodyLimit:     etc.Get(defaultBodyLimitKey, defaultBodyLimit).Int(),
+		concurrency:   etc.Get(defaultConcurrencyKey, defaultConcurrency).Int(),
+		strictRouting: etc.Get(defaultStrictRoutingKey).Bool(),
+		caseSensitive: etc.Get(defaultCaseSensitiveKey).Bool(),
+		keyFile:       etc.Get(defaultKeyFileKey).String(),
+		certFile:      etc.Get(defaultCertFileKey).String(),
+		corsOpts:      CorsOptions{},
+		swagOpts:      SwagOptions{},
 	}
 
 	if err := etc.Get(defaultCorsKey).Scan(&opts.corsOpts); err != nil {
@@ -89,6 +98,31 @@ func WithName(name string) Option {
 // WithAddr 设置监听地址
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
+}
+
+// WithConsole 设置是否启用控制台输出
+func WithConsole(enable bool) Option {
+	return func(o *options) { o.console = enable }
+}
+
+// WithBodyLimit 设置body大小
+func WithBodyLimit(bodyLimit int) Option {
+	return func(o *options) { o.bodyLimit = bodyLimit }
+}
+
+// WithConcurrency 设置最大并发连接数
+func WithConcurrency(concurrency int) Option {
+	return func(o *options) { o.concurrency = concurrency }
+}
+
+// WithStrictRouting 设置是否启用严格路由模式
+func WithStrictRouting(enable bool) Option {
+	return func(o *options) { o.strictRouting = enable }
+}
+
+// WithCaseSensitive 设置是否区分路由大小写
+func WithCaseSensitive(enable bool) Option {
+	return func(o *options) { o.caseSensitive = enable }
 }
 
 // WithCredentials 设置证书和秘钥
