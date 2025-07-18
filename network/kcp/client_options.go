@@ -12,9 +12,9 @@ const (
 )
 
 const (
-	defaultClientDialAddrKey          = "etc.network.tcp.client.addr"
-	defaultClientDialTimeoutKey       = "etc.network.tcp.client.timeout"
-	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
+	defaultClientDialAddrKey          = "etc.network.kcp.client.addr"
+	defaultClientDialTimeoutKey       = "etc.network.kcp.client.timeout"
+	defaultClientHeartbeatIntervalKey = "etc.network.kcp.client.heartbeatInterval"
 )
 
 type ClientOption func(o *clientOptions)
