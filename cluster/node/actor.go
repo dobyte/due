@@ -54,6 +54,11 @@ func (a *Actor) Proxy() *Proxy {
 	return a.scheduler.node.proxy
 }
 
+// Processor 获取处理器
+func (a *Actor) Processor() Processor {
+	return a.processor
+}
+
 // Invoke 调用函数（Actor内线程安全）
 func (a *Actor) Invoke(fn func()) {
 	a.rw.RLock()
