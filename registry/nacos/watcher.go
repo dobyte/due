@@ -12,7 +12,7 @@ import (
 
 type watcher struct {
 	idx        int64
-	state      int32
+	state      atomic.Bool
 	ctx        context.Context
 	cancel     context.CancelFunc
 	watcherMgr *watcherMgr
@@ -30,17 +30,14 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 func (w *watcher) notify(services []*registry.ServiceInstance) {
-	if atomic.LoadInt32(&w.state) == 0 {
-		return
+	if w.state.Load() {
+		w.chWatch <- services
 	}
-
-	w.chWatch <- services
 }
 
 // Next 返回服务实例列表
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
-	if atomic.LoadInt32(&w.state) == 0 {
-		atomic.StoreInt32(&w.state, 1)
+	if w.state.CompareAndSwap(false, true) {
 		return w.watcherMgr.services(), nil
 	}
 
@@ -71,9 +68,9 @@ type watcherMgr struct {
 	cancel           context.CancelFunc
 	registry         *Registry
 	serviceName      string
-	serviceInstances *atomic.Value
+	serviceInstances atomic.Value
 	serviceWaitIndex uint64
-	idx              int64
+	idx              atomic.Int64
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher
 }
@@ -88,7 +85,6 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 	wm.ctx, wm.cancel = context.WithCancel(registry.ctx)
 	wm.registry = registry
 	wm.serviceName = serviceName
-	wm.serviceInstances = &atomic.Value{}
 	wm.serviceInstances.Store(services)
 	wm.watchers = make(map[int64]*watcher)
 
@@ -126,7 +122,7 @@ func (wm *watcherMgr) fork() registry.Watcher {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
-	w := newWatcher(wm, atomic.AddInt64(&wm.idx, 1))
+	w := newWatcher(wm, wm.idx.Add(1))
 	wm.watchers[w.idx] = w
 
 	return w

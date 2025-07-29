@@ -2,6 +2,8 @@ package http
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/dobyte/due/component/http/v2/swagger"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
@@ -12,7 +14,6 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
-	"strings"
 )
 
 type Server struct {
@@ -31,8 +32,16 @@ func NewServer(opts ...Option) *Server {
 	s := &Server{}
 	s.opts = o
 	s.proxy = newProxy(s)
-	s.app = fiber.New(fiber.Config{ServerHeader: o.name})
-	s.app.Use(logger.New())
+	s.app = fiber.New(fiber.Config{
+		ServerHeader:  o.name,
+		BodyLimit:     o.bodyLimit,
+		StrictRouting: o.strictRouting,
+		CaseSensitive: o.caseSensitive,
+	})
+
+	if o.console {
+		s.app.Use(logger.New())
+	}
 
 	s.app.Use(recover.New(recover.Config{
 		EnableStackTrace: true,

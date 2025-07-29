@@ -117,6 +117,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	if err != nil {
 		return nil, err
 	}
+
 	r.watchers.Store(serviceName, w)
 
 	return w.fork(), nil

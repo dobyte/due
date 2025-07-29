@@ -292,12 +292,21 @@ func (e *event) Deliver(args *cluster.DeliverArgs) error {
 
 // Reply 回复消息
 func (e *event) Reply(message *cluster.Message) error {
-	return e.node.proxy.Push(e.ctx, &cluster.PushArgs{
-		GID:     e.gid,
-		Kind:    session.Conn,
-		Target:  e.cid,
-		Message: message,
-	})
+	if e.uid != 0 {
+		return e.node.proxy.Push(e.ctx, &cluster.PushArgs{
+			GID:     e.gid,
+			Kind:    session.User,
+			Target:  e.uid,
+			Message: message,
+		})
+	} else {
+		return e.node.proxy.Push(e.ctx, &cluster.PushArgs{
+			GID:     e.gid,
+			Kind:    session.Conn,
+			Target:  e.cid,
+			Message: message,
+		})
+	}
 }
 
 // Response 响应消息

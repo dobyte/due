@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -144,6 +145,7 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 
 func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data interface{}) {
 	req := r.node.reqPool.Get().(*request)
+	req.ctx = context.Background()
 	req.gid = gid
 	req.nid = nid
 	req.pid = pid

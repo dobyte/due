@@ -3,6 +3,7 @@ package http
 import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/transport"
+	"github.com/gofiber/fiber/v3"
 )
 
 type Proxy struct {
@@ -11,6 +12,11 @@ type Proxy struct {
 
 func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
+}
+
+// App 获取fiber原生应用
+func (p *Proxy) App() *fiber.App {
+	return p.server.app
 }
 
 // Router 获取路由器

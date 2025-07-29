@@ -67,7 +67,6 @@ func NewNode(opts ...Option) *Node {
 	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() interface{} {
 		evt := &event{}
-		evt.ctx = context.Background()
 		evt.node = n
 		evt.actor.Store((*Actor)(nil))
 
@@ -75,7 +74,6 @@ func NewNode(opts ...Option) *Node {
 	}}
 	n.reqPool = &sync.Pool{New: func() interface{} {
 		req := &request{}
-		req.ctx = context.Background()
 		req.node = n
 		req.message = &cluster.Message{}
 		req.actor.Store((*Actor)(nil))
