@@ -8,12 +8,13 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xcall"
-	"github.com/gorilla/websocket"
 	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/gorilla/websocket"
 )
 
 type serverConnMgr struct {
@@ -75,6 +76,7 @@ func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
 func (cm *serverConnMgr) recycle(c *websocket.Conn) {
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
+		conn.reset()
 		cm.pool.Put(conn)
 		atomic.AddInt64(&cm.total, -1)
 	}

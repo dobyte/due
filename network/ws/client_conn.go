@@ -1,6 +1,11 @@
 package ws
 
 import (
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -9,16 +14,13 @@ import (
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
-	"net"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type clientConn struct {
 	rw                sync.RWMutex    // 锁
 	id                int64           // 连接ID
 	uid               int64           // 用户ID
+	attr              *attr           // 连接属性
 	conn              *websocket.Conn // TCP源连接
 	state             int32           // 连接状态
 	client            *client         // 客户端
@@ -34,6 +36,7 @@ var _ network.Conn = &clientConn{}
 func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
 	c := &clientConn{
 		id:                id,
+		attr:              &attr{},
 		conn:              conn,
 		state:             int32(network.ConnOpened),
 		client:            client,
@@ -63,6 +66,11 @@ func (c *clientConn) ID() int64 {
 // UID 获取用户ID
 func (c *clientConn) UID() int64 {
 	return atomic.LoadInt64(&c.uid)
+}
+
+// Attr 获取属性接口
+func (c *clientConn) Attr() network.Attr {
+	return c.attr
 }
 
 // Bind 绑定用户ID

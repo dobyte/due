@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -89,6 +90,16 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 // Broadcast 推送广播消息
 func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []byte) (int64, error) {
 	return p.gate.session.Broadcast(kind, message)
+}
+
+// Subscribe 订阅频道
+func (p *provider) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+
+}
+
+// Unsubscribe 取消订阅频道
+func (p *provider) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+
 }
 
 // GetState 获取状态

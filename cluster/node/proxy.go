@@ -2,6 +2,8 @@ package node
 
 import (
 	"context"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
@@ -9,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
-	"time"
 )
 
 type Proxy struct {
@@ -263,6 +264,21 @@ func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) erro
 // Broadcast 推送广播消息
 func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) error {
 	return p.gateLinker.Broadcast(ctx, args)
+}
+
+// Subscribe 订阅频道
+func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
+
+}
+
+// Unsubscribe 取消订阅频道
+func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
+
+}
+
+// Publish 发布消息
+func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
+
 }
 
 // Deliver 投递消息给节点处理

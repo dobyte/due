@@ -1,10 +1,11 @@
 package session
 
 import (
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/network"
 	"net"
 	"sync"
+
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/network"
 )
 
 const (
@@ -26,15 +27,17 @@ func (k Kind) String() string {
 }
 
 type Session struct {
-	rw    sync.RWMutex           // 读写锁
-	conns map[int64]network.Conn // 连接会话（连接ID -> network.Conn）
-	users map[int64]network.Conn // 用户会话（用户ID -> network.Conn）
+	rw       sync.RWMutex                         // 读写锁
+	conns    map[int64]network.Conn               // 连接会话（连接ID -> network.Conn）
+	users    map[int64]network.Conn               // 用户会话（用户ID -> network.Conn）
+	channels map[string]map[network.Conn]struct{} // 频道
 }
 
 func NewSession() *Session {
 	return &Session{
-		conns: make(map[int64]network.Conn),
-		users: make(map[int64]network.Conn),
+		conns:    make(map[int64]network.Conn),
+		users:    make(map[int64]network.Conn),
+		channels: make(map[string]map[network.Conn]struct{}),
 	}
 }
 
@@ -64,6 +67,12 @@ func (s *Session) RemConn(conn network.Conn) {
 	if uid != 0 {
 		delete(s.users, uid)
 	}
+
+	conn.Attr().Visit(func(channel, _ any) bool {
+		s.doUnsubscribe(channel.(string), conn)
+
+		return true
+	})
 }
 
 // Has 是否存在会话
@@ -273,6 +282,92 @@ func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
 	}
 
 	return
+}
+
+func (s *Session) Publish(channel string, msg []byte) (err error) {
+
+}
+
+// Subscribe 订阅频道
+func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err error) {
+	if len(targets) == 0 {
+		return
+	}
+
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
+	var conns map[int64]network.Conn
+	switch kind {
+	case Conn:
+		conns = s.conns
+	case User:
+		conns = s.users
+	default:
+		err = errors.ErrInvalidSessionKind
+		return
+	}
+
+	for _, target := range targets {
+		conn, ok := conns[target]
+		if !ok {
+			continue
+		}
+
+		conn.Attr().Set(channel, struct{}{})
+
+		if channels, ok := s.channels[channel]; ok {
+			channels[conn] = struct{}{}
+		} else {
+			channels = make(map[network.Conn]struct{}, len(targets))
+			channels[conn] = struct{}{}
+			s.channels[channel] = channels
+		}
+	}
+
+	return
+}
+
+// Unsubscribe 取消订阅频道
+func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err error) {
+	if len(targets) == 0 {
+		return
+	}
+
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
+	var conns map[int64]network.Conn
+	switch kind {
+	case Conn:
+		conns = s.conns
+	case User:
+		conns = s.users
+	default:
+		err = errors.ErrInvalidSessionKind
+		return
+	}
+
+	for _, target := range targets {
+		if conn, ok := conns[target]; ok {
+			if ok = conn.Attr().Del(channel); ok {
+				s.doUnsubscribe(channel, conn)
+			}
+		}
+	}
+
+	return
+}
+
+// 取消订阅频道
+func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
+	if channels, ok := s.channels[channel]; ok {
+		delete(channels, conn)
+
+		if len(channels) == 0 {
+			delete(s.channels, channel)
+		}
+	}
 }
 
 // Stat 统计会话总数

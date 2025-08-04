@@ -126,6 +126,25 @@ type BroadcastArgs struct {
 	Message *Message     // 消息
 }
 
+type SubscribeArgs struct {
+	GID     string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind    session.Kind // 会话类型，session.Conn 或 session.User
+	Targets []int64      // 会话目标，CID 或 UID
+	Channel string       // 频道
+}
+
+type UnsubscribeArgs struct {
+	GID     string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind    session.Kind // 会话类型，session.Conn 或 session.User
+	Targets []int64      // 会话目标，CID 或 UID
+	Channel string       // 频道
+}
+
+type PublishArgs struct {
+	Channel string   // 频道
+	Message *Message // 消息
+}
+
 type TriggerArgs struct {
 	Event int   // 事件
 	CID   int64 // 连接ID

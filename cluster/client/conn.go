@@ -1,18 +1,17 @@
 package client
 
 import (
+	"net"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
-	"net"
-	"sync"
 )
 
 type Conn struct {
 	conn   network.Conn
 	client *Client
-	attrs  sync.Map
 }
 
 // ID 获取连接ID
@@ -37,12 +36,12 @@ func (c *Conn) Unbind() {
 
 // SetAttr 设置属性值
 func (c *Conn) SetAttr(key, value any) {
-	c.attrs.Store(key, value)
+	c.conn.Attr().Set(key, value)
 }
 
 // GetAttr 获取属性值
 func (c *Conn) GetAttr(key any) value.Value {
-	if val, ok := c.attrs.Load(key); ok {
+	if val, ok := c.conn.Attr().Get(key); ok {
 		return value.NewValue(val)
 	} else {
 		return value.NewValue()
@@ -51,7 +50,7 @@ func (c *Conn) GetAttr(key any) value.Value {
 
 // DelAttr 删除属性值
 func (c *Conn) DelAttr(key any) {
-	c.attrs.Delete(key)
+	c.conn.Attr().Del(key)
 }
 
 // LocalIP 获取本地IP

@@ -19,6 +19,10 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
+        # 实例元数据
+        [cluster.node.metadata]
+            # 键值对
+            key = "anytype"
     # 集群节点配置
     [cluster.node]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -33,6 +37,10 @@ shutdownMaxWaitTime = "0s"
         timeout = "3s"
         # 节点权重，用于集群节点的负载均衡策略
         weight = 0
+        # 实例元数据
+        [cluster.node.metadata]
+            # 键值对
+            key = "any"
     # 集群网格配置
     [cluster.mesh]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -41,6 +49,10 @@ shutdownMaxWaitTime = "0s"
         name = "mesh"
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
+        # 实例元数据
+        [cluster.mesh.metadata]
+            # 键值对
+            key = "anytype"
     # 集群客户端配置，常用于调试使用
     [cluster.client]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
