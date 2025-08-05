@@ -39,6 +39,8 @@ func (s *Server) init() {
 	s.RegisterHandler(route.Publish, s.publish)
 	s.RegisterHandler(route.Subscribe, s.subscribe)
 	s.RegisterHandler(route.Unsubscribe, s.unsubscribe)
+	s.RegisterHandler(route.GetState, s.getState)
+	s.RegisterHandler(route.SetState, s.setState)
 }
 
 // 绑定用户
@@ -183,12 +185,30 @@ func (s *Server) publish(conn *server.Conn, data []byte) error {
 
 // 订阅频道
 func (s *Server) subscribe(conn *server.Conn, data []byte) error {
+	seq, kind, targets, channel, err := protocol.DecodeSubscribeReq(data)
+	if err != nil {
+		return err
+	}
 
+	if err = s.provider.Subscribe(context.Background(), kind, targets, channel); seq == 0 {
+		return err
+	} else {
+		return conn.Send(protocol.EncodeSubscribeRes(seq, codes.ErrorToCode(err)))
+	}
 }
 
 // 取消订阅频道
 func (s *Server) unsubscribe(conn *server.Conn, data []byte) error {
+	seq, kind, targets, channel, err := protocol.DecodeUnsubscribeReq(data)
+	if err != nil {
+		return err
+	}
 
+	if err = s.provider.Unsubscribe(context.Background(), kind, targets, channel); seq == 0 {
+		return err
+	} else {
+		return conn.Send(protocol.EncodeUnsubscribeRes(seq, codes.ErrorToCode(err)))
+	}
 }
 
 // 获取状态
@@ -210,7 +230,9 @@ func (s *Server) setState(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	err = s.provider.SetState(state)
-
-	return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
+	if err = s.provider.SetState(state); seq == 0 {
+		return err
+	} else {
+		return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
+	}
 }

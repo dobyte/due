@@ -3,11 +3,12 @@ package gate_test
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/session"
-	"testing"
-	"time"
 )
 
 func TestServer(t *testing.T) {
@@ -24,6 +25,7 @@ func TestServer(t *testing.T) {
 }
 
 type provider struct {
+	gate.Provider
 }
 
 // Bind 绑定用户与网关间的关系
@@ -63,6 +65,21 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 // Broadcast 推送广播消息（异步）
 func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []byte) (total int64, err error) {
 	return
+}
+
+// 发布频道消息（异步）
+func (p *provider) Publish(ctx context.Context, channel string, message []byte) int64 {
+	return 0
+}
+
+// Subscribe 订阅频道
+func (p *provider) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	return nil
+}
+
+// Unsubscribe 取消订阅频道
+func (p *provider) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	return nil
 }
 
 // Stat 统计会话总数

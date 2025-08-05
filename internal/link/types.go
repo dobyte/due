@@ -5,13 +5,16 @@ import (
 )
 
 type (
-	Message        = cluster.Message
-	GetIPArgs      = cluster.GetIPArgs
-	IsOnlineArgs   = cluster.IsOnlineArgs
-	DisconnectArgs = cluster.DisconnectArgs
-	PushArgs       = cluster.PushArgs
-	MulticastArgs  = cluster.MulticastArgs
-	BroadcastArgs  = cluster.BroadcastArgs
+	Message         = cluster.Message
+	GetIPArgs       = cluster.GetIPArgs
+	IsOnlineArgs    = cluster.IsOnlineArgs
+	DisconnectArgs  = cluster.DisconnectArgs
+	PushArgs        = cluster.PushArgs
+	MulticastArgs   = cluster.MulticastArgs
+	BroadcastArgs   = cluster.BroadcastArgs
+	PublishArgs     = cluster.PublishArgs
+	SubscribeArgs   = cluster.SubscribeArgs
+	UnsubscribeArgs = cluster.UnsubscribeArgs
 )
 
 type DeliverArgs struct {

@@ -124,24 +124,62 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 	}
 }
 
-// Push 异步推送消息
+// Push 推送消息（异步）
 func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
 }
 
-// Multicast 推送组播消息
+// Multicast 推送组播消息（异步）
 func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeMulticastReq(0, kind, targets, message))
 }
 
-// Broadcast 推送广播消息
+// Broadcast 推送广播消息（异步）
 func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, message))
 }
 
-// Publish 发布频道消息
+// Publish 发布频道消息（异步）
 func (c *Client) Publish(ctx context.Context, channel string, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, message))
+}
+
+// Subscribe 订阅频道
+func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	seq := c.doGenSequence()
+
+	buf := protocol.EncodeSubscribeReq(seq, kind, targets, channel)
+
+	res, err := c.cli.Call(ctx, seq, buf)
+	if err != nil {
+		return err
+	}
+
+	code, err := protocol.DecodeSubscribeRes(res)
+	if err != nil {
+		return err
+	}
+
+	return codes.CodeToError(code)
+}
+
+// Unsubscribe 取消订阅频道
+func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	seq := c.doGenSequence()
+
+	buf := protocol.EncodeUnsubscribeReq(seq, kind, targets, channel)
+
+	res, err := c.cli.Call(ctx, seq, buf)
+	if err != nil {
+		return err
+	}
+
+	code, err := protocol.DecodeUnsubscribeRes(res)
+	if err != nil {
+		return err
+	}
+
+	return codes.CodeToError(code)
 }
 
 // GetState 获取状态

@@ -457,6 +457,144 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
 	return eg.Wait()
 }
 
+// Publish 发布频道消息
+func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) error {
+	buf, err := l.PackBuffer(args.Message.Data, true)
+	if err != nil {
+		return err
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+		eg.Go(func() error {
+			message, err := packet.PackBuffer(&packet.Message{
+				Seq:    args.Message.Seq,
+				Route:  args.Message.Route,
+				Buffer: buf,
+			})
+			if err != nil {
+				return err
+			}
+
+			client, err := l.builder.Build(ep.Address())
+			if err != nil {
+				return err
+			}
+
+			return client.Publish(ctx, args.Channel, message)
+		})
+
+		return true
+	})
+
+	return eg.Wait()
+}
+
+// Subscribe 订阅频道
+func (l *GateLinker) Subscribe(ctx context.Context, args *SubscribeArgs) error {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectSubscribe(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectSubscribe(ctx, args)
+		} else {
+			return l.doDirectSubscribe(ctx, args)
+		}
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接订阅频道，只能订阅同一个网关服务器上
+func (l *GateLinker) doDirectSubscribe(ctx context.Context, args *SubscribeArgs) error {
+	if len(args.Targets) == 0 {
+		return errors.ErrReceiveTargetEmpty
+	}
+
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return err
+	}
+
+	return client.Subscribe(ctx, args.Kind, args.Targets, args.Channel)
+}
+
+// 间接订阅频道
+func (l *GateLinker) doIndirectSubscribe(ctx context.Context, args *SubscribeArgs) error {
+	if len(args.Targets) == 0 {
+		return errors.ErrReceiveTargetEmpty
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for _, target := range args.Targets {
+		func(target int64) {
+			eg.Go(func() error {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+					return false, nil, client.Subscribe(ctx, args.Kind, []int64{target}, args.Channel)
+				})
+				return err
+			})
+		}(target)
+	}
+
+	return eg.Wait()
+}
+
+// Unsubscribe 取消订阅频道
+func (l *GateLinker) Unsubscribe(ctx context.Context, args *UnsubscribeArgs) error {
+	switch args.Kind {
+	case session.Conn:
+		return l.doDirectUnsubscribe(ctx, args)
+	case session.User:
+		if args.GID == "" {
+			return l.doIndirectUnsubscribe(ctx, args)
+		} else {
+			return l.doDirectUnsubscribe(ctx, args)
+		}
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// 直接订阅频道，只能订阅同一个网关服务器上
+func (l *GateLinker) doDirectUnsubscribe(ctx context.Context, args *UnsubscribeArgs) error {
+	if len(args.Targets) == 0 {
+		return errors.ErrReceiveTargetEmpty
+	}
+
+	client, err := l.doBuildClient(args.GID)
+	if err != nil {
+		return err
+	}
+
+	return client.Unsubscribe(ctx, args.Kind, args.Targets, args.Channel)
+}
+
+// 间接订阅频道
+func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *UnsubscribeArgs) error {
+	if len(args.Targets) == 0 {
+		return errors.ErrReceiveTargetEmpty
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for _, target := range args.Targets {
+		func(target int64) {
+			eg.Go(func() error {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+					return false, nil, client.Unsubscribe(ctx, args.Kind, []int64{target}, args.Channel)
+				})
+				return err
+			})
+		}(target)
+	}
+
+	return eg.Wait()
+}
+
 // 执行RPC调用
 func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.Client) (bool, interface{}, error)) (interface{}, error) {
 	var (

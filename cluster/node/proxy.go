@@ -268,17 +268,17 @@ func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) erro
 
 // Publish 发布消息
 func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
-
+	return p.gateLinker.Publish(ctx, args)
 }
 
 // Subscribe 订阅频道
 func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
-
+	return p.gateLinker.Subscribe(ctx, args)
 }
 
 // Unsubscribe 取消订阅频道
 func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
-
+	return p.gateLinker.Unsubscribe(ctx, args)
 }
 
 // Deliver 投递消息给节点处理
