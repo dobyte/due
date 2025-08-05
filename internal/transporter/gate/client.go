@@ -2,13 +2,14 @@ package gate
 
 import (
 	"context"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/session"
-	"sync/atomic"
 )
 
 type Client struct {
@@ -136,6 +137,11 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 // Broadcast 推送广播消息
 func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffer.Buffer) error {
 	return c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, message))
+}
+
+// Publish 发布频道消息
+func (c *Client) Publish(ctx context.Context, channel string, message buffer.Buffer) error {
+	return c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, message))
 }
 
 // GetState 获取状态

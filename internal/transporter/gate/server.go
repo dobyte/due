@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
@@ -35,6 +36,9 @@ func (s *Server) init() {
 	s.RegisterHandler(route.Push, s.push)
 	s.RegisterHandler(route.Multicast, s.multicast)
 	s.RegisterHandler(route.Broadcast, s.broadcast)
+	s.RegisterHandler(route.Publish, s.publish)
+	s.RegisterHandler(route.Subscribe, s.subscribe)
+	s.RegisterHandler(route.Unsubscribe, s.unsubscribe)
 }
 
 // 绑定用户
@@ -161,6 +165,30 @@ func (s *Server) broadcast(conn *server.Conn, data []byte) error {
 	} else {
 		return conn.Send(protocol.EncodeBroadcastRes(seq, codes.ErrorToCode(err), uint64(total)))
 	}
+}
+
+// 发布频道消息
+func (s *Server) publish(conn *server.Conn, data []byte) error {
+	seq, channel, message, err := protocol.DecodePublishReq(data)
+	if err != nil {
+		return err
+	}
+
+	if total := s.provider.Publish(context.Background(), channel, message); seq == 0 {
+		return nil
+	} else {
+		return conn.Send(protocol.EncodePublishRes(seq, uint64(total)))
+	}
+}
+
+// 订阅频道
+func (s *Server) subscribe(conn *server.Conn, data []byte) error {
+
+}
+
+// 取消订阅频道
+func (s *Server) unsubscribe(conn *server.Conn, data []byte) error {
+
 }
 
 // 获取状态

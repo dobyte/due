@@ -30,7 +30,7 @@ type Session struct {
 	rw       sync.RWMutex                         // 读写锁
 	conns    map[int64]network.Conn               // 连接会话（连接ID -> network.Conn）
 	users    map[int64]network.Conn               // 用户会话（用户ID -> network.Conn）
-	channels map[string]map[network.Conn]struct{} // 频道
+	channels map[string]map[network.Conn]struct{} // 会话频道（频道名 -> [network.Conn --> none]）
 }
 
 func NewSession() *Session {
@@ -201,7 +201,7 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 }
 
 // Send 发送消息（同步）
-func (s *Session) Send(kind Kind, target int64, msg []byte) error {
+func (s *Session) Send(kind Kind, target int64, message []byte) error {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -210,11 +210,11 @@ func (s *Session) Send(kind Kind, target int64, msg []byte) error {
 		return err
 	}
 
-	return conn.Send(msg)
+	return conn.Send(message)
 }
 
 // Push 推送消息（异步）
-func (s *Session) Push(kind Kind, target int64, msg []byte) error {
+func (s *Session) Push(kind Kind, target int64, message []byte) error {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -223,11 +223,11 @@ func (s *Session) Push(kind Kind, target int64, msg []byte) error {
 		return err
 	}
 
-	return conn.Push(msg)
+	return conn.Push(message)
 }
 
 // Multicast 推送组播消息（异步）
-func (s *Session) Multicast(kind Kind, targets []int64, msg []byte) (n int64, err error) {
+func (s *Session) Multicast(kind Kind, targets []int64, message []byte) (n int64, err error) {
 	if len(targets) == 0 {
 		return
 	}
@@ -251,7 +251,7 @@ func (s *Session) Multicast(kind Kind, targets []int64, msg []byte) (n int64, er
 		if !ok {
 			continue
 		}
-		if conn.Push(msg) == nil {
+		if conn.Push(message) == nil {
 			n++
 		}
 	}
@@ -260,7 +260,7 @@ func (s *Session) Multicast(kind Kind, targets []int64, msg []byte) (n int64, er
 }
 
 // Broadcast 推送广播消息（异步）
-func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
+func (s *Session) Broadcast(kind Kind, message []byte) (n int64, err error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
@@ -276,7 +276,7 @@ func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
 	}
 
 	for _, conn := range conns {
-		if conn.Push(msg) == nil {
+		if conn.Push(message) == nil {
 			n++
 		}
 	}
@@ -284,8 +284,23 @@ func (s *Session) Broadcast(kind Kind, msg []byte) (n int64, err error) {
 	return
 }
 
-func (s *Session) Publish(channel string, msg []byte) (err error) {
+// Publish 发布频道消息（异步）
+func (s *Session) Publish(channel string, message []byte) (n int64) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
 
+	channels, ok := s.channels[channel]
+	if !ok {
+		return
+	}
+
+	for conn := range channels {
+		if conn.Push(message) == nil {
+			n++
+		}
+	}
+
+	return
 }
 
 // Subscribe 订阅频道

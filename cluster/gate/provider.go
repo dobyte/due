@@ -92,14 +92,19 @@ func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []b
 	return p.gate.session.Broadcast(kind, message)
 }
 
+// Publish 发布频道消息
+func (p *provider) Publish(ctx context.Context, channel string, message []byte) int64 {
+	return p.gate.session.Publish(channel, message)
+}
+
 // Subscribe 订阅频道
 func (p *provider) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
-
+	return p.gate.session.Subscribe(kind, targets, channel)
 }
 
 // Unsubscribe 取消订阅频道
 func (p *provider) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
-
+	return p.gate.session.Unsubscribe(kind, targets, channel)
 }
 
 // GetState 获取状态

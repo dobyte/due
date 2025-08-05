@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/session"
 )
@@ -25,6 +26,12 @@ type Provider interface {
 	Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (total int64, err error)
 	// Broadcast 推送广播消息
 	Broadcast(ctx context.Context, kind session.Kind, message []byte) (total int64, err error)
+	// Publish 发布频道消息
+	Publish(ctx context.Context, channel string, message []byte) (total int64)
+	// Subscribe 订阅频道
+	Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error
+	// Unsubscribe 取消订阅频道
+	Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error
 	// GetState 获取状态
 	GetState() (cluster.State, error)
 	// SetState 设置状态

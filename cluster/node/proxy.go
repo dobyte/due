@@ -266,6 +266,11 @@ func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) erro
 	return p.gateLinker.Broadcast(ctx, args)
 }
 
+// Publish 发布消息
+func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
+
+}
+
 // Subscribe 订阅频道
 func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
 
@@ -273,11 +278,6 @@ func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) erro
 
 // Unsubscribe 取消订阅频道
 func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
-
-}
-
-// Publish 发布消息
-func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
 
 }
 
