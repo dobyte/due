@@ -2,6 +2,9 @@ package link
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
@@ -12,8 +15,6 @@ import (
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"time"
 )
 
 type NodeLinker struct {
@@ -153,7 +154,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 
 		return client.Deliver(ctx, args.CID, args.UID, message)
 	} else {
-		_, err := l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, interface{}, error) {
+		_, err := l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
 			return false, nil, client.Deliver(ctx, args.CID, args.UID, message)
 		})
 		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
@@ -236,7 +237,7 @@ func (l *NodeLinker) SetState(ctx context.Context, nid string, state cluster.Sta
 }
 
 // 执行节点RPC调用
-func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn func(ctx context.Context, client *node.Client) (bool, interface{}, error)) (interface{}, error) {
+func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn func(ctx context.Context, client *node.Client) (bool, any, error)) (any, error) {
 	var (
 		err       error
 		nid       string
@@ -245,7 +246,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 		client    *node.Client
 		ep        *endpoint.Endpoint
 		continued bool
-		reply     interface{}
+		reply     any
 	)
 
 	if route, err = l.dispatcher.FindRoute(routeID); err != nil {
@@ -256,7 +257,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 		return nil, errors.ErrIllegalRequest
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if route.Stateful() {
 			if nid, err = l.Locate(ctx, uid, route.Group()); err != nil {
 				return nil, err
@@ -320,7 +321,7 @@ func (l *NodeLinker) doPackMessage(message *Message, encrypt bool) ([]byte, erro
 }
 
 // 消息转buffer
-func (l *NodeLinker) toBuffer(message interface{}, encrypt bool) ([]byte, error) {
+func (l *NodeLinker) toBuffer(message any, encrypt bool) ([]byte, error) {
 	if message == nil {
 		return nil, nil
 	}

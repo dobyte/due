@@ -1,19 +1,20 @@
 package client
 
 import (
+	"net"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
-	"net"
-	"sync/atomic"
-	"time"
 )
 
 const (
-	maxRetryTimes = 5                      // 最大重试次数
+	maxRetryTimes = 3                      // 最大重试次数
 	dialTimeout   = 500 * time.Millisecond // 拨号超时时间
 )
 
@@ -182,7 +183,7 @@ func (c *Conn) write(conn net.Conn) {
 				c.pending.store(ch.seq, ch.call)
 			}
 
-			ch.buf.Range(func(node *buffer.NocopyNode) bool {
+			ch.buf.Visit(func(node *buffer.NocopyNode) bool {
 				if _, err := conn.Write(node.Bytes()); err != nil {
 					return false
 				} else {

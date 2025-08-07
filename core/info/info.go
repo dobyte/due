@@ -2,10 +2,11 @@ package info
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/mode"
 	"strings"
 	"syscall"
 	"unicode/utf8"
+
+	"github.com/dobyte/due/v2/mode"
 )
 
 const logo = `
@@ -25,7 +26,7 @@ const (
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
 	website           = "https://github.com/dobyte/due"
-	version           = "v2.2.7"
+	version           = "v2.2.8"
 	global            = "Global"
 )
 

@@ -2,14 +2,15 @@ package node
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
-	"sync/atomic"
-	"time"
 )
 
 type event struct {
@@ -65,7 +66,7 @@ func (e *event) Kind() Kind {
 }
 
 // Parse 解析消息
-func (e *event) Parse(v interface{}) error {
+func (e *event) Parse(v any) error {
 	return errors.NewError(errors.ErrIllegalOperation)
 }
 
@@ -218,6 +219,50 @@ func (e *event) UnbindNode(uid ...int64) error {
 	}
 }
 
+// Subscribe 订阅频道
+func (e *event) Subscribe(channel string, uids ...int64) error {
+	if len(uids) > 0 {
+		return e.node.proxy.Subscribe(e.ctx, &cluster.SubscribeArgs{
+			Kind:    session.User,
+			Targets: uids,
+			Channel: channel,
+		})
+	} else {
+		if e.gid == "" {
+			return errors.ErrIllegalOperation
+		}
+
+		return e.node.proxy.Subscribe(e.ctx, &cluster.SubscribeArgs{
+			GID:     e.gid,
+			Kind:    session.Conn,
+			Targets: []int64{e.cid},
+			Channel: channel,
+		})
+	}
+}
+
+// Unsubscribe 取消订阅
+func (e *event) Unsubscribe(channel string, uids ...int64) error {
+	if len(uids) > 0 {
+		return e.node.proxy.Unsubscribe(e.ctx, &cluster.UnsubscribeArgs{
+			Kind:    session.User,
+			Targets: uids,
+			Channel: channel,
+		})
+	} else {
+		if e.gid == "" {
+			return errors.ErrIllegalOperation
+		}
+
+		return e.node.proxy.Unsubscribe(e.ctx, &cluster.UnsubscribeArgs{
+			GID:     e.gid,
+			Kind:    session.Conn,
+			Targets: []int64{e.cid},
+			Channel: channel,
+		})
+	}
+}
+
 // BindActor 绑定Actor
 func (e *event) BindActor(kind, id string) error {
 	return e.node.scheduler.bindActor(e.uid, kind, id)
@@ -310,7 +355,7 @@ func (e *event) Reply(message *cluster.Message) error {
 }
 
 // Response 响应消息
-func (e *event) Response(message interface{}) error {
+func (e *event) Response(message any) error {
 	return errors.NewError(errors.ErrIllegalOperation)
 }
 

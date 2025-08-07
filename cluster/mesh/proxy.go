@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
@@ -43,7 +44,7 @@ func (p *Proxy) GetName() string {
 }
 
 // AddServiceProvider 添加服务提供者
-func (p *Proxy) AddServiceProvider(name string, desc interface{}, provider interface{}) {
+func (p *Proxy) AddServiceProvider(name string, desc, provider any) {
 	p.mesh.addServiceProvider(name, desc, provider)
 }
 
@@ -163,6 +164,21 @@ func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) erro
 // Broadcast 推送广播消息
 func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) error {
 	return p.gateLinker.Broadcast(ctx, args)
+}
+
+// Publish 发布消息
+func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
+	return p.gateLinker.Publish(ctx, args)
+}
+
+// Subscribe 订阅频道
+func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
+	return p.gateLinker.Subscribe(ctx, args)
+}
+
+// Unsubscribe 取消订阅频道
+func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
+	return p.gateLinker.Unsubscribe(ctx, args)
 }
 
 // Deliver 投递消息给节点处理

@@ -9,6 +9,9 @@ package node
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
@@ -17,8 +20,6 @@ import (
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
-	"sync/atomic"
-	"time"
 )
 
 type request struct {
@@ -76,7 +77,7 @@ func (r *request) Kind() Kind {
 }
 
 // Parse 解析消息
-func (r *request) Parse(v interface{}) error {
+func (r *request) Parse(v any) error {
 	msg, ok := r.message.Data.([]byte)
 	if !ok {
 		return copier.CopyWithOption(v, r.message.Data, copier.Option{
@@ -256,6 +257,50 @@ func (r *request) UnbindNode(uid ...int64) error {
 	}
 }
 
+// Subscribe 订阅频道
+func (r *request) Subscribe(channel string, uids ...int64) error {
+	if len(uids) > 0 {
+		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
+			Kind:    session.User,
+			Targets: uids,
+			Channel: channel,
+		})
+	} else {
+		if r.gid == "" {
+			return errors.ErrIllegalOperation
+		}
+
+		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
+			GID:     r.gid,
+			Kind:    session.Conn,
+			Targets: []int64{r.cid},
+			Channel: channel,
+		})
+	}
+}
+
+// Unsubscribe 取消订阅
+func (r *request) Unsubscribe(channel string, uids ...int64) error {
+	if len(uids) > 0 {
+		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
+			Kind:    session.User,
+			Targets: uids,
+			Channel: channel,
+		})
+	} else {
+		if r.gid == "" {
+			return errors.ErrIllegalOperation
+		}
+
+		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
+			GID:     r.gid,
+			Kind:    session.Conn,
+			Targets: []int64{r.cid},
+			Channel: channel,
+		})
+	}
+}
+
 // BindActor 绑定Actor
 func (r *request) BindActor(kind, id string) error {
 	return r.node.scheduler.bindActor(r.uid, kind, id)
@@ -373,7 +418,7 @@ func (r *request) Reply(message *cluster.Message) error {
 }
 
 // Response 响应消息
-func (r *request) Response(message interface{}) error {
+func (r *request) Response(message any) error {
 	return r.Reply(&cluster.Message{
 		Route: r.message.Route,
 		Seq:   r.message.Seq,

@@ -2,6 +2,11 @@ package server
 
 import (
 	"context"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -9,10 +14,6 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
-	"net"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type Conn struct {
@@ -53,7 +54,7 @@ func (c *Conn) Send(buf buffer.Buffer) (err error) {
 		return err
 	}
 
-	buf.Range(func(node *buffer.NocopyNode) bool {
+	buf.Visit(func(node *buffer.NocopyNode) bool {
 		if _, err = c.conn.Write(node.Bytes()); err != nil {
 			return false
 		}

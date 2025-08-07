@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/errors"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 )
 
 const (
@@ -21,7 +22,7 @@ const (
 type chWrite struct {
 	ctx  context.Context // 上下文
 	seq  uint64          // 序列号
-	buf  buffer.Buffer   // 数据Buffer
+	buf  buffer.Buffer   // 数据buffer
 	call chan []byte     // 回调数据
 }
 
@@ -106,11 +107,11 @@ func (c *Client) init() {
 
 	go c.wait()
 
-	for i := 0; i < ordered; i++ {
+	for range ordered {
 		c.connections = append(c.connections, newConn(c))
 	}
 
-	for i := 0; i < unordered; i++ {
+	for range unordered {
 		c.connections = append(c.connections, newConn(c, c.chWrite))
 	}
 }

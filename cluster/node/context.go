@@ -2,9 +2,10 @@ package node
 
 import (
 	"context"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/transport"
-	"time"
 )
 
 type Context interface {
@@ -25,7 +26,7 @@ type Context interface {
 	// Kind 上下文消息类型
 	Kind() Kind
 	// Parse 解析消息
-	Parse(v interface{}) error
+	Parse(v any) error
 	// Defer 添加defer延迟调用栈
 	// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
 	// 区别在于使用Defer方法可以对调用栈进行取消操作
@@ -55,7 +56,7 @@ type Context interface {
 	// Reply 回复消息
 	Reply(message *cluster.Message) error
 	// Response 响应消息
-	Response(message interface{}) error
+	Response(message any) error
 	// Disconnect 关闭来自网关的连接
 	Disconnect(force ...bool) error
 	// BindGate 绑定网关
@@ -66,6 +67,10 @@ type Context interface {
 	BindNode(uid ...int64) error
 	// UnbindNode 解绑节点
 	UnbindNode(uid ...int64) error
+	// Subscribe 订阅频道
+	Subscribe(channel string, uids ...int64) error
+	// Unsubscribe 取消订阅
+	Unsubscribe(channel string, uids ...int64) error
 	// BindActor 绑定Actor
 	BindActor(kind, id string) error
 	// UnbindActor 解绑Actor

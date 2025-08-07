@@ -1,17 +1,22 @@
 package buffer
 
+import (
+	"sync/atomic"
+)
+
 var defaultWriterPool = NewWriterPool([]int{32, 64, 128, 256, 512, 1024, 2048, 4096, 10240})
 
 type NocopyBuffer struct {
-	len  int
-	num  int
-	head *NocopyNode
-	tail *NocopyNode
+	len   int          // 字节数
+	num   int          // 节点数
+	head  *NocopyNode  // 头节点
+	tail  *NocopyNode  // 尾节点
+	delay atomic.Int32 // 延迟释放点
 }
 
 var _ Buffer = &NocopyBuffer{}
 
-func NewNocopyBuffer(blocks ...interface{}) *NocopyBuffer {
+func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
 	buf := &NocopyBuffer{len: -1}
 
 	for _, block := range blocks {
@@ -104,8 +109,8 @@ func (b *NocopyBuffer) Malloc(cap int, whence ...Whence) *Writer {
 	return writer
 }
 
-// Range 迭代
-func (b *NocopyBuffer) Range(fn func(node *NocopyNode) bool) {
+// Visit 迭代
+func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) {
 	node := b.head
 	for node != nil {
 		next := node.next
@@ -135,18 +140,26 @@ func (b *NocopyBuffer) Bytes() []byte {
 	}
 }
 
+// Delay 设置延迟释放点
+func (b *NocopyBuffer) Delay(delay int32) {
+	b.delay.Store(delay)
+}
+
 // Release 释放
-func (b *NocopyBuffer) Release() {
-	node := b.head
-	for node != nil {
-		next := node.next
-		node.Release()
-		node = next
+func (b *NocopyBuffer) Release(force ...bool) {
+	if (len(force) > 0 && force[0]) || b.delay.Add(-1) <= 0 {
+		node := b.head
+		for node != nil {
+			next := node.next
+			node.Release()
+			node = next
+		}
+		b.len = -1
+		b.num = 0
+		b.head = nil
+		b.tail = nil
+		b.delay.Store(0)
 	}
-	b.len = -1
-	b.num = 0
-	b.head = nil
-	b.tail = nil
 }
 
 // 添加到尾部

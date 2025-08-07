@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"testing"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/utils/xrand"
-	"testing"
 )
 
 type User struct {
@@ -90,7 +91,7 @@ func TestNewBuffer2(t *testing.T) {
 	t.Log(buff.Len())
 	t.Log(buff.Len())
 
-	buff.Range(func(node *buffer.NocopyNode) bool {
+	buff.Visit(func(node *buffer.NocopyNode) bool {
 		t.Log(node.Bytes())
 		return true
 	})

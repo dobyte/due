@@ -1,11 +1,12 @@
 package dispatcher
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
-	"sync"
 )
 
 type BalanceStrategy string
@@ -42,13 +43,21 @@ func (d *Dispatcher) FindEndpoint(insID string) (*endpoint.Endpoint, error) {
 	return ep, nil
 }
 
-// IterateEndpoint 迭代服务端口
-func (d *Dispatcher) IterateEndpoint(fn func(insID string, ep *endpoint.Endpoint) bool) {
+// Endpoints 获取所有端口
+func (d *Dispatcher) Endpoints() map[string]*endpoint.Endpoint {
+	d.rw.RLock()
+	defer d.rw.RUnlock()
+
+	return d.endpoints
+}
+
+// VisitEndpoints 迭代服务端口
+func (d *Dispatcher) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint) bool) {
 	d.rw.RLock()
 	defer d.rw.RUnlock()
 
 	for insID, ep := range d.endpoints {
-		if fn(insID, ep) == false {
+		if !fn(insID, ep) {
 			break
 		}
 	}

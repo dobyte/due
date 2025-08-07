@@ -23,8 +23,10 @@ type Buffer interface {
 	Mount(block interface{}, whence ...Whence)
 	// Malloc 分配一块内存给Writer
 	Malloc(cap int, whence ...Whence) *Writer
-	// Range 迭代
-	Range(fn func(node *NocopyNode) bool)
+	// Visit 迭代
+	Visit(fn func(node *NocopyNode) bool)
+	// Delay 设置延迟释放点
+	Delay(delay int32)
 	// Release 释放
-	Release()
+	Release(force ...bool)
 }

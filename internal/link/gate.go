@@ -126,7 +126,7 @@ func (l *GateLinker) Bind(ctx context.Context, gid string, cid, uid int64) error
 
 // Unbind 解绑网关
 func (l *GateLinker) Unbind(ctx context.Context, uid int64) error {
-	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
 		miss, err := client.Unbind(ctx, uid)
 		return miss, nil, err
 	})
@@ -188,7 +188,7 @@ func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session
 
 // 间接获取IP
 func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, error) {
-	v, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+	v, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
 		ip, miss, err := client.GetIP(ctx, session.User, uid)
 		return miss, ip, err
 	})
@@ -204,7 +204,7 @@ func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (int64, error)
 	total := int64(0)
 	eg, ctx := errgroup.WithContext(ctx)
 
-	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+	l.dispatcher.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
 			client, err := l.builder.Build(ep.Address())
 			if err != nil {
@@ -262,7 +262,7 @@ func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *IsOnlineArgs) (
 
 // 间接检测是否在线
 func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
-	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
+	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
 		return client.IsOnline(ctx, args.Kind, args.Target)
 	})
 	if err != nil {
@@ -300,7 +300,7 @@ func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArg
 
 // 间接断开连接
 func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
-	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, interface{}, error) {
+	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
 		return false, nil, client.Disconnect(ctx, session.User, uid, force)
 	})
 
@@ -345,7 +345,7 @@ func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
 		return err
 	}
 
-	_, err = l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, interface{}, error) {
+	_, err = l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
 		return false, nil, client.Push(ctx, args.Kind, args.Target, message)
 	})
 
@@ -393,102 +393,111 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		return errors.ErrReceiveTargetEmpty
 	}
 
-	buf, err := l.PackBuffer(args.Message.Data, true)
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
 
+	message.Delay(int32(len(args.Targets)))
+
 	eg, ctx := errgroup.WithContext(ctx)
 
-	for _, target := range args.Targets {
-		func(target int64) {
-			eg.Go(func() error {
-				message, err := packet.PackBuffer(&packet.Message{
-					Seq:    args.Message.Seq,
-					Route:  args.Message.Route,
-					Buffer: buf,
-				})
-				if err != nil {
-					return err
-				}
+	for i := range args.Targets {
+		target := args.Targets[i]
 
-				_, err = l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
-					return false, nil, client.Push(ctx, args.Kind, target, message)
-				})
-				return err
+		eg.Go(func() error {
+			_, err = l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
+				return false, nil, client.Push(ctx, args.Kind, target, message)
 			})
-		}(target)
+			return err
+		})
 	}
 
-	return eg.Wait()
+	if err = eg.Wait(); err != nil {
+		message.Release(true)
+
+		return err
+	}
+
+	return nil
 }
 
 // Broadcast 推送广播消息
 func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
-	buf, err := l.PackBuffer(args.Message.Data, true)
+	endpoints := l.dispatcher.Endpoints()
+
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
 
+	message.Delay(int32(len(endpoints)))
+
 	eg, ctx := errgroup.WithContext(ctx)
 
-	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
-		eg.Go(func() error {
-			message, err := packet.PackBuffer(&packet.Message{
-				Seq:    args.Message.Seq,
-				Route:  args.Message.Route,
-				Buffer: buf,
-			})
-			if err != nil {
-				return err
-			}
+	for _, ep := range endpoints {
+		addr := ep.Address()
 
-			client, err := l.builder.Build(ep.Address())
+		eg.Go(func() error {
+			client, err := l.builder.Build(addr)
 			if err != nil {
 				return err
 			}
 
 			return client.Broadcast(ctx, args.Kind, message)
 		})
+	}
 
-		return true
-	})
+	if err = eg.Wait(); err != nil {
+		message.Release(true)
 
-	return eg.Wait()
+		return err
+	}
+
+	return nil
 }
 
 // Publish 发布频道消息
 func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) error {
-	buf, err := l.PackBuffer(args.Message.Data, true)
+	endpoints := l.dispatcher.Endpoints()
+
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
 
+	message.Delay(int32(len(endpoints)))
+
 	eg, ctx := errgroup.WithContext(ctx)
 
-	l.dispatcher.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
-		eg.Go(func() error {
-			message, err := packet.PackBuffer(&packet.Message{
-				Seq:    args.Message.Seq,
-				Route:  args.Message.Route,
-				Buffer: buf,
-			})
-			if err != nil {
-				return err
-			}
+	for _, ep := range endpoints {
+		addr := ep.Address()
 
-			client, err := l.builder.Build(ep.Address())
+		eg.Go(func() error {
+			client, err := l.builder.Build(addr)
 			if err != nil {
 				return err
 			}
 
 			return client.Publish(ctx, args.Channel, message)
 		})
+	}
 
-		return true
-	})
+	if err = eg.Wait(); err != nil {
+		message.Release(true)
 
-	return eg.Wait()
+		return err
+	}
+
+	return nil
 }
 
 // Subscribe 订阅频道
@@ -532,7 +541,7 @@ func (l *GateLinker) doIndirectSubscribe(ctx context.Context, args *SubscribeArg
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
 					return false, nil, client.Subscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -584,7 +593,7 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, interface{}, error) {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
 					return false, nil, client.Unsubscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -596,17 +605,17 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 }
 
 // 执行RPC调用
-func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.Client) (bool, interface{}, error)) (interface{}, error) {
+func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.Client) (bool, any, error)) (any, error) {
 	var (
 		err       error
 		gid       string
 		prev      string
 		client    *gate.Client
 		continued bool
-		reply     interface{}
+		reply     any
 	)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if gid, err = l.Locate(ctx, uid); err != nil {
 			return nil, err
 		}
@@ -663,7 +672,7 @@ func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer,
 }
 
 // PackBuffer 消息转buffer
-func (l *GateLinker) PackBuffer(message interface{}, encrypt bool) ([]byte, error) {
+func (l *GateLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
 	if message == nil {
 		return nil, nil
 	}
