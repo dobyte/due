@@ -1,9 +1,10 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/dobyte/due/v2/etc"
 	"github.com/go-redis/redis/v8"
-	"time"
 )
 
 const (
@@ -12,7 +13,7 @@ const (
 	defaultMaxRetries        = 3
 	defaultPrefix            = "lock"
 	defaultExpiration        = "3s"
-	defaultAcquireInterval   = "100ms"
+	defaultAcquireInterval   = "20ms"
 	defaultAcquireMaxRetries = 0
 )
 
@@ -62,7 +63,7 @@ type options struct {
 	// 锁过期时间，默认为3s
 	expiration time.Duration
 
-	// 循环获取锁的频率间隔时间，默认为100ms
+	// 循环获取锁的频率间隔时间，默认为20ms
 	acquireInterval time.Duration
 
 	// 循环获取锁的最大重试次数，默认为无限次

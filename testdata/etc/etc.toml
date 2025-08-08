@@ -551,20 +551,20 @@ shutdownMaxWaitTime = "0s"
         prefix = "lock"
         # 锁过期时间（自动续约），支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         expiration = "3s"
-        # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为100ms
-        acquireInterval = "100ms"
+        # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为20ms
+        acquireInterval = "20ms"
         # 循环获取锁的最大重试次数，默认为0，<=0则为无限次
         acquireMaxRetries = 0
     # memcache分布式锁模块
     [lock.memcache]
         # 客户端连接地址
-        addrs = ["127.0.0.1:6379"]
+        addrs = ["127.0.0.1:11211"]
         # key前缀
         prefix = "lock"
         # 锁过期时间（自动续约），支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         expiration = "3s"
-        # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为100ms
-        acquireInterval = "100ms"
+        # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为20ms
+        acquireInterval = "20ms"
         # 循环获取锁的最大重试次数，默认为0，<=0则为无限次
         acquireMaxRetries = 0
 
