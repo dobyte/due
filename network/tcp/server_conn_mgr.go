@@ -1,12 +1,13 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"net"
 	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type serverConnMgr struct {
@@ -68,6 +69,7 @@ func (cm *serverConnMgr) allocate(c net.Conn) error {
 func (cm *serverConnMgr) recycle(c net.Conn) {
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
+		conn.reset()
 		cm.pool.Put(conn)
 		atomic.AddInt64(&cm.total, -1)
 	}
