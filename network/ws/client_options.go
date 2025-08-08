@@ -1,8 +1,9 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/etc"
 	"time"
+
+	"github.com/dobyte/due/v2/etc"
 )
 
 const (
@@ -21,7 +22,6 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	url               string        // 拨号地址
-	msgType           string        // 默认消息类型，text | binary
 	handshakeTimeout  time.Duration // 握手超时时间
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
 }

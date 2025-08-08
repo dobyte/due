@@ -9,8 +9,10 @@ var defaultWriterPool = NewWriterPool([]int{32, 64, 128, 256, 512, 1024, 2048, 4
 type NocopyBuffer struct {
 	len   int          // 字节数
 	num   int          // 节点数
-	head  *NocopyNode  // 头节点
-	tail  *NocopyNode  // 尾节点
+	head  any          // 头节点
+	tail  any          // 尾节点
+	prev  any          // 上一个节点
+	next  any          // 下一个节点
 	delay atomic.Int32 // 延迟释放点
 }
 
@@ -32,23 +34,28 @@ func (b *NocopyBuffer) Len() int {
 		return b.len
 	}
 
-	n := 0
+	size := 0
+
 	for node := b.head; node != nil; {
-		n += node.Len()
-		node = node.next
+		switch n := node.(type) {
+		case *NocopyNode:
+			size += n.Len()
+			node = n.next
+		case *NocopyBuffer:
+			size += n.Len()
+			node = n.next
+		default:
+			node = nil
+		}
 	}
-	b.len = n
 
-	return n
-}
+	b.len = size
 
-// Nodes 获取节点数
-func (b *NocopyBuffer) Nodes() int {
-	return b.num
+	return size
 }
 
 // Mount 挂载块到Buffer上
-func (b *NocopyBuffer) Mount(block interface{}, whence ...Whence) {
+func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	switch v := block.(type) {
 	case []byte:
 		if len(whence) > 0 && whence[0] == Head {
@@ -56,38 +63,7 @@ func (b *NocopyBuffer) Mount(block interface{}, whence ...Whence) {
 		} else {
 			b.addToTail(&NocopyNode{buf: v})
 		}
-	case *NocopyBuffer:
-		if v == nil || v.head == nil {
-			return
-		}
-
-		b.num += v.num
-		b.len = -1
-
-		if len(whence) > 0 && whence[0] == Head {
-			if b.head != nil {
-				v.tail.next = b.head
-				b.head.prev = v.tail
-			}
-
-			b.head = v.head
-
-			if b.tail == nil {
-				b.tail = v.tail
-			}
-		} else {
-			if b.tail != nil {
-				v.head.prev = b.tail
-				b.tail.next = v.head
-			}
-
-			b.tail = v.tail
-
-			if b.head == nil {
-				b.head = v.head
-			}
-		}
-	case *NocopyNode:
+	default:
 		if len(whence) > 0 && whence[0] == Head {
 			b.addToHead(v)
 		} else {
@@ -110,32 +86,67 @@ func (b *NocopyBuffer) Malloc(cap int, whence ...Whence) *Writer {
 }
 
 // Visit 迭代
-func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) {
-	node := b.head
-	for node != nil {
-		next := node.next
+func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) bool {
+	for node := b.head; node != nil; {
+		switch n := node.(type) {
+		case *NocopyNode:
+			next := n.next
 
-		if fn(node) {
+			if !fn(n) {
+				return false
+			}
+
 			node = next
-		} else {
-			break
+		case *NocopyBuffer:
+			next := n.next
+
+			if !n.Visit(fn) {
+				return false
+			}
+
+			node = next
+		default:
+			return false
 		}
 	}
+
+	return true
 }
 
 // Bytes 获取字节
 func (b *NocopyBuffer) Bytes() []byte {
+	if b == nil {
+		return nil
+	}
+
 	switch b.num {
 	case 0:
 		return nil
 	case 1:
-		return b.head.Bytes()
+		switch h := b.head.(type) {
+		case *NocopyNode:
+			return h.Bytes()
+		case *NocopyBuffer:
+			return b.Bytes()
+		default:
+			return nil
+		}
 	default:
 		bytes := make([]byte, 0, b.Len())
+
 		for node := b.head; node != nil; {
-			bytes = append(bytes, node.Bytes()...)
-			node = node.next
+			switch n := node.(type) {
+			case *NocopyNode:
+				bytes = append(bytes, n.Bytes()...)
+				node = n.next
+			case *NocopyBuffer:
+				bytes = append(bytes, n.Bytes()...)
+				node = n.next
+			default:
+				return bytes
+			}
 		}
+
 		return bytes
 	}
 }
@@ -148,11 +159,17 @@ func (b *NocopyBuffer) Delay(delay int32) {
 // Release 释放
 func (b *NocopyBuffer) Release(force ...bool) {
 	if (len(force) > 0 && force[0]) || b.delay.Add(-1) <= 0 {
-		node := b.head
-		for node != nil {
-			next := node.next
-			node.Release()
-			node = next
+		for node := b.head; node != nil; {
+			switch n := node.(type) {
+			case *NocopyNode:
+				next := n.next
+				n.Release()
+				node = next
+			case *NocopyBuffer:
+				next := n.next
+				n.Release(force...)
+				node = next
+			}
 		}
 		b.len = -1
 		b.num = 0
@@ -162,38 +179,98 @@ func (b *NocopyBuffer) Release(force ...bool) {
 	}
 }
 
-// 添加到尾部
-func (b *NocopyBuffer) addToTail(node *NocopyNode) {
+// 添加到头部
+func (b *NocopyBuffer) addToHead(node any) {
 	if node == nil {
 		return
 	}
 
-	if b.head == nil {
-		b.head = node
-		b.tail = node
-	} else {
-		b.tail.next = node
-		b.tail.next.prev = b.tail
-		b.tail = node
+	switch n := node.(type) {
+	case *NocopyNode:
+		if b.head == nil {
+			b.head = n
+			b.tail = n
+		} else {
+			n.next = b.head
+
+			switch h := b.head.(type) {
+			case *NocopyNode:
+				h.prev = n
+				b.head = n
+			case *NocopyBuffer:
+				h.prev = n
+				b.head = n
+			}
+		}
+
+		b.len = -1
+		b.num++
+	case *NocopyBuffer:
+		if b.head == nil {
+			b.head = n
+			b.tail = n
+		} else {
+			n.next = b.head
+
+			switch h := b.head.(type) {
+			case *NocopyNode:
+				h.prev = n
+				b.head = n
+			case *NocopyBuffer:
+				h.prev = n
+				b.head = n
+			}
+		}
+
+		b.len = -1
+		b.num += n.num
 	}
-	b.num++
-	b.len = -1
 }
 
-// 添加到头部
-func (b *NocopyBuffer) addToHead(node *NocopyNode) {
+// 添加到尾部
+func (b *NocopyBuffer) addToTail(node any) {
 	if node == nil {
 		return
 	}
 
-	if b.head == nil {
-		b.head = node
-		b.tail = node
-	} else {
-		node.next = b.head
-		b.head.prev = node
-		b.head = node
+	switch n := node.(type) {
+	case *NocopyNode:
+		if b.tail == nil {
+			b.head = n
+			b.tail = n
+		} else {
+			n.prev = b.tail
+
+			switch t := b.tail.(type) {
+			case *NocopyNode:
+				t.next = n
+				b.tail = n
+			case *NocopyBuffer:
+				t.next = n
+				b.tail = n
+			}
+		}
+
+		b.len = -1
+		b.num++
+	case *NocopyBuffer:
+		if b.tail == nil {
+			b.head = n
+			b.tail = n
+		} else {
+			n.prev = b.tail
+
+			switch t := b.tail.(type) {
+			case *NocopyNode:
+				t.next = n
+				b.tail = n
+			case *NocopyBuffer:
+				t.next = n
+				b.tail = n
+			}
+		}
+
+		b.len = -1
+		b.num += n.num
 	}
-	b.num++
-	b.len = -1
 }

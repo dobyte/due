@@ -131,3 +131,51 @@ func TestNocopyBuffer_Mount(t *testing.T) {
 
 	fmt.Println(buff1.Bytes())
 }
+
+func TestNocopyBuffer_Release(t *testing.T) {
+	buff1 := buffer.NewNocopyBuffer()
+	buff1.Delay(2)
+
+	writer1 := buff1.Malloc(8)
+	writer1.WriteInt64s(binary.BigEndian, 1)
+
+	fmt.Println(buff1.Bytes())
+
+	fmt.Println()
+
+	{
+		buff2 := buffer.NewNocopyBuffer()
+
+		writer2 := buff2.Malloc(8)
+		writer2.WriteInt64s(binary.BigEndian, 2)
+
+		fmt.Println(buff2.Bytes())
+
+		buff2.Mount(buff1, buffer.Head)
+
+		fmt.Println(buff2.Bytes())
+
+		buff2.Release()
+
+		fmt.Println(buff2.Bytes())
+	}
+
+	fmt.Println()
+
+	{
+		buff3 := buffer.NewNocopyBuffer()
+
+		writer3 := buff3.Malloc(8)
+		writer3.WriteInt64s(binary.BigEndian, 3)
+
+		fmt.Println(buff3.Bytes())
+
+		buff3.Mount(buff1, buffer.Head)
+
+		fmt.Println(buff3.Bytes())
+
+		buff3.Release()
+
+		fmt.Println(buff3.Bytes())
+	}
+}

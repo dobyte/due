@@ -24,7 +24,7 @@ type Buffer interface {
 	// Malloc 分配一块内存给Writer
 	Malloc(cap int, whence ...Whence) *Writer
 	// Visit 迭代
-	Visit(fn func(node *NocopyNode) bool)
+	Visit(fn func(node *NocopyNode) bool) bool
 	// Delay 设置延迟释放点
 	Delay(delay int32)
 	// Release 释放
