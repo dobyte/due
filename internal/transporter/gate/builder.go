@@ -1,10 +1,11 @@
 package gate
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"golang.org/x/sync/singleflight"
-	"sync"
 )
 
 type Options struct {
@@ -30,7 +31,11 @@ func (b *Builder) Build(addr string) (*Client, error) {
 		return cli.(*Client), nil
 	}
 
-	cli, err, _ := b.sfg.Do(addr, func() (interface{}, error) {
+	cli, err, _ := b.sfg.Do(addr, func() (any, error) {
+		if cli, ok := b.clients.Load(addr); ok {
+			return cli.(*Client), nil
+		}
+
 		cli := NewClient(client.NewClient(&client.Options{
 			Addr:         addr,
 			InsID:        b.opts.InsID,

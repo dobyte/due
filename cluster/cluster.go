@@ -95,6 +95,15 @@ func (h Hook) String() string {
 	}
 }
 
+// 无状态路由消息分发策略
+type Dispatch string
+
+const (
+	Random           Dispatch = "random" // 随机
+	RoundRobin       Dispatch = "rr"     // 轮询
+	WeightRoundRobin Dispatch = "wrr"    // 加权轮询
+)
+
 type GetIPArgs struct {
 	GID    string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind   session.Kind // 会话类型，session.Conn 或 session.User
@@ -102,9 +111,9 @@ type GetIPArgs struct {
 }
 
 type Message struct {
-	Seq   int32       // 序列号
-	Route int32       // 路由ID
-	Data  interface{} // 消息数据，接收json、proto、[]byte
+	Seq   int32 // 序列号
+	Route int32 // 路由ID
+	Data  any   // 消息数据，接收json、proto、[]byte
 }
 
 type PushArgs struct {

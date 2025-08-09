@@ -3,6 +3,9 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
@@ -10,8 +13,6 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
-	"sync"
-	"sync/atomic"
 )
 
 type HookHandler func(proxy *Proxy)
@@ -164,9 +165,9 @@ func (m *Mesh) registerServiceInstance() {
 		Kind:     cluster.Mesh.String(),
 		Alias:    m.opts.name,
 		State:    m.getState().String(),
-		Weight:   m.opts.weight,
 		Endpoint: m.transporter.Endpoint().String(),
 		Services: make([]string, 0, len(m.services)),
+		Metadata: m.opts.metadata,
 	}
 
 	for _, item := range m.services {

@@ -3,6 +3,9 @@ package node
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
@@ -12,8 +15,6 @@ import (
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"sync/atomic"
 )
 
 type HookHandler func(proxy *Proxy)
@@ -299,6 +300,7 @@ func (n *Node) registerServiceInstances() {
 		Events:   events,
 		Endpoint: n.linker.Endpoint().String(),
 		Weight:   n.opts.weight,
+		Metadata: n.opts.metadata,
 	})
 
 	if n.transporter != nil {
@@ -316,6 +318,7 @@ func (n *Node) registerServiceInstances() {
 			Services: services,
 			Endpoint: n.transporter.Endpoint().String(),
 			Weight:   n.opts.weight,
+			Metadata: n.opts.metadata,
 		})
 	}
 

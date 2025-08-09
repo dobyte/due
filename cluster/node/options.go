@@ -2,14 +2,16 @@ package node
 
 import (
 	"context"
+	"time"
+
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"time"
 )
 
 const (
@@ -21,12 +23,13 @@ const (
 )
 
 const (
-	defaultIDKey      = "etc.cluster.node.id"
-	defaultNameKey    = "etc.cluster.node.name"
-	defaultAddrKey    = "etc.cluster.node.addr"
-	defaultCodecKey   = "etc.cluster.node.codec"
-	defaultTimeoutKey = "etc.cluster.node.timeout"
-	defaultWeightKey  = "etc.cluster.node.weight"
+	defaultIDKey       = "etc.cluster.node.id"
+	defaultNameKey     = "etc.cluster.node.name"
+	defaultAddrKey     = "etc.cluster.node.addr"
+	defaultCodecKey    = "etc.cluster.node.codec"
+	defaultWeightKey   = "etc.cluster.node.weight"
+	defaultTimeoutKey  = "etc.cluster.node.timeout"
+	defaultMetadataKey = "etc.cluster.node.metadata"
 )
 
 // SchedulingModel 调度模型
@@ -40,22 +43,24 @@ type options struct {
 	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
 	addr        string                // 监听地址
 	codec       encoding.Codec        // 编解码器
+	weight      int                   // 服务器权重
 	timeout     time.Duration         // RPC调用超时时间
 	locator     locate.Locator        // 用户定位器
 	registry    registry.Registry     // 服务注册器
 	encryptor   crypto.Encryptor      // 消息加密器
 	transporter transport.Transporter // 消息传输器
-	weight      int                   // 权重
+	metadata    map[string]any        // 元数据
 }
 
 func defaultOptions() *options {
 	opts := &options{
-		ctx:     context.Background(),
-		name:    defaultName,
-		addr:    defaultAddr,
-		codec:   encoding.Invoke(defaultCodec),
-		timeout: defaultTimeout,
-		weight:  defaultWeight,
+		ctx:      context.Background(),
+		name:     defaultName,
+		addr:     defaultAddr,
+		codec:    encoding.Invoke(defaultCodec),
+		weight:   defaultWeight,
+		timeout:  defaultTimeout,
+		metadata: make(map[string]any),
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -82,6 +87,10 @@ func defaultOptions() *options {
 
 	if weight := etc.Get(defaultWeightKey).Int(); weight > 0 {
 		opts.weight = weight
+	}
+
+	if err := etc.Get(defaultMetadataKey).Scan(&opts.metadata); err != nil {
+		log.Warnf("scan node metadata failed: %v", err)
 	}
 
 	return opts
@@ -140,4 +149,9 @@ func WithTransporter(transporter transport.Transporter) Option {
 // WithWeight 设置权重
 func WithWeight(weight int) Option {
 	return func(o *options) { o.weight = weight }
+}
+
+// WithMetadata 设置元数据
+func WithMetadata(metadata map[string]any) Option {
+	return func(o *options) { o.metadata = metadata }
 }

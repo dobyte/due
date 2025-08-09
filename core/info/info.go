@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dobyte/due/v2/mode"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 const logo = `
@@ -42,6 +43,7 @@ func PrintGlobalInfo() {
 	PrintBoxInfo(global,
 		fmt.Sprintf("PID: %d", syscall.Getpid()),
 		fmt.Sprintf("Mode: %s", mode.GetMode()),
+		fmt.Sprintf("Time: %s", xtime.Now()),
 	)
 }
 

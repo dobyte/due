@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
@@ -21,6 +22,7 @@ func newProxy(gate *Gate) *proxy {
 		InsKind:  cluster.Gate,
 		Locator:  gate.opts.locator,
 		Registry: gate.opts.registry,
+		Dispatch: gate.opts.dispatch,
 	})}
 }
 

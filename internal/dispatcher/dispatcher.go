@@ -3,22 +3,15 @@ package dispatcher
 import (
 	"sync"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 )
 
-type BalanceStrategy string
-
-const (
-	Random           BalanceStrategy = "random" // 随机
-	RoundRobin       BalanceStrategy = "rr"     // 轮询
-	WeightRoundRobin BalanceStrategy = "wrr"    // 加权轮询
-)
-
 type Dispatcher struct {
-	strategy  BalanceStrategy
+	dispatch  cluster.Dispatch
 	rw        sync.RWMutex
 	routes    map[int32]*Route
 	events    map[int]*Event
@@ -26,8 +19,8 @@ type Dispatcher struct {
 	instances map[string]*registry.ServiceInstance
 }
 
-func NewDispatcher(strategy BalanceStrategy) *Dispatcher {
-	return &Dispatcher{strategy: strategy}
+func NewDispatcher(dispatch cluster.Dispatch) *Dispatcher {
+	return &Dispatcher{dispatch: dispatch}
 }
 
 // FindEndpoint 查找服务端口
@@ -113,16 +106,26 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 				route = newRoute(d, item.ID, service.Alias, item.Stateful, item.Internal)
 				routes[item.ID] = route
 			}
-			route.addEndpoint(service.ID, service.State, ep)
+			route.addServiceEndpoint(&serviceEndpoint{
+				insID:    service.ID,
+				state:    service.State,
+				endpoint: ep,
+				weight:   service.Weight,
+			})
 		}
 
 		for _, evt := range service.Events {
 			event, ok := events[evt]
 			if !ok {
-				event = newEvent(d, evt)
+				event = newEvent(evt)
 				events[evt] = event
 			}
-			event.addEndpoint(service.ID, service.State, ep)
+			event.addServiceEndpoint(&serviceEndpoint{
+				insID:    service.ID,
+				state:    service.State,
+				endpoint: ep,
+				weight:   service.Weight,
+			})
 		}
 	}
 
@@ -131,14 +134,5 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	d.events = events
 	d.endpoints = endpoints
 	d.instances = instances
-
-	if d.strategy == WeightRoundRobin {
-		for _, route := range routes {
-			route.initWRRQueue()
-		}
-		for _, event := range events {
-			event.initWRRQueue()
-		}
-	}
 	d.rw.Unlock()
 }

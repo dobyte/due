@@ -10,6 +10,9 @@ package gate
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
@@ -19,8 +22,6 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
-	"sync"
-	"sync/atomic"
 )
 
 type Gate struct {
@@ -210,8 +211,8 @@ func (g *Gate) registerServiceInstance() {
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
 		State:    g.getState().String(),
-		Weight:   g.opts.weight,
 		Endpoint: g.linker.Endpoint().String(),
+		Metadata: g.opts.metadata,
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)

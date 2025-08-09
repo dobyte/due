@@ -19,6 +19,8 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
+        # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
+        dispatch = "random"
         # 实例元数据
         [cluster.node.metadata]
             # 键值对
@@ -35,8 +37,8 @@ shutdownMaxWaitTime = "0s"
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
-        # 节点权重，用于集群节点的负载均衡策略
-        weight = 0
+        # 节点权重，用于节点无状态路由消息的加权轮询策略，权重值必需大于0才生效。默认为1
+        weight = 1
         # 实例元数据
         [cluster.node.metadata]
             # 键值对

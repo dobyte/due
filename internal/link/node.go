@@ -31,7 +31,7 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		ctx:        ctx,
 		opts:       opts,
 		builder:    node.NewBuilder(&node.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
-		dispatcher: dispatcher.NewDispatcher(opts.BalanceStrategy),
+		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		sources:    make(map[int64]map[string]string),
 	}
 
@@ -174,7 +174,7 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	event.IterateEndpoint(func(_ string, ep *endpoint.Endpoint) bool {
+	event.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
 			client, err := l.builder.Build(ep.Address())
 			if err != nil {

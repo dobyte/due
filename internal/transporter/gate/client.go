@@ -6,6 +6,7 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
@@ -141,11 +142,19 @@ func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffe
 
 // Publish 发布频道消息（异步）
 func (c *Client) Publish(ctx context.Context, channel string, message buffer.Buffer) error {
+	if len(channel) > 1<<8-1 {
+		return errors.ErrInvalidArgument
+	}
+
 	return c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, message))
 }
 
 // Subscribe 订阅频道
 func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	if len(channel) > 1<<8-1 {
+		return errors.ErrInvalidArgument
+	}
+
 	seq := c.doGenSequence()
 
 	buf := protocol.EncodeSubscribeReq(seq, kind, targets, channel)
@@ -165,6 +174,10 @@ func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int
 
 // Unsubscribe 取消订阅频道
 func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+	if len(channel) > 1<<8-1 {
+		return errors.ErrInvalidArgument
+	}
+
 	seq := c.doGenSequence()
 
 	buf := protocol.EncodeUnsubscribeReq(seq, kind, targets, channel)
