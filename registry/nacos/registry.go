@@ -2,6 +2,11 @@ package nacos
 
 import (
 	"context"
+	"net"
+	"net/url"
+	"strconv"
+	"sync"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -11,10 +16,6 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
-	"net"
-	"net/url"
-	"strconv"
-	"sync"
 )
 
 const name = "nacos"
@@ -224,6 +225,7 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 		ins.Events = make([]int, 0)
 		ins.Services = make([]string, 0)
 		ins.Weight = xconv.Int(instance.Metadata[metaFieldWeight])
+		ins.Metadata = make(map[string]any)
 
 		if v := instance.Metadata[metaFieldRoutes]; v != "" {
 			if err := json.Unmarshal([]byte(v), &ins.Routes); err != nil {
@@ -239,6 +241,12 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 
 		if v := instance.Metadata[metaFieldServices]; v != "" {
 			if err := json.Unmarshal([]byte(v), &ins.Services); err != nil {
+				return nil, err
+			}
+		}
+
+		if v := instance.Metadata[metaFieldMetadata]; v != "" {
+			if err := json.Unmarshal([]byte(v), &ins.Metadata); err != nil {
 				return nil, err
 			}
 		}

@@ -2,14 +2,15 @@ package nacos
 
 import (
 	"context"
+	"net"
+	"net/url"
+	"strconv"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
-	"net"
-	"net/url"
-	"strconv"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
+	metaFieldMetadata = "metadata"
 )
 
 type registrar struct {
@@ -55,6 +57,11 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
+	metadata, err := json.Marshal(ins.Metadata)
+	if err != nil {
+		return err
+	}
+
 	param := vo.RegisterInstanceParam{
 		Ip:          host,
 		Port:        port,
@@ -76,6 +83,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 			metaFieldServices: string(services),
 			metaFieldEndpoint: ins.Endpoint,
 			metaFieldWeight:   xconv.String(ins.Weight),
+			metaFieldMetadata: string(metadata),
 		},
 	}
 

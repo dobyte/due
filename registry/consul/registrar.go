@@ -3,14 +3,16 @@ package consul
 import (
 	"context"
 	"fmt"
-	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/hashicorp/consul/api"
 	"net"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/hashicorp/consul/api"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
+	metaFieldMetadata = "metadata"
 )
 
 type registrar struct {
@@ -64,23 +67,32 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
-	insID := makeInsID(ins)
+	events, err := json.Marshal(ins.Events)
+	if err != nil {
+		return err
+	}
+
+	services, err := json.Marshal(ins.Services)
+	if err != nil {
+		return err
+	}
 
 	registration := &api.AgentServiceRegistration{}
-	registration.ID = insID
+	registration.ID = makeInsID(ins)
 	registration.Name = ins.Name
 	registration.Address = host
 	registration.Port = port
 	registration.TaggedAddresses = map[string]api.ServiceAddress{raw.Scheme: {Address: host, Port: port}}
-	registration.Meta = make(map[string]string, 7)
+	registration.Meta = make(map[string]string, 8)
 	registration.Meta[metaFieldID] = ins.ID
 	registration.Meta[metaFieldKind] = ins.Kind
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
 	registration.Meta[metaFieldEndpoint] = ins.Endpoint
-	registration.Meta[metaFieldEvents] = xconv.Json(ins.Events)
+	registration.Meta[metaFieldEvents] = string(events)
 	registration.Meta[metaFieldWeight] = xconv.String(ins.Weight)
-	registration.Meta[metaFieldServices] = xconv.Json(ins.Services)
+	registration.Meta[metaFieldServices] = string(services)
+	// registration.Meta[metaFieldMetadata] = string(metadata)
 
 	for field, value := range marshalMetaRoutes(ins.Routes) {
 		registration.Meta[field] = value
@@ -97,7 +109,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	if r.registry.opts.enableHeartbeatCheck {
 		registration.Checks = append(registration.Checks, &api.AgentServiceCheck{
-			CheckID:                        fmt.Sprintf(checkIDFormat, insID),
+			CheckID:                        fmt.Sprintf(checkIDFormat, registration.ID),
 			TTL:                            fmt.Sprintf("%ds", r.registry.opts.heartbeatCheckInterval),
 			DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", r.registry.opts.deregisterCriticalServiceAfter),
 		})
@@ -108,7 +120,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	if r.registry.opts.enableHeartbeatCheck {
-		r.chHeartbeat <- insID
+		r.chHeartbeat <- registration.ID
 	}
 
 	return nil
