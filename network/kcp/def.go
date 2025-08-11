@@ -8,7 +8,6 @@ const (
 )
 
 type chWrite struct {
-	typ     int
-	msg     []byte
-	msgType int
+	typ int
+	msg []byte
 }
