@@ -1,9 +1,10 @@
 package memcache
 
 import (
+	"time"
+
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/v2/etc"
-	"time"
 )
 
 const (
@@ -11,6 +12,8 @@ const (
 	defaultPrefix        = "cache"
 	defaultNilValue      = "cache@nil"
 	defaultNilExpiration = "10s"
+	defaultMinExpiration = "1h"
+	defaultMaxExpiration = "24h"
 )
 
 const (
@@ -18,13 +21,15 @@ const (
 	defaultPrefixKey        = "etc.cache.memcache.prefix"
 	defaultNilValueKey      = "etc.cache.memcache.nilValue"
 	defaultNilExpirationKey = "etc.cache.memcache.nilExpiration"
+	defaultMinExpirationKey = "etc.cache.memcache.minExpiration"
+	defaultMaxExpirationKey = "etc.cache.memcache.maxExpiration"
 )
 
 type Option func(o *options)
 
 type options struct {
 	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:6379"}
+	// 内建客户端配置，默认为[]string{"127.0.0.1:11211"}
 	addrs []string
 
 	// 客户端
@@ -40,6 +45,12 @@ type options struct {
 
 	// 空值过期时间，默认为10s
 	nilExpiration time.Duration
+
+	// 最小过期时间，默认为1h
+	minExpiration time.Duration
+
+	// 最大过期时间，默认为24h
+	maxExpiration time.Duration
 }
 
 func defaultOptions() *options {
@@ -48,6 +59,8 @@ func defaultOptions() *options {
 		prefix:        etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		nilValue:      etc.Get(defaultNilValueKey, defaultNilValue).String(),
 		nilExpiration: etc.Get(defaultNilExpirationKey, defaultNilExpiration).Duration(),
+		minExpiration: etc.Get(defaultMinExpirationKey, defaultMinExpiration).Duration(),
+		maxExpiration: etc.Get(defaultMaxExpirationKey, defaultMaxExpiration).Duration(),
 	}
 }
 
@@ -74,4 +87,14 @@ func WithNilValue(nilValue string) Option {
 // WithNilExpiration 设置空值过期时间
 func WithNilExpiration(nilExpiration time.Duration) Option {
 	return func(o *options) { o.nilExpiration = nilExpiration }
+}
+
+// WithMinExpiration 设置最小过期时间
+func WithMinExpiration(minExpiration time.Duration) Option {
+	return func(o *options) { o.minExpiration = minExpiration }
+}
+
+// WithMaxExpiration 设置最大过期时间
+func WithMaxExpiration(maxExpiration time.Duration) Option {
+	return func(o *options) { o.maxExpiration = maxExpiration }
 }

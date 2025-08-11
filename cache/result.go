@@ -1,8 +1,9 @@
 package cache
 
 import (
-	"github.com/dobyte/due/v2/core/value"
 	"time"
+
+	"github.com/dobyte/due/v2/core/value"
 )
 
 type Result interface {
@@ -39,9 +40,9 @@ type Result interface {
 	Strings() ([]string, error)
 	Bytes() ([]byte, error)
 	Durations() ([]time.Duration, error)
-	Slice() ([]interface{}, error)
-	Map() (map[string]interface{}, error)
-	Scan(pointer interface{}) error
+	Slice() ([]any, error)
+	Map() (map[string]any, error)
+	Scan(pointer any) error
 }
 
 type result struct {
@@ -49,7 +50,7 @@ type result struct {
 	value value.Value
 }
 
-func NewResult(val interface{}, err ...error) Result {
+func NewResult(val any, err ...error) Result {
 	if len(err) > 0 {
 		return &result{err: err[0], value: value.NewValue(val)}
 	} else {
@@ -313,7 +314,7 @@ func (r *result) Durations() ([]time.Duration, error) {
 	return r.value.Durations(), nil
 }
 
-func (r *result) Slice() ([]interface{}, error) {
+func (r *result) Slice() ([]any, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -321,7 +322,7 @@ func (r *result) Slice() ([]interface{}, error) {
 	return r.value.Slice(), nil
 }
 
-func (r *result) Map() (map[string]interface{}, error) {
+func (r *result) Map() (map[string]any, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -329,7 +330,7 @@ func (r *result) Map() (map[string]interface{}, error) {
 	return r.value.Map(), nil
 }
 
-func (r *result) Scan(pointer interface{}) error {
+func (r *result) Scan(pointer any) error {
 	if r.err != nil {
 		return r.err
 	}

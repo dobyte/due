@@ -27,7 +27,7 @@ type Option func(o *options)
 
 type options struct {
 	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:6379"}
+	// 内建客户端配置，默认为[]string{"127.0.0.1:11211"}
 	addrs []string
 
 	// 客户端

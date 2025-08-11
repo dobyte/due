@@ -2,6 +2,8 @@ package redis
 
 import (
 	"context"
+	"time"
+
 	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -9,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
-	"time"
 )
 
 type Cache struct {
@@ -43,7 +44,7 @@ func NewCache(opts ...Option) *Cache {
 func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+	val, err, _ := c.sfg.Do(key, func() (any, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
 	if err != nil {
@@ -61,10 +62,10 @@ func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 }
 
 // Get 获取缓存值
-func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.Result {
+func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+	val, err, _ := c.sfg.Do(key, func() (any, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -83,7 +84,7 @@ func (c *Cache) Get(ctx context.Context, key string, def ...interface{}) cache.R
 }
 
 // Set 设置缓存值
-func (c *Cache) Set(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error {
+func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...time.Duration) error {
 	if len(expiration) > 0 {
 		return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), expiration[0]).Err()
 	} else {
@@ -95,7 +96,7 @@ func (c *Cache) Set(ctx context.Context, key string, value interface{}, expirati
 func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+	val, err, _ := c.sfg.Do(key, func() (any, error) {
 		return c.opts.client.Get(ctx, key).Result()
 	})
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -110,7 +111,7 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 		}
 	}
 
-	rst, _, _ := c.sfg.Do(key+":set", func() (interface{}, error) {
+	rst, _, _ := c.sfg.Do(key+":set", func() (any, error) {
 		val, err := fn()
 		if err != nil {
 			return cache.NewResult(nil, err), nil
@@ -136,20 +137,16 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 }
 
 // Delete 删除缓存
-func (c *Cache) Delete(ctx context.Context, keys ...string) (bool, error) {
-	prefixedKeys := make([]string, 0, len(keys))
-	for _, key := range keys {
-		if key != "" {
-			prefixedKeys = append(prefixedKeys, c.AddPrefix(key))
-		}
+func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
 	}
 
-	if len(prefixedKeys) == 0 {
-		return false, nil
+	for i, key := range keys {
+		keys[i] = c.AddPrefix(key)
 	}
 
-	num, err := c.opts.client.Del(ctx, prefixedKeys...).Result()
-	return num > 1, err
+	return c.opts.client.Del(ctx, keys...).Result()
 }
 
 // IncrInt 整数自增
@@ -182,6 +179,6 @@ func (c *Cache) AddPrefix(key string) string {
 }
 
 // Client 获取客户端
-func (c *Cache) Client() interface{} {
+func (c *Cache) Client() any {
 	return c.opts.client
 }

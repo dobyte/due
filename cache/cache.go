@@ -7,19 +7,19 @@ import (
 
 var globalCache Cache
 
-type SetValueFunc func() (interface{}, error)
+type SetValueFunc func() (any, error)
 
 type Cache interface {
 	// Has 检测缓存是否存在
 	Has(ctx context.Context, key string) (bool, error)
 	// Get 获取缓存值
-	Get(ctx context.Context, key string, def ...interface{}) Result
+	Get(ctx context.Context, key string, def ...any) Result
 	// Set 设置缓存值
-	Set(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error
+	Set(ctx context.Context, key string, value any, expiration ...time.Duration) error
 	// GetSet 获取设置缓存值
 	GetSet(ctx context.Context, key string, fn SetValueFunc) Result
 	// Delete 删除缓存
-	Delete(ctx context.Context, keys ...string) (bool, error)
+	Delete(ctx context.Context, keys ...string) (int64, error)
 	// IncrInt 整数自增
 	IncrInt(ctx context.Context, key string, value int64) (int64, error)
 	// IncrFloat 浮点数自增
@@ -31,7 +31,7 @@ type Cache interface {
 	// AddPrefix 添加Key前缀
 	AddPrefix(key string) string
 	// Client 获取客户端
-	Client() interface{}
+	Client() any
 }
 
 // SetCache 设置缓存
@@ -50,12 +50,12 @@ func Has(ctx context.Context, key string) (bool, error) {
 }
 
 // Get 获取缓存值
-func Get(ctx context.Context, key string, def ...interface{}) Result {
+func Get(ctx context.Context, key string, def ...any) Result {
 	return globalCache.Get(ctx, key, def...)
 }
 
 // Set 设置缓存值
-func Set(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error {
+func Set(ctx context.Context, key string, value any, expiration ...time.Duration) error {
 	return globalCache.Set(ctx, key, value, expiration...)
 }
 
@@ -65,7 +65,7 @@ func GetSet(ctx context.Context, key string, fn SetValueFunc) Result {
 }
 
 // Delete 删除缓存
-func Delete(ctx context.Context, keys ...string) (bool, error) {
+func Delete(ctx context.Context, keys ...string) (int64, error) {
 	return globalCache.Delete(ctx, keys...)
 }
 
@@ -95,6 +95,6 @@ func AddPrefix(key string) string {
 }
 
 // Client 获取客户端
-func Client() interface{} {
+func Client() any {
 	return globalCache.Client()
 }
