@@ -29,6 +29,10 @@ const (
 	metaFieldEndpoint = "endpoint"
 )
 
+const (
+	defaultMetadataPrefix = "_"
+)
+
 type registrar struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -97,7 +101,7 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 	}
 
 	for field, value := range ins.Metadata {
-		registration.Meta["_"+field] = value
+		registration.Meta[defaultMetadataPrefix+field] = value
 	}
 
 	if r.registry.opts.enableHealthCheck {

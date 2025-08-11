@@ -163,15 +163,14 @@ func TestClient_Benchmark(t *testing.T) {
 	// 准备连接
 	conns := make([]network.Conn, concurrency)
 	for i := 0; i < concurrency; i++ {
-		conn, err := client.Dial()
-		if err != nil {
+		if conn, err := client.Dial(); err != nil {
 			fmt.Println("connect failed", i, err)
 			i--
 			continue
+		} else {
+			conns[i] = conn
+			time.Sleep(time.Millisecond)
 		}
-
-		conns[i] = conn
-		time.Sleep(time.Millisecond)
 	}
 
 	// 发送消息
@@ -179,27 +178,20 @@ func TestClient_Benchmark(t *testing.T) {
 		go func(conn network.Conn) {
 			defer conn.Close(true)
 
-			for {
-				select {
-				case _, ok := <-chMsg:
-					if !ok {
-						return
-					}
-
-					if err = conn.Push(msg); err != nil {
-						t.Error(err)
-						return
-					}
-
-					atomic.AddInt64(&totalSent, 1)
+			for range chMsg {
+				if err = conn.Push(msg); err != nil {
+					t.Error(err)
+					return
 				}
+
+				atomic.AddInt64(&totalSent, 1)
 			}
 		}(conn)
 	}
 
 	startTime := time.Now().UnixNano()
 
-	for i := 0; i < total; i++ {
+	for range total {
 		chMsg <- struct{}{}
 	}
 

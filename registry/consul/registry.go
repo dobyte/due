@@ -2,12 +2,13 @@ package consul
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
-	"sync"
-	"time"
 )
 
 const name = "consul"
@@ -143,6 +144,7 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			Routes:   unmarshalMetaRoutes(entry.Service.Meta),
 			Events:   make([]int, 0),
 			Services: make([]string, 0),
+			Metadata: make(map[string]string),
 		}
 
 		for k, v := range entry.Service.Meta {
@@ -167,6 +169,10 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				}
 			case metaFieldEndpoint:
 				ins.Endpoint = v
+			default:
+				if len(k) > 0 && string(k[0]) == defaultMetadataPrefix {
+					ins.Metadata[string(k[1:])] = v
+				}
 			}
 		}
 

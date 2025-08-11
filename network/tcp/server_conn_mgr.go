@@ -87,15 +87,6 @@ func (p *partition) store(c net.Conn, conn *serverConn) {
 	p.rw.Unlock()
 }
 
-// 加载连接
-func (p *partition) load(c net.Conn) (*serverConn, bool) {
-	p.rw.RLock()
-	conn, ok := p.connections[c]
-	p.rw.RUnlock()
-
-	return conn, ok
-}
-
 // 删除连接
 func (p *partition) delete(c net.Conn) (*serverConn, bool) {
 	p.rw.Lock()
