@@ -1,12 +1,13 @@
 package xrand
 
 import (
-	"github.com/dobyte/due/v2/log"
 	"math"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 const (
@@ -155,7 +156,7 @@ func Lucky(probability float64, base ...float64) bool {
 }
 
 // Weight 权重随机
-func Weight(fn func(v interface{}) float64, list ...interface{}) int {
+func Weight(fn func(v any) float64, list ...any) int {
 	if len(list) == 0 {
 		return -1
 	}
@@ -194,7 +195,7 @@ func Weight(fn func(v interface{}) float64, list ...interface{}) int {
 }
 
 // Shuffle 打乱数组
-func Shuffle(list []interface{}) {
+func Shuffle(list []any) {
 	globalRand.Shuffle(len(list), func(i, j int) {
 		list[i], list[j] = list[j], list[i]
 	})

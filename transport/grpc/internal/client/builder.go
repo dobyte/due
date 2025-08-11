@@ -1,6 +1,8 @@
 package client
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/discovery"
 	"github.com/dobyte/due/v2/registry"
@@ -9,7 +11,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
-	"sync"
 )
 
 type Builder struct {
@@ -60,7 +61,7 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 		return c.(*grpc.ClientConn), nil
 	}
 
-	c, err, _ := b.sfg.Do(target, func() (interface{}, error) {
+	c, err, _ := b.sfg.Do(target, func() (any, error) {
 		cc, err := grpc.NewClient(target, b.dialOpts...)
 		if err != nil {
 			return nil, err

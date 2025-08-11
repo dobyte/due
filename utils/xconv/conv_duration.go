@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Duration(any interface{}) time.Duration {
-	if any == nil {
+func Duration(val any) time.Duration {
+	if val == nil {
 		return 0
 	}
 
@@ -28,7 +30,7 @@ func Duration(any interface{}) time.Duration {
 		return d
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		return time.Duration(v)
 	case *int:
@@ -106,17 +108,7 @@ func Duration(any interface{}) time.Duration {
 	case *time.Duration:
 		return *v
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
 			return Duration(rv.Bool())
 		case reflect.String:
@@ -139,12 +131,12 @@ func Duration(any interface{}) time.Duration {
 	}
 }
 
-func Durations(any interface{}) (slice []time.Duration) {
-	if any == nil {
+func Durations(val any) (slice []time.Duration) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]time.Duration, len(v))
 		for i := range v {
@@ -305,12 +297,12 @@ func Durations(any interface{}) (slice []time.Duration) {
 		for i := range *v {
 			slice[i] = Duration((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]time.Duration, len(v))
 		for i := range v {
 			slice[i] = Duration(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]time.Duration, len(*v))
 		for i := range *v {
 			slice[i] = Duration((*v)[i])
@@ -326,21 +318,11 @@ func Durations(any interface{}) (slice []time.Duration) {
 			slice[i] = Duration((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]time.Duration, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Duration(rv.Index(i).Interface())
 			}
 		}
@@ -349,12 +331,12 @@ func Durations(any interface{}) (slice []time.Duration) {
 	return
 }
 
-func DurationPointer(any interface{}) *time.Duration {
+func DurationPointer(any any) *time.Duration {
 	v := Duration(any)
 	return &v
 }
 
-func DurationsPointer(any interface{}) *[]time.Duration {
+func DurationsPointer(any any) *[]time.Duration {
 	v := Durations(any)
 	return &v
 }

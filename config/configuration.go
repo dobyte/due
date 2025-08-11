@@ -15,7 +15,7 @@ type Configuration struct {
 }
 
 // Decode 解码
-func (c *Configuration) Decode() (interface{}, error) {
+func (c *Configuration) Decode() (any, error) {
 	if c.decoder == nil {
 		return nil, errors.ErrInvalidDecoder
 	}
@@ -24,7 +24,7 @@ func (c *Configuration) Decode() (interface{}, error) {
 }
 
 // Scan 扫描
-func (c *Configuration) Scan(dest interface{}) error {
+func (c *Configuration) Scan(dest any) error {
 	if c.scanner == nil {
 		return errors.ErrInvalidScanner
 	}

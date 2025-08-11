@@ -32,9 +32,9 @@ type Codec interface {
 	// Name 编解码器类型
 	Name() string
 	// Marshal 编码
-	Marshal(v interface{}) ([]byte, error)
+	Marshal(v any) ([]byte, error)
 	// Unmarshal 解码
-	Unmarshal(data []byte, v interface{}) error
+	Unmarshal(data []byte, v any) error
 }
 
 // Register 注册编解码器

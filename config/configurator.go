@@ -2,12 +2,6 @@ package config
 
 import (
 	"context"
-	"dario.cat/mergo"
-	"github.com/dobyte/due/v2/core/value"
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/dobyte/due/v2/utils/xreflect"
-	"github.com/jinzhu/copier"
 	"log"
 	"math"
 	"path/filepath"
@@ -16,15 +10,22 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"dario.cat/mergo"
+	"github.com/dobyte/due/v2/core/value"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xreflect"
+	"github.com/jinzhu/copier"
 )
 
 type Configurator interface {
 	// Has 检测多个匹配规则中是否存在配置
 	Has(pattern string) bool
 	// Get 获取配置值
-	Get(pattern string, def ...interface{}) value.Value
+	Get(pattern string, def ...any) value.Value
 	// Set 设置配置值
-	Set(pattern string, value interface{}) error
+	Set(pattern string, value any) error
 	// Match 匹配多个规则
 	Match(patterns ...string) Matcher
 	// Watch 设置监听回调
@@ -32,7 +33,7 @@ type Configurator interface {
 	// Load 加载配置项
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store 保存配置项
-	Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error
+	Store(ctx context.Context, source string, file string, content any, override ...bool) error
 	// Close 关闭配置监听
 	Close()
 }
@@ -51,7 +52,7 @@ type defaultConfigurator struct {
 	sources  map[string]Source
 	mu       sync.Mutex
 	idx      int64
-	values   [2]map[string]interface{}
+	values   [2]map[string]any
 	rw       sync.RWMutex
 	watchers []*watcher
 }
@@ -81,7 +82,7 @@ func (c *defaultConfigurator) init() {
 		c.sources[s.Name()] = s
 	}
 
-	values := make(map[string]interface{})
+	values := make(map[string]any)
 	for _, s := range c.opts.sources {
 		cs, err := s.Load(c.ctx)
 		if err != nil {
@@ -110,22 +111,22 @@ func (c *defaultConfigurator) init() {
 }
 
 // 保存配置
-func (c *defaultConfigurator) store(values map[string]interface{}) {
+func (c *defaultConfigurator) store(values map[string]any) {
 	idx := atomic.AddInt64(&c.idx, 1) % int64(len(c.values))
 	c.values[idx] = values
 }
 
 // 加载配置
-func (c *defaultConfigurator) load() map[string]interface{} {
+func (c *defaultConfigurator) load() map[string]any {
 	idx := atomic.LoadInt64(&c.idx) % int64(len(c.values))
 	return c.values[idx]
 }
 
 // 拷贝配置
-func (c *defaultConfigurator) copy() (map[string]interface{}, error) {
+func (c *defaultConfigurator) copy() (map[string]any, error) {
 	values := c.load()
 
-	dst := make(map[string]interface{})
+	dst := make(map[string]any)
 
 	err := copier.CopyWithOption(&dst, values, copier.Option{
 		DeepCopy: true,
@@ -162,7 +163,7 @@ func (c *defaultConfigurator) watch() {
 				}
 
 				names := make([]string, 0, len(cs))
-				values := make(map[string]interface{})
+				values := make(map[string]any)
 				for _, cc := range cs {
 					if len(cc.Content) == 0 {
 						continue
@@ -242,7 +243,7 @@ func (c *defaultConfigurator) Has(pattern string) bool {
 func (c *defaultConfigurator) doHas(pattern string) bool {
 	var (
 		keys   = strings.Split(pattern, ".")
-		node   interface{}
+		node   any
 		found  = true
 		values = c.load()
 	)
@@ -251,13 +252,13 @@ func (c *defaultConfigurator) doHas(pattern string) bool {
 	node = values
 	for _, key := range keys {
 		switch vs := node.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if v, ok := vs[key]; ok {
 				node = v
 			} else {
 				found = false
 			}
-		case []interface{}:
+		case []any:
 			i, err := strconv.Atoi(key)
 			if err != nil {
 				found = false
@@ -279,7 +280,7 @@ func (c *defaultConfigurator) doHas(pattern string) bool {
 }
 
 // Get 获取配置值
-func (c *defaultConfigurator) Get(pattern string, def ...interface{}) value.Value {
+func (c *defaultConfigurator) Get(pattern string, def ...any) value.Value {
 	if val, ok := c.doGet(pattern); ok {
 		return val
 	}
@@ -296,7 +297,7 @@ func (c *defaultConfigurator) Match(patterns ...string) Matcher {
 func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 	var (
 		keys   = strings.Split(pattern, ".")
-		node   interface{}
+		node   any
 		found  = true
 		values = c.load()
 	)
@@ -309,13 +310,13 @@ func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 	node = values
 	for _, key := range keys {
 		switch vs := node.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if v, ok := vs[key]; ok {
 				node = v
 			} else {
 				found = false
 			}
-		case []interface{}:
+		case []any:
 			i, err := strconv.Atoi(key)
 			if err != nil {
 				found = false
@@ -342,10 +343,10 @@ NOTFOUND:
 }
 
 // Set 设置配置值
-func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
+func (c *defaultConfigurator) Set(pattern string, value any) error {
 	var (
 		keys = strings.Split(pattern, ".")
-		node interface{}
+		node any
 	)
 
 	c.mu.Lock()
@@ -360,7 +361,7 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 	node = values
 	for i, key := range keys {
 		switch vs := node.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if i == len(keys)-1 {
 				vs[key] = value
 			} else {
@@ -368,14 +369,14 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 				ii, err := strconv.Atoi(keys[i+1])
 				if next, ok := vs[key]; ok {
 					switch nv := next.(type) {
-					case map[string]interface{}:
+					case map[string]any:
 						rebuild = err == nil
-					case []interface{}:
+					case []any:
 						rebuild = err != nil
 						// the next node capacity is not enough
 						// expand capacity
 						if err == nil && ii >= len(nv) {
-							dst := make([]interface{}, ii+1)
+							dst := make([]any, ii+1)
 							copy(dst, nv)
 							vs[key] = dst
 						}
@@ -388,15 +389,15 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 
 				if rebuild {
 					if err != nil {
-						vs[key] = make(map[string]interface{})
+						vs[key] = make(map[string]any)
 					} else {
-						vs[key] = make([]interface{}, 1)
+						vs[key] = make([]any, 1)
 					}
 				}
 
 				node = vs[key]
 			}
-		case []interface{}:
+		case []any:
 			ii, err := strconv.Atoi(key)
 			if err != nil {
 				return err
@@ -412,14 +413,14 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 				rebuild := false
 				_, err = strconv.Atoi(keys[i+1])
 				switch nv := vs[ii].(type) {
-				case map[string]interface{}:
+				case map[string]any:
 					rebuild = err == nil
-				case []interface{}:
+				case []any:
 					rebuild = err != nil
 					// the next node capacity is not enough
 					// expand capacity
 					if err == nil && ii >= len(nv) {
-						dst := make([]interface{}, ii+1)
+						dst := make([]any, ii+1)
 						copy(dst, nv)
 						vs[ii] = dst
 					}
@@ -429,9 +430,9 @@ func (c *defaultConfigurator) Set(pattern string, value interface{}) error {
 
 				if rebuild {
 					if err != nil {
-						vs[ii] = make(map[string]interface{})
+						vs[ii] = make(map[string]any)
 					} else {
-						vs[ii] = make([]interface{}, 1)
+						vs[ii] = make([]any, 1)
 					}
 				}
 
@@ -480,7 +481,7 @@ func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...s
 }
 
 // Store 保存配置项
-func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error {
+func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content any, override ...bool) error {
 	if content == nil {
 		return errors.ErrInvalidConfigContent
 	}
@@ -512,7 +513,7 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 			val, ok := dest[name]
 			if !ok {
 				buf, err = c.opts.encoder(format, content)
-			} else if v, ok := val.(map[string]interface{}); ok {
+			} else if v, ok := val.(map[string]any); ok {
 				buf, err = c.opts.encoder(format, content)
 				if err != nil {
 					return err
@@ -545,7 +546,7 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 	return s.Store(ctx, file, buf)
 }
 
-func reviseKeys(keys []string, values map[string]interface{}) []string {
+func reviseKeys(keys []string, values map[string]any) []string {
 	for i := 1; i < len(keys); i++ {
 		key := strings.Join(keys[:i+1], ".")
 		if _, ok := values[key]; ok {

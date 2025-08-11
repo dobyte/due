@@ -3,12 +3,13 @@ package packet
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/log"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 )
 
 const (
@@ -32,7 +33,7 @@ type NocopyReader interface {
 
 type Packer interface {
 	// ReadMessage 读取消息
-	ReadMessage(reader interface{}) ([]byte, error)
+	ReadMessage(reader any) ([]byte, error)
 	// PackBuffer 打包消息
 	PackBuffer(message *Message) (buffer.Buffer, error)
 	// PackMessage 打包消息
@@ -95,7 +96,7 @@ func NewPacker(opts ...Option) *defaultPacker {
 }
 
 // ReadMessage 读取消息
-func (p *defaultPacker) ReadMessage(reader interface{}) ([]byte, error) {
+func (p *defaultPacker) ReadMessage(reader any) ([]byte, error) {
 	switch r := reader.(type) {
 	case NocopyReader:
 		return p.nocopyReadMessage(r)

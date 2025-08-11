@@ -16,21 +16,21 @@ func (codec) Name() string {
 }
 
 // Marshal 编码
-func (codec) Marshal(v interface{}) ([]byte, error) {
+func (codec) Marshal(v any) ([]byte, error) {
 	return msgpack.Marshal(v)
 }
 
 // Unmarshal 解码
-func (codec) Unmarshal(data []byte, v interface{}) error {
+func (codec) Unmarshal(data []byte, v any) error {
 	return msgpack.Unmarshal(data, v)
 }
 
 // Marshal 编码
-func Marshal(v interface{}) ([]byte, error) {
+func Marshal(v any) ([]byte, error) {
 	return DefaultCodec.Marshal(v)
 }
 
 // Unmarshal 解码
-func Unmarshal(data []byte, v interface{}) error {
+func Unmarshal(data []byte, v any) error {
 	return DefaultCodec.Unmarshal(data, v)
 }

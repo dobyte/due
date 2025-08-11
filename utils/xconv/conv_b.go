@@ -6,12 +6,14 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func toB(any string) float64 {
+func toB(val string) float64 {
 	reg := regexp.MustCompile(`(?i)^(\d+)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
 
-	if rst := reg.FindStringSubmatch(any); len(rst) == 3 {
+	if rst := reg.FindStringSubmatch(val); len(rst) == 3 {
 		var unit float64
 
 		switch strings.ToUpper(rst[2]) {
@@ -41,8 +43,8 @@ func toB(any string) float64 {
 	}
 }
 
-func B(any interface{}) float64 {
-	switch v := any.(type) {
+func B(val any) float64 {
+	switch v := val.(type) {
 	case int:
 		return float64(v)
 	case *int:
@@ -120,17 +122,7 @@ func B(any interface{}) float64 {
 	case *time.Duration:
 		return 0
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.String:
 			return toB(rv.String())
 		case reflect.Uintptr:
@@ -151,12 +143,12 @@ func B(any interface{}) float64 {
 	}
 }
 
-func Bs(any interface{}) (slice []float64) {
-	if any == nil {
+func Bs(val any) (slice []float64) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]float64, len(v))
 		for i := range v {
@@ -305,12 +297,12 @@ func Bs(any interface{}) (slice []float64) {
 		return make([]float64, len(v))
 	case *[]bool:
 		return make([]float64, len(*v))
-	case []interface{}:
+	case []any:
 		slice = make([]float64, len(v))
 		for i := range v {
 			slice[i] = B(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -326,21 +318,11 @@ func Bs(any interface{}) (slice []float64) {
 			slice[i] = B((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]float64, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = B(rv.Index(i).Interface())
 			}
 		}

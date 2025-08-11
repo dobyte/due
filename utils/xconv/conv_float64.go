@@ -4,10 +4,12 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Float64(any interface{}) float64 {
-	if any == nil {
+func Float64(val any) float64 {
+	if val == nil {
 		return 0
 	}
 
@@ -17,7 +19,7 @@ func Float64(any interface{}) float64 {
 		return f
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		return float64(v)
 	case *int:
@@ -89,17 +91,7 @@ func Float64(any interface{}) float64 {
 	case *time.Time:
 		return float64(v.UnixNano())
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
 			return Float64(rv.Bool())
 		case reflect.String:
@@ -123,12 +115,12 @@ func Float64(any interface{}) float64 {
 	}
 }
 
-func Float64s(any interface{}) (slice []float64) {
-	if any == nil {
+func Float64s(val any) (slice []float64) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]float64, len(v))
 		for i := range v {
@@ -283,12 +275,12 @@ func Float64s(any interface{}) (slice []float64) {
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]float64, len(v))
 		for i := range v {
 			slice[i] = Float64(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -304,21 +296,11 @@ func Float64s(any interface{}) (slice []float64) {
 			slice[i] = Float64((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]float64, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Float64(rv.Index(i).Interface())
 			}
 		}
@@ -327,12 +309,12 @@ func Float64s(any interface{}) (slice []float64) {
 	return
 }
 
-func Float64Pointer(any interface{}) *float64 {
+func Float64Pointer(any any) *float64 {
 	v := Float64(any)
 	return &v
 }
 
-func Float64sPointer(any interface{}) *[]float64 {
+func Float64sPointer(any any) *[]float64 {
 	v := Float64s(any)
 	return &v
 }

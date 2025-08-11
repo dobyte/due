@@ -20,6 +20,7 @@ type Value interface {
 	Uint64() uint64
 	Float32() float32
 	Float64() float64
+	Rune() rune
 	Bool() bool
 	String() string
 	Duration() time.Duration
@@ -36,22 +37,23 @@ type Value interface {
 	Uint64s() []uint64
 	Float32s() []float32
 	Float64s() []float64
+	Runes() []rune
 	Bools() []bool
 	Strings() []string
 	Bytes() []byte
 	Bs() []float64
 	Durations() []time.Duration
-	Slice() []interface{}
-	Map() map[string]interface{}
-	Scan(pointer interface{}) error
-	Value() interface{}
+	Slice() []any
+	Map() map[string]any
+	Scan(pointer any) error
+	Value() any
 }
 
 type value struct {
-	v interface{}
+	v any
 }
 
-func NewValue(v ...interface{}) Value {
+func NewValue(v ...any) Value {
 	if len(v) == 0 {
 		return &value{v: nil}
 	}
@@ -104,6 +106,10 @@ func (v *value) Float32() float32 {
 
 func (v *value) Float64() float64 {
 	return xconv.Float64(v.Value())
+}
+
+func (v *value) Rune() rune {
+	return xconv.Rune(v.Value())
 }
 
 func (v *value) Bool() bool {
@@ -170,6 +176,10 @@ func (v *value) Float64s() []float64 {
 	return xconv.Float64s(v.Value())
 }
 
+func (v *value) Runes() []rune {
+	return xconv.Runes(v.Value())
+}
+
 func (v *value) Bools() []bool {
 	return xconv.Bools(v.Value())
 }
@@ -190,12 +200,12 @@ func (v *value) Durations() []time.Duration {
 	return xconv.Durations(v.Value())
 }
 
-func (v *value) Slice() []interface{} {
-	return xconv.Interfaces(v.Value())
+func (v *value) Slice() []any {
+	return xconv.Anys(v.Value())
 }
 
-func (v *value) Map() map[string]interface{} {
-	m := make(map[string]interface{})
+func (v *value) Map() map[string]any {
+	m := make(map[string]any)
 	if err := v.Scan(&m); err != nil {
 		return nil
 	}
@@ -203,7 +213,7 @@ func (v *value) Map() map[string]interface{} {
 	return m
 }
 
-func (v *value) Scan(pointer interface{}) error {
+func (v *value) Scan(pointer any) error {
 	switch p := pointer.(type) {
 	case *int:
 		*p = v.Int()
@@ -254,6 +264,6 @@ func (v *value) Scan(pointer interface{}) error {
 	return nil
 }
 
-func (v *value) Value() interface{} {
+func (v *value) Value() any {
 	return v.v
 }

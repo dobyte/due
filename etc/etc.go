@@ -47,12 +47,12 @@ func Has(pattern string) bool {
 }
 
 // Get 获取配置值
-func Get(pattern string, def ...interface{}) value.Value {
+func Get(pattern string, def ...any) value.Value {
 	return globalConfigurator.Get(pattern, def...)
 }
 
 // Set 设置配置值
-func Set(pattern string, value interface{}) error {
+func Set(pattern string, value any) error {
 	return globalConfigurator.Set(pattern, value)
 }
 

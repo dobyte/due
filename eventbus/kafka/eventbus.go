@@ -2,9 +2,10 @@ package kafka
 
 import (
 	"context"
+	"sync"
+
 	"github.com/IBM/sarama"
 	"github.com/dobyte/due/v2/eventbus"
-	"sync"
 )
 
 type Eventbus struct {
@@ -61,7 +62,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 }
 
 // Publish 发布事件
-func (eb *Eventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
+func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	if eb.err != nil {
 		return eb.err
 	}

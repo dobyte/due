@@ -29,7 +29,7 @@ type jsonFormatter struct {
 
 func newJsonFormatter() *jsonFormatter {
 	return &jsonFormatter{
-		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
+		bufferPool: sync.Pool{New: func() any { return &bytes.Buffer{} }},
 	}
 }
 

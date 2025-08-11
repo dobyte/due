@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
@@ -78,7 +79,7 @@ func (s *Server) Stop() error {
 }
 
 // RegisterService 注册服务
-func (s *Server) RegisterService(desc, ss interface{}) error {
+func (s *Server) RegisterService(desc, ss any) error {
 	name, ok := desc.(string)
 	if !ok {
 		return errors.New("invalid dispatcher desc")

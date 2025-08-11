@@ -4,6 +4,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net/url"
+	"os"
+	"sync"
+
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/discovery"
@@ -12,9 +16,6 @@ import (
 	cli "github.com/smallnest/rpcx/client"
 	proto "github.com/smallnest/rpcx/protocol"
 	"golang.org/x/sync/singleflight"
-	"net/url"
-	"os"
-	"sync"
 )
 
 const defaultPoolSize = 10
@@ -89,7 +90,7 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 		return val.(*cli.OneClientPool).Get(), nil
 	}
 
-	val, err, _ = b.sfg.Do(target, func() (interface{}, error) {
+	val, err, _ = b.sfg.Do(target, func() (any, error) {
 		builder, ok := b.builders[u.Scheme]
 		if !ok {
 			return nil, errors.ErrMissingResolver

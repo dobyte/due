@@ -162,6 +162,14 @@ func (r *result) Float64() (float64, error) {
 	return r.value.Float64(), nil
 }
 
+func (r *result) Rune() (rune, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
+	return r.value.Rune(), nil
+}
+
 func (r *result) Bool() (bool, error) {
 	if r.err != nil {
 		return false, r.err
@@ -176,6 +184,14 @@ func (r *result) String() (string, error) {
 	}
 
 	return r.value.String(), nil
+}
+
+func (r *result) B() (float64, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
+	return r.value.B(), nil
 }
 
 func (r *result) Duration() (time.Duration, error) {
@@ -282,6 +298,14 @@ func (r *result) Float64s() ([]float64, error) {
 	return r.value.Float64s(), nil
 }
 
+func (r *result) Runes() ([]rune, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	return r.value.Runes(), nil
+}
+
 func (r *result) Bools() ([]bool, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -296,6 +320,14 @@ func (r *result) Strings() ([]string, error) {
 	}
 
 	return r.value.Strings(), nil
+}
+
+func (r *result) Bs() ([]float64, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	return r.value.Bs(), nil
 }
 
 func (r *result) Bytes() ([]byte, error) {

@@ -3,16 +3,18 @@ package xconv
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dobyte/due/v2/encoding/json"
 	"reflect"
+
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Byte(any interface{}) byte {
-	return Uint8(any)
+func Byte(val any) byte {
+	return Uint8(val)
 }
 
-func Bytes(any interface{}) []byte {
-	if any == nil {
+func Bytes(val any) []byte {
+	if val == nil {
 		return nil
 	}
 
@@ -21,7 +23,7 @@ func Bytes(any interface{}) []byte {
 		buf = bytes.NewBuffer(nil)
 	)
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		err = binary.Write(buf, binary.BigEndian, int64(v))
 	case *int:
@@ -47,17 +49,7 @@ func Bytes(any interface{}) []byte {
 	case *[]byte:
 		return *v
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Invalid:
 			return nil
 		case reflect.Bool:
@@ -85,11 +77,11 @@ func Bytes(any interface{}) []byte {
 		case reflect.Complex64, reflect.Complex128:
 			return nil
 		default:
-			b, err := json.Marshal(v)
-			if err != nil {
+			if b, e := json.Marshal(v); e != nil {
 				return nil
+			} else {
+				return b
 			}
-			return b
 		}
 	}
 	if err != nil {
@@ -99,12 +91,12 @@ func Bytes(any interface{}) []byte {
 	return buf.Bytes()
 }
 
-func BytePointer(any interface{}) *byte {
+func BytePointer(any any) *byte {
 	v := Byte(any)
 	return &v
 }
 
-func BytesPointer(any interface{}) *[]byte {
+func BytesPointer(any any) *[]byte {
 	v := Bytes(any)
 	return &v
 }

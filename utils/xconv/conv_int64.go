@@ -6,14 +6,16 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Int64(any interface{}) int64 {
-	if any == nil {
+func Int64(val any) int64 {
+	if val == nil {
 		return 0
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		return int64(v)
 	case *int:
@@ -97,17 +99,7 @@ func Int64(any interface{}) int64 {
 	case *[]byte:
 		return Int64(*v)
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
 			return Int64(rv.Bool())
 		case reflect.String:
@@ -131,12 +123,12 @@ func Int64(any interface{}) int64 {
 	}
 }
 
-func Int64s(any interface{}) (slice []int64) {
-	if any == nil {
+func Int64s(val any) (slice []int64) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]int64, len(v))
 		for i := range v {
@@ -291,12 +283,12 @@ func Int64s(any interface{}) (slice []int64) {
 		for i := range *v {
 			slice[i] = Int64((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]int64, len(v))
 		for i := range v {
 			slice[i] = Int64(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]int64, len(*v))
 		for i := range *v {
 			slice[i] = Int64((*v)[i])
@@ -312,21 +304,11 @@ func Int64s(any interface{}) (slice []int64) {
 			slice[i] = Int64((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]int64, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Int64(rv.Index(i).Interface())
 			}
 		}
@@ -335,12 +317,12 @@ func Int64s(any interface{}) (slice []int64) {
 	return
 }
 
-func Int64Pointer(any interface{}) *int64 {
+func Int64Pointer(any any) *int64 {
 	v := Int64(any)
 	return &v
 }
 
-func Int64sPointer(any interface{}) *[]int64 {
+func Int64sPointer(any any) *[]int64 {
 	v := Int64s(any)
 	return &v
 }

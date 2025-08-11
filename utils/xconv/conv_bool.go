@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Bool(any interface{}) bool {
-	if any == nil {
+func Bool(val any) bool {
+	if val == nil {
 		return false
 	}
 
@@ -16,7 +18,7 @@ func Bool(any interface{}) bool {
 		return v != "" && v != "0" && strings.ToLower(v) != "false"
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		return v != 0
 	case *int:
@@ -90,17 +92,7 @@ func Bool(any interface{}) bool {
 	case *time.Time:
 		return v.IsZero()
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
 			return rv.Bool()
 		case reflect.String:
@@ -131,12 +123,12 @@ func Bool(any interface{}) bool {
 	}
 }
 
-func Bools(any interface{}) (slice []bool) {
-	if any == nil {
+func Bools(val any) (slice []bool) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]bool, len(v))
 		for i := range v {
@@ -291,12 +283,12 @@ func Bools(any interface{}) (slice []bool) {
 		return v
 	case *[]bool:
 		return *v
-	case []interface{}:
+	case []any:
 		slice = make([]bool, len(v))
 		for i := range v {
 			slice[i] = Bool(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -312,21 +304,11 @@ func Bools(any interface{}) (slice []bool) {
 			slice[i] = Bool((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]bool, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Bool(rv.Index(i).Interface())
 			}
 		}
@@ -335,12 +317,12 @@ func Bools(any interface{}) (slice []bool) {
 	return
 }
 
-func BoolPointer(any interface{}) *bool {
+func BoolPointer(any any) *bool {
 	v := Bool(any)
 	return &v
 }
 
-func BoolsPointer(any interface{}) *[]bool {
+func BoolsPointer(any any) *[]bool {
 	v := Bools(any)
 	return &v
 }

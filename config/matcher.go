@@ -8,9 +8,9 @@ type Matcher interface {
 	// Has 检测多个匹配规则中是否存在配置
 	Has() bool
 	// Get 获取配置值
-	Get(def ...interface{}) value.Value
+	Get(def ...any) value.Value
 	// Scan 扫描读取配置值
-	Scan(dest interface{}) error
+	Scan(dest any) error
 }
 
 type defaultMatcher struct {
@@ -51,7 +51,7 @@ func (m *defaultMatcher) Get(def ...any) value.Value {
 }
 
 // Scan 扫描读取配置值
-func (m *defaultMatcher) Scan(dest interface{}) error {
+func (m *defaultMatcher) Scan(dest any) error {
 	if m.c != nil {
 		for _, pattern := range m.patterns {
 			if val, ok := m.c.doGet(pattern); ok {

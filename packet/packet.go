@@ -19,7 +19,7 @@ func GetPacker() Packer {
 }
 
 // ReadMessage 读取消息
-func ReadMessage(reader interface{}) ([]byte, error) {
+func ReadMessage(reader any) ([]byte, error) {
 	return globalPacker.ReadMessage(reader)
 }
 

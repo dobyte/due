@@ -130,7 +130,7 @@ func IsNumber(number string, langths ...int) bool {
 }
 
 // In 检测是值是否在给定的集合中
-func In(v interface{}, set interface{}) bool {
+func In(v any, set any) bool {
 	kind, value := xreflect.Value(set)
 	if kind != reflect.Slice && kind != reflect.Array {
 		return false
@@ -143,7 +143,7 @@ func In(v interface{}, set interface{}) bool {
 	kk, vv := xreflect.Value(v)
 
 	if kk == reflect.Slice || kk == reflect.Array {
-		check := make(map[interface{}]struct{}, value.Len())
+		check := make(map[any]struct{}, value.Len())
 
 		for i := 0; i < value.Len(); i++ {
 			val := value.Index(i)

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+
 	cli "github.com/smallnest/rpcx/client"
 )
 
@@ -14,11 +15,11 @@ func NewClient(cli *cli.OneClient) *Client {
 }
 
 // Call 调用服务方法
-func (c *Client) Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error {
+func (c *Client) Call(ctx context.Context, service, method string, args any, reply any, opts ...any) error {
 	return c.cli.Call(ctx, service, method, args, reply)
 }
 
 // Client 获取客户端
-func (c *Client) Client() interface{} {
+func (c *Client) Client() any {
 	return c.cli
 }

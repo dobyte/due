@@ -19,7 +19,7 @@ type textFormatter struct {
 
 func newTextFormatter() *textFormatter {
 	return &textFormatter{
-		bufferPool: sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
+		bufferPool: sync.Pool{New: func() any { return &bytes.Buffer{} }},
 	}
 }
 

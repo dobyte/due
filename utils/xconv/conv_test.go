@@ -1,11 +1,12 @@
 package xconv_test
 
 import (
-	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"math"
 	"math/cmplx"
 	"testing"
+
+	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 func TestInt64(t *testing.T) {
@@ -69,11 +70,11 @@ func TestJson(t *testing.T) {
 	t.Log(xconv.Json(`{"id":1,"name":"fuxiao"}`))
 	t.Log(xconv.Json("[]"))
 	t.Log(xconv.Json(`[{"id":1,"name":"fuxiao"}]`))
-	t.Log(xconv.Json(map[string]interface{}{
+	t.Log(xconv.Json(map[string]any{
 		"id":   1,
 		"name": "fuxiao",
 	}))
-	t.Log(xconv.Json([]map[string]interface{}{{
+	t.Log(xconv.Json([]map[string]any{{
 		"id":   1,
 		"name": "fuxiao",
 	}}))

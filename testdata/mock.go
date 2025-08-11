@@ -427,9 +427,9 @@ type Hashtags struct {
 }
 
 type Entities struct {
-	Urls         []interface{} `json:"urls"`
-	Hashtags     []Hashtags    `json:"hashtags"`
-	UserMentions []interface{} `json:"user_mentions"`
+	Urls         []any      `json:"urls"`
+	Hashtags     []Hashtags `json:"hashtags"`
+	UserMentions []any      `json:"user_mentions"`
 }
 
 type Metadata struct {
@@ -438,9 +438,9 @@ type Metadata struct {
 }
 
 type Urls struct {
-	ExpandedURL interface{} `json:"expanded_url"`
-	URL         string      `json:"url"`
-	Indices     []int       `json:"indices"`
+	ExpandedURL any    `json:"expanded_url"`
+	URL         string `json:"url"`
+	Indices     []int  `json:"indices"`
 }
 
 type URL struct {
@@ -448,7 +448,7 @@ type URL struct {
 }
 
 type Description struct {
-	Urls []interface{} `json:"urls"`
+	Urls []any `json:"urls"`
 }
 
 type UserEntities struct {
@@ -464,7 +464,7 @@ type User struct {
 	ProfileImageURL                string       `json:"profile_image_url"`
 	CreatedAt                      string       `json:"created_at"`
 	Location                       string       `json:"location"`
-	FollowRequestSent              interface{}  `json:"follow_request_sent"`
+	FollowRequestSent              any          `json:"follow_request_sent"`
 	ProfileLinkColor               string       `json:"profile_link_color"`
 	IsTranslator                   bool         `json:"is_translator"`
 	IDStr                          string       `json:"id_str"`
@@ -472,7 +472,7 @@ type User struct {
 	DefaultProfile                 bool         `json:"default_profile"`
 	ContributorsEnabled            bool         `json:"contributors_enabled"`
 	FavouritesCount                int          `json:"favourites_count"`
-	URL                            interface{}  `json:"url"`
+	URL                            any          `json:"url"`
 	ProfileImageURLHTTPS           string       `json:"profile_image_url_https"`
 	UtcOffset                      int          `json:"utc_offset"`
 	ID                             int          `json:"id"`
@@ -482,7 +482,7 @@ type User struct {
 	Lang                           string       `json:"lang"`
 	FollowersCount                 int          `json:"followers_count"`
 	Protected                      bool         `json:"protected"`
-	Notifications                  interface{}  `json:"notifications"`
+	Notifications                  any          `json:"notifications"`
 	ProfileBackgroundImageURLHTTPS string       `json:"profile_background_image_url_https"`
 	ProfileBackgroundColor         string       `json:"profile_background_color"`
 	Verified                       bool         `json:"verified"`
@@ -493,33 +493,33 @@ type User struct {
 	ProfileBackgroundImageURL      string       `json:"profile_background_image_url"`
 	StatusesCount                  int          `json:"statuses_count"`
 	FriendsCount                   int          `json:"friends_count"`
-	Following                      interface{}  `json:"following"`
+	Following                      any          `json:"following"`
 	ShowAllInlineMedia             bool         `json:"show_all_inline_media"`
 	ScreenName                     string       `json:"screen_name"`
 }
 
 type Statuses struct {
-	Coordinates          interface{} `json:"coordinates"`
-	Favorited            bool        `json:"favorited"`
-	Truncated            bool        `json:"truncated"`
-	CreatedAt            string      `json:"created_at"`
-	IDStr                string      `json:"id_str"`
-	Entities             Entities    `json:"entities"`
-	InReplyToUserIDStr   interface{} `json:"in_reply_to_user_id_str"`
-	Contributors         interface{} `json:"contributors"`
-	Text                 string      `json:"text"`
-	Metadata             Metadata    `json:"metadata"`
-	RetweetCount         int         `json:"retweet_count"`
-	InReplyToStatusIDStr interface{} `json:"in_reply_to_status_id_str"`
-	ID                   int64       `json:"id"`
-	Geo                  interface{} `json:"geo"`
-	Retweeted            bool        `json:"retweeted"`
-	InReplyToUserID      interface{} `json:"in_reply_to_user_id"`
-	Place                interface{} `json:"place"`
-	User                 User        `json:"user"`
-	InReplyToScreenName  interface{} `json:"in_reply_to_screen_name"`
-	Source               string      `json:"source"`
-	InReplyToStatusID    interface{} `json:"in_reply_to_status_id"`
+	Coordinates          any      `json:"coordinates"`
+	Favorited            bool     `json:"favorited"`
+	Truncated            bool     `json:"truncated"`
+	CreatedAt            string   `json:"created_at"`
+	IDStr                string   `json:"id_str"`
+	Entities             Entities `json:"entities"`
+	InReplyToUserIDStr   any      `json:"in_reply_to_user_id_str"`
+	Contributors         any      `json:"contributors"`
+	Text                 string   `json:"text"`
+	Metadata             Metadata `json:"metadata"`
+	RetweetCount         int      `json:"retweet_count"`
+	InReplyToStatusIDStr any      `json:"in_reply_to_status_id_str"`
+	ID                   int64    `json:"id"`
+	Geo                  any      `json:"geo"`
+	Retweeted            bool     `json:"retweeted"`
+	InReplyToUserID      any      `json:"in_reply_to_user_id"`
+	Place                any      `json:"place"`
+	User                 User     `json:"user"`
+	InReplyToScreenName  any      `json:"in_reply_to_screen_name"`
+	Source               string   `json:"source"`
+	InReplyToStatusID    any      `json:"in_reply_to_status_id"`
 }
 
 type SearchMetadata struct {

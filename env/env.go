@@ -1,12 +1,13 @@
 package env
 
 import (
-	"github.com/dobyte/due/v2/core/value"
 	"os"
+
+	"github.com/dobyte/due/v2/core/value"
 )
 
 // Get 获取环境变量值
-func Get(key string, def ...interface{}) value.Value {
+func Get(key string, def ...any) value.Value {
 	if val, ok := os.LookupEnv(key); ok {
 		return value.NewValue(val)
 	}

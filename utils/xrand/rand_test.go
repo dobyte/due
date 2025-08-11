@@ -2,9 +2,10 @@ package xrand_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xrand"
-	"testing"
 )
 
 func Test_Str(t *testing.T) {
@@ -33,7 +34,7 @@ func TestLucky(t *testing.T) {
 func TestWeight(t *testing.T) {
 	total := 1000000
 
-	weights := []interface{}{
+	weights := []any{
 		50,
 		20.3,
 		29.7,
@@ -42,7 +43,7 @@ func TestWeight(t *testing.T) {
 	counters := []int{0, 0, 0}
 
 	for i := 0; i < total; i++ {
-		index := xrand.Weight(func(v interface{}) float64 {
+		index := xrand.Weight(func(v any) float64 {
 			return xconv.Float64(v)
 		}, weights...)
 		counters[index] = counters[index] + 1

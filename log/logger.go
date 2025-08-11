@@ -2,41 +2,42 @@ package log
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/mode"
 	"io"
 	"os"
 	"sync"
+
+	"github.com/dobyte/due/v2/mode"
 )
 
 type Logger interface {
 	// Print 打印日志，不含堆栈信息
-	Print(level Level, a ...interface{})
+	Print(level Level, a ...any)
 	// Printf 打印模板日志，不含堆栈信息
-	Printf(level Level, format string, a ...interface{})
+	Printf(level Level, format string, a ...any)
 	// Debug 打印调试日志
-	Debug(a ...interface{})
+	Debug(a ...any)
 	// Debugf 打印调试模板日志
-	Debugf(format string, a ...interface{})
+	Debugf(format string, a ...any)
 	// Info 打印信息日志
-	Info(a ...interface{})
+	Info(a ...any)
 	// Infof 打印信息模板日志
-	Infof(format string, a ...interface{})
+	Infof(format string, a ...any)
 	// Warn 打印警告日志
-	Warn(a ...interface{})
+	Warn(a ...any)
 	// Warnf 打印警告模板日志
-	Warnf(format string, a ...interface{})
+	Warnf(format string, a ...any)
 	// Error 打印错误日志
-	Error(a ...interface{})
+	Error(a ...any)
 	// Errorf 打印错误模板日志
-	Errorf(format string, a ...interface{})
+	Errorf(format string, a ...any)
 	// Fatal 打印致命错误日志
-	Fatal(a ...interface{})
+	Fatal(a ...any)
 	// Fatalf 打印致命错误模板日志
-	Fatalf(format string, a ...interface{})
+	Fatalf(format string, a ...any)
 	// Panic 打印Panic日志
-	Panic(a ...interface{})
+	Panic(a ...any)
 	// Panicf 打印Panic模板日志
-	Panicf(format string, a ...interface{})
+	Panicf(format string, a ...any)
 	// Close 关闭日志
 	Close() error
 }
@@ -143,84 +144,84 @@ func (l *defaultLogger) buildEnabler(level Level) enabler {
 }
 
 // BuildEntity 构建日志实体
-func (l *defaultLogger) BuildEntity(level Level, isNeedStack bool, a ...interface{}) *Entity {
+func (l *defaultLogger) BuildEntity(level Level, isNeedStack bool, a ...any) *Entity {
 	return l.entityPool.build(level, isNeedStack, a...)
 }
 
 // 打印日志
-func (l *defaultLogger) print(level Level, isNeedStack bool, a ...interface{}) {
+func (l *defaultLogger) print(level Level, isNeedStack bool, a ...any) {
 	l.BuildEntity(level, isNeedStack, a...).Log()
 }
 
 // Print 打印日志
-func (l *defaultLogger) Print(level Level, a ...interface{}) {
+func (l *defaultLogger) Print(level Level, a ...any) {
 	l.print(level, false, a...)
 }
 
 // Printf 打印模板日志
-func (l *defaultLogger) Printf(level Level, format string, a ...interface{}) {
+func (l *defaultLogger) Printf(level Level, format string, a ...any) {
 	l.print(level, false, fmt.Sprintf(format, a...))
 }
 
 // Debug 打印调试日志
-func (l *defaultLogger) Debug(a ...interface{}) {
+func (l *defaultLogger) Debug(a ...any) {
 	l.print(DebugLevel, true, a...)
 }
 
 // Debugf 打印调试模板日志
-func (l *defaultLogger) Debugf(format string, a ...interface{}) {
+func (l *defaultLogger) Debugf(format string, a ...any) {
 	l.print(DebugLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
-func (l *defaultLogger) Info(a ...interface{}) {
+func (l *defaultLogger) Info(a ...any) {
 	l.print(InfoLevel, true, a...)
 }
 
 // Infof 打印信息模板日志
-func (l *defaultLogger) Infof(format string, a ...interface{}) {
+func (l *defaultLogger) Infof(format string, a ...any) {
 	l.print(InfoLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
-func (l *defaultLogger) Warn(a ...interface{}) {
+func (l *defaultLogger) Warn(a ...any) {
 	l.print(WarnLevel, true, a...)
 }
 
 // Warnf 打印警告模板日志
-func (l *defaultLogger) Warnf(format string, a ...interface{}) {
+func (l *defaultLogger) Warnf(format string, a ...any) {
 	l.print(WarnLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
-func (l *defaultLogger) Error(a ...interface{}) {
+func (l *defaultLogger) Error(a ...any) {
 	l.print(ErrorLevel, true, a...)
 }
 
 // Errorf 打印错误模板日志
-func (l *defaultLogger) Errorf(format string, a ...interface{}) {
+func (l *defaultLogger) Errorf(format string, a ...any) {
 	l.print(ErrorLevel, true, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
-func (l *defaultLogger) Fatal(a ...interface{}) {
+func (l *defaultLogger) Fatal(a ...any) {
 	l.print(FatalLevel, true, a...)
 	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
-func (l *defaultLogger) Fatalf(format string, a ...interface{}) {
+func (l *defaultLogger) Fatalf(format string, a ...any) {
 	l.print(FatalLevel, true, fmt.Sprintf(format, a...))
 	os.Exit(1)
 }
 
 // Panic 打印Panic日志
-func (l *defaultLogger) Panic(a ...interface{}) {
+func (l *defaultLogger) Panic(a ...any) {
 	l.print(PanicLevel, true, a...)
 }
 
 // Panicf 打印Panic模板日志
-func (l *defaultLogger) Panicf(format string, a ...interface{}) {
+func (l *defaultLogger) Panicf(format string, a ...any) {
 	l.print(PanicLevel, true, fmt.Sprintf(format, a...))
 }
 

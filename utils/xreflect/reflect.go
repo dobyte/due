@@ -4,9 +4,9 @@ import (
 	"reflect"
 )
 
-func Value(i any) (reflect.Kind, reflect.Value) {
+func Value(val any) (reflect.Kind, reflect.Value) {
 	var (
-		rv = reflect.ValueOf(i)
+		rv = reflect.ValueOf(val)
 		rk = rv.Kind()
 	)
 
@@ -19,12 +19,12 @@ func Value(i any) (reflect.Kind, reflect.Value) {
 }
 
 // IsNil 检测值是否为nil
-func IsNil(v any) bool {
-	if v == nil {
+func IsNil(val any) bool {
+	if val == nil {
 		return true
 	}
 
-	rv := reflect.ValueOf(v)
+	rv := reflect.ValueOf(val)
 	rk := rv.Kind()
 
 	switch rk {

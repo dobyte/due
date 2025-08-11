@@ -9,12 +9,13 @@ package etcd
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/registry"
-	"go.etcd.io/etcd/api/v3/mvccpb"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/dobyte/due/v2/registry"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type watcherMgr struct {
@@ -174,7 +175,7 @@ func (wm *watcherMgr) broadcast() {
 }
 
 func (wm *watcherMgr) services() (services []*registry.ServiceInstance) {
-	wm.serviceInstances.Range(func(key, value interface{}) bool {
+	wm.serviceInstances.Range(func(key, value any) bool {
 		services = append(services, value.(*registry.ServiceInstance))
 		return true
 	})

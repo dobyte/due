@@ -17,7 +17,7 @@ const (
 	Full
 )
 
-var stacks = sync.Pool{New: func() interface{} {
+var stacks = sync.Pool{New: func() any {
 	return &Stack{storage: make([]uintptr, 64)}
 }}
 

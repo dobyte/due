@@ -21,7 +21,7 @@ type serverConnMgr struct {
 func newServerConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.pool = sync.Pool{New: func() interface{} { return &serverConn{} }}
+	cm.pool = sync.Pool{New: func() any { return &serverConn{} }}
 	cm.partitions = make([]*partition, 100)
 
 	for i := 0; i < len(cm.partitions); i++ {

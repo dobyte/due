@@ -2,13 +2,14 @@ package consul
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
-	"path/filepath"
-	"strings"
 )
 
 type watcher struct {
@@ -38,7 +39,7 @@ func (w *watcher) init() (err error) {
 		prefix = w.source.opts.path + "/"
 	}
 
-	w.plan, err = watch.Parse(map[string]interface{}{
+	w.plan, err = watch.Parse(map[string]any{
 		"type":   "keyprefix",
 		"prefix": prefix,
 	})
@@ -57,7 +58,7 @@ func (w *watcher) init() (err error) {
 	return
 }
 
-func (w *watcher) planHandler(idx uint64, raw interface{}) {
+func (w *watcher) planHandler(idx uint64, raw any) {
 	if raw == nil {
 		return // ignore
 	}

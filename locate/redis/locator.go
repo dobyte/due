@@ -3,6 +3,10 @@ package redis
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+	"sync"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
@@ -10,9 +14,6 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
-	"sort"
-	"strings"
-	"sync"
 )
 
 const (
@@ -73,7 +74,7 @@ func (l *Locator) Name() string {
 func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg.Do(key, func() (interface{}, error) {
+	val, err, _ := l.sfg.Do(key, func() (any, error) {
 		val, err := l.opts.client.Get(ctx, key).Result()
 		if err != nil && !errors.Is(err, redis.Nil) {
 			return "", err
@@ -92,7 +93,7 @@ func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg.Do(key+name, func() (interface{}, error) {
+	val, err, _ := l.sfg.Do(key+name, func() (any, error) {
 		val, err := l.opts.client.HGet(ctx, key, name).Result()
 		if err != nil && !errors.Is(err, redis.Nil) {
 			return "", err

@@ -8,9 +8,10 @@
 package hook
 
 import (
-	"github.com/sirupsen/logrus"
 	"io"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 var _ logrus.Hook = NewWriterHook(nil)
@@ -23,7 +24,7 @@ type WriterHook struct {
 	defaultWriter io.Writer
 }
 
-func NewWriterHook(output interface{}) *WriterHook {
+func NewWriterHook(output any) *WriterHook {
 	h := &WriterHook{}
 
 	switch writer := output.(type) {

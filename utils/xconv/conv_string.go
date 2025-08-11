@@ -2,19 +2,21 @@ package xconv
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/encoding/json"
 	"reflect"
 	"strconv"
 	"time"
 	"unsafe"
+
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func String(any interface{}) string {
-	if any == nil {
+func String(val any) string {
+	if val == nil {
 		return ""
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case int:
 		return strconv.Itoa(v)
 	case *int:
@@ -94,17 +96,7 @@ func String(any interface{}) string {
 		}
 		return v.String()
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Invalid:
 			return ""
 		case reflect.Bool:
@@ -129,12 +121,12 @@ func String(any interface{}) string {
 	}
 }
 
-func Strings(any interface{}) (slice []string) {
-	if any == nil {
+func Strings(val any) (slice []string) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]string, len(v))
 		for i := range v {
@@ -289,12 +281,12 @@ func Strings(any interface{}) (slice []string) {
 		for i := range *v {
 			slice[i] = String((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]string, len(v))
 		for i := range v {
 			slice[i] = String(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -310,21 +302,11 @@ func Strings(any interface{}) (slice []string) {
 			slice[i] = String((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]string, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = String(rv.Index(i).Interface())
 			}
 		}
@@ -333,12 +315,12 @@ func Strings(any interface{}) (slice []string) {
 	return
 }
 
-func StringPointer(any interface{}) *string {
-	v := String(any)
+func StringPointer(val any) *string {
+	v := String(val)
 	return &v
 }
 
-func StringsPointer(any interface{}) *[]string {
-	v := Strings(any)
+func StringsPointer(val any) *[]string {
+	v := Strings(val)
 	return &v
 }

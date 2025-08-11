@@ -2,11 +2,12 @@ package redis
 
 import (
 	"context"
+	"strings"
+	"sync"
+
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/go-redis/redis/v8"
-	"strings"
-	"sync"
 )
 
 type Eventbus struct {
@@ -50,7 +51,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 }
 
 // Publish 发布事件
-func (eb *Eventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
+func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	buf, err := serialize(topic, payload)
 	if err != nil {
 		return err

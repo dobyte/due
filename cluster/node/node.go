@@ -20,9 +20,9 @@ import (
 type HookHandler func(proxy *Proxy)
 
 type serviceEntity struct {
-	name     string      // 服务名称;用于定位服务发现
-	desc     interface{} // 服务描述(grpc为desc描述对象; rpcx为服务路径)
-	provider interface{} // 服务提供者
+	name     string // 服务名称;用于定位服务发现
+	desc     any    // 服务描述(grpc为desc描述对象; rpcx为服务路径)
+	provider any    // 服务提供者
 }
 
 type Node struct {
@@ -66,14 +66,14 @@ func NewNode(opts ...Option) *Node {
 	n.fnChan = make(chan func(), 4096)
 	n.state.Store(int32(cluster.Shut))
 	n.wg = &sync.WaitGroup{}
-	n.evtPool = &sync.Pool{New: func() interface{} {
+	n.evtPool = &sync.Pool{New: func() any {
 		evt := &event{}
 		evt.node = n
 		evt.actor.Store((*Actor)(nil))
 
 		return evt
 	}}
-	n.reqPool = &sync.Pool{New: func() interface{} {
+	n.reqPool = &sync.Pool{New: func() any {
 		req := &request{}
 		req.node = n
 		req.message = &cluster.Message{}

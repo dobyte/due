@@ -32,9 +32,9 @@ type Mesh struct {
 }
 
 type serviceEntity struct {
-	name     string      // 服务名称;用于定位服务发现
-	desc     interface{} // 服务描述(grpc为desc描述对象; rpcx为服务路径)
-	provider interface{} // 服务提供者
+	name     string // 服务名称;用于定位服务发现
+	desc     any    // 服务描述(grpc为desc描述对象; rpcx为服务路径)
+	provider any    // 服务提供者
 }
 
 func NewMesh(opts ...Option) *Mesh {

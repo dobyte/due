@@ -2,19 +2,20 @@ package config
 
 import (
 	"context"
+	"strings"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/encoding/toml"
 	"github.com/dobyte/due/v2/encoding/xml"
 	"github.com/dobyte/due/v2/encoding/yaml"
 	"github.com/dobyte/due/v2/errors"
-	"strings"
 )
 
 type Option func(o *options)
 
-type Encoder func(format string, content interface{}) ([]byte, error)
-type Decoder func(format string, content []byte) (interface{}, error)
-type Scanner func(format string, content []byte, dest interface{}) error
+type Encoder func(format string, content any) ([]byte, error)
+type Decoder func(format string, content []byte) (any, error)
+type Scanner func(format string, content []byte, dest any) error
 
 type options struct {
 	ctx     context.Context
@@ -54,7 +55,7 @@ func WithDecoder(decoder Decoder) Option {
 }
 
 // 默认编码器
-func defaultEncoder(format string, content interface{}) ([]byte, error) {
+func defaultEncoder(format string, content any) ([]byte, error) {
 	switch strings.ToLower(format) {
 	case json.Name:
 		return json.Marshal(content)
@@ -70,7 +71,7 @@ func defaultEncoder(format string, content interface{}) ([]byte, error) {
 }
 
 // 默认解码器
-func defaultDecoder(format string, content []byte) (interface{}, error) {
+func defaultDecoder(format string, content []byte) (any, error) {
 	switch strings.ToLower(format) {
 	case json.Name:
 		return unmarshal(content, json.Unmarshal)
@@ -86,7 +87,7 @@ func defaultDecoder(format string, content []byte) (interface{}, error) {
 }
 
 // 默认扫描器
-func defaultScanner(format string, content []byte, dest interface{}) error {
+func defaultScanner(format string, content []byte, dest any) error {
 	switch strings.ToLower(format) {
 	case json.Name:
 		return json.Unmarshal(content, dest)
@@ -101,13 +102,13 @@ func defaultScanner(format string, content []byte, dest interface{}) error {
 	}
 }
 
-func unmarshal(content []byte, fn func(data []byte, v interface{}) error) (dest interface{}, err error) {
-	dest = make(map[string]interface{})
+func unmarshal(content []byte, fn func(data []byte, v any) error) (dest any, err error) {
+	dest = make(map[string]any)
 	if err = fn(content, &dest); err == nil {
 		return
 	}
 
-	dest = make([]interface{}, 0)
+	dest = make([]any, 0)
 	err = fn(content, &dest)
 
 	return

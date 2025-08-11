@@ -1,17 +1,19 @@
 package xconv
 
 import (
-	"github.com/dobyte/due/v2/encoding/json"
 	"reflect"
+
+	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func Json(any interface{}) string {
+func Json(val any) string {
 	isJson := func(s string) bool {
 		l := len(s)
 		return l >= 2 && ((s[0] == '{' && s[l-1] == '}') || (s[0] == '[' && s[l-1] == ']'))
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case string:
 		if isJson(v) {
 			return v
@@ -29,17 +31,7 @@ func Json(any interface{}) string {
 			return s
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.String:
 			if s := rv.String(); isJson(s) {
 				return s

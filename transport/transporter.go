@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/registry"
 )
@@ -18,14 +19,14 @@ type Server interface {
 	// Endpoint 服务端口
 	Endpoint() *endpoint.Endpoint
 	// RegisterService 注册服务
-	RegisterService(desc, service interface{}) error
+	RegisterService(desc, service any) error
 }
 
 type Client interface {
 	// Call 调用服务方法
-	Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error
+	Call(ctx context.Context, service, method string, args any, reply any, opts ...any) error
 	// Client 获取内部客户端
-	Client() interface{}
+	Client() any
 }
 
 type Transporter interface {

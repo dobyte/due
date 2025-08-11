@@ -2,12 +2,13 @@ package eventbus
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"sync"
-	"time"
 )
 
 var globalEventbus Eventbus
@@ -29,7 +30,7 @@ type Eventbus interface {
 	// Close 关闭事件总线
 	Close() error
 	// Publish 发布事件
-	Publish(ctx context.Context, topic string, message interface{}) error
+	Publish(ctx context.Context, topic string, message any) error
 	// Subscribe 订阅事件
 	Subscribe(ctx context.Context, topic string, handler EventHandler) error
 	// Unsubscribe 取消订阅
@@ -52,7 +53,7 @@ func NewEventbus() *defaultEventbus {
 }
 
 // Publish 发布事件
-func (eb *defaultEventbus) Publish(ctx context.Context, topic string, payload interface{}) error {
+func (eb *defaultEventbus) Publish(ctx context.Context, topic string, payload any) error {
 	eb.rw.RLock()
 	defer eb.rw.RUnlock()
 
@@ -130,7 +131,7 @@ func GetEventbus() Eventbus {
 }
 
 // Publish 发布事件
-func Publish(ctx context.Context, topic string, message interface{}) error {
+func Publish(ctx context.Context, topic string, message any) error {
 	return globalEventbus.Publish(ctx, topic, message)
 }
 

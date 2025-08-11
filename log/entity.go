@@ -9,12 +9,13 @@ package log
 
 import (
 	"fmt"
-	stacks "github.com/dobyte/due/v2/core/stack"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	stacks "github.com/dobyte/due/v2/core/stack"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 const (
@@ -31,12 +32,12 @@ type EntityPool struct {
 
 func newEntityPool(logger *defaultLogger) *EntityPool {
 	return &EntityPool{
-		pool:   sync.Pool{New: func() interface{} { return &Entity{} }},
+		pool:   sync.Pool{New: func() any { return &Entity{} }},
 		logger: logger,
 	}
 }
 
-func (p *EntityPool) build(level Level, isNeedStack bool, a ...interface{}) *Entity {
+func (p *EntityPool) build(level Level, isNeedStack bool, a ...any) *Entity {
 	e := p.pool.Get().(*Entity)
 	e.pool = p
 

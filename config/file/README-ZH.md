@@ -50,7 +50,7 @@ func main() {
     )
 
     // 更新配置
-    if err := config.Store(ctx, name, filepath, map[string]interface{}{
+    if err := config.Store(ctx, name, filepath, map[string]any{
         "timezone": "Local",
     }); err != nil {
         log.Errorf("store config failed: %v", err)
@@ -64,7 +64,7 @@ func main() {
     log.Infof("timezone: %s", timezone)
 
     // 更新配置
-    if err := config.Store(ctx, name, filepath, map[string]interface{}{
+    if err := config.Store(ctx, name, filepath, map[string]any{
         "timezone": "UTC",
     }); err != nil {
         log.Errorf("store config failed: %v", err)

@@ -8,14 +8,15 @@
 package logrus
 
 import (
+	"io"
+	"os"
+
 	"github.com/dobyte/due/log/logrus/v2/internal/define"
 	"github.com/dobyte/due/log/logrus/v2/internal/formatter"
 	"github.com/dobyte/due/log/logrus/v2/internal/hook"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
 	"github.com/sirupsen/logrus"
-	"io"
-	"os"
 )
 
 var _ log.Logger = NewLogger()
@@ -114,7 +115,7 @@ func (l *Logger) buildWriter(level log.Level) io.Writer {
 }
 
 // Print 打印日志，不含堆栈信息
-func (l *Logger) Print(level log.Level, a ...interface{}) {
+func (l *Logger) Print(level log.Level, a ...any) {
 	switch level {
 	case log.DebugLevel:
 		l.logger.Debug(a...)
@@ -132,7 +133,7 @@ func (l *Logger) Print(level log.Level, a ...interface{}) {
 }
 
 // Printf 打印模板日志，不含堆栈信息
-func (l *Logger) Printf(level log.Level, format string, a ...interface{}) {
+func (l *Logger) Printf(level log.Level, format string, a ...any) {
 	switch level {
 	case log.DebugLevel:
 		l.logger.Debugf(format, a...)
@@ -150,62 +151,62 @@ func (l *Logger) Printf(level log.Level, format string, a ...interface{}) {
 }
 
 // Debug 打印调试日志
-func (l *Logger) Debug(a ...interface{}) {
+func (l *Logger) Debug(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Debug(a...)
 }
 
 // Debugf 打印调试模板日志
-func (l *Logger) Debugf(format string, a ...interface{}) {
+func (l *Logger) Debugf(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Debugf(format, a...)
 }
 
 // Info 打印信息日志
-func (l *Logger) Info(a ...interface{}) {
+func (l *Logger) Info(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Info(a...)
 }
 
 // Infof 打印信息模板日志
-func (l *Logger) Infof(format string, a ...interface{}) {
+func (l *Logger) Infof(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Infof(format, a...)
 }
 
 // Warn 打印警告日志
-func (l *Logger) Warn(a ...interface{}) {
+func (l *Logger) Warn(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Warn(a...)
 }
 
 // Warnf 打印警告模板日志
-func (l *Logger) Warnf(format string, a ...interface{}) {
+func (l *Logger) Warnf(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Warnf(format, a...)
 }
 
 // Error 打印错误日志
-func (l *Logger) Error(a ...interface{}) {
+func (l *Logger) Error(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Error(a...)
 }
 
 // Errorf 打印错误模板日志
-func (l *Logger) Errorf(format string, a ...interface{}) {
+func (l *Logger) Errorf(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Errorf(format, a...)
 }
 
 // Fatal 打印致命错误日志
-func (l *Logger) Fatal(a ...interface{}) {
+func (l *Logger) Fatal(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Fatal(a...)
 }
 
 // Fatalf 打印致命错误模板日志
-func (l *Logger) Fatalf(format string, a ...interface{}) {
+func (l *Logger) Fatalf(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Fatalf(format, a...)
 }
 
 // Panic 打印Panic日志
-func (l *Logger) Panic(a ...interface{}) {
+func (l *Logger) Panic(a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Fatal(a...)
 }
 
 // Panicf 打印Panic模板日志
-func (l *Logger) Panicf(format string, a ...interface{}) {
+func (l *Logger) Panicf(format string, a ...any) {
 	l.logger.WithField(define.StackOutFlagField, true).Fatalf(format, a...)
 }
 

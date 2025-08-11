@@ -86,6 +86,6 @@ func Release() {
 type logger struct {
 }
 
-func (l *logger) Printf(format string, args ...interface{}) {
+func (l *logger) Printf(format string, args ...any) {
 	log.Infof(format, args...)
 }

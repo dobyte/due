@@ -2,10 +2,11 @@ package nacos_test
 
 import (
 	"context"
-	"github.com/dobyte/due/config/nacos/v2"
-	"github.com/dobyte/due/v2/config"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/config/nacos/v2"
+	"github.com/dobyte/due/v2/config"
 )
 
 func init() {
@@ -46,11 +47,11 @@ func TestLoad(t *testing.T) {
 func TestStore(t *testing.T) {
 	ctx := context.Background()
 	file := "configs.json"
-	content1 := map[string]interface{}{
+	content1 := map[string]any{
 		"timezone": "Local",
 	}
 
-	content2 := map[string]interface{}{
+	content2 := map[string]any{
 		"timezone": "UTC",
 		"pid":      "./run/gate.pid",
 	}

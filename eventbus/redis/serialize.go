@@ -17,7 +17,7 @@ type data struct {
 }
 
 // 序列化
-func serialize(topic string, payload interface{}) ([]byte, error) {
+func serialize(topic string, payload any) ([]byte, error) {
 	return json.Marshal(&data{
 		ID:        xuuid.UUID(),
 		Topic:     topic,

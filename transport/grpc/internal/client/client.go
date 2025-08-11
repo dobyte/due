@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+
 	"google.golang.org/grpc"
 )
 
@@ -14,7 +15,7 @@ func NewClient(cc *grpc.ClientConn) *Client {
 }
 
 // Call 调用服务方法
-func (c *Client) Call(ctx context.Context, service, method string, args interface{}, reply interface{}, opts ...interface{}) error {
+func (c *Client) Call(ctx context.Context, service, method string, args any, reply any, opts ...any) error {
 	path := ""
 
 	if service != "" {
@@ -36,6 +37,6 @@ func (c *Client) Call(ctx context.Context, service, method string, args interfac
 }
 
 // Client 获取GRPC客户端
-func (c *Client) Client() interface{} {
+func (c *Client) Client() any {
 	return c.cc
 }

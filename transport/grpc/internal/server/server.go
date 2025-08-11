@@ -2,11 +2,12 @@ package server
 
 import (
 	"errors"
+	"net"
+
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"net"
 )
 
 const scheme = "grpc"
@@ -90,7 +91,7 @@ func (s *Server) Stop() error {
 }
 
 // RegisterService 注册服务
-func (s *Server) RegisterService(desc, service interface{}) error {
+func (s *Server) RegisterService(desc, service any) error {
 	switch sd := desc.(type) {
 	case grpc.ServiceDesc:
 		s.server.RegisterService(&sd, service)

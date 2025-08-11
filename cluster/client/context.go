@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/packet"
 )
 
@@ -42,12 +43,12 @@ func (c *Context) Route() int32 {
 }
 
 // Data 获取消息数据
-func (c *Context) Data() interface{} {
+func (c *Context) Data() any {
 	return c.message.Buffer
 }
 
 // Parse 解析消息
-func (c *Context) Parse(v interface{}) (err error) {
+func (c *Context) Parse(v any) (err error) {
 	buffer := c.message.Buffer
 
 	if c.conn.client.opts.encryptor != nil {

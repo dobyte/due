@@ -1,17 +1,21 @@
 package xconv
 
-import "reflect"
+import (
+	"reflect"
 
-func Int(any interface{}) int {
-	return int(Int64(any))
+	"github.com/dobyte/due/v2/utils/xreflect"
+)
+
+func Int(val any) int {
+	return int(Int64(val))
 }
 
-func Ints(any interface{}) (slice []int) {
-	if any == nil {
+func Ints(val any) (slice []int) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		return v
 	case *[]int:
@@ -166,12 +170,12 @@ func Ints(any interface{}) (slice []int) {
 		for i := range *v {
 			slice[i] = Int((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]int, len(v))
 		for i := range v {
 			slice[i] = Int(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]int, len(*v))
 		for i := range *v {
 			slice[i] = Int((*v)[i])
@@ -187,21 +191,11 @@ func Ints(any interface{}) (slice []int) {
 			slice[i] = Int((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]int, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Int(rv.Index(i).Interface())
 			}
 		}
@@ -210,12 +204,12 @@ func Ints(any interface{}) (slice []int) {
 	return
 }
 
-func IntPointer(any interface{}) *int {
+func IntPointer(any any) *int {
 	v := Int(any)
 	return &v
 }
 
-func IntsPointer(any interface{}) *[]int {
+func IntsPointer(any any) *[]int {
 	v := Ints(any)
 	return &v
 }

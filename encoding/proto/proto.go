@@ -25,7 +25,7 @@ func (codec) Name() string {
 }
 
 // Marshal 编码
-func (codec) Marshal(v interface{}) ([]byte, error) {
+func (codec) Marshal(v any) ([]byte, error) {
 	msg, ok := v.(proto.Message)
 	if !ok {
 		return nil, errors.New("can't marshal a value that not implements proto.Buffer interface")
@@ -35,7 +35,7 @@ func (codec) Marshal(v interface{}) ([]byte, error) {
 }
 
 // Unmarshal 解码
-func (codec) Unmarshal(data []byte, v interface{}) error {
+func (codec) Unmarshal(data []byte, v any) error {
 	msg, ok := v.(proto.Message)
 	if !ok {
 		return errors.New("can't unmarshal to a value that not implements proto.Buffer")
@@ -45,11 +45,11 @@ func (codec) Unmarshal(data []byte, v interface{}) error {
 }
 
 // Marshal 编码
-func Marshal(v interface{}) ([]byte, error) {
+func Marshal(v any) ([]byte, error) {
 	return DefaultCodec.Marshal(v)
 }
 
 // Unmarshal 解码
-func Unmarshal(data []byte, v interface{}) error {
+func Unmarshal(data []byte, v any) error {
 	return DefaultCodec.Unmarshal(data, v)
 }

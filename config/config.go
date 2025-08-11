@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/core/value"
 )
 
@@ -35,7 +36,7 @@ func Has(pattern string) bool {
 }
 
 // Get 获取配置值
-func Get(pattern string, def ...interface{}) value.Value {
+func Get(pattern string, def ...any) value.Value {
 	if globalConfigurator == nil {
 		return value.NewValue()
 	}
@@ -44,7 +45,7 @@ func Get(pattern string, def ...interface{}) value.Value {
 }
 
 // Set 设置配置值
-func Set(pattern string, value interface{}) error {
+func Set(pattern string, value any) error {
 	if globalConfigurator == nil {
 		return nil
 	}
@@ -80,7 +81,7 @@ func Load(ctx context.Context, source string, file ...string) ([]*Configuration,
 }
 
 // Store 保存配置项
-func Store(ctx context.Context, source string, file string, content interface{}, override ...bool) error {
+func Store(ctx context.Context, source string, file string, content any, override ...bool) error {
 	if globalConfigurator == nil {
 		return nil
 	}

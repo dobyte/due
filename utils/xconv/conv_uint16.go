@@ -1,17 +1,21 @@
 package xconv
 
-import "reflect"
+import (
+	"reflect"
 
-func Uint16(any interface{}) uint16 {
-	return uint16(Uint64(any))
+	"github.com/dobyte/due/v2/utils/xreflect"
+)
+
+func Uint16(val any) uint16 {
+	return uint16(Uint64(val))
 }
 
-func Uint16s(any interface{}) (slice []uint16) {
-	if any == nil {
+func Uint16s(val any) (slice []uint16) {
+	if val == nil {
 		return
 	}
 
-	switch v := any.(type) {
+	switch v := val.(type) {
 	case []int:
 		slice = make([]uint16, len(v))
 		for i := range v {
@@ -166,12 +170,12 @@ func Uint16s(any interface{}) (slice []uint16) {
 		for i := range *v {
 			slice[i] = Uint16((*v)[i])
 		}
-	case []interface{}:
+	case []any:
 		slice = make([]uint16, len(v))
 		for i := range v {
 			slice[i] = Uint16(v[i])
 		}
-	case *[]interface{}:
+	case *[]any:
 		slice = make([]uint16, len(*v))
 		for i := range *v {
 			slice[i] = Uint16((*v)[i])
@@ -187,21 +191,11 @@ func Uint16s(any interface{}) (slice []uint16) {
 			slice[i] = Uint16((*v)[i])
 		}
 	default:
-		var (
-			rv   = reflect.ValueOf(any)
-			kind = rv.Kind()
-		)
-
-		for kind == reflect.Ptr {
-			rv = rv.Elem()
-			kind = rv.Kind()
-		}
-
-		switch kind {
+		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Slice, reflect.Array:
 			count := rv.Len()
 			slice = make([]uint16, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				slice[i] = Uint16(rv.Index(i).Interface())
 			}
 		}
@@ -210,12 +204,12 @@ func Uint16s(any interface{}) (slice []uint16) {
 	return
 }
 
-func Uint16Pointer(any interface{}) *uint16 {
-	v := Uint16(any)
+func Uint16Pointer(val any) *uint16 {
+	v := Uint16(val)
 	return &v
 }
 
-func Uint16sPointer(any interface{}) *[]uint16 {
-	v := Uint16s(any)
+func Uint16sPointer(val any) *[]uint16 {
+	v := Uint16s(val)
 	return &v
 }

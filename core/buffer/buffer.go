@@ -20,7 +20,7 @@ type Buffer interface {
 	// Bytes 获取所有字节（性能较低，不推荐使用）
 	Bytes() []byte
 	// Mount 挂载数据到Buffer上
-	Mount(block interface{}, whence ...Whence)
+	Mount(block any, whence ...Whence)
 	// Malloc 分配一块内存给Writer
 	Malloc(cap int, whence ...Whence) *Writer
 	// Visit 迭代
