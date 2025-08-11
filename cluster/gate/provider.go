@@ -73,8 +73,8 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, me
 
 	if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
 		xcall.Go(func() {
-			if err := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); err != nil {
-				log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, err)
+			if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); err != nil {
+				log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, e)
 			}
 		})
 	}

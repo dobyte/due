@@ -340,9 +340,9 @@ func (n *Node) deregisterServiceInstances() {
 	for i := range n.instances {
 		instance := n.instances[i]
 		eg.Go(func() error {
-			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
-			defer cancel()
-			return n.opts.registry.Deregister(ctx, instance)
+			tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+			defer tcancel()
+			return n.opts.registry.Deregister(tctx, instance)
 		})
 	}
 
@@ -358,9 +358,9 @@ func (n *Node) doRegisterServiceInstances() error {
 	for i := range n.instances {
 		instance := n.instances[i]
 		eg.Go(func() error {
-			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
-			defer cancel()
-			return n.opts.registry.Register(ctx, instance)
+			tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+			defer tcancel()
+			return n.opts.registry.Register(tctx, instance)
 		})
 	}
 
