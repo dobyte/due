@@ -48,7 +48,7 @@ type options struct {
 	locator  locate.Locator    // 用户定位器
 	registry registry.Registry // 服务注册器
 	dispatch cluster.Dispatch  // 无状态路由消息分发策略
-	metadata map[string]any    // 元数据
+	metadata map[string]string // 元数据
 }
 
 func defaultOptions() *options {
@@ -58,7 +58,7 @@ func defaultOptions() *options {
 		addr:     defaultAddr,
 		timeout:  defaultTimeout,
 		dispatch: defaultDispatch,
-		metadata: make(map[string]any),
+		metadata: make(map[string]string),
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -131,6 +131,6 @@ func WithDispatch(dispatch cluster.Dispatch) Option {
 }
 
 // WithMetadata 设置元数据
-func WithMetadata(metadata map[string]any) Option {
+func WithMetadata(metadata map[string]string) Option {
 	return func(o *options) { o.metadata = metadata }
 }

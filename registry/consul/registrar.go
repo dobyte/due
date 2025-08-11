@@ -27,7 +27,6 @@ const (
 	metaFieldWeight   = "weight"
 	metaFieldServices = "services"
 	metaFieldEndpoint = "endpoint"
-	metaFieldMetadata = "metadata"
 )
 
 type registrar struct {
@@ -51,7 +50,7 @@ func newRegistrar(registry *Registry) *registrar {
 }
 
 // 注册服务
-func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
+func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) error {
 	raw, err := url.Parse(ins.Endpoint)
 	if err != nil {
 		return err
@@ -92,10 +91,13 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	registration.Meta[metaFieldEvents] = string(events)
 	registration.Meta[metaFieldWeight] = xconv.String(ins.Weight)
 	registration.Meta[metaFieldServices] = string(services)
-	// registration.Meta[metaFieldMetadata] = string(metadata)
 
 	for field, value := range marshalMetaRoutes(ins.Routes) {
 		registration.Meta[field] = value
+	}
+
+	for field, value := range ins.Metadata {
+		registration.Meta["_"+field] = value
 	}
 
 	if r.registry.opts.enableHealthCheck {
@@ -127,7 +129,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 }
 
 // 解注册服务
-func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+func (r *registrar) deregister(_ context.Context, ins *registry.ServiceInstance) error {
 	r.cancel()
 	close(r.chHeartbeat)
 

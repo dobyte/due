@@ -2,10 +2,11 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/registry"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dobyte/due/v2/registry"
 )
 
 type watcher struct {
@@ -61,7 +62,6 @@ func (w *watcher) Stop() error {
 }
 
 type watcherMgr struct {
-	err              error
 	ctx              context.Context
 	cancel           context.CancelFunc
 	registry         *Registry
@@ -97,9 +97,9 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 			case <-wm.ctx.Done():
 				return
 			case <-ticker.C:
-				ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-				services, index, err = wm.registry.services(ctx, wm.serviceName, wm.serviceWaitIndex, true)
-				cancel()
+				tctx, tcancel := context.WithTimeout(ctx, 120*time.Second)
+				services, index, err = wm.registry.services(tctx, wm.serviceName, wm.serviceWaitIndex, true)
+				tcancel()
 				if err != nil {
 					time.Sleep(time.Second)
 					continue

@@ -189,7 +189,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 }
 
 // 获取服务实体列表
-func (r *Registry) services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
+func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	instances, err := r.opts.client.SelectInstances(vo.SelectInstancesParam{
 		ServiceName: serviceName,
 		Clusters:    []string{r.opts.clusterName},
@@ -225,7 +225,7 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 		ins.Events = make([]int, 0)
 		ins.Services = make([]string, 0)
 		ins.Weight = xconv.Int(instance.Metadata[metaFieldWeight])
-		ins.Metadata = make(map[string]any)
+		ins.Metadata = make(map[string]string)
 
 		if v := instance.Metadata[metaFieldRoutes]; v != "" {
 			if err := json.Unmarshal([]byte(v), &ins.Routes); err != nil {

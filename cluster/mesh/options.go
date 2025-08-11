@@ -40,7 +40,7 @@ type options struct {
 	registry    registry.Registry     // 服务注册器
 	encryptor   crypto.Encryptor      // 消息加密器
 	transporter transport.Transporter // 消息传输器
-	metadata    map[string]any        // 元数据
+	metadata    map[string]string     // 元数据
 }
 
 func defaultOptions() *options {
@@ -49,7 +49,7 @@ func defaultOptions() *options {
 		name:     defaultName,
 		codec:    encoding.Invoke(defaultCodec),
 		timeout:  defaultTimeout,
-		metadata: make(map[string]any),
+		metadata: make(map[string]string),
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -118,6 +118,6 @@ func WithTransporter(transporter transport.Transporter) Option {
 }
 
 // WithMetadata 设置元数据
-func WithMetadata(metadata map[string]any) Option {
+func WithMetadata(metadata map[string]string) Option {
 	return func(o *options) { o.metadata = metadata }
 }

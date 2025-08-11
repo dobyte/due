@@ -2,12 +2,13 @@ package nacos
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
-	"sync"
-	"sync/atomic"
 )
 
 type watcher struct {
@@ -63,13 +64,11 @@ func (w *watcher) Stop() error {
 }
 
 type watcherMgr struct {
-	err              error
 	ctx              context.Context
 	cancel           context.CancelFunc
 	registry         *Registry
 	serviceName      string
 	serviceInstances atomic.Value
-	serviceWaitIndex uint64
 	idx              atomic.Int64
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher

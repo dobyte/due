@@ -22,9 +22,9 @@ shutdownMaxWaitTime = "0s"
         # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
         dispatch = "random"
         # 实例元数据
-        [cluster.node.metadata]
-            # 键值对
-            key = "anytype"
+        [cluster.gate.metadata]
+            # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
+            key = "value"
     # 集群节点配置
     [cluster.node]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -41,8 +41,8 @@ shutdownMaxWaitTime = "0s"
         weight = 1
         # 实例元数据
         [cluster.node.metadata]
-            # 键值对
-            key = "any"
+            # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
+            key = "value"
     # 集群网格配置
     [cluster.mesh]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -53,8 +53,8 @@ shutdownMaxWaitTime = "0s"
         codec = "proto"
         # 实例元数据
         [cluster.mesh.metadata]
-            # 键值对
-            key = "anytype"
+            # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
+            key = "value"
     # 集群客户端配置，常用于调试使用
     [cluster.client]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
