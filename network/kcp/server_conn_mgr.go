@@ -69,6 +69,7 @@ func (cm *serverConnMgr) allocate(c *kcp.UDPSession) error {
 func (cm *serverConnMgr) recycle(c *kcp.UDPSession) {
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
+		conn.reset()
 		cm.pool.Put(conn)
 		atomic.AddInt64(&cm.total, -1)
 	}

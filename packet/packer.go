@@ -48,7 +48,6 @@ type Packer interface {
 
 type defaultPacker struct {
 	opts             *options
-	once             sync.Once
 	heartbeat        []byte
 	readerSizePool   sync.Pool
 	readerBufferPool sync.Pool

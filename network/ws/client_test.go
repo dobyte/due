@@ -9,19 +9,20 @@ package ws_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/network/ws/v2"
-	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/packet"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 )
 
 func TestClient_Dial(t *testing.T) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < 1; i++ {
+	for range 1 {
 		wg.Add(1)
 
 		go func() {
@@ -60,19 +61,16 @@ func TestClient_Dial(t *testing.T) {
 				Buffer: []byte("hello server~~"),
 			})
 
-			for {
-				select {
-				case <-ticker.C:
-					if err = conn.Push(msg); err != nil {
-						t.Error(err)
-						return
-					}
+			for range ticker.C {
+				if err = conn.Push(msg); err != nil {
+					t.Error(err)
+					return
+				}
 
-					times++
+				times++
 
-					if times >= 5 {
-						return
-					}
+				if times >= 5 {
+					return
 				}
 			}
 		}()
@@ -116,19 +114,16 @@ func TestNewClient(t *testing.T) {
 		Buffer: []byte("hello server~~"),
 	})
 
-	for {
-		select {
-		case <-ticker.C:
-			if err = conn.Push(data); err != nil {
-				log.Errorf("push message failed: %v", err)
-				return
-			}
+	for range ticker.C {
+		if err = conn.Push(data); err != nil {
+			log.Errorf("push message failed: %v", err)
+			return
+		}
 
-			times++
+		times++
 
-			if times >= 5 {
-				return
-			}
+		if times >= 5 {
+			return
 		}
 	}
 }
