@@ -2,16 +2,19 @@ package node_test
 
 import (
 	"context"
-	"fmt"
-	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/transporter/node"
-	"github.com/dobyte/due/v2/log"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/internal/transporter/internal/server"
+	"github.com/dobyte/due/v2/internal/transporter/node"
+	"github.com/dobyte/due/v2/log"
 )
 
 func TestServer(t *testing.T) {
-	server, err := node.NewServer(":49898", &provider{})
+	server, err := node.NewServer(&provider{}, &server.Options{
+		Addr: ":49898",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,23 +38,6 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message []byte) error {
 	log.Infof("gid: %s, nid: %s, cid: %d, uid: %d message: %s", gid, nid, cid, uid, string(message))
 	return nil
-}
-
-func TestTimeout(t *testing.T) {
-	ctx := context.Background()
-
-	ctx1, _ := context.WithTimeout(ctx, 10*time.Second)
-
-	ctx2, _ := context.WithTimeout(ctx1, 5*time.Second)
-
-	fmt.Println(time.Now().Unix())
-
-	select {
-	case <-ctx1.Done():
-		fmt.Println(1, time.Now().Unix())
-	case <-ctx2.Done():
-		fmt.Println(2, time.Now().Unix())
-	}
 }
 
 // GetState 获取状态

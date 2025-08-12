@@ -1,11 +1,11 @@
 package server
 
 import (
-	"errors"
 	"net"
 
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -21,6 +21,7 @@ type Server struct {
 
 type Options struct {
 	Addr       string
+	Expose     bool
 	KeyFile    string
 	CertFile   string
 	ServerOpts []grpc.ServerOption
@@ -98,7 +99,7 @@ func (s *Server) RegisterService(desc, service any) error {
 	case *grpc.ServiceDesc:
 		s.server.RegisterService(sd, service)
 	default:
-		return errors.New("invalid dispatcher desc")
+		return errors.ErrInvalidServiceDesc
 	}
 
 	return nil

@@ -42,26 +42,6 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 		return err
 	}
 
-	routes, err := json.Marshal(ins.Routes)
-	if err != nil {
-		return err
-	}
-
-	events, err := json.Marshal(ins.Events)
-	if err != nil {
-		return err
-	}
-
-	services, err := json.Marshal(ins.Services)
-	if err != nil {
-		return err
-	}
-
-	metadata, err := json.Marshal(ins.Metadata)
-	if err != nil {
-		return err
-	}
-
 	param := vo.RegisterInstanceParam{
 		Ip:          host,
 		Port:        port,
@@ -72,19 +52,50 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 		ServiceName: ins.Name,
 		ClusterName: r.registry.opts.clusterName,
 		GroupName:   r.registry.opts.groupName,
-		Metadata: map[string]string{
-			metaFieldID:       ins.ID,
-			metaFieldName:     ins.Name,
-			metaFieldKind:     ins.Kind,
-			metaFieldAlias:    ins.Alias,
-			metaFieldState:    ins.State,
-			metaFieldRoutes:   string(routes),
-			metaFieldEvents:   string(events),
-			metaFieldServices: string(services),
-			metaFieldEndpoint: ins.Endpoint,
-			metaFieldWeight:   xconv.String(ins.Weight),
-			metaFieldMetadata: string(metadata),
-		},
+		Metadata:    make(map[string]string, 11),
+	}
+
+	param.Metadata[metaFieldID] = ins.ID
+	param.Metadata[metaFieldName] = ins.Name
+	param.Metadata[metaFieldKind] = ins.Kind
+	param.Metadata[metaFieldAlias] = ins.Alias
+	param.Metadata[metaFieldState] = ins.State
+	param.Metadata[metaFieldEndpoint] = ins.Endpoint
+
+	if ins.Weight > 0 {
+		param.Metadata[metaFieldWeight] = xconv.String(ins.Weight)
+	}
+
+	if len(ins.Routes) > 0 {
+		if routes, err := json.Marshal(ins.Routes); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
+		}
+	}
+
+	if len(ins.Events) > 0 {
+		if events, err := json.Marshal(ins.Events); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldEvents] = xconv.BytesToString(events)
+		}
+	}
+
+	if len(ins.Services) > 0 {
+		if services, err := json.Marshal(ins.Services); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldServices] = xconv.BytesToString(services)
+		}
+	}
+
+	if len(ins.Metadata) > 0 {
+		if metadata, err := json.Marshal(ins.Metadata); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldMetadata] = xconv.BytesToString(metadata)
+		}
 	}
 
 	ok, err := r.registry.opts.client.RegisterInstance(param)
@@ -93,7 +104,7 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 	}
 
 	if !ok {
-		return errors.New("service instance register fail")
+		return errors.ErrServiceRegisterFailed
 	}
 
 	return nil
@@ -121,7 +132,7 @@ func (r *registrar) deregister(_ context.Context, ins *registry.ServiceInstance)
 	}
 
 	if !ok {
-		return errors.New("service instance deregister fail")
+		return errors.ErrServiceDeregisterFailed
 	}
 
 	return nil

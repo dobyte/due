@@ -3,13 +3,14 @@ package consul_test
 import (
 	"context"
 	"fmt"
+	"net"
+	"testing"
+	"time"
+
 	"github.com/dobyte/due/registry/consul/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xnet"
-	"net"
-	"testing"
-	"time"
 )
 
 const (
@@ -56,9 +57,12 @@ func TestRegistry_Register(t *testing.T) {
 		Alias:    "mahjong",
 		State:    cluster.Work.String(),
 		Endpoint: fmt.Sprintf("grpc://%s:%d", host, port),
+		Metadata: map[string]string{
+			"key": "value",
+		},
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ins.Routes = append(ins.Routes, registry.Route{
 			ID:       int32(i),
 			Stateful: true,

@@ -182,7 +182,10 @@ func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 
 // 启动传输服务器
 func (g *Gate) startLinkerServer() {
-	transporter, err := gate.NewServer(g.opts.addr, &provider{gate: g})
+	transporter, err := gate.NewServer(&provider{gate: g}, &gate.ServerOptions{
+		Addr:   g.opts.addr,
+		Expose: g.opts.expose,
+	})
 	if err != nil {
 		log.Fatalf("link server create failed: %v", err)
 	}

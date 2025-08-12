@@ -209,7 +209,10 @@ func (n *Node) dispatch() {
 
 // 启动连接服务器
 func (n *Node) startLinkServer() {
-	linker, err := node.NewServer(n.opts.addr, &provider{node: n})
+	linker, err := node.NewServer(&provider{node: n}, &node.ServerOptions{
+		Addr:   n.opts.addr,
+		Expose: n.opts.expose,
+	})
 	if err != nil {
 		log.Fatalf("link server create failed: %v", err)
 	}

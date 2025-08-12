@@ -10,9 +10,10 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"time"
 )
 
 type heartbeat struct {
@@ -137,9 +138,9 @@ func (r *registrar) heartbeat(ctx context.Context, leaseID clientv3.LeaseID, key
 					return
 				}
 
-				pctx, pcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
-				leaseID, err = r.put(pctx, key, value)
-				pcancel()
+				tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+				leaseID, err = r.put(tctx, key, value)
+				tcancel()
 				if err != nil {
 					time.Sleep(r.registry.opts.retryInterval)
 					continue

@@ -63,16 +63,16 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 		return nil, err
 	}
 
-	ctx1, cancel1 := context.WithTimeout(ctx, defaultTimeout)
-	defer cancel1()
+	tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+	defer tcancel()
 
 	select {
 	case <-ctx.Done():
 		conn.cancel(seq)
 		return nil, ctx.Err()
-	case <-ctx1.Done():
+	case <-tctx.Done():
 		conn.cancel(seq)
-		return nil, ctx1.Err()
+		return nil, tctx.Err()
 	case data := <-call:
 		return data, nil
 	}

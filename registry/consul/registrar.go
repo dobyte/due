@@ -70,16 +70,6 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 		return err
 	}
 
-	events, err := json.Marshal(ins.Events)
-	if err != nil {
-		return err
-	}
-
-	services, err := json.Marshal(ins.Services)
-	if err != nil {
-		return err
-	}
-
 	registration := &api.AgentServiceRegistration{}
 	registration.ID = makeInsID(ins)
 	registration.Name = ins.Name
@@ -92,9 +82,26 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 	registration.Meta[metaFieldAlias] = ins.Alias
 	registration.Meta[metaFieldState] = ins.State
 	registration.Meta[metaFieldEndpoint] = ins.Endpoint
-	registration.Meta[metaFieldEvents] = string(events)
-	registration.Meta[metaFieldWeight] = xconv.String(ins.Weight)
-	registration.Meta[metaFieldServices] = string(services)
+
+	if ins.Weight > 0 {
+		registration.Meta[metaFieldWeight] = xconv.String(ins.Weight)
+	}
+
+	if len(ins.Events) > 0 {
+		if events, err := json.Marshal(ins.Events); err != nil {
+			return err
+		} else {
+			registration.Meta[metaFieldEvents] = xconv.BytesToString(events)
+		}
+	}
+
+	if len(ins.Services) > 0 {
+		if services, err := json.Marshal(ins.Services); err != nil {
+			return err
+		} else {
+			registration.Meta[metaFieldServices] = xconv.BytesToString(services)
+		}
+	}
 
 	for field, value := range marshalMetaRoutes(ins.Routes) {
 		registration.Meta[field] = value

@@ -1,43 +1,75 @@
 package net
 
 import (
-	"github.com/dobyte/due/v2/errors"
+	"io"
 	"net"
+	"net/http"
 	"strconv"
+	"sync/atomic"
+	"time"
+
+	"github.com/dobyte/due/v2/errors"
+)
+
+var urls = []string{
+	"http://ipinfo.io/ip",
+	"http://ifconfig.me/ip",
+	"https://api.ipquery.io",
+	"https://api.ipify.org",
+}
+
+const (
+	IPv4Zero     = "0.0.0.0"
+	IPv4Loopback = "127.0.0.1"
 )
 
 // ParseAddr 解析地址
-func ParseAddr(addr string) (listenAddr, exposeAddr string, err error) {
-	var host, port string
+// 注：仅在addr为0.0.0.0:[port]或:[port]时才会根据wan参数自动获取暴露IP
+func ParseAddr(addr string, expose ...bool) (string, string, error) {
+	var (
+		err        error
+		host       string
+		port       string
+		listenHost string
+		exposeHost string
+	)
 
 	if addr != "" {
-		host, port, err = net.SplitHostPort(addr)
-		if err != nil {
-			return
+		if host, port, err = net.SplitHostPort(addr); err != nil {
+			return "", "", err
 		}
 	}
 
 	if port == "" || port == "0" {
-		p, err := AssignRandPort(host)
-		if err != nil {
+		if p, err := AssignRandPort(host); err != nil {
 			return "", "", err
+		} else {
+			port = strconv.Itoa(p)
 		}
-		port = strconv.Itoa(p)
 	}
 
-	if len(host) > 0 && (host != "0.0.0.0" && host != "[::]" && host != "::") {
-		listenAddr = net.JoinHostPort(host, port)
-		exposeAddr = listenAddr
+	if host != "" && host != IPv4Zero && host != "[::]" && host != "::" {
+		listenHost = host
+		exposeHost = host
 	} else {
-		ip, err := InternalIP()
-		if err != nil {
-			return "", "", err
+		if len(expose) > 0 && expose[0] {
+			if ip, err := PublicIP(); err != nil {
+				return "", "", err
+			} else {
+				exposeHost = ip
+			}
+		} else {
+			if ip, err := PrivateIP(); err != nil {
+				return "", "", err
+			} else {
+				exposeHost = ip
+			}
 		}
-		listenAddr = net.JoinHostPort("0.0.0.0", port)
-		exposeAddr = net.JoinHostPort(ip, port)
+
+		listenHost = IPv4Zero
 	}
 
-	return
+	return net.JoinHostPort(listenHost, port), net.JoinHostPort(exposeHost, port), nil
 }
 
 // ExtractIP 提取主机地址
@@ -55,8 +87,50 @@ func ExtractPort(addr net.Addr) (int, error) {
 	return strconv.Atoi(port)
 }
 
+// ExternalIP 获取外网IP地址
+//
+// Deprecated: As of due 2.2.8, this function simply calls [net.PublicIP].
+func ExternalIP() (string, error) {
+	return PublicIP()
+}
+
 // InternalIP 获取内网IP地址
+//
+// Deprecated: As of due 2.2.8, this function simply calls [net.PublicIP].
 func InternalIP() (string, error) {
+	return PrivateIP()
+}
+
+// PublicIP 获取公网IP
+func PublicIP() (string, error) {
+	var (
+		ch      = make(chan string)
+		state   atomic.Bool
+		timeout = 500 * time.Millisecond
+	)
+
+	for _, url := range urls {
+		go func() {
+			if ip, err := queryPublicIP(url, timeout); err == nil {
+				if state.CompareAndSwap(false, true) {
+					ch <- ip
+				}
+			}
+		}()
+	}
+
+	defer close(ch)
+
+	select {
+	case ip := <-ch:
+		return ip, nil
+	case <-time.After(timeout):
+		return "", errors.ErrNotFoundIPAddress
+	}
+}
+
+// PrivateIP 获取私网IP
+func PrivateIP() (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "", err
@@ -87,7 +161,6 @@ func InternalIP() (string, error) {
 			case *net.IPAddr:
 				ipnet = v.IP
 			default:
-				err = errors.New("invalid addr interface")
 				continue
 			}
 
@@ -110,19 +183,35 @@ func InternalIP() (string, error) {
 	if ip != "" {
 		return ip, nil
 	} else {
-		return "", errors.New("not found ip address")
+		return "", errors.ErrNotFoundIPAddress
 	}
 }
 
-// ExternalIP 获取外网IP地址
-func ExternalIP() (string, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:54")
+// 获取外网IP地址
+func queryPublicIP(url string, timeout time.Duration) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
 
-	return ExtractIP(conn.LocalAddr())
+	client := &http.Client{Timeout: timeout}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if ip := net.ParseIP(string(body)); ip == nil {
+		return "", errors.ErrNotFoundIPAddress
+	} else {
+		return ip.String(), nil
+	}
 }
 
 // AssignRandPort 分配一个随机端口
@@ -151,7 +240,7 @@ func FulfillAddr(addr string) string {
 		return addr
 	}
 	if host == "" {
-		host = "0.0.0.0"
+		host = IPv4Zero
 	}
 
 	return net.JoinHostPort(host, port)

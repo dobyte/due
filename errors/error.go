@@ -2,9 +2,10 @@ package errors
 
 import (
 	"fmt"
+	"io"
+
 	"github.com/dobyte/due/v2/codes"
 	"github.com/dobyte/due/v2/core/stack"
-	"io"
 )
 
 var (
@@ -55,6 +56,13 @@ var (
 	ErrWriterClosing           = New("writer is closing")
 	ErrDeadlineExceeded        = New("deadline exceeded")
 	ErrMissingResolver         = New("missing resolver")
+	ErrServiceRegisterFailed   = New("service register failed")
+	ErrServiceDeregisterFailed = New("service deregister failed")
+	ErrInvalidPublicKey        = New("invalid public key")
+	ErrInvalidPrivateKey       = New("invalid private key")
+	ErrInvalidSignature        = New("invalid signature")
+	ErrNotFoundIPAddress       = New("not found ip address")
+	ErrInvalidServiceDesc      = New("invalid service desc")
 )
 
 // NewError 新建一个错误

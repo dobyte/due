@@ -31,6 +31,7 @@ const (
 	defaultIDKey       = "etc.cluster.gate.id"
 	defaultNameKey     = "etc.cluster.gate.name"
 	defaultAddrKey     = "etc.cluster.gate.addr"
+	defaultExposeKey   = "etc.cluster.gate.expose"
 	defaultTimeoutKey  = "etc.cluster.gate.timeout"
 	defaultDispatchKey = "etc.cluster.gate.dispatch"
 	defaultMetadataKey = "etc.cluster.gate.metadata"
@@ -43,6 +44,7 @@ type options struct {
 	id       string            // 实例ID
 	name     string            // 实例名称
 	addr     string            // 监听地址
+	expose   bool              // 是否将内部通信地址暴露到公网
 	timeout  time.Duration     // RPC调用超时时间
 	server   network.Server    // 网关服务器
 	locator  locate.Locator    // 用户定位器
@@ -59,6 +61,7 @@ func defaultOptions() *options {
 		timeout:  defaultTimeout,
 		dispatch: defaultDispatch,
 		metadata: make(map[string]string),
+		expose:   etc.Get(defaultExposeKey).Bool(),
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -98,6 +101,16 @@ func WithID(id string) Option {
 // WithName 设置实例名称
 func WithName(name string) Option {
 	return func(o *options) { o.name = name }
+}
+
+// WithAddr 设置监听地址
+func WithAddr(addr string) Option {
+	return func(o *options) { o.addr = addr }
+}
+
+// WithExpose 设置是否将内部通信地址暴露到公网
+func WithExpose(expose bool) Option {
+	return func(o *options) { o.expose = expose }
 }
 
 // WithContext 设置上下文

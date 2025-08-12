@@ -17,6 +17,8 @@ shutdownMaxWaitTime = "0s"
         name = "gate"
         # 内建RPC服务器监听地址。不填写默认随机监听
         addr = ":0"
+        # 是否将内部通信地址暴露到公网。默认为false
+        expose = false
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
         # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
@@ -33,6 +35,8 @@ shutdownMaxWaitTime = "0s"
         name = "node"
         # 内建RPC服务器监听地址。不填写默认随机监听
         addr = ":0"
+        # 是否将内部通信地址暴露到公网。默认为false
+        expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
@@ -49,6 +53,8 @@ shutdownMaxWaitTime = "0s"
         id = ""
         # 实例名称
         name = "mesh"
+        # 是否将内部通信地址暴露到公网。默认为false
+        expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
         # 实例元数据
@@ -130,6 +136,8 @@ shutdownMaxWaitTime = "0s"
         [transport.grpc.server]
             # 服务器监听地址。空或:0时系统将会随机端口号
             addr = ":0"
+            # 是否将内部通信地址暴露到公网。默认为false
+            expose = false
             # 秘钥文件
             keyFile = ""
             # 证书文件
@@ -146,6 +154,8 @@ shutdownMaxWaitTime = "0s"
         [transport.rpcx.server]
             # 服务器监听地址。空或:0时系统将会随机端口号
             addr = ":0"
+            # 是否将内部通信地址暴露到公网。默认为false
+            expose = false
             # 秘钥文件
             keyFile = ""
             # 证书文件

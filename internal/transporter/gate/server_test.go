@@ -12,7 +12,9 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	server, err := gate.NewServer(":49899", &provider{})
+	server, err := gate.NewServer(&provider{}, &gate.ServerOptions{
+		Addr: ":49899",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

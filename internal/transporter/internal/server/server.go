@@ -26,7 +26,7 @@ type Server struct {
 }
 
 func NewServer(opts *Options) (*Server, error) {
-	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
+	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr, opts.Expose)
 	if err != nil {
 		return nil, err
 	}

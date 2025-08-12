@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"github.com/dobyte/due/v2/errors"
 	"math/big"
+
+	"github.com/dobyte/due/v2/errors"
 )
 
 type Signer struct {
@@ -71,7 +72,7 @@ func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
 	segments := bytes.Split(signature, delimiter)
 
 	if len(segments) != 2 {
-		return false, errors.New("invalid signature")
+		return false, errors.ErrInvalidSignature
 	}
 
 	rs := new(big.Int)

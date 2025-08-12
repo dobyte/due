@@ -26,6 +26,7 @@ const (
 	defaultIDKey       = "etc.cluster.node.id"
 	defaultNameKey     = "etc.cluster.node.name"
 	defaultAddrKey     = "etc.cluster.node.addr"
+	defaultExposeKey   = "etc.cluster.node.expose"
 	defaultCodecKey    = "etc.cluster.node.codec"
 	defaultWeightKey   = "etc.cluster.node.weight"
 	defaultTimeoutKey  = "etc.cluster.node.timeout"
@@ -42,6 +43,7 @@ type options struct {
 	id          string                // 实例ID
 	name        string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
 	addr        string                // 监听地址
+	expose      bool                  // 是否将内部通信地址暴露到公网
 	codec       encoding.Codec        // 编解码器
 	weight      int                   // 服务器权重
 	timeout     time.Duration         // RPC调用超时时间
@@ -61,6 +63,7 @@ func defaultOptions() *options {
 		weight:   defaultWeight,
 		timeout:  defaultTimeout,
 		metadata: make(map[string]string),
+		expose:   etc.Get(defaultExposeKey).Bool(),
 	}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
@@ -109,6 +112,11 @@ func WithName(name string) Option {
 // WithAddr 设置连接地址
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
+}
+
+// WithExpose 设置是否将内部通信地址暴露到公网
+func WithExpose(expose bool) Option {
+	return func(o *options) { o.expose = expose }
 }
 
 // WithCodec 设置编解码器

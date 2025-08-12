@@ -194,7 +194,8 @@ func parsePublicKey(publicKey string) (*rsa.PublicKey, error) {
 	}
 
 	if black == nil {
-		return nil, errors.New("invalid public key")
+		return nil, errors.ErrInvalidPublicKey
+
 	}
 
 	pkcs, err := x509.ParsePKCS1PublicKey(black.Bytes)
@@ -217,7 +218,7 @@ func parsePrivateKey(privateKey string) (*rsa.PrivateKey, error) {
 	}
 
 	if black == nil {
-		return nil, errors.New("invalid private key")
+		return nil, errors.ErrInvalidPrivateKey
 	}
 
 	priv, err := x509.ParsePKCS8PrivateKey(black.Bytes)

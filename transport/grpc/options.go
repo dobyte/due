@@ -14,6 +14,7 @@ const (
 
 const (
 	defaultServerAddrKey       = "etc.transport.grpc.server.addr"
+	defaultServerExposeKey     = "etc.transport.grpc.server.expose"
 	defaultServerKeyFileKey    = "etc.transport.grpc.server.keyFile"
 	defaultServerCertFileKey   = "etc.transport.grpc.server.certFile"
 	defaultClientCertFileKey   = "etc.transport.grpc.client.certFile"
@@ -30,6 +31,7 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{}
 	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
+	opts.server.Expose = etc.Get(defaultServerExposeKey).Bool()
 	opts.server.KeyFile = etc.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
 	opts.client.CertFile = etc.Get(defaultClientCertFileKey).String()
@@ -38,9 +40,14 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithServerListenAddr 设置服务器监听地址
-func WithServerListenAddr(addr string) Option {
+// WithServerAddr 设置服务器监听地址
+func WithServerAddr(addr string) Option {
 	return func(o *options) { o.server.Addr = addr }
+}
+
+// WithServerExpose 设置是否将内部通信地址暴露到公网
+func WithServerExpose(expose bool) Option {
+	return func(o *options) { o.server.Expose = expose }
 }
 
 // WithServerCredentials 设置服务器证书和秘钥

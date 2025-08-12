@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 
 	"github.com/dobyte/due/v2/core/endpoint"
-	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/smallnest/rpcx/server"
 )
@@ -21,13 +21,15 @@ type Server struct {
 
 type Options struct {
 	Addr       string
+	Expose     bool
 	KeyFile    string
 	CertFile   string
 	ServerOpts []server.OptionFn
 }
 
 func NewServer(opts *Options) (*Server, error) {
-	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr)
+	listenAddr, exposeAddr, err := net.ParseAddr(opts.Addr, opts.Expose)
+
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func (s *Server) Stop() error {
 func (s *Server) RegisterService(desc, ss any) error {
 	name, ok := desc.(string)
 	if !ok {
-		return errors.New("invalid dispatcher desc")
+		return errors.ErrInvalidServiceDesc
 	}
 
 	return s.server.RegisterName(name, ss, "")

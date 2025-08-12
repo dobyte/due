@@ -160,11 +160,11 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			case metaFieldWeight:
 				ins.Weight = xconv.Int(v)
 			case metaFieldEvents:
-				if err = json.Unmarshal([]byte(v), &ins.Events); err != nil {
+				if err = json.Unmarshal(xconv.StringToBytes(v), &ins.Events); err != nil {
 					continue
 				}
 			case metaFieldServices:
-				if err = json.Unmarshal([]byte(v), &ins.Services); err != nil {
+				if err = json.Unmarshal(xconv.StringToBytes(v), &ins.Services); err != nil {
 					continue
 				}
 			case metaFieldEndpoint:

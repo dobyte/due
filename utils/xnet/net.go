@@ -9,8 +9,9 @@ package xnet
 
 import (
 	"encoding/binary"
-	innernet "github.com/dobyte/due/v2/core/net"
 	"net"
+
+	innernet "github.com/dobyte/due/v2/core/net"
 )
 
 // ExtractIP 提取主机地址
@@ -31,6 +32,16 @@ func InternalIP() (string, error) {
 // ExternalIP 获取外网IP地址
 func ExternalIP() (string, error) {
 	return innernet.ExternalIP()
+}
+
+// PublicIP 获取公网IP
+func PublicIP() (string, error) {
+	return innernet.PublicIP()
+}
+
+// PrivateIP 获取私网IP
+func PrivateIP() (string, error) {
+	return innernet.PrivateIP()
 }
 
 // FulfillAddr 补全地址

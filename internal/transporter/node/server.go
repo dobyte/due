@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
@@ -15,8 +16,10 @@ type Server struct {
 	provider Provider
 }
 
-func NewServer(addr string, provider Provider) (*Server, error) {
-	serv, err := server.NewServer(&server.Options{Addr: addr})
+type ServerOptions = server.Options
+
+func NewServer(provider Provider, opts *ServerOptions) (*Server, error) {
+	serv, err := server.NewServer(opts)
 	if err != nil {
 		return nil, err
 	}

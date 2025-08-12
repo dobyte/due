@@ -97,7 +97,7 @@ func NewRegistry(opts ...Option) *Registry {
 			if err != nil {
 				r.err = err
 			} else {
-				r.err = errors.New("invalid server urls")
+				r.err = errors.ErrInvalidArgument
 			}
 		} else {
 			if err != nil {

@@ -200,7 +200,7 @@ func parseECDSAPublicKey(publicKey string) (*ecdsa.PublicKey, error) {
 	}
 
 	if black == nil {
-		return nil, errors.New("invalid public key")
+		return nil, errors.ErrInvalidPublicKey
 	}
 
 	pub, err := x509.ParsePKIXPublicKey(black.Bytes)
@@ -212,7 +212,7 @@ func parseECDSAPublicKey(publicKey string) (*ecdsa.PublicKey, error) {
 	case *ecdsa.PublicKey:
 		return key, nil
 	default:
-		return nil, errors.New("invalid public key")
+		return nil, errors.ErrInvalidPublicKey
 	}
 }
 
@@ -223,7 +223,7 @@ func parseECDSAPrivateKey(privateKey string) (*ecdsa.PrivateKey, error) {
 	}
 
 	if black == nil {
-		return nil, errors.New("invalid private key")
+		return nil, errors.ErrInvalidPrivateKey
 	}
 
 	return x509.ParseECPrivateKey(black.Bytes)
