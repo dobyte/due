@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/dobyte/due/v2/log/log/console"
+	"github.com/dobyte/due/v2/log/log/file"
 )
 
 var syncers = make(map[string]Syncer)
@@ -18,6 +19,7 @@ type Syncer interface {
 }
 
 func init() {
+	RegisterSyncer(file.NewSyncer())
 	RegisterSyncer(console.NewSyncer())
 }
 

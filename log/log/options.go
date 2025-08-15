@@ -1,8 +1,6 @@
 package log
 
 import (
-	"time"
-
 	"github.com/dobyte/due/v2/etc"
 )
 
@@ -14,11 +12,6 @@ const (
 	defaultOutCallerFullPath = false
 	defaultTimeZone          = "Local"
 	defaultTimeFormat        = "2006/01/02 15:04:05.000000"
-	defaultFilePath          = "./log/due.log"
-	defaultFileMaxAge        = "7d"
-	defaultFileMaxSize       = "100M"
-	defaultFileRotate        = FileRotateDay
-	defaultFileCompress      = true
 )
 
 const (
@@ -30,29 +23,19 @@ const (
 	defaultOutCallerFullPathKey = "etc.log.outCallerFullPath"
 	defaultTimeZoneKey          = "etc.log.timeZone"
 	defaultTimeFormatKey        = "etc.log.timeFormat"
-	defaultFilePathKey          = "etc.log.filePath"
-	defaultFileMaxAgeKey        = "etc.log.fileMaxAge"
-	defaultFileMaxSizeKey       = "etc.log.fileMaxSize"
-	defaultFileRotateKey        = "etc.log.fileRotate"
-	defaultFileCompressKey      = "etc.log.fileCompress"
 )
 
 type Option func(o *options)
 
 type options struct {
-	outLevel          Level         // 输出级别
-	outFormat         Format        // 输出格式
-	outTerminals      []Terminal    // 输出终端
-	outStackLevel     Level         // 输出栈的日志级别
-	outCallerDepth    int           // 输出栈的深度
-	outCallerFullPath bool          // 输出栈的调用文件全路径
-	timeZone          string        // 时间时区，默认为Local
-	timeFormat        string        // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
-	filePath          string        // 文件路径
-	fileMaxAge        time.Duration // 文件最大留存时间
-	fileMaxSize       int64         // 单个文件最大尺寸
-	fileRotate        FileRotate    // 文件反转规则
-	fileCompress      bool          // 是否对轮换的日志文件进行压缩
+	outLevel          Level      // 输出级别
+	outFormat         Format     // 输出格式
+	outTerminals      []Terminal // 输出终端
+	outStackLevel     Level      // 输出栈的日志级别
+	outCallerDepth    int        // 输出栈的深度
+	outCallerFullPath bool       // 输出栈的调用文件全路径
+	timeZone          string     // 时间时区，默认为Local
+	timeFormat        string     // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
 }
 
 func defaultOptions() *options {
@@ -65,11 +48,6 @@ func defaultOptions() *options {
 		outCallerFullPath: etc.Get(defaultOutCallerFullPathKey, defaultOutCallerFullPath).Bool(),
 		timeZone:          etc.Get(defaultTimeZoneKey, defaultTimeZone).String(),
 		timeFormat:        etc.Get(defaultTimeFormatKey, defaultTimeFormat).String(),
-		filePath:          etc.Get(defaultFilePathKey, defaultFilePath).String(),
-		fileMaxAge:        etc.Get(defaultFileMaxAgeKey, defaultFileMaxAge).Duration(),
-		fileMaxSize:       int64(etc.Get(defaultFileMaxSizeKey, defaultFileMaxSize).B()),
-		fileRotate:        FileRotate(etc.Get(defaultFileRotateKey, defaultFileRotate).String()),
-		fileCompress:      etc.Get(defaultFileCompressKey, defaultFileCompress).Bool(),
 	}
 
 	if err := etc.Get(defaultOutTerminalsKey).Scan(&opts.outTerminals); err != nil || len(opts.outTerminals) == 0 {
@@ -117,29 +95,4 @@ func WithTimeZone(timeZone string) Option {
 // WithTimeFormat 设置日志输出时间格式
 func WithTimeFormat(timeFormat string) Option {
 	return func(o *options) { o.timeFormat = timeFormat }
-}
-
-// WithFilePath 设置文件路径
-func WithFilePath(filePath string) Option {
-	return func(o *options) { o.filePath = filePath }
-}
-
-// WithFileMaxAge 设置文件最大留存时间
-func WithFileMaxAge(fileMaxAge time.Duration) Option {
-	return func(o *options) { o.fileMaxAge = fileMaxAge }
-}
-
-// WithFileMaxSize 设置单个文件最大尺寸
-func WithFileMaxSize(fileMaxSize int64) Option {
-	return func(o *options) { o.fileMaxSize = fileMaxSize }
-}
-
-// WithFileRotate 设置文件反转规则
-func WithFileRotate(fileRotate FileRotate) Option {
-	return func(o *options) { o.fileRotate = fileRotate }
-}
-
-// WithFileCompress 设置是否对轮换日志文件进行压缩
-func WithFileCompress(fileCompress bool) Option {
-	return func(o *options) { o.fileCompress = fileCompress }
 }
