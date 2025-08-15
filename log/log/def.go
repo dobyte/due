@@ -1,38 +1,5 @@
 package log
 
-// Level 日志级别
-type Level string
-
-const (
-	LevelNone  Level = "none"  // NONE
-	LevelDebug Level = "debug" // DEBUG
-	LevelInfo  Level = "info"  // INFO
-	LevelWarn  Level = "warn"  // WARN
-	LevelError Level = "error" // ERROR
-	LevelFatal Level = "fatal" // FATAL
-	LevelPanic Level = "panic" // PANIC
-)
-
-// Priority 获取日志级别优先级
-func (l Level) Priority() int {
-	switch l {
-	case LevelDebug:
-		return 1
-	case LevelInfo:
-		return 2
-	case LevelWarn:
-		return 3
-	case LevelError:
-		return 4
-	case LevelFatal:
-		return 5
-	case LevelPanic:
-		return 6
-	default:
-		return 0
-	}
-}
-
 // Format 日志输出格式
 type Format string
 
