@@ -194,8 +194,8 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 		syncer.Write(buf.Bytes())
 	} else {
 		var (
-			buf1  *Buffer
-			buf2  *Buffer
+			buf1  Buffer
+			buf2  Buffer
 			eg, _ = errgroup.WithContext(context.Background())
 		)
 

@@ -10,7 +10,7 @@ type Formatter interface {
 	// Name 名称
 	Name() string
 	// Format 格式化
-	Format(entity *Entity, isConsole ...bool) *Buffer
+	Format(entity *Entity, isConsole ...bool) Buffer
 }
 
 func init() {

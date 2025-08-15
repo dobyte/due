@@ -23,7 +23,7 @@ type jsonFormatter struct {
 
 func newJsonFormatter() Formatter {
 	return &jsonFormatter{
-		pool: &sync.Pool{New: func() any { return &Buffer{bufer: bytes.NewBuffer(nil)} }},
+		pool: &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(nil)} }},
 	}
 }
 
@@ -31,8 +31,8 @@ func (f *jsonFormatter) Name() string {
 	return "json"
 }
 
-func (f *jsonFormatter) Format(entity *Entity, isConsole ...bool) *Buffer {
-	b := f.pool.Get().(*Buffer)
+func (f *jsonFormatter) Format(entity *Entity, isConsole ...bool) Buffer {
+	b := f.pool.Get().(*buffer)
 	b.pool = f.pool
 
 	level := strings.ToUpper(string(entity.Level()[:4]))

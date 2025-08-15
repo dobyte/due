@@ -13,7 +13,7 @@ type textFormatter struct {
 
 func newTextFormatter() Formatter {
 	return &textFormatter{
-		pool: &sync.Pool{New: func() any { return &Buffer{bufer: bytes.NewBuffer(nil)} }},
+		pool: &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(nil)} }},
 	}
 }
 
@@ -21,8 +21,8 @@ func (f *textFormatter) Name() string {
 	return "text"
 }
 
-func (f *textFormatter) Format(entity *Entity, isConsole ...bool) *Buffer {
-	b := f.pool.Get().(*Buffer)
+func (f *textFormatter) Format(entity *Entity, isConsole ...bool) Buffer {
+	b := f.pool.Get().(*buffer)
 	b.pool = f.pool
 
 	level := strings.ToUpper(string(entity.Level()[:4]))
