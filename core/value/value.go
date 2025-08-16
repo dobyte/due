@@ -1,10 +1,12 @@
 package value
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
 type Value interface {
@@ -47,6 +49,16 @@ type Value interface {
 	Map() map[string]any
 	Scan(pointer any) error
 	Value() any
+	Kind() reflect.Kind
+	IsBool() bool
+	IsString() bool
+	IsNumber() bool
+	IsComplex() bool
+	IsArray() bool
+	IsMap() bool
+	IsSlice() bool
+	IsStruct() bool
+	IsInterface() bool
 }
 
 type value struct {
@@ -266,4 +278,64 @@ func (v *value) Scan(pointer any) error {
 
 func (v *value) Value() any {
 	return v.v
+}
+
+func (v *value) Kind() reflect.Kind {
+	rk, _ := xreflect.Value(v.v)
+	return rk
+}
+
+func (v *value) IsBool() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Bool
+}
+
+func (v *value) IsString() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.String
+}
+
+func (v *value) IsNumber() bool {
+	switch rk, _ := xreflect.Value(v.v); rk {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func (v *value) IsComplex() bool {
+	switch rk, _ := xreflect.Value(v.v); rk {
+	case reflect.Complex64, reflect.Complex128:
+		return true
+	default:
+		return false
+	}
+}
+
+func (v *value) IsMap() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Map
+}
+
+func (v *value) IsSlice() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Slice
+}
+
+func (v *value) IsArray() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Array
+}
+
+func (v *value) IsStruct() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Struct
+}
+
+func (v *value) IsInterface() bool {
+	rk, _ := xreflect.Value(v.v)
+	return rk == reflect.Interface
 }

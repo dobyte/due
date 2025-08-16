@@ -1,56 +1,28 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/8/30 5:08 下午
- * @Desc: TODO
- */
-
 package log
 
-// Format 日志输出格式
-type Format int
-
-const (
-	TextFormat Format = iota // 文本格式
-	JsonFormat               // JSON格式
+import (
+	"github.com/dobyte/due/v2/log/internal"
 )
 
-func (f Format) String() string {
-	switch f {
-	case TextFormat:
-		return "text"
-	case JsonFormat:
-		return "json"
-	}
-	return "none"
-}
-
-// CutRule 日志切割规则
-type CutRule int
+// Terminal 日志输出终端
+type Terminal string
 
 const (
-	CutByYear   CutRule = iota + 1 // 按照年切割
-	CutByMonth                     // 按照月切割
-	CutByDay                       // 按照日切割
-	CutByHour                      // 按照时切割
-	CutByMinute                    // 按照分切割
-	CutBySecond                    // 按照秒切割
+	TerminalConsole Terminal = "console" // 控制台
+	TerminalFile    Terminal = "file"    // 文件
 )
 
-func (c CutRule) String() string {
-	switch c {
-	case CutByYear:
-		return "year"
-	case CutByMonth:
-		return "month"
-	case CutByDay:
-		return "day"
-	case CutByHour:
-		return "hour"
-	case CutByMinute:
-		return "minute"
-	case CutBySecond:
-		return "second"
-	}
-	return "none"
-}
+type (
+	Level  = internal.Level
+	Entity = internal.Entity
+)
+
+const (
+	LevelNone  = internal.LevelNone
+	LevelDebug = internal.LevelDebug
+	LevelInfo  = internal.LevelInfo
+	LevelWarn  = internal.LevelWarn
+	LevelError = internal.LevelError
+	LevelFatal = internal.LevelFatal
+	LevelPanic = internal.LevelPanic
+)

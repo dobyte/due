@@ -1,12 +1,13 @@
 package log_test
 
 import (
-	"github.com/dobyte/due/v2/log"
 	"testing"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 func TestLog(t *testing.T) {
-	logger := log.NewLogger(log.WithFormat(log.JsonFormat))
+	logger := log.NewLogger()
 
 	logger.Debug("welcome to due-framework")
 	logger.Info("welcome to due-framework")

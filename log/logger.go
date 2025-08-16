@@ -1,12 +1,16 @@
 package log
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"time"
 
-	"github.com/dobyte/due/v2/mode"
+	"github.com/dobyte/due/v2/core/stack"
+	"golang.org/x/sync/errgroup"
 )
 
 type Logger interface {
@@ -42,27 +46,17 @@ type Logger interface {
 	Close() error
 }
 
+type terminal struct {
+	syncer Syncer
+	levels map[Level]bool
+}
+
 type defaultLogger struct {
-	opts       *options
-	formatter  formatter
-	syncers    []syncer
-	bufferPool sync.Pool
-	entityPool *EntityPool
+	opts      *options
+	pool      *sync.Pool
+	loc       *time.Location
+	terminals []*terminal
 }
-
-type enabler func(level Level) bool
-
-type formatter interface {
-	format(e *Entity, isTerminal bool) []byte
-}
-
-type syncer struct {
-	writer   io.Writer
-	terminal bool
-	enabler  enabler
-}
-
-var _ Logger = &defaultLogger{}
 
 func NewLogger(opts ...Option) *defaultLogger {
 	o := defaultOptions()
@@ -72,171 +66,225 @@ func NewLogger(opts ...Option) *defaultLogger {
 
 	l := &defaultLogger{}
 	l.opts = o
-	l.syncers = make([]syncer, 0, 7)
-	l.entityPool = newEntityPool(l)
+	l.pool = &sync.Pool{New: func() any { return &Entity{} }}
 
-	switch l.opts.format {
-	case TextFormat:
-		l.formatter = newTextFormatter()
-	case JsonFormat:
-		l.formatter = newJsonFormatter()
-	}
+	switch v := l.opts.outTerminals.(type) {
+	case []Terminal:
+		for _, name := range v {
+			if syncer, ok := syncers[string(name)]; ok {
+				l.terminals = append(l.terminals, &terminal{
+					syncer: syncer,
+				})
+			}
+		}
+	case map[Terminal][]Level:
+		for name, levels := range v {
+			if syncer, ok := syncers[string(name)]; ok {
+				t := &terminal{
+					syncer: syncer,
+					levels: make(map[Level]bool, len(levels)),
+				}
 
-	if o.file != "" {
-		if o.classifiedStorage {
-			l.syncers = append(l.syncers, syncer{
-				writer:  l.buildWriter(DebugLevel),
-				enabler: l.buildEnabler(DebugLevel),
-			}, syncer{
-				writer:  l.buildWriter(InfoLevel),
-				enabler: l.buildEnabler(InfoLevel),
-			}, syncer{
-				writer:  l.buildWriter(WarnLevel),
-				enabler: l.buildEnabler(WarnLevel),
-			}, syncer{
-				writer:  l.buildWriter(ErrorLevel),
-				enabler: l.buildEnabler(ErrorLevel),
-			}, syncer{
-				writer:  l.buildWriter(FatalLevel),
-				enabler: l.buildEnabler(FatalLevel),
-			}, syncer{
-				writer:  l.buildWriter(PanicLevel),
-				enabler: l.buildEnabler(PanicLevel),
-			})
-		} else {
-			l.syncers = append(l.syncers, syncer{
-				writer:  l.buildWriter(NoneLevel),
-				enabler: l.buildEnabler(NoneLevel),
-			})
+				for _, level := range levels {
+					t.levels[level] = true
+				}
+
+				l.terminals = append(l.terminals, t)
+			}
 		}
 	}
 
-	if mode.IsDebugMode() && o.stdout {
-		l.syncers = append(l.syncers, syncer{
-			writer:   os.Stdout,
-			terminal: true,
-			enabler:  l.buildEnabler(NoneLevel),
-		})
+	if loc, err := time.LoadLocation(l.opts.timeZone); err != nil {
+		l.loc = time.Local
+	} else {
+		l.loc = loc
 	}
 
 	return l
 }
 
-func (l *defaultLogger) buildWriter(level Level) io.Writer {
-	w, err := NewWriter(WriterOptions{
-		Path:    l.opts.file,
-		Level:   level,
-		MaxAge:  l.opts.fileMaxAge,
-		MaxSize: l.opts.fileMaxSize * 1024 * 1024,
-		CutRule: l.opts.fileCutRule,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	return w
-}
-
-func (l *defaultLogger) buildEnabler(level Level) enabler {
-	return func(lvl Level) bool {
-		return lvl >= l.opts.level && (level == NoneLevel || (lvl >= level && level >= l.opts.level))
-	}
-}
-
-// BuildEntity 构建日志实体
-func (l *defaultLogger) BuildEntity(level Level, isNeedStack bool, a ...any) *Entity {
-	return l.entityPool.build(level, isNeedStack, a...)
-}
-
-// 打印日志
-func (l *defaultLogger) print(level Level, isNeedStack bool, a ...any) {
-	l.BuildEntity(level, isNeedStack, a...).Log()
-}
-
-// Print 打印日志
+// Print 打印日志，不含堆栈信息
 func (l *defaultLogger) Print(level Level, a ...any) {
 	l.print(level, false, a...)
 }
 
-// Printf 打印模板日志
+// Printf 打印模板日志，不含堆栈信息
 func (l *defaultLogger) Printf(level Level, format string, a ...any) {
 	l.print(level, false, fmt.Sprintf(format, a...))
 }
 
 // Debug 打印调试日志
 func (l *defaultLogger) Debug(a ...any) {
-	l.print(DebugLevel, true, a...)
+	l.print(LevelDebug, true, a...)
 }
 
 // Debugf 打印调试模板日志
 func (l *defaultLogger) Debugf(format string, a ...any) {
-	l.print(DebugLevel, true, fmt.Sprintf(format, a...))
+	l.print(LevelDebug, true, fmt.Sprintf(format, a...))
 }
 
 // Info 打印信息日志
 func (l *defaultLogger) Info(a ...any) {
-	l.print(InfoLevel, true, a...)
+	l.print(LevelInfo, true, a...)
 }
 
 // Infof 打印信息模板日志
 func (l *defaultLogger) Infof(format string, a ...any) {
-	l.print(InfoLevel, true, fmt.Sprintf(format, a...))
+	l.print(LevelInfo, true, fmt.Sprintf(format, a...))
 }
 
 // Warn 打印警告日志
 func (l *defaultLogger) Warn(a ...any) {
-	l.print(WarnLevel, true, a...)
+	l.print(LevelWarn, true, a...)
 }
 
 // Warnf 打印警告模板日志
 func (l *defaultLogger) Warnf(format string, a ...any) {
-	l.print(WarnLevel, true, fmt.Sprintf(format, a...))
+	l.print(LevelWarn, true, fmt.Sprintf(format, a...))
 }
 
 // Error 打印错误日志
 func (l *defaultLogger) Error(a ...any) {
-	l.print(ErrorLevel, true, a...)
+	l.print(LevelError, true, a...)
 }
 
 // Errorf 打印错误模板日志
 func (l *defaultLogger) Errorf(format string, a ...any) {
-	l.print(ErrorLevel, true, fmt.Sprintf(format, a...))
+	l.print(LevelError, true, fmt.Sprintf(format, a...))
 }
 
 // Fatal 打印致命错误日志
 func (l *defaultLogger) Fatal(a ...any) {
-	l.print(FatalLevel, true, a...)
-	os.Exit(1)
+	l.print(LevelFatal, true, a...)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *defaultLogger) Fatalf(format string, a ...any) {
-	l.print(FatalLevel, true, fmt.Sprintf(format, a...))
-	os.Exit(1)
+	l.print(LevelFatal, true, fmt.Sprintf(format, a...))
 }
 
 // Panic 打印Panic日志
 func (l *defaultLogger) Panic(a ...any) {
-	l.print(PanicLevel, true, a...)
+	l.print(LevelPanic, true, a...)
 }
 
 // Panicf 打印Panic模板日志
 func (l *defaultLogger) Panicf(format string, a ...any) {
-	l.print(PanicLevel, true, fmt.Sprintf(format, a...))
+	l.print(LevelPanic, true, fmt.Sprintf(format, a...))
 }
 
 // Close 关闭日志
-func (l *defaultLogger) Close() (err error) {
-	for _, s := range l.syncers {
-		w, ok := s.writer.(interface{ Close() error })
-		if !ok {
+func (l *defaultLogger) Close() error {
+	eg, _ := errgroup.WithContext(context.Background())
+
+	for i := range l.terminals {
+		syncer := l.terminals[i].syncer
+
+		eg.Go(func() error {
+			return syncer.Close()
+		})
+	}
+
+	return eg.Wait()
+}
+
+// 打印日志
+func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
+	if len(l.terminals) == 0 {
+		return
+	}
+
+	if level.Priority() < l.opts.outLevel.Priority() {
+		return
+	}
+
+	var entity *Entity
+
+	for i := range l.terminals {
+		t := l.terminals[i]
+
+		if len(t.levels) > 0 && !t.levels[level] {
 			continue
 		}
 
-		if e := w.Close(); e != nil {
-			err = e
+		if entity == nil {
+			entity = l.makeEntity(level, isOutStack, a...)
+			defer l.releaseEntity(entity)
 		}
+
+		t.syncer.Write(entity)
+	}
+}
+
+func (l *defaultLogger) releaseEntity(e *Entity) {
+	e.Level = LevelNone
+	e.Time = ""
+	e.Message = ""
+	e.Caller = ""
+	e.Frames = nil
+
+	l.pool.Put(e)
+}
+
+// 构建实体信息
+func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Entity {
+	e := l.pool.Get().(*Entity)
+	e.Level = level
+	e.Time = l.makeTime()
+	e.Message = l.makeMessage(a...)
+
+	if isOutStack && l.opts.outStackLevel != "" && l.opts.outStackLevel != LevelNone && level.Priority() >= l.opts.outStackLevel.Priority() {
+		e.Caller, e.Frames = l.makeStack(stack.Full)
+	} else {
+		e.Caller, e.Frames = l.makeStack(stack.First)
 	}
 
-	return
+	return e
+}
+
+// 构建时间
+func (l *defaultLogger) makeTime() string {
+	return l.now().Format(l.opts.timeFormat)
+}
+
+// 构建日志消息
+func (l *defaultLogger) makeMessage(a ...any) string {
+	if c := len(a); c > 0 {
+		return strings.TrimSuffix(fmt.Sprintf(strings.TrimSuffix(strings.Repeat("%v ", c), " "), a...), "\n")
+	} else {
+		return ""
+	}
+}
+
+// 构建堆栈信息
+func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
+	st := stack.Callers(3+l.opts.outCallerDepth, depth)
+	defer st.Free()
+
+	var (
+		caller string
+		frames = st.Frames()
+	)
+
+	if len(frames) > 0 {
+		file := frames[0].File
+		line := frames[0].Line
+
+		if !l.opts.outCallerFullPath {
+			_, file = filepath.Split(file)
+		}
+
+		caller = fmt.Sprintf("%s:%d", file, line)
+	}
+
+	if depth == stack.First {
+		return caller, nil
+	} else {
+		return caller, frames
+	}
+}
+
+// 获取当前时间
+func (l *defaultLogger) now() time.Time {
+	return time.Now().In(l.loc)
 }
