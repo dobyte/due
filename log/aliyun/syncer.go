@@ -24,9 +24,10 @@ const (
 const Name = "aliyun"
 
 type Syncer struct {
-	opts     *options
-	pool     sync.Pool
-	producer *producer.Producer
+	opts       *options
+	producer   *producer.Producer
+	rawPool    sync.Pool
+	bufferPool sync.Pool
 }
 
 func NewSyncer(opts ...Option) *Syncer {
@@ -50,8 +51,9 @@ func NewSyncer(opts ...Option) *Syncer {
 
 	s := &Syncer{}
 	s.opts = o
-	s.pool = sync.Pool{New: func() any { return &bytes.Buffer{} }}
 	s.producer = producer
+	s.rawPool = sync.Pool{New: func() any { return make(map[string]string, 5) }}
+	s.bufferPool = sync.Pool{New: func() any { return &bytes.Buffer{} }}
 
 	return s
 }
@@ -73,17 +75,22 @@ func (s *Syncer) Close() error {
 
 // 构建日志
 func (s *Syncer) makeLog(entity *log.Entity) *sls.Log {
-	raw := make(map[string]string)
+	raw := s.rawPool.Get().(map[string]string)
+	defer func() {
+		clear(raw)
+		s.rawPool.Put(raw)
+	}()
+
 	raw[fieldKeyLevel] = string(entity.Level[:4])
 	raw[fieldKeyTime] = entity.Time
 	raw[fieldKeyFile] = entity.Caller
 	raw[fieldKeyMsg] = entity.Message
 
 	if len(entity.Frames) > 0 {
-		b := s.pool.Get().(*bytes.Buffer)
+		b := s.bufferPool.Get().(*bytes.Buffer)
 		defer func() {
 			b.Reset()
-			s.pool.Put(b)
+			s.bufferPool.Put(b)
 		}()
 
 		fmt.Fprint(b, "[")
