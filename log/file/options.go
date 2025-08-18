@@ -10,29 +10,29 @@ const (
 	defaultPath     = "./log/due.log"
 	defaultMaxAge   = "7d"
 	defaultMaxSize  = "100M"
-	defaultRotate   = RotateDay
+	defaultRotate   = RotateNone
 	defaultCompress = false
 	defaultFormat   = FormatText
 )
 
 const (
 	defaultPathKey     = "etc.log.file.path"
+	defaultFormatKey   = "etc.log.file.format"
 	defaultMaxAgeKey   = "etc.log.file.maxAge"
 	defaultMaxSizeKey  = "etc.log.file.maxSize"
 	defaultRotateKey   = "etc.log.file.rotate"
 	defaultCompressKey = "etc.log.file.compress"
-	defaultFormatKey   = "etc.log.file.format"
 )
 
 type Option func(o *options)
 
 type options struct {
 	path     string        // 文件路径
+	format   Format        // 输出格式
 	maxAge   time.Duration // 文件最大留存时间
 	maxSize  int64         // 单个文件最大尺寸
 	rotate   Rotate        // 文件反转规则
 	compress bool          // 是否对轮换的日志文件进行压缩
-	format   Format        // 输出格式
 }
 
 func defaultOptions() *options {
@@ -49,6 +49,11 @@ func defaultOptions() *options {
 // WithPath 设置文件路径
 func WithPath(path string) Option {
 	return func(o *options) { o.path = path }
+}
+
+// WithFormat 设置输出格式
+func WithFormat(format Format) Option {
+	return func(o *options) { o.format = format }
 }
 
 // WithMaxAge 设置文件最大留存时间
@@ -69,9 +74,4 @@ func WithRotate(rotate Rotate) Option {
 // WithCompress 设置是否对轮换日志文件进行压缩
 func WithCompress(compress bool) Option {
 	return func(o *options) { o.compress = compress }
-}
-
-// WithFormat 设置输出格式
-func WithFormat(format Format) Option {
-	return func(o *options) { o.format = format }
 }

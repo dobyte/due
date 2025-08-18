@@ -3,7 +3,7 @@ package log
 var globalLogger Logger
 
 func init() {
-	SetLogger(NewLogger(WithOutCallerDepth(2)))
+	SetLogger(NewLogger())
 }
 
 // SetLogger 设置日志记录器

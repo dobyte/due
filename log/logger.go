@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/core/stack"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -68,7 +69,7 @@ func NewLogger(opts ...Option) *defaultLogger {
 	l.opts = o
 	l.pool = &sync.Pool{New: func() any { return &Entity{} }}
 
-	switch v := l.opts.outTerminals.(type) {
+	switch v := l.opts.terminals.(type) {
 	case []Terminal:
 		for _, name := range v {
 			if syncer, ok := syncers[string(name)]; ok {
@@ -92,12 +93,6 @@ func NewLogger(opts ...Option) *defaultLogger {
 				l.terminals = append(l.terminals, t)
 			}
 		}
-	}
-
-	if loc, err := time.LoadLocation(l.opts.timeZone); err != nil {
-		l.loc = time.Local
-	} else {
-		l.loc = loc
 	}
 
 	return l
@@ -194,7 +189,7 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 		return
 	}
 
-	if level.Priority() < l.opts.outLevel.Priority() {
+	if level.Priority() < l.opts.level.Priority() {
 		return
 	}
 
@@ -216,6 +211,7 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 	}
 }
 
+// 释放实体
 func (l *defaultLogger) releaseEntity(e *Entity) {
 	e.Level = LevelNone
 	e.Time = ""
@@ -233,7 +229,7 @@ func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Enti
 	e.Time = l.makeTime()
 	e.Message = l.makeMessage(a...)
 
-	if isOutStack && l.opts.outStackLevel != "" && l.opts.outStackLevel != LevelNone && level.Priority() >= l.opts.outStackLevel.Priority() {
+	if isOutStack && l.opts.stackLevel != "" && l.opts.stackLevel != LevelNone && level.Priority() >= l.opts.stackLevel.Priority() {
 		e.Caller, e.Frames = l.makeStack(stack.Full)
 	} else {
 		e.Caller, e.Frames = l.makeStack(stack.First)
@@ -244,7 +240,7 @@ func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Enti
 
 // 构建时间
 func (l *defaultLogger) makeTime() string {
-	return l.now().Format(l.opts.timeFormat)
+	return xtime.Now().Format(l.opts.timeFormat)
 }
 
 // 构建日志消息
@@ -258,7 +254,7 @@ func (l *defaultLogger) makeMessage(a ...any) string {
 
 // 构建堆栈信息
 func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
-	st := stack.Callers(3+l.opts.outCallerDepth, depth)
+	st := stack.Callers(3+l.opts.callerDepth, depth)
 	defer st.Free()
 
 	var (
@@ -270,7 +266,7 @@ func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 		file := frames[0].File
 		line := frames[0].Line
 
-		if !l.opts.outCallerFullPath {
+		if !l.opts.callerFullPath {
 			_, file = filepath.Split(file)
 		}
 
@@ -282,9 +278,4 @@ func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 	} else {
 		return caller, frames
 	}
-}
-
-// 获取当前时间
-func (l *defaultLogger) now() time.Time {
-	return time.Now().In(l.loc)
 }
