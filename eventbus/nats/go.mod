@@ -18,12 +18,9 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
-	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible // indirect
-	github.com/lestrrat-go/strftime v1.0.6 // indirect
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/panjf2000/ants/v2 v2.11.3 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect

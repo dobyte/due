@@ -41,8 +41,6 @@ require (
 	github.com/kavu/go_reuseport v1.5.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/klauspost/reedsolomon v1.12.4 // indirect
-	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible // indirect
-	github.com/lestrrat-go/strftime v1.0.6 // indirect
 	github.com/libp2p/go-sockaddr v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
