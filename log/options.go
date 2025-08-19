@@ -4,6 +4,8 @@ import (
 	"reflect"
 
 	"github.com/dobyte/due/v2/etc"
+	"github.com/dobyte/due/v2/log/console"
+	"github.com/dobyte/due/v2/log/file"
 )
 
 const (
@@ -23,22 +25,27 @@ const (
 	defaultTimeFormatKey     = "etc.log.timeFormat"
 )
 
-var defaultTerminals = []Terminal{TerminalConsole, TerminalFile}
+var (
+	defaultSyncers   = []Syncer{console.NewSyncer(), file.NewSyncer()}
+	defaultTerminals = []Terminal{TerminalConsole, TerminalFile}
+)
 
 type Option func(o *options)
 
 type options struct {
-	level          Level  // 输出级别
-	terminals      any    // 输出终端
-	stackLevel     Level  // 输出栈的日志级别
-	callerDepth    int    // 输出栈的深度
-	callerFullPath bool   // 输出栈的调用文件全路径
-	timeFormat     string // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	level          Level    // 输出级别
+	terminals      any      // 输出终端
+	stackLevel     Level    // 输出栈的日志级别
+	callerDepth    int      // 输出栈的深度
+	callerFullPath bool     // 输出栈的调用文件全路径
+	timeFormat     string   // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	syncers        []Syncer // 日志同步器
 }
 
 func defaultOptions() *options {
 	opts := &options{
 		level:          Level(etc.Get(defaultLevelKey, defaultLevel).String()),
+		syncers:        defaultSyncers,
 		terminals:      defaultTerminals,
 		stackLevel:     Level(etc.Get(defaultStackLevelKey, defaultStackLevel).String()),
 		callerDepth:    etc.Get(defaultCallerDepthKey, defaultCallerDepth).Int(),
@@ -73,6 +80,11 @@ func defaultOptions() *options {
 // WithLevel 设置日志的输出级别
 func WithLevel(level Level) Option {
 	return func(o *options) { o.level = level }
+}
+
+// WithSyncers 设置日志同步器
+func WithSyncers(syncers ...Syncer) Option {
+	return func(o *options) { o.syncers = syncers }
 }
 
 // WithTerminals 设置日志的输出终端

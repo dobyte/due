@@ -7,6 +7,8 @@ import (
 	"github.com/dobyte/due/v2/log/internal"
 )
 
+const Name = "console"
+
 type Syncer struct {
 	opts      *options
 	writer    io.WriteCloser
@@ -21,6 +23,12 @@ func NewSyncer(opts ...Option) *Syncer {
 
 	s := &Syncer{}
 	s.opts = o
+	s.init()
+
+	return s
+}
+
+func (s *Syncer) init() {
 	s.writer = os.Stdout
 
 	if s.opts.format == FormatJson {
@@ -28,13 +36,11 @@ func NewSyncer(opts ...Option) *Syncer {
 	} else {
 		s.formatter = internal.NewTextFormatter(true)
 	}
-
-	return s
 }
 
 // Name 同步器名称
 func (s *Syncer) Name() string {
-	return "console"
+	return Name
 }
 
 // Write 写入日志

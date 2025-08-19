@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/dobyte/due/v2/core/stack"
 	"github.com/dobyte/due/v2/utils/xtime"
@@ -55,7 +54,6 @@ type terminal struct {
 type defaultLogger struct {
 	opts      *options
 	pool      *sync.Pool
-	loc       *time.Location
 	terminals []*terminal
 }
 
@@ -68,6 +66,11 @@ func NewLogger(opts ...Option) *defaultLogger {
 	l := &defaultLogger{}
 	l.opts = o
 	l.pool = &sync.Pool{New: func() any { return &Entity{} }}
+
+	syncers := make(map[string]Syncer, len(l.opts.syncers))
+	for _, syncer := range l.opts.syncers {
+		syncers[syncer.Name()] = syncer
+	}
 
 	switch v := l.opts.terminals.(type) {
 	case []Terminal:

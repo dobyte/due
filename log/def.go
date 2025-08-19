@@ -15,6 +15,7 @@ const (
 type (
 	Level  = internal.Level
 	Entity = internal.Entity
+	Syncer = internal.Syncer
 )
 
 const (
