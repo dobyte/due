@@ -84,7 +84,13 @@ func WithLevel(level Level) Option {
 
 // WithSyncers 设置日志同步器
 func WithSyncers(syncers ...Syncer) Option {
-	return func(o *options) { o.syncers = syncers }
+	return func(o *options) {
+		for _, syncer := range syncers {
+			_ = syncer.Close()
+		}
+
+		o.syncers = syncers
+	}
 }
 
 // WithTerminals 设置日志的输出终端
