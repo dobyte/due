@@ -17,16 +17,17 @@ const (
 )
 
 type Actor struct {
-	opts      *actorOptions                  // 配置项
-	scheduler *Scheduler                     // 调度器
-	state     atomic.Int32                   // 状态
-	routes    map[int32]RouteHandler         // 路由处理器
-	events    map[cluster.Event]EventHandler // 事件处理器
-	processor Processor                      // 处理器
-	rw        sync.RWMutex                   // 锁
-	mailbox   chan Context                   // 邮箱
-	fnChan    chan func()                    // 调用函数
-	binds     sync.Map                       // 绑定的用户
+	opts           *actorOptions                  // 配置项
+	scheduler      *Scheduler                     // 调度器
+	state          atomic.Int32                   // 状态
+	routes         map[int32]RouteHandler         // 路由处理器
+	defaultHandler RouteHandler                   // 默认处理器
+	events         map[cluster.Event]EventHandler // 事件处理器
+	processor      Processor                      // 处理器
+	rw             sync.RWMutex                   // 锁
+	mailbox        chan Context                   // 邮箱
+	fnChan         chan func()                    // 调用函数
+	binds          sync.Map                       // 绑定的用户
 }
 
 // ID 获取Actor的ID
@@ -125,6 +126,10 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	default:
 		// ignore
 	}
+}
+
+func (a *Actor) SetDefaultHandler(handler RouteHandler) {
+	a.defaultHandler = handler
 }
 
 // AddEventHandler 添加事件处理器
@@ -265,6 +270,10 @@ func (a *Actor) dispatch() {
 			} else {
 				if handler, ok := a.routes[ctx.Route()]; ok {
 					xcall.Call(func() { handler(ctx) })
+
+					ctx.compareVersionExecDefer(version)
+				} else if a.defaultHandler != nil {
+					xcall.Call(func() { a.defaultHandler(ctx) })
 
 					ctx.compareVersionExecDefer(version)
 				}
