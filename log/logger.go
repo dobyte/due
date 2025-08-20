@@ -207,17 +207,21 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 
 		if entity == nil {
 			entity = l.makeEntity(level, isOutStack, a...)
-			defer l.releaseEntity(entity)
 		}
 
 		t.syncer.Write(entity)
+	}
+
+	if entity != nil {
+		l.releaseEntity(entity)
 	}
 }
 
 // 释放实体
 func (l *defaultLogger) releaseEntity(e *Entity) {
-	e.Level = LevelNone
+	e.Now = nil
 	e.Time = ""
+	e.Level = LevelNone
 	e.Message = ""
 	e.Caller = ""
 	e.Frames = nil
@@ -227,9 +231,12 @@ func (l *defaultLogger) releaseEntity(e *Entity) {
 
 // 构建实体信息
 func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Entity {
+	now := xtime.Now()
+
 	e := l.pool.Get().(*Entity)
+	e.Now = &now
+	e.Time = e.Now.Format(l.opts.timeFormat)
 	e.Level = level
-	e.Time = l.makeTime()
 	e.Message = l.makeMessage(a...)
 
 	if isOutStack && l.opts.stackLevel != "" && l.opts.stackLevel != LevelNone && level.Priority() >= l.opts.stackLevel.Priority() {
@@ -241,18 +248,19 @@ func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Enti
 	return e
 }
 
-// 构建时间
-func (l *defaultLogger) makeTime() string {
-	return xtime.Now().Format(l.opts.timeFormat)
-}
-
 // 构建日志消息
-func (l *defaultLogger) makeMessage(a ...any) string {
-	if c := len(a); c > 0 {
-		return strings.TrimSuffix(fmt.Sprintf(strings.TrimSuffix(strings.Repeat("%v ", c), " "), a...), "\n")
-	} else {
-		return ""
+func (l *defaultLogger) makeMessage(a ...any) (message string) {
+	for i, v := range a {
+		if i == len(a)-1 {
+			message += fmt.Sprintf("%v", v)
+		} else {
+			message += fmt.Sprintf("%v ", v)
+		}
 	}
+
+	message = strings.TrimSuffix(message, "\n")
+
+	return
 }
 
 // 构建堆栈信息

@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -23,12 +22,10 @@ func (f *TextFormatter) Format(entity *Entity) Buffer {
 	b := f.pool.Get().(*buffer)
 	b.pool = f.pool
 
-	level := strings.ToUpper(string(entity.Level[:4]))
-
 	if f.console {
-		b.WriteString("\x1b[" + strconv.Itoa(entity.Level.Color()) + "m" + level + "\x1b[0m[" + entity.Time + "]")
+		b.WriteString("\x1b[" + entity.Level.Color() + "m" + entity.Level.Label() + "\x1b[0m[" + entity.Time + "]")
 	} else {
-		b.WriteString(level + "[" + entity.Time + "]")
+		b.WriteString(entity.Level.Label() + "[" + entity.Time + "]")
 	}
 
 	if entity.Caller != "" {

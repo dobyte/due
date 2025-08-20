@@ -1,10 +1,10 @@
 package internal
 
 const (
-	red    = 31
-	yellow = 33
-	blue   = 36
-	gray   = 37
+	red    = "31"
+	yellow = "33"
+	blue   = "36"
+	gray   = "37"
 )
 
 // Level 日志级别
@@ -41,7 +41,7 @@ func (l Level) Priority() int {
 }
 
 // Color 获取日志级别颜色
-func (l Level) Color() int {
+func (l Level) Color() string {
 	switch l {
 	case LevelDebug:
 		return gray
@@ -51,5 +51,24 @@ func (l Level) Color() int {
 		return red
 	default:
 		return blue
+	}
+}
+
+func (l Level) Label() string {
+	switch l {
+	case LevelDebug:
+		return "DEBU"
+	case LevelInfo:
+		return "INFO"
+	case LevelWarn:
+		return "WARN"
+	case LevelError:
+		return "ERRO"
+	case LevelFatal:
+		return "FATA"
+	case LevelPanic:
+		return "PANI"
+	default:
+		return "NONE"
 	}
 }

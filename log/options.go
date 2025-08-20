@@ -27,7 +27,7 @@ const (
 
 var (
 	defaultSyncers   = []Syncer{console.NewSyncer(), file.NewSyncer()}
-	defaultTerminals = []Terminal{TerminalConsole, TerminalFile}
+	defaultTerminals = []Terminal{TerminalFile}
 )
 
 type Option func(o *options)
@@ -85,7 +85,7 @@ func WithLevel(level Level) Option {
 // WithSyncers 设置日志同步器
 func WithSyncers(syncers ...Syncer) Option {
 	return func(o *options) {
-		for _, syncer := range syncers {
+		for _, syncer := range o.syncers {
 			_ = syncer.Close()
 		}
 
