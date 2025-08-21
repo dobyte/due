@@ -38,11 +38,11 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		path:     etc.Get(defaultPathKey, defaultPath).String(),
+		format:   Format(etc.Get(defaultFormatKey, defaultFormat).String()),
 		maxAge:   etc.Get(defaultMaxAgeKey, defaultMaxAge).Duration(),
 		maxSize:  int64(etc.Get(defaultMaxSizeKey, defaultMaxSize).B()),
 		rotate:   Rotate(etc.Get(defaultRotateKey, defaultRotate).String()),
 		compress: etc.Get(defaultCompressKey, defaultCompress).Bool(),
-		format:   Format(etc.Get(defaultFormatKey, defaultFormat).String()),
 	}
 }
 

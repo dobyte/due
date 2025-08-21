@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/core/stack"
+	"github.com/dobyte/due/v2/log/console"
+	"github.com/dobyte/due/v2/log/file"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/errgroup"
 )
@@ -75,15 +77,63 @@ func NewLogger(opts ...Option) *defaultLogger {
 	switch v := l.opts.terminals.(type) {
 	case []Terminal:
 		for _, name := range v {
-			if syncer, ok := syncers[string(name)]; ok {
+			syncer, ok := syncers[string(name)]
+			if !ok {
+				switch name {
+				case TerminalConsole:
+					syncer = console.NewSyncer()
+				case TerminalFile:
+					syncer = file.NewSyncer()
+				}
+			}
+
+			if syncer == nil {
+				continue
+			}
+
+			l.terminals = append(l.terminals, &terminal{
+				syncer: syncer,
+			})
+		}
+	case [][]Terminal:
+		if len(v) > 0 {
+			for _, name := range v[0] {
+				syncer, ok := syncers[string(name)]
+				if !ok {
+					switch name {
+					case TerminalConsole:
+						syncer = console.NewSyncer()
+					case TerminalFile:
+						syncer = file.NewSyncer()
+					}
+				}
+
+				if syncer == nil {
+					continue
+				}
+
 				l.terminals = append(l.terminals, &terminal{
 					syncer: syncer,
 				})
 			}
 		}
-	case map[Terminal][]Level:
-		for name, levels := range v {
-			if syncer, ok := syncers[string(name)]; ok {
+	case []map[Terminal][]Level:
+		if len(v) > 0 {
+			for name, levels := range v[0] {
+				syncer, ok := syncers[string(name)]
+				if !ok {
+					switch name {
+					case TerminalConsole:
+						syncer = console.NewSyncer()
+					case TerminalFile:
+						syncer = file.NewSyncer()
+					}
+				}
+
+				if syncer == nil {
+					continue
+				}
+
 				t := &terminal{
 					syncer: syncer,
 					levels: make(map[Level]bool, len(levels)),
@@ -265,7 +315,7 @@ func (l *defaultLogger) makeMessage(a ...any) (message string) {
 
 // 构建堆栈信息
 func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
-	st := stack.Callers(3+l.opts.callerDepth, depth)
+	st := stack.Callers(3+l.opts.callDepth, depth)
 	defer st.Free()
 
 	var (
@@ -277,7 +327,7 @@ func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 		file := frames[0].File
 		line := frames[0].Line
 
-		if !l.opts.callerFullPath {
+		if !l.opts.callFullPath {
 			_, file = filepath.Split(file)
 		}
 
