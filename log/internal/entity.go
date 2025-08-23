@@ -6,7 +6,7 @@ import (
 )
 
 type Entity struct {
-	Now      *time.Time
+	Now      time.Time
 	Time     string
 	Datetime string
 	Level    Level

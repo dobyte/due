@@ -53,7 +53,7 @@ var (
 	ErrUnregisterRoute         = New("unregistered route")
 	ErrNotBindActor            = New("not bind actor")
 	ErrNotFoundActor           = New("not found actor")
-	ErrWriterClosing           = New("writer is closing")
+	ErrSyncerClosed            = New("syncer is closed")
 	ErrDeadlineExceeded        = New("deadline exceeded")
 	ErrMissingResolver         = New("missing resolver")
 	ErrServiceRegisterFailed   = New("service register failed")

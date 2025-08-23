@@ -269,7 +269,6 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 
 // 释放实体
 func (l *defaultLogger) releaseEntity(e *Entity) {
-	e.Now = nil
 	e.Time = ""
 	e.Level = LevelNone
 	e.Message = ""
@@ -281,10 +280,8 @@ func (l *defaultLogger) releaseEntity(e *Entity) {
 
 // 构建实体信息
 func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Entity {
-	now := xtime.Now()
-
 	e := l.pool.Get().(*Entity)
-	e.Now = &now
+	e.Now = xtime.Now()
 	e.Time = e.Now.Format(l.opts.timeFormat)
 	e.Level = level
 	e.Message = l.makeMessage(a...)
@@ -315,7 +312,7 @@ func (l *defaultLogger) makeMessage(a ...any) (message string) {
 
 // 构建堆栈信息
 func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
-	st := stack.Callers(3+l.opts.callDepth, depth)
+	st := stack.Callers(3+l.opts.callSkip, depth)
 	defer st.Free()
 
 	var (

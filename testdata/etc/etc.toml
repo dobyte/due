@@ -207,12 +207,12 @@ shutdownMaxWaitTime = "0s"
     level = "info"
     # 堆栈的最低输出级别，可选：debug | info | warn | error | fatal | panic
     stackLevel = "error"
-    # 输出栈的深度
-    callDepth = 0
-    # 是否启用调用文件全路径
-    callFullPath = true
     # 时间格式，标准库时间格式
     timeFormat = "2006/01/02 15:04:05.000000"
+    # 输出栈的跳过深度
+    callSkip = 2
+    # 是否启用调用文件全路径
+    callFullPath = true
     # 控制台同步器配置
     [log.console]
         # 日志输出格式，可选：text | json

@@ -3,6 +3,8 @@ package internal
 import (
 	"bytes"
 	"sync"
+
+	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 type Buffer interface {
@@ -34,5 +36,5 @@ func (b *buffer) WriteByte(c byte) error {
 }
 
 func (b *buffer) WriteString(s string) (n int, err error) {
-	return b.bufer.WriteString(s)
+	return b.bufer.Write(xconv.StringToBytes(s))
 }

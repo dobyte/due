@@ -36,7 +36,7 @@ type Syncer struct {
 	file        *os.File
 	writer      *bufio.Writer
 	acc         atomic.Int64
-	chEntry     chan *entry
+	chEntry     chan entry
 	closing     atomic.Bool
 	flushing    bool
 	compressing bool
@@ -45,7 +45,7 @@ type Syncer struct {
 }
 
 type entry struct {
-	now *time.Time
+	now time.Time
 	buf internal.Buffer
 }
 
@@ -74,7 +74,7 @@ func (s *Syncer) init() {
 
 	s.fileDir = path
 	s.gzipExt = gzipExt
-	s.chEntry = make(chan *entry, 4096)
+	s.chEntry = make(chan entry, 4096)
 
 	if s.opts.format == FormatJson {
 		s.formatter = internal.NewJsonFormatter()
@@ -114,10 +114,10 @@ func (s *Syncer) Name() string {
 // Write 写入日志
 func (s *Syncer) Write(entity *internal.Entity) error {
 	if s.closing.Load() {
-		return errors.ErrWriterClosing
+		return errors.ErrSyncerClosed
 	}
 
-	entry := &entry{
+	e := entry{
 		buf: s.formatter.Format(entity),
 		now: entity.Now,
 	}
@@ -125,9 +125,13 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 	if s.mu.TryLock() {
 		defer s.mu.Unlock()
 
-		return s.flushToFile(entry)
+		if s.closing.Load() {
+			return errors.ErrSyncerClosed
+		}
+
+		return s.flushToFile(e)
 	} else {
-		s.chEntry <- entry
+		s.chEntry <- e
 		s.acc.Add(1)
 
 		s.tryFlushToFile()
@@ -142,14 +146,12 @@ func (s *Syncer) Close() error {
 	defer s.mu.Unlock()
 
 	if !s.closing.CompareAndSwap(false, true) {
-		return errors.ErrWriterClosing
+		return errors.ErrSyncerClosed
 	}
 
 	_ = s.flushToFile()
 
 	s.wg.Wait()
-
-	close(s.chEntry)
 
 	if s.file == nil {
 		return nil
@@ -175,7 +177,7 @@ HEAD:
 }
 
 // 写入将缓冲区数据写入文件
-func (s *Syncer) flushToFile(e ...*entry) error {
+func (s *Syncer) flushToFile(e ...entry) error {
 	acc := s.acc.Load()
 
 	if acc > 0 || len(e) > 0 {
@@ -216,7 +218,19 @@ func (s *Syncer) flushToFile(e ...*entry) error {
 }
 
 // 写入日志
-func (s *Syncer) writeEntry(e *entry, autoFlush bool) error {
+func (s *Syncer) writeEntry(e entry, isAutoFlush bool) error {
+	if s.opts.rotate != RotateNone {
+		if fileTag := s.makeFileTag(e.now); fileTag != s.fileTag {
+			if err := s.writer.Flush(); err != nil {
+				return err
+			}
+
+			if err := s.rotateFile(); err != nil {
+				return err
+			}
+		}
+	}
+
 	if e.buf != nil {
 		size, err := s.writer.Write(e.buf.Bytes())
 		e.buf.Release()
@@ -228,17 +242,15 @@ func (s *Syncer) writeEntry(e *entry, autoFlush bool) error {
 		s.size += int64(size)
 	}
 
-	if autoFlush {
+	if isAutoFlush {
 		if err := s.writer.Flush(); err != nil {
 			return err
 		}
 	}
 
-	if fileTag := s.makeFileTag(*e.now); s.size >= s.opts.maxSize || fileTag != s.fileTag {
-		if !autoFlush {
-			if err := s.writer.Flush(); err != nil {
-				return err
-			}
+	if s.size >= s.opts.maxSize {
+		if err := s.writer.Flush(); err != nil {
+			return err
 		}
 
 		if err := s.rotateFile(); err != nil {
@@ -476,7 +488,8 @@ func (s *Syncer) makeFileTag(t time.Time) string {
 	case RotateMonth:
 		return t.Format("200601")
 	case RotateWeek:
-		return t.Format("20060102")
+		year, week := t.ISOWeek()
+		return fmt.Sprintf("%d%02d", year, week)
 	case RotateDay:
 		return t.Format("20060102")
 	case RotateHour:
