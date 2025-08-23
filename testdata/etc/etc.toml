@@ -227,7 +227,7 @@ shutdownMaxWaitTime = "0s"
         maxAge = "7d"
         # 文件最大尺寸限制，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为100M
         maxSize = "100M"
-        # 文件翻转方式，可选：none | year | month | week | day | hour | minute | second，默认为none
+        # 文件翻转方式，可选：none | year | month | week | day | hour，默认为none
         rotate = "none"
         # 文件翻转时是否对文件进行压缩
         compress = false
