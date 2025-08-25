@@ -9,6 +9,7 @@ package gate
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -145,5 +146,5 @@ func WithDispatch(dispatch cluster.Dispatch) Option {
 
 // WithMetadata 设置元数据
 func WithMetadata(metadata map[string]string) Option {
-	return func(o *options) { o.metadata = metadata }
+	return func(o *options) { maps.Copy(o.metadata, metadata) }
 }
