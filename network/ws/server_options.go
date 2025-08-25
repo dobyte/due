@@ -1,9 +1,10 @@
 package ws
 
 import (
-	"github.com/dobyte/due/v2/etc"
 	"net/http"
 	"time"
+
+	"github.com/dobyte/due/v2/etc"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 	defaultServerHandshakeTimeout   = "10s"
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
+	defaultServerAuthorizeTimeout   = "0s"
 )
 
 const (
@@ -26,6 +28,7 @@ const (
 	defaultServerHandshakeTimeoutKey   = "etc.network.ws.server.handshakeTimeout"
 	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey   = "etc.network.ws.server.authorizeTimeout"
 )
 
 const (
@@ -49,6 +52,7 @@ type serverOptions struct {
 	handshakeTimeout   time.Duration      // 握手超时时间，默认10s
 	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
 }
 
 func defaultServerOptions() *serverOptions {
@@ -78,6 +82,7 @@ func defaultServerOptions() *serverOptions {
 		handshakeTimeout:   etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration(),
 		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
+		authorizeTimeout:   etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(),
 	}
 }
 
@@ -119,4 +124,9 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // WithServerHeartbeatMechanism 设置心跳机制
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+}
+
+// WithServerAuthorizeTimeout 设置授权超时时间
+func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) { o.authorizeTimeout = authorizeTimeout }
 }

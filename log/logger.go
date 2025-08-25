@@ -95,56 +95,32 @@ func NewLogger(opts ...Option) *defaultLogger {
 				syncer: syncer,
 			})
 		}
-	case [][]Terminal:
-		if len(v) > 0 {
-			for _, name := range v[0] {
-				syncer, ok := syncers[string(name)]
-				if !ok {
-					switch name {
-					case TerminalConsole:
-						syncer = console.NewSyncer()
-					case TerminalFile:
-						syncer = file.NewSyncer()
-					}
+	case map[Terminal][]Level:
+		for name, levels := range v {
+			syncer, ok := syncers[string(name)]
+			if !ok {
+				switch name {
+				case TerminalConsole:
+					syncer = console.NewSyncer()
+				case TerminalFile:
+					syncer = file.NewSyncer()
 				}
-
-				if syncer == nil {
-					continue
-				}
-
-				l.terminals = append(l.terminals, &terminal{
-					syncer: syncer,
-				})
 			}
-		}
-	case []map[Terminal][]Level:
-		if len(v) > 0 {
-			for name, levels := range v[0] {
-				syncer, ok := syncers[string(name)]
-				if !ok {
-					switch name {
-					case TerminalConsole:
-						syncer = console.NewSyncer()
-					case TerminalFile:
-						syncer = file.NewSyncer()
-					}
-				}
 
-				if syncer == nil {
-					continue
-				}
-
-				t := &terminal{
-					syncer: syncer,
-					levels: make(map[Level]bool, len(levels)),
-				}
-
-				for _, level := range levels {
-					t.levels[level] = true
-				}
-
-				l.terminals = append(l.terminals, t)
+			if syncer == nil {
+				continue
 			}
+
+			t := &terminal{
+				syncer: syncer,
+				levels: make(map[Level]bool, len(levels)),
+			}
+
+			for _, level := range levels {
+				t.levels[level] = true
+			}
+
+			l.terminals = append(l.terminals, t)
 		}
 	}
 

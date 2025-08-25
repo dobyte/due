@@ -49,7 +49,7 @@ func defaultOptions() *options {
 
 	switch value := etc.Get(defaultTerminalsKey); value.Kind() {
 	case reflect.Slice, reflect.Array:
-		terminals := make([]string, 0)
+		terminals := make([]Terminal, 0)
 
 		if err := value.Scan(&terminals); err != nil || len(terminals) == 0 {
 			opts.terminals = defaultTerminals
@@ -57,7 +57,7 @@ func defaultOptions() *options {
 			opts.terminals = terminals
 		}
 	case reflect.Map:
-		terminals := make(map[string][]Level)
+		terminals := make(map[Terminal][]Level)
 
 		if err := value.Scan(&terminals); err != nil || len(terminals) == 0 {
 			opts.terminals = defaultTerminals
@@ -83,7 +83,20 @@ func WithSyncers(syncers ...Syncer) Option {
 
 // WithTerminals 设置日志的输出终端
 func WithTerminals[T Terminal | []Terminal | map[Terminal][]Level](terminals ...T) Option {
-	return func(o *options) { o.terminals = terminals }
+	return func(o *options) {
+		switch v := any(terminals).(type) {
+		case []Terminal:
+			o.terminals = v
+		case [][]Terminal:
+			if len(v) > 0 {
+				o.terminals = v[0]
+			}
+		case []map[Terminal][]Level:
+			if len(v) > 0 {
+				o.terminals = v[0]
+			}
+		}
+	}
 }
 
 // WithStackLevel 设置日志的输出栈的日志级别

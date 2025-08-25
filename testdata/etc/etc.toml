@@ -213,6 +213,18 @@ shutdownMaxWaitTime = "0s"
     callSkip = 2
     # 是否启用调用文件全路径
     callFullPath = true
+    # 日志输出终端（数组和对象两种配置形式任选其一）
+    terminals = ["console", "file"]
+    # 日志输出终端（数组和对象两种配置形式任选其一）
+    [log.terminals]
+        # 控制台 -> 日志级别
+        console = ["debug", "info", "warn", "error", "fatal", "panic"]
+        # 文件 -> 日志级别
+        file = ["debug", "info", "warn", "error", "fatal", "panic"]
+        # 阿里云日志 -> 日志级别
+        aliyun = ["debug", "info", "warn", "error", "fatal", "panic"]
+        # 腾讯云日志 -> 日志级别
+        tencent = ["debug", "info", "warn", "error", "fatal", "panic"]
     # 控制台同步器配置
     [log.console]
         # 日志输出格式，可选：text | json
@@ -408,6 +420,8 @@ shutdownMaxWaitTime = "0s"
             heartbeatInterval = "10s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
             heartbeatMechanism = "resp"
+            # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
+            authorizeTimeout = "0s"
         # ws网络客户端
         [network.ws.client]
             # 拨号地址
@@ -428,6 +442,8 @@ shutdownMaxWaitTime = "0s"
             heartbeatInterval = "10s"
             # 心跳机制，默认resp
             heartbeatMechanism = "resp"
+            # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
+            authorizeTimeout = "0s"
         # tcp网络客户端
         [network.tcp.client]
             # 拨号地址
@@ -468,6 +484,20 @@ shutdownMaxWaitTime = "0s"
         password = ""
         # 最大重试次数
         maxRetries = 3
+        # key前缀，默认为cache
+        prefix = "cache"
+        # 空值，默认为cache@nil
+        nilValue = "cache@nil"
+        # 空值过期时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+        nilExpiration = "10s"
+        # 最小过期时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1h
+        minExpiration = "1h"
+        # 最大过期时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为24h
+        maxExpiration = "24h"
+    # memcache缓存模块
+    [cache.memcache]
+        # 客户端连接地址
+        addrs = ["127.0.0.1:11211"]
         # key前缀，默认为cache
         prefix = "cache"
         # 空值，默认为cache@nil

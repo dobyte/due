@@ -1,8 +1,9 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/v2/etc"
 	"time"
+
+	"github.com/dobyte/due/v2/etc"
 )
 
 const (
@@ -10,6 +11,7 @@ const (
 	defaultServerMaxConnNum         = 5000
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
+	defaultServerAuthorizeTimeout   = "0s"
 )
 
 const (
@@ -17,6 +19,7 @@ const (
 	defaultServerMaxConnNumKey         = "etc.network.tcp.server.maxConnNum"
 	defaultServerHeartbeatIntervalKey  = "etc.network.tcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.tcp.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey   = "etc.network.tcp.server.authorizeTimeout"
 )
 
 const (
@@ -33,6 +36,7 @@ type serverOptions struct {
 	maxConnNum         int                // 最大连接数，默认5000
 	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
 }
 
 func defaultServerOptions() *serverOptions {
@@ -41,6 +45,7 @@ func defaultServerOptions() *serverOptions {
 		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
 		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
+		authorizeTimeout:   etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(),
 	}
 }
 
@@ -62,4 +67,9 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // WithServerHeartbeatMechanism 设置心跳机制
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+}
+
+// WithServerAuthorizeTimeout 设置授权超时时间
+func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) { o.authorizeTimeout = authorizeTimeout }
 }

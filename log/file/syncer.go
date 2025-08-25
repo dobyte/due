@@ -3,6 +3,7 @@ package file
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,8 @@ const gzipExt = ".gz"
 
 type Syncer struct {
 	opts        *options
+	ctx         context.Context
+	cancel      context.CancelFunc
 	fileDir     string
 	fileName    string
 	fileExt     string
@@ -39,7 +42,6 @@ type Syncer struct {
 	chEntry     chan entry
 	closing     atomic.Bool
 	flushing    bool
-	compressing bool
 	wg          sync.WaitGroup
 	formatter   internal.Formatter
 }
@@ -75,6 +77,7 @@ func (s *Syncer) init() {
 	s.fileDir = path
 	s.gzipExt = gzipExt
 	s.chEntry = make(chan entry, 4096)
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	if s.opts.format == FormatJson {
 		s.formatter = internal.NewJsonFormatter()
@@ -82,9 +85,9 @@ func (s *Syncer) init() {
 		s.formatter = internal.NewTextFormatter()
 	}
 
-	// defer func() {
-	// 	go s.tickRotateFile()
-	// }()
+	defer func() {
+		go s.tickRotateFile()
+	}()
 
 	if err := s.parseFileMark(); err != nil {
 		return
@@ -117,11 +120,14 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 		return errors.ErrSyncerClosed
 	}
 
-	e := entry{
+	return s.doWrite(entry{
 		buf: s.formatter.Format(entity),
 		now: entity.Now,
-	}
+	})
+}
 
+// 执行写入日志操作
+func (s *Syncer) doWrite(e entry) error {
 	if s.mu.TryLock() {
 		defer s.mu.Unlock()
 
@@ -148,6 +154,8 @@ func (s *Syncer) Close() error {
 	if !s.closing.CompareAndSwap(false, true) {
 		return errors.ErrSyncerClosed
 	}
+
+	s.cancel()
 
 	_ = s.flushToFile()
 
@@ -263,14 +271,25 @@ func (s *Syncer) writeEntry(e entry, isAutoFlush bool) error {
 
 // 定时翻滚文件
 func (s *Syncer) tickRotateFile() {
+	if s.opts.rotate == RotateNone {
+		return
+	}
+
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
-		<-ticker.C
+		select {
+		case now, ok := <-ticker.C:
+			if !ok {
+				return
+			}
 
-		if fileTag := s.makeFileTag(xtime.Now()); fileTag != s.fileTag {
-			_ = s.rotateFile()
+			if s.makeFileTag(now) != s.fileTag {
+				s.doWrite(entry{now: now})
+			}
+		case <-s.ctx.Done():
+			return
 		}
 	}
 }
@@ -494,6 +513,8 @@ func (s *Syncer) makeFileTag(t time.Time) string {
 		return t.Format("20060102")
 	case RotateHour:
 		return t.Format("2006010215")
+	case RotateMinute:
+		return t.Format("200601021504")
 	default:
 		return ""
 	}

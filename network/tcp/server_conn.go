@@ -27,6 +27,7 @@ type serverConn struct {
 	done              chan struct{}  // 写入完成信号
 	close             chan struct{}  // 关闭信号
 	lastHeartbeatTime int64          // 上次心跳时间
+	authorizeTimer    atomic.Value   // 授权定时器
 }
 
 var _ network.Conn = &serverConn{}
@@ -49,11 +50,15 @@ func (c *serverConn) Attr() network.Attr {
 // Bind 绑定用户ID
 func (c *serverConn) Bind(uid int64) {
 	atomic.StoreInt64(&c.uid, uid)
+
+	c.uncheckAuthorize()
 }
 
 // Unbind 解绑用户ID
 func (c *serverConn) Unbind() {
 	atomic.StoreInt64(&c.uid, 0)
+
+	c.checkAuthorize()
 }
 
 // Send 发送消息（同步）
@@ -168,6 +173,30 @@ func (c *serverConn) checkState() error {
 	}
 }
 
+// 授权检查
+func (c *serverConn) checkAuthorize() {
+	if c.connMgr.server.opts.authorizeTimeout > 0 {
+		if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
+			if c.UID() != 0 {
+				return
+			}
+
+			c.forceClose(true)
+		})); timer != nil {
+			timer.(*time.Timer).Stop()
+		}
+	}
+}
+
+// 取消授权检查
+func (c *serverConn) uncheckAuthorize() {
+	if c.connMgr.server.opts.authorizeTimeout > 0 {
+		if timer := c.authorizeTimer.Swap((*time.Timer)(nil)); timer != nil {
+			timer.(*time.Timer).Stop()
+		}
+	}
+}
+
 // 初始化连接
 func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.id = id
@@ -184,6 +213,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	xcall.Go(c.read)
 
 	xcall.Go(c.write)
+
+	c.checkAuthorize()
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
