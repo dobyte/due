@@ -1,10 +1,12 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/network"
+	"crypto/tls"
 	"net"
 	"time"
+
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
 )
 
 type server struct {
@@ -105,12 +107,22 @@ func (s *server) init() error {
 		return err
 	}
 
-	ln, err := net.ListenTCP(addr.Network(), addr)
-	if err != nil {
-		return err
-	}
+	if s.opts.certFile != "" && s.opts.keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(s.opts.certFile, s.opts.keyFile)
+		if err != nil {
+			return err
+		}
 
-	s.listener = ln
+		if s.listener, err = tls.Listen(addr.Network(), addr.String(), &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}); err != nil {
+			return err
+		}
+	} else {
+		if s.listener, err = net.ListenTCP(addr.Network(), addr); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

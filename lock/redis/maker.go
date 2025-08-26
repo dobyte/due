@@ -2,16 +2,19 @@ package redis
 
 import (
 	"context"
+	"time"
+
+	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"github.com/go-redis/redis/v8"
-	"time"
 )
 
 type Maker struct {
 	opts          *options
+	err           error
 	builtin       bool
 	releaseScript *redis.Script
 	renewalScript *redis.Script
@@ -33,14 +36,23 @@ func NewMaker(opts ...Option) *Maker {
 	m.renewalScript = redis.NewScript(renewalScript)
 
 	if o.client == nil {
-		m.builtin = true
-		o.client = redis.NewUniversalClient(&redis.UniversalOptions{
+		options := &redis.UniversalOptions{
 			Addrs:      o.addrs,
 			DB:         o.db,
 			Username:   o.username,
 			Password:   o.password,
 			MaxRetries: o.maxRetries,
-		})
+		}
+
+		if o.certFile != "" && o.keyFile != "" && o.caFile != "" {
+			if options.TLSConfig, m.err = tls.MakeRedisTLSConfig(o.certFile, o.keyFile, o.caFile); m.err != nil {
+				return m
+			}
+		}
+
+		m.builtin = true
+		o.client = redis.NewUniversalClient(options)
+
 	}
 
 	return m

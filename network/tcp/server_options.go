@@ -16,6 +16,8 @@ const (
 
 const (
 	defaultServerAddrKey               = "etc.network.tcp.server.addr"
+	defaultServerCertFileKey           = "etc.network.tcp.server.certFile"
+	defaultServerKeyFileKey            = "etc.network.tcp.server.keyFile"
 	defaultServerMaxConnNumKey         = "etc.network.tcp.server.maxConnNum"
 	defaultServerHeartbeatIntervalKey  = "etc.network.tcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.tcp.server.heartbeatMechanism"
@@ -33,6 +35,8 @@ type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
 	addr               string             // 监听地址，默认0.0.0.0:3553
+	certFile           string             // 证书文件
+	keyFile            string             // 秘钥文件
 	maxConnNum         int                // 最大连接数，默认5000
 	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
@@ -42,6 +46,8 @@ type serverOptions struct {
 func defaultServerOptions() *serverOptions {
 	return &serverOptions{
 		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
+		certFile:           etc.Get(defaultServerCertFileKey).String(),
+		keyFile:            etc.Get(defaultServerKeyFileKey).String(),
 		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
 		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
@@ -52,6 +58,16 @@ func defaultServerOptions() *serverOptions {
 // WithServerListenAddr 设置监听地址
 func WithServerListenAddr(addr string) ServerOption {
 	return func(o *serverOptions) { o.addr = addr }
+}
+
+// WithServerCertFile 设置证书文件
+func WithServerCertFile(certFile string) ServerOption {
+	return func(o *serverOptions) { o.certFile = certFile }
+}
+
+// WithServerKeyFile 设置秘钥文件
+func WithServerKeyFile(keyFile string) ServerOption {
+	return func(o *serverOptions) { o.keyFile = keyFile }
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数

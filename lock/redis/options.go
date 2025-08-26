@@ -24,6 +24,9 @@ const (
 	defaultPrefixKey            = "etc.lock.redis.prefix"
 	defaultUsernameKey          = "etc.lock.redis.username"
 	defaultPasswordKey          = "etc.lock.redis.password"
+	defaultCertFileKey          = "etc.lock.redis.certFile"
+	defaultKeyFileKey           = "etc.lock.redis.keyFile"
+	defaultCaFileKey            = "etc.lock.redis.caFile"
 	defaultExpirationKey        = "etc.lock.redis.expiration"
 	defaultAcquireIntervalKey   = "etc.lock.redis.acquireInterval"
 	defaultAcquireMaxRetriesKey = "etc.lock.redis.acquireMaxRetries"
@@ -47,6 +50,15 @@ type options struct {
 	// 密码
 	// 内建客户端配置，默认为空
 	password string
+
+	// 客户端证书
+	certFile string
+
+	// 客户端密钥
+	keyFile string
+
+	// CA证书
+	caFile string
 
 	// 最大重试次数
 	// 内建客户端配置，默认为3次
@@ -78,6 +90,9 @@ func defaultOptions() *options {
 		prefix:            etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		username:          etc.Get(defaultUsernameKey).String(),
 		password:          etc.Get(defaultPasswordKey).String(),
+		certFile:          etc.Get(defaultCertFileKey).String(),
+		keyFile:           etc.Get(defaultKeyFileKey).String(),
+		caFile:            etc.Get(defaultCaFileKey).String(),
 		expiration:        etc.Get(defaultExpirationKey, defaultExpiration).Duration(),
 		acquireInterval:   etc.Get(defaultAcquireIntervalKey, defaultAcquireInterval).Duration(),
 		acquireMaxRetries: etc.Get(defaultAcquireMaxRetriesKey, defaultAcquireMaxRetries).Int(),
@@ -102,6 +117,21 @@ func WithUsername(username string) Option {
 // WithPassword 设置密码
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
+}
+
+// WithCertFile 设置客户端证书
+func WithCertFile(certFile string) Option {
+	return func(o *options) { o.certFile = certFile }
+}
+
+// WithKeyFile 设置客户端密钥
+func WithKeyFile(keyFile string) Option {
+	return func(o *options) { o.keyFile = keyFile }
+}
+
+// WithCAFile 设置CA证书
+func WithCAFile(caFile string) Option {
+	return func(o *options) { o.caFile = caFile }
 }
 
 // WithMaxRetries 设置最大重试次数
