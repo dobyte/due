@@ -1,9 +1,14 @@
 package tcp
 
 import (
-	"github.com/dobyte/due/v2/network"
+	"crypto/tls"
+	"crypto/x509"
 	"net"
+	"os"
 	"sync/atomic"
+
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/network"
 )
 
 type client struct {
@@ -27,7 +32,11 @@ func NewClient(opts ...ClientOption) network.Client {
 
 // Dial 拨号连接
 func (c *client) Dial(addr ...string) (network.Conn, error) {
-	var address string
+	var (
+		conn    net.Conn
+		address string
+	)
+
 	if len(addr) > 0 && addr[0] != "" {
 		address = addr[0]
 	} else {
@@ -39,9 +48,27 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout)
-	if err != nil {
-		return nil, err
+	if c.opts.certFile != "" {
+		b, err := os.ReadFile(c.opts.certFile)
+		if err != nil {
+			return nil, err
+		}
+
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(b) {
+			return nil, errors.ErrInvalidCertFile
+		}
+
+		dialer := &net.Dialer{Timeout: c.opts.timeout}
+		config := &tls.Config{ServerName: c.opts.serverName, RootCAs: cp}
+
+		if conn, err = tls.DialWithDialer(dialer, tcpAddr.Network(), tcpAddr.String(), config); err != nil {
+			return nil, err
+		}
+	} else {
+		if conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout); err != nil {
+			return nil, err
+		}
 	}
 
 	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil

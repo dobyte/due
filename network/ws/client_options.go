@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	defaultClientDialUrl           = "ws://127.0.0.1:3553"
+	defaultClientUrl               = "ws://127.0.0.1:3553"
 	defaultClientHandshakeTimeout  = "10s"
 	defaultClientHeartbeatInterval = "10s"
 )
 
 const (
-	defaultClientDialUrlKey           = "etc.network.ws.client.url"
+	defaultClientUrlKey               = "etc.network.ws.client.url"
 	defaultClientHandshakeTimeoutKey  = "etc.network.ws.client.handshakeTimeout"
 	defaultClientHeartbeatIntervalKey = "etc.network.ws.client.heartbeatInterval"
 )
@@ -28,14 +28,14 @@ type clientOptions struct {
 
 func defaultClientOptions() *clientOptions {
 	return &clientOptions{
-		url:               etc.Get(defaultClientDialUrlKey, defaultClientDialUrl).String(),
+		url:               etc.Get(defaultClientUrlKey, defaultClientUrl).String(),
 		handshakeTimeout:  etc.Get(defaultClientHandshakeTimeoutKey, defaultClientHandshakeTimeout).Duration(),
 		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(),
 	}
 }
 
-// WithClientDialUrl 设置拨号链接
-func WithClientDialUrl(url string) ClientOption {
+// WithClientUrl 设置拨号链接
+func WithClientUrl(url string) ClientOption {
 	return func(o *clientOptions) { o.url = url }
 }
 

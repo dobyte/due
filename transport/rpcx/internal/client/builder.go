@@ -3,7 +3,6 @@ package client
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"net/url"
 	"os"
 	"sync"
@@ -48,7 +47,7 @@ func NewBuilder(opts *Options) *Builder {
 		b.RegisterBuilder(discovery.NewBuilder(opts.Discovery))
 	}
 
-	if opts.CertFile != "" && opts.ServerName != "" {
+	if opts.CertFile != "" {
 		b.dialOpts.TLSConfig, b.err = newClientTLSFromFile(opts.CertFile, opts.ServerName)
 	}
 
@@ -63,7 +62,7 @@ func newClientTLSFromFile(certFile string, serverName string) (*tls.Config, erro
 
 	cp := x509.NewCertPool()
 	if !cp.AppendCertsFromPEM(b) {
-		return nil, fmt.Errorf("credentials: failed to append certificates")
+		return nil, errors.ErrInvalidCertFile
 	}
 
 	return &tls.Config{ServerName: serverName, RootCAs: cp}, nil
