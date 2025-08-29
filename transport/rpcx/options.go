@@ -18,7 +18,7 @@ const (
 	defaultServerKeyFileKey    = "etc.transport.rpcx.server.keyFile"
 	defaultServerCertFileKey   = "etc.transport.rpcx.server.certFile"
 	defaultClientPoolSizeKey   = "etc.transport.rpcx.client.poolSize"
-	defaultClientCertFileKey   = "etc.transport.rpcx.client.certFile"
+	defaultClientCAFileKey     = "etc.transport.rpcx.client.caFile"
 	defaultClientServerNameKey = "etc.transport.rpcx.client.serverName"
 )
 
@@ -36,7 +36,7 @@ func defaultOptions() *options {
 	opts.server.KeyFile = etc.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
 	opts.client.PoolSize = etc.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
-	opts.client.CertFile = etc.Get(defaultClientCertFileKey).String()
+	opts.client.CAFile = etc.Get(defaultClientCAFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
 
 	return opts
@@ -54,7 +54,7 @@ func WithServerExpose(expose bool) Option {
 
 // WithServerCredentials 设置服务器证书和秘钥
 func WithServerCredentials(certFile, keyFile string) Option {
-	return func(o *options) { o.server.KeyFile, o.server.CertFile = keyFile, certFile }
+	return func(o *options) { o.server.CertFile, o.server.KeyFile = certFile, keyFile }
 }
 
 // WithClientPoolSize 设置客户端连接池大小
@@ -63,8 +63,8 @@ func WithClientPoolSize(size int) Option {
 }
 
 // WithClientCredentials 设置客户端证书和校验域名
-func WithClientCredentials(certFile string, serverName string) Option {
-	return func(o *options) { o.client.CertFile, o.client.ServerName = certFile, serverName }
+func WithClientCredentials(caFile string, serverName string) Option {
+	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
 }
 
 // WithClientDiscovery 设置客户端服务发现组件

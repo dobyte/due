@@ -60,14 +60,9 @@ func WithServerListenAddr(addr string) ServerOption {
 	return func(o *serverOptions) { o.addr = addr }
 }
 
-// WithServerCertFile 设置证书文件
-func WithServerCertFile(certFile string) ServerOption {
-	return func(o *serverOptions) { o.certFile = certFile }
-}
-
-// WithServerKeyFile 设置秘钥文件
-func WithServerKeyFile(keyFile string) ServerOption {
-	return func(o *serverOptions) { o.keyFile = keyFile }
+// WithServerCredentials 设置服务器证书和秘钥
+func WithServerCredentials(certFile, keyFile string) ServerOption {
+	return func(o *serverOptions) { o.certFile, o.keyFile = certFile, keyFile }
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数

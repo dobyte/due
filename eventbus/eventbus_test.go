@@ -2,10 +2,12 @@ package eventbus_test
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/eventbus"
 	"log"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/eventbus/process"
 )
 
 const (
@@ -13,7 +15,7 @@ const (
 	paidTopic  = "paid"
 )
 
-var eb = eventbus.NewEventbus()
+var eb = process.NewEventbus()
 
 func loginEventHandler(event *eventbus.Event) {
 	log.Printf("%+v\n", event)

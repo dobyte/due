@@ -9,17 +9,15 @@ import (
 )
 
 type Eventbus struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	opts   *options
-
-	err      error
-	err1     error
-	err2     error
-	consumer sarama.Consumer
-	producer sarama.AsyncProducer
-	builtin  bool
-
+	ctx       context.Context
+	cancel    context.CancelFunc
+	opts      *options
+	err       error
+	err1      error
+	err2      error
+	consumer  sarama.Consumer
+	producer  sarama.AsyncProducer
+	builtin   bool
 	rw        sync.RWMutex
 	consumers map[string]*consumer
 }
@@ -41,7 +39,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	} else {
 		eb.builtin = true
 		config := sarama.NewConfig()
-		config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategyRoundRobin}
+		config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 		config.Consumer.Return.Errors = true
 		config.Producer.Partitioner = sarama.NewHashPartitioner
 		config.Producer.RequiredAcks = sarama.WaitForAll
@@ -77,7 +75,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	}
 
 	eb.producer.Input() <- &sarama.ProducerMessage{
-		Topic: topic,
+		Topic: eb.doMakeChannel(topic),
 		Value: sarama.ByteEncoder(buf),
 	}
 
@@ -101,18 +99,20 @@ func (eb *Eventbus) Subscribe(_ context.Context, topic string, handler eventbus.
 		return eb.err1
 	}
 
+	channel := eb.doMakeChannel(topic)
+
 	eb.rw.Lock()
-	c, ok := eb.consumers[topic]
+	c, ok := eb.consumers[channel]
 	if !ok {
 		c = &consumer{handlers: make(map[uintptr][]eventbus.EventHandler)}
 		c.ctx, c.cancel = context.WithCancel(eb.ctx)
-		eb.consumers[topic] = c
+		eb.consumers[channel] = c
 	}
 	c.addHandler(handler)
 	eb.rw.Unlock()
 
 	if !ok {
-		return eb.watch(c, topic)
+		return eb.watch(c, channel)
 	}
 
 	return nil
@@ -128,15 +128,17 @@ func (eb *Eventbus) Unsubscribe(_ context.Context, topic string, handler eventbu
 		return eb.err1
 	}
 
+	channel := eb.doMakeChannel(topic)
+
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
-	if c, ok := eb.consumers[topic]; ok {
-		if c.remHandler(handler) != 0 {
+	if c, ok := eb.consumers[channel]; ok {
+		if c.delHandler(handler) != 0 {
 			return nil
 		}
 		c.cancel()
-		delete(eb.consumers, topic)
+		delete(eb.consumers, channel)
 	}
 
 	return nil
@@ -201,4 +203,12 @@ func (eb *Eventbus) watch(c *consumer, topic string) error {
 	}
 
 	return nil
+}
+
+func (eb *Eventbus) doMakeChannel(topic string) string {
+	if eb.opts.prefix == "" {
+		return topic
+	} else {
+		return eb.opts.prefix + ":" + topic
+	}
 }

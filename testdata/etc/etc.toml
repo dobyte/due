@@ -1,5 +1,5 @@
 # 进程号
-pid = "./run/cluster.pid"
+pid = "./run/due.pid"
 # 开发模式。支持模式：debug、test、release（设置优先级：配置文件 < 环境变量 < 运行参数 < mode.SetMode()）
 mode = "debug"
 # 统一时区设置。项目中的时间获取请使用xtime.Now()
@@ -138,14 +138,14 @@ shutdownMaxWaitTime = "0s"
             addr = ":0"
             # 是否将内部通信地址暴露到公网。默认为false
             expose = false
-            # 秘钥文件
+            # 私钥文件
             keyFile = ""
             # 证书文件
             certFile = ""
         # GRPC客户端相关配置
         [transport.grpc.client]
-            # 证书文件
-            certFile = ""
+            # CA证书文件
+            caFile = ""
             # 证书域名
             serverName = ""
     # RPCX相关配置
@@ -156,14 +156,14 @@ shutdownMaxWaitTime = "0s"
             addr = ":0"
             # 是否将内部通信地址暴露到公网。默认为false
             expose = false
-            # 秘钥文件
+            # 私钥文件
             keyFile = ""
             # 证书文件
             certFile = ""
         # RPCX客户端相关配置
         [transport.rpcx.client]
-            # 证书文件
-            certFile = ""
+            # CA证书文件
+            caFile = ""
             # 证书域名
             serverName = ""
             # 连接池大小，默认为10
@@ -436,6 +436,10 @@ shutdownMaxWaitTime = "0s"
         [network.tcp.server]
             # 服务器监听地址
             addr = ":3553"
+            # 私钥文件
+            keyFile = ""
+            # 证书文件
+            certFile = ""
             # 服务器最大连接数
             maxConnNum = 5000
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -450,6 +454,10 @@ shutdownMaxWaitTime = "0s"
             addr = "127.0.0.1:3553"
             # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
             timeout = "5s"
+            # CA证书文件
+            caFile = ""
+            # 证书域名
+            serverName = ""
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
 
@@ -465,10 +473,16 @@ shutdownMaxWaitTime = "0s"
         username = ""
         # 密码
         password = ""
+        # 私钥文件
+        keyFile = ""
+        # 证书文件
+        certFile = ""
+        # CA证书文件
+        caFile = ""
         # 最大重试次数
         maxRetries = 3
         # key前缀
-        prefix = "due"
+        prefix = "due:locate"
 
 # 缓存模块
 [cache]
@@ -482,10 +496,16 @@ shutdownMaxWaitTime = "0s"
         username = ""
         # 密码
         password = ""
+        # 私钥文件
+        keyFile = ""
+        # 证书文件
+        certFile = ""
+        # CA证书文件
+        caFile = ""
         # 最大重试次数
         maxRetries = 3
         # key前缀，默认为cache
-        prefix = "cache"
+        prefix = "due:cache"
         # 空值，默认为cache@nil
         nilValue = "cache@nil"
         # 空值过期时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -499,7 +519,7 @@ shutdownMaxWaitTime = "0s"
         # 客户端连接地址
         addrs = ["127.0.0.1:11211"]
         # key前缀，默认为cache
-        prefix = "cache"
+        prefix = "due:cache"
         # 空值，默认为cache@nil
         nilValue = "cache@nil"
         # 空值过期时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -516,15 +536,21 @@ shutdownMaxWaitTime = "0s"
         # 客户端连接地址
         addrs = ["127.0.0.1:6379"]
         # 数据库号
-        db = 5
+        db = 0
         # 用户名
         username = ""
         # 密码
         password = ""
+        # 私钥文件
+        keyFile = ""
+        # 证书文件
+        certFile = ""
+        # CA证书文件
+        caFile = ""
         # 最大重试次数
         maxRetries = 3
         # key前缀
-        prefix = "lock"
+        prefix = "due:lock"
         # 锁过期时间（自动续约），支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         expiration = "3s"
         # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为20ms
@@ -536,7 +562,7 @@ shutdownMaxWaitTime = "0s"
         # 客户端连接地址
         addrs = ["127.0.0.1:11211"]
         # key前缀
-        prefix = "lock"
+        prefix = "due:lock"
         # 锁过期时间（自动续约），支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         expiration = "3s"
         # 循环获取锁的频率间隔时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为20ms
@@ -621,6 +647,8 @@ shutdownMaxWaitTime = "0s"
         url = "nats://127.0.0.1:4222"
         # 客户端连接超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为2s
         timeout = "2s"
+        # key前缀
+        prefix = "due:eventbus"
     # redis事件总线模块
     [eventbus.redis]
         # 客户端连接地址
@@ -631,13 +659,21 @@ shutdownMaxWaitTime = "0s"
         username = ""
         # 密码
         password = ""
+        # 私钥文件
+        keyFile = ""
+        # 证书文件
+        certFile = ""
+        # CA证书文件
+        caFile = ""
         # 最大重试次数
         maxRetries = 3
         # key前缀
-        prefix = "due"
+        prefix = "due:eventbus"
     # kafka事件总线模块
     [eventbus.kafka]
         # 客户端连接地址
         addrs = ["127.0.0.1:9092"]
         # Kafka版本，默认为无版本
         version = ""
+        # key前缀
+        prefix = "due:eventbus"

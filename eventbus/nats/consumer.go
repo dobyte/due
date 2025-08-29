@@ -1,12 +1,13 @@
 package nats
 
 import (
+	"reflect"
+	"sync"
+
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/nats-io/nats.go"
-	"reflect"
-	"sync"
 )
 
 type consumer struct {
@@ -32,7 +33,7 @@ func (c *consumer) addHandler(handler eventbus.EventHandler) int {
 }
 
 // 移除处理器
-func (c *consumer) remHandler(handler eventbus.EventHandler) int {
+func (c *consumer) delHandler(handler eventbus.EventHandler) int {
 	pointer := reflect.ValueOf(handler).Pointer()
 
 	c.rw.Lock()

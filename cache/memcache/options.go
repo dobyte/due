@@ -9,7 +9,7 @@ import (
 
 const (
 	defaultAddr          = "127.0.0.1:11211"
-	defaultPrefix        = "cache"
+	defaultPrefix        = "due:cache"
 	defaultNilValue      = "cache@nil"
 	defaultNilExpiration = "10s"
 	defaultMinExpiration = "1h"

@@ -14,7 +14,7 @@ const (
 
 const (
 	defaultClientAddrKey              = "etc.network.tcp.client.addr"
-	defaultClientCertFileKey          = "etc.network.tcp.client.certFile"
+	defaultClientCAFileKey            = "etc.network.tcp.client.caFile"
 	defaultClientServerNameKey        = "etc.network.tcp.client.serverName"
 	defaultClientTimeoutKey           = "etc.network.tcp.client.timeout"
 	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
@@ -24,7 +24,7 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	addr              string        // 地址
-	certFile          string        // 证书文件
+	caFile            string        // CA证书文件
 	serverName        string        // 服务器名称
 	timeout           time.Duration // 拨号超时时间，默认5s
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
@@ -34,7 +34,7 @@ func defaultClientOptions() *clientOptions {
 	return &clientOptions{
 		addr:              etc.Get(defaultClientAddrKey, defaultClientAddr).String(),
 		timeout:           etc.Get(defaultClientTimeoutKey, defaultClientTimeout).Duration(),
-		certFile:          etc.Get(defaultClientCertFileKey).String(),
+		caFile:            etc.Get(defaultClientCAFileKey).String(),
 		serverName:        etc.Get(defaultClientServerNameKey).String(),
 		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(),
 	}
@@ -50,14 +50,9 @@ func WithClientTimeout(timeout time.Duration) ClientOption {
 	return func(o *clientOptions) { o.timeout = timeout }
 }
 
-// WithClientCertFile 设置证书文件
-func WithClientCertFile(certFile string) ClientOption {
-	return func(o *clientOptions) { o.certFile = certFile }
-}
-
-// WithClientServerName 设置服务器名称
-func WithClientServerName(serverName string) ClientOption {
-	return func(o *clientOptions) { o.serverName = serverName }
+// WithClientCredentials 设置CA证书和校验域名
+func WithClientCredentials(caFile string, serverName string) ClientOption {
+	return func(o *clientOptions) { o.caFile, o.serverName = caFile, serverName }
 }
 
 // WithClientHeartbeatInterval 设置心跳间隔时间

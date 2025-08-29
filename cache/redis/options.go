@@ -1,16 +1,17 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/dobyte/due/v2/etc"
 	"github.com/go-redis/redis/v8"
-	"time"
 )
 
 const (
 	defaultAddr          = "127.0.0.1:6379"
 	defaultDB            = 0
 	defaultMaxRetries    = 3
-	defaultPrefix        = "cache"
+	defaultPrefix        = "due:cache"
 	defaultNilValue      = "cache@nil"
 	defaultNilExpiration = "10s"
 	defaultMinExpiration = "1h"
@@ -24,6 +25,9 @@ const (
 	defaultPrefixKey        = "etc.cache.redis.prefix"
 	defaultUsernameKey      = "etc.cache.redis.username"
 	defaultPasswordKey      = "etc.cache.redis.password"
+	defaultCertFileKey      = "etc.cache.redis.certFile"
+	defaultKeyFileKey       = "etc.cache.redis.keyFile"
+	defaultCAFileKey        = "etc.cache.redis.caFile"
 	defaultNilValueKey      = "etc.cache.redis.nilValue"
 	defaultNilExpirationKey = "etc.cache.redis.nilExpiration"
 	defaultMinExpirationKey = "etc.cache.redis.minExpiration"
@@ -48,6 +52,15 @@ type options struct {
 	// 密码
 	// 内建客户端配置，默认为空
 	password string
+
+	// 客户端证书
+	certFile string
+
+	// 客户端密钥
+	keyFile string
+
+	// CA证书
+	caFile string
 
 	// 最大重试次数
 	// 内建客户端配置，默认为3次
@@ -78,10 +91,13 @@ func defaultOptions() *options {
 	return &options{
 		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		db:            etc.Get(defaultDBKey, defaultDB).Int(),
-		maxRetries:    etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
-		prefix:        etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		username:      etc.Get(defaultUsernameKey).String(),
 		password:      etc.Get(defaultPasswordKey).String(),
+		certFile:      etc.Get(defaultCertFileKey).String(),
+		keyFile:       etc.Get(defaultKeyFileKey).String(),
+		caFile:        etc.Get(defaultCAFileKey).String(),
+		maxRetries:    etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
+		prefix:        etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		nilValue:      etc.Get(defaultNilValueKey, defaultNilValue).String(),
 		nilExpiration: etc.Get(defaultNilExpirationKey, defaultNilExpiration).Duration(),
 		minExpiration: etc.Get(defaultMinExpirationKey, defaultMinExpiration).Duration(),
@@ -107,6 +123,11 @@ func WithUsername(username string) Option {
 // WithPassword 设置密码
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
+}
+
+// WithCredentials 设置证书、密钥、CA证书
+func WithCredentials(certFile, keyFile, caFile string) Option {
+	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
 // WithMaxRetries 设置最大重试次数

@@ -2,13 +2,14 @@ package memcache
 
 import (
 	"context"
+	"time"
+
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"time"
 )
 
 type Maker struct {
@@ -58,7 +59,7 @@ func (m *Maker) Close() error {
 }
 
 // 执行获取锁操作
-func (m *Maker) acquire(ctx context.Context, key, version string) error {
+func (m *Maker) acquire(_ context.Context, key, version string) error {
 	var (
 		err     error
 		retries int
@@ -91,7 +92,7 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 }
 
 // 尝试获取锁
-func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration ...time.Duration) error {
+func (m *Maker) tryAcquire(_ context.Context, key, version string, expiration ...time.Duration) error {
 	item := &memcache.Item{Key: key, Value: xconv.Bytes(version)}
 
 	if len(expiration) > 0 && expiration[0] > 0 {
@@ -122,7 +123,7 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 }
 
 // 执行替换操作
-func (m *Maker) swap(ctx context.Context, key, version string, expiration int32) error {
+func (m *Maker) swap(_ context.Context, key, version string, expiration int32) error {
 	item, err := m.opts.client.Get(key)
 	if err != nil {
 		if errors.Is(err, memcache.ErrCacheMiss) {

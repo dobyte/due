@@ -9,7 +9,7 @@ import (
 const (
 	defaultPath     = "./log/due.log"
 	defaultMaxAge   = "7d"
-	defaultMaxSize  = "100M"
+	defaultMaxSize  = "500M"
 	defaultRotate   = RotateNone
 	defaultCompress = false
 	defaultFormat   = FormatText

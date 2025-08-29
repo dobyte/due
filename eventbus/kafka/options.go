@@ -2,13 +2,14 @@ package kafka
 
 import (
 	"context"
+
 	"github.com/IBM/sarama"
 	"github.com/dobyte/due/v2/etc"
 )
 
 const (
 	defaultAddr   = "127.0.0.1:9092"
-	defaultPrefix = "due"
+	defaultPrefix = "due:eventbus"
 )
 
 const (
@@ -30,7 +31,7 @@ type options struct {
 	version string
 
 	// 前缀
-	// key前缀，默认为due
+	// key前缀，默认为due:eventbus
 	prefix string
 
 	// 客户端

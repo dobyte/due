@@ -1,15 +1,13 @@
 package client
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"net/url"
-	"os"
 	"sync"
 
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/discovery"
+	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
@@ -30,7 +28,7 @@ type Builder struct {
 
 type Options struct {
 	PoolSize   int
-	CertFile   string
+	CAFile     string
 	ServerName string
 	Discovery  registry.Discovery
 	FailMode   cli.FailMode
@@ -47,25 +45,11 @@ func NewBuilder(opts *Options) *Builder {
 		b.RegisterBuilder(discovery.NewBuilder(opts.Discovery))
 	}
 
-	if opts.CertFile != "" {
-		b.dialOpts.TLSConfig, b.err = newClientTLSFromFile(opts.CertFile, opts.ServerName)
+	if opts.CAFile != "" {
+		b.dialOpts.TLSConfig, b.err = tls.MakeTCPClientTLSConfig(opts.CAFile, opts.ServerName)
 	}
 
 	return b
-}
-
-func newClientTLSFromFile(certFile string, serverName string) (*tls.Config, error) {
-	b, err := os.ReadFile(certFile)
-	if err != nil {
-		return nil, err
-	}
-
-	cp := x509.NewCertPool()
-	if !cp.AppendCertsFromPEM(b) {
-		return nil, errors.ErrInvalidCertFile
-	}
-
-	return &tls.Config{ServerName: serverName, RootCAs: cp}, nil
 }
 
 // RegisterBuilder 注册构建器

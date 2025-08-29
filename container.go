@@ -2,6 +2,14 @@ package due
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"runtime"
+	"strconv"
+	"syscall"
+	"time"
+
+	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/info"
@@ -12,12 +20,6 @@ import (
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xfile"
-	"os"
-	"os/signal"
-	"runtime"
-	"strconv"
-	"syscall"
-	"time"
 )
 
 const (
@@ -120,6 +122,10 @@ func (c *Container) doClearModules() {
 
 	if err := lock.Close(); err != nil {
 		log.Warnf("lock-maker close failed: %v", err)
+	}
+
+	if err := cache.Close(); err != nil {
+		log.Warnf("cache close failed: %v", err)
 	}
 
 	task.Release()

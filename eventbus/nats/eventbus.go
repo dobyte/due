@@ -9,9 +9,9 @@ import (
 )
 
 type Eventbus struct {
-	err  error
-	opts *options
-
+	err       error
+	opts      *options
+	builtin   bool
 	rw        sync.RWMutex
 	consumers map[string]*consumer
 }
@@ -28,6 +28,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 
 	if o.conn == nil {
 		o.conn, eb.err = nats.Connect(o.url, nats.Timeout(o.timeout))
+		eb.builtin = true
 	}
 
 	return eb
@@ -44,7 +45,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 		return err
 	}
 
-	return eb.opts.conn.Publish(topic, buf)
+	return eb.opts.conn.Publish(eb.doMakeChannel(topic), buf)
 }
 
 // Subscribe 订阅事件
@@ -53,20 +54,22 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		return eb.err
 	}
 
+	channel := eb.doMakeChannel(topic)
+
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
-	c, ok := eb.consumers[topic]
+	c, ok := eb.consumers[channel]
 	if !ok {
 		c = &consumer{handlers: make(map[uintptr][]eventbus.EventHandler)}
-		sub, err := eb.opts.conn.Subscribe(topic, func(msg *nats.Msg) {
+		sub, err := eb.opts.conn.Subscribe(channel, func(msg *nats.Msg) {
 			c.dispatch(msg.Data)
 		})
 		if err != nil {
 			return err
 		}
 		c.sub = sub
-		eb.consumers[topic] = c
+		eb.consumers[channel] = c
 	}
 
 	c.addHandler(handler)
@@ -80,11 +83,13 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 		return eb.err
 	}
 
+	channel := eb.doMakeChannel(topic)
+
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
-	if c, ok := eb.consumers[topic]; ok {
-		if c.remHandler(handler) != 0 {
+	if c, ok := eb.consumers[channel]; ok {
+		if c.delHandler(handler) != 0 {
 			return nil
 		}
 
@@ -92,7 +97,7 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 			return err
 		}
 
-		delete(eb.consumers, topic)
+		delete(eb.consumers, channel)
 	}
 
 	return nil
@@ -104,7 +109,17 @@ func (eb *Eventbus) Close() error {
 		return eb.err
 	}
 
-	eb.opts.conn.Close()
+	if eb.builtin {
+		eb.opts.conn.Close()
+	}
 
 	return nil
+}
+
+func (eb *Eventbus) doMakeChannel(topic string) string {
+	if eb.opts.prefix == "" {
+		return topic
+	} else {
+		return eb.opts.prefix + ":" + topic
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cache"
+	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xrand"
@@ -14,8 +15,10 @@ import (
 )
 
 type Cache struct {
-	opts *options
-	sfg  singleflight.Group
+	err     error
+	opts    *options
+	builtin bool
+	sfg     singleflight.Group
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -24,18 +27,31 @@ func NewCache(opts ...Option) *Cache {
 		opt(o)
 	}
 
+	c := &Cache{}
+
+	defer func() {
+		if c.err == nil {
+			c.opts = o
+		}
+	}()
+
 	if o.client == nil {
-		o.client = redis.NewUniversalClient(&redis.UniversalOptions{
+		options := &redis.UniversalOptions{
 			Addrs:      o.addrs,
 			DB:         o.db,
 			Username:   o.username,
 			Password:   o.password,
 			MaxRetries: o.maxRetries,
-		})
-	}
+		}
 
-	c := &Cache{}
-	c.opts = o
+		if o.certFile != "" && o.keyFile != "" && o.caFile != "" {
+			if options.TLSConfig, c.err = tls.MakeRedisTLSConfig(o.certFile, o.keyFile, o.caFile); c.err != nil {
+				return c
+			}
+		}
+
+		o.client, c.builtin = redis.NewUniversalClient(options), true
+	}
 
 	return c
 }
@@ -181,4 +197,13 @@ func (c *Cache) AddPrefix(key string) string {
 // Client 获取客户端
 func (c *Cache) Client() any {
 	return c.opts.client
+}
+
+// Close 关闭缓存
+func (c *Cache) Close() error {
+	if c.builtin {
+		return c.opts.client.Close()
+	}
+
+	return nil
 }

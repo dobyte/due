@@ -64,6 +64,8 @@ var (
 	ErrNotFoundIPAddress       = New("not found ip address")
 	ErrInvalidServiceDesc      = New("invalid service desc")
 	ErrInvalidCertFile         = New("invalid cert file")
+	ErrMissingCacheInstance    = New("missing cache instance")
+	ErrMissingEventbusInstance = New("missing eventbus instance")
 )
 
 // NewError 新建一个错误

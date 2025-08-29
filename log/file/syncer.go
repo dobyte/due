@@ -513,8 +513,6 @@ func (s *Syncer) makeFileTag(t time.Time) string {
 		return t.Format("20060102")
 	case RotateHour:
 		return t.Format("2006010215")
-	case RotateMinute:
-		return t.Format("200601021504")
 	default:
 		return ""
 	}

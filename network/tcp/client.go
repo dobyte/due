@@ -2,12 +2,10 @@ package tcp
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"net"
-	"os"
 	"sync/atomic"
 
-	"github.com/dobyte/due/v2/errors"
+	ctls "github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/network"
 )
 
@@ -48,19 +46,13 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	if c.opts.certFile != "" {
-		b, err := os.ReadFile(c.opts.certFile)
+	if c.opts.caFile != "" {
+		config, err := ctls.MakeTCPClientTLSConfig(c.opts.caFile, c.opts.serverName)
 		if err != nil {
 			return nil, err
 		}
 
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(b) {
-			return nil, errors.ErrInvalidCertFile
-		}
-
 		dialer := &net.Dialer{Timeout: c.opts.timeout}
-		config := &tls.Config{ServerName: c.opts.serverName, RootCAs: cp}
 
 		if conn, err = tls.DialWithDialer(dialer, tcpAddr.Network(), tcpAddr.String(), config); err != nil {
 			return nil, err

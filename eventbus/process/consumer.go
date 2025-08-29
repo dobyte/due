@@ -1,25 +1,33 @@
-package eventbus
+package process
 
 import (
-	"github.com/dobyte/due/v2/task"
 	"reflect"
 	"sync"
+
+	"github.com/dobyte/due/v2/eventbus/internal"
+	"github.com/dobyte/due/v2/task"
 )
 
 type consumer struct {
 	rw       sync.RWMutex
-	handlers map[uintptr][]EventHandler
+	handlers map[uintptr][]internal.EventHandler
+}
+
+func NewConsumer() *consumer {
+	return &consumer{
+		handlers: make(map[uintptr][]internal.EventHandler),
+	}
 }
 
 // 添加处理器
-func (c *consumer) addHandler(handler EventHandler) int {
+func (c *consumer) addHandler(handler internal.EventHandler) int {
 	pointer := reflect.ValueOf(handler).Pointer()
 
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
 	if _, ok := c.handlers[pointer]; !ok {
-		c.handlers[pointer] = make([]EventHandler, 0, 1)
+		c.handlers[pointer] = make([]internal.EventHandler, 0, 1)
 	}
 
 	c.handlers[pointer] = append(c.handlers[pointer], handler)
@@ -28,7 +36,7 @@ func (c *consumer) addHandler(handler EventHandler) int {
 }
 
 // 移除处理器
-func (c *consumer) remHandler(handler EventHandler) int {
+func (c *consumer) delHandler(handler internal.EventHandler) int {
 	pointer := reflect.ValueOf(handler).Pointer()
 
 	c.rw.Lock()
@@ -40,7 +48,7 @@ func (c *consumer) remHandler(handler EventHandler) int {
 }
 
 // 分发数据
-func (c *consumer) dispatch(event *Event) {
+func (c *consumer) dispatch(event *internal.Event) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 

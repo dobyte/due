@@ -31,8 +31,7 @@ func NewCache(opts ...Option) *Cache {
 	c.opts = o
 
 	if o.client == nil {
-		c.builtin = true
-		o.client = memcache.New(o.addrs...)
+		o.client, c.builtin = memcache.New(o.addrs...), true
 	}
 
 	return c

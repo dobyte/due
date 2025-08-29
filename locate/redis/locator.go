@@ -3,11 +3,12 @@ package redis
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
@@ -27,7 +28,9 @@ const name = "redis"
 var _ locate.Locator = &Locator{}
 
 type Locator struct {
+	err              error
 	opts             *options
+	builtin          bool
 	ctx              context.Context
 	cancel           context.CancelFunc
 	sfg              singleflight.Group
@@ -42,25 +45,34 @@ func NewLocator(opts ...Option) *Locator {
 		opt(o)
 	}
 
-	if o.prefix == "" {
-		o.prefix = defaultPrefix
-	}
+	l := &Locator{}
+
+	defer func() {
+		if l.err == nil {
+			l.opts = o
+			l.ctx, l.cancel = context.WithCancel(o.ctx)
+			l.unbindGateScript = redis.NewScript(unbindGateScript)
+			l.unbindNodeScript = redis.NewScript(unbindNodeScript)
+		}
+	}()
 
 	if o.client == nil {
-		o.client = redis.NewUniversalClient(&redis.UniversalOptions{
+		options := &redis.UniversalOptions{
 			Addrs:      o.addrs,
 			DB:         o.db,
 			Username:   o.username,
 			Password:   o.password,
 			MaxRetries: o.maxRetries,
-		})
-	}
+		}
 
-	l := &Locator{}
-	l.opts = o
-	l.ctx, l.cancel = context.WithCancel(o.ctx)
-	l.unbindGateScript = redis.NewScript(unbindGateScript)
-	l.unbindNodeScript = redis.NewScript(unbindNodeScript)
+		if o.certFile != "" && o.keyFile != "" && o.caFile != "" {
+			if options.TLSConfig, l.err = tls.MakeRedisTLSConfig(o.certFile, o.keyFile, o.caFile); l.err != nil {
+				return l
+			}
+		}
+
+		o.client, l.builtin = redis.NewUniversalClient(options), true
+	}
 
 	return l
 }
@@ -72,6 +84,10 @@ func (l *Locator) Name() string {
 
 // LocateGate 定位用户所在网关
 func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
+	if l.err != nil {
+		return "", l.err
+	}
+
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
 	val, err, _ := l.sfg.Do(key, func() (any, error) {
@@ -91,6 +107,10 @@ func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 
 // LocateNode 定位用户所在节点
 func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	if l.err != nil {
+		return "", l.err
+	}
+
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
 	val, err, _ := l.sfg.Do(key+name, func() (any, error) {
@@ -110,6 +130,10 @@ func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (strin
 
 // BindGate 绑定网关
 func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
+	if l.err != nil {
+		return l.err
+	}
+
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
 	if err := l.opts.client.Set(ctx, key, gid, redis.KeepTTL).Err(); err != nil {
@@ -125,6 +149,10 @@ func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
 
 // BindNode 绑定节点
 func (l *Locator) BindNode(ctx context.Context, uid int64, name, nid string) error {
+	if l.err != nil {
+		return l.err
+	}
+
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
 	if err := l.opts.client.HSet(ctx, key, name, nid).Err(); err != nil {
@@ -140,6 +168,10 @@ func (l *Locator) BindNode(ctx context.Context, uid int64, name, nid string) err
 
 // UnbindGate 解绑网关
 func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
+	if l.err != nil {
+		return l.err
+	}
+
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
 	rst, err := l.unbindGateScript.Run(ctx, l.opts.client, []string{key}, gid).StringSlice()
@@ -158,6 +190,10 @@ func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
 
 // UnbindNode 解绑节点
 func (l *Locator) UnbindNode(ctx context.Context, uid int64, name, nid string) error {
+	if l.err != nil {
+		return l.err
+	}
+
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
 	rst, err := l.unbindNodeScript.Run(ctx, l.opts.client, []string{key}, name, nid).StringSlice()
@@ -198,20 +234,17 @@ func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64
 }
 
 func (l *Locator) toUniqueKey(kinds ...string) string {
-	sort.Slice(kinds, func(i, j int) bool {
-		return kinds[i] < kinds[j]
-	})
+	slices.Sort(kinds)
 
-	keys := make([]string, 0, len(kinds))
-	for _, kind := range kinds {
-		keys = append(keys, kind)
-	}
-
-	return strings.Join(keys, "&")
+	return strings.Join(kinds, "&")
 }
 
 // Watch 监听用户定位变化
 func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, error) {
+	if l.err != nil {
+		return nil, l.err
+	}
+
 	key := l.toUniqueKey(kinds...)
 
 	v, ok := l.watchers.Load(key)

@@ -22,7 +22,7 @@ type Builder struct {
 }
 
 type Options struct {
-	CertFile   string
+	CAFile     string
 	ServerName string
 	Discovery  registry.Discovery
 	DialOpts   []grpc.DialOption
@@ -32,8 +32,8 @@ func NewBuilder(opts *Options) *Builder {
 	b := &Builder{opts: opts}
 
 	var cred credentials.TransportCredentials
-	if opts.CertFile != "" && opts.ServerName != "" {
-		if cred, b.err = credentials.NewClientTLSFromFile(opts.CertFile, opts.ServerName); b.err != nil {
+	if opts.CAFile != "" && opts.ServerName != "" {
+		if cred, b.err = credentials.NewClientTLSFromFile(opts.CAFile, opts.ServerName); b.err != nil {
 			return b
 		}
 	} else {

@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/etc"
 	"github.com/go-redis/redis/v8"
 )
@@ -10,16 +11,19 @@ const (
 	defaultAddr       = "127.0.0.1:6379"
 	defaultDB         = 0
 	defaultMaxRetries = 3
-	defaultPrefix     = "due"
+	defaultPrefix     = "due:locate"
 )
 
 const (
 	defaultAddrsKey      = "etc.locate.redis.addrs"
 	defaultDBKey         = "etc.locate.redis.db"
-	defaultMaxRetriesKey = "etc.locate.redis.maxRetries"
-	defaultPrefixKey     = "etc.locate.redis.prefix"
 	defaultUsernameKey   = "etc.locate.redis.username"
 	defaultPasswordKey   = "etc.locate.redis.password"
+	defaultCertFileKey   = "etc.locate.redis.certFile"
+	defaultKeyFileKey    = "etc.locate.redis.keyFile"
+	defaultCAFileKey     = "etc.locate.redis.caFile"
+	defaultMaxRetriesKey = "etc.locate.redis.maxRetries"
+	defaultPrefixKey     = "etc.locate.redis.prefix"
 )
 
 type Option func(o *options)
@@ -43,6 +47,15 @@ type options struct {
 	// 内建客户端配置，默认为空
 	password string
 
+	// 客户端证书
+	certFile string
+
+	// 客户端密钥
+	keyFile string
+
+	// CA证书
+	caFile string
+
 	// 最大重试次数
 	// 内建客户端配置，默认为3次
 	maxRetries int
@@ -52,7 +65,7 @@ type options struct {
 	client redis.UniversalClient
 
 	// 前缀
-	// key前缀，默认为due
+	// key前缀，默认为due:locate
 	prefix string
 }
 
@@ -61,10 +74,13 @@ func defaultOptions() *options {
 		ctx:        context.Background(),
 		addrs:      etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		db:         etc.Get(defaultDBKey, defaultDB).Int(),
-		maxRetries: etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
-		prefix:     etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		username:   etc.Get(defaultUsernameKey).String(),
 		password:   etc.Get(defaultPasswordKey).String(),
+		certFile:   etc.Get(defaultCertFileKey).String(),
+		keyFile:    etc.Get(defaultKeyFileKey).String(),
+		caFile:     etc.Get(defaultCAFileKey).String(),
+		maxRetries: etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
+		prefix:     etc.Get(defaultPrefixKey, defaultPrefix).String(),
 	}
 }
 
@@ -91,6 +107,11 @@ func WithUsername(username string) Option {
 // WithPassword 设置密码
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
+}
+
+// WithCredentials 设置证书、密钥、CA证书
+func WithCredentials(certFile, keyFile, caFile string) Option {
+	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
 // WithMaxRetries 设置最大重试次数

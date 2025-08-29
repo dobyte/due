@@ -11,7 +11,7 @@ const (
 	defaultAddr              = "127.0.0.1:6379"
 	defaultDB                = 0
 	defaultMaxRetries        = 3
-	defaultPrefix            = "lock"
+	defaultPrefix            = "due:lock"
 	defaultExpiration        = "3s"
 	defaultAcquireInterval   = "20ms"
 	defaultAcquireMaxRetries = 0
@@ -69,7 +69,7 @@ type options struct {
 	client redis.UniversalClient
 
 	// 前缀
-	// key前缀，默认为lock
+	// key前缀，默认为due:lock
 	prefix string
 
 	// 锁过期时间，默认为3s
@@ -119,19 +119,9 @@ func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
-// WithCertFile 设置客户端证书
-func WithCertFile(certFile string) Option {
-	return func(o *options) { o.certFile = certFile }
-}
-
-// WithKeyFile 设置客户端密钥
-func WithKeyFile(keyFile string) Option {
-	return func(o *options) { o.keyFile = keyFile }
-}
-
-// WithCAFile 设置CA证书
-func WithCAFile(caFile string) Option {
-	return func(o *options) { o.caFile = caFile }
+// WithCredentials 设置证书、密钥、CA证书
+func WithCredentials(certFile, keyFile, caFile string) Option {
+	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
 // WithMaxRetries 设置最大重试次数

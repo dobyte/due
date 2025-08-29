@@ -9,7 +9,7 @@ import (
 
 const (
 	defaultAddr              = "127.0.0.1:11211"
-	defaultPrefix            = "lock"
+	defaultPrefix            = "due:lock"
 	defaultExpiration        = "3s"
 	defaultAcquireInterval   = "20ms"
 	defaultAcquireMaxRetries = 0
@@ -35,7 +35,7 @@ type options struct {
 	client *memcache.Client
 
 	// 前缀
-	// key前缀，默认为cache
+	// key前缀，默认为due:lock
 	prefix string
 
 	// 锁过期时间，默认为3s

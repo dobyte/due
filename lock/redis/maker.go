@@ -13,8 +13,8 @@ import (
 )
 
 type Maker struct {
-	opts          *options
 	err           error
+	opts          *options
 	builtin       bool
 	releaseScript *redis.Script
 	renewalScript *redis.Script
@@ -31,9 +31,14 @@ func NewMaker(opts ...Option) *Maker {
 	}
 
 	m := &Maker{}
-	m.opts = o
-	m.releaseScript = redis.NewScript(releaseScript)
-	m.renewalScript = redis.NewScript(renewalScript)
+
+	defer func() {
+		if m.err == nil {
+			m.opts = o
+			m.releaseScript = redis.NewScript(releaseScript)
+			m.renewalScript = redis.NewScript(renewalScript)
+		}
+	}()
 
 	if o.client == nil {
 		options := &redis.UniversalOptions{
@@ -50,9 +55,7 @@ func NewMaker(opts ...Option) *Maker {
 			}
 		}
 
-		m.builtin = true
-		o.client = redis.NewUniversalClient(options)
-
+		o.client, m.builtin = redis.NewUniversalClient(options), true
 	}
 
 	return m
@@ -75,6 +78,10 @@ func (m *Maker) Make(name string) lock.Locker {
 
 // Close 关闭构建器
 func (m *Maker) Close() error {
+	if m.err != nil {
+		return m.err
+	}
+
 	if m.builtin {
 		return m.opts.client.Close()
 	}
@@ -84,6 +91,10 @@ func (m *Maker) Close() error {
 
 // 执行获取锁操作
 func (m *Maker) acquire(ctx context.Context, key, version string) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	var (
 		args    = redis.SetArgs{Mode: "NX", TTL: m.opts.expiration}
 		retries int
@@ -113,6 +124,10 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 
 // 尝试获取锁
 func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration ...time.Duration) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	args := redis.SetArgs{Mode: "NX", TTL: m.opts.expiration}
 
 	if len(expiration) > 0 {
@@ -133,6 +148,10 @@ func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration 
 
 // 执行释放锁操作
 func (m *Maker) release(ctx context.Context, key, version string) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{key}, version).StringSlice()
 	if err != nil {
 		return err
@@ -147,6 +166,10 @@ func (m *Maker) release(ctx context.Context, key, version string) error {
 
 // 执行续租锁操作
 func (m *Maker) renewal(ctx context.Context, key, version string) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{key}, version, m.opts.expiration.Milliseconds()).StringSlice()
 	if err != nil {
 		return err

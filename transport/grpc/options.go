@@ -17,7 +17,7 @@ const (
 	defaultServerExposeKey     = "etc.transport.grpc.server.expose"
 	defaultServerKeyFileKey    = "etc.transport.grpc.server.keyFile"
 	defaultServerCertFileKey   = "etc.transport.grpc.server.certFile"
-	defaultClientCertFileKey   = "etc.transport.grpc.client.certFile"
+	defaultClientCAFileKey     = "etc.transport.grpc.client.caFile"
 	defaultClientServerNameKey = "etc.transport.grpc.client.serverName"
 )
 
@@ -34,7 +34,7 @@ func defaultOptions() *options {
 	opts.server.Expose = etc.Get(defaultServerExposeKey).Bool()
 	opts.server.KeyFile = etc.Get(defaultServerKeyFileKey).String()
 	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
-	opts.client.CertFile = etc.Get(defaultClientCertFileKey).String()
+	opts.client.CAFile = etc.Get(defaultClientCAFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
 
 	return opts
@@ -52,7 +52,7 @@ func WithServerExpose(expose bool) Option {
 
 // WithServerCredentials 设置服务器证书和秘钥
 func WithServerCredentials(certFile, keyFile string) Option {
-	return func(o *options) { o.server.KeyFile, o.server.CertFile = keyFile, certFile }
+	return func(o *options) { o.server.CertFile, o.server.KeyFile = certFile, keyFile }
 }
 
 // WithServerOptions 设置服务器选项
@@ -61,8 +61,8 @@ func WithServerOptions(opts ...grpc.ServerOption) Option {
 }
 
 // WithClientCredentials 设置客户端证书和校验域名
-func WithClientCredentials(certFile string, serverName string) Option {
-	return func(o *options) { o.client.CertFile, o.client.ServerName = certFile, serverName }
+func WithClientCredentials(caFile string, serverName string) Option {
+	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
 }
 
 // WithClientDiscovery 设置客户端服务发现组件
