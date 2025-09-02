@@ -2,7 +2,7 @@ package xcall
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 	"time"
 )
 
@@ -32,40 +32,25 @@ func (g *Goroutines) Run(ctx context.Context, timeout ...time.Duration) {
 		defer cancel()
 	}
 
-	done := make(chan struct{})
-	over := make(chan struct{})
-	defer close(done)
-	defer close(over)
-
-	go func() {
-		var total atomic.Int32
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case _, ok := <-done:
-				if !ok {
-					return
-				}
-
-				if int(total.Add(1)) == len(g.fns) {
-					over <- struct{}{}
-					return
-				}
-			}
-		}
-	}()
+	var wg sync.WaitGroup
+	wg.Add(len(g.fns))
 
 	for i := range g.fns {
 		fn := g.fns[i]
 		Go(func() {
+			defer wg.Done()
 			fn()
-			done <- struct{}{}
 		})
 	}
 
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
 	select {
 	case <-ctx.Done():
-	case <-over:
+	case <-done:
 	}
 }
