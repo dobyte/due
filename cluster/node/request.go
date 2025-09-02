@@ -381,21 +381,12 @@ func (r *request) Deliver(args *cluster.DeliverArgs) error {
 func (r *request) Reply(message *cluster.Message) error {
 	switch {
 	case r.gid != "": // 来源于网关
-		if r.uid != 0 {
-			return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
-				GID:     r.gid,
-				Kind:    session.User,
-				Target:  r.uid,
-				Message: message,
-			})
-		} else {
-			return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
-				GID:     r.gid,
-				Kind:    session.Conn,
-				Target:  r.cid,
-				Message: message,
-			})
-		}
+		return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
+			GID:     r.gid,
+			Kind:    session.Conn,
+			Target:  r.cid,
+			Message: message,
+		})
 	case r.pid != "": // 来源于Actor
 		if actor, ok := r.node.scheduler.doLoad(r.pid); ok {
 			return actor.Deliver(r.uid, message)

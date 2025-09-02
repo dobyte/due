@@ -176,14 +176,15 @@ func (c *serverConn) checkState() error {
 // 授权检查
 func (c *serverConn) checkAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
-		if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
+		timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 			if c.UID() != 0 {
 				return
 			}
 
 			c.forceClose(true)
-		})); timer != nil {
-			timer.(*time.Timer).Stop()
+		}))
+		if t, ok := timer.(*time.Timer); ok && t != nil {
+			t.Stop()
 		}
 	}
 }
@@ -191,8 +192,10 @@ func (c *serverConn) checkAuthorize() {
 // 取消授权检查
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
-		if timer := c.authorizeTimer.Swap((*time.Timer)(nil)); timer != nil {
-			timer.(*time.Timer).Stop()
+		timer := c.authorizeTimer.Swap((*time.Timer)(nil))
+
+		if t, ok := timer.(*time.Timer); ok && t != nil {
+			t.Stop()
 		}
 	}
 }
@@ -207,6 +210,7 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
 	c.lastHeartbeatTime = xtime.Now().UnixNano()
+	c.authorizeTimer.Store((*time.Timer)(nil))
 	atomic.StoreInt64(&c.uid, 0)
 	atomic.StoreInt32(&c.state, int32(network.ConnOpened))
 

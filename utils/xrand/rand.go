@@ -130,6 +130,11 @@ func Float64(min, max float64) float64 {
 	return min + globalRand.Float64()*(max-min)
 }
 
+// Duration 生成[min,max]范围间的时间间隔
+func Duration(min, max time.Duration) time.Duration {
+	return time.Duration(Int64(int64(min), int64(max)))
+}
+
 // Lucky 根据概率抽取幸运值
 func Lucky(probability float64, base ...float64) bool {
 	if probability <= 0 {
