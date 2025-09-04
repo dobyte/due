@@ -7,6 +7,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/bytedance/sonic"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
@@ -323,4 +324,53 @@ func StringPointer(val any) *string {
 func StringsPointer(val any) *[]string {
 	v := Strings(val)
 	return &v
+}
+
+// StrToAny 将字符串转换为任意类型
+func StrToAny[T any](a string) (T, error) {
+	var t T
+	switch any(t).(type) {
+	case bool:
+		v, err := strconv.ParseBool(a)
+		if err != nil {
+			return t, err
+		}
+		t = any(v).(T)
+	case int, uint, int32, uint32:
+		v, err := strconv.ParseInt(a, 10, 32)
+		if err != nil {
+			return t, err
+		}
+		t = *(*T)(unsafe.Pointer(&v))
+	case int64, uint64:
+		v, err := strconv.ParseInt(a, 10, 64)
+		if err != nil {
+			return t, err
+		}
+		t = *(*T)(unsafe.Pointer(&v))
+	case float64:
+		v, err := strconv.ParseFloat(a, 64)
+		if err != nil {
+			return t, err
+		}
+		t = *(*T)(unsafe.Pointer(&v))
+	case float32:
+		v, err := strconv.ParseFloat(a, 32)
+		v32 := float32(v)
+		if err != nil {
+			return t, err
+		}
+		t = *(*T)(unsafe.Pointer(&v32))
+	case string:
+		v := a
+		t = any(v).(T)
+	case interface{}:
+		err := sonic.Unmarshal([]byte(a), &t)
+		if err != nil {
+			return t, err
+		}
+	default:
+		return t, fmt.Errorf("the type %T is not supported", t)
+	}
+	return t, nil
 }

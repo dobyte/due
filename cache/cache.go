@@ -36,6 +36,8 @@ type Cache interface {
 	Client() any
 	// Close 关闭缓存
 	Close() error
+	// Ping 检查缓存连接
+	Ping(ctx context.Context) error
 }
 
 // SetCache 设置缓存
@@ -154,4 +156,9 @@ func Close() error {
 	}
 
 	return globalCache.Close()
+}
+
+// Ping 检查缓存连接
+func Ping(ctx context.Context) error {
+	return globalCache.Ping(ctx)
 }
