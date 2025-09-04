@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+var _ cache.Cache = (*Cache)(nil)
+
 type Cache struct {
 	err     error
 	opts    *options
@@ -206,4 +208,9 @@ func (c *Cache) Close() error {
 	}
 
 	return nil
+}
+
+// Ping 检查缓存连接
+func (c *Cache) Ping(ctx context.Context) error {
+	return c.opts.client.Ping(ctx).Err()
 }
