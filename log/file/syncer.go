@@ -379,7 +379,7 @@ func (s *Syncer) compressFile(dst, src string) (err error) {
 // 打开文件
 func (s *Syncer) openFile() error {
 	if _, err := os.Stat(s.fileDir); err != nil {
-		if err = os.MkdirAll(filepath.Dir(s.opts.path), 0644); err != nil {
+		if err = os.MkdirAll(filepath.Dir(s.opts.path), 0755); err != nil {
 			return err
 		}
 	}
