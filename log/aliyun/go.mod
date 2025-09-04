@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/aliyun/aliyun-log-go-sdk v0.1.100
-	github.com/dobyte/due/v2 v2.3.1
+	github.com/dobyte/due/v2 v2.3.2
 )
 
 require (

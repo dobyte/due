@@ -3,7 +3,7 @@ module github.com/dobyte/due/locate/redis/v2
 go 1.23.0
 
 require (
-	github.com/dobyte/due/v2 v2.3.1
+	github.com/dobyte/due/v2 v2.3.2
 	github.com/go-redis/redis/v8 v8.11.5
 	golang.org/x/sync v0.13.0
 )
