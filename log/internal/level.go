@@ -1,10 +1,14 @@
 package internal
 
 const (
-	red    = "31"
-	yellow = "33"
-	blue   = "36"
-	gray   = "37"
+	red    = "\x1b[31m"
+	yellow = "\x1b[33m"
+	blue   = "\x1b[36m"
+	gray   = "\x1b[37m"
+)
+
+const (
+	reset = "\x1b[0m"
 )
 
 // Level 日志级别

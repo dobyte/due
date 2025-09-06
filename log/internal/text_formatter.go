@@ -13,7 +13,7 @@ type TextFormatter struct {
 
 func NewTextFormatter(console ...bool) *TextFormatter {
 	return &TextFormatter{
-		pool:    &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(nil)} }},
+		pool:    &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, 1024))} }},
 		console: len(console) > 0 && console[0],
 	}
 }
@@ -23,23 +23,38 @@ func (f *TextFormatter) Format(entity *Entity) Buffer {
 	b.pool = f.pool
 
 	if f.console {
-		b.WriteString("\x1b[" + entity.Level.Color() + "m" + entity.Level.Label() + "\x1b[0m[" + entity.Time + "]")
+		b.WriteString(entity.Level.Color())
+		b.WriteString(entity.Level.Label())
+		b.WriteString(reset)
 	} else {
-		b.WriteString(entity.Level.Label() + "[" + entity.Time + "]")
+		b.WriteString(entity.Level.Label())
 	}
 
+	b.WriteRune('[')
+	b.WriteString(entity.Time)
+	b.WriteRune(']')
+
 	if entity.Caller != "" {
-		b.WriteString(" " + entity.Caller)
+		b.WriteRune(' ')
+		b.WriteString(entity.Caller)
 	}
 
 	if entity.Message != "" {
-		b.WriteString(" " + entity.Message)
+		b.WriteRune(' ')
+		b.WriteString(entity.Message)
 	}
 
 	if len(entity.Frames) > 0 {
 		b.WriteString("\nStack:")
 		for i, frame := range entity.Frames {
-			b.WriteString("\n" + strconv.Itoa(i+1) + "." + frame.Function + "\n\t" + frame.File + ":" + strconv.Itoa(frame.Line))
+			b.WriteByte('\n')
+			b.WriteString(strconv.Itoa(i + 1))
+			b.WriteString(".")
+			b.WriteString(frame.Function)
+			b.WriteString("\n\t")
+			b.WriteString(frame.File)
+			b.WriteString(":")
+			b.WriteString(strconv.Itoa(frame.Line))
 		}
 	}
 

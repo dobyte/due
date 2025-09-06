@@ -23,7 +23,7 @@ type JsonFormatter struct {
 
 func NewJsonFormatter(console ...bool) *JsonFormatter {
 	return &JsonFormatter{
-		pool:    &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(nil)} }},
+		pool:    &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, 1024))} }},
 		console: len(console) > 0 && console[0],
 	}
 }
@@ -32,29 +32,65 @@ func (f *JsonFormatter) Format(entity *Entity) Buffer {
 	b := f.pool.Get().(*buffer)
 	b.pool = f.pool
 
+	b.WriteString(`{"`)
+	b.WriteString(fieldKeyLevel)
+	b.WriteString(`":"`)
+
 	if f.console {
-		b.WriteString(`{"` + fieldKeyLevel + `":"` + "\x1b[" + entity.Level.Color() + "m" + entity.Level.Label() + "\x1b[0m" + `","` + fieldKeyTime + `":"` + entity.Time + `"`)
+		b.WriteString(entity.Level.Color())
+		b.WriteString(entity.Level.Label())
+		b.WriteString(reset)
 	} else {
-		b.WriteString(`{"` + fieldKeyLevel + `":"` + entity.Level.Label() + `","` + fieldKeyTime + `":"` + entity.Time + `"`)
+		b.WriteString(entity.Level.Label())
 	}
 
+	b.WriteString(`","`)
+	b.WriteString(fieldKeyTime)
+	b.WriteString(`":"`)
+	b.WriteString(entity.Time)
+	b.WriteString(`"`)
+
 	if entity.Caller != "" {
-		b.WriteString(`,"` + fieldKeyFile + `":"` + entity.Caller + `"`)
+		b.WriteString(`,"`)
+		b.WriteString(fieldKeyFile)
+		b.WriteString(`":"`)
+		b.WriteString(entity.Caller)
+		b.WriteString(`"`)
 	}
 
 	if entity.Message != "" {
-		b.WriteString(`,"` + fieldKeyMsg + `":"` + entity.Message + `"`)
+		b.WriteString(`,"`)
+		b.WriteString(fieldKeyMsg)
+		b.WriteString(`":"`)
+		b.WriteString(entity.Message)
+		b.WriteString(`"`)
 	}
 
 	if len(entity.Frames) > 0 {
-		b.WriteString(`,"` + fieldKeyStack + `":[`)
+		b.WriteString(`,"`)
+		b.WriteString(fieldKeyStack)
+		b.WriteString(`":[`)
 		for i, frame := range entity.Frames {
 			if i == 0 {
-				b.WriteString(`{"` + fieldKeyStackFunc + `":"` + frame.Function + `"`)
+				b.WriteString(`{"`)
+				b.WriteString(fieldKeyStackFunc)
+				b.WriteString(`":"`)
+				b.WriteString(frame.Function)
+				b.WriteString(`"`)
 			} else {
-				b.WriteString(`,{"` + fieldKeyStackFunc + `":"` + frame.Function + `"`)
+				b.WriteString(`,{"`)
+				b.WriteString(fieldKeyStackFunc)
+				b.WriteString(`":"`)
+				b.WriteString(frame.Function)
+				b.WriteString(`"`)
 			}
-			b.WriteString(`,"` + fieldKeyStackFile + `":"` + frame.File + `:` + strconv.Itoa(frame.Line) + `"}`)
+			b.WriteString(`,"`)
+			b.WriteString(fieldKeyStackFile)
+			b.WriteString(`":"`)
+			b.WriteString(frame.File)
+			b.WriteString(`:`)
+			b.WriteString(strconv.Itoa(frame.Line))
+			b.WriteString(`"`)
 		}
 		b.WriteString(`]`)
 	}
