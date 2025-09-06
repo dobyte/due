@@ -1,22 +1,11 @@
 package net
 
 import (
-	"io"
 	"net"
-	"net/http"
 	"strconv"
-	"sync/atomic"
-	"time"
 
 	"github.com/dobyte/due/v2/errors"
 )
-
-var urls = []string{
-	"http://ipinfo.io/ip",
-	"http://ifconfig.me/ip",
-	"https://api.ipquery.io",
-	"https://api.ipify.org",
-}
 
 const (
 	IPv4Zero     = "0.0.0.0"
@@ -89,128 +78,33 @@ func ExtractPort(addr net.Addr) (int, error) {
 
 // ExternalIP 获取外网IP地址
 //
-// Deprecated: As of due 2.2.8, this function simply calls [net.PublicIP].
+// Deprecated: As of due v2.3.0, this function simply calls [net.PublicIP].
 func ExternalIP() (string, error) {
 	return PublicIP()
 }
 
 // InternalIP 获取内网IP地址
 //
-// Deprecated: As of due 2.2.8, this function simply calls [net.PublicIP].
+// Deprecated: As of due v2.3.0, this function simply calls [net.PublicIP].
 func InternalIP() (string, error) {
 	return PrivateIP()
 }
 
 // PublicIP 获取公网IP
 func PublicIP() (string, error) {
-	var (
-		ch      = make(chan string)
-		state   atomic.Bool
-		timeout = 500 * time.Millisecond
-	)
-
-	for _, url := range urls {
-		go func() {
-			if ip, err := queryPublicIP(url, timeout); err == nil {
-				if state.CompareAndSwap(false, true) {
-					ch <- ip
-				}
-			}
-		}()
-	}
-
-	defer close(ch)
-
-	select {
-	case ip := <-ch:
-		return ip, nil
-	case <-time.After(timeout):
+	if globalPublicIPResolver != nil {
+		return globalPublicIPResolver()
+	} else {
 		return "", errors.ErrNotFoundIPAddress
 	}
 }
 
 // PrivateIP 获取私网IP
 func PrivateIP() (string, error) {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return "", err
-	}
-
-	var (
-		addrs []net.Addr
-		ipnet net.IP
-		ip    string
-	)
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		if addrs, err = iface.Addrs(); err != nil {
-			return "", err
-		}
-
-		for _, addr := range addrs {
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ipnet = v.IP
-			case *net.IPAddr:
-				ipnet = v.IP
-			default:
-				continue
-			}
-
-			if ipnet == nil || ipnet.IsLoopback() {
-				continue
-			}
-
-			if ipv4 := ipnet.To4(); ipv4 != nil && ipv4.IsPrivate() {
-				if ipv4[0] == 192 && ipv4[1] == 168 {
-					return ipv4.String(), nil
-				}
-
-				if ip == "" {
-					ip = ipv4.String()
-				}
-			}
-		}
-	}
-
-	if ip != "" {
-		return ip, nil
+	if globalPrivateIPResolver != nil {
+		return globalPrivateIPResolver()
 	} else {
 		return "", errors.ErrNotFoundIPAddress
-	}
-}
-
-// 获取外网IP地址
-func queryPublicIP(url string, timeout time.Duration) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	client := &http.Client{Timeout: timeout}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if ip := net.ParseIP(string(body)); ip == nil {
-		return "", errors.ErrNotFoundIPAddress
-	} else {
-		return ip.String(), nil
 	}
 }
 
