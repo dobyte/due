@@ -1,14 +1,15 @@
 package swagger
 
 import (
-	"github.com/dobyte/due/v2/log"
-	"github.com/go-openapi/runtime/middleware"
-	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/adaptor"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/dobyte/due/v2/log"
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
 )
 
 type Config struct {
@@ -21,11 +22,9 @@ type Config struct {
 }
 
 const (
-	defaultSwaggerBundleUrl = "https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui-bundle.min.js"
-	defaultSwaggerPresetUrl = "https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui-standalone-preset.min.js"
-	defaultSwaggerStylesUrl = "https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/swagger-ui/4.5.2/swagger-ui.min.css"
-	swaggerFavicon32Latest  = "https://unpkg.com/swagger-ui-dist/favicon-32x32.png"
-	swaggerFavicon16Latest  = "https://unpkg.com/swagger-ui-dist/favicon-16x16.png"
+	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.js"
+	defaultSwaggerPresetUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js"
+	defaultSwaggerStylesUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css"
 )
 
 func New(cfg Config) fiber.Handler {
