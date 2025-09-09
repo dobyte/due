@@ -34,7 +34,7 @@
 ### 3.功能
 
 * 网关：支持tcp、kcp、ws等协议的网关服务器。
-* 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
+* 日志：支持console、file、aliyun、tencent等多种日志组件。
 * 注册：支持consul、etcd、nacos等多种服务注册中心。
 * 协议：支持json、protobuf、msgpack等多种通信协议。
 * 配置：支持consul、etcd、nacos等多种配置中心；并支持json、yaml、toml、xml等多种文件格式。
@@ -52,7 +52,7 @@
 
 ### 4.下一期新功能规划
 
-* 高性能日志库
+* 分布式任务调度系统
 
 ### 5.特殊说明
 
@@ -653,8 +653,8 @@ throughput (TPS)     : 128969
     * consul: github.com/dobyte/due/registry/consul/v2
     * nacos: github.com/dobyte/due/registry/nacos/v2
 4. 传输组件
-    * grpc: github.com/dobyte/due/transporter/grpc/v2
-    * rpcx: github.com/dobyte/due/transporter/rpcx/v2
+    * grpc: github.com/dobyte/due/transport/grpc/v2
+    * rpcx: github.com/dobyte/due/transport/rpcx/v2
 5. 定位组件
     * redis: github.com/dobyte/due/locate/redis/v2
 6. 事件总线

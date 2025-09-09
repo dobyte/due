@@ -12,6 +12,10 @@ func SetLogger(logger Logger) {
 		return
 	}
 
+	if globalLogger != nil {
+		globalLogger.Close()
+	}
+
 	globalLogger = logger
 }
 
