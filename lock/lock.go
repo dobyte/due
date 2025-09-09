@@ -3,6 +3,8 @@ package lock
 import (
 	"context"
 	"time"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 var globalMaker Maker
@@ -30,6 +32,17 @@ type Locker interface {
 
 // SetMaker 设置Locker制造商
 func SetMaker(maker Maker) {
+	if maker == nil {
+		log.Warn("cannot set a nil lock-maker")
+		return
+	}
+
+	if globalMaker != nil {
+		if err := globalMaker.Close(); err != nil {
+			log.Error("close lock-maker failed: %v", err)
+		}
+	}
+
 	globalMaker = maker
 }
 

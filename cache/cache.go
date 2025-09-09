@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 )
 
 var globalCache Cache
@@ -40,6 +41,17 @@ type Cache interface {
 
 // SetCache 设置缓存
 func SetCache(cache Cache) {
+	if cache == nil {
+		log.Warn("cannot set a nil cache")
+		return
+	}
+
+	if globalCache != nil {
+		if err := globalCache.Close(); err != nil {
+			log.Error("close cache failed: %v", err)
+		}
+	}
+
 	globalCache = cache
 }
 
