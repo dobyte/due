@@ -557,11 +557,12 @@ Ubuntu 20.04.6 LTS 13th Gen Intel(R) Core(TM) i5-13400F 16GB
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.3.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
-| PID: 28660                                           |
+| PID: 14885                                           |
 | Mode: debug                                          |
+| Time: 2025-09-09 19:45:41.534775032 +0800 CST        |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Client────────────────────────┐
 | Name: client                                         |
@@ -571,67 +572,67 @@ Ubuntu 20.04.6 LTS 13th Gen Intel(R) Core(TM) i5-13400F 16GB
 └──────────────────────────────────────────────────────┘
 server               : tcp
 concurrency          : 50
-latency              : 4.741343s
+latency              : 4.073481s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 210910
+throughput (TPS)     : 245490
 --------------------------------
 server               : tcp
 concurrency          : 100
-latency              : 4.697039s
+latency              : 4.356167s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 212900
+throughput (TPS)     : 229559
 --------------------------------
 server               : tcp
 concurrency          : 200
-latency              : 4.447127s
+latency              : 4.673732s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 224864
+throughput (TPS)     : 213961
 --------------------------------
 server               : tcp
 concurrency          : 300
-latency              : 5.616742s
+latency              : 4.424671s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 178039
+throughput (TPS)     : 226005
 --------------------------------
 server               : tcp
 concurrency          : 400
-latency              : 4.726411s
+latency              : 4.343600s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 211577
+throughput (TPS)     : 230223
 --------------------------------
 server               : tcp
 concurrency          : 500
-latency              : 5.054949s
+latency              : 4.441719s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 197825
+throughput (TPS)     : 225138
 --------------------------------
 server               : tcp
 concurrency          : 1000
-latency              : 5.486149s
+latency              : 4.882094s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 182277
+throughput (TPS)     : 204830
 --------------------------------
 server               : tcp
 concurrency          : 1000
-latency              : 7.753779s
+latency              : 6.283487s
 data size            : 2.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 128969
+throughput (TPS)     : 159147
 --------------------------------
 ```
 
