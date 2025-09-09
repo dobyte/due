@@ -669,8 +669,10 @@ throughput (TPS)     : 128969
    * nacos: github.com/dobyte/due/config/nacos/v2
 9. 缓存组件
    * redis: github.com/dobyte/due/cache/redis/v2
+   * memcache: github.com/dobyte/due/cache/memcache/v2
 10. 分布式锁组件
     * redis: github.com/dobyte/due/lock/redis/v2
+    * memcache: github.com/dobyte/due/lock/memcache/v2
 
 ### 14.其他客户端
 
