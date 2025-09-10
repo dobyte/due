@@ -57,6 +57,7 @@ func (w *Writer) Grow(n int) {
 func (w *Writer) Write(p []byte) (n int, err error) {
 	w.grow(len(p))
 	n = copy(w.buf[w.off:], p)
+	w.off += n
 	return
 }
 
