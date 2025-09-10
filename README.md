@@ -707,7 +707,29 @@ throughput (TPS)     : 159147
    </li>
 </ul>
 
-### 17.交流与讨论
+### 17.常见问题
+
+1. 框架主模块与子模块版本不一致的问题
+
+原因：由于框架采用的是模块化设计，每个模块都有自己的版本号，而主模块的版本号是所有子模块版本号的基础。因此，在使用框架时，需要注意主模块与子模块的版本号是否一致，否则可能会导致一些不可预料的问题。
+
+例如：due主模块版本为v2.3.2，而子模块lock/redis版本为v2.0.0-20250902100831-0402c3a6689f，这就会导致版本不一致的问题。
+
+```text
+github.com/dobyte/due/v2 v2.3.2
+github.com/dobyte/due/lock/redis/v2 v2.0.0-20250902100831-0402c3a6689f
+```
+
+解决：
+
+1.进入到[release](https://github.com/dobyte/due/releases)页面，找到框架发布的版本号对应的commit号：93262b5。
+
+2.执行go get github.com/dobyte/due/lock/redis/v2@93262b5拉取与主模块本版对应的子模块。
+
+3.至此，问题解决。
+
+
+### 18.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 
