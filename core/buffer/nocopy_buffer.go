@@ -127,7 +127,7 @@ func (b *NocopyBuffer) Bytes() []byte {
 		case *NocopyNode:
 			return h.Bytes()
 		case *NocopyBuffer:
-			return b.Bytes()
+			return h.Bytes()
 		default:
 			return nil
 		}
