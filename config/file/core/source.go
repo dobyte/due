@@ -2,14 +2,15 @@ package core
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xfile"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/utils/xfile"
 )
 
 const Name = "file"
@@ -132,7 +133,7 @@ func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
 			return err
 		}
 
-		if d.IsDir() || strings.HasSuffix(d.Name(), ".") {
+		if d.IsDir() || strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
 

@@ -127,6 +127,13 @@ shutdownMaxWaitTime = "0s"
         basePath = "/swagger"
         # swagger文件路径
         filePath = "./docs/swagger.json"
+        # swagger-ui-bundle.js地址。当系统默认的cdn失效时可替换为自己的cdn地址，默认为空，使用系统默认https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.js
+        swaggerBundleUrl = ""
+        # swagger-ui-standalone-preset.js地址。当系统默认的cdn失效时可替换为自己的cdn地址，默认为空，使用系统默认https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js
+        swaggerPresetUrl = ""
+        # swagger-ui.css地址。当系统默认的cdn失效时可替换为自己的cdn地址，默认为空，使用系统默认https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css
+        swaggerStylesUrl = ""
+
 
 # 传输模块
 [transport]

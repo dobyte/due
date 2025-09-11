@@ -34,7 +34,7 @@
 ### 3.功能
 
 * 网关：支持tcp、kcp、ws等协议的网关服务器。
-* 日志：支持std、zap、logrus、aliyun、tencent等多种日志组件。
+* 日志：支持console、file、aliyun、tencent等多种日志组件。
 * 注册：支持consul、etcd、nacos等多种服务注册中心。
 * 协议：支持json、protobuf、msgpack等多种通信协议。
 * 配置：支持consul、etcd、nacos等多种配置中心；并支持json、yaml、toml、xml等多种文件格式。
@@ -52,7 +52,7 @@
 
 ### 4.下一期新功能规划
 
-* 高性能日志库
+* 分布式任务调度系统
 
 ### 5.特殊说明
 
@@ -557,11 +557,12 @@ Ubuntu 20.04.6 LTS 13th Gen Intel(R) Core(TM) i5-13400F 16GB
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.3.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
-| PID: 28660                                           |
+| PID: 14885                                           |
 | Mode: debug                                          |
+| Time: 2025-09-09 19:45:41.534775032 +0800 CST        |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Client────────────────────────┐
 | Name: client                                         |
@@ -571,67 +572,67 @@ Ubuntu 20.04.6 LTS 13th Gen Intel(R) Core(TM) i5-13400F 16GB
 └──────────────────────────────────────────────────────┘
 server               : tcp
 concurrency          : 50
-latency              : 4.741343s
+latency              : 4.073481s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 210910
+throughput (TPS)     : 245490
 --------------------------------
 server               : tcp
 concurrency          : 100
-latency              : 4.697039s
+latency              : 4.356167s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 212900
+throughput (TPS)     : 229559
 --------------------------------
 server               : tcp
 concurrency          : 200
-latency              : 4.447127s
+latency              : 4.673732s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 224864
+throughput (TPS)     : 213961
 --------------------------------
 server               : tcp
 concurrency          : 300
-latency              : 5.616742s
+latency              : 4.424671s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 178039
+throughput (TPS)     : 226005
 --------------------------------
 server               : tcp
 concurrency          : 400
-latency              : 4.726411s
+latency              : 4.343600s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 211577
+throughput (TPS)     : 230223
 --------------------------------
 server               : tcp
 concurrency          : 500
-latency              : 5.054949s
+latency              : 4.441719s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 197825
+throughput (TPS)     : 225138
 --------------------------------
 server               : tcp
 concurrency          : 1000
-latency              : 5.486149s
+latency              : 4.882094s
 data size            : 1.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 182277
+throughput (TPS)     : 204830
 --------------------------------
 server               : tcp
 concurrency          : 1000
-latency              : 7.753779s
+latency              : 6.283487s
 data size            : 2.00KB
 sent requests        : 1000000
 received requests    : 1000000
-throughput (TPS)     : 128969
+throughput (TPS)     : 159147
 --------------------------------
 ```
 
@@ -653,8 +654,8 @@ throughput (TPS)     : 128969
     * consul: github.com/dobyte/due/registry/consul/v2
     * nacos: github.com/dobyte/due/registry/nacos/v2
 4. 传输组件
-    * grpc: github.com/dobyte/due/transporter/grpc/v2
-    * rpcx: github.com/dobyte/due/transporter/rpcx/v2
+    * grpc: github.com/dobyte/due/transport/grpc/v2
+    * rpcx: github.com/dobyte/due/transport/rpcx/v2
 5. 定位组件
     * redis: github.com/dobyte/due/locate/redis/v2
 6. 事件总线
@@ -669,8 +670,10 @@ throughput (TPS)     : 128969
    * nacos: github.com/dobyte/due/config/nacos/v2
 9. 缓存组件
    * redis: github.com/dobyte/due/cache/redis/v2
+   * memcache: github.com/dobyte/due/cache/memcache/v2
 10. 分布式锁组件
     * redis: github.com/dobyte/due/lock/redis/v2
+    * memcache: github.com/dobyte/due/lock/memcache/v2
 
 ### 14.其他客户端
 
@@ -704,7 +707,29 @@ throughput (TPS)     : 128969
    </li>
 </ul>
 
-### 17.交流与讨论
+### 17.常见问题
+
+1. 框架主模块与子模块版本不一致的问题
+
+原因：由于框架采用的是模块化设计，每个模块都有自己的版本号，而主模块的版本号是所有子模块版本号的基础。因此，在使用框架时，需要注意主模块与子模块的版本号是否一致，否则可能会导致一些不可预料的问题。
+
+例如：due主模块版本为v2.3.2，而子模块lock/redis版本为v2.0.0-20250902100831-0402c3a6689f，这就会导致版本不一致的问题。
+
+```text
+github.com/dobyte/due/v2 v2.3.2
+github.com/dobyte/due/lock/redis/v2 v2.0.0-20250902100831-0402c3a6689f
+```
+
+解决：
+
+1.进入到[release](https://github.com/dobyte/due/releases)页面，找到框架发布的版本号对应的commit号：93262b5。
+
+2.执行go get github.com/dobyte/due/lock/redis/v2@93262b5拉取与主模块本版对应的子模块。
+
+3.至此，问题解决。
+
+
+### 18.交流与讨论
 
 <img title="" src="group_qrcode.jpeg" alt="交流群" width="175"><img title="" src="personal_qrcode.jpeg" alt="个人二维码" width="177">
 

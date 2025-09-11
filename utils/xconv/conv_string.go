@@ -83,9 +83,9 @@ func String(val any) string {
 	case *string:
 		return *v
 	case []byte:
-		return *(*string)(unsafe.Pointer(&v))
+		return BytesToString(v)
 	case *[]byte:
-		return *(*string)(unsafe.Pointer(v))
+		return BytesToString(*v)
 	case time.Time:
 		if v.IsZero() {
 			return ""

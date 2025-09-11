@@ -12,11 +12,10 @@ import (
 const scheme = "rpcx"
 
 type Server struct {
-	listenAddr       string
-	exposeAddr       string
-	server           *server.Server
-	endpoint         *endpoint.Endpoint
-	disabledServices []string
+	listenAddr string
+	exposeAddr string
+	server     *server.Server
+	endpoint   *endpoint.Endpoint
 }
 
 type Options struct {

@@ -3,7 +3,7 @@ module github.com/dobyte/due/eventbus/redis/v2
 go 1.23.0
 
 require (
-	github.com/dobyte/due/v2 v2.3.1
+	github.com/dobyte/due/v2 v2.3.3
 	github.com/go-redis/redis/v8 v8.11.5
 )
 

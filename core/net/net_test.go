@@ -35,3 +35,43 @@ func TestExternalIP(t *testing.T) {
 		fmt.Println(ip)
 	}
 }
+
+func TestPublicIP(t *testing.T) {
+	if ip, err := net.PublicIP(); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(ip)
+	}
+
+	net.SetPublicIPResolver(customPublicIPResolver)
+
+	if ip, err := net.PublicIP(); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(ip)
+	}
+}
+
+func TestPrivateIP(t *testing.T) {
+	if ip, err := net.PrivateIP(); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(ip)
+	}
+
+	net.SetPrivateIPResolver(customPrivateIPResolver)
+
+	if ip, err := net.PrivateIP(); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(ip)
+	}
+}
+
+func customPublicIPResolver() (string, error) {
+	return "1.1.1.1", nil
+}
+
+func customPrivateIPResolver() (string, error) {
+	return "192.168.1.1", nil
+}

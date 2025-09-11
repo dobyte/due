@@ -58,10 +58,13 @@ type CorsOptions struct {
 }
 
 type SwagOptions struct {
-	Enable   bool   `json:"enable"`   // 是否启用
-	Title    string `json:"title"`    // 文档标题
-	FilePath string `json:"filePath"` // 文档路径
-	BasePath string `json:"basePath"` // 访问路径
+	Enable           bool   `json:"enable"`           // 是否启用
+	Title            string `json:"title"`            // 文档标题
+	FilePath         string `json:"filePath"`         // 文档路径
+	BasePath         string `json:"basePath"`         // 访问路径
+	SwaggerBundleUrl string `json:"swaggerBundleUrl"` // swagger-ui-bundle.js地址
+	SwaggerPresetUrl string `json:"swaggerPresetUrl"` // swagger-ui-standalone-preset.js地址
+	SwaggerStylesUrl string `json:"swaggerStylesUrl"` // swagger-ui.css地址
 }
 
 func defaultOptions() *options {
