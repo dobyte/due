@@ -2,9 +2,10 @@ package xtime
 
 import (
 	"fmt"
-	"github.com/dobyte/due/v2/etc"
 	"math"
 	"time"
+
+	"github.com/dobyte/due/v2/etc"
 )
 
 const (
@@ -290,14 +291,17 @@ func MonthHead(offset ...int) Time {
 // MonthTail 获取一月中的最后一天的最后一秒
 // offset 偏移月数，例如：-1：前一月 0：当前月 1：下一月
 func MonthTail(offset ...int) Time {
-	now := Now()
+	var (
+		now          = Now()
+		offsetYears  int
+		offsetMonths int
+	)
 
-	if len(offset) == 0 || offset[0] == 0 {
-		return time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
+	if len(offset) > 0 {
+		offsetYears = offset[0] / 12
+		offsetMonths = offset[0] % 12
 	}
 
-	offsetYears := offset[0] / 12
-	offsetMonths := offset[0] % 12
 	year := now.Year() + offsetYears
 	month := int(now.Month()) + offsetMonths
 
