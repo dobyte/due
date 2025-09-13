@@ -174,7 +174,7 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *kcp.UDPSession) {
 	conn.SetWriteDelay(false)
 	conn.SetNoDelay(1, 10, 2, 1)
 	conn.SetMtu(1500)
-	//conn.SetWindowSize(config.SndWnd, config.RcvWnd)
+	// conn.SetWindowSize(config.SndWnd, config.RcvWnd)
 	conn.SetACKNoDelay(true)
 
 	xcall.Go(c.read)
@@ -211,6 +211,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 
 	c.rw.RLock()
 	c.chWrite <- chWrite{typ: closeSig}
+	c.close <- struct{}{}
 	c.rw.RUnlock()
 
 	<-c.done
