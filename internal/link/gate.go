@@ -325,29 +325,53 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 
 // 直接推送
 func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
-	message, err := l.PackMessage(args.Message, true)
-	if err != nil {
-		return err
-	}
-
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
 		return err
 	}
 
-	return client.Push(ctx, args.Kind, args.Target, message)
-}
-
-// 间接推送
-func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
 	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
 		return err
 	}
 
-	_, err = l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
-		return false, nil, client.Push(ctx, args.Kind, args.Target, message)
+	err = client.Push(ctx, args.Kind, args.Target, message)
+
+	if err != nil {
+		message.Release()
+	}
+
+	return err
+}
+
+// 间接推送
+func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
+	_, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
+		message, err := l.PackMessage(args.Message, true)
+		if err != nil {
+			return false, nil, err
+		}
+
+		err = client.Push(ctx, args.Kind, args.Target, message)
+
+		if err != nil {
+			message.Release()
+		}
+
+		return false, nil, err
 	})
+
+	return err
+}
+
+// 执行推送消息
+func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
+	_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
+		return false, nil, client.Push(ctx, kind, target, message)
+	})
+	if err != nil {
+		message.Release()
+	}
 
 	return err
 }
@@ -374,22 +398,30 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 		return errors.ErrReceiveTargetEmpty
 	}
 
-	message, err := l.PackMessage(args.Message, true)
-	if err != nil {
-		return err
-	}
-
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
 		return err
 	}
 
-	return client.Multicast(ctx, args.Kind, args.Targets, message)
+	message, err := l.PackMessage(args.Message, true)
+	if err != nil {
+		return err
+	}
+
+	err = client.Multicast(ctx, args.Kind, args.Targets, message)
+
+	if err != nil {
+		message.Release()
+	}
+
+	return err
 }
 
 // 间接推送组播消息
 func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) error {
-	if len(args.Targets) == 0 {
+	n := len(args.Targets)
+
+	if n == 0 {
 		return errors.ErrReceiveTargetEmpty
 	}
 
@@ -398,24 +430,30 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		return err
 	}
 
-	message.Delay(int32(len(args.Targets)))
+	message.Delay(int32(n))
 
+	if n == 1 {
+		return l.doPush(ctx, args.Kind, args.Targets[0], message)
+	}
+
+	total := atomic.Int32{}
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for i := range args.Targets {
 		target := args.Targets[i]
 
 		eg.Go(func() error {
-			_, err = l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
-				return false, nil, client.Push(ctx, args.Kind, target, message)
-			})
+			err = l.doPush(ctx, args.Kind, target, message)
+
+			if err == nil {
+				total.Add(1)
+			}
+
 			return err
 		})
 	}
 
-	if err = eg.Wait(); err != nil {
-		message.Release(true)
-
+	if err = eg.Wait(); err != nil && total.Load() == 0 {
 		return err
 	}
 
@@ -426,7 +464,9 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
 	endpoints := l.dispatcher.Endpoints()
 
-	if len(endpoints) == 0 {
+	n := len(endpoints)
+
+	if n == 0 {
 		return nil
 	}
 
@@ -435,37 +475,62 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
 		return err
 	}
 
-	message.Delay(int32(len(endpoints)))
+	message.Delay(int32(n))
 
+	if n == 1 {
+		for _, ep := range endpoints {
+			return l.doBroadcast(ctx, ep.Address(), args.Kind, message)
+		}
+	}
+
+	total := atomic.Int32{}
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, ep := range endpoints {
 		addr := ep.Address()
 
 		eg.Go(func() error {
-			client, err := l.builder.Build(addr)
-			if err != nil {
-				return err
+			err = l.doBroadcast(ctx, addr, args.Kind, message)
+
+			if err == nil {
+				total.Add(1)
 			}
 
-			return client.Broadcast(ctx, args.Kind, message)
+			return err
 		})
 	}
 
-	if err = eg.Wait(); err != nil {
-		message.Release(true)
-
+	if err = eg.Wait(); err != nil && total.Load() == 0 {
 		return err
 	}
 
 	return nil
 }
 
+// 执行广播消息
+func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, message buffer.Buffer) error {
+	client, err := l.builder.Build(addr)
+	if err != nil {
+		message.Release()
+		return err
+	}
+
+	err = client.Broadcast(ctx, kind, message)
+
+	if err != nil {
+		message.Release()
+	}
+
+	return err
+}
+
 // Publish 发布频道消息
 func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) error {
 	endpoints := l.dispatcher.Endpoints()
 
-	if len(endpoints) == 0 {
+	n := len(endpoints)
+
+	if n == 0 {
 		return nil
 	}
 
@@ -474,30 +539,53 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) error {
 		return err
 	}
 
-	message.Delay(int32(len(endpoints)))
+	message.Delay(int32(n))
 
+	if n == 1 {
+		for _, ep := range endpoints {
+			return l.doPublish(ctx, ep.Address(), args.Channel, message)
+		}
+	}
+
+	total := atomic.Int32{}
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for _, ep := range endpoints {
 		addr := ep.Address()
 
 		eg.Go(func() error {
-			client, err := l.builder.Build(addr)
-			if err != nil {
-				return err
+			err = l.doPublish(ctx, addr, args.Channel, message)
+
+			if err == nil {
+				total.Add(1)
 			}
 
-			return client.Publish(ctx, args.Channel, message)
+			return err
 		})
 	}
 
-	if err = eg.Wait(); err != nil {
-		message.Release(true)
-
+	if err = eg.Wait(); err != nil && total.Load() == 0 {
 		return err
 	}
 
 	return nil
+}
+
+// 执行发布频道消息
+func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, message buffer.Buffer) error {
+	client, err := l.builder.Build(addr)
+	if err != nil {
+		message.Release()
+		return err
+	}
+
+	err = client.Publish(ctx, channel, message)
+
+	if err != nil {
+		message.Release()
+	}
+
+	return err
 }
 
 // Subscribe 订阅频道

@@ -48,9 +48,12 @@ func (n *NocopyNode) Release() {
 	case []byte:
 		n.buf = nil
 	case *Writer:
-		b.Reset()
-		if n.pool != nil {
-			n.pool.Put(b)
+		if b != nil {
+			b.Reset()
+			n.buf = nil
+			if n.pool != nil {
+				n.pool.Put(b)
+			}
 		}
 	}
 }

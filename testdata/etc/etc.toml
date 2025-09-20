@@ -134,6 +134,10 @@ shutdownMaxWaitTime = "0s"
         # swagger-ui.css地址。当系统默认的cdn失效时可替换为自己的cdn地址，默认为空，使用系统默认https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css
         swaggerStylesUrl = ""
 
+# pprof模块
+[pprof]
+    # pprof服务器监听地址
+    addr = ":0"
 
 # 传输模块
 [transport]

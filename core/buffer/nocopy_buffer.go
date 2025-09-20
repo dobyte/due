@@ -7,13 +7,14 @@ import (
 var defaultWriterPool = NewWriterPool([]int{32, 64, 128, 256, 512, 1024, 2048, 4096, 10240})
 
 type NocopyBuffer struct {
-	len   int          // 字节数
-	num   int          // 节点数
-	head  any          // 头节点
-	tail  any          // 尾节点
-	prev  any          // 上一个节点
-	next  any          // 下一个节点
-	delay atomic.Int32 // 延迟释放点
+	len      int          // 字节数
+	num      int          // 节点数
+	head     any          // 头节点
+	tail     any          // 尾节点
+	prev     any          // 上一个节点
+	next     any          // 下一个节点
+	delay    atomic.Int32 // 延迟释放点
+	released atomic.Bool  // 已释放
 }
 
 var _ Buffer = &NocopyBuffer{}
@@ -159,23 +160,27 @@ func (b *NocopyBuffer) Delay(delay int32) {
 // Release 释放
 func (b *NocopyBuffer) Release(force ...bool) {
 	if (len(force) > 0 && force[0]) || b.delay.Add(-1) <= 0 {
-		for node := b.head; node != nil; {
-			switch n := node.(type) {
-			case *NocopyNode:
-				next := n.next
-				n.Release()
-				node = next
-			case *NocopyBuffer:
-				next := n.next
-				n.Release(force...)
-				node = next
+		if b.released.CompareAndSwap(false, true) {
+			for node := b.head; node != nil; {
+				switch n := node.(type) {
+				case *NocopyNode:
+					next := n.next
+					n.Release()
+					node = next
+				case *NocopyBuffer:
+					next := n.next
+					n.Release(force...)
+					node = next
+				}
 			}
+			b.len = -1
+			b.num = 0
+			b.head = nil
+			b.tail = nil
+			b.prev = nil
+			b.next = nil
+			b.delay.Store(0)
 		}
-		b.len = -1
-		b.num = 0
-		b.head = nil
-		b.tail = nil
-		b.delay.Store(0)
 	}
 }
 
