@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/IBM/sarama v1.43.3
-	github.com/dobyte/due/v2 v2.3.3
+	github.com/dobyte/due/v2 v2.3.4
 )
 
 require (
