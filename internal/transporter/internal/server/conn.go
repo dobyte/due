@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,14 +15,18 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
+type chWrite struct {
+	isHeartbeat bool
+	buf         buffer.Buffer
+}
+
 type Conn struct {
 	ctx               context.Context    // 上下文
 	cancel            context.CancelFunc // 取消函数
 	server            *Server            // 连接管理
-	rw                sync.RWMutex       // 锁
 	conn              net.Conn           // TCP源连接
 	state             int32              // 连接状态
-	chData            chan chData        // 消息处理通道
+	chWrite           chan chWrite       // 写入通道
 	lastHeartbeatTime int64              // 上次心跳时间
 	InsKind           cluster.Kind       // 集群类型
 	InsID             string             // 集群ID
@@ -35,44 +38,25 @@ func newConn(server *Server, conn net.Conn) *Conn {
 	c.conn = conn
 	c.server = server
 	c.state = def.ConnOpened
-	c.chData = make(chan chData, 10240)
+	c.chWrite = make(chan chWrite, 4096)
 	c.lastHeartbeatTime = xtime.Now().Unix()
 
 	go c.read()
 
-	go c.process()
+	go c.write()
 
 	return c
 }
 
 // Send 发送消息
-func (c *Conn) Send(buf buffer.Buffer) (err error) {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if err = c.checkState(); err != nil {
-		return err
-	}
-
-	buf.Visit(func(node *buffer.NocopyNode) bool {
-		if _, err = c.conn.Write(node.Bytes()); err != nil {
-			return false
-		}
-		return true
-	})
-
-	buf.Release()
-
-	return
-}
-
-// 检测连接状态
-func (c *Conn) checkState() error {
+func (c *Conn) Send(buf buffer.Buffer) error {
 	if atomic.LoadInt32(&c.state) == def.ConnClosed {
 		return errors.ErrConnectionClosed
-	} else {
-		return nil
 	}
+
+	c.chWrite <- chWrite{buf: buf}
+
+	return nil
 }
 
 // 关闭连接
@@ -81,18 +65,19 @@ func (c *Conn) close(isNeedRecycle ...bool) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
 	c.cancel()
-
-	close(c.chData)
 
 	if len(isNeedRecycle) > 0 && isNeedRecycle[0] {
 		c.server.recycle(c.conn)
 	}
 
-	return c.conn.Close()
+	err := c.conn.Close()
+
+	time.AfterFunc(time.Second, func() {
+		close(c.chWrite)
+	})
+
+	return err
 }
 
 // 读取消息
@@ -110,26 +95,30 @@ func (c *Conn) read() {
 				return
 			}
 
-			c.rw.RLock()
-
 			if atomic.LoadInt32(&c.state) == def.ConnClosed {
-				c.rw.RUnlock()
 				return
 			}
 
-			c.chData <- chData{
-				isHeartbeat: isHeartbeat,
-				route:       route,
-				data:        data,
-			}
+			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 
-			c.rw.RUnlock()
+			if isHeartbeat {
+				c.chWrite <- chWrite{isHeartbeat: true}
+			} else {
+				handler, ok := c.server.handlers[route]
+				if !ok {
+					continue
+				}
+
+				if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+					log.Warnf("process route %d message failed: %v", route, err)
+				}
+			}
 		}
 	}
 }
 
-// 处理数据
-func (c *Conn) process() {
+// 写入消息
+func (c *Conn) write() {
 	ticker := time.NewTicker(def.HeartbeatInterval)
 	defer ticker.Stop()
 
@@ -143,35 +132,30 @@ func (c *Conn) process() {
 				_ = c.close(true)
 				return
 			}
-		case ch, ok := <-c.chData:
+		case ch, ok := <-c.chWrite:
 			if !ok {
 				return
 			}
 
-			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
-
 			if ch.isHeartbeat {
-				c.heartbeat()
-			} else {
-				handler, ok := c.server.handlers[ch.route]
-				if !ok {
-					continue
+				if _, err := c.conn.Write(protocol.Heartbeat()); err != nil {
+					log.Warnf("write heartbeat message error: %v", err)
 				}
+			} else {
+				ok = ch.buf.Visit(func(node *buffer.NocopyNode) bool {
+					if _, err := c.conn.Write(node.Bytes()); err != nil {
+						log.Warnf("write buffer message error: %v", err)
+						return false
+					}
+					return true
+				})
 
-				if err := handler(c, ch.data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-					log.Warnf("process route %d message failed: %v", ch.route, err)
+				ch.buf.Release()
+
+				if !ok {
+					return
 				}
 			}
 		}
-	}
-}
-
-// 响应心跳消息
-func (c *Conn) heartbeat() {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if _, err := c.conn.Write(protocol.Heartbeat()); err != nil {
-		log.Warnf("write heartbeat message error: %v", err)
 	}
 }

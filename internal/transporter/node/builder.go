@@ -36,12 +36,18 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			return cli.(*Client), nil
 		}
 
-		cli := NewClient(client.NewClient(&client.Options{
+		c := client.NewClient(&client.Options{
 			Addr:         addr,
 			InsID:        b.opts.InsID,
 			InsKind:      b.opts.InsKind,
 			CloseHandler: func() { b.clients.Delete(addr) },
-		}))
+		})
+
+		if err := c.Establish(); err != nil {
+			return nil, err
+		}
+
+		cli := NewClient(c)
 
 		b.clients.Store(addr, cli)
 

@@ -42,7 +42,7 @@ func (c *Container) Add(components ...component.Component) {
 }
 
 // Serve 启动容器
-func (c *Container) Serve() {
+func (c *Container) Serve(flash ...bool) {
 	c.doSaveProcessID()
 
 	c.doPrintFrameworkInfo()
@@ -51,7 +51,9 @@ func (c *Container) Serve() {
 
 	c.doStartComponents()
 
-	c.doWaitSystemSignal()
+	if len(flash) == 0 || !flash[0] {
+		c.doWaitSystemSignal()
+	}
 
 	c.doCloseComponents()
 

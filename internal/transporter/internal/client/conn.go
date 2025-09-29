@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
 	"time"
@@ -19,46 +20,29 @@ const (
 )
 
 type Conn struct {
-	cli               *Client       // 客户端
-	state             int32         // 连接状态
-	chWrite           chan *chWrite // 写入队列
-	pending           *pending      // 等待队列
-	done              chan struct{} // 关闭请求
-	builtin           bool          // 是否内建
-	lastHeartbeatTime int64         // 上次心跳时间
+	cli               *Client            // 客户端
+	state             atomic.Int32       // 连接状态
+	pending           *pending           // 等待队列
+	orderlyQueue      chan *chWrite      // 有序队列
+	disorderlyQueue   chan *chWrite      // 无序队列
+	ctx               context.Context    // 上下文
+	cancel            context.CancelFunc // 取消函数
+	lastHeartbeatTime atomic.Int64       // 上次心跳时间
 }
 
-func newConn(cli *Client, ch ...chan *chWrite) *Conn {
+func newConn(cli *Client, queue chan *chWrite) *Conn {
 	c := &Conn{}
 	c.cli = cli
-	c.state = def.ConnClosed
+	c.state.Store(def.ConnClosed)
 	c.pending = newPending()
-
-	if len(ch) > 0 {
-		c.chWrite = ch[0]
-	} else {
-		c.chWrite = make(chan *chWrite, 10240)
-		c.builtin = true
-	}
-
-	c.dial()
+	c.orderlyQueue = make(chan *chWrite, 4096)
+	c.disorderlyQueue = queue
 
 	return c
 }
 
-// 发送
-func (c *Conn) send(ch *chWrite) error {
-	if atomic.LoadInt32(&c.state) == def.ConnClosed {
-		return errors.ErrConnectionClosed
-	}
-
-	c.chWrite <- ch
-
-	return nil
-}
-
 // 拨号
-func (c *Conn) dial() {
+func (c *Conn) dial() error {
 	var (
 		delay time.Duration
 		retry int
@@ -70,9 +54,8 @@ func (c *Conn) dial() {
 			retry++
 
 			if retry >= maxRetryTimes {
-				log.Warnf("dial failed: %v", err)
 				c.close()
-				break
+				return err
 			} else {
 				if delay == 0 {
 					delay = 5 * time.Millisecond
@@ -89,46 +72,76 @@ func (c *Conn) dial() {
 			}
 		}
 
-		c.process(conn)
-
-		break
+		return c.process(conn)
 	}
 }
 
+// 发送
+func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
+	if c.state.Load() == def.ConnClosed {
+		return errors.ErrConnectionClosed
+	}
+
+	if len(isOrderly) > 0 && isOrderly[0] {
+		c.orderlyQueue <- ch
+	} else {
+		c.disorderlyQueue <- ch
+	}
+
+	return nil
+}
+
 // 处理连接
-func (c *Conn) process(conn net.Conn) {
-	atomic.StoreInt32(&c.state, def.ConnOpened)
-
-	c.done = make(chan struct{})
-
-	c.lastHeartbeatTime = xtime.Now().Unix()
+func (c *Conn) process(conn net.Conn) (err error) {
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.state.Store(def.ConnOpened)
+	c.lastHeartbeatTime.Store(xtime.Now().Unix())
 
 	go c.read(conn)
 
-	seq := uint64(1)
+	defer func() {
+		if err != nil {
+			c.close()
+		}
+	}()
 
-	call := make(chan []byte)
-
-	c.pending.store(seq, call)
-
-	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
-
-	defer buf.Release()
-
-	if _, err := conn.Write(buf.Bytes()); err != nil {
+	if err = c.handshake(conn); err != nil {
 		return
 	}
 
-	<-call
-
 	go c.write(conn)
+
+	return
+}
+
+// 握手
+func (c *Conn) handshake(conn net.Conn) (err error) {
+	var (
+		seq  = uint64(1)
+		call = make(chan []byte)
+	)
+
+	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
+	defer buf.Release()
+
+	c.pending.store(seq, call)
+
+	if _, err = conn.Write(buf.Bytes()); err != nil {
+		c.pending.delete(seq)
+	} else {
+		<-call
+	}
+
+	close(call)
+
+	return
 }
 
 // 读取数据
 func (c *Conn) read(conn net.Conn) {
 	for {
 		select {
-		case <-c.done:
+		case <-c.ctx.Done():
 			return
 		default:
 			isHeartbeat, _, seq, data, err := protocol.ReadMessage(conn)
@@ -137,7 +150,7 @@ func (c *Conn) read(conn net.Conn) {
 				return
 			}
 
-			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
+			c.lastHeartbeatTime.Store(xtime.Now().Unix())
 
 			if isHeartbeat {
 				continue
@@ -160,11 +173,16 @@ func (c *Conn) write(conn net.Conn) {
 
 	for {
 		select {
-		case <-c.done:
+		case <-c.ctx.Done():
 			return
-		case <-ticker.C:
-			deadline := xtime.Now().Add(-2 * def.HeartbeatInterval).Unix()
-			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+		case t, ok := <-ticker.C:
+			if !ok {
+				return
+			}
+
+			deadline := t.Add(-2 * def.HeartbeatInterval).Unix()
+
+			if c.lastHeartbeatTime.Load() < deadline {
 				c.retry(conn)
 				return
 			} else {
@@ -174,55 +192,82 @@ func (c *Conn) write(conn net.Conn) {
 					return
 				}
 			}
-		case ch, ok := <-c.chWrite:
+		case ch, ok := <-c.orderlyQueue: // 有序队列
 			if !ok {
 				return
 			}
 
-			if ch.seq != 0 {
-				c.pending.store(ch.seq, ch.call)
+			if ok = c.doWrite(conn, ch); !ok {
+				return
+			}
+		case ch, ok := <-c.disorderlyQueue: // 无序队列
+			if !ok {
+				return
 			}
 
-			ch.buf.Visit(func(node *buffer.NocopyNode) bool {
-				if _, err := conn.Write(node.Bytes()); err != nil {
-					return false
-				} else {
-					return true
-				}
-			})
-
-			ch.buf.Release()
+			if ok = c.doWrite(conn, ch); !ok {
+				return
+			}
 		}
 	}
 }
 
+// 执行写入数据
+func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
+	if ch.seq != 0 {
+		c.pending.store(ch.seq, ch.call)
+	}
+
+	ok := ch.buf.Visit(func(node *buffer.NocopyNode) bool {
+		if _, err := conn.Write(node.Bytes()); err != nil {
+			return false
+		} else {
+			return true
+		}
+	})
+
+	c.cli.release(ch)
+
+	if !ok {
+		c.retry(conn)
+	}
+
+	return ok
+}
+
 // 重试拨号
 func (c *Conn) retry(conn net.Conn) {
-	if !atomic.CompareAndSwapInt32(&c.state, def.ConnOpened, def.ConnRetrying) {
+	if !c.state.CompareAndSwap(def.ConnOpened, def.ConnRetrying) {
 		return
 	}
 
-	_ = conn.Close()
+	conn.Close()
 
-	close(c.done)
+	if c.cancel != nil {
+		c.cancel()
+	}
 
-	c.dial()
+	if err := c.dial(); err != nil {
+		log.Warnf("retry dial failed: %v", err)
+	}
 }
 
 // 关闭连接
 func (c *Conn) close() {
+	c.state.Store(def.ConnClosed)
+
 	c.cli.done()
 
-	atomic.StoreInt32(&c.state, def.ConnClosed)
-
-	if c.builtin {
-		time.AfterFunc(time.Second, func() {
-			close(c.chWrite)
-		})
+	if c.cancel != nil {
+		c.cancel()
 	}
+
+	time.AfterFunc(time.Second, func() {
+		close(c.orderlyQueue)
+	})
 }
 
 // 取消回调
-func (c *Conn) cancel(seq uint64) {
+func (c *Conn) delete(seq uint64) {
 	c.pending.delete(seq)
 }
