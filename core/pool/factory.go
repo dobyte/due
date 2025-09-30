@@ -20,10 +20,12 @@ func NewFactory[T any](new func(name string) (T, error)) *Factory[T] {
 }
 
 // Get 获取单例对象
-func (f *Factory[T]) Get(name string) (ins T, err error) {
+func (f *Factory[T]) Get(name string) (T, error) {
 	if val, ok := f.ins.Load(name); ok {
 		return val.(T), nil
 	}
+
+	var zero T
 
 	val, err, _ := f.sfg.Do(name, func() (any, error) {
 		if val, ok := f.ins.Load(name); ok {
@@ -32,7 +34,7 @@ func (f *Factory[T]) Get(name string) (ins T, err error) {
 
 		val, err := f.new(name)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 
 		f.ins.Store(name, val)
@@ -40,7 +42,7 @@ func (f *Factory[T]) Get(name string) (ins T, err error) {
 		return val, nil
 	})
 	if err != nil {
-		return
+		return zero, err
 	}
 
 	return val.(T), nil
