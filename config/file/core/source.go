@@ -10,7 +10,7 @@ import (
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xfile"
+	"github.com/dobyte/due/v2/utils/xos"
 )
 
 const Name = "file"
@@ -80,7 +80,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.New("the specified file cannot be modified under the file path")
 	}
 
-	return xfile.WriteFile(filepath.Join(s.path, file), content)
+	return xos.WriteFile(filepath.Join(s.path, file), content)
 }
 
 // Watch 监听配置变化

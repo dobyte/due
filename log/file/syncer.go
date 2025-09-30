@@ -16,7 +16,7 @@ import (
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log/internal"
-	"github.com/dobyte/due/v2/utils/xfile"
+	"github.com/dobyte/due/v2/utils/xos"
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
@@ -93,7 +93,7 @@ func (s *Syncer) init() {
 		return
 	}
 
-	fi, err := xfile.Stat(s.opts.path)
+	fi, err := xos.Stat(s.opts.path)
 	if err != nil {
 		return
 	}

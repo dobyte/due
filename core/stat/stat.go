@@ -1,4 +1,4 @@
-package xfile
+package stat
 
 import (
 	"os"
@@ -14,6 +14,8 @@ type FileInfo interface {
 	Mode() os.FileMode
 	// IsDir 检测文件是否是目录
 	IsDir() bool
+	// IsFile 检测文件是否是普通文件
+	IsFile() bool
 	// Sys 获取系统原始数据
 	Sys() any
 	// CreateTime 获取文件创建时间
@@ -58,6 +60,11 @@ func (fs *fileStat) ModifyTime() time.Time {
 // IsDir 检测文件是否是目录
 func (fs *fileStat) IsDir() bool {
 	return fs.fi.IsDir()
+}
+
+// IsFile 检测文件是否是普通文件
+func (fs *fileStat) IsFile() bool {
+	return !fs.IsDir()
 }
 
 // Sys 获取系统原始数据

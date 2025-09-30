@@ -4,6 +4,7 @@ import (
 	"reflect"
 )
 
+// Value 获取值的反射类型和值
 func Value(val any) (reflect.Kind, reflect.Value) {
 	var (
 		rv = reflect.ValueOf(val)

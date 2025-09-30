@@ -1,4 +1,4 @@
-package xfile
+package stat
 
 import (
 	"syscall"

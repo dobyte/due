@@ -19,7 +19,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xcall"
-	"github.com/dobyte/due/v2/utils/xfile"
+	"github.com/dobyte/due/v2/utils/xos"
 )
 
 const (
@@ -146,7 +146,7 @@ func (c *Container) doSaveProcessID() {
 		return
 	}
 
-	if err := xfile.WriteFile(filename, []byte(strconv.Itoa(syscall.Getpid()))); err != nil {
+	if err := xos.WriteFile(filename, []byte(strconv.Itoa(syscall.Getpid()))); err != nil {
 		log.Fatalf("pid save failed: %v", err)
 	}
 }

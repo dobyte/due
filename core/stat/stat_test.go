@@ -1,12 +1,13 @@
-package xfile_test
+package stat_test
 
 import (
-	"github.com/dobyte/due/v2/utils/xfile"
 	"testing"
+
+	"github.com/dobyte/due/v2/core/stat"
 )
 
 func TestStat(t *testing.T) {
-	fi, err := xfile.Stat("a.txt")
+	fi, err := stat.Stat("stat_linux.go")
 	if err != nil {
 		t.Fatal(err)
 	}

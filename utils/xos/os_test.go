@@ -1,14 +1,14 @@
 package xos_test
 
 import (
-	"github.com/dobyte/due/v2/utils/xos"
 	"testing"
+
+	xfile "github.com/dobyte/due/v2/utils/xos"
 )
 
-func TestCreate(t *testing.T) {
-	_, err := xos.Create("./pprof/server/cpu_profile")
+func TestWriteFile(t *testing.T) {
+	err := xfile.WriteFile("./run/test.txt", []byte("hello world"))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("write file failed: %v", err)
 	}
-
 }
