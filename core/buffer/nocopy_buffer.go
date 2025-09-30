@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 )
 
-var defaultWriterPool = NewWriterPool([]int{32, 64, 128, 256, 512, 1024, 2048, 4096, 10240})
+var defaultWriterPool = NewWriterPool(32)
 
 type NocopyBuffer struct {
 	len      int          // 字节数
