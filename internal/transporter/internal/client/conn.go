@@ -78,8 +78,13 @@ func (c *Conn) dial() error {
 
 // 发送
 func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
-	if c.state.Load() == def.ConnClosed {
+	switch c.state.Load() {
+	case def.ConnClosed:
 		return errors.ErrConnectionClosed
+	case def.ConnHanged:
+		return errors.ErrConnectionHanged
+	default:
+		// ignore
 	}
 
 	if len(isOrderly) > 0 && isOrderly[0] {
@@ -237,7 +242,7 @@ func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
 
 // 重试拨号
 func (c *Conn) retry(conn net.Conn) {
-	if !c.state.CompareAndSwap(def.ConnOpened, def.ConnRetrying) {
+	if !c.state.CompareAndSwap(def.ConnOpened, def.ConnHanged) {
 		return
 	}
 

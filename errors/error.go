@@ -48,6 +48,7 @@ var (
 	ErrNotFoundServiceAddress  = New("not found service address")
 	ErrUnknownError            = New("unknown error")
 	ErrClientClosed            = New("client is closed")
+	ErrServerClosed            = New("server is closed")
 	ErrActorExists             = New("actor exists")
 	ErrMissingDispatchStrategy = New("missing dispatch strategy")
 	ErrUnregisterRoute         = New("unregistered route")

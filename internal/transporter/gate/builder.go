@@ -2,11 +2,16 @@ package gate
 
 import (
 	"sync"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/singleflight"
 )
+
+const defaultFaultTimeout = 3 * time.Second // 默认故障超时时间
 
 type Options struct {
 	InsID   string       // 实例ID
@@ -16,6 +21,7 @@ type Options struct {
 type Builder struct {
 	sfg     singleflight.Group
 	opts    *Options
+	faults  sync.Map
 	clients sync.Map
 }
 
@@ -36,11 +42,18 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			return cli.(*Client), nil
 		}
 
+		if t, ok := b.faults.Load(addr); ok && xtime.Now().Sub(t.(xtime.Time)) <= defaultFaultTimeout {
+			return nil, errors.ErrServerClosed
+		}
+
 		c := client.NewClient(&client.Options{
-			Addr:         addr,
-			InsID:        b.opts.InsID,
-			InsKind:      b.opts.InsKind,
-			CloseHandler: func() { b.clients.Delete(addr) },
+			Addr:    addr,
+			InsID:   b.opts.InsID,
+			InsKind: b.opts.InsKind,
+			CloseHandler: func() {
+				b.faults.Store(addr, xtime.Now())
+				b.clients.Delete(addr)
+			},
 		})
 
 		if err := c.Establish(); err != nil {

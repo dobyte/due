@@ -3,9 +3,9 @@ package def
 import "time"
 
 const (
-	ConnClosed   int32 = iota // 连接打开
-	ConnOpened                // 连接关闭
-	ConnRetrying              // 连接重试
+	ConnClosed int32 = iota // 连接打开
+	ConnOpened              // 连接关闭
+	ConnHanged              // 连接挂起
 )
 
 const (
