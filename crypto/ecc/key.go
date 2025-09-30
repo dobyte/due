@@ -19,7 +19,7 @@ import (
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/dobyte/due/v2/utils/xpath"
+	"github.com/dobyte/due/v2/utils/xos"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 )
 
@@ -99,7 +99,7 @@ func (k *Key) marshalPrivateKey(out io.Writer) error {
 
 // SaveKeyPair 保存秘钥对
 func (k *Key) SaveKeyPair(dir string, file string) (err error) {
-	if !xpath.IsDir(dir) {
+	if !xos.IsDir(dir) {
 		err = os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
 			return
@@ -133,7 +133,7 @@ func (k *Key) savePrivateKey(dir string, file string) (err error) {
 
 // 保存公钥
 func (k *Key) savePublicKey(dir string, file string) (err error) {
-	base, _, name, ext := xpath.Split(file)
+	base, _, name, ext := xos.Split(file)
 	if ext != "" {
 		file = name + ".pub." + ext
 	} else {
@@ -161,7 +161,7 @@ func loadKey(key string) (*pem.Block, error) {
 		buffer []byte
 	)
 
-	if xpath.IsFile(key) {
+	if xos.IsFile(key) {
 		buffer, err = os.ReadFile(key)
 		if err != nil {
 			return nil, err
