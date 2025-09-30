@@ -21,6 +21,11 @@ const (
 
 var globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
+// Rand 获取全局随机对象
+func Rand() *rand.Rand {
+	return globalRand
+}
+
 // Str 生成指定长度的字符串
 func Str(seed string, length int) (str string) {
 	if length <= 0 {
@@ -34,7 +39,7 @@ func Str(seed string, length int) (str string) {
 		return
 	}
 
-	for i := 0; i < length; i++ {
+	for range length {
 		pos := globalRand.Intn(n)
 		str += string(r[pos : pos+1])
 	}
@@ -204,8 +209,4 @@ func Shuffle(list []any) {
 	globalRand.Shuffle(len(list), func(i, j int) {
 		list[i], list[j] = list[j], list[i]
 	})
-}
-
-func Rand() *rand.Rand {
-	return globalRand
 }

@@ -61,3 +61,22 @@ func PaddingSuffix(s, padding string, length int) string {
 
 	return s + strings.Repeat(padding, n)[:paddingLen]
 }
+
+// Replace 替换指定范围的字符串
+func Replace(str string, start, count int, replace string) string {
+	s := []rune(str)
+
+	if start >= len(s) {
+		return str
+	}
+
+	if count < 0 {
+		count = len(s) - start
+	} else {
+		if start+count >= len(s) {
+			count = len(s) - start
+		}
+	}
+
+	return string(s[:start]) + strings.Repeat(replace, count) + string(s[start+count:])
+}
