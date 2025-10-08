@@ -11,7 +11,7 @@ import (
 
 type client struct {
 	opts              *clientOptions            // 配置
-	id                int64                     // 连接ID
+	id                atomic.Int64              // 连接ID
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
@@ -63,7 +63,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		}
 	}
 
-	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
+	return newClientConn(c, c.id.Add(1), conn), nil
 }
 
 // Protocol 协议

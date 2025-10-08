@@ -46,6 +46,10 @@ type Packer interface {
 	CheckHeartbeat(data []byte) (bool, error)
 }
 
+type sizeBuffer struct {
+	bytes []byte
+}
+
 type defaultPacker struct {
 	opts             *options
 	heartbeat        []byte
@@ -71,27 +75,15 @@ func NewPacker(opts ...Option) *defaultPacker {
 		log.Fatalf("the number of buffer bytes must be greater than or equal to 0, and give %d", o.bufferBytes)
 	}
 
-	p := &defaultPacker{opts: o}
-
-	if !o.heartbeatTime {
-		buf := &bytes.Buffer{}
-
-		buf.Grow(defaultSizeBytes + defaultHeaderBytes)
-
-		_ = binary.Write(buf, o.byteOrder, uint32(defaultHeaderBytes))
-
-		_ = binary.Write(buf, o.byteOrder, uint8(heartbeatBit))
-
-		p.heartbeat = buf.Bytes()
+	return &defaultPacker{
+		opts: o,
+		readerSizePool: sync.Pool{New: func() any {
+			return &sizeBuffer{bytes: make([]byte, defaultSizeBytes)}
+		}},
+		readerBufferPool: sync.Pool{New: func() any {
+			return make([]byte, defaultSizeBytes+defaultHeaderBytes+o.routeBytes+o.seqBytes+o.bufferBytes)
+		}},
 	}
-
-	p.readerSizePool = sync.Pool{New: func() any { return make([]byte, defaultSizeBytes) }}
-
-	p.readerBufferPool = sync.Pool{New: func() any {
-		return make([]byte, defaultSizeBytes+defaultHeaderBytes+o.routeBytes+o.seqBytes+o.bufferBytes)
-	}}
-
-	return p
 }
 
 // ReadMessage 读取消息
@@ -146,19 +138,19 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 
 // 拷贝读取消息
 func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
-	buf := make([]byte, defaultSizeBytes)
+	buf := p.readerSizePool.Get().(*sizeBuffer)
+	defer p.readerSizePool.Put(buf)
 
-	_, err := io.ReadFull(reader, buf)
-	if err != nil {
+	if _, err := io.ReadFull(reader, buf.bytes); err != nil {
 		return nil, err
 	}
 
 	var size uint32
 
 	if p.opts.byteOrder == binary.BigEndian {
-		size = binary.BigEndian.Uint32(buf)
+		size = binary.BigEndian.Uint32(buf.bytes)
 	} else {
-		size = binary.LittleEndian.Uint32(buf)
+		size = binary.LittleEndian.Uint32(buf.bytes)
 	}
 
 	if size == 0 {
@@ -166,10 +158,9 @@ func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
 	}
 
 	data := make([]byte, defaultSizeBytes+size)
-	copy(data[:defaultSizeBytes], buf)
+	copy(data[:defaultSizeBytes], buf.bytes)
 
-	_, err = io.ReadFull(reader, data[defaultSizeBytes:])
-	if err != nil {
+	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
 		return nil, err
 	}
 
@@ -377,33 +368,40 @@ func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 
 // PackHeartbeat 打包心跳
 func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
-	if !p.opts.heartbeatTime {
+	if p.opts.heartbeatTime {
+		var (
+			buf  = &bytes.Buffer{}
+			size = defaultHeaderBytes + defaultHeartbeatTimeBytes
+		)
+
+		buf.Grow(defaultSizeBytes + size)
+
+		if err := binary.Write(buf, p.opts.byteOrder, uint32(size)); err != nil {
+			return nil, err
+		}
+
+		if err := binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit)); err != nil {
+			return nil, err
+		}
+
+		if err := binary.Write(buf, p.opts.byteOrder, time.Now().UnixNano()); err != nil {
+			return nil, err
+		}
+
+		return buf.Bytes(), nil
+	} else {
+		if len(p.heartbeat) == 0 {
+			buf := bytes.NewBuffer(p.heartbeat)
+			buf.Grow(defaultSizeBytes + defaultHeaderBytes)
+
+			_ = binary.Write(buf, p.opts.byteOrder, uint32(defaultHeaderBytes))
+			_ = binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit))
+
+			p.heartbeat = buf.Bytes()
+		}
+
 		return p.heartbeat, nil
 	}
-
-	var (
-		buf  = &bytes.Buffer{}
-		size = defaultHeaderBytes + defaultHeartbeatTimeBytes
-	)
-
-	buf.Grow(defaultSizeBytes + size)
-
-	err := binary.Write(buf, p.opts.byteOrder, uint32(size))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buf, p.opts.byteOrder, time.Now().UnixNano())
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }
 
 // CheckHeartbeat 检测心跳包

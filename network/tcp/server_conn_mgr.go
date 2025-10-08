@@ -11,8 +11,8 @@ import (
 )
 
 type serverConnMgr struct {
-	id         int64        // 连接ID
-	total      int64        // 总连接数
+	id         atomic.Int64 // 连接ID
+	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	pool       sync.Pool    // 连接池
 	partitions []*partition // 连接管理
@@ -51,16 +51,16 @@ func (cm *serverConnMgr) close() {
 
 // 分配连接
 func (cm *serverConnMgr) allocate(c net.Conn) error {
-	if atomic.LoadInt64(&cm.total) >= int64(cm.server.opts.maxConnNum) {
+	if cm.total.Load() >= int64(cm.server.opts.maxConnNum) {
 		return errors.ErrTooManyConnection
 	}
 
-	id := atomic.AddInt64(&cm.id, 1)
+	id := cm.id.Add(1)
 	conn := cm.pool.Get().(*serverConn)
 	conn.init(cm, id, c)
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
-	atomic.AddInt64(&cm.total, 1)
+	cm.total.Add(1)
 
 	return nil
 }
@@ -71,7 +71,7 @@ func (cm *serverConnMgr) recycle(c net.Conn) {
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		conn.reset()
 		cm.pool.Put(conn)
-		atomic.AddInt64(&cm.total, -1)
+		cm.total.Add(-1)
 	}
 }
 

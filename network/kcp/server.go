@@ -11,8 +11,6 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/xtaci/kcp-go/v5"
-	"net"
-	"time"
 )
 
 type server struct {
@@ -107,7 +105,7 @@ func (s *server) init() error {
 	//key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
 	//block, _ := kcp.NewAESBlockCrypt(key)
 
-	ln, err := kcp.ListenWithOptions(s.opts.addr, nil, 10, 3)
+	ln, err := kcp.ListenWithOptions(s.opts.addr, nil, 0, 0)
 	if err != nil {
 		return err
 	}
@@ -119,31 +117,12 @@ func (s *server) init() error {
 
 // 启动服务器
 func (s *server) serve() {
-	var tempDelay time.Duration
-
 	for {
 		conn, err := s.listener.AcceptKCP()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Temporary() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
-				} else {
-					tempDelay *= 2
-				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
-				}
-
-				log.Warnf("kcp accept error: %v; retrying in %v", err, tempDelay)
-				time.Sleep(tempDelay)
-				continue
-			}
-
 			log.Warnf("kcp accept error: %v", err)
 			return
 		}
-
-		tempDelay = 0
 
 		if err = s.connMgr.allocate(conn); err != nil {
 			_ = conn.Close()
