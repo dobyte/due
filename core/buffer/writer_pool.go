@@ -11,9 +11,9 @@ type WriterPool struct {
 
 func NewWriterPool(grade int) *WriterPool {
 	p := &WriterPool{}
-	p.pools = make([]*sync.Pool, grade)
+	p.pools = make([]*sync.Pool, grade+1)
 
-	for i := range grade {
+	for i := range grade + 1 {
 		cap := 1 << i
 		p.pools[i] = &sync.Pool{New: func() any { return NewWriter(cap) }}
 	}

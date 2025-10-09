@@ -2,14 +2,37 @@ package packet_test
 
 import (
 	"bytes"
+	"testing"
+
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xrand"
-	"testing"
 )
 
 var packer = packet.NewPacker(
 	packet.WithHeartbeatTime(true),
 )
+
+func TestDefaultPacker_ReadMessage(t *testing.T) {
+	data, err := packer.PackMessage(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(data)
+
+	reader := bytes.NewReader(data)
+
+	message, err := packer.ReadMessage(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(message)
+}
 
 func TestDefaultPacker_PackMessage(t *testing.T) {
 	data, err := packer.PackMessage(&packet.Message{

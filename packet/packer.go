@@ -51,8 +51,10 @@ type sizeBuffer struct {
 }
 
 type defaultPacker struct {
-	opts             *options
-	heartbeat        []byte
+	opts      *options
+	pool      *buffer.BytesPool
+	heartbeat []byte
+
 	readerSizePool   sync.Pool
 	readerBufferPool sync.Pool
 }
@@ -77,6 +79,8 @@ func NewPacker(opts ...Option) *defaultPacker {
 
 	return &defaultPacker{
 		opts: o,
+		pool: buffer.NewBytesPoolWithCapacity(defaultSizeBytes + defaultHeaderBytes + o.routeBytes + o.seqBytes + o.bufferBytes),
+
 		readerSizePool: sync.Pool{New: func() any {
 			return &sizeBuffer{bytes: make([]byte, defaultSizeBytes)}
 		}},
@@ -138,27 +142,23 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 
 // 拷贝读取消息
 func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
-	buf := p.readerSizePool.Get().(*sizeBuffer)
-	defer p.readerSizePool.Put(buf)
+	buf1 := p.pool.Get(defaultSizeBytes)
+	defer p.pool.Put(buf1)
 
-	if _, err := io.ReadFull(reader, buf.bytes); err != nil {
+	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
 		return nil, err
 	}
 
-	var size uint32
-
-	if p.opts.byteOrder == binary.BigEndian {
-		size = binary.BigEndian.Uint32(buf.bytes)
-	} else {
-		size = binary.LittleEndian.Uint32(buf.bytes)
-	}
+	size := p.opts.byteOrder.Uint32(buf1.Bytes())
 
 	if size == 0 {
 		return nil, nil
 	}
 
-	data := make([]byte, defaultSizeBytes+size)
-	copy(data[:defaultSizeBytes], buf.bytes)
+	buf2 := p.pool.Get(int(defaultSizeBytes + size))
+	data := buf2.Bytes()
+
+	copy(data[:defaultSizeBytes], buf1.Bytes())
 
 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
 		return nil, err
