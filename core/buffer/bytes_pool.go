@@ -37,19 +37,20 @@ func (p *BytesPool) Get(cap int) *Bytes {
 
 	b := pool.Get().(*Bytes)
 	b.off = cap
+	b.pool = p
 
 	return b
 }
 
 // Put 放回
-func (p *BytesPool) Put(w *Bytes) {
-	pool := p.getPool(w.Cap())
+func (p *BytesPool) Put(b *Bytes) {
+	pool := p.getPool(b.Cap())
 
 	if pool == nil {
 		return
 	}
 
-	pool.Put(w)
+	pool.Put(b)
 }
 
 // 获取对象池

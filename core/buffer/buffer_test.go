@@ -28,7 +28,7 @@ func TestNewBuffer(t *testing.T) {
 
 	fmt.Println(writer.Bytes())
 
-	writer.Reset()
+	writer.Release()
 	writer.WriteInt16s(binary.BigEndian, int16(20))
 	writer.WriteFloat32s(binary.BigEndian, 5.2)
 
@@ -63,7 +63,7 @@ func BenchmarkBuffer2(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		writer.WriteInt64s(binary.BigEndian, 2)
-		writer.Reset()
+		writer.Release()
 	}
 }
 

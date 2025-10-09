@@ -6,8 +6,9 @@ import (
 )
 
 type Writer struct {
-	buf []byte
-	off int
+	buf  []byte
+	off  int
+	pool *WriterPool
 }
 
 func NewWriter(cap ...int) *Writer {
@@ -42,15 +43,19 @@ func (w *Writer) Bytes() []byte {
 	return w.buf[:w.off]
 }
 
-// Reset 复位
-func (w *Writer) Reset() {
-	w.off = 0
-	w.buf = w.buf[:0]
-}
-
 // Grow 增长空间
 func (w *Writer) Grow(n int) {
 	w.growSlice(n)
+}
+
+// Release 释放
+func (w *Writer) Release() {
+	w.off = 0
+	w.buf = w.buf[:0]
+
+	if w.pool != nil {
+		w.pool.Put(w)
+	}
 }
 
 // 写数据，实现io.Writer

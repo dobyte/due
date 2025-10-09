@@ -141,6 +141,31 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 }
 
 // 拷贝读取消息
+// func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
+// 	buf := make([]byte, defaultSizeBytes)
+
+// 	if _, err := io.ReadFull(reader, buf); err != nil {
+// 		return nil, err
+// 	}
+
+// 	size := p.opts.byteOrder.Uint32(buf)
+
+// 	if size == 0 {
+// 		return nil, nil
+// 	}
+
+// 	data := make([]byte, int(defaultSizeBytes+size))
+
+// 	copy(data[:defaultSizeBytes], buf)
+
+// 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return data, nil
+// }
+
+// 拷贝读取消息
 func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
 	buf1 := p.pool.Get(defaultSizeBytes)
 	defer p.pool.Put(buf1)
@@ -156,6 +181,8 @@ func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
 	}
 
 	buf2 := p.pool.Get(int(defaultSizeBytes + size))
+	defer p.pool.Put(buf2)
+
 	data := buf2.Bytes()
 
 	copy(data[:defaultSizeBytes], buf1.Bytes())

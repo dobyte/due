@@ -1,21 +1,22 @@
 package buffer
 
 type NocopyNode struct {
-	buf  any
-	pool *WriterPool
-	prev any
-	next any
+	prev  any
+	next  any
+	block any
 }
 
 // Len 获取字节长度
 func (n *NocopyNode) Len() int {
-	if n.buf == nil {
+	if n == nil {
 		return 0
 	}
 
-	switch b := n.buf.(type) {
+	switch b := n.block.(type) {
 	case []byte:
 		return len(b)
+	case *Bytes:
+		return b.Len()
 	case *Writer:
 		return b.Len()
 	default:
@@ -29,9 +30,11 @@ func (n *NocopyNode) Bytes() []byte {
 		return nil
 	}
 
-	switch b := n.buf.(type) {
+	switch b := n.block.(type) {
 	case []byte:
 		return b
+	case *Bytes:
+		return b.Bytes()
 	case *Writer:
 		return b.Bytes()
 	default:
@@ -41,19 +44,20 @@ func (n *NocopyNode) Bytes() []byte {
 
 // Release 释放
 func (n *NocopyNode) Release() {
+	if n == nil {
+		return
+	}
+
+	switch b := n.block.(type) {
+	case []byte:
+		// ignore
+	case *Bytes:
+		b.Release()
+	case *Writer:
+		b.Release()
+	}
+
 	n.prev = nil
 	n.next = nil
-
-	switch b := n.buf.(type) {
-	case []byte:
-		n.buf = nil
-	case *Writer:
-		if b != nil {
-			b.Reset()
-			n.buf = nil
-			if n.pool != nil {
-				n.pool.Put(b)
-			}
-		}
-	}
+	n.block = nil
 }

@@ -29,7 +29,10 @@ func (p *WriterPool) Get(cap int) *Writer {
 		return nil
 	}
 
-	return pool.Get().(*Writer)
+	w := pool.Get().(*Writer)
+	w.pool = p
+
+	return w
 }
 
 // Put 放回

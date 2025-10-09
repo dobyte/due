@@ -60,9 +60,21 @@ func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	switch v := block.(type) {
 	case []byte:
 		if len(whence) > 0 && whence[0] == Head {
-			b.addToHead(&NocopyNode{buf: v})
+			b.addToHead(&NocopyNode{block: v})
 		} else {
-			b.addToTail(&NocopyNode{buf: v})
+			b.addToTail(&NocopyNode{block: v})
+		}
+	case *Bytes:
+		if len(whence) > 0 && whence[0] == Head {
+			b.addToHead(&NocopyNode{block: v})
+		} else {
+			b.addToTail(&NocopyNode{block: v})
+		}
+	case *Writer:
+		if len(whence) > 0 && whence[0] == Head {
+			b.addToHead(&NocopyNode{block: v})
+		} else {
+			b.addToTail(&NocopyNode{block: v})
 		}
 	default:
 		if len(whence) > 0 && whence[0] == Head {
@@ -78,9 +90,9 @@ func (b *NocopyBuffer) Malloc(cap int, whence ...Whence) *Writer {
 	writer := defaultWriterPool.Get(cap)
 
 	if len(whence) > 0 && whence[0] == Head {
-		b.addToHead(&NocopyNode{buf: writer, pool: defaultWriterPool})
+		b.addToHead(&NocopyNode{block: writer})
 	} else {
-		b.addToTail(&NocopyNode{buf: writer, pool: defaultWriterPool})
+		b.addToTail(&NocopyNode{block: writer})
 	}
 
 	return writer
