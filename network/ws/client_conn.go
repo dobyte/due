@@ -19,14 +19,14 @@ import (
 type clientConn struct {
 	rw                sync.RWMutex    // 锁
 	id                int64           // 连接ID
-	uid               int64           // 用户ID
+	uid               atomic.Int64    // 用户ID
 	attr              *attr           // 连接属性
 	conn              *websocket.Conn // TCP源连接
-	state             int32           // 连接状态
+	state             atomic.Int32    // 连接状态
 	client            *client         // 客户端
 	chLowWrite        chan chWrite    // 低级队列
 	chHighWrite       chan chWrite    // 优先队列
-	lastHeartbeatTime int64           // 上次心跳时间
+	lastHeartbeatTime atomic.Int64    // 上次心跳时间
 	done              chan struct{}   // 写入完成信号
 	close             chan struct{}   // 关闭信号
 }
@@ -35,17 +35,18 @@ var _ network.Conn = &clientConn{}
 
 func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
 	c := &clientConn{
-		id:                id,
-		attr:              &attr{},
-		conn:              conn,
-		state:             int32(network.ConnOpened),
-		client:            client,
-		chLowWrite:        make(chan chWrite, 4096),
-		chHighWrite:       make(chan chWrite, 1024),
-		lastHeartbeatTime: xtime.Now().UnixNano(),
-		done:              make(chan struct{}),
-		close:             make(chan struct{}),
+		id:          id,
+		attr:        &attr{},
+		conn:        conn,
+		client:      client,
+		chLowWrite:  make(chan chWrite, 4096),
+		chHighWrite: make(chan chWrite, 1024),
+		done:        make(chan struct{}),
+		close:       make(chan struct{}),
 	}
+
+	c.state.Store(int32(network.ConnOpened))
+	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 
 	xcall.Go(c.read)
 
@@ -65,7 +66,7 @@ func (c *clientConn) ID() int64 {
 
 // UID 获取用户ID
 func (c *clientConn) UID() int64 {
-	return atomic.LoadInt64(&c.uid)
+	return c.uid.Load()
 }
 
 // Attr 获取属性接口
@@ -75,12 +76,12 @@ func (c *clientConn) Attr() network.Attr {
 
 // Bind 绑定用户ID
 func (c *clientConn) Bind(uid int64) {
-	atomic.StoreInt64(&c.uid, uid)
+	c.uid.Store(uid)
 }
 
 // Unbind 解绑用户ID
 func (c *clientConn) Unbind() {
-	atomic.StoreInt64(&c.uid, 0)
+	c.uid.Store(0)
 }
 
 // Send 发送消息（异步）
@@ -115,7 +116,7 @@ func (c *clientConn) Push(msg []byte) (err error) {
 
 // State 获取连接状态
 func (c *clientConn) State() network.ConnState {
-	return network.ConnState(atomic.LoadInt32(&c.state))
+	return network.ConnState(c.state.Load())
 }
 
 // Close 关闭连接（主动关闭）
@@ -183,7 +184,7 @@ func (c *clientConn) RemoteAddr() (net.Addr, error) {
 
 // 检测连接状态
 func (c *clientConn) checkState() error {
-	switch network.ConnState(atomic.LoadInt32(&c.state)) {
+	switch c.State() {
 	case network.ConnHanged:
 		return errors.ErrConnectionHanged
 	case network.ConnClosed:
@@ -195,47 +196,47 @@ func (c *clientConn) checkState() error {
 
 // 优雅关闭
 func (c *clientConn) graceClose() error {
-	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnHanged)) {
+	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
 	}
 
 	c.rw.RLock()
+	if c.conn == nil {
+		c.rw.RUnlock()
+		return errors.ErrConnectionClosed
+	}
 	c.chLowWrite <- chWrite{typ: closeSig}
 	c.rw.RUnlock()
 
 	<-c.done
 
-	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+	if !c.state.CompareAndSwap(int32(network.ConnHanged), int32(network.ConnClosed)) {
 		return errors.ErrConnectionNotHanged
 	}
 
-	c.rw.Lock()
-	close(c.chLowWrite)
-	close(c.chHighWrite)
-	close(c.close)
-	close(c.done)
-	conn := c.conn
-	c.conn = nil
-	c.rw.Unlock()
-
-	err := conn.Close()
-
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
-	}
-
-	return err
+	return c.doClose()
 }
 
 // 强制关闭
 func (c *clientConn) forceClose() error {
-	if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnOpened), int32(network.ConnClosed)) {
-		if !atomic.CompareAndSwapInt32(&c.state, int32(network.ConnHanged), int32(network.ConnClosed)) {
+	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnClosed)) {
+		if !c.state.CompareAndSwap(int32(network.ConnHanged), int32(network.ConnClosed)) {
 			return errors.ErrConnectionClosed
 		}
 	}
 
+	return c.doClose()
+}
+
+// 执行关闭操作
+func (c *clientConn) doClose() error {
 	c.rw.Lock()
+
+	if c.conn == nil {
+		c.rw.Unlock()
+		return errors.ErrConnectionClosed
+	}
+
 	close(c.chLowWrite)
 	close(c.chHighWrite)
 	close(c.close)
@@ -278,7 +279,7 @@ func (c *clientConn) read() {
 			}
 
 			if c.client.opts.heartbeatInterval > 0 {
-				atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().UnixNano())
+				c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 			}
 
 			switch c.State() {
@@ -338,8 +339,12 @@ func (c *clientConn) write() {
 			if !c.doWrite(conn, r) {
 				return
 			}
-		case <-ticker.C:
-			if !c.doHandleHeartbeat(conn) {
+		case t, ok := <-ticker.C:
+			if !ok {
+				return
+			}
+
+			if !c.doHandleHeartbeat(conn, t) {
 				return
 			}
 		default:
@@ -360,8 +365,12 @@ func (c *clientConn) write() {
 				if !c.doWrite(conn, r) {
 					return
 				}
-			case <-ticker.C:
-				if !c.doHandleHeartbeat(conn) {
+			case t, ok := <-ticker.C:
+				if !ok {
+					return
+				}
+
+				if !c.doHandleHeartbeat(conn, t) {
 					return
 				}
 			}
@@ -373,7 +382,9 @@ func (c *clientConn) write() {
 func (c *clientConn) doWrite(conn *websocket.Conn, r chWrite) bool {
 	if r.typ == closeSig {
 		c.rw.RLock()
-		c.done <- struct{}{}
+		if c.conn != nil {
+			c.done <- struct{}{}
+		}
 		c.rw.RUnlock()
 		return false
 	}
@@ -403,9 +414,10 @@ func (c *clientConn) doWrite(conn *websocket.Conn, r chWrite) bool {
 }
 
 // 处理心跳
-func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn) bool {
-	deadline := xtime.Now().Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
-	if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
+	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
+
+	if c.lastHeartbeatTime.Load() < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 		_ = c.forceClose()
 		return false
@@ -429,5 +441,5 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn) bool {
 
 // 是否已关闭
 func (c *clientConn) isClosed() bool {
-	return network.ConnState(atomic.LoadInt32(&c.state)) == network.ConnClosed
+	return c.State() == network.ConnClosed
 }

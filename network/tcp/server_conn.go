@@ -237,6 +237,10 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	}
 
 	c.rw.RLock()
+	if c.conn == nil {
+		c.rw.RUnlock()
+		return errors.ErrConnectionClosed
+	}
 	c.chWrite <- chWrite{typ: closeSig}
 	c.rw.RUnlock()
 
@@ -246,25 +250,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		return errors.ErrConnectionNotHanged
 	}
 
-	c.rw.Lock()
-	close(c.chWrite)
-	close(c.close)
-	close(c.done)
-	conn := c.conn
-	c.conn = nil
-	c.rw.Unlock()
-
-	err := conn.Close()
-
-	if c.connMgr.server.disconnectHandler != nil {
-		c.connMgr.server.disconnectHandler(c)
-	}
-
-	if isNeedRecycle {
-		c.connMgr.recycle(conn)
-	}
-
-	return err
+	return c.doClose(isNeedRecycle)
 }
 
 // 强制关闭
@@ -275,7 +261,18 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 		}
 	}
 
+	return c.doClose(isNeedRecycle)
+}
+
+// 执行关闭操作
+func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.rw.Lock()
+
+	if c.conn == nil {
+		c.rw.Unlock()
+		return errors.ErrConnectionClosed
+	}
+
 	close(c.chWrite)
 	close(c.close)
 	close(c.done)
@@ -324,6 +321,11 @@ func (c *serverConn) read() {
 				// ignore
 			}
 
+			// ignore empty packet
+			if len(msg) == 0 {
+				continue
+			}
+
 			isHeartbeat, err := packet.CheckHeartbeat(msg)
 			if err != nil {
 				log.Errorf("check heartbeat message error: %v", err)
@@ -337,8 +339,7 @@ func (c *serverConn) read() {
 					c.sendHeartbeat(conn)
 				}
 			} else {
-				// ignore empty packet
-				if len(msg) > 0 && c.connMgr.server.receiveHandler != nil {
+				if c.connMgr.server.receiveHandler != nil {
 					c.connMgr.server.receiveHandler(c, msg)
 				}
 			}
@@ -369,7 +370,9 @@ func (c *serverConn) write() {
 
 			if r.typ == closeSig {
 				c.rw.RLock()
-				c.done <- struct{}{}
+				if c.conn != nil {
+					c.done <- struct{}{}
+				}
 				c.rw.RUnlock()
 				return
 			}
@@ -393,11 +396,11 @@ func (c *serverConn) write() {
 				_ = c.forceClose(true)
 				return
 			} else {
-				if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
-					if c.isClosed() {
-						return
-					}
+				if c.isClosed() {
+					return
+				}
 
+				if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
 					c.sendHeartbeat(conn)
 				}
 			}

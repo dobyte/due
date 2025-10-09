@@ -170,11 +170,18 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *kcp.UDPSession) {
 	c.close = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 
+	conn.SetNoDelay(1, 10, 2, 1)
+	conn.SetStreamMode(true)
+	conn.SetWindowSize(4096, 4096)
+	conn.SetReadBuffer(4 * 1024 * 1024)
+	conn.SetWriteBuffer(4 * 1024 * 1024)
+	conn.SetACKNoDelay(true)
+
 	// conn.SetWriteDelay(true)
 	// conn.SetNoDelay(1, 10, 2, 1)
 	// conn.SetMtu(2048)
 	//conn.SetWindowSize(config.SndWnd, config.RcvWnd)
-	conn.SetACKNoDelay(false)
+	// conn.SetACKNoDelay(false)
 
 	xcall.Go(c.read)
 
@@ -277,6 +284,7 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
+			conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			msg, err := packet.ReadMessage(conn)
 			if err != nil {
 				_ = c.forceClose(true)

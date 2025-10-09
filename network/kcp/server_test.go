@@ -1,17 +1,18 @@
 package kcp_test
 
 import (
+	"net/http"
+	_ "net/http/pprof"
+	"testing"
+
 	"github.com/dobyte/due/network/kcp/v2"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
-	"net/http"
-	_ "net/http/pprof"
-	"testing"
 )
 
 func TestServer_Simple(t *testing.T) {
-	server := kcp.NewServer()
+	server := kcp.NewServer(kcp.WithServerHeartbeatInterval(0))
 
 	server.OnStart(func() {
 		log.Info("server is started")
