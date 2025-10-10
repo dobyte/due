@@ -72,6 +72,56 @@ func TestPackHeartbeat(t *testing.T) {
 	t.Log(isHeartbeat)
 }
 
+func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
+	data, err := packer.PackMessage(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte(xrand.Letters(1024)),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	reader := bytes.NewReader(data)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(data)))
+
+	for i := 0; i < b.N; i++ {
+		if buf, err := packer.ReadBuffer(reader); err != nil {
+			b.Fatal(err)
+		} else {
+			buf.Release()
+		}
+
+		reader.Reset(data)
+	}
+}
+
+func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
+	data, err := packer.PackMessage(&packet.Message{
+		Seq:    1,
+		Route:  1,
+		Buffer: []byte(xrand.Letters(1024)),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	reader := bytes.NewReader(data)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(data)))
+
+	for i := 0; i < b.N; i++ {
+		if _, err = packer.ReadMessage(reader); err != nil {
+			b.Fatal(err)
+		}
+
+		reader.Reset(data)
+	}
+}
+
 func BenchmarkDefaultPacker_PackMessage(b *testing.B) {
 	buffer := []byte(xrand.Letters(1024))
 
@@ -89,48 +139,6 @@ func BenchmarkDefaultPacker_PackMessage(b *testing.B) {
 	}
 }
 
-func BenchmarkUnpack(b *testing.B) {
-	buf, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello world"),
-	})
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	for i := 0; i < b.N; i++ {
-		_, err := packet.UnpackMessage(buf)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
-	buf, err := packer.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte(xrand.Letters(1024)),
-	})
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	reader := bytes.NewReader(buf)
-
-	b.ResetTimer()
-	b.SetBytes(int64(len(buf)))
-
-	for i := 0; i < b.N; i++ {
-		if _, err = packer.ReadMessage(reader); err != nil {
-			b.Fatal(err)
-		}
-
-		reader.Reset(buf)
-	}
-}
-
 func BenchmarkDefaultPacker_UnpackMessage(b *testing.B) {
 	buf, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
@@ -145,8 +153,7 @@ func BenchmarkDefaultPacker_UnpackMessage(b *testing.B) {
 	b.SetBytes(int64(len(buf)))
 
 	for i := 0; i < b.N; i++ {
-		_, err := packer.UnpackMessage(buf)
-		if err != nil {
+		if _, err := packer.UnpackMessage(buf); err != nil {
 			b.Fatal(err)
 		}
 	}

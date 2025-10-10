@@ -82,10 +82,10 @@ func BenchmarkNocopyBuffer_Malloc(b *testing.B) {
 func TestNewBuffer2(t *testing.T) {
 	buff := buffer.NewNocopyBuffer()
 
-	writer1 := buff.Malloc(8)
+	writer1 := buff.MallocWriter(8)
 	writer1.WriteInt64s(binary.BigEndian, 2)
 
-	writer2 := buff.Malloc(8)
+	writer2 := buff.MallocWriter(8)
 	writer2.WriteInt64s(binary.BigEndian, 3)
 
 	t.Log(buff.Len())
@@ -105,26 +105,26 @@ func TestNewBuffer2(t *testing.T) {
 func TestNocopyBuffer_Malloc(t *testing.T) {
 	buff := buffer.NewNocopyBuffer()
 
-	buff.Malloc(10)
+	buff.MallocWriter(10)
 
-	buff.Malloc(250)
+	buff.MallocWriter(250)
 }
 
 func TestNocopyBuffer_Mount(t *testing.T) {
 	buff1 := buffer.NewNocopyBuffer()
 
-	writer1 := buff1.Malloc(8)
+	writer1 := buff1.MallocWriter(8)
 	writer1.WriteInt64s(binary.BigEndian, 1)
 
-	writer2 := buff1.Malloc(8)
+	writer2 := buff1.MallocWriter(8)
 	writer2.WriteInt64s(binary.BigEndian, 2)
 
 	buff2 := buffer.NewNocopyBuffer()
 
-	writer3 := buff2.Malloc(8)
+	writer3 := buff2.MallocWriter(8)
 	writer3.WriteInt64s(binary.BigEndian, 3)
 
-	writer4 := buff2.Malloc(8)
+	writer4 := buff2.MallocWriter(8)
 	writer4.WriteInt64s(binary.BigEndian, 4)
 
 	buff1.Mount(buff2, buffer.Head)
@@ -136,7 +136,7 @@ func TestNocopyBuffer_Release(t *testing.T) {
 	buff1 := buffer.NewNocopyBuffer()
 	buff1.Delay(2)
 
-	writer1 := buff1.Malloc(8)
+	writer1 := buff1.MallocWriter(8)
 	writer1.WriteInt64s(binary.BigEndian, 1)
 
 	fmt.Println(buff1.Bytes())
@@ -146,7 +146,7 @@ func TestNocopyBuffer_Release(t *testing.T) {
 	{
 		buff2 := buffer.NewNocopyBuffer()
 
-		writer2 := buff2.Malloc(8)
+		writer2 := buff2.MallocWriter(8)
 		writer2.WriteInt64s(binary.BigEndian, 2)
 
 		fmt.Println(buff2.Bytes())
@@ -165,7 +165,7 @@ func TestNocopyBuffer_Release(t *testing.T) {
 	{
 		buff3 := buffer.NewNocopyBuffer()
 
-		writer3 := buff3.Malloc(8)
+		writer3 := buff3.MallocWriter(8)
 		writer3.WriteInt64s(binary.BigEndian, 3)
 
 		fmt.Println(buff3.Bytes())

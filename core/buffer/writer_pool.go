@@ -5,10 +5,18 @@ import (
 	"sync"
 )
 
+var defaultWriterPool = NewWriterPool(32)
+
+// MallocWriter 分配一块内存给Writer
+func MallocWriter(cap int) *Writer {
+	return defaultWriterPool.Get(cap)
+}
+
 type WriterPool struct {
 	pools []*sync.Pool
 }
 
+// NewWriterPool 分级创建写入器池
 func NewWriterPool(grade int) *WriterPool {
 	p := &WriterPool{}
 	p.pools = make([]*sync.Pool, grade+1)
@@ -19,6 +27,11 @@ func NewWriterPool(grade int) *WriterPool {
 	}
 
 	return p
+}
+
+// NewWriterPoolWithCapacity 以指定容量创建写入器池
+func NewWriterPoolWithCapacity(cap int) *WriterPool {
+	return NewWriterPool(int(math.Ceil(math.Log2(float64(cap)))))
 }
 
 // Get 获取

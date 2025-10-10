@@ -5,11 +5,18 @@ import (
 	"sync"
 )
 
+var defaultBytesPool = NewBytesPool(32)
+
+// MallocBytes 从字节池分配字节
+func MallocBytes(cap int) *Bytes {
+	return defaultBytesPool.Get(cap)
+}
+
 type BytesPool struct {
 	pools []*sync.Pool
 }
 
-// NewBytesPool 创建字节池
+// NewBytesPool 分级创建字节池
 func NewBytesPool(grade int) *BytesPool {
 	p := &BytesPool{}
 	p.pools = make([]*sync.Pool, grade+1)
@@ -22,7 +29,7 @@ func NewBytesPool(grade int) *BytesPool {
 	return p
 }
 
-// NewBytesPoolWithCapacity 创建字节池
+// NewBytesPoolWithCapacity 以指定容量创建字节池
 func NewBytesPoolWithCapacity(cap int) *BytesPool {
 	return NewBytesPool(int(math.Ceil(math.Log2(float64(cap)))))
 }

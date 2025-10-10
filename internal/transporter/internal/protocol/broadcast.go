@@ -2,12 +2,13 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
-	"io"
 )
 
 const (
@@ -18,16 +19,14 @@ const (
 // EncodeBroadcastReq 编码广播请求
 // 协议：size + header + route + seq + session kind + <message packet>
 func EncodeBroadcastReq(seq uint64, kind session.Kind, message buffer.Buffer) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(broadcastReqBytes)
+	writer := buffer.MallocWriter(broadcastReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Broadcast)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
-	buf.Mount(message)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer, message)
 }
 
 // DecodeBroadcastReq 解码广播请求
@@ -63,8 +62,7 @@ func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) buffer.Buffer 
 		size -= b64
 	}
 
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(broadcastResBytes)
+	writer := buffer.MallocWriter(broadcastResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(size))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Broadcast)
@@ -75,7 +73,7 @@ func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) buffer.Buffer 
 		writer.WriteUint64s(binary.BigEndian, total[0])
 	}
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeBroadcastRes 解码广播响应

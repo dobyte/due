@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"io"
 )
 
 const (
@@ -22,8 +23,7 @@ func EncodeTriggerReq(seq uint64, event cluster.Event, cid int64, uid ...int64) 
 		size -= b64
 	}
 
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(triggerReqBytes)
+	writer := buffer.MallocWriter(triggerReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(size))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Trigger)
@@ -35,7 +35,7 @@ func EncodeTriggerReq(seq uint64, event cluster.Event, cid int64, uid ...int64) 
 		writer.WriteInt64s(binary.BigEndian, uid[0])
 	}
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeTriggerReq 解码触发事件请求
@@ -77,15 +77,14 @@ func DecodeTriggerReq(data []byte) (seq uint64, event cluster.Event, cid int64, 
 // EncodeTriggerRes 编码触发事件响应
 // 协议：size + header + route + seq + code
 func EncodeTriggerRes(seq uint64, code uint16) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(triggerResBytes)
+	writer := buffer.MallocWriter(triggerResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(triggerResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Trigger)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeTriggerRes 解码触发事件响应

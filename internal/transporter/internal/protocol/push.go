@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
-	"io"
 )
 
 const (
@@ -17,17 +18,15 @@ const (
 // EncodePushReq 编码推送请求
 // 协议：size + header + route + seq + session kind + target + <message packet>
 func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.Buffer) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(pushReqBytes)
+	writer := buffer.MallocWriter(pushReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Push)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
-	buf.Mount(message)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer, message)
 }
 
 // DecodePushReq 解码推送消息
@@ -62,15 +61,14 @@ func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, me
 // EncodePushRes 编码推送响应
 // 协议：size + header + route + seq + code
 func EncodePushRes(seq uint64, code uint16) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(pushResBytes)
+	writer := buffer.MallocWriter(pushResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Push)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodePushRes 解码推送响应

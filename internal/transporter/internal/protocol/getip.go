@@ -2,13 +2,14 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/utils/xnet"
-	"io"
 )
 
 const (
@@ -19,8 +20,7 @@ const (
 // EncodeGetIPReq 编码获取IP请求
 // 协议：size + header + route + seq + session kind + target
 func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(getIPReqBytes)
+	writer := buffer.MallocWriter(getIPReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.GetIP)
@@ -28,7 +28,7 @@ func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) buffer.Buffer {
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeGetIPReq 解码获取IP请求
@@ -71,8 +71,7 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) buffer.Buffer {
 		size -= 4
 	}
 
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(getIPResBytes)
+	writer := buffer.MallocWriter(getIPResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(size))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.GetIP)
@@ -83,7 +82,7 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) buffer.Buffer {
 		writer.WriteUint32s(binary.BigEndian, xnet.IP2Long(ip[0]))
 	}
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 func DecodeGetIPRes(data []byte) (code uint16, ip string, err error) {

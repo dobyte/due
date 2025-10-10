@@ -19,8 +19,8 @@ const (
 // 协议：size + header + route + seq + session kind + count + targets + channel
 func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) buffer.Buffer {
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(size)
+
+	writer := buffer.MallocWriter(size)
 	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Unsubscribe)
@@ -30,7 +30,7 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 	writer.WriteInt64s(binary.BigEndian, targets...)
 	writer.WriteString(channel)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeUnsubscribeReq 解码取消订阅频道请求
@@ -70,15 +70,14 @@ func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets [
 // EncodeUnsubscribeRes 编码取消订阅频道响应
 // 协议：size + header + route + seq + code
 func EncodeUnsubscribeRes(seq uint64, code uint16) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(unsubscribeResBytes)
+	writer := buffer.MallocWriter(unsubscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Unsubscribe)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeUnsubscribeRes 解码取消订阅频道响应

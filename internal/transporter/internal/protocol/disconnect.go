@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
-	"io"
 )
 
 const (
@@ -17,8 +18,7 @@ const (
 // EncodeDisconnectReq 编码断连请求
 // 协议：size + header + route + seq + session kind + target + force
 func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(disconnectReqBytes)
+	writer := buffer.MallocWriter(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Disconnect)
@@ -27,7 +27,7 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool
 	writer.WriteInt64s(binary.BigEndian, target)
 	writer.WriteBools(force)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeDisconnectReq 解码端连请求
@@ -69,15 +69,14 @@ func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int
 // EncodeDisconnectRes 编码断连响应
 // 协议：size + header + route + seq + code
 func EncodeDisconnectRes(seq uint64, code uint16) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(disconnectResBytes)
+	writer := buffer.MallocWriter(disconnectResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Disconnect)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeDisconnectRes 解码断连响应

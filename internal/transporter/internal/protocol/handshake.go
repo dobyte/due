@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"io"
 )
 
 const (
@@ -18,8 +19,8 @@ const (
 // 协议：size + header + route + seq + ins kind + ins id
 func EncodeHandshakeReq(seq uint64, insKind cluster.Kind, insID string) buffer.Buffer {
 	size := handshakeReqBytes + len(insID)
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(size)
+
+	writer := buffer.MallocWriter(size)
 	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Handshake)
@@ -27,7 +28,7 @@ func EncodeHandshakeReq(seq uint64, insKind cluster.Kind, insID string) buffer.B
 	writer.WriteUint8s(uint8(insKind))
 	writer.WriteString(insID)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeHandshakeReq 解码握手请求
@@ -60,15 +61,14 @@ func DecodeHandshakeReq(data []byte) (seq uint64, insKind cluster.Kind, insID st
 // EncodeHandshakeRes 编码握手响应
 // 协议：size + header + route + seq + code
 func EncodeHandshakeRes(seq uint64, code uint16) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(handshakeResBytes)
+	writer := buffer.MallocWriter(handshakeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(handshakeResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Handshake)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeHandshakeRes 解码握手响应

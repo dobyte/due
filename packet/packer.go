@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
@@ -32,10 +31,12 @@ type NocopyReader interface {
 }
 
 type Packer interface {
-	// ReadMessage 读取消息
-	ReadMessage(reader any) ([]byte, error)
-	// PackBuffer 打包消息
+	// ReadBuffer 以buffer的形式读取消息
+	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
+	// PackBuffer 以buffer的形式打包消息
 	PackBuffer(message *Message) (buffer.Buffer, error)
+	// ReadMessage 读取消息
+	ReadMessage(reader io.Reader) ([]byte, error)
 	// PackMessage 打包消息
 	PackMessage(message *Message) ([]byte, error)
 	// UnpackMessage 解包消息
@@ -46,17 +47,9 @@ type Packer interface {
 	CheckHeartbeat(data []byte) (bool, error)
 }
 
-type sizeBuffer struct {
-	bytes []byte
-}
-
 type defaultPacker struct {
 	opts      *options
-	pool      *buffer.BytesPool
 	heartbeat []byte
-
-	readerSizePool   sync.Pool
-	readerBufferPool sync.Pool
 }
 
 func NewPacker(opts ...Option) *defaultPacker {
@@ -78,28 +71,102 @@ func NewPacker(opts ...Option) *defaultPacker {
 	}
 
 	return &defaultPacker{
-		opts: o,
-		pool: buffer.NewBytesPoolWithCapacity(defaultSizeBytes + defaultHeaderBytes + o.routeBytes + o.seqBytes + o.bufferBytes),
-
-		readerSizePool: sync.Pool{New: func() any {
-			return &sizeBuffer{bytes: make([]byte, defaultSizeBytes)}
-		}},
-		readerBufferPool: sync.Pool{New: func() any {
-			return make([]byte, defaultSizeBytes+defaultHeaderBytes+o.routeBytes+o.seqBytes+o.bufferBytes)
-		}},
+		opts:      o,
+		heartbeat: makeHeartbeat(o.byteOrder),
 	}
 }
 
-// ReadMessage 读取消息
-func (p *defaultPacker) ReadMessage(reader any) ([]byte, error) {
-	switch r := reader.(type) {
-	case NocopyReader:
-		return p.nocopyReadMessage(r)
-	case io.Reader:
-		return p.copyReadMessage(r)
-	default:
-		return nil, errors.ErrInvalidReader
+// ReadBuffer 以buffer的形式读取消息
+func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
+	buf1 := buffer.MallocBytes(defaultSizeBytes)
+	defer buf1.Release()
+
+	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
+		return nil, err
 	}
+
+	size := p.opts.byteOrder.Uint32(buf1.Bytes())
+
+	if size == 0 {
+		return nil, nil
+	}
+
+	buf2 := buffer.MallocBytes(int(defaultSizeBytes + size))
+	data := buf2.Bytes()
+
+	copy(data[:defaultSizeBytes], buf1.Bytes())
+
+	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+		return nil, err
+	}
+
+	return buffer.NewNocopyBuffer(buf2), nil
+}
+
+// PackBuffer 以buffer的形式打包消息
+func (p *defaultPacker) PackBuffer(message *Message) (buffer.Buffer, error) {
+	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
+		return nil, errors.ErrRouteOverflow
+	}
+
+	if p.opts.seqBytes > 0 {
+		if message.Seq > int32(1<<(8*p.opts.seqBytes-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytes-1)) {
+			return nil, errors.ErrSeqOverflow
+		}
+	}
+
+	if len(message.Buffer) > p.opts.bufferBytes {
+		return nil, errors.ErrMessageTooLarge
+	}
+
+	writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)
+	writer.WriteInt32s(p.opts.byteOrder, int32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+len(message.Buffer)))
+	writer.WriteInt8s(int8(dataBit))
+
+	switch p.opts.routeBytes {
+	case 1:
+		writer.WriteInt8s(int8(message.Route))
+	case 2:
+		writer.WriteInt16s(p.opts.byteOrder, int16(message.Route))
+	case 4:
+		writer.WriteInt32s(p.opts.byteOrder, message.Route)
+	}
+
+	switch p.opts.seqBytes {
+	case 1:
+		writer.WriteInt8s(int8(message.Seq))
+	case 2:
+		writer.WriteInt16s(p.opts.byteOrder, int16(message.Seq))
+	case 4:
+		writer.WriteInt32s(p.opts.byteOrder, message.Seq)
+	}
+
+	return buffer.NewNocopyBuffer(writer, message.Buffer), nil
+}
+
+// ReadMessage 读取消息
+func (p *defaultPacker) ReadMessage(reader io.Reader) ([]byte, error) {
+	buf := make([]byte, defaultSizeBytes)
+
+	if _, err := io.ReadFull(reader, buf); err != nil {
+		return nil, err
+	}
+
+	size := p.opts.byteOrder.Uint32(buf)
+
+	if size == 0 {
+		return nil, nil
+	}
+
+	data := make([]byte, int(defaultSizeBytes+size))
+
+	copy(data[:defaultSizeBytes], buf)
+
+	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 // 无拷贝读取消息
@@ -138,60 +205,6 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 	}
 
 	return buf, nil
-}
-
-// 拷贝读取消息
-// func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
-// 	buf := make([]byte, defaultSizeBytes)
-
-// 	if _, err := io.ReadFull(reader, buf); err != nil {
-// 		return nil, err
-// 	}
-
-// 	size := p.opts.byteOrder.Uint32(buf)
-
-// 	if size == 0 {
-// 		return nil, nil
-// 	}
-
-// 	data := make([]byte, int(defaultSizeBytes+size))
-
-// 	copy(data[:defaultSizeBytes], buf)
-
-// 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return data, nil
-// }
-
-// 拷贝读取消息
-func (p *defaultPacker) copyReadMessage(reader io.Reader) ([]byte, error) {
-	buf1 := p.pool.Get(defaultSizeBytes)
-	defer p.pool.Put(buf1)
-
-	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
-		return nil, err
-	}
-
-	size := p.opts.byteOrder.Uint32(buf1.Bytes())
-
-	if size == 0 {
-		return nil, nil
-	}
-
-	buf2 := p.pool.Get(int(defaultSizeBytes + size))
-	defer p.pool.Put(buf2)
-
-	data := buf2.Bytes()
-
-	copy(data[:defaultSizeBytes], buf1.Bytes())
-
-	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
-		return nil, err
-	}
-
-	return data, nil
 }
 
 // PackMessage 打包消息
@@ -257,54 +270,6 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
-}
-
-// PackBuffer 打包消息
-func (p *defaultPacker) PackBuffer(message *Message) (buffer.Buffer, error) {
-	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
-		return nil, errors.ErrRouteOverflow
-	}
-
-	if p.opts.seqBytes > 0 {
-		if message.Seq > int32(1<<(8*p.opts.seqBytes-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytes-1)) {
-			return nil, errors.ErrSeqOverflow
-		}
-	}
-
-	if len(message.Buffer) > p.opts.bufferBytes {
-		return nil, errors.ErrMessageTooLarge
-	}
-
-	var (
-		size = defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes + len(message.Buffer)
-		buf  = buffer.NewNocopyBuffer()
-	)
-
-	writer := buf.Malloc(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)
-	writer.WriteInt32s(p.opts.byteOrder, int32(size))
-	writer.WriteInt8s(int8(dataBit))
-
-	switch p.opts.routeBytes {
-	case 1:
-		writer.WriteInt8s(int8(message.Route))
-	case 2:
-		writer.WriteInt16s(p.opts.byteOrder, int16(message.Route))
-	case 4:
-		writer.WriteInt32s(p.opts.byteOrder, message.Route)
-	}
-
-	switch p.opts.seqBytes {
-	case 1:
-		writer.WriteInt8s(int8(message.Seq))
-	case 2:
-		writer.WriteInt16s(p.opts.byteOrder, int16(message.Seq))
-	case 4:
-		writer.WriteInt32s(p.opts.byteOrder, message.Seq)
-	}
-
-	buf.Mount(message.Buffer)
-
-	return buf, nil
 }
 
 // UnpackMessage 解包消息
@@ -417,16 +382,6 @@ func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
 
 		return buf.Bytes(), nil
 	} else {
-		if len(p.heartbeat) == 0 {
-			buf := bytes.NewBuffer(p.heartbeat)
-			buf.Grow(defaultSizeBytes + defaultHeaderBytes)
-
-			_ = binary.Write(buf, p.opts.byteOrder, uint32(defaultHeaderBytes))
-			_ = binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit))
-
-			p.heartbeat = buf.Bytes()
-		}
-
 		return p.heartbeat, nil
 	}
 }
@@ -443,8 +398,7 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 		reader = bytes.NewReader(data)
 	)
 
-	err := binary.Read(reader, p.opts.byteOrder, &size)
-	if err != nil {
+	if err := binary.Read(reader, p.opts.byteOrder, &size); err != nil {
 		return false, err
 	}
 
@@ -452,10 +406,20 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 		return false, errors.ErrInvalidMessage
 	}
 
-	err = binary.Read(reader, p.opts.byteOrder, &header)
-	if err != nil {
+	if err := binary.Read(reader, p.opts.byteOrder, &header); err != nil {
 		return false, err
 	}
 
 	return header&heartbeatBit == heartbeatBit, nil
+}
+
+// 构建心跳包
+func makeHeartbeat(byteOrder binary.ByteOrder) []byte {
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(defaultSizeBytes + defaultHeaderBytes)
+
+	_ = binary.Write(buf, byteOrder, uint32(defaultHeaderBytes))
+	_ = binary.Write(buf, byteOrder, uint8(heartbeatBit))
+
+	return buf.Bytes()
 }

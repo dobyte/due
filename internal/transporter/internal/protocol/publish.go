@@ -18,17 +18,16 @@ const (
 func EncodePublishReq(seq uint64, channel string, message buffer.Buffer) buffer.Buffer {
 	channelBytes := len([]byte(channel))
 	size := publishReqBytes + channelBytes
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(size)
+
+	writer := buffer.MallocWriter(size)
 	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Publish)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(channelBytes))
 	writer.WriteString(channel)
-	buf.Mount(message)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer, message)
 }
 
 // DecodePublishReq 解码发布频道消息请求
@@ -62,15 +61,14 @@ func DecodePublishReq(data []byte) (seq uint64, channel string, message []byte, 
 // EncodePublishRes 编码发布频道消息响应
 // 协议：size + header + route + seq + total
 func EncodePublishRes(seq uint64, total uint64) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(publishResBytes)
+	writer := buffer.MallocWriter(publishResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(publishResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Publish)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint64s(binary.BigEndian, total)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeMulticastRes 解码组播响应

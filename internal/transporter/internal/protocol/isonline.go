@@ -2,11 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"io"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
-	"io"
 )
 
 const (
@@ -17,8 +18,7 @@ const (
 // EncodeIsOnlineReq 编码检测用户是否在线请求
 // 协议：size + header + route + seq + session kind + target
 func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(isOnlineReqBytes)
+	writer := buffer.MallocWriter(isOnlineReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.IsOnline)
@@ -26,7 +26,7 @@ func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) buffer.Buffe
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeIsOnlineReq 解码检测用户是否在线请求
@@ -64,8 +64,7 @@ func DecodeIsOnlineReq(data []byte) (seq uint64, kind session.Kind, target int64
 // EncodeIsOnlineRes 编码检测用户是否在线响应
 // 协议：size + header + route + seq + code + online state
 func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) buffer.Buffer {
-	buf := buffer.NewNocopyBuffer()
-	writer := buf.Malloc(isOnlineResBytes)
+	writer := buffer.MallocWriter(isOnlineResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.IsOnline)
@@ -73,7 +72,7 @@ func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) buffer.Buffer {
 	writer.WriteUint16s(binary.BigEndian, code)
 	writer.WriteBools(isOnline)
 
-	return buf
+	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeIsOnlineRes 解码检测用户是否在线响应

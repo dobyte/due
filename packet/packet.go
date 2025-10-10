@@ -1,6 +1,10 @@
 package packet
 
-import "github.com/dobyte/due/v2/core/buffer"
+import (
+	"io"
+
+	"github.com/dobyte/due/v2/core/buffer"
+)
 
 var globalPacker Packer
 
@@ -18,14 +22,19 @@ func GetPacker() Packer {
 	return globalPacker
 }
 
-// ReadMessage 读取消息
-func ReadMessage(reader any) ([]byte, error) {
-	return globalPacker.ReadMessage(reader)
+// ReadBuffer 以buffer的形式读取消息
+func ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
+	return globalPacker.ReadBuffer(reader)
 }
 
-// PackBuffer 打包消息
+// PackBuffer 以buffer的形式打包消息
 func PackBuffer(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackBuffer(message)
+}
+
+// ReadMessage 读取消息
+func ReadMessage(reader io.Reader) ([]byte, error) {
+	return globalPacker.ReadMessage(reader)
 }
 
 // PackMessage 打包消息

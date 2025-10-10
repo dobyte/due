@@ -4,8 +4,6 @@ import (
 	"sync/atomic"
 )
 
-var defaultWriterPool = NewWriterPool(32)
-
 type NocopyBuffer struct {
 	len      int          // 字节数
 	num      int          // 节点数
@@ -85,17 +83,22 @@ func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	}
 }
 
-// Malloc 分配一块内存给Writer
-func (b *NocopyBuffer) Malloc(cap int, whence ...Whence) *Writer {
-	writer := defaultWriterPool.Get(cap)
+// MallocBytes 分配一块内存给Bytes
+func (b *NocopyBuffer) MallocBytes(cap int, whence ...Whence) *Bytes {
+	block := MallocBytes(cap)
 
-	if len(whence) > 0 && whence[0] == Head {
-		b.addToHead(&NocopyNode{block: writer})
-	} else {
-		b.addToTail(&NocopyNode{block: writer})
-	}
+	b.Mount(block)
 
-	return writer
+	return block
+}
+
+// MallocWriter 分配一块内存给Writer
+func (b *NocopyBuffer) MallocWriter(cap int, whence ...Whence) *Writer {
+	block := MallocWriter(cap)
+
+	b.Mount(block)
+
+	return block
 }
 
 // Visit 迭代
