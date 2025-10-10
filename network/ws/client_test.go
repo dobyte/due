@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -33,8 +34,10 @@ func TestClient_Dial(t *testing.T) {
 			client.OnDisconnect(func(conn network.Conn) {
 				t.Log("connection is closed")
 			})
-			client.OnReceive(func(conn network.Conn, msg []byte) {
-				message, err := packet.UnpackMessage(msg)
+			client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+				defer buf.Release()
+
+				message, err := packet.UnpackMessage(buf.Bytes())
 				if err != nil {
 					t.Error(err)
 					return
@@ -88,8 +91,10 @@ func TestNewClient(t *testing.T) {
 	client.OnDisconnect(func(conn network.Conn) {
 		log.Info("connection is closed")
 	})
-	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.UnpackMessage(msg)
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
+		message, err := packet.UnpackMessage(buf.Bytes())
 		if err != nil {
 			t.Error(err)
 			return
@@ -150,7 +155,9 @@ func TestClient_Benchmark(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	client := ws.NewClient()
-	client.OnReceive(func(conn network.Conn, msg []byte) {
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
 		atomic.AddInt64(&totalRecv, 1)
 
 		wg.Done()

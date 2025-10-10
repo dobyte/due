@@ -8,13 +8,15 @@
 package ws_test
 
 import (
+	"net/http"
+	"testing"
+
 	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xcall"
-	"net/http"
-	"testing"
 )
 
 func TestServer(t *testing.T) {
@@ -28,8 +30,10 @@ func TestServer(t *testing.T) {
 	server.OnDisconnect(func(conn network.Conn) {
 		t.Logf("connection is closed, connection id: %d", conn.ID())
 	})
-	server.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.UnpackMessage(msg)
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
+		message, err := packet.UnpackMessage(buf.Bytes())
 		if err != nil {
 			t.Error(err)
 			return
@@ -37,7 +41,7 @@ func TestServer(t *testing.T) {
 
 		t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 
-		msg, err = packet.PackMessage(&packet.Message{
+		msg, err := packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: []byte("I'm fine~~"),
@@ -73,14 +77,16 @@ func TestServer_Benchmark(t *testing.T) {
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
-	server.OnReceive(func(conn network.Conn, msg []byte) {
-		_, err := packet.UnpackMessage(msg)
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
+		_, err := packet.UnpackMessage(buf.Bytes())
 		if err != nil {
 			t.Error(err)
 			return
 		}
 
-		msg, err = packet.PackMessage(&packet.Message{
+		msg, err := packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: []byte("I'm fine~~"),

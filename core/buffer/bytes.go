@@ -1,9 +1,11 @@
 package buffer
 
+import "sync"
+
 type Bytes struct {
 	buf  []byte
 	off  int
-	pool *BytesPool
+	pool *sync.Pool
 }
 
 func NewBytes(cap int) *Bytes {
@@ -48,11 +50,9 @@ func (b *Bytes) Bytes() []byte {
 
 // Release 释放
 func (b *Bytes) Release() {
-	if b != nil {
-		b.off = 0
+	b.off = 0
 
-		if b.pool != nil {
-			b.pool.Put(b)
-		}
+	if b.pool != nil {
+		b.pool.Put(b)
 	}
 }

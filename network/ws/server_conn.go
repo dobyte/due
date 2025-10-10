@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -314,7 +315,7 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
-			msgType, msg, err := conn.ReadMessage()
+			msgType, msgData, err := conn.ReadMessage()
 			if err != nil {
 				if !errors.Is(err, net.ErrClosed) {
 					if _, ok := err.(*websocket.CloseError); !ok {
@@ -343,12 +344,12 @@ func (c *serverConn) read() {
 			}
 
 			// ignore empty packet
-			if len(msg) == 0 {
+			if len(msgData) == 0 {
 				continue
 			}
 
 			// check heartbeat packet
-			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			isHeartbeat, err := packet.CheckHeartbeat(msgData)
 			if err != nil {
 				log.Errorf("check heartbeat message error: %v", err)
 				continue
@@ -366,7 +367,7 @@ func (c *serverConn) read() {
 				}
 			} else {
 				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, msg)
+					c.connMgr.server.receiveHandler(c, buffer.NewNocopyBuffer(msgData))
 				}
 			}
 		}

@@ -23,7 +23,9 @@ func NewWriterPool(grade int) *WriterPool {
 
 	for i := range grade + 1 {
 		cap := 1 << i
-		p.pools[i] = &sync.Pool{New: func() any { return NewWriter(cap) }}
+		pool := &sync.Pool{}
+		pool.New = func() any { return &Writer{buf: make([]byte, cap), pool: pool} }
+		p.pools[i] = pool
 	}
 
 	return p
@@ -42,10 +44,7 @@ func (p *WriterPool) Get(cap int) *Writer {
 		return nil
 	}
 
-	w := pool.Get().(*Writer)
-	w.pool = p
-
-	return w
+	return pool.Get().(*Writer)
 }
 
 // Put 放回

@@ -76,7 +76,7 @@ func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 	data, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
-		Buffer: []byte(xrand.Letters(1024)),
+		Buffer: []byte(xrand.Letters(2048)),
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -102,7 +102,7 @@ func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
 	data, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
-		Buffer: []byte(xrand.Letters(1024)),
+		Buffer: []byte(xrand.Letters(2048)),
 	})
 	if err != nil {
 		b.Fatal(err)

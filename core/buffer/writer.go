@@ -3,12 +3,13 @@ package buffer
 import (
 	"encoding/binary"
 	"math"
+	"sync"
 )
 
 type Writer struct {
 	buf  []byte
 	off  int
-	pool *WriterPool
+	pool *sync.Pool
 }
 
 func NewWriter(cap ...int) *Writer {

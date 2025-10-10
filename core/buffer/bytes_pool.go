@@ -23,7 +23,9 @@ func NewBytesPool(grade int) *BytesPool {
 
 	for i := range grade + 1 {
 		cap := 1 << i
-		p.pools[i] = &sync.Pool{New: func() any { return NewBytes(cap) }}
+		pool := &sync.Pool{}
+		pool.New = func() any { return &Bytes{buf: make([]byte, cap), off: cap, pool: pool} }
+		p.pools[i] = pool
 	}
 
 	return p
@@ -44,7 +46,6 @@ func (p *BytesPool) Get(cap int) *Bytes {
 
 	b := pool.Get().(*Bytes)
 	b.off = cap
-	b.pool = p
 
 	return b
 }
