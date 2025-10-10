@@ -2,36 +2,30 @@ package protocol
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/v2/errors"
 	"io"
-	"sync"
-)
 
-var sizePool = sync.Pool{New: func() any {
-	return make([]byte, 4)
-}}
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
+)
 
 // ReadMessage 读取消息
 func ReadMessage(reader io.Reader) (isHeartbeat bool, route uint8, seq uint64, data []byte, err error) {
-	buf := sizePool.Get().([]byte)
+	buf := buffer.MallocBytes(defaultSizeBytes)
+	defer buf.Release()
 
-	if _, err = io.ReadFull(reader, buf); err != nil {
-		sizePool.Put(buf)
+	if _, err = io.ReadFull(reader, buf.Bytes()); err != nil {
 		return
 	}
 
-	size := binary.BigEndian.Uint32(buf)
+	size := binary.BigEndian.Uint32(buf.Bytes())
 
 	if size == 0 {
-		sizePool.Put(buf)
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	data = make([]byte, defaultSizeBytes+size)
-	copy(data[:defaultSizeBytes], buf)
-
-	sizePool.Put(buf)
+	copy(data[:defaultSizeBytes], buf.Bytes())
 
 	if _, err = io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
 		return

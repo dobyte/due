@@ -184,10 +184,10 @@ func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	return p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
-		NID:     args.NID,
-		UID:     args.UID,
-		Route:   args.Message.Route,
-		Message: args.Message,
+		NID:    args.NID,
+		UID:    args.UID,
+		Route:  args.Message.Route,
+		Buffer: args.Message,
 	})
 }
 

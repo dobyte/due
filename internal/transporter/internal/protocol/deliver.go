@@ -16,15 +16,15 @@ const (
 
 // EncodeDeliverReq 编码投递消息请求
 // 协议：size + header + route + seq + cid + uid + <message packet>
-func EncodeDeliverReq(seq uint64, cid int64, uid int64, message []byte) buffer.Buffer {
+func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) buffer.Buffer {
 	writer := buffer.MallocWriter(deliverReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(deliverReqBytes-defaultSizeBytes+len(message)))
+	writer.WriteUint32s(binary.BigEndian, uint32(deliverReqBytes-defaultSizeBytes+buf.Len()))
 	writer.WriteUint8s(dataBit)
 	writer.WriteUint8s(route.Deliver)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteInt64s(binary.BigEndian, cid, uid)
 
-	return buffer.NewNocopyBuffer(writer, message)
+	return buffer.NewNocopyBuffer(writer, buf)
 }
 
 // DecodeDeliverReq 解码投递消息请求

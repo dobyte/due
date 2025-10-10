@@ -2,16 +2,18 @@ package tcp_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/network/tcp/v2"
-	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/utils/xrand"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/network/tcp/v2"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/utils/xrand"
 )
 
 func TestClient_Simple(t *testing.T) {
@@ -25,8 +27,10 @@ func TestClient_Simple(t *testing.T) {
 		log.Info("connection is closed")
 	})
 
-	client.OnReceive(func(conn network.Conn, msg []byte) {
-		message, err := packet.UnpackMessage(msg)
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
+		message, err := packet.UnpackMessage(buf.Bytes())
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
@@ -138,7 +142,9 @@ func doPressureTest(c int, n int, size int) {
 
 	client := tcp.NewClient(tcp.WithClientHeartbeatInterval(0))
 
-	client.OnReceive(func(conn network.Conn, msg []byte) {
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		buf.Release()
+
 		atomic.AddInt64(&totalRecv, 1)
 
 		wg.Done()

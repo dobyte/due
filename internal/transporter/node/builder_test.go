@@ -2,10 +2,12 @@ package node_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"testing"
 )
 
 func TestBuilder(t *testing.T) {
@@ -19,7 +21,7 @@ func TestBuilder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = client.Deliver(context.Background(), 1, 2, []byte("hello world"))
+	err = client.Deliver(context.Background(), 1, 2, buffer.NewNocopyBuffer([]byte("hello world")))
 	if err != nil {
 		t.Fatal(err)
 	}

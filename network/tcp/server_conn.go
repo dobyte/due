@@ -302,7 +302,7 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
-			msg, err := packet.ReadMessage(conn)
+			buf, err := packet.ReadBuffer(conn)
 			if err != nil {
 				_ = c.forceClose(true)
 				return
@@ -322,11 +322,11 @@ func (c *serverConn) read() {
 			}
 
 			// ignore empty packet
-			if len(msg) == 0 {
+			if buf.Len() == 0 {
 				continue
 			}
 
-			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			isHeartbeat, err := packet.CheckHeartbeat(buf.Bytes())
 			if err != nil {
 				log.Errorf("check heartbeat message error: %v", err)
 				continue
@@ -340,7 +340,7 @@ func (c *serverConn) read() {
 				}
 			} else {
 				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, msg)
+					c.connMgr.server.receiveHandler(c, buf)
 				}
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
@@ -69,28 +70,28 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 }
 
 // 投递消息
-func (p *proxy) deliver(ctx context.Context, cid, uid int64, message []byte) {
-	msg, err := packet.UnpackMessage(message)
+func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) {
+	message, err := packet.UnpackMessage(buf.Bytes())
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)
 		return
 	}
 
 	if mode.IsDebugMode() {
-		log.Debugf("deliver message, cid: %d uid: %d seq: %d route: %d buffer: %s", cid, uid, msg.Seq, msg.Route, string(msg.Buffer))
+		log.Debugf("deliver message, cid: %d uid: %d seq: %d route: %d buffer: %s", cid, uid, message.Seq, message.Route, string(message.Buffer))
 	}
 
 	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
-		CID:     cid,
-		UID:     uid,
-		Route:   msg.Route,
-		Message: message,
+		CID:    cid,
+		UID:    uid,
+		Route:  message.Route,
+		Buffer: buf,
 	}); err != nil {
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
-			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
+			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
 		default:
-			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, msg.Seq, msg.Route, err)
+			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
 		}
 	}
 }

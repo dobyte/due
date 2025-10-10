@@ -1,19 +1,21 @@
 package protocol_test
 
 import (
+	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"testing"
 )
 
 func TestEncodeDeliverReq(t *testing.T) {
-	buffer := protocol.EncodeDeliverReq(1, 2, 3, []byte("hello world"))
+	buffer := protocol.EncodeDeliverReq(1, 2, 3, buffer.NewNocopyBuffer([]byte("hello world")))
 
 	t.Log(buffer.Bytes())
 }
 
 func TestDecodeDeliverReq(t *testing.T) {
-	buffer := protocol.EncodeDeliverReq(1, 2, 3, []byte("hello world"))
+	buffer := protocol.EncodeDeliverReq(1, 2, 3, buffer.NewNocopyBuffer([]byte("hello world")))
 
 	seq, cid, uid, message, err := protocol.DecodeDeliverReq(buffer.Bytes())
 	if err != nil {

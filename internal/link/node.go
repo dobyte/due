@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/dispatcher"
@@ -131,16 +132,19 @@ func (l *NodeLinker) Unbind(ctx context.Context, uid int64, name, nid string) er
 
 // Deliver 投递消息给节点处理
 func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
-	var message []byte
+	var (
+		err error
+		buf buffer.Buffer
+	)
 
-	switch msg := args.Message.(type) {
+	switch b := args.Buffer.(type) {
 	case []byte:
-		message = msg
+		buf = buffer.NewNocopyBuffer(b)
+	case buffer.Buffer:
+		buf = b
 	case *Message:
-		if m, err := l.doPackMessage(msg, false); err != nil {
+		if buf, err = l.PackBuffer(b, false); err != nil {
 			return err
-		} else {
-			message = m
 		}
 	default:
 		return errors.ErrInvalidMessage
@@ -152,12 +156,11 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 			return err
 		}
 
-		return client.Deliver(ctx, args.CID, args.UID, message)
+		return client.Deliver(ctx, args.CID, args.UID, buf)
 	} else {
-		_, err := l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
-			return false, nil, client.Deliver(ctx, args.CID, args.UID, message)
-		})
-		if err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
+			return false, nil, client.Deliver(ctx, args.CID, args.UID, buf)
+		}); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 			return err
 		}
 
@@ -307,13 +310,13 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 }
 
 // 打包消息
-func (l *NodeLinker) doPackMessage(message *Message, encrypt bool) ([]byte, error) {
+func (l *NodeLinker) PackBuffer(message *Message, encrypt bool) (buffer.Buffer, error) {
 	buffer, err := l.toBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
 
-	return packet.PackMessage(&packet.Message{
+	return packet.PackBuffer(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,
