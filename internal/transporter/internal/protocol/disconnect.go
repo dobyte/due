@@ -17,7 +17,7 @@ const (
 
 // EncodeDisconnectReq 编码断连请求
 // 协议：size + header + route + seq + session kind + target + force
-func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) buffer.Buffer {
+func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -68,7 +68,7 @@ func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int
 
 // EncodeDisconnectRes 编码断连响应
 // 协议：size + header + route + seq + code
-func EncodeDisconnectRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

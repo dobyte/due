@@ -6,6 +6,8 @@ type NocopyNode struct {
 	block any
 }
 
+var _ Buffer = (*NocopyNode)(nil)
+
 // Len 获取字节长度
 func (n *NocopyNode) Len() int {
 	if n == nil {

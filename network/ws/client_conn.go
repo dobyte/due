@@ -310,7 +310,7 @@ func (c *clientConn) read() {
 			}
 
 			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buffer.NewNocopyBuffer(msgData))
+				c.client.receiveHandler(c, buffer.NewBytes(msgData))
 			}
 		}
 	}

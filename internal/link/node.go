@@ -142,7 +142,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	case buffer.Buffer:
 		buf = b
 	case *Message:
-		if buf, err = l.PackBuffer(b, false); err != nil {
+		if buf, err = l.PackMessage(b, false); err != nil {
 			return err
 		}
 	default:
@@ -312,8 +312,8 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 }
 
 // 打包消息
-func (l *NodeLinker) PackBuffer(message *Message, encrypt bool) (buffer.Buffer, error) {
-	buffer, err := l.toBuffer(message.Data, encrypt)
+func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (*buffer.NocopyBuffer, error) {
+	buffer, err := l.PackBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func (l *NodeLinker) PackBuffer(message *Message, encrypt bool) (buffer.Buffer, 
 }
 
 // 消息转buffer
-func (l *NodeLinker) toBuffer(message any, encrypt bool) ([]byte, error) {
+func (l *NodeLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
 	if message == nil {
 		return nil, nil
 	}

@@ -66,15 +66,17 @@ func (r *Router) AddRouteHandler(route int32, handler RouteHandler, opts ...Rout
 		return
 	}
 
-	options := RouteOptions{}
 	if len(opts) > 0 {
-		options = opts[0]
-	}
-
-	r.routes[route] = &routeEntity{
-		route:   route,
-		handler: handler,
-		options: options,
+		r.routes[route] = &routeEntity{
+			route:   route,
+			handler: handler,
+			options: opts[0],
+		}
+	} else {
+		r.routes[route] = &routeEntity{
+			route:   route,
+			handler: handler,
+		}
 	}
 }
 

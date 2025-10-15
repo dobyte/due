@@ -16,7 +16,7 @@ const (
 
 // EncodeDeliverReq 编码投递消息请求
 // 协议：size + header + route + seq + cid + uid + <message packet>
-func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) buffer.Buffer {
+func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(deliverReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(deliverReqBytes-defaultSizeBytes+buf.Len()))
 	writer.WriteUint8s(dataBit)
@@ -54,7 +54,7 @@ func DecodeDeliverReq(data []byte) (seq uint64, cid int64, uid int64, message []
 
 // EncodeDeliverRes 编码投递消息响应
 // 协议：size + header + route + seq + code
-func EncodeDeliverRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeDeliverRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(deliverResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(deliverResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

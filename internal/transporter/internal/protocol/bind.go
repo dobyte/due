@@ -16,7 +16,7 @@ const (
 
 // EncodeBindReq 编码绑定请求
 // 协议：size + header + route + seq + cid + uid
-func EncodeBindReq(seq uint64, cid, uid int64) buffer.Buffer {
+func EncodeBindReq(seq uint64, cid, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(bindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(bindReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -58,7 +58,7 @@ func DecodeBindReq(data []byte) (seq uint64, cid, uid int64, err error) {
 
 // EncodeBindRes 编码绑定响应
 // 协议：size + header + route + seq + code
-func EncodeBindRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeBindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(bindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(bindResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

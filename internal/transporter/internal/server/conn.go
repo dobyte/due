@@ -17,7 +17,7 @@ import (
 
 type chWrite struct {
 	isHeartbeat bool
-	buf         buffer.Buffer
+	buf         *buffer.NocopyBuffer
 }
 
 type Conn struct {
@@ -49,7 +49,7 @@ func newConn(server *Server, conn net.Conn) *Conn {
 }
 
 // Send 发送消息
-func (c *Conn) Send(buf buffer.Buffer) error {
+func (c *Conn) Send(buf *buffer.NocopyBuffer) error {
 	if atomic.LoadInt32(&c.state) == def.ConnClosed {
 		return errors.ErrConnectionClosed
 	}

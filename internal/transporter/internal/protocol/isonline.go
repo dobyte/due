@@ -17,7 +17,7 @@ const (
 
 // EncodeIsOnlineReq 编码检测用户是否在线请求
 // 协议：size + header + route + seq + session kind + target
-func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) buffer.Buffer {
+func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(isOnlineReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -63,7 +63,7 @@ func DecodeIsOnlineReq(data []byte) (seq uint64, kind session.Kind, target int64
 
 // EncodeIsOnlineRes 编码检测用户是否在线响应
 // 协议：size + header + route + seq + code + online state
-func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) buffer.Buffer {
+func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(isOnlineResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

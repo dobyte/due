@@ -19,16 +19,6 @@ type Buffer interface {
 	Len() int
 	// Bytes 获取所有字节（性能较低，不推荐使用）
 	Bytes() []byte
-	// Mount 挂载数据到Buffer上
-	Mount(block any, whence ...Whence)
-	// MallocBytes 分配一块内存给Bytes
-	MallocBytes(cap int, whence ...Whence) *Bytes
-	// MallocWriter 分配一块内存给Writer
-	MallocWriter(cap int, whence ...Whence) *Writer
-	// Visit 迭代
-	Visit(fn func(node *NocopyNode) bool) bool
-	// Delay 设置延迟释放点
-	Delay(delay int32)
 	// Release 释放
 	Release()
 }

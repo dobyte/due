@@ -8,7 +8,15 @@ type Bytes struct {
 	pool *sync.Pool
 }
 
-func NewBytes(cap int) *Bytes {
+var _ Buffer = (*Bytes)(nil)
+
+// NewBytes 以指定buf创建字节
+func NewBytes(buf []byte) *Bytes {
+	return &Bytes{buf: buf, off: len(buf)}
+}
+
+// NewBytesWithCapacity 以指定容量创建字节
+func NewBytesWithCapacity(cap int) *Bytes {
 	return &Bytes{buf: make([]byte, cap), off: cap}
 }
 

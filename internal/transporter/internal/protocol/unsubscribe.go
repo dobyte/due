@@ -17,7 +17,7 @@ const (
 
 // EncodeUnsubscribeReq 编码取消订阅频道请求（单次最多取消订阅65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + channel
-func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) buffer.Buffer {
+func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
 	writer := buffer.MallocWriter(size)
@@ -69,7 +69,7 @@ func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets [
 
 // EncodeUnsubscribeRes 编码取消订阅频道响应
 // 协议：size + header + route + seq + code
-func EncodeUnsubscribeRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unsubscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

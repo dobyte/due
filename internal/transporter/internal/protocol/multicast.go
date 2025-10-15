@@ -18,7 +18,7 @@ const (
 
 // EncodeMulticastReq 编码组播请求（最多组播65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + <message packet>
-func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message buffer.Buffer) buffer.Buffer {
+func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message buffer.Buffer) *buffer.NocopyBuffer {
 	size := multicastReqBytes + len(targets)*8
 
 	writer := buffer.MallocWriter(size)
@@ -69,7 +69,7 @@ func DecodeMulticastReq(data []byte) (seq uint64, kind session.Kind, targets []i
 
 // EncodeMulticastRes 编码组播响应
 // 协议：size + header + route + seq + code + [total]
-func EncodeMulticastRes(seq uint64, code uint16, total ...uint64) buffer.Buffer {
+func EncodeMulticastRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := multicastResBytes - defaultSizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
 		size -= b64

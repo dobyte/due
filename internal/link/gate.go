@@ -114,8 +114,7 @@ func (l *GateLinker) Bind(ctx context.Context, gid string, cid, uid int64) error
 		return err
 	}
 
-	_, err = client.Bind(ctx, cid, uid)
-	if err != nil {
+	if _, err = client.Bind(ctx, cid, uid); err != nil {
 		return err
 	}
 
@@ -714,13 +713,11 @@ func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.
 
 		prev = gid
 
-		client, err = l.doBuildClient(gid)
-		if err != nil {
+		if client, err = l.doBuildClient(gid); err != nil {
 			return nil, err
 		}
 
-		continued, reply, err = fn(client)
-		if continued {
+		if continued, reply, err = fn(client); continued {
 			l.sources.Delete(uid)
 			continue
 		}
@@ -746,7 +743,7 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 }
 
 // PackMessage 打包消息
-func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
+func (l *GateLinker) PackMessage(message *Message, encrypt bool) (*buffer.NocopyBuffer, error) {
 	buf, err := l.PackBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ const (
 
 // EncodeUnbindReq 编码解绑请求
 // 协议：size + header + route + seq + uid
-func EncodeUnbindReq(seq uint64, uid int64) buffer.Buffer {
+func EncodeUnbindReq(seq uint64, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -54,7 +54,7 @@ func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
 
 // EncodeUnbindRes 编码解绑响应
 // 协议：size + header + route + seq + code
-func EncodeUnbindRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeUnbindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

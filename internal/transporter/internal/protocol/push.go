@@ -17,7 +17,7 @@ const (
 
 // EncodePushReq 编码推送请求
 // 协议：size + header + route + seq + session kind + target + <message packet>
-func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.Buffer) buffer.Buffer {
+func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(pushReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
@@ -60,7 +60,7 @@ func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, me
 
 // EncodePushRes 编码推送响应
 // 协议：size + header + route + seq + code
-func EncodePushRes(seq uint64, code uint16) buffer.Buffer {
+func EncodePushRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(pushResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

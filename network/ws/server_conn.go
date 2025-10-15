@@ -367,7 +367,7 @@ func (c *serverConn) read() {
 				}
 			} else {
 				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, buffer.NewNocopyBuffer(msgData))
+					c.connMgr.server.receiveHandler(c, buffer.NewBytes(msgData))
 				}
 			}
 		}

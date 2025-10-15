@@ -15,7 +15,7 @@ const (
 
 // EncodePublishReq 编码发布频道消息请求
 // 协议：size + header + route + seq + channel len + channel + <message packet>
-func EncodePublishReq(seq uint64, channel string, message buffer.Buffer) buffer.Buffer {
+func EncodePublishReq(seq uint64, channel string, message buffer.Buffer) *buffer.NocopyBuffer {
 	channelBytes := len([]byte(channel))
 	size := publishReqBytes + channelBytes
 
@@ -60,7 +60,7 @@ func DecodePublishReq(data []byte) (seq uint64, channel string, message []byte, 
 
 // EncodePublishRes 编码发布频道消息响应
 // 协议：size + header + route + seq + total
-func EncodePublishRes(seq uint64, total uint64) buffer.Buffer {
+func EncodePublishRes(seq uint64, total uint64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(publishResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(publishResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

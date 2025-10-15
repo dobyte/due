@@ -19,7 +19,7 @@ const (
 
 // EncodeGetIPReq 编码获取IP请求
 // 协议：size + header + route + seq + session kind + target
-func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) buffer.Buffer {
+func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getIPReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -65,7 +65,7 @@ func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, e
 
 // EncodeGetIPRes 编码获取IP响应
 // 协议：size + header + route + seq + code + [ip]
-func EncodeGetIPRes(seq uint64, code uint16, ip ...string) buffer.Buffer {
+func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer {
 	size := getIPResBytes - defaultSizeBytes
 	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
 		size -= 4

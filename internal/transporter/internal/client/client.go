@@ -17,9 +17,9 @@ const (
 )
 
 type chWrite struct {
-	seq  uint64        // 序列号
-	buf  buffer.Buffer // 数据buffer
-	call chan []byte   // 回调数据
+	seq  uint64               // 序列号
+	buf  *buffer.NocopyBuffer // 数据buffer
+	call chan []byte          // 回调数据
 }
 
 type Client struct {
@@ -76,7 +76,7 @@ func (c *Client) Establish() error {
 }
 
 // Call 调用
-func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ...int64) ([]byte, error) {
+func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) ([]byte, error) {
 	if c.closed.Load() {
 		return nil, errors.ErrClientClosed
 	}
@@ -113,7 +113,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf buffer.Buffer, idx ..
 }
 
 // Send 发送
-func (c *Client) Send(ctx context.Context, buf buffer.Buffer, idx ...int64) error {
+func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
 	if c.closed.Load() {
 		return errors.ErrClientClosed
 	}

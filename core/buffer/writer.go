@@ -12,16 +12,20 @@ type Writer struct {
 	pool *sync.Pool
 }
 
-func NewWriter(cap ...int) *Writer {
-	w := &Writer{}
+var _ Buffer = (*Writer)(nil)
 
+// NewWriter 以指定buf创建写入器
+func NewWriter(buf []byte) *Writer {
+	return &Writer{buf: buf}
+}
+
+// NewWriterWithCapacity 以指定容量创建写入器
+func NewWriterWithCapacity(cap ...int) *Writer {
 	if len(cap) > 0 {
-		w.buf = make([]byte, cap[0])
+		return &Writer{buf: make([]byte, cap[0])}
 	} else {
-		w.buf = make([]byte, 0)
+		return &Writer{buf: make([]byte, 0)}
 	}
-
-	return w
 }
 
 // Len 返回数据长度

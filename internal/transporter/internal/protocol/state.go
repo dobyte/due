@@ -19,7 +19,7 @@ const (
 
 // EncodeGetStateReq 编码获取状态请求
 // 协议：size + header + route + seq
-func EncodeGetStateReq(seq uint64) buffer.Buffer {
+func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -52,7 +52,7 @@ func DecodeGetStateReq(data []byte) (seq uint64, err error) {
 
 // EncodeGetStateRes 编码获取状态响应
 // 协议：size + header + route + seq + code + cluster state
-func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) buffer.Buffer {
+func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -93,7 +93,7 @@ func DecodeGetStateRes(data []byte) (code uint16, state cluster.State, err error
 
 // EncodeSetStateReq 编码设置状态请求
 // 协议：size + header + route + seq + cluster state
-func EncodeSetStateReq(seq uint64, state cluster.State) buffer.Buffer {
+func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -133,7 +133,7 @@ func DecodeSetStateReq(data []byte) (seq uint64, state cluster.State, err error)
 
 // EncodeSetStateRes 编码设置状态响应
 // 协议：size + header + route + seq + code
-func EncodeSetStateRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

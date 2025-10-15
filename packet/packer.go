@@ -34,7 +34,7 @@ type Packer interface {
 	// ReadBuffer 以buffer的形式读取消息
 	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
 	// PackBuffer 以buffer的形式打包消息
-	PackBuffer(message *Message) (buffer.Buffer, error)
+	PackBuffer(message *Message) (*buffer.NocopyBuffer, error)
 	// ReadMessage 读取消息
 	ReadMessage(reader io.Reader) ([]byte, error)
 	// PackMessage 打包消息
@@ -104,7 +104,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 }
 
 // PackBuffer 以buffer的形式打包消息
-func (p *defaultPacker) PackBuffer(message *Message) (buffer.Buffer, error) {
+func (p *defaultPacker) PackBuffer(message *Message) (*buffer.NocopyBuffer, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
 	}

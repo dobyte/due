@@ -17,7 +17,7 @@ const (
 
 // EncodeSubscribeReq 编码订阅频道请求（单次最多订阅65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + channel
-func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) buffer.Buffer {
+func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := subscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
 	writer := buffer.MallocWriter(size)
@@ -69,7 +69,7 @@ func DecodeSubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []i
 
 // EncodeSubscribeRes 编码订阅频道响应
 // 协议：size + header + route + seq + code
-func EncodeSubscribeRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeSubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(subscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(subscribeResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

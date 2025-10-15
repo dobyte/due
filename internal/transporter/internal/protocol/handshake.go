@@ -17,7 +17,7 @@ const (
 
 // EncodeHandshakeReq 编码握手请求
 // 协议：size + header + route + seq + ins kind + ins id
-func EncodeHandshakeReq(seq uint64, insKind cluster.Kind, insID string) buffer.Buffer {
+func EncodeHandshakeReq(seq uint64, insKind cluster.Kind, insID string) *buffer.NocopyBuffer {
 	size := handshakeReqBytes + len(insID)
 
 	writer := buffer.MallocWriter(size)
@@ -60,7 +60,7 @@ func DecodeHandshakeReq(data []byte) (seq uint64, insKind cluster.Kind, insID st
 
 // EncodeHandshakeRes 编码握手响应
 // 协议：size + header + route + seq + code
-func EncodeHandshakeRes(seq uint64, code uint16) buffer.Buffer {
+func EncodeHandshakeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(handshakeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(handshakeResBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)

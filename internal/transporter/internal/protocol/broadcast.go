@@ -18,7 +18,7 @@ const (
 
 // EncodeBroadcastReq 编码广播请求
 // 协议：size + header + route + seq + session kind + <message packet>
-func EncodeBroadcastReq(seq uint64, kind session.Kind, message buffer.Buffer) buffer.Buffer {
+func EncodeBroadcastReq(seq uint64, kind session.Kind, message buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(broadcastReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-defaultSizeBytes+message.Len()))
 	writer.WriteUint8s(dataBit)
@@ -56,7 +56,7 @@ func DecodeBroadcastReq(data []byte) (seq uint64, kind session.Kind, message []b
 
 // EncodeBroadcastRes 编码广播响应
 // 协议：size + header + route + seq + code + [total]
-func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) buffer.Buffer {
+func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := broadcastResBytes - defaultSizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
 		size -= b64

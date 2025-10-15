@@ -3,13 +3,14 @@ package buffer_test
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dobyte/due/v2/core/buffer"
 	"io"
 	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
 )
 
 func TestReader(t *testing.T) {
-	writer := buffer.NewWriter(0)
+	writer := buffer.NewWriterWithCapacity(0)
 	writer.WriteBools(true)
 	writer.WriteInt8s(1)
 	writer.WriteUint8s(2)
@@ -45,7 +46,7 @@ func TestReader(t *testing.T) {
 }
 
 func BenchmarkReader(b *testing.B) {
-	writer := buffer.NewWriter(0)
+	writer := buffer.NewWriterWithCapacity(0)
 	writer.WriteBools(true)
 	writer.WriteInt8s(1)
 	writer.WriteUint8s(2)
@@ -85,7 +86,7 @@ func BenchmarkReader(b *testing.B) {
 }
 
 func BenchmarkBinaryRead(b *testing.B) {
-	writer := buffer.NewWriter(0)
+	writer := buffer.NewWriterWithCapacity(0)
 	writer.WriteBools(true)
 	writer.WriteInt8s(1)
 	writer.WriteUint8s(2)

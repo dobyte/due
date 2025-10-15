@@ -28,7 +28,7 @@ func ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 }
 
 // PackBuffer 以buffer的形式打包消息
-func PackBuffer(message *Message) (buffer.Buffer, error) {
+func PackBuffer(message *Message) (*buffer.NocopyBuffer, error) {
 	return globalPacker.PackBuffer(message)
 }
 

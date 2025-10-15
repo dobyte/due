@@ -18,7 +18,7 @@ const (
 
 // EncodeStatReq 编码统计在线人数请求
 // 协议：size + header + route + seq + session kind
-func EncodeStatReq(seq uint64, kind session.Kind) buffer.Buffer {
+func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(statReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-defaultSizeBytes))
 	writer.WriteUint8s(dataBit)
@@ -58,7 +58,7 @@ func DecodeStatReq(data []byte) (seq uint64, kind session.Kind, err error) {
 
 // EncodeStatRes 编码统计在线人数响应
 // 协议：size + header + route + seq + code + [total]
-func EncodeStatRes(seq uint64, code uint16, total ...uint64) buffer.Buffer {
+func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := statResBytes - defaultSizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
 		size -= b64
