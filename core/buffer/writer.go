@@ -52,7 +52,6 @@ func (w *Writer) Grow(n int) {
 // Release 释放
 func (w *Writer) Release() {
 	w.off = 0
-	w.buf = w.buf[:0]
 
 	if w.pool != nil {
 		w.pool.Put(w)
@@ -189,7 +188,7 @@ func (w *Writer) WriteBytes(values ...byte) {
 
 // 执行扩容操作
 func (w *Writer) grow(n int) {
-	if w.off+n < len(w.buf) {
+	if w.off+n < cap(w.buf) {
 		return
 	}
 

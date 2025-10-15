@@ -30,5 +30,5 @@ type Buffer interface {
 	// Delay 设置延迟释放点
 	Delay(delay int32)
 	// Release 释放
-	Release(force ...bool)
+	Release()
 }
