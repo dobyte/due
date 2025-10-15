@@ -102,8 +102,7 @@ func (l *NodeLinker) Bind(ctx context.Context, uid int64, name, nid string) erro
 		return errors.ErrNotFoundLocator
 	}
 
-	err := l.opts.Locator.BindNode(ctx, uid, name, nid)
-	if err != nil {
+	if err := l.opts.Locator.BindNode(ctx, uid, name, nid); err != nil {
 		return err
 	}
 
@@ -256,6 +255,10 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 		return nil, err
 	}
 
+	if uid == 0 && (route.Stateful() || route.Authorized()) {
+		return nil, errors.ErrIllegalRequest
+	}
+
 	if l.opts.InsKind == cluster.Gate && route.Internal() {
 		return nil, errors.ErrIllegalRequest
 	}
@@ -265,24 +268,23 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 			if nid, err = l.Locate(ctx, uid, route.Group()); err != nil {
 				return nil, err
 			}
+
 			if nid == prev {
 				return reply, err
 			}
+
 			prev = nid
 		}
 
-		ep, err = route.FindEndpoint(nid)
-		if err != nil {
+		if ep, err = route.FindEndpoint(nid); err != nil {
 			return nil, err
 		}
 
-		client, err = l.builder.Build(ep.Address())
-		if err != nil {
+		if client, err = l.builder.Build(ep.Address()); err != nil {
 			return nil, err
 		}
 
-		continued, reply, err = fn(ctx, client)
-		if continued {
+		if continued, reply, err = fn(ctx, client); continued {
 			if route.Stateful() {
 				l.doDeleteSource(uid, route.Group(), prev)
 			}

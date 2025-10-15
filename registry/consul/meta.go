@@ -2,12 +2,20 @@ package consul
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
-	"strings"
 )
 
 const metaValueSize = 512
+
+const (
+	metaRouteInternal = 1 << iota
+	metaRouteStateful
+	metaRouteAuthorized
+	metaRouteRestricted
+)
 
 // 编码元数据路由
 func marshalMetaRoutes(routes []registry.Route) map[string]string {
@@ -19,7 +27,25 @@ func marshalMetaRoutes(routes []registry.Route) map[string]string {
 	)
 
 	for _, route := range routes {
-		val := fmt.Sprintf("%d-%d-%d", route.ID, xconv.Int(route.Stateful), xconv.Int(route.Internal))
+		var opts int
+
+		if route.Internal {
+			opts |= metaRouteInternal
+		}
+
+		if route.Stateful {
+			opts |= metaRouteStateful
+		}
+
+		if route.Authorized {
+			opts |= metaRouteAuthorized
+		}
+
+		if route.Restricted {
+			opts |= metaRouteRestricted
+		}
+
+		val := fmt.Sprintf("%d-%d", route.ID, opts)
 
 		if s := len(items); s == 0 {
 			size = len(val)
@@ -72,14 +98,18 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 		for _, item := range strings.Split(items, ",") {
 			val := strings.Split(item, "-")
 
-			if len(val) != 3 {
+			if len(val) != 2 {
 				continue
 			}
 
+			opts := xconv.Int(val[1])
+
 			routes = append(routes, registry.Route{
-				ID:       xconv.Int32(val[0]),
-				Stateful: xconv.Bool(val[1]),
-				Internal: xconv.Bool(val[2]),
+				ID:         xconv.Int32(val[0]),
+				Internal:   opts&metaRouteInternal != 0,
+				Stateful:   opts&metaRouteStateful != 0,
+				Authorized: opts&metaRouteAuthorized != 0,
+				Restricted: opts&metaRouteRestricted != 0,
 			})
 		}
 	}

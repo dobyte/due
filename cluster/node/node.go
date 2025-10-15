@@ -283,9 +283,11 @@ func (n *Node) registerServiceInstances() {
 
 	for _, entity := range n.router.routes {
 		routes = append(routes, registry.Route{
-			ID:       entity.route,
-			Stateful: entity.stateful,
-			Internal: entity.internal,
+			ID:         entity.route,
+			Internal:   entity.options.Internal,
+			Stateful:   entity.options.Stateful,
+			Authorized: entity.options.Authorized,
+			Restricted: entity.options.Restricted,
 		})
 	}
 

@@ -72,13 +72,8 @@ func (p *Proxy) Trigger() *Trigger {
 }
 
 // AddRouteHandler 添加路由处理器
-func (p *Proxy) AddRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	p.node.router.AddRouteHandler(route, stateful, handler, middlewares...)
-}
-
-// AddInternalRouteHandler 添加内部路由处理器（node节点间路由消息处理）
-func (p *Proxy) AddInternalRouteHandler(route int32, stateful bool, handler RouteHandler, middlewares ...MiddlewareHandler) {
-	p.node.router.AddInternalRouteHandler(route, stateful, handler, middlewares...)
+func (p *Proxy) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
+	p.node.router.AddRouteHandler(route, handler, opts...)
 }
 
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器

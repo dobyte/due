@@ -7,24 +7,21 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/registry"
 )
 
 type Route struct {
 	abstract
-	id         int32         // 路由ID
-	group      string        // 路由所属组
-	stateful   bool          // 是否有状态
-	internal   bool          // 是否内部路由
-	counter    atomic.Uint64 // 轮询计数器
-	dispatcher *Dispatcher   // 分发器
+	route      registry.Route // 路由信息
+	group      string         // 路由所属组
+	counter    atomic.Uint64  // 轮询计数器
+	dispatcher *Dispatcher    // 分发器
 }
 
-func newRoute(dispatcher *Dispatcher, id int32, group string, stateful, internal bool) *Route {
+func newRoute(dispatcher *Dispatcher, group string, route registry.Route) *Route {
 	return &Route{
-		id:         id,
+		route:      route,
 		group:      group,
-		stateful:   stateful,
-		internal:   internal,
 		dispatcher: dispatcher,
 		abstract:   newAbstract(),
 	}
@@ -32,7 +29,7 @@ func newRoute(dispatcher *Dispatcher, id int32, group string, stateful, internal
 
 // ID 获取路由ID
 func (r *Route) ID() int32 {
-	return r.id
+	return r.route.ID
 }
 
 // Group 路由所属组
@@ -40,14 +37,24 @@ func (r *Route) Group() string {
 	return r.group
 }
 
-// Stateful 获取路由状态
-func (r *Route) Stateful() bool {
-	return r.stateful
-}
-
 // Internal 是否内部路由
 func (r *Route) Internal() bool {
-	return r.internal
+	return r.route.Internal
+}
+
+// Stateful 是否有状态路由
+func (r *Route) Stateful() bool {
+	return r.route.Stateful
+}
+
+// Authorized 是否授权路由
+func (r *Route) Authorized() bool {
+	return r.route.Authorized
+}
+
+// Restricted 是否受限路由
+func (r *Route) Restricted() bool {
+	return r.route.Restricted
 }
 
 // FindEndpoint 查询路由服务端点

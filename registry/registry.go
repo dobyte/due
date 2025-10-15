@@ -59,8 +59,12 @@ type ServiceInstance struct {
 type Route struct {
 	// 路由ID
 	ID int32 `json:"i,omitempty"`
-	// 是否有状态
-	Stateful bool `json:"s,omitempty"`
 	// 是否内部路由
 	Internal bool `json:"n,omitempty"`
+	// 是否有状态路由
+	Stateful bool `json:"s,omitempty"`
+	// 是否授权路由
+	Authorized bool `json:"a,omitempty"`
+	// 是否受限路由
+	Restricted bool `json:"r,omitempty"`
 }

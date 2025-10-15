@@ -103,7 +103,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 		for _, item := range service.Routes {
 			route, ok := routes[item.ID]
 			if !ok {
-				route = newRoute(d, item.ID, service.Alias, item.Stateful, item.Internal)
+				route = newRoute(d, service.Alias, item)
 				routes[item.ID] = route
 			}
 			route.addServiceEndpoint(&serviceEndpoint{
