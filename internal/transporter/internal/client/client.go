@@ -149,11 +149,7 @@ func (c *Client) release(ch *chWrite) {
 	ch.buf.Release()
 	ch.buf = nil
 	ch.seq = 0
-
-	if ch.call != nil {
-		close(ch.call)
-		ch.call = nil
-	}
+	ch.call = nil
 
 	c.pool.Put(ch)
 }
