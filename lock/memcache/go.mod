@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/bradfitz/gomemcache v0.0.0-20250403215159-8d39553ac7cf
-	github.com/dobyte/due/v2 v2.3.5
+	github.com/dobyte/due/v2 v2.4.0
 )
 
 require (
