@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -182,11 +183,13 @@ func (l *defaultLogger) Errorf(format string, a ...any) {
 // Fatal 打印致命错误日志
 func (l *defaultLogger) Fatal(a ...any) {
 	l.print(LevelFatal, true, a...)
+	os.Exit(1)
 }
 
 // Fatalf 打印致命错误模板日志
 func (l *defaultLogger) Fatalf(format string, a ...any) {
 	l.print(LevelFatal, true, fmt.Sprintf(format, a...))
+	os.Exit(1)
 }
 
 // Panic 打印Panic日志
