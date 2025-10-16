@@ -3,7 +3,7 @@ module github.com/dobyte/due/config/etcd/v2
 go 1.23.0
 
 require (
-	github.com/dobyte/due/v2 v2.4.0
+	github.com/dobyte/due/v2 v2.4.1
 	go.etcd.io/etcd/api/v3 v3.5.21
 	go.etcd.io/etcd/client/v3 v3.5.21
 )
