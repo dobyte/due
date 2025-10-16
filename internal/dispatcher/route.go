@@ -52,11 +52,6 @@ func (r *Route) Authorized() bool {
 	return r.route.Authorized
 }
 
-// Restricted 是否受限路由
-func (r *Route) Restricted() bool {
-	return r.route.Restricted
-}
-
 // FindEndpoint 查询路由服务端点
 func (r *Route) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 	if len(insID) == 0 || insID[0] == "" {
@@ -75,7 +70,7 @@ func (r *Route) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 
 // 直接分配
 func (r *Route) directDispatch(insID string) (*endpoint.Endpoint, error) {
-	sep, ok := r.endpoints2[insID]
+	sep, ok := r.endpoints5[insID]
 	if !ok {
 		return nil, errors.ErrNotFoundEndpoint
 	}
@@ -85,8 +80,12 @@ func (r *Route) directDispatch(insID string) (*endpoint.Endpoint, error) {
 
 // 随机分配
 func (r *Route) randomDispatch() (*endpoint.Endpoint, error) {
-	if n := len(r.endpoints3); n > 0 {
-		return r.endpoints3[rand.IntN(n)].endpoint, nil
+	if n := len(r.endpoints1); n > 0 {
+		return r.endpoints1[rand.IntN(n)].endpoint, nil
+	}
+
+	if n := len(r.endpoints2); n > 0 {
+		return r.endpoints2[rand.IntN(n)].endpoint, nil
 	}
 
 	return nil, errors.ErrNotFoundEndpoint
@@ -94,13 +93,19 @@ func (r *Route) randomDispatch() (*endpoint.Endpoint, error) {
 
 // 轮询分配
 func (r *Route) roundRobinDispatch() (*endpoint.Endpoint, error) {
-	if len(r.endpoints3) == 0 {
-		return nil, errors.ErrNotFoundEndpoint
+	if n := len(r.endpoints1); n > 0 {
+		index := int(r.counter.Add(1) % uint64(n))
+
+		return r.endpoints1[index].endpoint, nil
 	}
 
-	index := int(r.counter.Add(1) % uint64(len(r.endpoints3)))
+	if n := len(r.endpoints2); n > 0 {
+		index := int(r.counter.Add(1) % uint64(n))
 
-	return r.endpoints3[index].endpoint, nil
+		return r.endpoints2[index].endpoint, nil
+	}
+
+	return nil, errors.ErrNotFoundEndpoint
 }
 
 // 加权轮询分配
@@ -110,22 +115,39 @@ func (r *Route) weightRoundRobinDispatch() (*endpoint.Endpoint, error) {
 		totalWeight int
 	)
 
-	for i := range r.endpoints3 {
-		se := r.endpoints3[i]
-		se.currWeight += se.weight
+	if len(r.endpoints1) > 0 {
+		for i := range r.endpoints1 {
+			se := r.endpoints1[i]
+			se.currWeight += se.weight
 
-		totalWeight += se.weight
+			totalWeight += se.weight
 
-		if selected == nil || se.currWeight > selected.currWeight {
-			selected = se
+			if selected == nil || se.currWeight > selected.currWeight {
+				selected = se
+			}
 		}
+
+		selected.currWeight -= totalWeight
+
+		return selected.endpoint, nil
 	}
 
-	if selected == nil {
-		return nil, errors.ErrNotFoundEndpoint
+	if len(r.endpoints2) > 0 {
+		for i := range r.endpoints2 {
+			se := r.endpoints2[i]
+			se.currWeight += se.weight
+
+			totalWeight += se.weight
+
+			if selected == nil || se.currWeight > selected.currWeight {
+				selected = se
+			}
+		}
+
+		selected.currWeight -= totalWeight
+
+		return selected.endpoint, nil
 	}
 
-	selected.currWeight -= totalWeight
-
-	return selected.endpoint, nil
+	return nil, errors.ErrNotFoundEndpoint
 }

@@ -23,7 +23,25 @@ func (e *Event) Event() int {
 func (e *Event) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint) bool) {
 	for _, se := range e.endpoints1 {
 		if !fn(se.insID, se.endpoint) {
-			break
+			return
+		}
+	}
+
+	for _, se := range e.endpoints2 {
+		if !fn(se.insID, se.endpoint) {
+			return
+		}
+	}
+
+	for _, se := range e.endpoints3 {
+		if !fn(se.insID, se.endpoint) {
+			return
+		}
+	}
+
+	for _, se := range e.endpoints4 {
+		if !fn(se.insID, se.endpoint) {
+			return
 		}
 	}
 }

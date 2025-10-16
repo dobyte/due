@@ -65,6 +65,4 @@ type Route struct {
 	Stateful bool `json:"s,omitempty"`
 	// 是否授权路由
 	Authorized bool `json:"a,omitempty"`
-	// 是否受限路由
-	Restricted bool `json:"r,omitempty"`
 }

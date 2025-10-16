@@ -41,12 +41,6 @@ type RouteOptions struct {
 	// 授权路由在集群间流转时必需附带UID信息，否则无法进行路由投递
 	Authorized bool
 
-	// 是否受限的路由，默认不受限
-	// 仅对无状态路由生效
-	// 受限的路由在节点状态变更为cluster.Hang或cluster.Shut时，不会路由到该节点；网关层会优先选取其他处于cluster.Work状态的节点；若无cluster.Work状态的节点则选取cluster.Busy节点
-	// 非受限路由不受节点状态影响
-	Restricted bool
-
 	// 路由中间件
 	Middlewares []MiddlewareHandler
 }

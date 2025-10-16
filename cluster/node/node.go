@@ -287,7 +287,6 @@ func (n *Node) registerServiceInstances() {
 			Internal:   entity.options.Internal,
 			Stateful:   entity.options.Stateful,
 			Authorized: entity.options.Authorized,
-			Restricted: entity.options.Restricted,
 		})
 	}
 

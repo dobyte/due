@@ -14,7 +14,6 @@ const (
 	metaRouteInternal = 1 << iota
 	metaRouteStateful
 	metaRouteAuthorized
-	metaRouteRestricted
 )
 
 // 编码元数据路由
@@ -39,10 +38,6 @@ func marshalMetaRoutes(routes []registry.Route) map[string]string {
 
 		if route.Authorized {
 			opts |= metaRouteAuthorized
-		}
-
-		if route.Restricted {
-			opts |= metaRouteRestricted
 		}
 
 		val := fmt.Sprintf("%d-%d", route.ID, opts)
@@ -109,7 +104,6 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 				Internal:   opts&metaRouteInternal != 0,
 				Stateful:   opts&metaRouteStateful != 0,
 				Authorized: opts&metaRouteAuthorized != 0,
-				Restricted: opts&metaRouteRestricted != 0,
 			})
 		}
 	}
