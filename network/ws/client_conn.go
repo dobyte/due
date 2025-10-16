@@ -89,30 +89,38 @@ func (c *clientConn) Unbind() {
 // 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
 // 建议使用Push方法替代Send
 func (c *clientConn) Send(msg []byte) (err error) {
+	if err := c.checkState(); err != nil {
+		return err
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err = c.checkState(); err != nil {
-		return
+	if c.conn == nil {
+		return errors.ErrConnectionClosed
 	}
 
 	c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return
+	return nil
 }
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
+	if err := c.checkState(); err != nil {
+		return err
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err = c.checkState(); err != nil {
-		return
+	if c.conn == nil {
+		return errors.ErrConnectionClosed
 	}
 
 	c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return
+	return nil
 }
 
 // State 获取连接状态

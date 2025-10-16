@@ -62,9 +62,9 @@ func (c *serverConn) Unbind() {
 }
 
 // Send 发送消息（同步）
-func (c *serverConn) Send(msg []byte) (err error) {
-	if err = c.checkState(); err != nil {
-		return
+func (c *serverConn) Send(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	c.rw.RLock()
@@ -75,22 +75,26 @@ func (c *serverConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	_, err = conn.Write(msg)
-	return
+	_, err := conn.Write(msg)
+	return err
 }
 
 // Push 发送消息（异步）
-func (c *serverConn) Push(msg []byte) (err error) {
+func (c *serverConn) Push(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err = c.checkState(); err != nil {
-		return
+	if c.conn == nil {
+		return errors.ErrConnectionClosed
 	}
 
 	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return
+	return nil
 }
 
 // State 获取连接状态
@@ -236,6 +240,8 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		return errors.ErrConnectionNotOpened
 	}
 
+	c.uncheckAuthorize()
+
 	c.rw.RLock()
 	if c.conn == nil {
 		c.rw.RUnlock()
@@ -260,6 +266,8 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 			return errors.ErrConnectionClosed
 		}
 	}
+
+	c.uncheckAuthorize()
 
 	return c.doClose(isNeedRecycle)
 }

@@ -100,17 +100,21 @@ func (c *clientConn) Send(msg []byte) error {
 }
 
 // Push 发送消息（异步）
-func (c *clientConn) Push(msg []byte) (err error) {
+func (c *clientConn) Push(msg []byte) error {
+	if err := c.checkState(); err != nil {
+		return err
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err = c.checkState(); err != nil {
-		return
+	if c.conn == nil {
+		return errors.ErrConnectionClosed
 	}
 
 	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
 
-	return
+	return nil
 }
 
 // State 获取连接状态
