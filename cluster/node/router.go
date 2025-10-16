@@ -10,21 +10,6 @@ import (
 
 type RouteHandler func(ctx Context)
 
-type Router struct {
-	node                *Node
-	routes              map[int32]*routeEntity
-	reqChan             chan *request
-	preRouteHandler     RouteHandler
-	postRouteHandler    RouteHandler
-	defaultRouteHandler RouteHandler
-}
-
-type routeEntity struct {
-	route   int32        // 路由
-	handler RouteHandler // 路由处理器
-	options RouteOptions // 路由选项
-}
-
 // RouteOptions 路由选项
 type RouteOptions struct {
 	// 是否内部的路由，默认非内部
@@ -44,6 +29,27 @@ type RouteOptions struct {
 
 	// 路由中间件
 	Middlewares []MiddlewareHandler
+}
+
+var (
+	InternalRoute   = RouteOptions{Internal: true}
+	StatefulRoute   = RouteOptions{Stateful: true}
+	AuthorizedRoute = RouteOptions{Authorized: true}
+)
+
+type Router struct {
+	node                *Node
+	routes              map[int32]*routeEntity
+	reqChan             chan *request
+	preRouteHandler     RouteHandler
+	postRouteHandler    RouteHandler
+	defaultRouteHandler RouteHandler
+}
+
+type routeEntity struct {
+	route   int32        // 路由
+	handler RouteHandler // 路由处理器
+	options RouteOptions // 路由选项
 }
 
 func newRouter(node *Node) *Router {
