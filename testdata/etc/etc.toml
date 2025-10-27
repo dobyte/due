@@ -211,6 +211,8 @@ shutdownMaxWaitTime = "0s"
     seqBytes = 2
     # 消息字节数，默认为5000字节
     bufferBytes = 5000
+    # 是否携带服务器心跳时间
+    heartbeatTime = false
 
 # 日志模块
 [log]
