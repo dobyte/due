@@ -13,9 +13,10 @@ const (
 )
 
 const (
-	defaultAddrsKey   = "etc.eventbus.kafka.addrs"
-	defaultPrefixKey  = "etc.eventbus.kafka.prefix"
-	defaultVersionKey = "etc.eventbus.kafka.version"
+	defaultAddrsKey           = "etc.eventbus.kafka.addrs"
+	defaultPrefixKey          = "etc.eventbus.kafka.prefix"
+	defaultVersionKey         = "etc.eventbus.kafka.version"
+	defaultAutoCreateTopicKey = "etc.eventbus.kafka.autoCreateTopic"
 )
 
 type Option func(o *options)
@@ -37,14 +38,19 @@ type options struct {
 	// 客户端
 	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
 	client sarama.Client
+
+	// 自动创建topic
+	// 当为true时，若不存在该主题，会自动创建，默认为false
+	autoCreateTopic bool
 }
 
 func defaultOptions() *options {
 	return &options{
-		ctx:     context.Background(),
-		addrs:   etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		prefix:  etc.Get(defaultPrefixKey, defaultPrefix).String(),
-		version: etc.Get(defaultVersionKey).String(),
+		ctx:             context.Background(),
+		addrs:           etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		prefix:          etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		version:         etc.Get(defaultVersionKey).String(),
+		autoCreateTopic: etc.Get(defaultAutoCreateTopicKey).Bool(),
 	}
 }
 
@@ -71,4 +77,9 @@ func WithVersion(version string) Option {
 // WithClient 设置外部客户端
 func WithClient(client sarama.Client) Option {
 	return func(o *options) { o.client = client }
+}
+
+// WithAutoCreateTopic 设置自动创建topic
+func WithAutoCreateTopic(autoCreateTopic bool) Option {
+	return func(o *options) { o.autoCreateTopic = autoCreateTopic }
 }

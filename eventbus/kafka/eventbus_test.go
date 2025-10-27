@@ -2,11 +2,12 @@ package kafka_test
 
 import (
 	"context"
-	"github.com/dobyte/due/eventbus/kafka/v2"
-	"github.com/dobyte/due/v2/eventbus"
 	"log"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/eventbus/kafka/v2"
+	"github.com/dobyte/due/v2/eventbus"
 )
 
 const (
@@ -25,7 +26,7 @@ func paidEventHandler(event *eventbus.Event) {
 func TestEventbus_Client1_Subscribe(t *testing.T) {
 	var (
 		err error
-		eb  = kafka.NewEventbus()
+		eb  = kafka.NewEventbus(kafka.WithAutoCreateTopic(true))
 		ctx = context.Background()
 	)
 

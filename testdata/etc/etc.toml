@@ -690,3 +690,5 @@ shutdownMaxWaitTime = "0s"
         version = ""
         # key前缀
         prefix = "due:eventbus"
+        # 是否自动创建topic，默认为false
+        autoCreateTopic = false

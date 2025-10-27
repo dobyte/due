@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/IBM/sarama"
@@ -9,17 +10,19 @@ import (
 )
 
 type Eventbus struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	opts      *options
-	err       error
-	err1      error
-	err2      error
-	consumer  sarama.Consumer
-	producer  sarama.AsyncProducer
-	builtin   bool
-	rw        sync.RWMutex
-	consumers map[string]*consumer
+	ctx          context.Context
+	cancel       context.CancelFunc
+	opts         *options
+	err          error
+	err1         error
+	consumer     sarama.Consumer
+	err2         error
+	producer     sarama.AsyncProducer
+	err3         error
+	clusterAdmin sarama.ClusterAdmin
+	builtin      bool
+	rw           sync.RWMutex
+	consumers    map[string]*consumer
 }
 
 func NewEventbus(opts ...Option) *Eventbus {
@@ -33,11 +36,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	eb.consumers = make(map[string]*consumer)
 	eb.ctx, eb.cancel = context.WithCancel(o.ctx)
 
-	if o.client != nil {
-		eb.consumer, eb.err1 = sarama.NewConsumerFromClient(o.client)
-		eb.producer, eb.err2 = sarama.NewAsyncProducerFromClient(o.client)
-	} else {
-		eb.builtin = true
+	if o.client == nil {
 		config := sarama.NewConfig()
 		config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 		config.Consumer.Return.Errors = true
@@ -50,10 +49,24 @@ func NewEventbus(opts ...Option) *Eventbus {
 			config.Version, eb.err = sarama.ParseKafkaVersion(o.version)
 		}
 
-		if eb.err == nil {
-			eb.consumer, eb.err1 = sarama.NewConsumer(o.addrs, config)
-			eb.producer, eb.err2 = sarama.NewAsyncProducer(o.addrs, config)
+		if eb.err != nil {
+			return eb
 		}
+
+		o.client, eb.err = sarama.NewClient(o.addrs, config)
+
+		if eb.err != nil {
+			return eb
+		}
+
+		eb.builtin = true
+	}
+
+	eb.consumer, eb.err1 = sarama.NewConsumerFromClient(o.client)
+	eb.producer, eb.err2 = sarama.NewAsyncProducerFromClient(o.client)
+
+	if o.autoCreateTopic {
+		eb.clusterAdmin, eb.err3 = sarama.NewClusterAdminFromClient(o.client)
 	}
 
 	return eb
@@ -100,6 +113,23 @@ func (eb *Eventbus) Subscribe(_ context.Context, topic string, handler eventbus.
 	}
 
 	channel := eb.doMakeChannel(topic)
+
+	if eb.opts.autoCreateTopic {
+		if eb.err3 != nil {
+			return eb.err3
+		}
+
+		if err := eb.clusterAdmin.CreateTopic(channel, &sarama.TopicDetail{
+			NumPartitions:     1,
+			ReplicationFactor: 1,
+		}, true); err != nil {
+			if e, ok := err.(*sarama.TopicError); ok && e.Err == sarama.ErrTopicAlreadyExists {
+				// ignore
+			} else {
+				return err
+			}
+		}
+	}
 
 	eb.rw.Lock()
 	c, ok := eb.consumers[channel]
@@ -150,12 +180,16 @@ func (eb *Eventbus) Close() error {
 		return eb.err
 	}
 
-	if eb.err1 != nil {
-		return eb.err1
+	if eb.err1 == nil && eb.consumer != nil {
+		_ = eb.consumer.Close()
 	}
 
-	if eb.err2 != nil {
-		return eb.err2
+	if eb.err2 == nil && eb.producer != nil {
+		_ = eb.producer.Close()
+	}
+
+	if eb.err3 == nil && eb.clusterAdmin != nil {
+		_ = eb.clusterAdmin.Close()
 	}
 
 	eb.cancel()
@@ -164,14 +198,7 @@ func (eb *Eventbus) Close() error {
 		return nil
 	}
 
-	err1 := eb.consumer.Close()
-	err2 := eb.producer.Close()
-
-	if err1 != nil {
-		return err1
-	}
-
-	return err2
+	return eb.opts.client.Close()
 }
 
 func (eb *Eventbus) watch(c *consumer, topic string) error {
@@ -209,6 +236,6 @@ func (eb *Eventbus) doMakeChannel(topic string) string {
 	if eb.opts.prefix == "" {
 		return topic
 	} else {
-		return eb.opts.prefix + ":" + topic
+		return strings.ReplaceAll(eb.opts.prefix, ":", ".") + "." + topic
 	}
 }
