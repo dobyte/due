@@ -1,12 +1,20 @@
 # due 基于Go语言开发的高性能分布式游戏服务器框架
 
 [![Build Status](https://github.com/dobyte/due/workflows/Go/badge.svg)](https://github.com/dobyte/due/actions)
-[![goproxy](https://goproxy.cn/stats/github.com/dobyte/due/v2/badges/download-count.svg)](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)
+[![goproxy.cn](https://goproxy.cn/stats/github.com/dobyte/due/badges/download-count.svg)](https://github.com/dobyte/due)
 [![Go Reference](https://pkg.go.dev/badge/github.com/dobyte/due.svg)](https://pkg.go.dev/github.com/dobyte/due)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dobyte/due)](https://goreportcard.com/report/github.com/dobyte/due)
 ![Coverage](https://img.shields.io/badge/Coverage-17.4%25-red)
 [![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
+
+[![Release](https://img.shields.io/github/v/release/dobyte/due?style=flat)](https://github.com/dobyte/due/releases)
+![Stars](https://img.shields.io/github/stars/dobyte/due?style=flat)
+![Forks](https://img.shields.io/github/forks/dobyte/due?style=flat)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/dobyte/due?style=flat)](https://github.com/dobyte/due/pulls)
+[![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed/dobyte/due?style=flat)](https://github.com/dobyte/due/pulls?q=is%3Apr+is%3Aclosed)
+[![GitHub issues](https://img.shields.io/github/issues/dobyte/due?style=flat)](https://github.com/dobyte/due/issues)
+[![GitHub closed issues](https://img.shields.io/github/issues-closed/dobyte/due?style=flat)](https://github.com/dobyte/due/issues?q=is%3Aissue+is%3Aclosed)
 
 ### 1.介绍
 
@@ -23,12 +31,12 @@
 * 🚠 便捷性：仅暴露必要的调用接口，减轻开发者的心智负担。
 * 🚀 高性能：框架原生实现集群通信方案，普通机器单线程也能轻松实现20W的TPS。
 * 🧊 标准化：框架原生提供标准化的开发规范，无论多么复杂的项目也能轻松应对。
-* ✈️ 高效性：框架原生提供tcp、kcp、ws等协议的服务器，方便开发者快速构建各种类型的网关服务器。
+* ✈️ 高效性：框架原生提供tcp、kcp、ws等服务器，方便开发者快速构建各种类型的网关服务器。
 * ⚖️ 稳定性：所有发布的正式版本均已通过内部真实业务的严格测试，具备较高的稳定性。
 * 🎟️ 扩展性：采用良好的接口设计，方便开发者设计实现自有功能。
 * 🔑 平滑性：引入信号量，通过控制服务注册中心来实现优雅地滚动更新。
 * 🔩 扩容性：通过优雅的路由分发机制，理论上可实现无限扩容。
-* 🔧 易调试：框架原生提供了tcp、kcp、ws等协议的客户端，方便开发者进行独立的调试全流程调试。
+* 🔧 易调试：框架原生提供了tcp、kcp、ws等客户端，方便开发者进行独立的调试全流程调试。
 * 🧰 可管理：提供完善的后台管理接口，方便开发者快速实现自定义的后台管理功能。
 
 ### 3.功能
