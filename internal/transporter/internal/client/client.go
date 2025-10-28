@@ -8,12 +8,13 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	defaultTimeout = 3 * time.Second // 调用超时时间
-	defaultConnNum = 20              // 默认连接数
+	defaultConnNum = 10              // 默认连接数
 )
 
 type chWrite struct {
@@ -57,6 +58,7 @@ func (c *Client) Establish() error {
 			conn := newConn(c, c.disorderlyQueue)
 
 			if err := conn.dial(); err != nil {
+				log.Warnf("conn dial failed: %v", err)
 				return err
 			}
 

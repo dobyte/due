@@ -128,7 +128,9 @@ func (c *Conn) write() {
 			return
 		case <-ticker.C:
 			deadline := xtime.Now().Add(-2 * def.HeartbeatInterval).Unix()
+
 			if atomic.LoadInt64(&c.lastHeartbeatTime) < deadline {
+				log.Warn("connection heartbeat timeout")
 				_ = c.close(true)
 				return
 			}

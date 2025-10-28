@@ -33,7 +33,7 @@ type Conn struct {
 func newConn(cli *Client, queue chan *chWrite) *Conn {
 	c := &Conn{}
 	c.cli = cli
-	c.state.Store(def.ConnClosed)
+	c.state.Store(def.ConnHanged)
 	c.pending = newPending()
 	c.orderlyQueue = make(chan *chWrite, 4096)
 	c.disorderlyQueue = queue
@@ -97,30 +97,26 @@ func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
 }
 
 // 处理连接
-func (c *Conn) process(conn net.Conn) (err error) {
+func (c *Conn) process(conn net.Conn) error {
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.state.Store(def.ConnOpened)
 	c.lastHeartbeatTime.Store(xtime.Now().Unix())
 
 	go c.read(conn)
 
-	defer func() {
-		if err != nil {
-			c.close()
-		}
-	}()
+	if err := c.handshake(conn); err != nil {
+		c.close()
 
-	if err = c.handshake(conn); err != nil {
-		return
+		return err
+	} else {
+		go c.write(conn)
+
+		return nil
 	}
-
-	go c.write(conn)
-
-	return
 }
 
 // 握手
-func (c *Conn) handshake(conn net.Conn) (err error) {
+func (c *Conn) handshake(conn net.Conn) error {
 	var (
 		seq  = uint64(1)
 		call = make(chan []byte)
@@ -131,15 +127,22 @@ func (c *Conn) handshake(conn net.Conn) (err error) {
 
 	c.pending.store(seq, call)
 
-	if _, err = conn.Write(buf.Bytes()); err != nil {
+	defer close(call)
+
+	if _, err := conn.Write(buf.Bytes()); err != nil {
 		c.pending.delete(seq)
-	} else {
-		<-call
+		return err
 	}
 
-	close(call)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
 
-	return
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-call:
+		return nil
+	}
 }
 
 // 读取数据
@@ -188,6 +191,7 @@ func (c *Conn) write(conn net.Conn) {
 			deadline := t.Add(-2 * def.HeartbeatInterval).Unix()
 
 			if c.lastHeartbeatTime.Load() < deadline {
+				log.Warn("connection heartbeat timeout")
 				c.retry(conn)
 				return
 			} else {
@@ -246,7 +250,7 @@ func (c *Conn) retry(conn net.Conn) {
 		return
 	}
 
-	conn.Close()
+	_ = conn.Close()
 
 	if c.cancel != nil {
 		c.cancel()
@@ -259,7 +263,9 @@ func (c *Conn) retry(conn net.Conn) {
 
 // 关闭连接
 func (c *Conn) close() {
-	c.state.Store(def.ConnClosed)
+	if c.state.Swap(def.ConnClosed) == def.ConnClosed {
+		return
+	}
 
 	c.cli.done()
 

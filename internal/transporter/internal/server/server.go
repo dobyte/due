@@ -15,6 +15,8 @@ import (
 
 const scheme = "drpc"
 
+type RouteHandler func(conn *Conn, data []byte) error
+
 type Server struct {
 	listener    net.Listener           // 监听器
 	listenAddr  string                 // 监听地址
