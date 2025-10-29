@@ -37,6 +37,7 @@ func NewClient(opts *Options) *Client {
 	c.opts = opts
 	c.connections = make([]*Conn, 0, defaultConnNum)
 	c.disorderlyQueue = make(chan *chWrite, 10240)
+	c.closed.Store(true)
 	c.pool = sync.Pool{New: func() any { return &chWrite{} }}
 
 	return c
@@ -73,6 +74,8 @@ func (c *Client) Establish() error {
 	if err := eg.Wait(); err != nil && len(c.connections) == 0 {
 		return err
 	}
+
+	c.closed.Store(false)
 
 	return nil
 }

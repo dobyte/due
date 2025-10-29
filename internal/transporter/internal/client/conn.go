@@ -127,10 +127,11 @@ func (c *Conn) handshake(conn net.Conn) error {
 
 	c.pending.store(seq, call)
 
-	defer close(call)
-
 	if _, err := conn.Write(buf.Bytes()); err != nil {
+		close(call)
+
 		c.pending.delete(seq)
+
 		return err
 	}
 
