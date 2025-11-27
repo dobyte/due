@@ -18,45 +18,45 @@ func String(val any) string {
 
 	switch v := val.(type) {
 	case int:
-		return strconv.Itoa(v)
+		return strconv.FormatInt(int64(v), 10)
 	case *int:
-		return strconv.Itoa(*v)
+		return strconv.FormatInt(int64(*v), 10)
 	case int8:
-		return strconv.Itoa(int(v))
+		return strconv.FormatInt(int64(v), 10)
 	case *int8:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatInt(int64(*v), 10)
 	case int16:
-		return strconv.Itoa(int(v))
+		return strconv.FormatInt(int64(v), 10)
 	case *int16:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatInt(int64(*v), 10)
 	case int32:
-		return strconv.Itoa(int(v))
+		return strconv.FormatInt(int64(v), 10)
 	case *int32:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatInt(int64(*v), 10)
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case *int64:
 		return strconv.FormatInt(*v, 10)
 	case uint:
-		return strconv.Itoa(int(v))
+		return strconv.FormatUint(uint64(v), 10)
 	case *uint:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatUint(uint64(*v), 10)
 	case uint8:
-		return strconv.Itoa(int(v))
+		return strconv.FormatUint(uint64(v), 10)
 	case *uint8:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatUint(uint64(*v), 10)
 	case uint16:
-		return strconv.Itoa(int(v))
+		return strconv.FormatUint(uint64(v), 10)
 	case *uint16:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatUint(uint64(*v), 10)
 	case uint32:
-		return strconv.Itoa(int(v))
+		return strconv.FormatUint(uint64(v), 10)
 	case *uint32:
-		return strconv.Itoa(int(*v))
+		return strconv.FormatUint(uint64(*v), 10)
 	case uint64:
-		return strconv.FormatInt(int64(v), 10)
+		return strconv.FormatUint(v, 10)
 	case *uint64:
-		return strconv.FormatInt(int64(*v), 10)
+		return strconv.FormatUint(*v, 10)
 	case float32:
 		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case *float32:
