@@ -22,7 +22,7 @@ type Config struct {
 }
 
 const (
-	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.js"
+	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-bundle.js"
 	defaultSwaggerPresetUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js"
 	defaultSwaggerStylesUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css"
 )
