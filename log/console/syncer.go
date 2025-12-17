@@ -54,5 +54,5 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 
 // Close 关闭同步器
 func (s *Syncer) Close() error {
-	return s.writer.Close()
+	return nil
 }

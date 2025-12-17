@@ -14,3 +14,12 @@ func TestLog(t *testing.T) {
 	logger.Warn("welcome to due-framework")
 	logger.Error("welcome to due-framework")
 }
+
+func TestLogger(t *testing.T) {
+	log.SetLogger(log.NewLogger(log.WithLevel(log.LevelDebug)))
+
+	log.Debug("welcome to due-framework")
+	log.Info("welcome to due-framework")
+	log.Warn("welcome to due-framework")
+	log.Error("welcome to due-framework")
+}
