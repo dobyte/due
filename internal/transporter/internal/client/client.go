@@ -24,19 +24,19 @@ type chWrite struct {
 }
 
 type Client struct {
-	opts            *Options       // 配置
-	connections     []*Conn        // 连接
-	disorderlyQueue chan *chWrite  // 无序队列
-	wg              sync.WaitGroup // 等待组
-	closed          atomic.Bool    // 已关闭
-	pool            sync.Pool      // 连接池
+	opts   *Options       // 配置
+	conns  []*Conn        // 连接
+	queue  chan *chWrite  // 无序队列
+	wg     sync.WaitGroup // 等待组
+	closed atomic.Bool    // 已关闭
+	pool   sync.Pool      // 连接池
 }
 
 func NewClient(opts *Options) *Client {
 	c := &Client{}
 	c.opts = opts
-	c.connections = make([]*Conn, 0, defaultConnNum)
-	c.disorderlyQueue = make(chan *chWrite, 10240)
+	c.conns = make([]*Conn, 0, defaultConnNum)
+	c.queue = make(chan *chWrite, 10240)
 	c.closed.Store(true)
 	c.pool = sync.Pool{New: func() any { return &chWrite{} }}
 
@@ -56,7 +56,7 @@ func (c *Client) Establish() error {
 
 	for range defaultConnNum {
 		eg.Go(func() error {
-			conn := newConn(c, c.disorderlyQueue)
+			conn := newConn(c)
 
 			if err := conn.dial(); err != nil {
 				log.Warnf("conn dial failed: %v", err)
@@ -64,14 +64,14 @@ func (c *Client) Establish() error {
 			}
 
 			mu.Lock()
-			c.connections = append(c.connections, conn)
+			c.conns = append(c.conns, conn)
 			mu.Unlock()
 
 			return nil
 		})
 	}
 
-	if err := eg.Wait(); err != nil && len(c.connections) == 0 {
+	if err := eg.Wait(); err != nil && len(c.conns) == 0 {
 		return err
 	}
 
@@ -139,9 +139,9 @@ func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int6
 // 获取连接
 func (c *Client) load(idx ...int64) *Conn {
 	if len(idx) > 0 {
-		return c.connections[idx[0]%int64(len(c.connections))]
+		return c.conns[idx[0]%int64(len(c.conns))]
 	} else {
-		return c.connections[0]
+		return c.conns[0]
 	}
 }
 
@@ -170,7 +170,7 @@ func (c *Client) wait() {
 	c.closed.Store(true)
 
 	time.AfterFunc(time.Second, func() {
-		close(c.disorderlyQueue)
+		close(c.queue)
 	})
 
 	if c.opts.CloseHandler != nil {

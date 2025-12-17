@@ -23,20 +23,18 @@ type Conn struct {
 	cli               *Client            // 客户端
 	state             atomic.Int32       // 连接状态
 	pending           *pending           // 等待队列
-	orderlyQueue      chan *chWrite      // 有序队列
-	disorderlyQueue   chan *chWrite      // 无序队列
+	queue             chan *chWrite      // 有序队列
 	ctx               context.Context    // 上下文
 	cancel            context.CancelFunc // 取消函数
 	lastHeartbeatTime atomic.Int64       // 上次心跳时间
 }
 
-func newConn(cli *Client, queue chan *chWrite) *Conn {
+func newConn(cli *Client) *Conn {
 	c := &Conn{}
 	c.cli = cli
 	c.state.Store(def.ConnHanged)
+	c.queue = make(chan *chWrite, 4096)
 	c.pending = newPending()
-	c.orderlyQueue = make(chan *chWrite, 4096)
-	c.disorderlyQueue = queue
 
 	return c
 }
@@ -88,9 +86,9 @@ func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
 	}
 
 	if len(isOrderly) > 0 && isOrderly[0] {
-		c.orderlyQueue <- ch
+		c.queue <- ch
 	} else {
-		c.disorderlyQueue <- ch
+		c.cli.queue <- ch
 	}
 
 	return nil
@@ -202,7 +200,7 @@ func (c *Conn) write(conn net.Conn) {
 					return
 				}
 			}
-		case ch, ok := <-c.orderlyQueue: // 有序队列
+		case ch, ok := <-c.queue: // 有序队列
 			if !ok {
 				return
 			}
@@ -210,7 +208,7 @@ func (c *Conn) write(conn net.Conn) {
 			if ok = c.doWrite(conn, ch); !ok {
 				return
 			}
-		case ch, ok := <-c.disorderlyQueue: // 无序队列
+		case ch, ok := <-c.cli.queue: // 无序队列
 			if !ok {
 				return
 			}
@@ -275,7 +273,7 @@ func (c *Conn) close() {
 	}
 
 	time.AfterFunc(time.Second, func() {
-		close(c.orderlyQueue)
+		close(c.queue)
 	})
 }
 
