@@ -97,6 +97,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	copy(data[:defaultSizeBytes], buf1.Bytes())
 
 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+		buf2.Release()
 		return nil, err
 	}
 
