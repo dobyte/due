@@ -277,8 +277,10 @@ func (c *clientConn) read() {
 
 			switch c.State() {
 			case network.ConnHanged:
+				buf.Release()
 				continue
 			case network.ConnClosed:
+				buf.Release()
 				return
 			default:
 				// ignore
@@ -286,22 +288,26 @@ func (c *clientConn) read() {
 
 			// ignore empty packet
 			if buf.Len() == 0 {
+				buf.Release()
 				continue
 			}
 
 			isHeartbeat, err := packet.CheckHeartbeat(buf.Bytes())
 			if err != nil {
 				log.Errorf("check heartbeat message error: %v", err)
+				buf.Release()
 				continue
 			}
 
 			// ignore heartbeat packet
 			if isHeartbeat {
-				continue
-			}
-
-			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buf)
+				buf.Release()
+			} else {
+				if c.client.receiveHandler != nil {
+					c.client.receiveHandler(c, buf)
+				} else {
+					buf.Release()
+				}
 			}
 		}
 	}
