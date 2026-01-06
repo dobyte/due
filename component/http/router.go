@@ -88,7 +88,7 @@ func (r *router) All(path string, handler any, middlewares ...any) Router {
 
 // Add 添加路由处理器
 func (r *router) Add(methods []string, path string, handler any, middlewares ...any) Router {
-	handlers := make([]fiber.Handler, 0, len(middlewares))
+	handlers := make([]any, 0, len(middlewares))
 	for i := range middlewares {
 		middleware := middlewares[i]
 
@@ -116,7 +116,7 @@ func (r *router) Add(methods []string, path string, handler any, middlewares ...
 
 // Group 路由组
 func (r *router) Group(prefix string, middlewares ...any) Router {
-	handlers := make([]fiber.Handler, 0, len(middlewares))
+	handlers := make([]any, 0, len(middlewares))
 	for i := range middlewares {
 		middleware := middlewares[i]
 
@@ -190,7 +190,7 @@ func (r *routeGroup) All(path string, handler any, middlewares ...any) Router {
 
 // Add 添加路由处理器
 func (r *routeGroup) Add(methods []string, path string, handler any, middlewares ...any) Router {
-	handlers := make([]fiber.Handler, 0, len(middlewares))
+	handlers := make([]any, 0, len(middlewares))
 	for i := range middlewares {
 		middleware := middlewares[i]
 
@@ -218,7 +218,7 @@ func (r *routeGroup) Add(methods []string, path string, handler any, middlewares
 
 // Group 路由组
 func (r *routeGroup) Group(prefix string, middlewares ...any) Router {
-	handlers := make([]fiber.Handler, 0, len(middlewares))
+	handlers := make([]any, 0, len(middlewares))
 	for i := range middlewares {
 		middleware := middlewares[i]
 
