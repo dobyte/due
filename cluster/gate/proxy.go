@@ -73,12 +73,9 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) {
 	message, err := packet.UnpackMessage(buf.Bytes())
 	if err != nil {
+		buf.Release()
 		log.Errorf("unpack message failed: %v", err)
 		return
-	}
-
-	if mode.IsDebugMode() {
-		log.Debugf("deliver message, cid: %d uid: %d seq: %d route: %d buffer: %s", cid, uid, message.Seq, message.Route, string(message.Buffer))
 	}
 
 	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
@@ -87,11 +84,16 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) 
 		Route:  message.Route,
 		Buffer: buf,
 	}); err != nil {
+		buf.Release()
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
 			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
 		default:
 			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
+		}
+	} else {
+		if mode.IsDebugMode() {
+			log.Debugf("deliver message success, cid: %d uid: %d seq: %d route: %d", cid, uid, message.Seq, message.Route)
 		}
 	}
 }
