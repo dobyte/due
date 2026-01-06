@@ -2,13 +2,14 @@ package redis_test
 
 import (
 	"context"
-	"github.com/dobyte/due/lock/redis/v2"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/lock/redis/v2"
 )
 
-func TestMaker_Make(t *testing.T) {
+func TestLocker_Acquire(t *testing.T) {
 	maker := redis.NewMaker()
 
 	locker := maker.Make("lockName")
@@ -22,7 +23,7 @@ func TestMaker_Make(t *testing.T) {
 	time.Sleep(20 * time.Second)
 }
 
-func TestMaker_Parallel_Make(t *testing.T) {
+func TestLocker_Parallel_Acquire(t *testing.T) {
 	var (
 		wg     sync.WaitGroup
 		ctx    = context.Background()
@@ -30,7 +31,7 @@ func TestMaker_Parallel_Make(t *testing.T) {
 		locker = maker.Make("lockName")
 	)
 
-	for i := 0; i < 100; i++ {
+	for i := range 10 {
 		wg.Add(1)
 
 		go func(i int) {

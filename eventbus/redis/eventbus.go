@@ -7,7 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/utils/xconv"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 type Eventbus struct {

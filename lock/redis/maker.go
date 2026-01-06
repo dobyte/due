@@ -9,7 +9,7 @@ import (
 	"github.com/dobyte/due/v2/lock"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 type Maker struct {

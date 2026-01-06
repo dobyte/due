@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/etc"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
