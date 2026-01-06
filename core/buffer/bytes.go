@@ -1,11 +1,15 @@
 package buffer
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 type Bytes struct {
-	buf  []byte
-	off  int
-	pool *sync.Pool
+	buf      []byte
+	off      int
+	pool     *sync.Pool
+	released atomic.Bool
 }
 
 var _ Buffer = (*Bytes)(nil)

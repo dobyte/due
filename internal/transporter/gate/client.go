@@ -25,109 +25,137 @@ func NewClient(cli *client.Client) *Client {
 }
 
 // Bind 绑定用户与连接
-func (c *Client) Bind(ctx context.Context, cid, uid int64) (bool, error) {
+func (c *Client) Bind(ctx context.Context, cid, uid int64) error {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeBindReq(seq, cid, uid)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
-		return false, err
+		return err
 	}
+	defer res.Release()
 
-	code, err := protocol.DecodeBindRes(res)
+	code, err := protocol.DecodeBindRes(res.Bytes())
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return code == codes.NotFoundSession, nil
+	return codes.CodeToError(code)
 }
 
 // Unbind 解绑用户与连接
-func (c *Client) Unbind(ctx context.Context, uid int64) (bool, error) {
+func (c *Client) Unbind(ctx context.Context, uid int64) error {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeUnbindReq(seq, uid)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
-		return false, err
+		return err
 	}
+	defer res.Release()
 
-	code, err := protocol.DecodeUnbindRes(res)
+	code, err := protocol.DecodeUnbindRes(res.Bytes())
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return code == codes.NotFoundSession, nil
+	return codes.CodeToError(code)
 }
 
 // GetIP 获取客户端IP
-func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, bool, error) {
+func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, error) {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeGetIPReq(seq, kind, target)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
+	defer res.Release()
 
-	code, ip, err := protocol.DecodeGetIPRes(res)
+	code, ip, err := protocol.DecodeGetIPRes(res.Bytes())
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
-	return ip, code == codes.NotFoundSession, nil
+	return ip, codes.CodeToError(code)
 }
 
 // Stat 推送广播消息
 func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeStatReq(seq, kind)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
 		return 0, err
 	}
+	defer res.Release()
 
-	_, total, err := protocol.DecodeStatRes(res)
+	_, total, err := protocol.DecodeStatRes(res.Bytes())
 
 	return int64(total), err
 }
 
 // IsOnline 检测是否在线
-func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, bool, error) {
+func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeIsOnlineReq(seq, kind, target)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
-		return false, false, err
+		return false, err
 	}
+	defer res.Release()
 
-	code, isOnline, err := protocol.DecodeIsOnlineRes(res)
+	code, isOnline, err := protocol.DecodeIsOnlineRes(res.Bytes())
 	if err != nil {
-		return false, false, err
+		return false, err
 	}
 
-	return code == codes.NotFoundSession, isOnline, nil
+	return isOnline, codes.CodeToError(code)
 }
 
 // Disconnect 断开连接
 func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
-	if force {
-		return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force))
-	} else {
-		return c.cli.Send(ctx, protocol.EncodeDisconnectReq(0, kind, target, force), target)
+	seq := c.doGenSequence()
+	buf := protocol.EncodeDisconnectReq(seq, kind, target, force)
+
+	res, err := c.cli.Call(ctx, seq, buf)
+	if err != nil {
+		return err
 	}
+	defer res.Release()
+
+	code, err := protocol.DecodeDisconnectRes(res.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return codes.CodeToError(code)
 }
 
-// Push 推送消息（异步）
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer) error {
-	return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
+// Push 推送消息
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer, results bool) error {
+	if results {
+		seq := c.doGenSequence()
+		buf := protocol.EncodePushReq(seq, kind, target, message)
+
+		res, err := c.cli.Call(ctx, seq, buf)
+		if err != nil {
+			return err
+		}
+		defer res.Release()
+
+		code, err := protocol.DecodePushRes(res.Bytes())
+		if err != nil {
+			return err
+		}
+
+		return codes.CodeToError(code)
+	} else {
+		return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
+	}
 }
 
 // Multicast 推送组播消息（异步）
@@ -156,15 +184,15 @@ func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int
 	}
 
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeSubscribeReq(seq, kind, targets, channel)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
 		return err
 	}
+	defer res.Release()
 
-	code, err := protocol.DecodeSubscribeRes(res)
+	code, err := protocol.DecodeSubscribeRes(res.Bytes())
 	if err != nil {
 		return err
 	}
@@ -179,15 +207,15 @@ func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []i
 	}
 
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeUnsubscribeReq(seq, kind, targets, channel)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
 		return err
 	}
+	defer res.Release()
 
-	code, err := protocol.DecodeUnsubscribeRes(res)
+	code, err := protocol.DecodeUnsubscribeRes(res.Bytes())
 	if err != nil {
 		return err
 	}
@@ -198,15 +226,15 @@ func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []i
 // GetState 获取状态
 func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeGetStateReq(seq)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
 		return 0, err
 	}
+	defer res.Release()
 
-	code, state, err := protocol.DecodeGetStateRes(res)
+	code, state, err := protocol.DecodeGetStateRes(res.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -217,15 +245,15 @@ func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 // SetState 设置状态
 func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	seq := c.doGenSequence()
-
 	buf := protocol.EncodeSetStateReq(seq, state)
 
 	res, err := c.cli.Call(ctx, seq, buf)
 	if err != nil {
 		return err
 	}
+	defer res.Release()
 
-	code, err := protocol.DecodeSetStateRes(res)
+	code, err := protocol.DecodeSetStateRes(res.Bytes())
 	if err != nil {
 		return err
 	}

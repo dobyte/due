@@ -46,6 +46,7 @@ func (p *BytesPool) Get(cap int) *Bytes {
 
 	b := pool.Get().(*Bytes)
 	b.off = cap
+	b.released.Store(false)
 
 	return b
 }

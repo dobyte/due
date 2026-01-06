@@ -1,7 +1,6 @@
 package gate
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -52,7 +51,6 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			InsID:   b.opts.InsID,
 			InsKind: b.opts.InsKind,
 			CloseHandler: func() {
-				fmt.Printf("client %s closed----------------------------------------\n", addr)
 				b.faults.Store(addr, xtime.Now())
 				b.clients.Delete(addr)
 			},

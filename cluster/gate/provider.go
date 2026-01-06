@@ -20,17 +20,16 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 		return errors.ErrInvalidArgument
 	}
 
-	err := p.gate.session.Bind(cid, uid)
-	if err != nil {
+	if err := p.gate.session.Bind(cid, uid); err != nil {
 		return err
 	}
 
-	err = p.gate.proxy.bindGate(ctx, cid, uid)
-	if err != nil {
+	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
 		_, _ = p.gate.session.Unbind(uid)
+		return err
 	}
 
-	return err
+	return nil
 }
 
 // Unbind 解绑用户与网关间的关系

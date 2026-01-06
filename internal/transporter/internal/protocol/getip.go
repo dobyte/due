@@ -85,6 +85,8 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 	return buffer.NewNocopyBuffer(writer)
 }
 
+// DecodeGetIPRes 解码获取IP响应
+// 协议：size + header + route + seq + code + [ip]
 func DecodeGetIPRes(data []byte) (code uint16, ip string, err error) {
 	if len(data) != getIPResBytes && len(data) != getIPResBytes-4 {
 		err = errors.ErrInvalidMessage

@@ -22,19 +22,19 @@ func TestBuilder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ip, miss, err := client.GetIP(context.Background(), session.User, 1)
+	ip, err := client.GetIP(context.Background(), session.User, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("miss: %v ip: %v", miss, ip)
+	t.Logf("ip: %v", ip)
 
-	ip, miss, err = client.GetIP(context.Background(), session.User, 1)
+	ip, err = client.GetIP(context.Background(), session.User, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("miss: %v ip: %v", miss, ip)
+	t.Logf("ip: %v", ip)
 }
 
 func TestBuilder_Fault(t *testing.T) {

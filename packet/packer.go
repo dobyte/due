@@ -101,7 +101,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 		return nil, err
 	}
 
-	return buffer.NewNocopyBuffer(buf2), nil
+	return buf2, nil
 }
 
 // PackBuffer 以buffer的形式打包消息

@@ -52,7 +52,9 @@ func (s *Server) bind(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Bind(context.Background(), cid, uid); seq == 0 {
+	err = s.provider.Bind(context.Background(), cid, uid)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeBindRes(seq, codes.ErrorToCode(err)))
@@ -66,7 +68,9 @@ func (s *Server) unbind(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Unbind(context.Background(), uid); seq == 0 {
+	err = s.provider.Unbind(context.Background(), uid)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeUnbindRes(seq, codes.ErrorToCode(err)))
@@ -80,7 +84,9 @@ func (s *Server) getIP(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if ip, err := s.provider.GetIP(context.Background(), kind, target); seq == 0 {
+	ip, err := s.provider.GetIP(context.Background(), kind, target)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
@@ -94,7 +100,9 @@ func (s *Server) stat(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if total, err := s.provider.Stat(context.Background(), kind); seq == 0 {
+	total, err := s.provider.Stat(context.Background(), kind)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeStatRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -108,7 +116,9 @@ func (s *Server) isOnline(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if isOnline, err := s.provider.IsOnline(context.Background(), kind, target); seq == 0 {
+	isOnline, err := s.provider.IsOnline(context.Background(), kind, target)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeIsOnlineRes(seq, codes.ErrorToCode(err), isOnline))
@@ -122,7 +132,9 @@ func (s *Server) disconnect(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Disconnect(context.Background(), kind, target, force); seq == 0 {
+	err = s.provider.Disconnect(context.Background(), kind, target, force)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeDisconnectRes(seq, codes.ErrorToCode(err)))
@@ -136,7 +148,9 @@ func (s *Server) push(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Push(context.Background(), kind, target, message); seq == 0 {
+	err = s.provider.Push(context.Background(), kind, target, message)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodePushRes(seq, codes.ErrorToCode(err)))
@@ -150,7 +164,9 @@ func (s *Server) multicast(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if total, err := s.provider.Multicast(context.Background(), kind, targets, message); seq == 0 {
+	total, err := s.provider.Multicast(context.Background(), kind, targets, message)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeMulticastRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -164,7 +180,9 @@ func (s *Server) broadcast(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if total, err := s.provider.Broadcast(context.Background(), kind, message); seq == 0 {
+	total, err := s.provider.Broadcast(context.Background(), kind, message)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeBroadcastRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -178,7 +196,9 @@ func (s *Server) publish(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if total := s.provider.Publish(context.Background(), channel, message); seq == 0 {
+	total := s.provider.Publish(context.Background(), channel, message)
+
+	if seq == 0 {
 		return nil
 	} else {
 		return conn.Send(protocol.EncodePublishRes(seq, uint64(total)))
@@ -192,7 +212,9 @@ func (s *Server) subscribe(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Subscribe(context.Background(), kind, targets, channel); seq == 0 {
+	err = s.provider.Subscribe(context.Background(), kind, targets, channel)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeSubscribeRes(seq, codes.ErrorToCode(err)))
@@ -206,7 +228,9 @@ func (s *Server) unsubscribe(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.Unsubscribe(context.Background(), kind, targets, channel); seq == 0 {
+	err = s.provider.Unsubscribe(context.Background(), kind, targets, channel)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeUnsubscribeRes(seq, codes.ErrorToCode(err)))
@@ -222,7 +246,11 @@ func (s *Server) getState(conn *server.Conn, data []byte) error {
 
 	state, err := s.provider.GetState()
 
-	return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
+	if seq == 0 {
+		return err
+	} else {
+		return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
+	}
 }
 
 // 设置状态
@@ -232,7 +260,9 @@ func (s *Server) setState(conn *server.Conn, data []byte) error {
 		return err
 	}
 
-	if err = s.provider.SetState(state); seq == 0 {
+	err = s.provider.SetState(state)
+
+	if seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))

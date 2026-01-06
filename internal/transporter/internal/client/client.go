@@ -20,7 +20,7 @@ const (
 type chWrite struct {
 	seq  uint64               // 序列号
 	buf  *buffer.NocopyBuffer // 数据buffer
-	call chan []byte          // 回调数据
+	call chan buffer.Buffer   // 回调数据
 }
 
 type Client struct {
@@ -81,7 +81,7 @@ func (c *Client) Establish() error {
 }
 
 // Call 调用
-func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) ([]byte, error) {
+func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
 	if c.closed.Load() {
 		return nil, errors.ErrClientClosed
 	}
@@ -89,7 +89,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	ch := c.pool.Get().(*chWrite)
 	ch.seq = seq
 	ch.buf = buf
-	ch.call = make(chan []byte)
+	ch.call = make(chan buffer.Buffer)
 
 	conn := c.load(idx...)
 
@@ -108,12 +108,12 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	case <-tctx.Done():
 		conn.delete(seq)
 		return nil, tctx.Err()
-	case data, ok := <-ch.call:
+	case res, ok := <-ch.call:
 		if !ok {
 			return nil, errors.ErrConnectionHanged
 		}
 
-		return data, nil
+		return res, nil
 	}
 }
 

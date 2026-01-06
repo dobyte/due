@@ -4,12 +4,14 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
 )
 
 func BenchmarkPending(b *testing.B) {
 	var (
 		sequence uint64
-		call     = make(chan []byte)
+		call     = make(chan buffer.Buffer)
 		ch       = make(chan uint64, 10240)
 		p        = newPending()
 		wg       sync.WaitGroup

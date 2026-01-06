@@ -120,14 +120,16 @@ type PushArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Target  int64        // 会话目标，CID 或 UID
-	Message *Message     // 消息
+	Message *Message     // 推送消息
+	Results bool         // 是否需要响应推送结果, 默认不响应推送结果
 }
 
 type MulticastArgs struct {
 	GID     string       // 网关ID，会话类型为用户时可忽略此参数
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Targets []int64      // 会话目标，CID 或 UID
-	Message *Message     // 消息
+	Message *Message     // 组播消息
+	Results bool         // 是否需要响应推送结果, 默认不响应推送结果
 }
 
 type BroadcastArgs struct {

@@ -1,6 +1,10 @@
 package client
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/dobyte/due/v2/core/buffer"
+)
 
 type pending struct {
 	partitions []*partition // 分片
@@ -10,19 +14,19 @@ func newPending() *pending {
 	p := &pending{partitions: make([]*partition, 20)}
 
 	for i := 0; i < len(p.partitions); i++ {
-		p.partitions[i] = &partition{calls: make(map[uint64]chan []byte)}
+		p.partitions[i] = &partition{calls: make(map[uint64]chan buffer.Buffer)}
 	}
 
 	return p
 }
 
 // 提取
-func (p *pending) extract(seq uint64) (chan []byte, bool) {
+func (p *pending) extract(seq uint64) (chan buffer.Buffer, bool) {
 	return p.partitions[int(seq%uint64(len(p.partitions)))].extract(seq)
 }
 
 // 存储
-func (p *pending) store(seq uint64, call chan []byte) {
+func (p *pending) store(seq uint64, call chan buffer.Buffer) {
 	p.partitions[int(seq%uint64(len(p.partitions)))].store(seq, call)
 }
 
@@ -32,12 +36,12 @@ func (p *pending) delete(seq uint64) {
 }
 
 type partition struct {
-	mu    sync.Mutex             // 锁
-	calls map[uint64]chan []byte // 同步通道
+	mu    sync.Mutex                    // 锁
+	calls map[uint64]chan buffer.Buffer // 同步通道
 }
 
 // 提取
-func (p *partition) extract(seq uint64) (chan []byte, bool) {
+func (p *partition) extract(seq uint64) (chan buffer.Buffer, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -50,7 +54,7 @@ func (p *partition) extract(seq uint64) (chan []byte, bool) {
 }
 
 // 存储
-func (p *partition) store(seq uint64, call chan []byte) {
+func (p *partition) store(seq uint64, call chan buffer.Buffer) {
 	p.mu.Lock()
 	p.calls[seq] = call
 	p.mu.Unlock()
