@@ -61,6 +61,11 @@ func (c *Code) WithMessage(message string) *Code {
 	}
 }
 
+// WithMessagef 格式化替换新的错误码消息
+func (c *Code) WithMessagef(format string, a ...any) *Code {
+	return c.WithMessage(fmt.Sprintf(format, a...))
+}
+
 // String 格式化错误码
 func (c *Code) String() string {
 	return fmt.Sprintf("code error: code = %d desc = %s", c.code, c.message)
