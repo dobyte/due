@@ -62,53 +62,68 @@ func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	return p.mesh.opts.transporter.NewClient(target)
 }
 
+// HasGate 检测是否存在某个网关
+func (p *Proxy) HasGate(gid string) bool {
+	return p.gateLinker.HasGate(gid)
+}
+
+// AskGate 检测用户是否在给定的网关上
+func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
+	return p.gateLinker.AskGate(ctx, gid, uid)
+}
+
+// LocateGate 定位用户所在网关
+func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
+	return p.gateLinker.LocateGate(ctx, uid)
+}
+
 // BindGate 绑定网关
 func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
-	return p.gateLinker.Bind(ctx, gid, cid, uid)
+	return p.gateLinker.BindGate(ctx, gid, cid, uid)
 }
 
 // UnbindGate 解绑网关
 func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
-	return p.gateLinker.Unbind(ctx, uid)
+	return p.gateLinker.UnbindGate(ctx, uid)
+}
+
+// FetchGateList 拉取网关列表
+func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.gateLinker.FetchGateList(ctx, states...)
+}
+
+// HasNode 检测是否存在某个节点
+func (p *Proxy) HasNode(nid string) bool {
+	return p.nodeLinker.HasNode(nid)
+}
+
+// AskNode 检测用户是否在给定的节点上
+func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
+	return p.nodeLinker.AskNode(ctx, uid, name, nid)
+}
+
+// LocateNode 定位用户所在节点
+func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	return p.nodeLinker.LocateNode(ctx, uid, name)
+}
+
+// LocateNodes 定位用户所在节点列表
+func (p *Proxy) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
+	return p.nodeLinker.LocateNodes(ctx, uid)
 }
 
 // BindNode 绑定节点
 // 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) BindNode(ctx context.Context, uid int64, name, nid string) error {
-	return p.nodeLinker.Bind(ctx, uid, name, nid)
+	return p.nodeLinker.BindNode(ctx, uid, name, nid)
 }
 
 // UnbindNode 解绑节点
 // 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, name, nid string) error {
-	return p.nodeLinker.Unbind(ctx, uid, name, nid)
-}
-
-// LocateGate 定位用户所在网关
-func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
-	return p.gateLinker.Locate(ctx, uid)
-}
-
-// AskGate 检测用户是否在给定的网关上
-func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
-	return p.gateLinker.Ask(ctx, gid, uid)
-}
-
-// LocateNode 定位用户所在节点
-func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
-	return p.nodeLinker.Locate(ctx, uid, name)
-}
-
-// AskNode 检测用户是否在给定的节点上
-func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
-	return p.nodeLinker.Ask(ctx, uid, name, nid)
-}
-
-// FetchGateList 拉取网关列表
-func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.gateLinker.FetchGateList(ctx, states...)
+	return p.nodeLinker.UnbindNode(ctx, uid, name, nid)
 }
 
 // FetchNodeList 拉取节点列表

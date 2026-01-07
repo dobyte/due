@@ -128,6 +128,29 @@ func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (strin
 	return val.(string), nil
 }
 
+// LocateNodes 定位用户所在节点列表
+func (l *Locator) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
+	if l.err != nil {
+		return nil, l.err
+	}
+
+	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
+
+	val, err, _ := l.sfg.Do(key, func() (any, error) {
+		val, err := l.opts.client.HGetAll(ctx, key).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return nil, err
+		}
+
+		return val, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return val.(map[string]string), nil
+}
+
 // BindGate 绑定网关
 func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
 	if l.err != nil {

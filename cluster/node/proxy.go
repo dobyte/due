@@ -109,14 +109,54 @@ func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	return p.node.opts.transporter.NewClient(target)
 }
 
+// HasGate 检测是否存在某个网关
+func (p *Proxy) HasGate(gid string) bool {
+	return p.gateLinker.HasGate(gid)
+}
+
+// AskGate 检测用户是否在给定的网关上
+func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
+	return p.gateLinker.AskGate(ctx, gid, uid)
+}
+
+// LocateGate 定位用户所在网关
+func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
+	return p.gateLinker.LocateGate(ctx, uid)
+}
+
 // BindGate 绑定网关
 func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
-	return p.gateLinker.Bind(ctx, gid, cid, uid)
+	return p.gateLinker.BindGate(ctx, gid, cid, uid)
 }
 
 // UnbindGate 解绑网关
 func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
-	return p.gateLinker.Unbind(ctx, uid)
+	return p.gateLinker.UnbindGate(ctx, uid)
+}
+
+// FetchGateList 拉取网关列表
+func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
+	return p.gateLinker.FetchGateList(ctx, states...)
+}
+
+// HasNode 检测是否存在某个节点
+func (p *Proxy) HasNode(nid string) bool {
+	return p.nodeLinker.HasNode(nid)
+}
+
+// AskNode 检测用户是否在给定的节点上
+func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
+	return p.nodeLinker.AskNode(ctx, uid, name, nid)
+}
+
+// LocateNode 定位用户所在节点
+func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
+	return p.nodeLinker.LocateNode(ctx, uid, name)
+}
+
+// LocateNodes 定位用户所在节点列表
+func (p *Proxy) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
+	return p.nodeLinker.LocateNodes(ctx, uid)
 }
 
 // BindNode 绑定节点
@@ -129,7 +169,7 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 		name, nid = nameAndNID[0], nameAndNID[1]
 	}
 
-	if err := p.nodeLinker.Bind(ctx, uid, name, nid); err != nil {
+	if err := p.nodeLinker.BindNode(ctx, uid, name, nid); err != nil {
 		return err
 	}
 
@@ -150,7 +190,7 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 		name, nid = nameAndNID[0], nameAndNID[1]
 	}
 
-	if err := p.nodeLinker.Unbind(ctx, uid, name, nid); err != nil {
+	if err := p.nodeLinker.UnbindNode(ctx, uid, name, nid); err != nil {
 		return err
 	}
 
@@ -159,41 +199,6 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 	}
 
 	return nil
-}
-
-// LocateGate 定位用户所在网关
-func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
-	return p.gateLinker.Locate(ctx, uid)
-}
-
-// AskGate 检测用户是否在给定的网关上
-func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
-	return p.gateLinker.Ask(ctx, gid, uid)
-}
-
-// HasGate 检测是否存在某个网关
-func (p *Proxy) HasGate(gid string) bool {
-	return p.gateLinker.Has(gid)
-}
-
-// LocateNode 定位用户所在节点
-func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
-	return p.nodeLinker.Locate(ctx, uid, name)
-}
-
-// AskNode 检测用户是否在给定的节点上
-func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
-	return p.nodeLinker.Ask(ctx, uid, name, nid)
-}
-
-// HasNode 检测是否存在某个节点
-func (p *Proxy) HasNode(nid string) bool {
-	return p.nodeLinker.Has(nid)
-}
-
-// FetchGateList 拉取网关列表
-func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.gateLinker.FetchGateList(ctx, states...)
 }
 
 // FetchNodeList 拉取节点列表

@@ -39,9 +39,15 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 	return l
 }
 
-// Ask 检测用户是否在给定的网关上
-func (l *GateLinker) Ask(ctx context.Context, gid string, uid int64) (string, bool, error) {
-	insID, err := l.Locate(ctx, uid)
+// HasGate 检测是否存在某个网关
+func (l *GateLinker) HasGate(gid string) bool {
+	_, err := l.dispatcher.FindEndpoint(gid)
+	return err == nil
+}
+
+// AskGate 检测用户是否在给定的网关上
+func (l *GateLinker) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
+	insID, err := l.LocateGate(ctx, uid)
 	if err != nil {
 		return "", false, err
 	}
@@ -49,14 +55,8 @@ func (l *GateLinker) Ask(ctx context.Context, gid string, uid int64) (string, bo
 	return insID, insID == gid, nil
 }
 
-// Has 检测是否存在某个网关
-func (l *GateLinker) Has(gid string) bool {
-	_, err := l.dispatcher.FindEndpoint(gid)
-	return err == nil
-}
-
-// Locate 定位用户所在网关
-func (l *GateLinker) Locate(ctx context.Context, uid int64) (string, error) {
+// LocateGate 定位用户所在网关
+func (l *GateLinker) LocateGate(ctx context.Context, uid int64) (string, error) {
 	if l.opts.Locator == nil {
 		return "", errors.ErrNotFoundLocator
 	}
@@ -79,6 +79,39 @@ func (l *GateLinker) Locate(ctx context.Context, uid int64) (string, error) {
 	l.sources.Store(uid, gid)
 
 	return gid, nil
+}
+
+// BindGate 绑定网关
+func (l *GateLinker) BindGate(ctx context.Context, gid string, cid, uid int64) error {
+	client, err := l.doBuildClient(gid)
+	if err != nil {
+		return err
+	}
+
+	if err = client.Bind(ctx, cid, uid); err != nil {
+		return err
+	}
+
+	l.sources.Store(uid, gid)
+
+	return nil
+}
+
+// UnbindGate 解绑网关
+func (l *GateLinker) UnbindGate(ctx context.Context, uid int64) error {
+	if _, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
+		if err := client.Unbind(ctx, uid); err != nil {
+			return errors.Is(err, errors.ErrNotFoundSession), nil, err
+		} else {
+			return false, nil, nil
+		}
+	}); err != nil {
+		return err
+	}
+
+	l.sources.Delete(uid)
+
+	return nil
 }
 
 // FetchGateList 拉取网关列表
@@ -105,39 +138,6 @@ func (l *GateLinker) FetchGateList(ctx context.Context, states ...cluster.State)
 	}
 
 	return list, nil
-}
-
-// Bind 绑定网关
-func (l *GateLinker) Bind(ctx context.Context, gid string, cid, uid int64) error {
-	client, err := l.doBuildClient(gid)
-	if err != nil {
-		return err
-	}
-
-	if err = client.Bind(ctx, cid, uid); err != nil {
-		return err
-	}
-
-	l.sources.Store(uid, gid)
-
-	return nil
-}
-
-// Unbind 解绑网关
-func (l *GateLinker) Unbind(ctx context.Context, uid int64) error {
-	if _, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
-		if err := client.Unbind(ctx, uid); err != nil {
-			return errors.Is(err, errors.ErrNotFoundSession), nil, err
-		} else {
-			return false, nil, nil
-		}
-	}); err != nil {
-		return err
-	}
-
-	l.sources.Delete(uid)
-
-	return nil
 }
 
 // GetState 获取网关状态
@@ -453,7 +453,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 			target := args.Targets[i]
 
 			eg.Go(func() error {
-				err = l.doPush(ctx, args.Kind, target, message)
+				err = l.doPush(ctx, args.Kind, target, message, args.Results)
 
 				if err == nil {
 					total.Add(1)
@@ -715,7 +715,7 @@ func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.
 	)
 
 	for range 2 {
-		if gid, err = l.Locate(ctx, uid); err != nil {
+		if gid, err = l.LocateGate(ctx, uid); err != nil {
 			return nil, err
 		}
 

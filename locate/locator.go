@@ -28,6 +28,8 @@ type Locator interface {
 	LocateGate(ctx context.Context, uid int64) (string, error)
 	// LocateNode 定位用户所在节点
 	LocateNode(ctx context.Context, uid int64, name string) (string, error)
+	// LocateNodes 定位用户所在节点列表
+	LocateNodes(ctx context.Context, uid int64) (map[string]string, error)
 }
 
 type Watcher interface {
