@@ -167,22 +167,26 @@ func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) er
 }
 
 // Push 推送消息
+// args.Ack设为true时可获得消息真实发送的情况
 func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
 	return p.gateLinker.Push(ctx, args)
 }
 
 // Multicast 推送组播消息
-func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) error {
+// 要想获得推送成功的目标数，需将args.Ack设为true
+func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
 	return p.gateLinker.Multicast(ctx, args)
 }
 
 // Broadcast 推送广播消息
-func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) error {
+// 要想获得推送成功的目标数，需将args.Ack设为true
+func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
 	return p.gateLinker.Broadcast(ctx, args)
 }
 
 // Publish 发布消息
-func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) error {
+// 要想获得推送成功的目标数，需将args.Ack设为true
+func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) (int64, error) {
 	return p.gateLinker.Publish(ctx, args)
 }
 

@@ -121,7 +121,7 @@ type PushArgs struct {
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Target  int64        // 会话目标，CID 或 UID
 	Message *Message     // 推送消息
-	Results bool         // 是否需要响应推送结果, 默认不响应推送结果
+	Ack     bool         // 是否需要响应推送结果
 }
 
 type MulticastArgs struct {
@@ -129,12 +129,13 @@ type MulticastArgs struct {
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Targets []int64      // 会话目标，CID 或 UID
 	Message *Message     // 组播消息
-	Results bool         // 是否需要响应推送结果, 默认不响应推送结果
+	Ack     bool         // 是否需要响应推送结果
 }
 
 type BroadcastArgs struct {
 	Kind    session.Kind // 会话类型，session.Conn 或 session.User
 	Message *Message     // 消息
+	Ack     bool         // 是否需要响应推送结果
 }
 
 type SubscribeArgs struct {
@@ -154,6 +155,7 @@ type UnsubscribeArgs struct {
 type PublishArgs struct {
 	Channel string   // 频道
 	Message *Message // 消息
+	Ack     bool     // 是否需要响应推送结果
 }
 
 type TriggerArgs struct {

@@ -83,6 +83,7 @@ func (c *Client) Establish() error {
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
 	if c.closed.Load() {
+		buf.Release()
 		return nil, errors.ErrClientClosed
 	}
 
@@ -120,6 +121,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
 	if c.closed.Load() {
+		buf.Release()
 		return errors.ErrClientClosed
 	}
 

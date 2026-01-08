@@ -99,7 +99,7 @@ func (l *GateLinker) BindGate(ctx context.Context, gid string, cid, uid int64) e
 
 // UnbindGate 解绑网关
 func (l *GateLinker) UnbindGate(ctx context.Context, uid int64) error {
-	if _, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
+	if _, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
 		if err := client.Unbind(ctx, uid); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), nil, err
 		} else {
@@ -183,13 +183,12 @@ func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session
 		return "", err
 	}
 
-	ip, err := client.GetIP(ctx, kind, target)
-	return ip, err
+	return client.GetIP(ctx, kind, target)
 }
 
 // 间接获取IP
 func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, error) {
-	v, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
+	v, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
 		if ip, err := client.GetIP(ctx, session.User, uid); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), ip, err
 		} else {
@@ -204,8 +203,7 @@ func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, er
 }
 
 // Stat 统计会话总数
-func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	total := int64(0)
+func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (total int64, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	l.dispatcher.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
@@ -215,20 +213,19 @@ func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (int64, error)
 				return err
 			}
 
-			n, err := client.Stat(ctx, kind)
-			if err != nil {
+			if n, err := client.Stat(ctx, kind); err != nil {
 				return err
+			} else {
+				atomic.AddInt64(&total, n)
+
+				return nil
 			}
-
-			atomic.AddInt64(&total, n)
-
-			return nil
 		})
 
 		return true
 	})
 
-	err := eg.Wait()
+	err = eg.Wait()
 
 	if total > 0 {
 		return total, nil
@@ -265,7 +262,7 @@ func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *IsOnlineArgs) (
 
 // 间接检测是否在线
 func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
-	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
+	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client, index, total int) (bool, any, error) {
 		if isOnline, err := client.IsOnline(ctx, args.Kind, args.Target); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), isOnline, err
 		} else {
@@ -307,7 +304,7 @@ func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArg
 
 // 间接断开连接
 func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
-	_, err := l.doRPC(ctx, uid, func(client *gate.Client) (bool, any, error) {
+	_, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
 		if err := client.Disconnect(ctx, session.User, uid, force); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), nil, err
 		} else {
@@ -320,75 +317,45 @@ func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force 
 
 // Push 推送消息
 func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
-	switch args.Kind {
-	case session.Conn:
-		return l.doDirectPush(ctx, args)
-	case session.User:
-		if args.GID == "" {
-			return l.doIndirectPush(ctx, args)
-		} else {
-			return l.doDirectPush(ctx, args)
-		}
-	default:
-		return errors.ErrInvalidSessionKind
-	}
-}
-
-// 直接推送
-func (l *GateLinker) doDirectPush(ctx context.Context, args *PushArgs) error {
-	client, err := l.doBuildClient(args.GID)
-	if err != nil {
-		return err
-	}
-
-	message, err := l.PackMessage(args.Message, true)
-	if err != nil {
-		return err
-	}
-
-	err = client.Push(ctx, args.Kind, args.Target, message, args.Results)
-
-	if err != nil {
-		message.Release()
-	}
-
-	return err
-}
-
-// 间接推送
-func (l *GateLinker) doIndirectPush(ctx context.Context, args *PushArgs) error {
-	_, err := l.doRPC(ctx, args.Target, func(client *gate.Client) (bool, any, error) {
-		message, err := l.PackMessage(args.Message, true)
-		if err != nil {
-			return false, nil, err
-		}
-
-		err = client.Push(ctx, args.Kind, args.Target, message, args.Results)
-
-		if err != nil {
-			message.Release()
-		}
-
-		return errors.Is(err, errors.ErrNotFoundSession), nil, err
+	_, err := l.Multicast(ctx, &cluster.MulticastArgs{
+		GID:     args.GID,
+		Kind:    args.Kind,
+		Targets: []int64{args.Target},
+		Message: args.Message,
+		Ack:     args.Ack,
 	})
 
 	return err
 }
 
 // 执行推送消息
-func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer, results bool) error {
-	_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
-		return false, nil, client.Push(ctx, kind, target, message, results)
+func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer, ack bool) error {
+	_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
+		if err := client.Push(ctx, kind, target, message, ack); ack {
+			if errors.Is(err, errors.ErrNotFoundSession) {
+				return true, nil, err
+			} else {
+				for range total - index {
+					message.Release()
+				}
+
+				return false, nil, err
+			}
+		} else {
+			return false, nil, err
+		}
+	}, func(index, total int) {
+		for range total - index {
+			message.Release()
+		}
 	})
-	if err != nil {
-		message.Release()
-	}
 
 	return err
 }
 
 // Multicast 推送组播消息
-func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) error {
+// 要想获得推送成功的目标数，需将args.Ack设为true
+func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	switch args.Kind {
 	case session.Conn:
 		return l.doDirectMulticast(ctx, args)
@@ -399,204 +366,218 @@ func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) error {
 			return l.doDirectMulticast(ctx, args)
 		}
 	default:
-		return errors.ErrInvalidSessionKind
+		return 0, errors.ErrInvalidSessionKind
 	}
 }
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
-func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) error {
+func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	if len(args.Targets) == 0 {
-		return errors.ErrReceiveTargetEmpty
+		return 0, errors.ErrReceiveTargetEmpty
 	}
 
 	client, err := l.doBuildClient(args.GID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	err = client.Multicast(ctx, args.Kind, args.Targets, message)
-
-	if err != nil {
-		message.Release()
-	}
-
-	return err
+	return client.Multicast(ctx, args.Kind, args.Targets, message, args.Ack)
 }
 
 // 间接推送组播消息
-func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) error {
+func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	n := len(args.Targets)
 
 	if n == 0 {
-		return errors.ErrReceiveTargetEmpty
+		return 0, errors.ErrReceiveTargetEmpty
 	}
 
 	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	message.Delay(int32(n))
+	if args.Ack {
+		message.Delay(int32(n * 2))
 
-	if n == 1 {
-		return l.doPush(ctx, args.Kind, args.Targets[0], message, args.Results)
+		if n == 1 {
+			if err := l.doPush(ctx, args.Kind, args.Targets[0], message, args.Ack); err != nil {
+				return 0, err
+			} else {
+				return 1, nil
+			}
+		} else {
+			return l.doMulticast(ctx, args.Kind, args.Targets, message, args.Ack)
+		}
 	} else {
-		total := atomic.Int32{}
-		eg, ctx := errgroup.WithContext(ctx)
+		if n == 1 {
+			return 0, l.doPush(ctx, args.Kind, args.Targets[0], message, args.Ack)
+		} else {
+			message.Delay(int32(n))
 
-		for i := range args.Targets {
-			target := args.Targets[i]
+			if _, err := l.doMulticast(ctx, args.Kind, args.Targets, message, args.Ack); err != nil {
+				return 0, err
+			} else {
+				return 0, nil
+			}
+		}
+	}
+}
 
-			eg.Go(func() error {
-				err = l.doPush(ctx, args.Kind, target, message, args.Results)
+// 执行推送组播消息
+func (l *GateLinker) doMulticast(ctx context.Context, kind session.Kind, targets []int64, message buffer.Buffer, ack bool) (total int64, err error) {
+	eg, ctx := errgroup.WithContext(ctx)
 
-				if err == nil {
-					total.Add(1)
-				}
+	for i := range targets {
+		target := targets[i]
 
+		eg.Go(func() error {
+			if err := l.doPush(ctx, kind, target, message, ack); err != nil {
 				return err
-			})
-		}
+			}
 
-		if err = eg.Wait(); err != nil && total.Load() == 0 {
-			return err
-		}
+			atomic.AddInt64(&total, 1)
 
-		return nil
+			return nil
+		})
+	}
+
+	if err = eg.Wait(); err != nil && total == 0 {
+		return 0, err
+	} else {
+		return total, nil
 	}
 }
 
 // Broadcast 推送广播消息
-func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) error {
-	endpoints := l.dispatcher.Endpoints()
-
-	n := len(endpoints)
+func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64, error) {
+	var (
+		endpoints = l.dispatcher.Endpoints()
+		n         = len(endpoints)
+	)
 
 	if n == 0 {
-		return nil
+		return 0, nil
 	}
 
 	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	message.Delay(int32(n))
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doBroadcast(ctx, ep.Address(), args.Kind, message)
+			return l.doBroadcast(ctx, ep.Address(), args.Kind, message, args.Ack)
+		}
+
+		return 0, nil
+	} else {
+		var (
+			total   int64
+			eg, ctx = errgroup.WithContext(ctx)
+		)
+
+		message.Delay(int32(n))
+
+		for _, ep := range endpoints {
+			addr := ep.Address()
+
+			eg.Go(func() error {
+				if v, err := l.doBroadcast(ctx, addr, args.Kind, message, args.Ack); err != nil {
+					return err
+				} else {
+					atomic.AddInt64(&total, v)
+
+					return nil
+				}
+			})
+		}
+
+		if err = eg.Wait(); err != nil && total == 0 {
+			return 0, err
+		} else {
+			return total, nil
 		}
 	}
-
-	total := atomic.Int32{}
-	eg, ctx := errgroup.WithContext(ctx)
-
-	for _, ep := range endpoints {
-		addr := ep.Address()
-
-		eg.Go(func() error {
-			err = l.doBroadcast(ctx, addr, args.Kind, message)
-
-			if err == nil {
-				total.Add(1)
-			}
-
-			return err
-		})
-	}
-
-	if err = eg.Wait(); err != nil && total.Load() == 0 {
-		return err
-	}
-
-	return nil
 }
 
 // 执行广播消息
-func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, message buffer.Buffer) error {
-	client, err := l.builder.Build(addr)
-	if err != nil {
+func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, message buffer.Buffer, ack bool) (int64, error) {
+	if client, err := l.builder.Build(addr); err != nil {
 		message.Release()
-		return err
+
+		return 0, err
+	} else {
+		return client.Broadcast(ctx, kind, message, ack)
 	}
-
-	err = client.Broadcast(ctx, kind, message)
-
-	if err != nil {
-		message.Release()
-	}
-
-	return err
 }
 
 // Publish 发布频道消息
-func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) error {
-	endpoints := l.dispatcher.Endpoints()
-
-	n := len(endpoints)
+func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, error) {
+	var (
+		endpoints = l.dispatcher.Endpoints()
+		n         = len(endpoints)
+	)
 
 	if n == 0 {
-		return nil
+		return 0, nil
 	}
 
 	message, err := l.PackMessage(args.Message, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	message.Delay(int32(n))
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doPublish(ctx, ep.Address(), args.Channel, message)
+			return l.doPublish(ctx, ep.Address(), args.Channel, message, args.Ack)
+		}
+
+		return 0, nil
+	} else {
+		var (
+			total   int64
+			eg, ctx = errgroup.WithContext(ctx)
+		)
+
+		message.Delay(int32(n))
+
+		for _, ep := range endpoints {
+			addr := ep.Address()
+
+			eg.Go(func() error {
+				if v, err := l.doPublish(ctx, addr, args.Channel, message, args.Ack); err != nil {
+					return err
+				} else {
+					atomic.AddInt64(&total, v)
+
+					return nil
+				}
+			})
+		}
+
+		if err = eg.Wait(); err != nil && total == 0 {
+			return 0, err
+		} else {
+			return total, nil
 		}
 	}
-
-	total := atomic.Int32{}
-	eg, ctx := errgroup.WithContext(ctx)
-
-	for _, ep := range endpoints {
-		addr := ep.Address()
-
-		eg.Go(func() error {
-			err = l.doPublish(ctx, addr, args.Channel, message)
-
-			if err == nil {
-				total.Add(1)
-			}
-
-			return err
-		})
-	}
-
-	if err = eg.Wait(); err != nil && total.Load() == 0 {
-		return err
-	}
-
-	return nil
 }
 
 // 执行发布频道消息
-func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, message buffer.Buffer) error {
-	client, err := l.builder.Build(addr)
-	if err != nil {
+func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, message buffer.Buffer, ack bool) (int64, error) {
+	if client, err := l.builder.Build(addr); err != nil {
 		message.Release()
-		return err
+
+		return 0, err
+	} else {
+		return client.Publish(ctx, channel, message, ack)
 	}
-
-	err = client.Publish(ctx, channel, message)
-
-	if err != nil {
-		message.Release()
-	}
-
-	return err
 }
 
 // Subscribe 订阅频道
@@ -640,7 +621,7 @@ func (l *GateLinker) doIndirectSubscribe(ctx context.Context, args *SubscribeArg
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
 					return false, nil, client.Subscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -692,7 +673,7 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client) (bool, any, error) {
+				_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
 					return false, nil, client.Unsubscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -704,7 +685,7 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 }
 
 // 执行RPC调用
-func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.Client) (bool, any, error)) (any, error) {
+func (l *GateLinker) doRPC(ctx context.Context, uid int64, successHandler func(client *gate.Client, index int, total int) (bool, any, error), failedHandler ...func(index int, total int)) (any, error) {
 	var (
 		err       error
 		gid       string
@@ -712,29 +693,38 @@ func (l *GateLinker) doRPC(ctx context.Context, uid int64, fn func(client *gate.
 		client    *gate.Client
 		continued bool
 		reply     any
+		total     = 2
 	)
 
-	for range 2 {
+	for i := range total {
 		if gid, err = l.LocateGate(ctx, uid); err != nil {
+			if len(failedHandler) > 0 {
+				failedHandler[0](i+1, total)
+			}
 			return nil, err
 		}
 
 		if gid == prev {
+			if len(failedHandler) > 0 {
+				failedHandler[0](i+1, total)
+			}
 			return reply, err
 		}
 
 		prev = gid
 
 		if client, err = l.doBuildClient(gid); err != nil {
+			if len(failedHandler) > 0 {
+				failedHandler[0](i+1, total)
+			}
 			return nil, err
 		}
 
-		if continued, reply, err = fn(client); continued {
-			l.sources.Delete(uid)
-			continue
+		if continued, reply, err = successHandler(client, i+1, total); !continued {
+			break
 		}
 
-		break
+		l.sources.Delete(uid)
 	}
 
 	return reply, err

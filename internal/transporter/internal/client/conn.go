@@ -157,9 +157,9 @@ func (c *Conn) read(conn net.Conn) {
 				return
 			}
 
-			isHeartbeat, _, seq := protocol.ParseBuffer(buf)
-
 			c.lastHeartbeatTime.Store(xtime.Now().Unix())
+
+			isHeartbeat, _, seq := protocol.ParseBuffer(buf)
 
 			if isHeartbeat {
 				continue
