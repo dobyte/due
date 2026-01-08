@@ -3,7 +3,7 @@ module github.com/dobyte/due/v2
 go 1.23.0
 
 require (
-	dario.cat/mergo v1.0.1
+	dario.cat/mergo v1.0.2
 	github.com/BurntSushi/toml v1.5.0
 	github.com/bytedance/sonic v1.14.1
 	github.com/fsnotify/fsnotify v1.9.0
