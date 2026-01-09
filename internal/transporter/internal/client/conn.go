@@ -159,18 +159,15 @@ func (c *Conn) read(conn net.Conn) {
 
 			c.lastHeartbeatTime.Store(xtime.Now().Unix())
 
-			isHeartbeat, _, seq := protocol.ParseBuffer(buf)
-
-			if isHeartbeat {
-				continue
+			if isHeartbeat, _, seq := protocol.ParseBuffer(buf.Bytes()); isHeartbeat {
+				buf.Release()
+			} else {
+				if call, ok := c.pending.extract(seq); ok {
+					call <- buf
+				} else {
+					buf.Release()
+				}
 			}
-
-			call, ok := c.pending.extract(seq)
-			if !ok {
-				continue
-			}
-
-			call <- buf
 		}
 	}
 }
