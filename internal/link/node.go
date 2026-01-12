@@ -167,8 +167,9 @@ func (l *NodeLinker) FetchNodeList(ctx context.Context, states ...cluster.State)
 // Deliver 投递消息给节点处理
 func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	var (
-		err error
-		buf buffer.Buffer
+		err       error
+		buf       buffer.Buffer
+		isDeliver bool
 	)
 
 	switch b := args.Buffer.(type) {
@@ -178,6 +179,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 		buf = b
 	case *Message:
 		if buf, err = l.PackMessage(b, false); err != nil {
+			buf.Release()
 			return err
 		}
 	default:
@@ -185,17 +187,29 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	}
 
 	if args.NID != "" {
-		client, err := l.doBuildClient(args.NID)
-		if err != nil {
+		if client, err := l.doBuildClient(args.NID); err != nil {
+			buf.Release()
 			return err
+		} else {
+			return client.Deliver(ctx, args.CID, args.UID, buf)
 		}
-
-		return client.Deliver(ctx, args.CID, args.UID, buf)
 	} else {
 		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
-			return false, nil, client.Deliver(ctx, args.CID, args.UID, buf)
-		}); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-			return err
+			isDeliver = true
+
+			if err = client.Deliver(ctx, args.CID, args.UID, buf); err != nil {
+				return false, nil, err
+			} else {
+				return true, nil, nil
+			}
+		}); err != nil {
+			if !isDeliver {
+				buf.Release()
+			}
+
+			if !errors.Is(err, errors.ErrNotFoundUserLocation) {
+				return err
+			}
 		}
 
 		return nil

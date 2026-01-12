@@ -3,6 +3,8 @@ package buffer
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 type Bytes struct {
@@ -16,7 +18,9 @@ var _ Buffer = (*Bytes)(nil)
 
 // NewBytes 以指定buf创建字节
 func NewBytes(buf []byte) *Bytes {
-	return &Bytes{buf: buf, off: len(buf)}
+	b := &Bytes{buf: buf, off: len(buf)}
+	log.Errorf("Bytes Malloc %p, acquire cap: %d, actual cap: %d\n", b, len(buf), b.Cap())
+	return b
 }
 
 // NewBytesWithCapacity 以指定容量创建字节
@@ -62,6 +66,8 @@ func (b *Bytes) Bytes() []byte {
 
 // Release 释放
 func (b *Bytes) Release() {
+	log.Errorf("Bytes Release %p, cap: %d\n", b, b.Cap())
+
 	b.off = 0
 
 	if b.pool != nil {

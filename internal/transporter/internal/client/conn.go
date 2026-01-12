@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -120,12 +121,12 @@ func (c *Conn) handshake(conn net.Conn) error {
 		call = make(chan buffer.Buffer)
 	)
 
-	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
-	defer buf.Release()
+	buf1 := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
+	defer buf1.Release()
 
 	c.pending.store(seq, call)
 
-	if _, err := conn.Write(buf.Bytes()); err != nil {
+	if _, err := conn.Write(buf1.Bytes()); err != nil {
 		close(call)
 
 		c.pending.delete(seq)
@@ -139,7 +140,13 @@ func (c *Conn) handshake(conn net.Conn) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-call:
+	case buf2, ok := <-call:
+		if !ok {
+			return errors.ErrConnectionClosed
+		}
+
+		buf2.Release()
+
 		return nil
 	}
 }
@@ -153,6 +160,7 @@ func (c *Conn) read(conn net.Conn) {
 		default:
 			buf, err := protocol.ReaderBuffer(conn)
 			if err != nil {
+				fmt.Println("---------------------------------")
 				c.retry(conn)
 				return
 			}

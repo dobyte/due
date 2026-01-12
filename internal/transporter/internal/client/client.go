@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultTimeout = 3 * time.Second // 调用超时时间
-	defaultConnNum = 10              // 默认连接数
+	defaultConnNum = 1               // 默认连接数
 )
 
 type chWrite struct {

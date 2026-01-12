@@ -3,6 +3,8 @@ package buffer
 import (
 	"math"
 	"sync"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 var defaultBytesPool = NewBytesPool(32)
@@ -47,6 +49,8 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	b := pool.Get().(*Bytes)
 	b.off = cap
 	b.released.Store(false)
+
+	log.Errorf("Bytes Malloc %p, acquire cap: %d, actual cap: %d\n", b, cap, b.Cap())
 
 	return b
 }

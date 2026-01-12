@@ -84,7 +84,6 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) 
 		Route:  message.Route,
 		Buffer: buf,
 	}); err != nil {
-		buf.Release()
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
 			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
