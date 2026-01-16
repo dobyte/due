@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -158,7 +157,6 @@ func (c *Conn) read(conn net.Conn) {
 		default:
 			buf, err := protocol.ReaderBuffer(conn)
 			if err != nil {
-				fmt.Println("---------------------------------")
 				c.retry(conn)
 				return
 			}
