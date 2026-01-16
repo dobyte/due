@@ -187,7 +187,8 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	}
 
 	if args.NID != "" {
-		if client, err := l.doBuildClient(args.NID); err != nil {
+		client, err := l.doBuildClient(args.NID)
+		if err != nil {
 			buf.Release()
 			return err
 		} else {
@@ -197,11 +198,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
 			isDeliver = true
 
-			if err = client.Deliver(ctx, args.CID, args.UID, buf); err != nil {
-				return false, nil, err
-			} else {
-				return true, nil, nil
-			}
+			return false, nil, client.Deliver(ctx, args.CID, args.UID, buf)
 		}); err != nil {
 			if !isDeliver {
 				buf.Release()

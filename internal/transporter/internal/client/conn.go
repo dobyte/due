@@ -121,17 +121,19 @@ func (c *Conn) handshake(conn net.Conn) error {
 		call = make(chan buffer.Buffer)
 	)
 
-	buf1 := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
-	defer buf1.Release()
+	buf := protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
+	defer buf.Release()
 
 	c.pending.store(seq, call)
 
-	if _, err := conn.Write(buf1.Bytes()); err != nil {
+	if _, err := conn.Write(buf.Bytes()); err != nil {
 		close(call)
 
 		c.pending.delete(seq)
 
 		return err
+	} else {
+		buf.Release()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -140,13 +142,7 @@ func (c *Conn) handshake(conn net.Conn) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case buf2, ok := <-call:
-		if !ok {
-			return errors.ErrConnectionClosed
-		}
-
-		buf2.Release()
-
+	case <-call:
 		return nil
 	}
 }
