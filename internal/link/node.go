@@ -167,8 +167,9 @@ func (l *NodeLinker) FetchNodeList(ctx context.Context, states ...cluster.State)
 // Deliver 投递消息给节点处理
 func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	var (
-		err error
-		buf buffer.Buffer
+		err       error
+		buf       buffer.Buffer
+		isDeliver bool
 	)
 
 	switch b := args.Buffer.(type) {
@@ -187,15 +188,24 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 	if args.NID != "" {
 		client, err := l.doBuildClient(args.NID)
 		if err != nil {
+			buf.Release()
 			return err
 		}
 
 		return client.Deliver(ctx, args.CID, args.UID, buf)
 	} else {
 		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
+			isDeliver = true
+
 			return false, nil, client.Deliver(ctx, args.CID, args.UID, buf)
-		}); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-			return err
+		}); err != nil {
+			if !isDeliver {
+				buf.Release()
+			}
+
+			if !errors.Is(err, errors.ErrNotFoundUserLocation) {
+				return err
+			}
 		}
 
 		return nil

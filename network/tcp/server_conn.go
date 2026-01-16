@@ -339,8 +339,8 @@ func (c *serverConn) read() {
 
 			isHeartbeat, err := packet.CheckHeartbeat(buf.Bytes())
 			if err != nil {
-				log.Errorf("check heartbeat message error: %v", err)
 				buf.Release()
+				log.Errorf("check heartbeat message error: %v", err)
 				continue
 			}
 
