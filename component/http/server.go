@@ -60,14 +60,16 @@ func NewServer(opts ...Option) *Server {
 	}
 
 	if s.opts.swagOpts.Enable {
-		s.app.Use(swagger.New(swagger.Config{
+		if middleware := swagger.New(swagger.Config{
 			Title:            s.opts.swagOpts.Title,
 			BasePath:         s.opts.swagOpts.BasePath,
 			FilePath:         s.opts.swagOpts.FilePath,
 			SwaggerBundleUrl: s.opts.swagOpts.SwaggerBundleUrl,
 			SwaggerPresetUrl: s.opts.swagOpts.SwaggerPresetUrl,
 			SwaggerStylesUrl: s.opts.swagOpts.SwaggerStylesUrl,
-		}))
+		}); middleware != nil {
+			s.app.Use(middleware)
+		}
 	}
 
 	for i := range o.middlewares {
