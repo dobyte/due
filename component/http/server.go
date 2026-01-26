@@ -33,10 +33,27 @@ func NewServer(opts ...Option) *Server {
 	s.opts = o
 	s.proxy = newProxy(s)
 	s.app = fiber.New(fiber.Config{
-		ServerHeader:  o.name,
-		BodyLimit:     o.bodyLimit,
-		StrictRouting: o.strictRouting,
-		CaseSensitive: o.caseSensitive,
+		ServerHeader:                 o.name,
+		StrictRouting:                o.strictRouting,
+		CaseSensitive:                o.caseSensitive,
+		DisableHeadAutoRegister:      o.disableHeadAutoRegister,
+		Immutable:                    o.immutable,
+		UnescapePath:                 o.unescapePath,
+		BodyLimit:                    o.bodyLimit,
+		Concurrency:                  o.concurrency,
+		Views:                        o.views,
+		ViewsLayout:                  o.viewsLayout,
+		PassLocalsToViews:            o.passLocalsToViews,
+		ReadBufferSize:               o.readBufferSize,
+		WriteBufferSize:              o.writeBufferSize,
+		ProxyHeader:                  o.proxyHeader,
+		ErrorHandler:                 o.errorHandler,
+		DisableKeepalive:             o.disableKeepalive,
+		DisableDefaultDate:           o.disableDefaultDate,
+		DisableDefaultContentType:    o.disableDefaultContentType,
+		DisableHeaderNormalizing:     o.disableHeaderNormalizing,
+		StreamRequestBody:            o.streamRequestBody,
+		DisablePreParseMultipartForm: o.disablePreParseMultipartForm,
 	})
 
 	if o.console {
@@ -69,6 +86,8 @@ func NewServer(opts ...Option) *Server {
 			SwaggerStylesUrl: s.opts.swagOpts.SwaggerStylesUrl,
 		}); middleware != nil {
 			s.app.Use(middleware)
+		} else {
+			s.opts.swagOpts.Enable = false
 		}
 	}
 
