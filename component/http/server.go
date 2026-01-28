@@ -54,6 +54,16 @@ func NewServer(opts ...Option) *Server {
 		DisableHeaderNormalizing:     o.disableHeaderNormalizing,
 		StreamRequestBody:            o.streamRequestBody,
 		DisablePreParseMultipartForm: o.disablePreParseMultipartForm,
+		ReduceMemoryUsage:            o.reduceMemoryUsage,
+		EnableIPValidation:           o.enableIPValidation,
+		EnableSplittingOnParsers:     o.enableSplittingOnParsers,
+		TrustProxy:                   o.trustProxy,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Proxies:   o.trustProxyConfig.Proxies,
+			LinkLocal: o.trustProxyConfig.LinkLocal,
+			Loopback:  o.trustProxyConfig.Loopback,
+			Private:   o.trustProxyConfig.Private,
+		},
 	})
 
 	if o.console {

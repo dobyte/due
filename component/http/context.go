@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dobyte/due/v2/codes"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -56,12 +57,18 @@ func (c *context) Failure(rst any) error {
 
 		switch parts := strings.SplitN(message, ": ", 2); len(parts) {
 		case 2:
-			return c.JSON(&Resp{Code: code.Code(), Message: parts[0], Details: parts[1]})
+			if mode.IsReleaseMode() {
+				return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
+			} else {
+				return c.JSON(&Resp{Code: code.Code(), Message: parts[0], Details: parts[1]})
+			}
 		case 1:
 			return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
 		default:
 			return c.JSON(&Resp{Code: code.Code(), Message: message})
 		}
+	case codes.Code:
+		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	case *codes.Code:
 		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	default:

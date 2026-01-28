@@ -85,6 +85,10 @@ shutdownMaxWaitTime = "0s"
     name = "http"
     # 服务器监听地址，默认为:8080
     addr = ":8080"
+    # 秘钥文件
+    keyFile = ""
+    # 证书文件
+    certFile = ""
     # 是否启用控制台输出，默认为false
     console = false
     # body大小，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为4 * 1024 * 1024
@@ -95,10 +99,52 @@ shutdownMaxWaitTime = "0s"
     strictRouting = false
     # 是否区分路由大小写，默认为false， 启用后"/FoO"与"/foo"为两个不同的路由
     caseSensitive = false
-    # 秘钥文件
-    keyFile = ""
-    # 证书文件
-    certFile = ""
+    # 是否禁用HEAD方法自动注册，默认为false
+    disableHeadAutoRegister = false
+    # 是否启用不可变路由，默认为false
+    immutable = false
+    # 是否unescape路径参数，默认为false
+    unescapePath = false
+    # 视图布局
+    viewsLayout = ""
+    # 是否将上下文 locals 传递给视图引擎
+    passLocalsToViews = false
+    # 读取缓冲区大小，默认为4096
+    readBufferSize = 4096
+    # 写入缓冲区大小，默认为4096
+    writeBufferSize = 4096
+    # 代理头部
+    proxyHeader = ""
+    # 是否禁用keepalive，默认为false
+    disableKeepalive = false
+    # 是否禁用默认日期，默认为false
+    disableDefaultDate = false
+    # 是否禁用默认Content-Type，默认为false
+    disableDefaultContentType = false
+    # 是否禁用默认头部归一化，默认为false
+    disableHeaderNormalizing = false
+    # 是否流式请求体，默认为false
+    streamRequestBody = false
+    # 是否禁用预解析multipart/form-data，默认为false
+    disablePreParseMultipartForm = false
+    # 是否减少内存占用，默认为false
+    reduceMemoryUsage = false
+    # 是否信任代理，默认为false
+    trustProxy = false
+    # 是否启用IP验证，默认为false
+    enableIPValidation = false
+    # 是否启用在解析器上拆分请求体，默认为false
+    enableSplittingOnParsers = false
+    # 信任代理配置
+    [http.trustProxyConfig]
+        # 代理是受信任代理 IP 地址或 CIDR 范围的列表
+        proxies = []
+        # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
+        linkLocal = false
+        # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
+        loopback = false
+        # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+        private = false
     # 跨域配置
     [http.cors]
         # 是否启用跨域
