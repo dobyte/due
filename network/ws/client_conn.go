@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -318,7 +317,7 @@ func (c *clientConn) read() {
 			}
 
 			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buffer.NewBytes(msgData))
+				c.client.receiveHandler(c, msgData)
 			}
 		}
 	}

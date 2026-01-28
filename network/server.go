@@ -7,14 +7,12 @@
 
 package network
 
-import "github.com/dobyte/due/v2/core/buffer"
-
 type (
 	StartHandler      func()
 	CloseHandler      func()
 	ConnectHandler    func(conn Conn)
 	DisconnectHandler func(conn Conn)
-	ReceiveHandler    func(conn Conn, buf buffer.Buffer)
+	ReceiveHandler    func(conn Conn, data []byte)
 )
 
 type Server interface {

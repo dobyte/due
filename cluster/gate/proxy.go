@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
@@ -70,10 +69,9 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 }
 
 // 投递消息
-func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) {
-	message, err := packet.UnpackMessage(buf.Bytes())
+func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
+	message, err := packet.UnpackMessage(data)
 	if err != nil {
-		buf.Release()
 		log.Errorf("unpack message failed: %v", err)
 		return
 	}
@@ -82,7 +80,7 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) 
 		CID:    cid,
 		UID:    uid,
 		Route:  message.Route,
-		Buffer: buf,
+		Buffer: data,
 	}); err != nil {
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):

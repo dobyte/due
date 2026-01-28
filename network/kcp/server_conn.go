@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -340,7 +339,7 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
-			msg, err := packet.ReadMessage(conn)
+			data, err := packet.ReadMessage(conn)
 			if err != nil {
 				_ = c.forceClose(true)
 				return
@@ -360,11 +359,11 @@ func (c *serverConn) read() {
 			}
 
 			// ignore empty packet
-			if len(msg) == 0 {
+			if len(data) == 0 {
 				continue
 			}
 
-			isHeartbeat, err := packet.CheckHeartbeat(msg)
+			isHeartbeat, err := packet.CheckHeartbeat(data)
 			if err != nil {
 				log.Errorf("check heartbeat message error: %v", err)
 				continue
@@ -384,7 +383,7 @@ func (c *serverConn) read() {
 				}
 			} else {
 				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, buffer.NewBytes(msg))
+					c.connMgr.server.receiveHandler(c, data)
 				}
 			}
 		}
