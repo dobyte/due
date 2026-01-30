@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -17,6 +18,7 @@ type Proxy struct {
 	node       *Node            // 节点服务器
 	gateLinker *link.GateLinker // 网关链接器
 	nodeLinker *link.NodeLinker // 节点链接器
+	boundUsers sync.Map         // 跟踪已绑定用户
 }
 
 func newProxy(node *Node) *Proxy {
@@ -174,7 +176,9 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 	}
 
 	if nid == p.node.opts.id {
-		p.node.addWait()
+		if _, loaded := p.boundUsers.LoadOrStore(uid, struct{}{}); !loaded {
+			p.node.addWait()
+		}
 	}
 
 	return nil
@@ -195,7 +199,9 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 	}
 
 	if nid == p.node.opts.id {
-		p.node.doneWait()
+		if _, loaded := p.boundUsers.LoadAndDelete(uid); loaded {
+			p.node.doneWait()
+		}
 	}
 
 	return nil
