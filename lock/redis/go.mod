@@ -3,7 +3,7 @@ module github.com/dobyte/due/lock/redis/v2
 go 1.24.0
 
 require (
-	github.com/dobyte/due/v2 v2.5.0
+	github.com/dobyte/due/v2 v2.5.1
 	github.com/redis/go-redis/v9 v9.17.2
 )
 

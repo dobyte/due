@@ -2,7 +2,7 @@ module github.com/dobyte/due/crypto/rsa/v2
 
 go 1.24.0
 
-require github.com/dobyte/due/v2 v2.5.0
+require github.com/dobyte/due/v2 v2.5.1
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

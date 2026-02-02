@@ -3,7 +3,7 @@ module github.com/dobyte/due/config/nacos/v2
 go 1.24.0
 
 require (
-	github.com/dobyte/due/v2 v2.5.0
+	github.com/dobyte/due/v2 v2.5.1
 	github.com/nacos-group/nacos-sdk-go/v2 v2.3.5
 )
 
