@@ -162,5 +162,13 @@ func WithWeight(weight int) Option {
 
 // WithMetadata 设置元数据
 func WithMetadata(metadata map[string]string) Option {
-	return func(o *options) { maps.Copy(o.metadata, metadata) }
+	return func(o *options) {
+		if len(metadata) != 0 {
+			if len(o.metadata) == 0 {
+				o.metadata = make(map[string]string)
+			}
+
+			maps.Copy(o.metadata, metadata)
+		}
+	}
 }

@@ -30,13 +30,15 @@ const (
 func New(cfg Config) fiber.Handler {
 	// Verify Swagger file exists
 	if _, err := os.Stat(cfg.FilePath); os.IsNotExist(err) {
-		log.Fatalf("%s file does not exist", cfg.FilePath)
+		log.Warnf("%s file does not exist", cfg.FilePath)
+		return nil
 	}
 
 	// Read Swagger Spec into memory
 	rawSpec, err := os.ReadFile(cfg.FilePath)
 	if err != nil {
-		log.Fatalf("Failed to read provided Swagger file (%s): %v", cfg.FilePath, err)
+		log.Warnf("Failed to read provided Swagger file (%s): %v", cfg.FilePath, err)
+		return nil
 	}
 
 	// Generate URL path's for the middleware

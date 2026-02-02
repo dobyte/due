@@ -8,7 +8,6 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -120,15 +119,13 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 }
 
 // 处理接收到的消息
-func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
-	defer buf.Release()
-
+func (c *Client) handleReceive(conn network.Conn, data []byte) {
 	val, ok := c.conns.Load(conn)
 	if !ok {
 		return
 	}
 
-	message, err := packet.UnpackMessage(buf.Bytes())
+	message, err := packet.UnpackMessage(data)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)
 		return

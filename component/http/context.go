@@ -2,17 +2,21 @@ package http
 
 import (
 	"bytes"
-	"github.com/dobyte/due/v2/codes"
-	"github.com/gofiber/fiber/v3"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
+
+	"github.com/dobyte/due/v2/codes"
+	"github.com/dobyte/due/v2/mode"
+	"github.com/gofiber/fiber/v3"
 )
 
 type Resp struct {
-	Code    int    `json:"code"`           // 响应码
-	Message string `json:"message"`        // 响应消息
-	Data    any    `json:"data,omitempty"` // 响应数据
+	Code    int    `json:"code"`              // 响应码
+	Message string `json:"message"`           // 响应消息
+	Details string `json:"details,omitempty"` // 响应详情
+	Data    any    `json:"data,omitempty"`    // 响应数据
 }
 
 type Context interface {
@@ -49,8 +53,22 @@ func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
 		code := codes.Convert(v)
+		message := code.Message()
 
-		return c.JSON(&Resp{Code: code.Code(), Message: code.Message()})
+		switch parts := strings.SplitN(message, ": ", 2); len(parts) {
+		case 2:
+			if mode.IsReleaseMode() {
+				return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
+			} else {
+				return c.JSON(&Resp{Code: code.Code(), Message: parts[0], Details: parts[1]})
+			}
+		case 1:
+			return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
+		default:
+			return c.JSON(&Resp{Code: code.Code(), Message: message})
+		}
+	case codes.Code:
+		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	case *codes.Code:
 		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	default:

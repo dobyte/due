@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/network/ws/v2"
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -30,10 +29,8 @@ func TestServer(t *testing.T) {
 	server.OnDisconnect(func(conn network.Conn) {
 		t.Logf("connection is closed, connection id: %d", conn.ID())
 	})
-	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
-		defer buf.Release()
-
-		message, err := packet.UnpackMessage(buf.Bytes())
+	server.OnReceive(func(conn network.Conn, data []byte) {
+		message, err := packet.UnpackMessage(data)
 		if err != nil {
 			t.Error(err)
 			return
@@ -77,11 +74,8 @@ func TestServer_Benchmark(t *testing.T) {
 	server.OnStart(func() {
 		t.Logf("server is started")
 	})
-	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
-		defer buf.Release()
-
-		_, err := packet.UnpackMessage(buf.Bytes())
-		if err != nil {
+	server.OnReceive(func(conn network.Conn, data []byte) {
+		if _, err := packet.UnpackMessage(data); err != nil {
 			t.Error(err)
 			return
 		}

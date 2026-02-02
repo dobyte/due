@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -375,7 +374,7 @@ func (c *serverConn) read() {
 				}
 			} else {
 				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, buffer.NewBytes(msgData))
+					c.connMgr.server.receiveHandler(c, msgData)
 				}
 			}
 		}

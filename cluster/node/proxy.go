@@ -20,19 +20,26 @@ type Proxy struct {
 }
 
 func newProxy(node *Node) *Proxy {
-	opts := &link.Options{
-		InsID:     node.opts.id,
-		InsKind:   cluster.Node,
-		Codec:     node.opts.codec,
-		Locator:   node.opts.locator,
-		Registry:  node.opts.registry,
-		Encryptor: node.opts.encryptor,
-	}
-
 	return &Proxy{
-		node:       node,
-		gateLinker: link.NewGateLinker(node.opts.ctx, opts),
-		nodeLinker: link.NewNodeLinker(node.opts.ctx, opts),
+		node: node,
+		gateLinker: link.NewGateLinker(node.opts.ctx, &link.Options{
+			InsID:     node.opts.id,
+			InsKind:   cluster.Node,
+			Codec:     node.opts.codec,
+			Locator:   node.opts.locator,
+			Registry:  node.opts.registry,
+			Encryptor: node.opts.encryptor,
+		}),
+		nodeLinker: link.NewNodeLinker(node.opts.ctx, &link.Options{
+			InsID:       node.opts.id,
+			InsKind:     cluster.Node,
+			Codec:       node.opts.codec,
+			Locator:     node.opts.locator,
+			Registry:    node.opts.registry,
+			Encryptor:   node.opts.encryptor,
+			WaitHandler: node.addWait,
+			DoneHandler: node.doneWait,
+		}),
 	}
 }
 
@@ -169,15 +176,7 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 		name, nid = nameAndNID[0], nameAndNID[1]
 	}
 
-	if err := p.nodeLinker.BindNode(ctx, uid, name, nid); err != nil {
-		return err
-	}
-
-	if nid == p.node.opts.id {
-		p.node.addWait()
-	}
-
-	return nil
+	return p.nodeLinker.BindNode(ctx, uid, name, nid)
 }
 
 // UnbindNode 解绑节点
@@ -190,15 +189,7 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 		name, nid = nameAndNID[0], nameAndNID[1]
 	}
 
-	if err := p.nodeLinker.UnbindNode(ctx, uid, name, nid); err != nil {
-		return err
-	}
-
-	if nid == p.node.opts.id {
-		p.node.doneWait()
-	}
-
-	return nil
+	return p.nodeLinker.UnbindNode(ctx, uid, name, nid)
 }
 
 // FetchNodeList 拉取节点列表

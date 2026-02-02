@@ -33,10 +33,37 @@ func NewServer(opts ...Option) *Server {
 	s.opts = o
 	s.proxy = newProxy(s)
 	s.app = fiber.New(fiber.Config{
-		ServerHeader:  o.name,
-		BodyLimit:     o.bodyLimit,
-		StrictRouting: o.strictRouting,
-		CaseSensitive: o.caseSensitive,
+		ServerHeader:                 o.name,
+		StrictRouting:                o.strictRouting,
+		CaseSensitive:                o.caseSensitive,
+		DisableHeadAutoRegister:      o.disableHeadAutoRegister,
+		Immutable:                    o.immutable,
+		UnescapePath:                 o.unescapePath,
+		BodyLimit:                    o.bodyLimit,
+		Concurrency:                  o.concurrency,
+		Views:                        o.views,
+		ViewsLayout:                  o.viewsLayout,
+		PassLocalsToViews:            o.passLocalsToViews,
+		ReadBufferSize:               o.readBufferSize,
+		WriteBufferSize:              o.writeBufferSize,
+		ProxyHeader:                  o.proxyHeader,
+		ErrorHandler:                 o.errorHandler,
+		DisableKeepalive:             o.disableKeepalive,
+		DisableDefaultDate:           o.disableDefaultDate,
+		DisableDefaultContentType:    o.disableDefaultContentType,
+		DisableHeaderNormalizing:     o.disableHeaderNormalizing,
+		StreamRequestBody:            o.streamRequestBody,
+		DisablePreParseMultipartForm: o.disablePreParseMultipartForm,
+		ReduceMemoryUsage:            o.reduceMemoryUsage,
+		EnableIPValidation:           o.enableIPValidation,
+		EnableSplittingOnParsers:     o.enableSplittingOnParsers,
+		TrustProxy:                   o.trustProxy,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Proxies:   o.trustProxyConfig.Proxies,
+			LinkLocal: o.trustProxyConfig.LinkLocal,
+			Loopback:  o.trustProxyConfig.Loopback,
+			Private:   o.trustProxyConfig.Private,
+		},
 	})
 
 	if o.console {
@@ -60,14 +87,18 @@ func NewServer(opts ...Option) *Server {
 	}
 
 	if s.opts.swagOpts.Enable {
-		s.app.Use(swagger.New(swagger.Config{
+		if middleware := swagger.New(swagger.Config{
 			Title:            s.opts.swagOpts.Title,
 			BasePath:         s.opts.swagOpts.BasePath,
 			FilePath:         s.opts.swagOpts.FilePath,
 			SwaggerBundleUrl: s.opts.swagOpts.SwaggerBundleUrl,
 			SwaggerPresetUrl: s.opts.swagOpts.SwaggerPresetUrl,
 			SwaggerStylesUrl: s.opts.swagOpts.SwaggerStylesUrl,
-		}))
+		}); middleware != nil {
+			s.app.Use(middleware)
+		} else {
+			s.opts.swagOpts.Enable = false
+		}
 	}
 
 	for i := range o.middlewares {
