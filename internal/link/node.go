@@ -28,15 +28,13 @@ type NodeLinker struct {
 }
 
 func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
-	l := &NodeLinker{
+	return &NodeLinker{
 		ctx:        ctx,
 		opts:       opts,
 		builder:    node.NewBuilder(&node.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		sources:    make(map[int64]map[string]string),
 	}
-
-	return l
 }
 
 // HasNode 检测是否存在某个节点
@@ -64,7 +62,7 @@ func (l *NodeLinker) AskNode(ctx context.Context, uid int64, name, nid string) (
 		return "", false, errors.ErrNotFoundUserLocation
 	}
 
-	l.doSaveSource(uid, name, insID)
+	l.doStoreSource(uid, name, insID)
 
 	return insID, insID == nid, nil
 }
@@ -89,7 +87,7 @@ func (l *NodeLinker) LocateNode(ctx context.Context, uid int64, name string) (st
 		return "", errors.ErrNotFoundUserLocation
 	}
 
-	l.doSaveSource(uid, name, nid)
+	l.doStoreSource(uid, name, nid)
 
 	return nid, nil
 }
@@ -115,7 +113,7 @@ func (l *NodeLinker) BindNode(ctx context.Context, uid int64, name, nid string) 
 		return err
 	}
 
-	l.doSaveSource(uid, name, nid)
+	l.doStoreSource(uid, name, nid)
 
 	return nil
 }
@@ -128,8 +126,7 @@ func (l *NodeLinker) UnbindNode(ctx context.Context, uid int64, name, nid string
 		return errors.ErrNotFoundLocator
 	}
 
-	err := l.opts.Locator.UnbindNode(ctx, uid, name, nid)
-	if err != nil {
+	if err := l.opts.Locator.UnbindNode(ctx, uid, name, nid); err != nil {
 		return err
 	}
 
@@ -366,43 +363,78 @@ func (l *NodeLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
 	return data, nil
 }
 
-// 保存用户节点来源
-func (l *NodeLinker) doSaveSource(uid int64, name, nid string) {
-	l.rw.Lock()
-	defer l.rw.Unlock()
+// 存储用户节点来源
+func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
+	wait, done := func() (bool, bool) {
+		l.rw.Lock()
+		defer l.rw.Unlock()
 
-	sources, ok := l.sources[uid]
-	if !ok {
-		sources = make(map[string]string)
-		l.sources[uid] = sources
+		if sources, ok := l.sources[uid]; ok {
+			if oldNID, ok := sources[name]; ok {
+				if oldNID == nid {
+					return false, false
+				} else {
+					sources[name] = nid
+
+					if l.opts.InsID == nid {
+						return false, true
+					} else {
+						return true, false
+					}
+				}
+			} else {
+				sources[name] = nid
+
+				return l.opts.InsID == nid, false
+			}
+		} else {
+			l.sources[uid] = map[string]string{name: nid}
+
+			return l.opts.InsID == nid, false
+		}
+	}()
+
+	if wait && l.opts.WaitHandler != nil {
+		l.opts.WaitHandler()
 	}
-	sources[name] = nid
+
+	if done && l.opts.DoneHandler != nil {
+		l.opts.DoneHandler()
+	}
 }
 
 // 删除用户节点来源
 func (l *NodeLinker) doDeleteSource(uid int64, name, nid string) {
-	l.rw.Lock()
-	defer l.rw.Unlock()
+	done := func() bool {
+		l.rw.Lock()
+		defer l.rw.Unlock()
 
-	sources, ok := l.sources[uid]
-	if !ok {
-		return
-	}
+		sources, ok := l.sources[uid]
+		if !ok {
+			return false
+		}
 
-	oldNID, ok := sources[name]
-	if !ok {
-		return
-	}
+		oldNID, ok := sources[name]
+		if !ok {
+			return false
+		}
 
-	// ignore mismatched NID
-	if oldNID != nid {
-		return
-	}
+		// ignore mismatched NID
+		if oldNID != nid {
+			return false
+		}
 
-	if len(sources) == 1 {
-		delete(l.sources, uid)
-	} else {
-		delete(sources, name)
+		if len(sources) == 1 {
+			delete(l.sources, uid)
+		} else {
+			delete(sources, name)
+		}
+
+		return oldNID == l.opts.InsID
+	}()
+
+	if done && l.opts.DoneHandler != nil {
+		l.opts.DoneHandler()
 	}
 }
 
@@ -451,7 +483,7 @@ func (l *NodeLinker) WatchUserLocate() {
 			for _, event := range events {
 				switch event.Type {
 				case locate.BindNode:
-					l.doSaveSource(event.UID, event.InsName, event.InsID)
+					l.doStoreSource(event.UID, event.InsName, event.InsID)
 				case locate.UnbindNode:
 					l.doDeleteSource(event.UID, event.InsName, event.InsID)
 				default:
