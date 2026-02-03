@@ -376,10 +376,13 @@ func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
 				} else {
 					sources[name] = nid
 
-					if l.opts.InsID == nid {
+					switch l.opts.InsID {
+					case oldNID:
 						return false, true
-					} else {
+					case nid:
 						return true, false
+					default:
+						return false, false
 					}
 				}
 			} else {
