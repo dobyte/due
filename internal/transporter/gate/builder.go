@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/singleflight"
 )
@@ -42,8 +43,10 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			return cli.(*Client), nil
 		}
 
-		if t, ok := b.faults.Load(addr); ok && xtime.Now().Sub(t.(xtime.Time)) <= defaultFaultTimeout {
-			return nil, errors.ErrServerClosed
+		if !mode.IsDebugMode() {
+			if t, ok := b.faults.Load(addr); ok && xtime.Now().Sub(t.(xtime.Time)) <= defaultFaultTimeout {
+				return nil, errors.ErrServerClosed
+			}
 		}
 
 		c := client.NewClient(&client.Options{
@@ -51,7 +54,9 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			InsID:   b.opts.InsID,
 			InsKind: b.opts.InsKind,
 			CloseHandler: func() {
-				b.faults.Store(addr, xtime.Now())
+				if !mode.IsDebugMode() {
+					b.faults.Store(addr, xtime.Now())
+				}
 				b.clients.Delete(addr)
 			},
 		})

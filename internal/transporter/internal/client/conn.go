@@ -75,23 +75,25 @@ func (c *Conn) dial() error {
 }
 
 // 发送
-func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
+func (c *Conn) send(ch *chWrite) (*pending, error) {
 	switch c.state.Load() {
 	case def.ConnClosed:
-		return errors.ErrConnectionClosed
+		return nil, errors.ErrConnectionClosed
 	case def.ConnHanged:
-		return errors.ErrConnectionHanged
+		return nil, errors.ErrConnectionHanged
 	default:
 		// ignore
 	}
 
-	if len(isOrderly) > 0 && isOrderly[0] {
-		c.queue <- ch
-	} else {
-		c.cli.queue <- ch
-	}
+	c.queue <- ch
 
-	return nil
+	if ch.seq != 0 {
+		c.pending.store(ch.seq, ch.call)
+
+		return c.pending, nil
+	} else {
+		return nil, nil
+	}
 }
 
 // 处理连接
@@ -225,10 +227,6 @@ func (c *Conn) write(conn net.Conn) {
 
 // 执行写入数据
 func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
-	if ch.seq != 0 {
-		c.pending.store(ch.seq, ch.call)
-	}
-
 	ok := ch.buf.Visit(func(node *buffer.NocopyNode) bool {
 		if _, err := conn.Write(node.Bytes()); err != nil {
 			return false
@@ -275,9 +273,11 @@ func (c *Conn) close() {
 		c.cancel()
 	}
 
-	time.AfterFunc(time.Second, func() {
-		close(c.queue)
-	})
+	for ch := range c.queue {
+		ch.buf.Release()
+	}
+
+	close(c.queue)
 }
 
 // 取消回调

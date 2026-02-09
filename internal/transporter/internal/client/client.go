@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
@@ -24,21 +23,24 @@ type chWrite struct {
 }
 
 type Client struct {
-	opts   *Options       // 配置
-	conns  []*Conn        // 连接
-	queue  chan *chWrite  // 无序队列
-	wg     sync.WaitGroup // 等待组
-	closed atomic.Bool    // 已关闭
-	pool   sync.Pool      // 连接池
+	opts    *Options       // 配置
+	wg      sync.WaitGroup // 等待组
+	pool    sync.Pool      // 连接池
+	rw      sync.RWMutex   // 读写锁
+	conns   []*Conn        // 连接
+	queue   chan *chWrite  // 无序队列
+	closed  bool           // 已关闭
+	pending *pending       // 等待队列
 }
 
 func NewClient(opts *Options) *Client {
 	c := &Client{}
 	c.opts = opts
+	c.pool = sync.Pool{New: func() any { return &chWrite{} }}
 	c.conns = make([]*Conn, 0, defaultConnNum)
 	c.queue = make(chan *chWrite, 10240)
-	c.closed.Store(true)
-	c.pool = sync.Pool{New: func() any { return &chWrite{} }}
+	c.closed = true
+	c.pending = newPending()
 
 	return c
 }
@@ -49,10 +51,7 @@ func (c *Client) Establish() error {
 
 	go c.wait()
 
-	var (
-		mu    sync.Mutex
-		eg, _ = errgroup.WithContext(context.Background())
-	)
+	eg, _ := errgroup.WithContext(context.Background())
 
 	for range defaultConnNum {
 		eg.Go(func() error {
@@ -63,9 +62,10 @@ func (c *Client) Establish() error {
 				return err
 			}
 
-			mu.Lock()
+			c.rw.Lock()
 			c.conns = append(c.conns, conn)
-			mu.Unlock()
+			c.closed = false
+			c.rw.Unlock()
 
 			return nil
 		})
@@ -75,26 +75,18 @@ func (c *Client) Establish() error {
 		return err
 	}
 
-	c.closed.Store(false)
-
 	return nil
 }
 
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
-	if c.closed.Load() {
-		buf.Release()
-		return nil, errors.ErrClientClosed
-	}
-
 	ch := c.pool.Get().(*chWrite)
 	ch.seq = seq
 	ch.buf = buf
 	ch.call = make(chan buffer.Buffer)
 
-	conn := c.load(idx...)
-
-	if err := conn.send(ch, len(idx) > 0); err != nil {
+	pending, err := c.send(ch, idx...)
+	if err != nil {
 		c.release(ch)
 		return nil, err
 	}
@@ -104,10 +96,14 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 	select {
 	case <-ctx.Done():
-		conn.delete(seq)
+		if pending != nil {
+			pending.delete(seq)
+		}
 		return nil, ctx.Err()
 	case <-tctx.Done():
-		conn.delete(seq)
+		if pending != nil {
+			pending.delete(seq)
+		}
 		return nil, tctx.Err()
 	case res, ok := <-ch.call:
 		if !ok {
@@ -120,17 +116,10 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
-	if c.closed.Load() {
-		buf.Release()
-		return errors.ErrClientClosed
-	}
-
 	ch := c.pool.Get().(*chWrite)
 	ch.buf = buf
 
-	conn := c.load(idx...)
-
-	if err := conn.send(ch, len(idx) > 0); err != nil {
+	if _, err := c.send(ch, idx...); err != nil {
 		c.release(ch)
 		return err
 	}
@@ -138,12 +127,47 @@ func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int6
 	return nil
 }
 
-// 获取连接
-func (c *Client) load(idx ...int64) *Conn {
+// 发送到队列
+func (c *Client) send(ch *chWrite, idx ...int64) (*pending, error) {
 	if len(idx) > 0 {
-		return c.conns[idx[0]%int64(len(c.conns))]
+		if conn, err := c.load(idx...); err != nil {
+			return nil, err
+		} else {
+			return conn.send(ch)
+		}
 	} else {
-		return c.conns[0]
+		c.rw.RLock()
+		if c.closed {
+			c.rw.RUnlock()
+			return nil, errors.ErrClientClosed
+		} else {
+			c.queue <- ch
+			c.rw.RUnlock()
+		}
+
+		if ch.seq != 0 {
+			c.pending.store(ch.seq, ch.call)
+
+			return c.pending, nil
+		} else {
+			return nil, nil
+		}
+	}
+}
+
+// 获取连接
+func (c *Client) load(idx ...int64) (*Conn, error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	if c.closed {
+		return nil, errors.ErrClientClosed
+	}
+
+	if len(idx) > 0 {
+		return c.conns[idx[0]%int64(len(c.conns))], nil
+	} else {
+		return c.conns[0], nil
 	}
 }
 
@@ -169,11 +193,14 @@ func (c *Client) done() {
 // 等待客户端连接全部关闭
 func (c *Client) wait() {
 	c.wg.Wait()
-	c.closed.Store(true)
 
-	time.AfterFunc(time.Second, func() {
-		close(c.queue)
-	})
+	c.rw.Lock()
+	c.closed = true
+	for ch := range c.queue {
+		ch.buf.Release()
+	}
+	close(c.queue)
+	c.rw.Unlock()
 
 	if c.opts.CloseHandler != nil {
 		c.opts.CloseHandler()
