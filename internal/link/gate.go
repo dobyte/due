@@ -372,7 +372,9 @@ func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64,
 
 // 直接推送组播消息，只能推送到同一个网关服务器上
 func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs) (int64, error) {
-	if len(args.Targets) == 0 {
+	n := len(args.Targets)
+
+	if n == 0 {
 		return 0, errors.ErrReceiveTargetEmpty
 	}
 
@@ -386,7 +388,19 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 		return 0, err
 	}
 
-	return client.Multicast(ctx, args.Kind, args.Targets, message, args.Ack)
+	if n == 1 {
+		if err := client.Push(ctx, args.Kind, args.Targets[0], message, args.Ack); err != nil {
+			return 0, err
+		} else {
+			if args.Ack {
+				return 1, nil
+			} else {
+				return 0, nil
+			}
+		}
+	} else {
+		return client.Multicast(ctx, args.Kind, args.Targets, message, args.Ack)
+	}
 }
 
 // 间接推送组播消息

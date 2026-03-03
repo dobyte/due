@@ -24,7 +24,7 @@ func NewClient(cli *client.Client) *Client {
 
 // Trigger 触发事件
 func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int64) error {
-	return c.cli.Send(ctx, protocol.EncodeTriggerReq(0, event, cid, uid))
+	return c.cli.Send(ctx, protocol.EncodeTriggerReq(0, event, cid, uid), cid)
 }
 
 // Deliver 投递消息
