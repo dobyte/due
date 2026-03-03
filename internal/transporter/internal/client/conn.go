@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
@@ -19,31 +21,61 @@ const (
 	dialTimeout   = 500 * time.Millisecond // 拨号超时时间
 )
 
-type Conn struct {
+type conn struct {
 	cli               *Client            // 客户端
+	rw                sync.RWMutex       // 读写锁
+	conn              net.Conn           // 连接
 	state             atomic.Int32       // 连接状态
+	queue             chan *message      // 有序队列
 	pending           *pending           // 等待队列
-	queue             chan *chWrite      // 有序队列
+	failure           chan struct{}      // 重试失败通道
+	success           chan struct{}      // 重试成功通道
 	ctx               context.Context    // 上下文
 	cancel            context.CancelFunc // 取消函数
+	lastFaultTime     atomic.Int64       // 上次故障时间
 	lastHeartbeatTime atomic.Int64       // 上次心跳时间
 }
 
-func newConn(cli *Client) *Conn {
-	c := &Conn{}
+func newConn(cli *Client) *conn {
+	c := &conn{}
 	c.cli = cli
-	c.state.Store(def.ConnHanged)
-	c.queue = make(chan *chWrite, 4096)
+	c.state.Store(def.ConnClosed)
+	c.queue = make(chan *message, 4096)
 	c.pending = newPending()
+	c.failure = make(chan struct{})
+	c.success = make(chan struct{})
+	c.lastFaultTime.Store(xtime.Now().Unix())
 
 	return c
 }
 
 // 拨号
-func (c *Conn) dial() error {
+func (c *conn) dial() error {
+	c.rw.Lock()
+	defer c.rw.Unlock()
+
+	if c.state.Load() == def.ConnOpened {
+		return nil
+	}
+
+	if err := c.doDial(); err != nil {
+		close(c.failure)
+		c.failure = make(chan struct{})
+
+		return err
+	} else {
+		close(c.success)
+		c.success = make(chan struct{})
+
+		return nil
+	}
+}
+
+// 执行拨号
+func (c *conn) doDial() error {
 	var (
-		delay time.Duration
 		retry int
+		delay time.Duration
 	)
 
 	for {
@@ -74,28 +106,9 @@ func (c *Conn) dial() error {
 	}
 }
 
-// 发送
-func (c *Conn) send(ch *chWrite, isOrderly ...bool) error {
-	switch c.state.Load() {
-	case def.ConnClosed:
-		return errors.ErrConnectionClosed
-	case def.ConnHanged:
-		return errors.ErrConnectionHanged
-	default:
-		// ignore
-	}
-
-	if len(isOrderly) > 0 && isOrderly[0] {
-		c.queue <- ch
-	} else {
-		c.cli.queue <- ch
-	}
-
-	return nil
-}
-
 // 处理连接
-func (c *Conn) process(conn net.Conn) error {
+func (c *conn) process(conn net.Conn) error {
+	c.conn = conn
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.state.Store(def.ConnOpened)
 	c.lastHeartbeatTime.Store(xtime.Now().Unix())
@@ -114,7 +127,7 @@ func (c *Conn) process(conn net.Conn) error {
 }
 
 // 握手
-func (c *Conn) handshake(conn net.Conn) error {
+func (c *conn) handshake(conn net.Conn) error {
 	var (
 		seq  = uint64(1)
 		buf  = protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
@@ -135,11 +148,13 @@ func (c *Conn) handshake(conn net.Conn) error {
 		buf.Release()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, defaultTimeout)
 	defer cancel()
 
 	select {
 	case <-ctx.Done():
+		c.pending.delete(seq)
+
 		return ctx.Err()
 	case buf := <-call:
 		buf.Release()
@@ -148,8 +163,30 @@ func (c *Conn) handshake(conn net.Conn) error {
 	}
 }
 
+// 发送消息
+func (c *conn) send(msg *message) error {
+	switch c.state.Load() {
+	case def.ConnClosed:
+		if mode.IsReleaseMode() && xtime.Now().Unix()-c.lastFaultTime.Load() < c.cli.opts.FaultInterval {
+			return errors.ErrConnectionClosed
+		}
+
+		if err := c.dial(); err != nil {
+			return err
+		}
+	case def.ConnHanged:
+		if err := c.wait(); err != nil {
+			return err
+		}
+	}
+
+	c.queue <- msg
+
+	return nil
+}
+
 // 读取数据
-func (c *Conn) read(conn net.Conn) {
+func (c *conn) read(conn net.Conn) {
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -177,7 +214,7 @@ func (c *Conn) read(conn net.Conn) {
 }
 
 // 写入数据
-func (c *Conn) write(conn net.Conn) {
+func (c *conn) write(conn net.Conn) {
 	ticker := time.NewTicker(def.HeartbeatInterval)
 	defer ticker.Stop()
 
@@ -203,20 +240,12 @@ func (c *Conn) write(conn net.Conn) {
 					return
 				}
 			}
-		case ch, ok := <-c.queue: // 有序队列
+		case msg, ok := <-c.queue: // 有序队列
 			if !ok {
 				return
 			}
 
-			if ok = c.doWrite(conn, ch); !ok {
-				return
-			}
-		case ch, ok := <-c.cli.queue: // 无序队列
-			if !ok {
-				return
-			}
-
-			if ok = c.doWrite(conn, ch); !ok {
+			if ok = c.doWrite(conn, msg); !ok {
 				return
 			}
 		}
@@ -224,12 +253,17 @@ func (c *Conn) write(conn net.Conn) {
 }
 
 // 执行写入数据
-func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
-	if ch.seq != 0 {
-		c.pending.store(ch.seq, ch.call)
+func (c *conn) doWrite(conn net.Conn, msg *message) bool {
+	if msg.seq != 0 {
+		if !msg.state.CompareAndSwap(statePending, stateSent) {
+			c.cli.release(msg)
+			return false
+		}
+
+		c.pending.store(msg.seq, msg.call)
 	}
 
-	ok := ch.buf.Visit(func(node *buffer.NocopyNode) bool {
+	ok := msg.buf.Visit(func(node *buffer.NocopyNode) bool {
 		if _, err := conn.Write(node.Bytes()); err != nil {
 			return false
 		} else {
@@ -237,7 +271,7 @@ func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
 		}
 	})
 
-	c.cli.release(ch)
+	c.cli.release(msg)
 
 	if !ok {
 		c.retry(conn)
@@ -247,7 +281,7 @@ func (c *Conn) doWrite(conn net.Conn, ch *chWrite) bool {
 }
 
 // 重试拨号
-func (c *Conn) retry(conn net.Conn) {
+func (c *conn) retry(conn net.Conn) {
 	if !c.state.CompareAndSwap(def.ConnOpened, def.ConnHanged) {
 		return
 	}
@@ -264,23 +298,45 @@ func (c *Conn) retry(conn net.Conn) {
 }
 
 // 关闭连接
-func (c *Conn) close() {
+func (c *conn) close() {
 	if c.state.Swap(def.ConnClosed) == def.ConnClosed {
 		return
 	}
 
-	c.cli.done()
+	c.lastFaultTime.Store(xtime.Now().Unix())
+
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
 
 	if c.cancel != nil {
 		c.cancel()
 	}
-
-	time.AfterFunc(time.Second, func() {
-		close(c.queue)
-	})
 }
 
-// 取消回调
-func (c *Conn) delete(seq uint64) {
-	c.pending.delete(seq)
+// 等待重连
+func (c *conn) wait() error {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	switch c.state.Load() {
+	case def.ConnOpened:
+		return nil
+	case def.ConnHanged:
+		select {
+		case <-c.failure:
+			return errors.ErrConnectionClosed
+		case <-c.success:
+			return nil
+		}
+	}
+
+	return errors.ErrConnectionClosed
+}
+
+// 删除发送消息
+func (c *conn) delete(msg *message) {
+	if !msg.state.CompareAndSwap(statePending, stateCanceled) {
+		c.pending.delete(msg.seq)
+	}
 }

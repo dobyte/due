@@ -29,6 +29,8 @@ const (
 	DateTime   = time.DateTime
 	DateOnly   = time.DateOnly
 	TimeOnly   = time.TimeOnly
+	MonthOnly  = "2006-01"
+	YearOnly   = "2006"
 )
 
 const (

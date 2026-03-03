@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -14,47 +15,39 @@ import (
 
 const (
 	defaultTimeout = 3 * time.Second // 调用超时时间
-	defaultConnNum = 10              // 默认连接数
 )
 
-type chWrite struct {
-	seq  uint64               // 序列号
-	buf  *buffer.NocopyBuffer // 数据buffer
-	call chan buffer.Buffer   // 回调数据
+type Options struct {
+	Addr          string       // 连接地址
+	InsID         string       // 实例ID
+	InsKind       cluster.Kind // 实例类型
+	ConnNum       int          // 连接数
+	FaultInterval int64        // 故障间隔时间
 }
 
 type Client struct {
-	opts   *Options       // 配置
-	conns  []*Conn        // 连接
-	queue  chan *chWrite  // 无序队列
-	wg     sync.WaitGroup // 等待组
-	closed atomic.Bool    // 已关闭
-	pool   sync.Pool      // 连接池
+	opts  *Options  // 配置
+	pool  sync.Pool // 对象池
+	conns []*conn   // 连接
+	idx   atomic.Uint64
 }
 
 func NewClient(opts *Options) *Client {
 	c := &Client{}
 	c.opts = opts
-	c.conns = make([]*Conn, 0, defaultConnNum)
-	c.queue = make(chan *chWrite, 10240)
-	c.closed.Store(true)
-	c.pool = sync.Pool{New: func() any { return &chWrite{} }}
-
+	c.pool = sync.Pool{New: func() any { return &message{} }}
 	return c
 }
 
 // Establish 新建连接
 func (c *Client) Establish() error {
-	c.wg.Add(defaultConnNum)
-
-	go c.wait()
-
 	var (
 		mu    sync.Mutex
 		eg, _ = errgroup.WithContext(context.Background())
+		conns = make([]*conn, 0, c.opts.ConnNum)
 	)
 
-	for range defaultConnNum {
+	for range c.opts.ConnNum {
 		eg.Go(func() error {
 			conn := newConn(c)
 
@@ -64,38 +57,39 @@ func (c *Client) Establish() error {
 			}
 
 			mu.Lock()
-			c.conns = append(c.conns, conn)
+			conns = append(conns, conn)
 			mu.Unlock()
 
 			return nil
 		})
 	}
 
-	if err := eg.Wait(); err != nil && len(c.conns) == 0 {
+	if err := eg.Wait(); err != nil && len(conns) == 0 {
 		return err
 	}
 
-	c.closed.Store(false)
+	c.conns = conns
 
 	return nil
 }
 
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
-	if c.closed.Load() {
+	conn := c.load(idx...)
+
+	if conn == nil {
 		buf.Release()
 		return nil, errors.ErrClientClosed
 	}
 
-	ch := c.pool.Get().(*chWrite)
-	ch.seq = seq
-	ch.buf = buf
-	ch.call = make(chan buffer.Buffer)
+	msg := c.pool.Get().(*message)
+	msg.seq = seq
+	msg.buf = buf
+	msg.call = make(chan buffer.Buffer)
+	msg.state.Store(statePending)
 
-	conn := c.load(idx...)
-
-	if err := conn.send(ch, len(idx) > 0); err != nil {
-		c.release(ch)
+	if err := conn.send(msg); err != nil {
+		c.release(msg)
 		return nil, err
 	}
 
@@ -104,12 +98,12 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 	select {
 	case <-ctx.Done():
-		conn.delete(seq)
+		conn.delete(msg)
 		return nil, ctx.Err()
 	case <-tctx.Done():
-		conn.delete(seq)
+		conn.delete(msg)
 		return nil, tctx.Err()
-	case res, ok := <-ch.call:
+	case res, ok := <-msg.call:
 		if !ok {
 			return nil, errors.ErrConnectionHanged
 		}
@@ -120,18 +114,18 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
-	if c.closed.Load() {
+	conn := c.load(idx...)
+
+	if conn == nil {
 		buf.Release()
 		return errors.ErrClientClosed
 	}
 
-	ch := c.pool.Get().(*chWrite)
-	ch.buf = buf
+	msg := c.pool.Get().(*message)
+	msg.buf = buf
 
-	conn := c.load(idx...)
-
-	if err := conn.send(ch, len(idx) > 0); err != nil {
-		c.release(ch)
+	if err := conn.send(msg); err != nil {
+		c.release(msg)
 		return err
 	}
 
@@ -139,43 +133,27 @@ func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int6
 }
 
 // 获取连接
-func (c *Client) load(idx ...int64) *Conn {
-	if len(idx) > 0 {
-		return c.conns[idx[0]%int64(len(c.conns))]
-	} else {
-		return c.conns[0]
+func (c *Client) load(idx ...int64) *conn {
+	if n := len(c.conns); n > 0 {
+		if len(idx) > 0 {
+			return c.conns[idx[0]%int64(n)]
+		} else {
+			return c.conns[c.idx.Add(1)%uint64(n)]
+		}
 	}
+
+	return nil
 }
 
 // 释放
-func (c *Client) release(ch *chWrite) {
-	if ch.buf == nil {
-		return
+func (c *Client) release(msg *message) {
+	if msg.buf != nil {
+		msg.buf.Release()
+		msg.buf = nil
 	}
 
-	ch.buf.Release()
-	ch.buf = nil
-	ch.seq = 0
-	ch.call = nil
+	msg.seq = 0
+	msg.call = nil
 
-	c.pool.Put(ch)
-}
-
-// 连接断开
-func (c *Client) done() {
-	c.wg.Done()
-}
-
-// 等待客户端连接全部关闭
-func (c *Client) wait() {
-	c.wg.Wait()
-	c.closed.Store(true)
-
-	time.AfterFunc(time.Second, func() {
-		close(c.queue)
-	})
-
-	if c.opts.CloseHandler != nil {
-		c.opts.CloseHandler()
-	}
+	c.pool.Put(msg)
 }
