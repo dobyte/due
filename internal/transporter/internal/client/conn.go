@@ -22,18 +22,17 @@ const (
 )
 
 type conn struct {
-	cli               *Client            // 客户端
-	rw                sync.RWMutex       // 读写锁
-	conn              net.Conn           // 连接
-	state             atomic.Int32       // 连接状态
-	queue             chan *message      // 有序队列
-	pending           *pending           // 等待队列
-	failure           chan struct{}      // 重试失败通道
-	success           chan struct{}      // 重试成功通道
-	ctx               context.Context    // 上下文
-	cancel            context.CancelFunc // 取消函数
-	lastFaultTime     atomic.Int64       // 上次故障时间
-	lastHeartbeatTime atomic.Int64       // 上次心跳时间
+	cli           *Client            // 客户端
+	rw            sync.RWMutex       // 读写锁
+	conn          net.Conn           // 连接
+	state         atomic.Int32       // 连接状态
+	queue         chan *message      // 有序队列
+	pending       *pending           // 等待队列
+	failure       chan struct{}      // 重试失败通道
+	success       chan struct{}      // 重试成功通道
+	ctx           context.Context    // 上下文
+	cancel        context.CancelFunc // 取消函数
+	lastFaultTime atomic.Int64       // 上次故障时间
 }
 
 func newConn(cli *Client) *conn {
@@ -111,7 +110,6 @@ func (c *conn) process(conn net.Conn) error {
 	c.conn = conn
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.state.Store(def.ConnOpened)
-	c.lastHeartbeatTime.Store(xtime.Now().Unix())
 
 	go c.read(conn)
 
@@ -198,8 +196,6 @@ func (c *conn) read(conn net.Conn) {
 				return
 			}
 
-			c.lastHeartbeatTime.Store(xtime.Now().Unix())
-
 			if isHeartbeat, _, seq := protocol.ParseBuffer(buf.Bytes()); isHeartbeat {
 				buf.Release()
 			} else {
@@ -222,23 +218,11 @@ func (c *conn) write(conn net.Conn) {
 		select {
 		case <-c.ctx.Done():
 			return
-		case t, ok := <-ticker.C:
-			if !ok {
-				return
-			}
-
-			deadline := t.Add(-2 * def.HeartbeatInterval).Unix()
-
-			if c.lastHeartbeatTime.Load() < deadline {
-				log.Warn("connection heartbeat timeout")
+		case <-ticker.C:
+			if _, err := conn.Write(protocol.Heartbeat()); err != nil {
+				log.Warnf("write heartbeat message error: %v", err)
 				c.retry(conn)
 				return
-			} else {
-				if _, err := conn.Write(protocol.Heartbeat()); err != nil {
-					log.Warnf("write heartbeat message error: %v", err)
-					c.retry(conn)
-					return
-				}
 			}
 		case msg, ok := <-c.queue: // 有序队列
 			if !ok {
