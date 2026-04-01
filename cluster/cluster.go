@@ -117,19 +117,23 @@ type Message struct {
 }
 
 type PushArgs struct {
-	GID     string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind    session.Kind // 会话类型，session.Conn 或 session.User
-	Target  int64        // 会话目标，CID 或 UID
-	Message *Message     // 推送消息
-	Ack     bool         // 是否需要响应推送结果
+	GID        string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind       session.Kind // 会话类型，session.Conn 或 session.User
+	Target     int64        // 会话目标，CID 或 UID
+	Message    *Message     // 推送消息
+	Ack        bool         // 是否需要响应推送结果
+	Disconnect bool         // 是否在推送消息后断开连接
+	Force      bool         // 是否在推送消息后强制断开连接
 }
 
 type MulticastArgs struct {
-	GID     string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind    session.Kind // 会话类型，session.Conn 或 session.User
-	Targets []int64      // 会话目标，CID 或 UID
-	Message *Message     // 组播消息
-	Ack     bool         // 是否需要响应推送结果
+	GID        string       // 网关ID，会话类型为用户时可忽略此参数
+	Kind       session.Kind // 会话类型，session.Conn 或 session.User
+	Targets    []int64      // 会话目标，CID 或 UID
+	Message    *Message     // 组播消息
+	Ack        bool         // 是否需要响应推送结果
+	Disconnect bool         // 是否在推送消息后断开连接
+	Force      bool         // 是否在推送消息后强制断开连接
 }
 
 type BroadcastArgs struct {
