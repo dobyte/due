@@ -18,7 +18,7 @@ func TestEncodePublishReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodePublishReq(1, "channel", buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -33,15 +33,16 @@ func TestDecodePublishReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodePublishReq(1, "channel", buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
 
-	seq, channel, message, err := protocol.DecodePublishReq(buf.Bytes())
+	seq, channel, disconnect, message, err := protocol.DecodePublishReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("seq: %v", seq)
 	t.Logf("channel: %v", channel)
+	t.Logf("disconnect: %v", disconnect)
 	t.Logf("message: %v", string(message))
 }
 

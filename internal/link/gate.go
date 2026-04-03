@@ -329,9 +329,9 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 }
 
 // 执行推送消息
-func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer, ack bool) error {
+func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, disconnect bool, message buffer.Buffer, ack bool) error {
 	_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
-		if err := client.Push(ctx, kind, target, message, ack); ack {
+		if err := client.Push(ctx, kind, target, disconnect, message, ack); ack {
 			if errors.Is(err, errors.ErrNotFoundSession) {
 				return true, nil, err
 			} else {
@@ -389,7 +389,7 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 	}
 
 	if n == 1 {
-		if err := client.Push(ctx, args.Kind, args.Targets[0], message, args.Ack); err != nil {
+		if err := client.Push(ctx, args.Kind, args.Targets[0], args.Disconnect, message, args.Ack); err != nil {
 			return 0, err
 		} else {
 			if args.Ack {
@@ -399,7 +399,7 @@ func (l *GateLinker) doDirectMulticast(ctx context.Context, args *MulticastArgs)
 			}
 		}
 	} else {
-		return client.Multicast(ctx, args.Kind, args.Targets, message, args.Ack)
+		return client.Multicast(ctx, args.Kind, args.Targets, args.Disconnect, message, args.Ack)
 	}
 }
 
@@ -420,21 +420,21 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		message.Delay(int32(n * 2))
 
 		if n == 1 {
-			if err := l.doPush(ctx, args.Kind, args.Targets[0], message, args.Ack); err != nil {
+			if err := l.doPush(ctx, args.Kind, args.Targets[0], args.Disconnect, message, args.Ack); err != nil {
 				return 0, err
 			} else {
 				return 1, nil
 			}
 		} else {
-			return l.doMulticast(ctx, args.Kind, args.Targets, message, args.Ack)
+			return l.doMulticast(ctx, args.Kind, args.Targets, args.Disconnect, message, args.Ack)
 		}
 	} else {
 		if n == 1 {
-			return 0, l.doPush(ctx, args.Kind, args.Targets[0], message, args.Ack)
+			return 0, l.doPush(ctx, args.Kind, args.Targets[0], args.Disconnect, message, args.Ack)
 		} else {
 			message.Delay(int32(n))
 
-			if _, err := l.doMulticast(ctx, args.Kind, args.Targets, message, args.Ack); err != nil {
+			if _, err := l.doMulticast(ctx, args.Kind, args.Targets, args.Disconnect, message, args.Ack); err != nil {
 				return 0, err
 			} else {
 				return 0, nil
@@ -444,14 +444,14 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 }
 
 // 执行推送组播消息
-func (l *GateLinker) doMulticast(ctx context.Context, kind session.Kind, targets []int64, message buffer.Buffer, ack bool) (total int64, err error) {
+func (l *GateLinker) doMulticast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer, ack bool) (total int64, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for i := range targets {
 		target := targets[i]
 
 		eg.Go(func() error {
-			if err := l.doPush(ctx, kind, target, message, ack); err != nil {
+			if err = l.doPush(ctx, kind, target, disconnect, message, ack); err != nil {
 				return err
 			}
 
@@ -486,7 +486,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doBroadcast(ctx, ep.Address(), args.Kind, message, args.Ack)
+			return l.doBroadcast(ctx, ep.Address(), args.Kind, args.Disconnect, message, args.Ack)
 		}
 
 		return 0, nil
@@ -502,7 +502,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 			addr := ep.Address()
 
 			eg.Go(func() error {
-				if v, err := l.doBroadcast(ctx, addr, args.Kind, message, args.Ack); err != nil {
+				if v, err := l.doBroadcast(ctx, addr, args.Kind, args.Disconnect, message, args.Ack); err != nil {
 					return err
 				} else {
 					atomic.AddInt64(&total, v)
@@ -521,13 +521,13 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 }
 
 // 执行广播消息
-func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, message buffer.Buffer, ack bool) (int64, error) {
+func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
 	if client, err := l.builder.Build(addr); err != nil {
 		message.Release()
 
 		return 0, err
 	} else {
-		return client.Broadcast(ctx, kind, message, ack)
+		return client.Broadcast(ctx, kind, disconnect, message, ack)
 	}
 }
 
@@ -549,7 +549,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doPublish(ctx, ep.Address(), args.Channel, message, args.Ack)
+			return l.doPublish(ctx, ep.Address(), args.Channel, args.Disconnect, message, args.Ack)
 		}
 
 		return 0, nil
@@ -565,7 +565,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 			addr := ep.Address()
 
 			eg.Go(func() error {
-				if v, err := l.doPublish(ctx, addr, args.Channel, message, args.Ack); err != nil {
+				if v, err := l.doPublish(ctx, addr, args.Channel, args.Disconnect, message, args.Ack); err != nil {
 					return err
 				} else {
 					atomic.AddInt64(&total, v)
@@ -584,13 +584,13 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 }
 
 // 执行发布频道消息
-func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, message buffer.Buffer, ack bool) (int64, error) {
+func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
 	if client, err := l.builder.Build(addr); err != nil {
 		message.Release()
 
 		return 0, err
 	} else {
-		return client.Publish(ctx, channel, message, ack)
+		return client.Publish(ctx, channel, disconnect, message, ack)
 	}
 }
 

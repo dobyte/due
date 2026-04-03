@@ -17,10 +17,14 @@ const (
 
 // EncodePushReq 编码推送请求
 // 协议：size + header + route + seq + session kind + target + <message packet>
-func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.Buffer) *buffer.NocopyBuffer {
+func EncodePushReq(seq uint64, kind session.Kind, target int64, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(pushReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(pushReqBytes-defaultSizeBytes+message.Len()))
-	writer.WriteUint8s(dataBit)
+	if disconnect {
+		writer.WriteUint8s(dataBit | disconnectBit)
+	} else {
+		writer.WriteUint8s(dataBit)
+	}
 	writer.WriteUint8s(route.Push)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -31,10 +35,22 @@ func EncodePushReq(seq uint64, kind session.Kind, target int64, message buffer.B
 
 // DecodePushReq 解码推送消息
 // 协议：size + header + route + seq + session kind + target + <message packet>
-func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, message []byte, err error) {
+func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, disconnect bool, message []byte, err error) {
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(defaultSizeBytes, io.SeekStart); err != nil {
+		return
+	}
+
+	var k uint8
+
+	if k, err = reader.ReadUint8(); err != nil {
+		return
+	} else {
+		disconnect = k&disconnectBit == disconnectBit
+	}
+
+	if _, err = reader.Seek(defaultRouteBytes, io.SeekCurrent); err != nil {
 		return
 	}
 
@@ -42,7 +58,6 @@ func DecodePushReq(data []byte) (seq uint64, kind session.Kind, target int64, me
 		return
 	}
 
-	var k uint8
 	if k, err = reader.ReadUint8(); err != nil {
 		return
 	} else {
