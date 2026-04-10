@@ -1,12 +1,13 @@
 package protocol_test
 
 import (
+	"testing"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
-	"testing"
 )
 
 func TestEncodeBroadcastReq(t *testing.T) {
@@ -19,7 +20,7 @@ func TestEncodeBroadcastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodeBroadcastReq(1, session.User, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodeBroadcastReq(1, session.User, true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -34,15 +35,16 @@ func TestDecodeBroadcastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodeBroadcastReq(1, session.User, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodeBroadcastReq(1, session.User, true, buffer.NewNocopyBuffer(message))
 
-	seq, kind, message, err := protocol.DecodeBroadcastReq(buf.Bytes())
+	seq, kind, disconnect, message, err := protocol.DecodeBroadcastReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
+	t.Logf("disconnect: %v", disconnect)
 	t.Logf("message: %v", string(message))
 }
 

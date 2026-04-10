@@ -53,24 +53,22 @@ func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64
 }
 
 // Push 发送消息（异步）
-func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message []byte) error {
-	//fmt.Println(kind, target, message)
-
+func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, message []byte) error {
 	return nil
 }
 
 // Multicast 推送组播消息（异步）
-func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (total int64, err error) {
+func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message []byte) (total int64, err error) {
 	return
 }
 
 // Broadcast 推送广播消息（异步）
-func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []byte) (total int64, err error) {
+func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, message []byte) (total int64, err error) {
 	return
 }
 
 // 发布频道消息（异步）
-func (p *provider) Publish(ctx context.Context, channel string, message []byte) int64 {
+func (p *provider) Publish(ctx context.Context, channel string, disconnect bool, message []byte) int64 {
 	return 0
 }
 

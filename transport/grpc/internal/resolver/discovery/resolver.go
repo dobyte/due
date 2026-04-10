@@ -14,11 +14,11 @@ type Resolver struct {
 }
 
 func (r *Resolver) ResolveNow(_ resolver.ResolveNowOptions) {
-	r.builder.updateResolver(r)
+	// ignore
 }
 
 func (r *Resolver) Close() {
-	r.builder.removeResolver(r)
+	log.Warnf("discovery resolver close")
 }
 
 func (r *Resolver) updateState(state resolver.State) {

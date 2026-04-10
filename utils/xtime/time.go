@@ -74,10 +74,15 @@ type Time = time.Time
 func init() {
 	timezone := etc.Get("etc.timezone", "Local").String()
 	if loc, err := time.LoadLocation(timezone); err != nil {
-		location = time.Local
+		SetLocation(time.Local)
 	} else {
-		location = loc
+		SetLocation(loc)
 	}
+}
+
+// SetLocation 设置时间区域（非线程安全，仅在初始化时调用）
+func SetLocation(loc *time.Location) {
+	location = loc
 }
 
 // Parse 解析日期时间

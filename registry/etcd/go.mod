@@ -1,9 +1,9 @@
 module github.com/dobyte/due/registry/etcd/v2
 
-go 1.24.0
+go 1.25.0
 
 require (
-	github.com/dobyte/due/v2 v2.5.2
+	github.com/dobyte/due/v2 v2.5.3
 	go.etcd.io/etcd/api/v3 v3.6.7
 	go.etcd.io/etcd/client/v3 v3.6.7
 )

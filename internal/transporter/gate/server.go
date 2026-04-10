@@ -143,12 +143,12 @@ func (s *Server) disconnect(conn *server.Conn, data []byte) error {
 
 // 推送单个消息
 func (s *Server) push(conn *server.Conn, data []byte) error {
-	seq, kind, target, message, err := protocol.DecodePushReq(data)
+	seq, kind, target, disconnect, message, err := protocol.DecodePushReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Push(context.Background(), kind, target, message)
+	err = s.provider.Push(context.Background(), kind, target, disconnect, message)
 
 	if seq == 0 {
 		return err
@@ -159,12 +159,12 @@ func (s *Server) push(conn *server.Conn, data []byte) error {
 
 // 推送组播消息
 func (s *Server) multicast(conn *server.Conn, data []byte) error {
-	seq, kind, targets, message, err := protocol.DecodeMulticastReq(data)
+	seq, kind, targets, disconnect, message, err := protocol.DecodeMulticastReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Multicast(context.Background(), kind, targets, message)
+	total, err := s.provider.Multicast(context.Background(), kind, targets, disconnect, message)
 
 	if seq == 0 {
 		return err
@@ -175,12 +175,12 @@ func (s *Server) multicast(conn *server.Conn, data []byte) error {
 
 // 推送广播消息
 func (s *Server) broadcast(conn *server.Conn, data []byte) error {
-	seq, kind, message, err := protocol.DecodeBroadcastReq(data)
+	seq, kind, disconnect, message, err := protocol.DecodeBroadcastReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Broadcast(context.Background(), kind, message)
+	total, err := s.provider.Broadcast(context.Background(), kind, disconnect, message)
 
 	if seq == 0 {
 		return err
@@ -191,12 +191,12 @@ func (s *Server) broadcast(conn *server.Conn, data []byte) error {
 
 // 发布频道消息
 func (s *Server) publish(conn *server.Conn, data []byte) error {
-	seq, channel, message, err := protocol.DecodePublishReq(data)
+	seq, channel, disconnect, message, err := protocol.DecodePublishReq(data)
 	if err != nil {
 		return err
 	}
 
-	total := s.provider.Publish(context.Background(), channel, message)
+	total := s.provider.Publish(context.Background(), channel, disconnect, message)
 
 	if seq == 0 {
 		return nil
