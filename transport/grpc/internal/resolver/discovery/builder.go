@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-const Scheme = "discovery"
+const scheme = "discovery"
 
 type Builder struct {
 	rw        sync.RWMutex
@@ -36,7 +36,7 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 }
 
 func (b *Builder) Scheme() string {
-	return Scheme
+	return scheme
 }
 
 func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
