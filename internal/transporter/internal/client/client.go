@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -94,16 +93,14 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, err
 	}
 
-	startTime := time.Now()
 	tctx, tcancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer tcancel()
 
 	select {
-	// case <-ctx.Done():
-	// 	conn.delete(msg)
-	// 	return nil, ctx.Err()
+	case <-ctx.Done():
+		conn.delete(msg)
+		return nil, ctx.Err()
 	case <-tctx.Done():
-		fmt.Printf("call timeout, seq = %d cost = %v\n", seq, time.Since(startTime).Seconds())
 		conn.delete(msg)
 		return nil, tctx.Err()
 	case res, ok := <-msg.call:
