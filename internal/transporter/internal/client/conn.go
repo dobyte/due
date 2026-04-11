@@ -16,16 +16,14 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
-const (
-	maxRetryTimes = 3                      // 最大重试次数
-	dialTimeout   = 500 * time.Millisecond // 拨号超时时间
-)
+const defaultDialRetryTimes = 3
 
 type conn struct {
 	cli           *Client            // 客户端
 	rw            sync.RWMutex       // 读写锁
 	conn          net.Conn           // 连接
 	state         atomic.Int32       // 连接状态
+	total         atomic.Int32       // 总消息数
 	queue         chan *message      // 有序队列
 	pending       *pending           // 等待队列
 	failure       chan struct{}      // 重试失败通道
@@ -39,11 +37,11 @@ func newConn(cli *Client) *conn {
 	c := &conn{}
 	c.cli = cli
 	c.state.Store(def.ConnClosed)
-	c.queue = make(chan *message, 4096)
+	c.queue = make(chan *message, c.cli.opts.WriteBufferSize)
 	c.pending = newPending()
 	c.failure = make(chan struct{})
 	c.success = make(chan struct{})
-	c.lastFaultTime.Store(xtime.Now().Unix())
+	c.lastFaultTime.Store(xtime.Now().UnixNano())
 
 	return c
 }
@@ -78,11 +76,11 @@ func (c *conn) doDial() error {
 	)
 
 	for {
-		conn, err := net.DialTimeout("tcp", c.cli.opts.Addr, dialTimeout)
+		conn, err := net.DialTimeout("tcp", c.cli.addr, c.cli.opts.DialTimeout)
 		if err != nil {
 			retry++
 
-			if retry >= maxRetryTimes {
+			if retry >= c.cli.opts.DialRetryTimes {
 				c.close()
 				return err
 			} else {
@@ -128,7 +126,7 @@ func (c *conn) process(conn net.Conn) error {
 func (c *conn) handshake(conn net.Conn) error {
 	var (
 		seq  = uint64(1)
-		buf  = protocol.EncodeHandshakeReq(seq, c.cli.opts.InsKind, c.cli.opts.InsID)
+		buf  = protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID)
 		call = make(chan buffer.Buffer)
 	)
 
@@ -146,7 +144,7 @@ func (c *conn) handshake(conn net.Conn) error {
 		buf.Release()
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, c.cli.opts.CallTimeout)
 	defer cancel()
 
 	select {
@@ -165,7 +163,7 @@ func (c *conn) handshake(conn net.Conn) error {
 func (c *conn) send(msg *message) error {
 	switch c.state.Load() {
 	case def.ConnClosed:
-		if mode.IsReleaseMode() && xtime.Now().Unix()-c.lastFaultTime.Load() < c.cli.opts.FaultInterval {
+		if mode.IsReleaseMode() && xtime.Now().UnixNano()-c.lastFaultTime.Load() < c.cli.opts.FaultRecoveryTime.Nanoseconds() {
 			return errors.ErrConnectionClosed
 		}
 
@@ -178,9 +176,21 @@ func (c *conn) send(msg *message) error {
 		}
 	}
 
-	c.queue <- msg
+	if total := c.total.Add(1); total > int32(c.cli.opts.WriteBufferSize) {
+		ctx, cancel := context.WithTimeout(c.ctx, c.cli.opts.WriteTimeout)
+		defer cancel()
 
-	return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.queue <- msg:
+			return nil
+		}
+	} else {
+		c.queue <- msg
+
+		return nil
+	}
 }
 
 // 读取数据
@@ -229,6 +239,8 @@ func (c *conn) write(conn net.Conn) {
 				return
 			}
 
+			c.total.Add(-1)
+
 			if ok = c.doWrite(conn, msg); !ok {
 				return
 			}
@@ -255,7 +267,7 @@ func (c *conn) doWrite(conn net.Conn, msg *message) bool {
 		}
 	})
 
-	c.cli.release(msg, true)
+	c.cli.release(msg)
 
 	if !ok {
 		c.retry(conn)

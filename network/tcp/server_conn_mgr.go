@@ -11,11 +11,12 @@ import (
 )
 
 type serverConnMgr struct {
-	id         atomic.Int64 // 连接ID
-	total      atomic.Int64 // 总连接数
-	server     *server      // 服务器
-	pool       sync.Pool    // 连接池
-	partitions []*partition // 连接管理
+	id          atomic.Int64 // 连接ID
+	total       atomic.Int64 // 总连接数
+	server      *server      // 服务器
+	pool        sync.Pool    // 连接池
+	partitions  []*partition // 连接管理
+	chWritePool sync.Pool    // 写入队列池
 }
 
 func newServerConnMgr(server *server) *serverConnMgr {
@@ -23,6 +24,7 @@ func newServerConnMgr(server *server) *serverConnMgr {
 	cm.server = server
 	cm.pool = sync.Pool{New: func() any { return &serverConn{} }}
 	cm.partitions = make([]*partition, 100)
+	cm.chWritePool = sync.Pool{New: func() any { return &chWrite{} }}
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[net.Conn]*serverConn)}

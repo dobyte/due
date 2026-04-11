@@ -473,6 +473,10 @@ shutdownMaxWaitTime = "0s"
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
             # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -485,6 +489,10 @@ shutdownMaxWaitTime = "0s"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -501,6 +509,10 @@ shutdownMaxWaitTime = "0s"
             certFile = ""
             # 服务器最大连接数
             maxConnNum = 5000
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
             # 心跳机制，默认resp
@@ -517,6 +529,10 @@ shutdownMaxWaitTime = "0s"
             caFile = ""
             # 证书域名
             serverName = ""
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
 

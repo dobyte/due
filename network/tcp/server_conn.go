@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"context"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,7 +24,7 @@ type serverConn struct {
 	connMgr           *serverConnMgr // 连接管理
 	rw                sync.RWMutex   // 读写锁
 	conn              net.Conn       // TCP源连接
-	chWrite           chan chWrite   // 写入队列
+	chWrite           chan *chWrite  // 写入队列
 	done              chan struct{}  // 写入完成信号
 	close             chan struct{}  // 关闭信号
 	lastHeartbeatTime atomic.Int64   // 上次心跳时间
@@ -92,7 +93,22 @@ func (c *serverConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
+	ch := c.connMgr.chWritePool.Get().(*chWrite)
+	ch.msg = msg
+	ch.typ = dataPacket
+
+	if c.connMgr.server.opts.writeTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.connMgr.server.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return errors.ErrWriteTimeout
+		case c.chWrite <- ch:
+		}
+	} else {
+		c.chWrite <- ch
+	}
 
 	return nil
 }
@@ -212,7 +228,7 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.connMgr = cm
-	c.chWrite = make(chan chWrite, 4096)
+	c.chWrite = make(chan *chWrite, c.connMgr.server.opts.writeQueueSize)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
@@ -247,7 +263,7 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.chWrite <- chWrite{typ: closeSig}
+	c.chWrite <- &chWrite{typ: closeSig}
 	c.rw.RUnlock()
 
 	<-c.done
@@ -286,6 +302,7 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	close(c.done)
 	conn := c.conn
 	c.conn = nil
+	c.chWrite = nil
 	c.rw.Unlock()
 
 	err := conn.Close()
@@ -372,6 +389,11 @@ func (c *serverConn) write() {
 	for {
 		select {
 		case r, ok := <-c.chWrite:
+			defer func() {
+				r.msg = nil
+				c.connMgr.chWritePool.Put(r)
+			}()
+
 			if !ok {
 				return
 			}

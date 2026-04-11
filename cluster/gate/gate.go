@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
@@ -149,25 +150,22 @@ func (g *Gate) handleConnect(conn network.Conn) {
 
 	cid, uid := conn.ID(), conn.UID()
 
-	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-	g.proxy.trigger(ctx, cluster.Connect, cid, uid)
-	cancel()
+	g.proxy.trigger(g.ctx, cluster.Connect, cid, uid)
 }
 
 // 处理断开连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	g.session.RemConn(conn)
 
-	if cid, uid := conn.ID(), conn.UID(); uid != 0 {
-		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
+	cid, uid := conn.ID(), conn.UID()
+
+	if uid != 0 {
+		ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 		_ = g.proxy.unbindGate(ctx, cid, uid)
-		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
-		cancel()
-	} else {
-		ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-		g.proxy.trigger(ctx, cluster.Disconnect, cid, uid)
 		cancel()
 	}
+
+	g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
 
 	g.wg.Done()
 }
@@ -175,9 +173,8 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 // 处理接收到的消息
 func (g *Gate) handleReceive(conn network.Conn, data []byte) {
 	cid, uid := conn.ID(), conn.UID()
-	ctx, cancel := context.WithTimeout(g.ctx, g.opts.timeout)
-	g.proxy.deliver(ctx, cid, uid, data)
-	cancel()
+
+	g.proxy.deliver(g.ctx, cid, uid, data)
 }
 
 // 启动传输服务器
@@ -218,7 +215,7 @@ func (g *Gate) registerServiceInstance() {
 		Metadata: g.opts.metadata,
 	}
 
-	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
@@ -234,7 +231,7 @@ func (g *Gate) refreshServiceInstance() {
 
 	g.instance.State = g.getState().String()
 
-	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
@@ -244,7 +241,7 @@ func (g *Gate) refreshServiceInstance() {
 
 // 解注册服务实例
 func (g *Gate) deregisterServiceInstance() {
-	ctx, cancel := context.WithTimeout(g.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := g.opts.registry.Deregister(ctx, g.instance); err != nil {

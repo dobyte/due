@@ -18,11 +18,17 @@ type proxy struct {
 
 func newProxy(gate *Gate) *proxy {
 	return &proxy{gate: gate, nodeLinker: link.NewNodeLinker(gate.ctx, &link.Options{
-		InsID:    gate.opts.id,
-		InsKind:  cluster.Gate,
-		Locator:  gate.opts.locator,
-		Registry: gate.opts.registry,
-		Dispatch: gate.opts.dispatch,
+		ID:                gate.opts.id,
+		Kind:              cluster.Gate,
+		Locator:           gate.opts.locator,
+		Registry:          gate.opts.registry,
+		Dispatch:          gate.opts.dispatch,
+		ConnNum:           gate.opts.connNum,
+		DialTimeout:       gate.opts.dialTimeout,
+		DialRetryTimes:    gate.opts.dialRetryTimes,
+		WriteTimeout:      gate.opts.writeTimeout,
+		WriteBufferSize:   gate.opts.writeBufferSize,
+		FaultRecoveryTime: gate.opts.faultRecoveryTime,
 	})}
 }
 

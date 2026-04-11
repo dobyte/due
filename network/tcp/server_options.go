@@ -9,6 +9,8 @@ import (
 const (
 	defaultServerAddr               = ":3553"
 	defaultServerMaxConnNum         = 5000
+	defaultServerWriteTimeout       = "1s"
+	defaultServerWriteQueueSize     = 512
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
@@ -19,6 +21,8 @@ const (
 	defaultServerCertFileKey           = "etc.network.tcp.server.certFile"
 	defaultServerKeyFileKey            = "etc.network.tcp.server.keyFile"
 	defaultServerMaxConnNumKey         = "etc.network.tcp.server.maxConnNum"
+	defaultServerWriteTimeoutKey       = "etc.network.tcp.server.writeTimeout"
+	defaultServerWriteQueueSizeKey     = "etc.network.tcp.server.writeQueueSize"
 	defaultServerHeartbeatIntervalKey  = "etc.network.tcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.tcp.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey   = "etc.network.tcp.server.authorizeTimeout"
@@ -38,17 +42,27 @@ type serverOptions struct {
 	certFile           string             // 证书文件
 	keyFile            string             // 秘钥文件
 	maxConnNum         int                // 最大连接数，默认5000
+	writeTimeout       time.Duration      // 写超时时间，默认无超时
+	writeQueueSize     int                // 写队列大小，默认1024
 	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
 }
 
 func defaultServerOptions() *serverOptions {
+	writeQueueSize := etc.Get(defaultServerWriteQueueSizeKey, defaultServerWriteQueueSize).Int()
+
+	if writeQueueSize <= 0 {
+		writeQueueSize = defaultServerWriteQueueSize
+	}
+
 	return &serverOptions{
 		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
 		certFile:           etc.Get(defaultServerCertFileKey).String(),
 		keyFile:            etc.Get(defaultServerKeyFileKey).String(),
 		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
+		writeTimeout:       etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(),
+		writeQueueSize:     writeQueueSize,
 		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
 		authorizeTimeout:   etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(),
@@ -68,6 +82,22 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 // WithServerMaxConnNum 设置连接的最大连接数
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) { o.maxConnNum = maxConnNum }
+}
+
+// WithServerWriteTimeout 设置写超时时间
+func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) { o.writeTimeout = writeTimeout }
+}
+
+// WithServerWriteQueueSize 设置写入队列大小
+func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
+	return func(o *serverOptions) {
+		if writeQueueSize <= 0 {
+			o.writeQueueSize = defaultServerWriteQueueSize
+		} else {
+			o.writeQueueSize = writeQueueSize
+		}
+	}
 }
 
 // WithServerHeartbeatInterval 设置心跳检测间隔时间

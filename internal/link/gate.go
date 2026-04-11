@@ -32,8 +32,18 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 	l := &GateLinker{
 		ctx:        ctx,
 		opts:       opts,
-		builder:    gate.NewBuilder(&gate.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
+		builder: gate.NewBuilder(&gate.Options{
+			ID:                opts.ID,
+			Kind:              opts.Kind,
+			ConnNum:           opts.ConnNum,
+			CallTimeout:       opts.CallTimeout,
+			DialTimeout:       opts.DialTimeout,
+			DialRetryTimes:    opts.DialRetryTimes,
+			WriteTimeout:      opts.WriteTimeout,
+			WriteBufferSize:   opts.WriteBufferSize,
+			FaultRecoveryTime: opts.FaultRecoveryTime,
+		}),
 	}
 
 	return l

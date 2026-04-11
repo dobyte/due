@@ -3,25 +3,15 @@ package gate
 import (
 	"sync"
 
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"golang.org/x/sync/singleflight"
 )
 
-const (
-	defaultConnNum       = 10 // 默认连接数
-	defaultFaultInterval = 3  // 默认故障超时时间
-)
-
-type Options struct {
-	InsID   string       // 实例ID
-	InsKind cluster.Kind // 实例类型
-}
+type Options = client.Options
 
 type Builder struct {
 	sfg     singleflight.Group
 	opts    *Options
-	faults  sync.Map
 	clients sync.Map
 }
 
@@ -42,13 +32,7 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			return cli.(*Client), nil
 		}
 
-		c := client.NewClient(&client.Options{
-			Addr:          addr,
-			InsID:         b.opts.InsID,
-			InsKind:       b.opts.InsKind,
-			ConnNum:       defaultConnNum,
-			FaultInterval: defaultFaultInterval,
-		})
+		c := client.NewClient(addr, b.opts)
 
 		if err := c.Establish(); err != nil {
 			return nil, err

@@ -23,8 +23,8 @@ func newProxy(node *Node) *Proxy {
 	return &Proxy{
 		node: node,
 		gateLinker: link.NewGateLinker(node.opts.ctx, &link.Options{
-			InsID:     node.opts.id,
-			InsKind:   cluster.Node,
+			ID:        node.opts.id,
+			Kind:      cluster.Node,
 			Codec:     node.opts.codec,
 			Locator:   node.opts.locator,
 			Registry:  node.opts.registry,

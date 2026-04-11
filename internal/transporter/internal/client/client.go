@@ -13,27 +13,29 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	defaultTimeout = 5 * time.Second // 调用超时时间
-)
-
 type Options struct {
-	Addr          string       // 连接地址
-	InsID         string       // 实例ID
-	InsKind       cluster.Kind // 实例类型
-	ConnNum       int          // 连接数
-	FaultInterval int64        // 故障间隔时间
+	ID                string        // 实例ID
+	Kind              cluster.Kind  // 实例类型
+	ConnNum           int           // 连接数
+	CallTimeout       time.Duration // 调用超时时间
+	DialTimeout       time.Duration // 拨号超时时间
+	DialRetryTimes    int           // 拨号重试次数
+	WriteTimeout      time.Duration // 写超时时间
+	WriteBufferSize   int           // 写缓冲区大小
+	FaultRecoveryTime time.Duration // 故障恢复时间
 }
 
 type Client struct {
-	opts  *Options  // 配置
-	pool  sync.Pool // 对象池
-	conns []*conn   // 连接
-	idx   atomic.Uint64
+	addr  string        // 连接地址
+	opts  *Options      // 配置
+	pool  sync.Pool     // 对象池
+	conns []*conn       // 连接
+	idx   atomic.Uint64 // 分配连接索引
 }
 
-func NewClient(opts *Options) *Client {
+func NewClient(addr string, opts *Options) *Client {
 	c := &Client{}
+	c.addr = addr
 	c.opts = opts
 	c.pool = sync.Pool{New: func() any { return &message{} }}
 	return c
@@ -93,7 +95,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, err
 	}
 
-	tctx, tcancel := context.WithTimeout(context.Background(), defaultTimeout)
+	tctx, tcancel := context.WithTimeout(ctx, c.opts.CallTimeout)
 	defer tcancel()
 
 	select {
@@ -147,12 +149,12 @@ func (c *Client) load(idx ...int64) *conn {
 
 // 释放
 func (c *Client) release(msg *message, isNeedClose ...bool) {
+	msg.seq = 0
+
 	if msg.buf != nil {
 		msg.buf.Release()
 		msg.buf = nil
 	}
-
-	msg.seq = 0
 
 	if msg.call != nil && len(isNeedClose) > 0 && isNeedClose[0] {
 		close(msg.call)

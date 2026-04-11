@@ -18,52 +18,65 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
 const (
-	defaultName     = "gate"          // 默认名称
-	defaultAddr     = ":0"            // 连接器监听地址
-	defaultTimeout  = 3 * time.Second // 默认超时时间
-	defaultDispatch = cluster.Random  // 默认的无状态路由分发策略
+	defaultName              = "gate"         // 默认名称
+	defaultAddr              = ":0"           // 连接器监听地址
+	defaultTimeout           = "3s"           // 默认超时时间
+	defaultDispatch          = cluster.Random // 默认的无状态路由分发策略
+	defaultConnNum           = 10             // 默认连接数
+	defaultDialTimeout       = "3s"           // 默认拨号超时时间
+	defaultDialRetryTimes    = 3              // 默认拨号重试次数
+	defaultWriteTimeout      = "1s"           // 默认写入超时时间
+	defaultWriteBufferSize   = 2048           // 默认写入缓冲区大小
+	defaultFaultRecoveryTime = "5s"           // 默认故障恢复时间
 )
 
 const (
-	defaultIDKey       = "etc.cluster.gate.id"
-	defaultNameKey     = "etc.cluster.gate.name"
-	defaultAddrKey     = "etc.cluster.gate.addr"
-	defaultExposeKey   = "etc.cluster.gate.expose"
-	defaultTimeoutKey  = "etc.cluster.gate.timeout"
-	defaultDispatchKey = "etc.cluster.gate.dispatch"
-	defaultMetadataKey = "etc.cluster.gate.metadata"
+	defaultIDKey                = "etc.cluster.gate.id"
+	defaultNameKey              = "etc.cluster.gate.name"
+	defaultAddrKey              = "etc.cluster.gate.addr"
+	defaultExposeKey            = "etc.cluster.gate.expose"
+	defaultTimeoutKey           = "etc.cluster.gate.timeout"
+	defaultDispatchKey          = "etc.cluster.gate.dispatch"
+	defaultMetadataKey          = "etc.cluster.gate.metadata"
+	defaultConnNumKey           = "etc.cluster.gate.connNum"
+	defaultDialTimeoutKey       = "etc.cluster.gate.dialTimeout"
+	defaultDialRetryTimesKey    = "etc.cluster.gate.dialRetryTimes"
+	defaultWriteTimeoutKey      = "etc.cluster.gate.writeTimeout"
+	defaultWriteBufferSizeKey   = "etc.cluster.gate.writeBufferSize"
+	defaultFaultRecoveryTimeKey = "etc.cluster.gate.faultRecoveryTime"
 )
 
 type Option func(o *options)
 
 type options struct {
-	ctx      context.Context   // 上下文
-	id       string            // 实例ID
-	name     string            // 实例名称
-	addr     string            // 监听地址
-	expose   bool              // 是否将内部通信地址暴露到公网
-	timeout  time.Duration     // RPC调用超时时间
-	server   network.Server    // 网关服务器
-	locator  locate.Locator    // 用户定位器
-	registry registry.Registry // 服务注册器
-	dispatch cluster.Dispatch  // 无状态路由消息分发策略
-	metadata map[string]string // 元数据
+	ctx               context.Context   // 上下文
+	id                string            // 实例ID
+	name              string            // 实例名称
+	addr              string            // 监听地址
+	expose            bool              // 是否将内部通信地址暴露到公网
+	server            network.Server    // 网关服务器
+	locator           locate.Locator    // 用户定位器
+	registry          registry.Registry // 服务注册器
+	dispatch          cluster.Dispatch  // 无状态路由消息分发策略
+	metadata          map[string]string // 元数据
+	connNum           int               // 连接数
+	dialTimeout       time.Duration     // 拨号超时时间
+	dialRetryTimes    int               // 拨号重试次数
+	writeTimeout      time.Duration     // 写入超时时间
+	writeBufferSize   int               // 写入缓冲区大小
+	faultRecoveryTime time.Duration     // 故障恢复时间
 }
 
 func defaultOptions() *options {
-	opts := &options{
-		ctx:      context.Background(),
-		name:     defaultName,
-		addr:     defaultAddr,
-		timeout:  defaultTimeout,
-		dispatch: defaultDispatch,
-		metadata: make(map[string]string),
-		expose:   etc.Get(defaultExposeKey).Bool(),
-	}
+	opts := &options{}
+	opts.ctx = context.Background()
+	opts.expose = etc.Get(defaultExposeKey).Bool()
+	opts.metadata = make(map[string]string)
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -71,20 +84,58 @@ func defaultOptions() *options {
 		opts.id = xuuid.UUID()
 	}
 
-	if name := etc.Get(defaultNameKey).String(); name != "" {
+	if name := etc.Get(defaultNameKey, defaultName).String(); name != "" {
 		opts.name = name
+	} else {
+		opts.name = defaultName
 	}
 
-	if addr := etc.Get(defaultAddrKey).String(); addr != "" {
+	if addr := etc.Get(defaultAddrKey, defaultAddr).String(); addr != "" {
 		opts.addr = addr
-	}
-
-	if timeout := etc.Get(defaultTimeoutKey).Duration(); timeout > 0 {
-		opts.timeout = timeout
+	} else {
+		opts.addr = defaultAddr
 	}
 
 	if strategy := etc.Get(defaultDispatchKey).String(); strategy != "" {
 		opts.dispatch = cluster.Dispatch(strategy)
+	} else {
+		opts.dispatch = defaultDispatch
+	}
+
+	if connNum := etc.Get(defaultConnNumKey, defaultConnNum).Int(); connNum > 0 {
+		opts.connNum = connNum
+	} else {
+		opts.connNum = defaultConnNum
+	}
+
+	if dialTimeout := etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(); dialTimeout > 0 {
+		opts.dialTimeout = dialTimeout
+	} else {
+		opts.dialTimeout = xconv.Duration(defaultDialTimeout)
+	}
+
+	if dialRetryTimes := etc.Get(defaultDialRetryTimesKey, defaultDialRetryTimes).Int(); dialRetryTimes > 0 {
+		opts.dialRetryTimes = dialRetryTimes
+	} else {
+		opts.dialRetryTimes = defaultDialRetryTimes
+	}
+
+	if writeTimeout := etc.Get(defaultWriteTimeoutKey, defaultWriteTimeout).Duration(); writeTimeout > 0 {
+		opts.writeTimeout = writeTimeout
+	} else {
+		opts.writeTimeout = xconv.Duration(defaultWriteTimeout)
+	}
+
+	if writeBufferSize := etc.Get(defaultWriteBufferSizeKey, defaultWriteBufferSize).Int(); writeBufferSize > 0 {
+		opts.writeBufferSize = writeBufferSize
+	} else {
+		opts.writeBufferSize = defaultWriteBufferSize
+	}
+
+	if faultRecoveryTime := etc.Get(defaultFaultRecoveryTimeKey, defaultFaultRecoveryTime).Duration(); faultRecoveryTime > 0 {
+		opts.faultRecoveryTime = faultRecoveryTime
+	} else {
+		opts.faultRecoveryTime = xconv.Duration(defaultFaultRecoveryTime)
 	}
 
 	if err := etc.Get(defaultMetadataKey).Scan(&opts.metadata); err != nil {
@@ -124,11 +175,6 @@ func WithServer(server network.Server) Option {
 	return func(o *options) { o.server = server }
 }
 
-// WithTimeout 设置RPC调用超时时间
-func WithTimeout(timeout time.Duration) Option {
-	return func(o *options) { o.timeout = timeout }
-}
-
 // WithLocator 设置用户定位器
 func WithLocator(locator locate.Locator) Option {
 	return func(o *options) { o.locator = locator }
@@ -142,6 +188,60 @@ func WithRegistry(r registry.Registry) Option {
 // WithDispatch 设置无状态路由消息分发策略
 func WithDispatch(dispatch cluster.Dispatch) Option {
 	return func(o *options) { o.dispatch = dispatch }
+}
+
+// WithConnNum 设置连接数
+func WithConnNum(connNum int) Option {
+	return func(o *options) {
+		if connNum > 0 {
+			o.connNum = connNum
+		}
+	}
+}
+
+// WithDialTimeout 设置拨号超时时间
+func WithDialTimeout(dialTimeout time.Duration) Option {
+	return func(o *options) {
+		if dialTimeout > 0 {
+			o.dialTimeout = dialTimeout
+		}
+	}
+}
+
+// WithDialRetryTimes 设置拨号重试次数
+func WithDialRetryTimes(dialRetryTimes int) Option {
+	return func(o *options) {
+		if dialRetryTimes > 0 {
+			o.dialRetryTimes = dialRetryTimes
+		}
+	}
+}
+
+// WithWriteTimeout 设置写超时时间
+func WithWriteTimeout(writeTimeout time.Duration) Option {
+	return func(o *options) {
+		if writeTimeout > 0 {
+			o.writeTimeout = writeTimeout
+		}
+	}
+}
+
+// WithWriteBufferSize 设置写缓冲区大小
+func WithWriteBufferSize(writeBufferSize int) Option {
+	return func(o *options) {
+		if writeBufferSize > 0 {
+			o.writeBufferSize = writeBufferSize
+		}
+	}
+}
+
+// WithFaultRecoveryTime 设置故障恢复时间
+func WithFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
+	return func(o *options) {
+		if faultRecoveryTime > 0 {
+			o.faultRecoveryTime = faultRecoveryTime
+		}
+	}
 }
 
 // WithMetadata 设置元数据

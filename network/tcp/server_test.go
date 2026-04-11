@@ -4,6 +4,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"testing"
+	"unsafe"
 
 	"github.com/dobyte/due/network/tcp/v2"
 	"github.com/dobyte/due/v2/log"
@@ -105,4 +106,15 @@ func TestServer_Benchmark(t *testing.T) {
 	}()
 
 	select {}
+}
+
+type chWrite struct {
+	msg []byte
+	// typ int8
+}
+
+func TestServer_ChWrite(t *testing.T) {
+	v := unsafe.Sizeof(&chWrite{})
+
+	t.Logf("chWrite size: %d", v)
 }
