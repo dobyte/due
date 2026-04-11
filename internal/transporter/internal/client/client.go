@@ -89,7 +89,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	msg.state.Store(statePending)
 
 	if err := conn.send(msg); err != nil {
-		c.release(msg)
+		c.release(msg, true)
 		return nil, err
 	}
 
@@ -146,14 +146,18 @@ func (c *Client) load(idx ...int64) *conn {
 }
 
 // 释放
-func (c *Client) release(msg *message) {
+func (c *Client) release(msg *message, isNeedClose ...bool) {
 	if msg.buf != nil {
 		msg.buf.Release()
 		msg.buf = nil
 	}
 
 	msg.seq = 0
-	msg.call = nil
+
+	if msg.call != nil && len(isNeedClose) > 0 && isNeedClose[0] {
+		close(msg.call)
+		msg.call = nil
+	}
 
 	c.pool.Put(msg)
 }

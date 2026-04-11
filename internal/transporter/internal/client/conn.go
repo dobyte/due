@@ -240,7 +240,7 @@ func (c *conn) write(conn net.Conn) {
 func (c *conn) doWrite(conn net.Conn, msg *message) bool {
 	if msg.seq != 0 {
 		if !msg.state.CompareAndSwap(statePending, stateSent) {
-			c.cli.release(msg)
+			c.cli.release(msg, true)
 			return false
 		}
 
@@ -255,7 +255,7 @@ func (c *conn) doWrite(conn net.Conn, msg *message) bool {
 		}
 	})
 
-	c.cli.release(msg)
+	c.cli.release(msg, true)
 
 	if !ok {
 		c.retry(conn)
