@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultTimeout = 3 * time.Second // 调用超时时间
+	defaultTimeout = 5 * time.Second // 调用超时时间
 )
 
 type Options struct {
@@ -93,7 +93,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, err
 	}
 
-	tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+	tctx, tcancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer tcancel()
 
 	select {

@@ -14,15 +14,11 @@ type Resolver struct {
 }
 
 func (r *Resolver) ResolveNow(_ resolver.ResolveNowOptions) {
-	if r.builder != nil {
-		r.builder.updateResolver(r)
-	}
+	// ignore
 }
 
 func (r *Resolver) Close() {
-	if r.builder != nil {
-		r.builder.removeResolver(r)
-	}
+	log.Warnf("direct resolver close")
 }
 
 func (r *Resolver) updateState(state resolver.State) {
