@@ -31,9 +31,19 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 	return &NodeLinker{
 		ctx:        ctx,
 		opts:       opts,
-		builder:    node.NewBuilder(&node.Options{InsID: opts.InsID, InsKind: opts.InsKind}),
-		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		sources:    make(map[int64]map[string]string),
+		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
+		builder: node.NewBuilder(&node.ClientOptions{
+			ID:                opts.ID,
+			Kind:              opts.Kind,
+			ConnNum:           opts.ConnNum,
+			CallTimeout:       opts.CallTimeout,
+			DialTimeout:       opts.DialTimeout,
+			DialRetryTimes:    opts.DialRetryTimes,
+			WriteTimeout:      opts.WriteTimeout,
+			WriteQueueSize:    opts.WriteQueueSize,
+			FaultRecoveryTime: opts.FaultRecoveryTime,
+		}),
 	}
 }
 
@@ -276,7 +286,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 		return nil, errors.ErrIllegalRequest
 	}
 
-	if l.opts.InsKind == cluster.Gate && route.Internal() {
+	if l.opts.Kind == cluster.Gate && route.Internal() {
 		return nil, errors.ErrIllegalRequest
 	}
 
@@ -377,21 +387,24 @@ func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
 				} else {
 					sources[name] = nid
 
-					if l.opts.InsID == nid {
+					switch l.opts.ID {
+					case oldNID:
 						return false, true
-					} else {
+					case nid:
 						return true, false
+					default:
+						return false, false
 					}
 				}
 			} else {
 				sources[name] = nid
 
-				return l.opts.InsID == nid, false
+				return l.opts.ID == nid, false
 			}
 		} else {
 			l.sources[uid] = map[string]string{name: nid}
 
-			return l.opts.InsID == nid, false
+			return l.opts.ID == nid, false
 		}
 	}()
 
@@ -431,7 +444,7 @@ func (l *NodeLinker) doDeleteSource(uid int64, name, nid string) {
 			delete(sources, name)
 		}
 
-		return oldNID == l.opts.InsID
+		return oldNID == l.opts.ID
 	}()
 
 	if done && l.opts.DoneHandler != nil {

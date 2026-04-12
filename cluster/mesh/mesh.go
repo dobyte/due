@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
@@ -174,7 +175,7 @@ func (m *Mesh) registerServiceInstance() {
 		m.instance.Services = append(m.instance.Services, item.name)
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
@@ -190,7 +191,7 @@ func (m *Mesh) refreshServiceInstance() {
 
 	m.instance.State = m.getState().String()
 
-	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
@@ -200,7 +201,7 @@ func (m *Mesh) refreshServiceInstance() {
 
 // 解注册服务实例
 func (m *Mesh) deregisterServiceInstance() {
-	ctx, cancel := context.WithTimeout(m.ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	defer cancel()
 
 	if err := m.opts.registry.Deregister(ctx, m.instance); err != nil {

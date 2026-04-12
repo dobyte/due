@@ -8,6 +8,7 @@
 package ws
 
 import (
+	"context"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -83,7 +84,18 @@ func (c *serverConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
+	if c.connMgr.server.opts.writeTimeout > 0 && len(c.chHighWrite) == cap(c.chHighWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.connMgr.server.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}:
+		}
+	} else {
+		c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
+	}
 
 	return nil
 }
@@ -101,7 +113,18 @@ func (c *serverConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
+	if c.connMgr.server.opts.writeTimeout > 0 && len(c.chLowWrite) == cap(c.chLowWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.connMgr.server.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}:
+		}
+	} else {
+		c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
+	}
 
 	return nil
 }
@@ -182,8 +205,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.connMgr = cm
-	c.chLowWrite = make(chan chWrite, 4096)
-	c.chHighWrite = make(chan chWrite, 1024)
+	c.chLowWrite = make(chan chWrite, c.connMgr.server.opts.writeQueueSize)
+	c.chHighWrite = make(chan chWrite, c.connMgr.server.opts.writeQueueSize)
 	c.done = make(chan struct{})
 	c.close = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())

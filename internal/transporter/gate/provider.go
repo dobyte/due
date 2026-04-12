@@ -21,13 +21,13 @@ type Provider interface {
 	// Disconnect 断开连接
 	Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error
 	// Push 发送消息
-	Push(ctx context.Context, kind session.Kind, target int64, message []byte) error
+	Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, message []byte) error
 	// Multicast 推送组播消息
-	Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (total int64, err error)
+	Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message []byte) (total int64, err error)
 	// Broadcast 推送广播消息
-	Broadcast(ctx context.Context, kind session.Kind, message []byte) (total int64, err error)
+	Broadcast(ctx context.Context, kind session.Kind, disconnect bool, message []byte) (total int64, err error)
 	// Publish 发布频道消息
-	Publish(ctx context.Context, channel string, message []byte) (total int64)
+	Publish(ctx context.Context, channel string, disconnect bool, message []byte) (total int64)
 	// Subscribe 订阅频道
 	Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error
 	// Unsubscribe 取消订阅频道

@@ -1,9 +1,9 @@
 module github.com/dobyte/due/registry/consul/v2
 
-go 1.24.0
+go 1.25.0
 
 require (
-	github.com/dobyte/due/v2 v2.5.1
+	github.com/dobyte/due/v2 v2.5.4
 	github.com/hashicorp/consul/api v1.32.0
 )
 
@@ -34,7 +34,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

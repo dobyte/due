@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"context"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -39,8 +40,8 @@ func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn 
 		attr:        &attr{},
 		conn:        conn,
 		client:      client,
-		chLowWrite:  make(chan chWrite, 4096),
-		chHighWrite: make(chan chWrite, 1024),
+		chLowWrite:  make(chan chWrite, client.opts.writeQueueSize),
+		chHighWrite: make(chan chWrite, client.opts.writeQueueSize),
 		done:        make(chan struct{}),
 		close:       make(chan struct{}),
 	}
@@ -99,7 +100,18 @@ func (c *clientConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
+	if c.client.opts.writeTimeout > 0 && len(c.chHighWrite) == cap(c.chHighWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}:
+		}
+	} else {
+		c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
+	}
 
 	return nil
 }
@@ -117,7 +129,18 @@ func (c *clientConn) Push(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
+	if c.client.opts.writeTimeout > 0 && len(c.chLowWrite) == cap(c.chLowWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}:
+		}
+	} else {
+		c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
+	}
 
 	return nil
 }

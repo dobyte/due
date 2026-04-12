@@ -18,12 +18,16 @@ const (
 
 // EncodeMulticastReq 编码组播请求（最多组播65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + <message packet>
-func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message buffer.Buffer) *buffer.NocopyBuffer {
+func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	size := multicastReqBytes + len(targets)*8
 
 	writer := buffer.MallocWriter(size)
 	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes+message.Len()))
-	writer.WriteUint8s(dataBit)
+	if disconnect {
+		writer.WriteUint8s(dataBit | disconnectBit)
+	} else {
+		writer.WriteUint8s(dataBit)
+	}
 	writer.WriteUint8s(route.Multicast)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -35,10 +39,22 @@ func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, message 
 
 // DecodeMulticastReq 解码组播请求
 // 协议：size + header + route + seq + session kind + count + targets + <message packet>
-func DecodeMulticastReq(data []byte) (seq uint64, kind session.Kind, targets []int64, message []byte, err error) {
+func DecodeMulticastReq(data []byte) (seq uint64, kind session.Kind, targets []int64, disconnect bool, message []byte, err error) {
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(defaultSizeBytes, io.SeekStart); err != nil {
+		return
+	}
+
+	var k uint8
+
+	if k, err = reader.ReadUint8(); err != nil {
+		return
+	} else {
+		disconnect = k&disconnectBit == disconnectBit
+	}
+
+	if _, err = reader.Seek(defaultRouteBytes, io.SeekCurrent); err != nil {
 		return
 	}
 
@@ -46,7 +62,6 @@ func DecodeMulticastReq(data []byte) (seq uint64, kind session.Kind, targets []i
 		return
 	}
 
-	var k uint8
 	if k, err = reader.ReadUint8(); err != nil {
 		return
 	} else {

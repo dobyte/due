@@ -67,8 +67,8 @@ func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int
 }
 
 // Push 发送消息
-func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, message []byte) error {
-	err := p.gate.session.Push(kind, target, message)
+func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, message []byte) error {
+	err := p.gate.session.Push(kind, target, disconnect, message)
 
 	if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
 		xcall.Go(func() {
@@ -82,18 +82,18 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, me
 }
 
 // Multicast 推送组播消息
-func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, message []byte) (int64, error) {
-	return p.gate.session.Multicast(kind, targets, message)
+func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message []byte) (int64, error) {
+	return p.gate.session.Multicast(kind, targets, disconnect, message)
 }
 
 // Broadcast 推送广播消息
-func (p *provider) Broadcast(ctx context.Context, kind session.Kind, message []byte) (int64, error) {
-	return p.gate.session.Broadcast(kind, message)
+func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, message []byte) (int64, error) {
+	return p.gate.session.Broadcast(kind, disconnect, message)
 }
 
 // Publish 发布频道消息
-func (p *provider) Publish(ctx context.Context, channel string, message []byte) int64 {
-	return p.gate.session.Publish(channel, message)
+func (p *provider) Publish(ctx context.Context, channel string, disconnect bool, message []byte) int64 {
+	return p.gate.session.Publish(channel, disconnect, message)
 }
 
 // Subscribe 订阅频道

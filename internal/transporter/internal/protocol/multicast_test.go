@@ -1,12 +1,13 @@
 package protocol_test
 
 import (
+	"testing"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
-	"testing"
 )
 
 func TestEncodeMulticastReq(t *testing.T) {
@@ -19,7 +20,7 @@ func TestEncodeMulticastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -34,9 +35,9 @@ func TestDecodeMulticastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
 
-	seq, kind, targets, message, err := protocol.DecodeMulticastReq(buf.Bytes())
+	seq, kind, targets, disconnect, message, err := protocol.DecodeMulticastReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +45,7 @@ func TestDecodeMulticastReq(t *testing.T) {
 	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
 	t.Logf("targets: %v", targets)
+	t.Logf("disconnect: %v", disconnect)
 	t.Logf("message: %v", string(message))
 }
 

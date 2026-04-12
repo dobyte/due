@@ -15,14 +15,26 @@ shutdownMaxWaitTime = "0s"
         id = ""
         # 实例名称
         name = "gate"
-        # 内建RPC服务器监听地址。不填写默认随机监听
-        addr = ":0"
-        # 是否将内部通信地址暴露到公网。默认为false
-        expose = false
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        timeout = "3s"
         # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
         dispatch = "random"
+        # 内建RPC服务器监听地址。不填写默认随机监听
+        addr = ":0"
+        # 是否将内建RPC通信地址暴露到公网。默认为false
+        expose = false
+        # RPC连接数，默认10
+        connNum = 10
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        callTimeout = "3s"
+        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        dialTimeout = "3s"
+        # RPC拨号重试次数，默认3
+        dialRetryTimes = 3
+        # RPC写入队列超时时间，默认1s
+        writeTimeout = "1s"
+        # RPC写入队列大小，默认2048
+        writeQueueSize = 2048
+        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+        faultRecoveryTime = "5s"
         # 实例元数据
         [cluster.gate.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -33,16 +45,28 @@ shutdownMaxWaitTime = "0s"
         id = ""
         # 实例名称
         name = "node"
-        # 内建RPC服务器监听地址。不填写默认随机监听
-        addr = ":0"
-        # 是否将内部通信地址暴露到公网。默认为false
-        expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        timeout = "3s"
         # 节点权重，用于节点无状态路由消息的加权轮询策略，权重值必需大于0才生效。默认为1
         weight = 1
+        # 内建RPC服务器监听地址。不填写默认随机监听
+        addr = ":0"
+        # 是否将内建RPC通信地址暴露到公网。默认为false
+        expose = false
+        # RPC连接数，默认10
+        connNum = 10
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        callTimeout = "3s"
+        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        dialTimeout = "3s"
+        # RPC拨号重试次数，默认3
+        dialRetryTimes = 3
+        # RPC写入队列超时时间，默认1s
+        writeTimeout = "1s"
+        # RPC写入队列大小，默认2048
+        writeQueueSize = 2048
+        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+        faultRecoveryTime = "5s"
         # 实例元数据
         [cluster.node.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -57,6 +81,20 @@ shutdownMaxWaitTime = "0s"
         expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
+        # RPC连接数，默认10
+        connNum = 10
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        callTimeout = "3s"
+        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        dialTimeout = "3s"
+        # RPC拨号重试次数，默认3
+        dialRetryTimes = 3
+        # RPC写入队列超时时间，默认1s
+        writeTimeout = "1s"
+        # RPC写入队列大小，默认2048
+        writeQueueSize = 2048
+        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+        faultRecoveryTime = "5s"
         # 实例元数据
         [cluster.mesh.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -473,6 +511,10 @@ shutdownMaxWaitTime = "0s"
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
             # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -485,6 +527,10 @@ shutdownMaxWaitTime = "0s"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
@@ -501,6 +547,10 @@ shutdownMaxWaitTime = "0s"
             certFile = ""
             # 服务器最大连接数
             maxConnNum = 5000
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
             # 心跳机制，默认resp
@@ -517,6 +567,10 @@ shutdownMaxWaitTime = "0s"
             caFile = ""
             # 证书域名
             serverName = ""
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
 

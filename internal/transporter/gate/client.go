@@ -139,10 +139,10 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 }
 
 // Push 推送消息
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, message buffer.Buffer, ack ...bool) error {
-	if len(ack) > 0 && ack[0] {
+func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, message buffer.Buffer, ack bool) error {
+	if ack {
 		seq := c.doGenSequence()
-		buf := protocol.EncodePushReq(seq, kind, target, message)
+		buf := protocol.EncodePushReq(seq, kind, target, disconnect, message)
 
 		res, err := c.cli.Call(ctx, seq, buf)
 		if err != nil {
@@ -157,15 +157,15 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, mess
 
 		return codes.CodeToError(code)
 	} else {
-		return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, message), target)
+		return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, disconnect, message), target)
 	}
 }
 
 // Multicast 推送组播消息
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, message buffer.Buffer, ack ...bool) (int64, error) {
-	if len(ack) > 0 && ack[0] {
+func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
+	if ack {
 		seq := c.doGenSequence()
-		buf := protocol.EncodeMulticastReq(seq, kind, targets, message)
+		buf := protocol.EncodeMulticastReq(seq, kind, targets, disconnect, message)
 
 		res, err := c.cli.Call(ctx, seq, buf)
 		if err != nil {
@@ -180,15 +180,15 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 
 		return int64(total), codes.CodeToError(code)
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodeMulticastReq(0, kind, targets, message))
+		return 0, c.cli.Send(ctx, protocol.EncodeMulticastReq(0, kind, targets, disconnect, message))
 	}
 }
 
 // Broadcast 推送广播消息
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffer.Buffer, ack ...bool) (int64, error) {
-	if len(ack) > 0 && ack[0] {
+func (c *Client) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
+	if ack {
 		seq := c.doGenSequence()
-		buf := protocol.EncodeBroadcastReq(seq, kind, message)
+		buf := protocol.EncodeBroadcastReq(seq, kind, disconnect, message)
 
 		res, err := c.cli.Call(ctx, seq, buf)
 		if err != nil {
@@ -203,20 +203,20 @@ func (c *Client) Broadcast(ctx context.Context, kind session.Kind, message buffe
 
 		return int64(total), codes.CodeToError(code)
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, message))
+		return 0, c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, disconnect, message))
 	}
 }
 
 // Publish 发布频道消息
-func (c *Client) Publish(ctx context.Context, channel string, message buffer.Buffer, ack ...bool) (int64, error) {
+func (c *Client) Publish(ctx context.Context, channel string, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
 	if len(channel) > 1<<8-1 {
 		message.Release()
 		return 0, errors.ErrInvalidArgument
 	}
 
-	if len(ack) > 0 && ack[0] {
+	if ack {
 		seq := c.doGenSequence()
-		buf := protocol.EncodePublishReq(seq, channel, message)
+		buf := protocol.EncodePublishReq(seq, channel, disconnect, message)
 
 		res, err := c.cli.Call(ctx, seq, buf)
 		if err != nil {
@@ -231,7 +231,7 @@ func (c *Client) Publish(ctx context.Context, channel string, message buffer.Buf
 
 		return int64(total), nil
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, message))
+		return 0, c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, disconnect, message))
 	}
 }
 

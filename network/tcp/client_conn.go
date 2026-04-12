@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"context"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,7 +24,7 @@ type clientConn struct {
 	conn              net.Conn      // TCP源连接
 	state             atomic.Int32  // 连接状态
 	client            *client       // 客户端
-	chWrite           chan chWrite  // 写入队列
+	chWrite           chan *chWrite // 写入队列
 	done              chan struct{} // 写入完成信号
 	close             chan struct{} // 关闭信号
 	lastHeartbeatTime atomic.Int64  // 上次心跳时间
@@ -37,7 +38,7 @@ func newClientConn(client *client, id int64, conn net.Conn) network.Conn {
 		attr:    &attr{},
 		conn:    conn,
 		client:  client,
-		chWrite: make(chan chWrite, 4096),
+		chWrite: make(chan *chWrite, client.opts.writeQueueSize),
 		done:    make(chan struct{}),
 		close:   make(chan struct{}),
 	}
@@ -112,7 +113,18 @@ func (c *clientConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chWrite <- chWrite{typ: dataPacket, msg: msg}
+	if c.client.opts.writeTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chWrite <- &chWrite{typ: dataPacket, msg: msg}:
+		}
+	} else {
+		c.chWrite <- &chWrite{typ: dataPacket, msg: msg}
+	}
 
 	return nil
 }
@@ -208,7 +220,7 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.chWrite <- chWrite{typ: closeSig}
+	c.chWrite <- &chWrite{typ: closeSig}
 	c.rw.RUnlock()
 
 	<-c.done

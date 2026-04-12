@@ -15,21 +15,16 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
-type chWrite struct {
-	isHeartbeat bool
-	buf         *buffer.NocopyBuffer
-}
-
 type Conn struct {
-	ctx               context.Context    // 上下文
-	cancel            context.CancelFunc // 取消函数
-	server            *Server            // 连接管理
-	conn              net.Conn           // TCP源连接
-	state             int32              // 连接状态
-	chWrite           chan chWrite       // 写入通道
-	lastHeartbeatTime int64              // 上次心跳时间
-	InsKind           cluster.Kind       // 集群类型
-	InsID             string             // 集群ID
+	ctx               context.Context           // 上下文
+	cancel            context.CancelFunc        // 取消函数
+	server            *Server                   // 连接管理
+	conn              net.Conn                  // TCP源连接
+	state             int32                     // 连接状态
+	chWrite           chan *buffer.NocopyBuffer // 写入通道
+	lastHeartbeatTime int64                     // 上次心跳时间
+	InsKind           cluster.Kind              // 集群类型
+	InsID             string                    // 集群ID
 }
 
 func newConn(server *Server, conn net.Conn) *Conn {
@@ -38,7 +33,7 @@ func newConn(server *Server, conn net.Conn) *Conn {
 	c.conn = conn
 	c.server = server
 	c.state = def.ConnOpened
-	c.chWrite = make(chan chWrite, 4096)
+	c.chWrite = make(chan *buffer.NocopyBuffer, server.opts.WriteQueueSize)
 	c.lastHeartbeatTime = xtime.Now().Unix()
 
 	go c.read()
@@ -54,7 +49,18 @@ func (c *Conn) Send(buf *buffer.NocopyBuffer) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chWrite <- chWrite{buf: buf}
+	if c.server.opts.WriteTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chWrite <- buf:
+		}
+	} else {
+		c.chWrite <- buf
+	}
 
 	return nil
 }
@@ -102,16 +108,16 @@ func (c *Conn) read() {
 			atomic.StoreInt64(&c.lastHeartbeatTime, xtime.Now().Unix())
 
 			if isHeartbeat {
-				c.chWrite <- chWrite{isHeartbeat: true}
-			} else {
-				handler, ok := c.server.handlers[route]
-				if !ok {
-					continue
-				}
+				continue
+			}
 
-				if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-					log.Warnf("process route %d message failed: %v", route, err)
-				}
+			handler, ok := c.server.handlers[route]
+			if !ok {
+				continue
+			}
+
+			if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+				log.Warnf("process route %d message failed: %v", route, err)
 			}
 		}
 	}
@@ -134,29 +140,23 @@ func (c *Conn) write() {
 				_ = c.close(true)
 				return
 			}
-		case ch, ok := <-c.chWrite:
+		case buf, ok := <-c.chWrite:
 			if !ok {
 				return
 			}
 
-			if ch.isHeartbeat {
-				if _, err := c.conn.Write(protocol.Heartbeat()); err != nil {
-					log.Warnf("write heartbeat message error: %v", err)
+			ok = buf.Visit(func(node *buffer.NocopyNode) bool {
+				if _, err := c.conn.Write(node.Bytes()); err != nil {
+					log.Warnf("write buffer message error: %v", err)
+					return false
 				}
-			} else {
-				ok = ch.buf.Visit(func(node *buffer.NocopyNode) bool {
-					if _, err := c.conn.Write(node.Bytes()); err != nil {
-						log.Warnf("write buffer message error: %v", err)
-						return false
-					}
-					return true
-				})
+				return true
+			})
 
-				ch.buf.Release()
+			buf.Release()
 
-				if !ok {
-					return
-				}
+			if !ok {
+				return
 			}
 		}
 	}

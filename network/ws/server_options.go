@@ -12,6 +12,8 @@ const (
 	defaultServerPath               = "/"
 	defaultServerMaxConnNum         = 5000
 	defaultServerCheckOrigin        = "*"
+	defaultServerWriteTimeout       = "0s"
+	defaultServerWriteQueueSize     = 1024
 	defaultServerHandshakeTimeout   = "10s"
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
@@ -25,6 +27,8 @@ const (
 	defaultServerCheckOriginsKey       = "etc.network.ws.server.origins"
 	defaultServerKeyFileKey            = "etc.network.ws.server.keyFile"
 	defaultServerCertFileKey           = "etc.network.ws.server.certFile"
+	defaultServerWriteTimeoutKey       = "etc.network.ws.server.writeTimeout"
+	defaultServerWriteQueueSizeKey     = "etc.network.ws.server.writeQueueSize"
 	defaultServerHandshakeTimeoutKey   = "etc.network.ws.server.handshakeTimeout"
 	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
@@ -49,6 +53,8 @@ type serverOptions struct {
 	keyFile            string             // 秘钥文件
 	path               string             // 路径，默认为"/"
 	checkOrigin        CheckOriginFunc    // 跨域检测
+	writeTimeout       time.Duration      // 写入超时时间，默认无超时
+	writeQueueSize     int                // 写入队列大小，默认1024
 	handshakeTimeout   time.Duration      // 握手超时时间，默认10s
 	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
@@ -72,13 +78,21 @@ func defaultServerOptions() *serverOptions {
 		return false
 	}
 
+	writeQueueSize := etc.Get(defaultServerWriteQueueSizeKey, defaultServerWriteQueueSize).Int()
+
+	if writeQueueSize <= 0 {
+		writeQueueSize = defaultServerWriteQueueSize
+	}
+
 	return &serverOptions{
 		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
 		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
 		path:               etc.Get(defaultServerPathKey, defaultServerPath).String(),
-		checkOrigin:        checkOrigin,
 		keyFile:            etc.Get(defaultServerKeyFileKey).String(),
 		certFile:           etc.Get(defaultServerCertFileKey).String(),
+		checkOrigin:        checkOrigin,
+		writeTimeout:       etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(),
+		writeQueueSize:     writeQueueSize,
 		handshakeTimeout:   etc.Get(defaultServerHandshakeTimeoutKey, defaultServerHandshakeTimeout).Duration(),
 		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
 		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
@@ -109,6 +123,22 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 // WithServerCheckOrigin 设置Websocket跨域检测函数
 func WithServerCheckOrigin(checkOrigin CheckOriginFunc) ServerOption {
 	return func(o *serverOptions) { o.checkOrigin = checkOrigin }
+}
+
+// WithServerWriteTimeout 设置写入超时时间
+func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) { o.writeTimeout = writeTimeout }
+}
+
+// WithServerWriteQueueSize 设置写入队列大小
+func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
+	return func(o *serverOptions) {
+		if writeQueueSize <= 0 {
+			o.writeQueueSize = defaultServerWriteQueueSize
+		} else {
+			o.writeQueueSize = writeQueueSize
+		}
+	}
 }
 
 // WithServerHandshakeTimeout 设置握手超时时间

@@ -1,12 +1,13 @@
 package protocol_test
 
 import (
+	"testing"
+
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
-	"testing"
 )
 
 func TestEncodePushReq(t *testing.T) {
@@ -19,7 +20,7 @@ func TestEncodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodePushReq(1, session.User, 3, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodePushReq(1, session.User, 3, true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -34,9 +35,9 @@ func TestDecodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodePushReq(1, session.User, 3, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodePushReq(1, session.User, 3, true, buffer.NewNocopyBuffer(message))
 
-	seq, kind, target, msg, err := protocol.DecodePushReq(buf.Bytes())
+	seq, kind, target, disconnect, msg, err := protocol.DecodePushReq(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +45,8 @@ func TestDecodePushReq(t *testing.T) {
 	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
 	t.Logf("target: %v", target)
-	t.Logf("message: %v", msg)
+	t.Logf("disconnect: %v", disconnect)
+	t.Logf("message: %v", len(msg))
 }
 
 func TestEncodePushRes(t *testing.T) {
