@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/nacos/v2
 go 1.25.0
 
 require (
-	github.com/dobyte/due/v2 v2.5.3
+	github.com/dobyte/due/v2 v2.5.4
 	github.com/nacos-group/nacos-sdk-go/v2 v2.3.5
 	golang.org/x/sync v0.20.0
 )
