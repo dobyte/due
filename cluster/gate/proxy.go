@@ -27,7 +27,7 @@ func newProxy(gate *Gate) *proxy {
 		DialTimeout:       gate.opts.dialTimeout,
 		DialRetryTimes:    gate.opts.dialRetryTimes,
 		WriteTimeout:      gate.opts.writeTimeout,
-		WriteBufferSize:   gate.opts.writeBufferSize,
+		WriteQueueSize:    gate.opts.writeQueueSize,
 		FaultRecoveryTime: gate.opts.faultRecoveryTime,
 	})}
 }

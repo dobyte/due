@@ -23,7 +23,7 @@ type Options struct {
 	DialTimeout       time.Duration     // 拨号超时时间
 	DialRetryTimes    int               // 拨号重试次数
 	WriteTimeout      time.Duration     // 写入超时时间
-	WriteBufferSize   int               // 写入缓冲区大小
+	WriteQueueSize    int32             // 写入队列大小
 	FaultRecoveryTime time.Duration     // 故障恢复时间
 	WaitHandler       func()            // 等待处理
 	DoneHandler       func()            // 完成处理

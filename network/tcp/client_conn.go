@@ -119,7 +119,7 @@ func (c *clientConn) Push(msg []byte) error {
 
 		select {
 		case <-ctx.Done():
-			return errors.ErrWriteTimeout
+			return ctx.Err()
 		case c.chWrite <- &chWrite{typ: dataPacket, msg: msg}:
 		}
 	} else {

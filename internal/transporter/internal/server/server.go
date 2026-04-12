@@ -18,6 +18,7 @@ const scheme = "drpc"
 type RouteHandler func(conn *Conn, data []byte) error
 
 type Server struct {
+	opts        *Options
 	listener    net.Listener           // 监听器
 	listenAddr  string                 // 监听地址
 	exposeAddr  string                 // 暴露地址
@@ -34,6 +35,7 @@ func NewServer(opts *Options) (*Server, error) {
 	}
 
 	s := &Server{}
+	s.opts = opts
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)

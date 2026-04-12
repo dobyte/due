@@ -67,7 +67,6 @@ var (
 	ErrInvalidCertFile         = New("invalid cert file")
 	ErrMissingCacheInstance    = New("missing cache instance")
 	ErrMissingEventbusInstance = New("missing eventbus instance")
-	ErrWriteTimeout            = New("write timeout")
 )
 
 // NewError 新建一个错误

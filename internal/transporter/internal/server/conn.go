@@ -33,7 +33,7 @@ func newConn(server *Server, conn net.Conn) *Conn {
 	c.conn = conn
 	c.server = server
 	c.state = def.ConnOpened
-	c.chWrite = make(chan *buffer.NocopyBuffer, 4096)
+	c.chWrite = make(chan *buffer.NocopyBuffer, server.opts.WriteQueueSize)
 	c.lastHeartbeatTime = xtime.Now().Unix()
 
 	go c.read()
@@ -49,7 +49,18 @@ func (c *Conn) Send(buf *buffer.NocopyBuffer) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.chWrite <- buf
+	if c.server.opts.WriteTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chWrite <- buf:
+		}
+	} else {
+		c.chWrite <- buf
+	}
 
 	return nil
 }

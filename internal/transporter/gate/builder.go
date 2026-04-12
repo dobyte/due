@@ -7,15 +7,15 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-type Options = client.Options
+type ClientOptions = client.Options
 
 type Builder struct {
 	sfg     singleflight.Group
-	opts    *Options
+	opts    *ClientOptions
 	clients sync.Map
 }
 
-func NewBuilder(opts *Options) *Builder {
+func NewBuilder(opts *ClientOptions) *Builder {
 	return &Builder{
 		opts: opts,
 	}

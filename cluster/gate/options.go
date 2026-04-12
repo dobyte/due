@@ -24,30 +24,28 @@ import (
 
 const (
 	defaultName              = "gate"         // 默认名称
-	defaultAddr              = ":0"           // 连接器监听地址
-	defaultTimeout           = "3s"           // 默认超时时间
 	defaultDispatch          = cluster.Random // 默认的无状态路由分发策略
+	defaultAddr              = ":0"           // 连接器监听地址
 	defaultConnNum           = 10             // 默认连接数
 	defaultDialTimeout       = "3s"           // 默认拨号超时时间
 	defaultDialRetryTimes    = 3              // 默认拨号重试次数
 	defaultWriteTimeout      = "1s"           // 默认写入超时时间
-	defaultWriteBufferSize   = 2048           // 默认写入缓冲区大小
+	defaultWriteQueueSize    = 2048           // 默认写入队列大小
 	defaultFaultRecoveryTime = "5s"           // 默认故障恢复时间
 )
 
 const (
 	defaultIDKey                = "etc.cluster.gate.id"
 	defaultNameKey              = "etc.cluster.gate.name"
-	defaultAddrKey              = "etc.cluster.gate.addr"
-	defaultExposeKey            = "etc.cluster.gate.expose"
-	defaultTimeoutKey           = "etc.cluster.gate.timeout"
 	defaultDispatchKey          = "etc.cluster.gate.dispatch"
 	defaultMetadataKey          = "etc.cluster.gate.metadata"
+	defaultAddrKey              = "etc.cluster.gate.addr"
+	defaultExposeKey            = "etc.cluster.gate.expose"
 	defaultConnNumKey           = "etc.cluster.gate.connNum"
 	defaultDialTimeoutKey       = "etc.cluster.gate.dialTimeout"
 	defaultDialRetryTimesKey    = "etc.cluster.gate.dialRetryTimes"
 	defaultWriteTimeoutKey      = "etc.cluster.gate.writeTimeout"
-	defaultWriteBufferSizeKey   = "etc.cluster.gate.writeBufferSize"
+	defaultWriteQueueSizeKey    = "etc.cluster.gate.writeQueueSize"
 	defaultFaultRecoveryTimeKey = "etc.cluster.gate.faultRecoveryTime"
 )
 
@@ -57,18 +55,18 @@ type options struct {
 	ctx               context.Context   // 上下文
 	id                string            // 实例ID
 	name              string            // 实例名称
-	addr              string            // 监听地址
-	expose            bool              // 是否将内部通信地址暴露到公网
 	server            network.Server    // 网关服务器
 	locator           locate.Locator    // 用户定位器
 	registry          registry.Registry // 服务注册器
 	dispatch          cluster.Dispatch  // 无状态路由消息分发策略
 	metadata          map[string]string // 元数据
-	connNum           int               // 连接数
+	addr              string            // 监听地址
+	expose            bool              // 是否将内部通信地址暴露到公网
+	connNum           int               // 拨号连接数
 	dialTimeout       time.Duration     // 拨号超时时间
 	dialRetryTimes    int               // 拨号重试次数
 	writeTimeout      time.Duration     // 写入超时时间
-	writeBufferSize   int               // 写入缓冲区大小
+	writeQueueSize    int32             // 写入队列大小
 	faultRecoveryTime time.Duration     // 故障恢复时间
 }
 
@@ -126,10 +124,10 @@ func defaultOptions() *options {
 		opts.writeTimeout = xconv.Duration(defaultWriteTimeout)
 	}
 
-	if writeBufferSize := etc.Get(defaultWriteBufferSizeKey, defaultWriteBufferSize).Int(); writeBufferSize > 0 {
-		opts.writeBufferSize = writeBufferSize
+	if writeQueueSize := etc.Get(defaultWriteQueueSizeKey, defaultWriteQueueSize).Int32(); writeQueueSize > 0 {
+		opts.writeQueueSize = writeQueueSize
 	} else {
-		opts.writeBufferSize = defaultWriteBufferSize
+		opts.writeQueueSize = defaultWriteQueueSize
 	}
 
 	if faultRecoveryTime := etc.Get(defaultFaultRecoveryTimeKey, defaultFaultRecoveryTime).Duration(); faultRecoveryTime > 0 {
@@ -139,7 +137,7 @@ func defaultOptions() *options {
 	}
 
 	if err := etc.Get(defaultMetadataKey).Scan(&opts.metadata); err != nil {
-		log.Warnf("scan gate metadata failed: %v", err)
+		log.Warnf("scan metadata failed: %v", err)
 	}
 
 	return opts
@@ -147,17 +145,35 @@ func defaultOptions() *options {
 
 // WithID 设置实例ID
 func WithID(id string) Option {
-	return func(o *options) { o.id = id }
+	return func(o *options) {
+		if id != "" {
+			o.id = id
+		} else {
+			log.Warnf("the specified id is empty and will be automatically ignored")
+		}
+	}
 }
 
 // WithName 设置实例名称
 func WithName(name string) Option {
-	return func(o *options) { o.name = name }
+	return func(o *options) {
+		if name != "" {
+			o.name = name
+		} else {
+			log.Warnf("the specified name is empty and will be ignored")
+		}
+	}
 }
 
 // WithAddr 设置监听地址
 func WithAddr(addr string) Option {
-	return func(o *options) { o.addr = addr }
+	return func(o *options) {
+		if addr != "" {
+			o.addr = addr
+		} else {
+			log.Warnf("the specified addr is empty and will be ignored")
+		}
+	}
 }
 
 // WithExpose 设置是否将内部通信地址暴露到公网
@@ -195,6 +211,8 @@ func WithConnNum(connNum int) Option {
 	return func(o *options) {
 		if connNum > 0 {
 			o.connNum = connNum
+		} else {
+			log.Warnf("the specified connNum is less than zero and will be ignored")
 		}
 	}
 }
@@ -204,6 +222,8 @@ func WithDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) {
 		if dialTimeout > 0 {
 			o.dialTimeout = dialTimeout
+		} else {
+			log.Warnf("the specified dialTimeout is less than zero and will be ignored")
 		}
 	}
 }
@@ -213,24 +233,30 @@ func WithDialRetryTimes(dialRetryTimes int) Option {
 	return func(o *options) {
 		if dialRetryTimes > 0 {
 			o.dialRetryTimes = dialRetryTimes
+		} else {
+			log.Warnf("the specified dialRetryTimes is less than zero and will be ignored")
 		}
 	}
 }
 
-// WithWriteTimeout 设置写超时时间
+// WithWriteTimeout 设置写入超时时间
 func WithWriteTimeout(writeTimeout time.Duration) Option {
 	return func(o *options) {
 		if writeTimeout > 0 {
 			o.writeTimeout = writeTimeout
+		} else {
+			log.Warnf("the specified writeTimeout is less than zero and will be ignored")
 		}
 	}
 }
 
-// WithWriteBufferSize 设置写缓冲区大小
-func WithWriteBufferSize(writeBufferSize int) Option {
+// WithWriteQueueSize 设置写入队列大小
+func WithWriteQueueSize(writeQueueSize int32) Option {
 	return func(o *options) {
-		if writeBufferSize > 0 {
-			o.writeBufferSize = writeBufferSize
+		if writeQueueSize > 0 {
+			o.writeQueueSize = writeQueueSize
+		} else {
+			log.Warnf("the specified writeQueueSize is less than zero and will be ignored")
 		}
 	}
 }
@@ -240,6 +266,8 @@ func WithFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 	return func(o *options) {
 		if faultRecoveryTime > 0 {
 			o.faultRecoveryTime = faultRecoveryTime
+		} else {
+			log.Warnf("the specified faultRecoveryTime is less than zero and will be ignored")
 		}
 	}
 }
@@ -253,6 +281,8 @@ func WithMetadata(metadata map[string]string) Option {
 			}
 
 			maps.Copy(o.metadata, metadata)
+		} else {
+			log.Warnf("the specified metadata is empty and will be ignored")
 		}
 	}
 }

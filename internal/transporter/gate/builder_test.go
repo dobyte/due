@@ -12,14 +12,14 @@ import (
 )
 
 func TestBuilder(t *testing.T) {
-	builder := gate.NewBuilder(&gate.Options{
+	builder := gate.NewBuilder(&gate.ClientOptions{
 		ID:                xuuid.UUID(),
 		Kind:              cluster.Node,
 		ConnNum:           10,
 		DialTimeout:       3 * time.Second,
 		DialRetryTimes:    3,
 		WriteTimeout:      1 * time.Second,
-		WriteBufferSize:   1024,
+		WriteQueueSize:    1024,
 		CallTimeout:       3 * time.Second,
 		FaultRecoveryTime: 3 * time.Second,
 	})
@@ -45,14 +45,14 @@ func TestBuilder(t *testing.T) {
 }
 
 func TestBuilder_Fault(t *testing.T) {
-	builder := gate.NewBuilder(&gate.Options{
+	builder := gate.NewBuilder(&gate.ClientOptions{
 		ID:                xuuid.UUID(),
 		Kind:              cluster.Node,
 		ConnNum:           10,
 		DialTimeout:       3 * time.Second,
 		DialRetryTimes:    3,
 		WriteTimeout:      1 * time.Second,
-		WriteBufferSize:   1024,
+		WriteQueueSize:    1024,
 		CallTimeout:       3 * time.Second,
 		FaultRecoveryTime: 3 * time.Second,
 	})

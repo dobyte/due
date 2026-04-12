@@ -33,7 +33,7 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		opts:       opts,
 		sources:    make(map[int64]map[string]string),
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
-		builder: node.NewBuilder(&node.Options{
+		builder: node.NewBuilder(&node.ClientOptions{
 			ID:                opts.ID,
 			Kind:              opts.Kind,
 			ConnNum:           opts.ConnNum,
@@ -41,7 +41,7 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 			DialTimeout:       opts.DialTimeout,
 			DialRetryTimes:    opts.DialRetryTimes,
 			WriteTimeout:      opts.WriteTimeout,
-			WriteBufferSize:   opts.WriteBufferSize,
+			WriteQueueSize:    opts.WriteQueueSize,
 			FaultRecoveryTime: opts.FaultRecoveryTime,
 		}),
 	}

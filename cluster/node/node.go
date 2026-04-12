@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
@@ -344,7 +345,7 @@ func (n *Node) deregisterServiceInstances() {
 	for i := range n.instances {
 		instance := n.instances[i]
 		eg.Go(func() error {
-			tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+			tctx, tcancel := context.WithTimeout(ctx, 3*time.Second)
 			defer tcancel()
 			return n.opts.registry.Deregister(tctx, instance)
 		})
@@ -362,7 +363,7 @@ func (n *Node) doRegisterServiceInstances() error {
 	for i := range n.instances {
 		instance := n.instances[i]
 		eg.Go(func() error {
-			tctx, tcancel := context.WithTimeout(ctx, defaultTimeout)
+			tctx, tcancel := context.WithTimeout(ctx, 3*time.Second)
 			defer tcancel()
 			return n.opts.registry.Register(tctx, instance)
 		})

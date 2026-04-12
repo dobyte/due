@@ -37,7 +37,7 @@ func newConn(cli *Client) *conn {
 	c := &conn{}
 	c.cli = cli
 	c.state.Store(def.ConnClosed)
-	c.queue = make(chan *message, c.cli.opts.WriteBufferSize)
+	c.queue = make(chan *message, c.cli.opts.WriteQueueSize)
 	c.pending = newPending()
 	c.failure = make(chan struct{})
 	c.success = make(chan struct{})
@@ -176,21 +176,23 @@ func (c *conn) send(msg *message) error {
 		}
 	}
 
-	if total := c.total.Add(1); total > int32(c.cli.opts.WriteBufferSize) {
-		ctx, cancel := context.WithTimeout(c.ctx, c.cli.opts.WriteTimeout)
-		defer cancel()
+	if c.cli.opts.WriteTimeout > 0 {
+		if total := c.total.Add(1); total > c.cli.opts.WriteQueueSize {
+			ctx, cancel := context.WithTimeout(c.ctx, c.cli.opts.WriteTimeout)
+			defer cancel()
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case c.queue <- msg:
-			return nil
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case c.queue <- msg:
+				return nil
+			}
 		}
-	} else {
-		c.queue <- msg
-
-		return nil
 	}
+
+	c.queue <- msg
+
+	return nil
 }
 
 // 读取数据

@@ -12,14 +12,14 @@ import (
 )
 
 func TestBuilder(t *testing.T) {
-	builder := node.NewBuilder(&node.Options{
+	builder := node.NewBuilder(&node.ClientOptions{
 		ID:                xuuid.UUID(),
 		Kind:              cluster.Gate,
 		ConnNum:           10,
 		DialTimeout:       3 * time.Second,
 		DialRetryTimes:    3,
 		WriteTimeout:      1 * time.Second,
-		WriteBufferSize:   1024,
+		WriteQueueSize:    1024,
 		CallTimeout:       3 * time.Second,
 		FaultRecoveryTime: 3 * time.Second,
 	})

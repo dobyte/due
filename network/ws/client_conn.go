@@ -106,7 +106,7 @@ func (c *clientConn) Send(msg []byte) (err error) {
 
 		select {
 		case <-ctx.Done():
-			return errors.ErrWriteTimeout
+			return ctx.Err()
 		case c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}:
 		}
 	} else {
@@ -135,7 +135,7 @@ func (c *clientConn) Push(msg []byte) (err error) {
 
 		select {
 		case <-ctx.Done():
-			return errors.ErrWriteTimeout
+			return ctx.Err()
 		case c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}:
 		}
 	} else {

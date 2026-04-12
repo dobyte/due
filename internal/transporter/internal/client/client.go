@@ -21,7 +21,7 @@ type Options struct {
 	DialTimeout       time.Duration // 拨号超时时间
 	DialRetryTimes    int           // 拨号重试次数
 	WriteTimeout      time.Duration // 写超时时间
-	WriteBufferSize   int           // 写缓冲区大小
+	WriteQueueSize    int32         // 写队列大小
 	FaultRecoveryTime time.Duration // 故障恢复时间
 }
 

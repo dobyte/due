@@ -103,7 +103,7 @@ func (c *serverConn) Push(msg []byte) error {
 
 		select {
 		case <-ctx.Done():
-			return errors.ErrWriteTimeout
+			return ctx.Err()
 		case c.chWrite <- ch:
 		}
 	} else {
