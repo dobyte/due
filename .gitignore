@@ -10,6 +10,7 @@ testdata/log/
 # Develop tools
 .vscode
 .idea/
+.qoder
 
 # Go workspace
 go.work
