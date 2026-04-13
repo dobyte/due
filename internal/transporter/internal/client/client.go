@@ -95,22 +95,36 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, err
 	}
 
-	tctx, tcancel := context.WithTimeout(ctx, c.opts.CallTimeout)
-	defer tcancel()
+	if c.opts.CallTimeout > 0 {
+		tctx, tcancel := context.WithTimeout(ctx, c.opts.CallTimeout)
+		defer tcancel()
 
-	select {
-	case <-ctx.Done():
-		conn.delete(msg)
-		return nil, ctx.Err()
-	case <-tctx.Done():
-		conn.delete(msg)
-		return nil, tctx.Err()
-	case res, ok := <-msg.call:
-		if !ok {
-			return nil, errors.ErrConnectionHanged
+		select {
+		case <-ctx.Done():
+			conn.delete(msg)
+			return nil, ctx.Err()
+		case <-tctx.Done():
+			conn.delete(msg)
+			return nil, tctx.Err()
+		case res, ok := <-msg.call:
+			if !ok {
+				return nil, errors.ErrConnectionHanged
+			}
+
+			return res, nil
 		}
+	} else {
+		select {
+		case <-ctx.Done():
+			conn.delete(msg)
+			return nil, ctx.Err()
+		case res, ok := <-msg.call:
+			if !ok {
+				return nil, errors.ErrConnectionHanged
+			}
 
-		return res, nil
+			return res, nil
+		}
 	}
 }
 

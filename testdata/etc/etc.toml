@@ -23,8 +23,8 @@ shutdownMaxWaitTime = "0s"
         expose = false
         # RPC连接数，默认5
         connNum = 5
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
-        callTimeout = "0s"
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        callTimeout = "3s"
         # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         dialTimeout = "3s"
         # RPC拨号重试次数，默认3

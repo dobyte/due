@@ -2,26 +2,24 @@ package client
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"time"
 )
 
 const (
-	defaultName    = "client"        // 默认客户端名称
-	defaultCodec   = "proto"         // 默认编解码器名称
-	defaultTimeout = 3 * time.Second // 默认超时时间
+	defaultName  = "client" // 默认客户端名称
+	defaultCodec = "proto"  // 默认编解码器名称
 )
 
 const (
-	defaultIDKey       = "etc.cluster.client.id"
-	defaultNameKey     = "etc.cluster.client.name"
-	defaultCodecKey    = "etc.cluster.client.codec"
-	defaultTimeoutKey  = "etc.cluster.client.timeout"
-	defaultAutoDialKey = "etc.cluster.client.autoDial"
+	defaultIDKey    = "etc.cluster.client.id"
+	defaultNameKey  = "etc.cluster.client.name"
+	defaultCodecKey = "etc.cluster.client.codec"
 )
 
 type Option func(o *options)
@@ -32,17 +30,12 @@ type options struct {
 	ctx       context.Context  // 上下文
 	codec     encoding.Codec   // 编解码器
 	client    network.Client   // 网络客户端
-	timeout   time.Duration    // RPC调用超时时间
 	encryptor crypto.Encryptor // 消息加密器
 }
 
 func defaultOptions() *options {
-	opts := &options{
-		ctx:     context.Background(),
-		name:    defaultName,
-		codec:   encoding.Invoke(defaultCodec),
-		timeout: defaultTimeout,
-	}
+	opts := &options{}
+	opts.ctx = context.Background()
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -50,16 +43,16 @@ func defaultOptions() *options {
 		opts.id = xuuid.UUID()
 	}
 
-	if name := etc.Get(defaultNameKey).String(); name != "" {
+	if name := etc.Get(defaultNameKey, defaultName).String(); name != "" {
 		opts.name = name
+	} else {
+		opts.name = defaultName
 	}
 
-	if codec := etc.Get(defaultCodecKey).String(); codec != "" {
+	if codec := etc.Get(defaultCodecKey, defaultCodec).String(); codec != "" {
 		opts.codec = encoding.Invoke(codec)
-	}
-
-	if timeout := etc.Get(defaultTimeoutKey).Int64(); timeout > 0 {
-		opts.timeout = time.Duration(timeout) * time.Second
+	} else {
+		opts.codec = encoding.Invoke(defaultCodec)
 	}
 
 	return opts
@@ -67,37 +60,68 @@ func defaultOptions() *options {
 
 // WithID 设置实例ID
 func WithID(id string) Option {
-	return func(o *options) { o.id = id }
+	return func(o *options) {
+		if id != "" {
+			o.id = id
+		} else {
+			log.Warnf("the specified id is empty and will be automatically ignored")
+		}
+	}
 }
 
 // WithName 设置实例名称
 func WithName(name string) Option {
-	return func(o *options) { o.name = name }
+	return func(o *options) {
+		if name != "" {
+			o.name = name
+		} else {
+			log.Warnf("the specified name is empty and will be automatically ignored")
+		}
+	}
 }
 
 // WithCodec 设置编解码器
 func WithCodec(codec encoding.Codec) Option {
-	return func(o *options) { o.codec = codec }
+	return func(o *options) {
+		if codec != nil {
+			o.codec = codec
+		} else {
+			log.Warnf("the specified codec is nil and will be automatically ignored")
+		}
+	}
 }
 
 // WithClient 设置客户端
 func WithClient(client network.Client) Option {
-	return func(o *options) { o.client = client }
+	return func(o *options) {
+		if client != nil {
+			o.client = client
+		} else {
+			log.Warnf("the specified client is nil and will be automatically ignored")
+		}
+	}
 }
 
 // WithContext 设置上下文
 func WithContext(ctx context.Context) Option {
-	return func(o *options) { o.ctx = ctx }
-}
-
-// WithTimeout 设置RPC调用超时时间
-func WithTimeout(timeout time.Duration) Option {
-	return func(o *options) { o.timeout = timeout }
+	return func(o *options) {
+		if ctx != nil {
+			o.ctx = ctx
+		} else {
+			log.Warnf("the specified ctx is nil and will be automatically ignored")
+		}
+	}
 }
 
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
-	return func(o *options) { o.encryptor = encryptor }
+	return func(o *options) {
+		if encryptor != nil {
+			o.encryptor = encryptor
+		} else {
+			log.Warnf("the specified encryptor is nil and will be automatically ignored")
+		}
+	}
 }
 
 type DialOption func(o *dialOptions)
