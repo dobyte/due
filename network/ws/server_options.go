@@ -164,7 +164,7 @@ func WithServerCheckOrigin(checkOrigin CheckOriginFunc) ServerOption {
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) {
 		if maxConnNum > 0 {
-			o.writeQueueSize = maxConnNum
+			o.maxConnNum = maxConnNum
 		} else {
 			log.Warnf("the specified maxConnNum is less than zero and will be ignored")
 		}
