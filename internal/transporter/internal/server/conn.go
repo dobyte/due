@@ -50,17 +50,20 @@ func (c *Conn) Send(buf *buffer.NocopyBuffer) error {
 	}
 
 	if c.server.opts.WriteTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
-		ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
-		defer cancel()
+		if len(c.chWrite) == cap(c.chWrite) {
+			ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
+			defer cancel()
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case c.chWrite <- buf:
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case c.chWrite <- buf:
+				return nil
+			}
 		}
-	} else {
-		c.chWrite <- buf
 	}
+
+	c.chWrite <- buf
 
 	return nil
 }

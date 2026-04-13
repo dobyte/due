@@ -1,9 +1,10 @@
 package ws
 
 import (
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/network"
 	"github.com/gorilla/websocket"
-	"sync/atomic"
 )
 
 type client struct {
@@ -23,9 +24,7 @@ func NewClient(opts ...ClientOption) network.Client {
 		opt(o)
 	}
 
-	return &client{opts: o, dialer: &websocket.Dialer{
-		HandshakeTimeout: o.handshakeTimeout,
-	}}
+	return &client{opts: o, dialer: &websocket.Dialer{HandshakeTimeout: o.dialTimeout}}
 }
 
 // Dial 拨号连接

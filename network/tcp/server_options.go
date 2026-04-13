@@ -4,12 +4,14 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/etc"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
 	defaultServerAddr               = ":3553"
 	defaultServerMaxConnNum         = 5000
-	defaultServerWriteTimeout       = "1s"
+	defaultServerWriteTimeout       = "0s"
 	defaultServerWriteQueueSize     = 512
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
@@ -50,59 +52,120 @@ type serverOptions struct {
 }
 
 func defaultServerOptions() *serverOptions {
-	writeQueueSize := etc.Get(defaultServerWriteQueueSizeKey, defaultServerWriteQueueSize).Int()
+	opts := &serverOptions{}
+	opts.certFile = etc.Get(defaultServerCertFileKey).String()
+	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
 
-	if writeQueueSize <= 0 {
-		writeQueueSize = defaultServerWriteQueueSize
+	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
+		opts.addr = addr
+	} else {
+		opts.addr = defaultServerAddr
 	}
 
-	return &serverOptions{
-		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		certFile:           etc.Get(defaultServerCertFileKey).String(),
-		keyFile:            etc.Get(defaultServerKeyFileKey).String(),
-		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		writeTimeout:       etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(),
-		writeQueueSize:     writeQueueSize,
-		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
-		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
-		authorizeTimeout:   etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(),
+	if maxConnNum := etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(); maxConnNum > 0 {
+		opts.maxConnNum = maxConnNum
+	} else {
+		opts.maxConnNum = defaultServerMaxConnNum
 	}
+
+	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
+		opts.writeTimeout = writeTimeout
+	} else {
+		opts.writeTimeout = xconv.Duration(defaultServerWriteTimeout)
+	}
+
+	if writeQueueSize := etc.Get(defaultServerWriteQueueSizeKey, defaultServerWriteQueueSize).Int(); writeQueueSize > 0 {
+		opts.writeQueueSize = writeQueueSize
+	} else {
+		opts.writeQueueSize = defaultServerWriteQueueSize
+	}
+
+	if heartbeatInterval := etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(); heartbeatInterval >= 0 {
+		opts.heartbeatInterval = heartbeatInterval
+	} else {
+		opts.heartbeatInterval = xconv.Duration(defaultServerHeartbeatInterval)
+	}
+
+	switch heartbeatMechanism := HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()); heartbeatMechanism {
+	case RespHeartbeat, TickHeartbeat:
+		opts.heartbeatMechanism = heartbeatMechanism
+	default:
+		opts.heartbeatMechanism = defaultServerHeartbeatMechanism
+	}
+
+	if authorizeTimeout := etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(); authorizeTimeout >= 0 {
+		opts.authorizeTimeout = authorizeTimeout
+	} else {
+		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
+	}
+
+	return opts
 }
 
-// WithServerListenAddr 设置监听地址
-func WithServerListenAddr(addr string) ServerOption {
-	return func(o *serverOptions) { o.addr = addr }
+// WithServerAddr 设置监听地址
+func WithServerAddr(addr string) ServerOption {
+	return func(o *serverOptions) {
+		if addr != "" {
+			o.addr = addr
+		} else {
+			log.Warnf("the specified addr is empty and will be ignored")
+		}
+	}
 }
 
 // WithServerCredentials 设置服务器证书和秘钥
 func WithServerCredentials(certFile, keyFile string) ServerOption {
-	return func(o *serverOptions) { o.certFile, o.keyFile = certFile, keyFile }
+	return func(o *serverOptions) {
+		if certFile != "" && keyFile != "" {
+			o.certFile, o.keyFile = certFile, keyFile
+		} else {
+			log.Warnf("the specified certFile or keyFile is empty and will be ignored")
+		}
+	}
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
-	return func(o *serverOptions) { o.maxConnNum = maxConnNum }
+	return func(o *serverOptions) {
+		if maxConnNum > 0 {
+			o.writeQueueSize = maxConnNum
+		} else {
+			log.Warnf("the specified maxConnNum is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerWriteTimeout 设置写超时时间
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
-	return func(o *serverOptions) { o.writeTimeout = writeTimeout }
+	return func(o *serverOptions) {
+		if writeTimeout >= 0 {
+			o.writeTimeout = writeTimeout
+		} else {
+			log.Warnf("the specified writeTimeout is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerWriteQueueSize 设置写入队列大小
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
-		if writeQueueSize <= 0 {
-			o.writeQueueSize = defaultServerWriteQueueSize
-		} else {
+		if writeQueueSize > 0 {
 			o.writeQueueSize = writeQueueSize
+		} else {
+			log.Warnf("the specified writeQueueSize is less than zero and will be ignored")
 		}
 	}
 }
 
 // WithServerHeartbeatInterval 设置心跳检测间隔时间
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
-	return func(o *serverOptions) { o.heartbeatInterval = heartbeatInterval }
+	return func(o *serverOptions) {
+		if heartbeatInterval >= 0 {
+			o.heartbeatInterval = heartbeatInterval
+		} else {
+			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerHeartbeatMechanism 设置心跳机制
@@ -112,5 +175,11 @@ func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerO
 
 // WithServerAuthorizeTimeout 设置授权超时时间
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
-	return func(o *serverOptions) { o.authorizeTimeout = authorizeTimeout }
+	return func(o *serverOptions) {
+		if authorizeTimeout >= 0 {
+			o.authorizeTimeout = authorizeTimeout
+		} else {
+			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
+		}
+	}
 }

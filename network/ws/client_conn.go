@@ -18,32 +18,34 @@ import (
 )
 
 type clientConn struct {
-	rw                sync.RWMutex    // 锁
-	id                int64           // 连接ID
-	uid               atomic.Int64    // 用户ID
-	attr              *attr           // 连接属性
-	conn              *websocket.Conn // TCP源连接
-	state             atomic.Int32    // 连接状态
-	client            *client         // 客户端
-	chLowWrite        chan chWrite    // 低级队列
-	chHighWrite       chan chWrite    // 优先队列
-	lastHeartbeatTime atomic.Int64    // 上次心跳时间
-	done              chan struct{}   // 写入完成信号
-	close             chan struct{}   // 关闭信号
+	rw                    sync.RWMutex    // 锁
+	id                    int64           // 连接ID
+	uid                   atomic.Int64    // 用户ID
+	attr                  *attr           // 连接属性
+	conn                  *websocket.Conn // TCP源连接
+	state                 atomic.Int32    // 连接状态
+	client                *client         // 客户端
+	taskPool              sync.Pool       // 任务对象池
+	lowPriorityTaskQueue  chan *task      // 低优先级队列
+	highPriorityTaskQueue chan *task      // 高优先级队列
+	lastHeartbeatTime     atomic.Int64    // 上次心跳时间
+	done                  chan struct{}   // 写入完成信号
+	close                 chan struct{}   // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
 
 func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
 	c := &clientConn{
-		id:          id,
-		attr:        &attr{},
-		conn:        conn,
-		client:      client,
-		chLowWrite:  make(chan chWrite, client.opts.writeQueueSize),
-		chHighWrite: make(chan chWrite, client.opts.writeQueueSize),
-		done:        make(chan struct{}),
-		close:       make(chan struct{}),
+		id:                    id,
+		attr:                  &attr{},
+		conn:                  conn,
+		client:                client,
+		taskPool:              sync.Pool{New: func() any { return &task{} }},
+		lowPriorityTaskQueue:  make(chan *task, client.opts.writeQueueSize),
+		highPriorityTaskQueue: make(chan *task, client.opts.writeQueueSize),
+		done:                  make(chan struct{}),
+		close:                 make(chan struct{}),
 	}
 
 	c.state.Store(int32(network.ConnOpened))
@@ -100,20 +102,7 @@ func (c *clientConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	if c.client.opts.writeTimeout > 0 && len(c.chHighWrite) == cap(c.chHighWrite) {
-		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
-		defer cancel()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}:
-		}
-	} else {
-		c.chHighWrite <- chWrite{typ: dataPacket, msg: msg}
-	}
-
-	return nil
+	return c.doWriteToQueue(c.highPriorityTaskQueue, dataPacket, msg)
 }
 
 // Push 发送消息（异步）
@@ -129,20 +118,7 @@ func (c *clientConn) Push(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	if c.client.opts.writeTimeout > 0 && len(c.chLowWrite) == cap(c.chLowWrite) {
-		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
-		defer cancel()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}:
-		}
-	} else {
-		c.chLowWrite <- chWrite{typ: dataPacket, msg: msg}
-	}
-
-	return nil
+	return c.doWriteToQueue(c.lowPriorityTaskQueue, dataPacket, msg)
 }
 
 // State 获取连接状态
@@ -236,7 +212,7 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.chLowWrite <- chWrite{typ: closeSig}
+	c.lowPriorityTaskQueue <- &task{typ: closeSig}
 	c.rw.RUnlock()
 
 	<-c.done
@@ -268,8 +244,8 @@ func (c *clientConn) doClose() error {
 		return errors.ErrConnectionClosed
 	}
 
-	close(c.chLowWrite)
-	close(c.chHighWrite)
+	close(c.lowPriorityTaskQueue)
+	close(c.highPriorityTaskQueue)
 	close(c.close)
 	close(c.done)
 	conn := c.conn
@@ -362,12 +338,12 @@ func (c *clientConn) write() {
 
 	for {
 		select {
-		case r, ok := <-c.chHighWrite:
+		case t, ok := <-c.highPriorityTaskQueue:
 			if !ok {
 				return
 			}
 
-			if !c.doWrite(conn, r) {
+			if !c.doWrite(conn, t) {
 				return
 			}
 		case t, ok := <-ticker.C:
@@ -380,20 +356,20 @@ func (c *clientConn) write() {
 			}
 		default:
 			select {
-			case r, ok := <-c.chHighWrite:
+			case t, ok := <-c.highPriorityTaskQueue:
 				if !ok {
 					return
 				}
 
-				if !c.doWrite(conn, r) {
+				if !c.doWrite(conn, t) {
 					return
 				}
-			case r, ok := <-c.chLowWrite:
+			case t, ok := <-c.lowPriorityTaskQueue:
 				if !ok {
 					return
 				}
 
-				if !c.doWrite(conn, r) {
+				if !c.doWrite(conn, t) {
 					return
 				}
 			case t, ok := <-ticker.C:
@@ -410,8 +386,10 @@ func (c *clientConn) write() {
 }
 
 // 执行写入操作
-func (c *clientConn) doWrite(conn *websocket.Conn, r chWrite) bool {
-	if r.typ == closeSig {
+func (c *clientConn) doWrite(conn *websocket.Conn, t *task) bool {
+	defer c.doRecycleToPool(t)
+
+	if t.typ == closeSig {
 		c.rw.RLock()
 		if c.conn != nil {
 			c.done <- struct{}{}
@@ -424,16 +402,16 @@ func (c *clientConn) doWrite(conn *websocket.Conn, r chWrite) bool {
 		return false
 	}
 
-	if r.typ == heartbeatPacket {
+	if t.typ == heartbeatPacket {
 		if msg, err := packet.PackHeartbeat(); err != nil {
 			log.Errorf("pack heartbeat message error: %v", err)
 			return true
 		} else {
-			r.msg = msg
+			t.msg = msg
 		}
 	}
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, r.msg); err != nil {
+	if err := conn.WriteMessage(websocket.BinaryMessage, t.msg); err != nil {
 		if !errors.Is(err, net.ErrClosed) {
 			if _, ok := err.(*websocket.CloseError); !ok {
 				log.Errorf("write message error: %v", err)
@@ -473,4 +451,36 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 // 是否已关闭
 func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
+}
+
+// 回收任务到对象池
+func (c *clientConn) doRecycleToPool(t *task) {
+	t.msg = nil
+	c.taskPool.Put(t)
+}
+
+// 写入任务到队列
+func (c *clientConn) doWriteToQueue(queue chan *task, typ int8, msg ...[]byte) error {
+	t := c.taskPool.Get().(*task)
+	t.typ = typ
+	if len(msg) > 0 {
+		t.msg = msg[0]
+	}
+
+	if c.client.opts.writeTimeout > 0 && len(queue) == cap(queue) {
+		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			c.doRecycleToPool(t)
+			return ctx.Err()
+		case queue <- t:
+			return nil
+		}
+	}
+
+	queue <- t
+
+	return nil
 }

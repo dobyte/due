@@ -52,13 +52,13 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 			return nil, err
 		}
 
-		dialer := &net.Dialer{Timeout: c.opts.timeout}
+		dialer := &net.Dialer{Timeout: c.opts.dialTimeout}
 
 		if conn, err = tls.DialWithDialer(dialer, tcpAddr.Network(), tcpAddr.String(), config); err != nil {
 			return nil, err
 		}
 	} else {
-		if conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.timeout); err != nil {
+		if conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout); err != nil {
 			return nil, err
 		}
 	}

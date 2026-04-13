@@ -21,11 +21,11 @@ const (
 	defaultCodec             = "proto" // 默认编解码器名称
 	defaultWeight            = 1       // 默认权重
 	defaultAddr              = ":0"    // 连接器监听地址
-	defaultConnNum           = 10      // 默认连接数
+	defaultConnNum           = 5       // 默认连接数
 	defaultCallTimeout       = "3s"    // 默认调用超时时间
 	defaultDialTimeout       = "3s"    // 默认拨号超时时间
 	defaultDialRetryTimes    = 3       // 默认拨号重试次数
-	defaultWriteTimeout      = "1s"    // 默认写入超时时间
+	defaultWriteTimeout      = "0s"    // 默认写入超时时间
 	defaultWriteQueueSize    = 2048    // 默认写入队列大小
 	defaultFaultRecoveryTime = "5s"    // 默认故障恢复时间
 )
@@ -63,15 +63,15 @@ type options struct {
 	encryptor         crypto.Encryptor      // 消息加密器
 	transporter       transport.Transporter // 消息传输器
 	metadata          map[string]string     // 元数据
-	addr              string                // 监听地址
-	expose            bool                  // 是否将内部通信地址暴露到公网
-	connNum           int                   // 拨号连接数
-	callTimeout       time.Duration         // RPC调用超时时间
-	dialTimeout       time.Duration         // 拨号超时时间
-	dialRetryTimes    int                   // 拨号重试次数
-	writeTimeout      time.Duration         // 写入超时时间
-	writeQueueSize    int32                 // 写入队列大小
-	faultRecoveryTime time.Duration         // 故障恢复时间
+	addr              string                // 内部RPC监听地址
+	expose            bool                  // 内部RPC是否暴露到公网
+	connNum           int                   // 内部RPC拨号连接数
+	callTimeout       time.Duration         // 内部RPC调用超时时间
+	dialTimeout       time.Duration         // 内部RPC拨号超时时间
+	dialRetryTimes    int                   // 内部RPC拨号重试次数
+	writeTimeout      time.Duration         // 内部RPC写入超时时间
+	writeQueueSize    int32                 // 内部RPC写入队列大小
+	faultRecoveryTime time.Duration         // 内部RPC故障恢复时间
 }
 
 func defaultOptions() *options {
@@ -116,25 +116,25 @@ func defaultOptions() *options {
 		opts.connNum = defaultConnNum
 	}
 
-	if callTimeout := etc.Get(defaultCallTimeoutKey, defaultCallTimeout).Duration(); callTimeout > 0 {
+	if callTimeout := etc.Get(defaultCallTimeoutKey, defaultCallTimeout).Duration(); callTimeout >= 0 {
 		opts.callTimeout = callTimeout
 	} else {
 		opts.callTimeout = xconv.Duration(defaultCallTimeout)
 	}
 
-	if dialTimeout := etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(); dialTimeout > 0 {
+	if dialTimeout := etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(); dialTimeout >= 0 {
 		opts.dialTimeout = dialTimeout
 	} else {
 		opts.dialTimeout = xconv.Duration(defaultDialTimeout)
 	}
 
-	if dialRetryTimes := etc.Get(defaultDialRetryTimesKey, defaultDialRetryTimes).Int(); dialRetryTimes > 0 {
+	if dialRetryTimes := etc.Get(defaultDialRetryTimesKey, defaultDialRetryTimes).Int(); dialRetryTimes >= 0 {
 		opts.dialRetryTimes = dialRetryTimes
 	} else {
 		opts.dialRetryTimes = defaultDialRetryTimes
 	}
 
-	if writeTimeout := etc.Get(defaultWriteTimeoutKey, defaultWriteTimeout).Duration(); writeTimeout > 0 {
+	if writeTimeout := etc.Get(defaultWriteTimeoutKey, defaultWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
 	} else {
 		opts.writeTimeout = xconv.Duration(defaultWriteTimeout)
@@ -146,7 +146,7 @@ func defaultOptions() *options {
 		opts.writeQueueSize = defaultWriteQueueSize
 	}
 
-	if faultRecoveryTime := etc.Get(defaultFaultRecoveryTimeKey, defaultFaultRecoveryTime).Duration(); faultRecoveryTime > 0 {
+	if faultRecoveryTime := etc.Get(defaultFaultRecoveryTimeKey, defaultFaultRecoveryTime).Duration(); faultRecoveryTime >= 0 {
 		opts.faultRecoveryTime = faultRecoveryTime
 	} else {
 		opts.faultRecoveryTime = xconv.Duration(defaultFaultRecoveryTime)
@@ -221,27 +221,57 @@ func WithWeight(weight int) Option {
 
 // WithContext 设置上下文
 func WithContext(ctx context.Context) Option {
-	return func(o *options) { o.ctx = ctx }
+	return func(o *options) {
+		if ctx != nil {
+			o.ctx = ctx
+		} else {
+			log.Warnf("the specified ctx is nil and will be ignored")
+		}
+	}
 }
 
 // WithLocator 设置定位器
 func WithLocator(locator locate.Locator) Option {
-	return func(o *options) { o.locator = locator }
+	return func(o *options) {
+		if locator != nil {
+			o.locator = locator
+		} else {
+			log.Warnf("the specified locator is nil and will be ignored")
+		}
+	}
 }
 
 // WithRegistry 设置服务注册器
 func WithRegistry(r registry.Registry) Option {
-	return func(o *options) { o.registry = r }
+	return func(o *options) {
+		if r != nil {
+			o.registry = r
+		} else {
+			log.Warnf("the specified registry is nil and will be ignored")
+		}
+	}
 }
 
 // WithEncryptor 设置消息加密器
 func WithEncryptor(encryptor crypto.Encryptor) Option {
-	return func(o *options) { o.encryptor = encryptor }
+	return func(o *options) {
+		if encryptor != nil {
+			o.encryptor = encryptor
+		} else {
+			log.Warnf("the specified encryptor is nil and will be ignored")
+		}
+	}
 }
 
 // WithTransporter 设置消息传输器
 func WithTransporter(transporter transport.Transporter) Option {
-	return func(o *options) { o.transporter = transporter }
+	return func(o *options) {
+		if transporter != nil {
+			o.transporter = transporter
+		} else {
+			log.Warnf("the specified transporter is nil and will be ignored")
+		}
+	}
 }
 
 // WithMetadata 设置元数据
@@ -273,7 +303,7 @@ func WithConnNum(connNum int) Option {
 // WithCallTimeout 设置RPC调用超时时间
 func WithCallTimeout(callTimeout time.Duration) Option {
 	return func(o *options) {
-		if callTimeout > 0 {
+		if callTimeout >= 0 {
 			o.callTimeout = callTimeout
 		} else {
 			log.Warnf("the specified callTimeout is less than zero and will be ignored")
@@ -284,7 +314,7 @@ func WithCallTimeout(callTimeout time.Duration) Option {
 // WithDialTimeout 设置拨号超时时间
 func WithDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) {
-		if dialTimeout > 0 {
+		if dialTimeout >= 0 {
 			o.dialTimeout = dialTimeout
 		} else {
 			log.Warnf("the specified dialTimeout is less than zero and will be ignored")
@@ -295,7 +325,7 @@ func WithDialTimeout(dialTimeout time.Duration) Option {
 // WithDialRetryTimes 设置拨号重试次数
 func WithDialRetryTimes(dialRetryTimes int) Option {
 	return func(o *options) {
-		if dialRetryTimes > 0 {
+		if dialRetryTimes >= 0 {
 			o.dialRetryTimes = dialRetryTimes
 		} else {
 			log.Warnf("the specified dialRetryTimes is less than zero and will be ignored")
@@ -306,7 +336,7 @@ func WithDialRetryTimes(dialRetryTimes int) Option {
 // WithWriteTimeout 设置写入超时时间
 func WithWriteTimeout(writeTimeout time.Duration) Option {
 	return func(o *options) {
-		if writeTimeout > 0 {
+		if writeTimeout >= 0 {
 			o.writeTimeout = writeTimeout
 		} else {
 			log.Warnf("the specified writeTimeout is less than zero and will be ignored")
@@ -328,7 +358,7 @@ func WithWriteQueueSize(writeQueueSize int32) Option {
 // WithFaultRecoveryTime 设置故障恢复时间
 func WithFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 	return func(o *options) {
-		if faultRecoveryTime > 0 {
+		if faultRecoveryTime >= 0 {
 			o.faultRecoveryTime = faultRecoveryTime
 		} else {
 			log.Warnf("the specified faultRecoveryTime is less than zero and will be ignored")
