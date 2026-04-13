@@ -21,16 +21,16 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # 是否将内建RPC通信地址暴露到公网。默认为false
         expose = false
-        # RPC连接数，默认10
-        connNum = 10
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        callTimeout = "3s"
+        # RPC连接数，默认5
+        connNum = 5
+        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
+        callTimeout = "0s"
         # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         dialTimeout = "3s"
         # RPC拨号重试次数，默认3
         dialRetryTimes = 3
-        # RPC写入队列超时时间，默认1s
-        writeTimeout = "1s"
+        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
+        writeTimeout = "0s"
         # RPC写入队列大小，默认2048
         writeQueueSize = 2048
         # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
@@ -53,16 +53,16 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # 是否将内建RPC通信地址暴露到公网。默认为false
         expose = false
-        # RPC连接数，默认10
-        connNum = 10
+        # RPC连接数，默认5
+        connNum = 5
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         callTimeout = "3s"
         # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         dialTimeout = "3s"
         # RPC拨号重试次数，默认3
         dialRetryTimes = 3
-        # RPC写入队列超时时间，默认1s
-        writeTimeout = "1s"
+        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
+        writeTimeout = "0s"
         # RPC写入队列大小，默认2048
         writeQueueSize = 2048
         # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
@@ -81,16 +81,16 @@ shutdownMaxWaitTime = "0s"
         expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
-        # RPC连接数，默认10
-        connNum = 10
+        # RPC连接数，默认5
+        connNum = 5
         # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         callTimeout = "3s"
         # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         dialTimeout = "3s"
         # RPC拨号重试次数，默认3
         dialRetryTimes = 3
-        # RPC写入队列超时时间，默认1s
-        writeTimeout = "1s"
+        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
+        writeTimeout = "0s"
         # RPC写入队列大小，默认2048
         writeQueueSize = 2048
         # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
@@ -503,20 +503,18 @@ shutdownMaxWaitTime = "0s"
             addr = ":3553"
             # 客户端连接路径
             path = "/"
-            # 服务器最大连接数
-            maxConnNum = 5000
             # 秘钥文件
             keyFile = ""
             # 证书文件
             certFile = ""
             # 跨域检测，空数组时不允许任何连接升级成websocket，未设置此参数时允许所有的链接升级成websocket
             origins = ["*"]
+            # 服务器最大连接数
+            maxConnNum = 5000
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024
             writeQueueSize = 1024
-            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-            handshakeTimeout = "10s"
             # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
@@ -527,12 +525,12 @@ shutdownMaxWaitTime = "0s"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024
             writeQueueSize = 1024
-            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-            handshakeTimeout = "10s"
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
     # tcp网络模块
@@ -561,12 +559,12 @@ shutdownMaxWaitTime = "0s"
         [network.tcp.client]
             # 拨号地址
             addr = "127.0.0.1:3553"
-            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
-            timeout = "5s"
             # CA证书文件
             caFile = ""
             # 证书域名
             serverName = ""
+            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024

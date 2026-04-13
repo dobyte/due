@@ -7,7 +7,7 @@ const (
 	dataPacket             // 数据包
 )
 
-type chWrite struct {
+type task struct {
 	typ int8
 	msg []byte
 }

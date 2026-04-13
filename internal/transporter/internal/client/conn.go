@@ -144,7 +144,7 @@ func (c *conn) handshake(conn net.Conn) error {
 		buf.Release()
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, c.cli.opts.CallTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, 3*time.Second)
 	defer cancel()
 
 	select {
@@ -241,7 +241,9 @@ func (c *conn) write(conn net.Conn) {
 				return
 			}
 
-			c.total.Add(-1)
+			if c.cli.opts.WriteTimeout > 0 {
+				c.total.Add(-1)
+			}
 
 			if ok = c.doWrite(conn, msg); !ok {
 				return

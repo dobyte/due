@@ -24,6 +24,7 @@ func newProxy(gate *Gate) *proxy {
 		Registry:          gate.opts.registry,
 		Dispatch:          gate.opts.dispatch,
 		ConnNum:           gate.opts.connNum,
+		CallTimeout:       gate.opts.callTimeout,
 		DialTimeout:       gate.opts.dialTimeout,
 		DialRetryTimes:    gate.opts.dialRetryTimes,
 		WriteTimeout:      gate.opts.writeTimeout,

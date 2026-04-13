@@ -28,8 +28,8 @@ type serverConnMgr struct {
 func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.pool = sync.Pool{New: func() any { return &serverConn{} }}
-	cm.partitions = make([]*partition, 100)
+	cm.pool = sync.Pool{New: func() any { return &serverConn{taskPool: sync.Pool{New: func() any { return &task{} }}} }}
+	cm.partitions = make([]*partition, 10)
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[*websocket.Conn]*serverConn)}
