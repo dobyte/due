@@ -1,6 +1,8 @@
 package http
 
 import (
+	"reflect"
+
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -209,12 +211,18 @@ func adaptHandlers(handlers []any) []any {
 	adaptedHandlers := make([]any, 0, len(handlers))
 
 	for i := range handlers {
-		if h, ok := handlers[i].(Handler); ok {
+		handler := handlers[i]
+
+		if reflect.ValueOf(handler).IsNil() {
+			continue
+		}
+
+		if h, ok := handler.(Handler); ok {
 			adaptedHandlers = append(adaptedHandlers, func(ctx fiber.Ctx) error {
 				return h(ctx.(Context))
 			})
-		} else if h != nil {
-			adaptedHandlers = append(adaptedHandlers, h)
+		} else {
+			adaptedHandlers = append(adaptedHandlers, handler)
 		}
 	}
 
