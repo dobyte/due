@@ -3,11 +3,12 @@ package redis_test
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/dobyte/due/locate/redis/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/utils/xuuid"
-	"testing"
-	"time"
 )
 
 var locator = redis.NewLocator(
@@ -83,9 +84,8 @@ func TestLocator_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			events, err := watcher1.Next()
-			if err != nil {
-				t.Errorf("goroutine 1: %v", err)
+			events, ok := <-watcher1.Next()
+			if !ok {
 				return
 			}
 
@@ -99,9 +99,8 @@ func TestLocator_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			events, err := watcher2.Next()
-			if err != nil {
-				t.Errorf("goroutine 2: %v", err)
+			events, ok := <-watcher2.Next()
+			if !ok {
 				return
 			}
 

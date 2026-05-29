@@ -10,6 +10,9 @@ package nacos_test
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/dobyte/due/registry/nacos/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/net"
@@ -17,8 +20,6 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"golang.org/x/sync/errgroup"
-	"testing"
-	"time"
 )
 
 const (
@@ -27,12 +28,12 @@ const (
 )
 
 var reg = nacos.NewRegistry(
-//nacos.WithUrls("http://192.168.2.54:8850/nacos"),
-//nacos.WithNamespaceId("nacos-test"),
+// nacos.WithUrls("http://192.168.2.54:8850/nacos"),
+// nacos.WithNamespaceId("nacos-test"),
 )
 
 func TestRegistry_Register1(t *testing.T) {
-	host, err := net.ExternalIP()
+	host, err := net.PublicIP()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestRegistry_Register1(t *testing.T) {
 }
 
 func TestRegistry_Register2(t *testing.T) {
-	host, err := net.ExternalIP()
+	host, err := net.PublicIP()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,9 +119,8 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, err := watcher1.Next()
-			if err != nil {
-				t.Errorf("goroutine 1: %v", err)
+			services, ok := <-watcher1.Next()
+			if !ok {
 				return
 			}
 
@@ -132,9 +132,8 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, err := watcher2.Next()
-			if err != nil {
-				t.Errorf("goroutine 2: %v", err)
+			services, ok := <-watcher2.Next()
+			if !ok {
 				return
 			}
 
@@ -233,22 +232,19 @@ func (n *node) watch() {
 			select {
 			case <-n.ctx.Done():
 				return
-			default:
-				// exec watch
+			case services, ok := <-watcher.Next():
+				if !ok {
+					return
+				}
+
+				fmt.Printf("node: %v services: %v\n", n.id, len(services))
+
+				for _, service := range services {
+					fmt.Printf("service id: %v\n", service.ID)
+				}
+
+				fmt.Println()
 			}
-
-			services, err := watcher.Next()
-			if err != nil {
-				continue
-			}
-
-			fmt.Printf("node: %v services: %v\n", n.id, len(services))
-
-			for _, service := range services {
-				fmt.Printf("service id: %v\n", service.ID)
-			}
-
-			fmt.Println()
 		}
 	}()
 }

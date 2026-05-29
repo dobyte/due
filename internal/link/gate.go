@@ -823,23 +823,20 @@ func (l *GateLinker) WatchUserLocate() {
 			select {
 			case <-l.ctx.Done():
 				return
-			default:
-				// exec watch
-			}
+			case events, ok := <-watcher.Next():
+				if !ok {
+					return
+				}
 
-			events, err := watcher.Next()
-			if err != nil {
-				continue
-			}
-
-			for _, event := range events {
-				switch event.Type {
-				case locate.BindGate:
-					l.sources.Store(event.UID, event.InsID)
-				case locate.UnbindGate:
-					l.sources.Delete(event.UID)
-				default:
-					// ignore
+				for _, event := range events {
+					switch event.Type {
+					case locate.BindGate:
+						l.sources.Store(event.UID, event.InsID)
+					case locate.UnbindGate:
+						l.sources.Delete(event.UID)
+					default:
+						// ignore
+					}
 				}
 			}
 		}
@@ -861,16 +858,13 @@ func (l *GateLinker) WatchClusterInstance() {
 			select {
 			case <-l.ctx.Done():
 				return
-			default:
-				// exec watch
-			}
+			case services, ok := <-watcher.Next():
+				if !ok {
+					return
+				}
 
-			services, err := watcher.Next()
-			if err != nil {
-				continue
+				l.dispatcher.ReplaceServices(services...)
 			}
-
-			l.dispatcher.ReplaceServices(services...)
 		}
 	}()
 }
