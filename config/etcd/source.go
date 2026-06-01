@@ -3,12 +3,13 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
-	"go.etcd.io/etcd/client/v3"
-	"path/filepath"
-	"strings"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const Name = "etcd"
@@ -34,6 +35,8 @@ func NewSource(opts ...Option) config.Source {
 		o.client, s.err = clientv3.New(clientv3.Config{
 			Endpoints:   o.addrs,
 			DialTimeout: o.dialTimeout,
+			Username:    o.username,
+			Password:    o.password,
 		})
 	}
 
