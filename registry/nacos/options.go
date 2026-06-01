@@ -9,41 +9,39 @@ import (
 )
 
 const (
-	defaultUrl             = "http://127.0.0.1:8848/nacos"
-	defaultClusterName     = "DEFAULT"
-	defaultGroupName       = "DEFAULT_GROUP"
-	defaultTimeout         = "3s"
-	defaultNamespaceId     = ""
-	defaultEndpoint        = ""
-	defaultRegionId        = ""
-	defaultAccessKey       = ""
-	defaultSecretKey       = ""
-	defaultOpenKMS         = false
-	defaultCacheDir        = "./run/nacos/naming/cache"
-	defaultUsername        = ""
-	defaultPassword        = ""
-	defaultLogDir          = "./run/nacos/naming/log"
-	defaultLogLevel        = "info"
-	defaultRefreshInterval = "0s"
+	defaultUrl         = "http://127.0.0.1:8848/nacos"
+	defaultClusterName = "DEFAULT"
+	defaultGroupName   = "DEFAULT_GROUP"
+	defaultTimeout     = "3s"
+	defaultNamespaceId = ""
+	defaultEndpoint    = ""
+	defaultRegionId    = ""
+	defaultAccessKey   = ""
+	defaultSecretKey   = ""
+	defaultOpenKMS     = false
+	defaultCacheDir    = "./run/nacos/naming/cache"
+	defaultUsername    = ""
+	defaultPassword    = ""
+	defaultLogDir      = "./run/nacos/naming/log"
+	defaultLogLevel    = "info"
 )
 
 const (
-	defaultUrlsKey            = "etc.registry.nacos.urls"
-	defaultClusterNameKey     = "etc.registry.nacos.clusterName"
-	defaultGroupNameKey       = "etc.registry.nacos.groupName"
-	defaultTimeoutKey         = "etc.registry.nacos.timeout"
-	defaultNamespaceIdKey     = "etc.registry.nacos.namespaceId"
-	defaultEndpointKey        = "etc.registry.nacos.endpoint"
-	defaultRegionIdKey        = "etc.registry.nacos.regionId"
-	defaultAccessKeyKey       = "etc.registry.nacos.accessKey"
-	defaultSecretKeyKey       = "etc.registry.nacos.secretKey"
-	defaultOpenKMSKey         = "etc.registry.nacos.openKMS"
-	defaultCacheDirKey        = "etc.registry.nacos.cacheDir"
-	defaultUsernameKey        = "etc.registry.nacos.username"
-	defaultPasswordKey        = "etc.registry.nacos.password"
-	defaultLogDirKey          = "etc.registry.nacos.logDir"
-	defaultLogLevelKey        = "etc.registry.nacos.logLevel"
-	defaultRefreshIntervalKey = "etc.registry.nacos.refreshInterval"
+	defaultUrlsKey        = "etc.registry.nacos.urls"
+	defaultClusterNameKey = "etc.registry.nacos.clusterName"
+	defaultGroupNameKey   = "etc.registry.nacos.groupName"
+	defaultTimeoutKey     = "etc.registry.nacos.timeout"
+	defaultNamespaceIdKey = "etc.registry.nacos.namespaceId"
+	defaultEndpointKey    = "etc.registry.nacos.endpoint"
+	defaultRegionIdKey    = "etc.registry.nacos.regionId"
+	defaultAccessKeyKey   = "etc.registry.nacos.accessKey"
+	defaultSecretKeyKey   = "etc.registry.nacos.secretKey"
+	defaultOpenKMSKey     = "etc.registry.nacos.openKMS"
+	defaultCacheDirKey    = "etc.registry.nacos.cacheDir"
+	defaultUsernameKey    = "etc.registry.nacos.username"
+	defaultPasswordKey    = "etc.registry.nacos.password"
+	defaultLogDirKey      = "etc.registry.nacos.logDir"
+	defaultLogLevelKey    = "etc.registry.nacos.logLevel"
 )
 
 type Option func(o *options)
@@ -117,31 +115,26 @@ type options struct {
 	// 日志输出级别
 	// 默认为info
 	logLevel string
-
-	// 自动刷新服务实例的间隔时间
-	// 默认为0，不自动刷新服务实例
-	refreshInterval time.Duration
 }
 
 func defaultOptions() *options {
 	return &options{
-		ctx:             context.Background(),
-		urls:            etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
-		clusterName:     etc.Get(defaultClusterNameKey, defaultClusterName).String(),
-		groupName:       etc.Get(defaultGroupNameKey, defaultGroupName).String(),
-		timeout:         etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
-		namespaceId:     etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
-		endpoint:        etc.Get(defaultEndpointKey, defaultEndpoint).String(),
-		regionId:        etc.Get(defaultRegionIdKey, defaultRegionId).String(),
-		accessKey:       etc.Get(defaultAccessKeyKey, defaultAccessKey).String(),
-		secretKey:       etc.Get(defaultSecretKeyKey, defaultSecretKey).String(),
-		openKMS:         etc.Get(defaultOpenKMSKey, defaultOpenKMS).Bool(),
-		cacheDir:        etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
-		username:        etc.Get(defaultUsernameKey, defaultUsername).String(),
-		password:        etc.Get(defaultPasswordKey, defaultPassword).String(),
-		logDir:          etc.Get(defaultLogDirKey, defaultLogDir).String(),
-		logLevel:        etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
-		refreshInterval: etc.Get(defaultRefreshIntervalKey, defaultRefreshInterval).Duration(),
+		ctx:         context.Background(),
+		urls:        etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
+		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
+		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
+		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		namespaceId: etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
+		endpoint:    etc.Get(defaultEndpointKey, defaultEndpoint).String(),
+		regionId:    etc.Get(defaultRegionIdKey, defaultRegionId).String(),
+		accessKey:   etc.Get(defaultAccessKeyKey, defaultAccessKey).String(),
+		secretKey:   etc.Get(defaultSecretKeyKey, defaultSecretKey).String(),
+		openKMS:     etc.Get(defaultOpenKMSKey, defaultOpenKMS).Bool(),
+		cacheDir:    etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
+		username:    etc.Get(defaultUsernameKey, defaultUsername).String(),
+		password:    etc.Get(defaultPasswordKey, defaultPassword).String(),
+		logDir:      etc.Get(defaultLogDirKey, defaultLogDir).String(),
+		logLevel:    etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
 	}
 }
 
@@ -228,9 +221,4 @@ func WithLogDir(logDir string) Option {
 // WithLogLevel 设置日志输出级别
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) { o.logLevel = logLevel }
-}
-
-// WithRefreshInterval 设置自动刷新服务实例的间隔时间
-func WithRefreshInterval(refreshInterval time.Duration) Option {
-	return func(o *options) { o.refreshInterval = refreshInterval }
 }

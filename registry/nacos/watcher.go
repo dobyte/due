@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -103,33 +102,6 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 
 	if err = wm.subscribe(); err != nil {
 		return nil, err
-	}
-
-	if wm.registry.opts.refreshInterval > 0 {
-		timer := time.NewTimer(wm.registry.opts.refreshInterval)
-
-		go func() {
-			defer timer.Stop()
-			for {
-				select {
-				case <-wm.ctx.Done():
-					return
-				case _, ok := <-timer.C:
-					if !ok {
-						return
-					}
-
-					services, err := wm.registry.services(wm.ctx, wm.serviceName)
-					if err != nil {
-						log.Warnf("refresh %s services failed: %v", wm.serviceName, err)
-						continue
-					}
-
-					wm.serviceInstances.Store(services)
-					wm.broadcast(services)
-				}
-			}
-		}()
 	}
 
 	return wm, nil
