@@ -6,18 +6,28 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/redis/go-redis/v9"
 )
 
+type state int32
+
+const (
+	stateInitial state = 0
+	stateRunning state = 1
+	stateStopped state = 2
+)
+
 type watcher struct {
 	idx        int64
-	state      int32
 	ctx        context.Context
 	cancel     context.CancelFunc
-	chEvent    chan []*locate.Event
 	watcherMgr *watcherMgr
+	rw         sync.RWMutex
+	state      state
+	chEvent    chan []*locate.Event
 }
 
 func newWatcher(wm *watcherMgr, idx int64) *watcher {
@@ -31,35 +41,35 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 func (w *watcher) notify(events []*locate.Event) {
-	if atomic.LoadInt32(&w.state) == 0 {
-		return
-	}
+	w.rw.RLock()
+	defer w.rw.RUnlock()
 
-	w.chEvent <- events
+	if w.state == stateRunning {
+		w.chEvent <- events
+	}
 }
 
 // Next 返回变动事件列表
-func (w *watcher) Next() ([]*locate.Event, error) {
-	if atomic.LoadInt32(&w.state) == 0 {
-		atomic.StoreInt32(&w.state, 1)
+func (w *watcher) Next() <-chan []*locate.Event {
+	w.rw.Lock()
+	if w.state == stateInitial {
+		w.state = stateRunning
 	}
+	w.rw.Unlock()
 
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case events, ok := <-w.chEvent:
-		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
-
-		return events, nil
-	}
+	return w.chEvent
 }
 
 // Stop 停止监听
 func (w *watcher) Stop() error {
+	w.rw.Lock()
+	defer w.rw.Unlock()
+
+	if w.state == stateStopped {
+		return errors.ErrIllegalOperation
+	}
+
+	w.state = stateStopped
 	w.cancel()
 	close(w.chEvent)
 	return w.watcherMgr.recycle(w.idx)
@@ -83,8 +93,7 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, kind))
 	}
 
-	err := sub.Subscribe(ctx, channels...)
-	if err != nil {
+	if err := sub.Subscribe(ctx, channels...); err != nil {
 		return nil, err
 	}
 

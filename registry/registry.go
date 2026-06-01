@@ -26,7 +26,7 @@ type Discovery interface {
 
 type Watcher interface {
 	// Next 返回服务实例列表
-	Next() ([]*ServiceInstance, error)
+	Next() <-chan []*ServiceInstance
 	// Stop 停止监听
 	Stop() error
 }

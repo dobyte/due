@@ -34,7 +34,7 @@ type Locator interface {
 
 type Watcher interface {
 	// Next 返回用户位置列表
-	Next() ([]*Event, error)
+	Next() <-chan []*Event
 	// Stop 停止监听
 	Stop() error
 }

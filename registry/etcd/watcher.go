@@ -13,31 +13,27 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-type watcherMgr struct {
-	err              error
-	ctx              context.Context
-	cancel           context.CancelFunc
-	registry         *Registry
-	serviceName      string
-	serviceInstances sync.Map
-	watcher          clientv3.Watcher
-	chWatch          clientv3.WatchChan
-	idx              atomic.Int64
-	rw               sync.RWMutex
-	watchers         map[int64]*watcher
-}
+type state int32
+
+const (
+	stateInitial state = 0
+	stateRunning state = 1
+	stateStopped state = 2
+)
 
 type watcher struct {
 	idx        int64
-	state      atomic.Bool
-	watcherMgr *watcherMgr
 	ctx        context.Context
 	cancel     context.CancelFunc
+	watcherMgr *watcherMgr
+	rw         sync.RWMutex
+	state      state
 	chWatch    chan []*registry.ServiceInstance
 }
 
@@ -52,36 +48,53 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 func (w *watcher) notify(services []*registry.ServiceInstance) {
-	if w.state.Load() {
+	w.rw.RLock()
+	defer w.rw.RUnlock()
+
+	if w.state == stateRunning {
 		w.chWatch <- services
 	}
 }
 
 // Next 返回服务实例列表
-func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
-	if w.state.CompareAndSwap(false, true) {
-		return w.watcherMgr.services(), nil
+func (w *watcher) Next() <-chan []*registry.ServiceInstance {
+	w.rw.Lock()
+	if w.state == stateInitial {
+		w.state = stateRunning
+		w.chWatch <- w.watcherMgr.services()
 	}
+	w.rw.Unlock()
 
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case services, ok := <-w.chWatch:
-		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
-
-		return services, nil
-	}
+	return w.chWatch
 }
 
 // Stop 停止监听
 func (w *watcher) Stop() error {
+	w.rw.Lock()
+	defer w.rw.Unlock()
+
+	if w.state == stateStopped {
+		return errors.ErrIllegalOperation
+	}
+
+	w.state = stateStopped
 	w.cancel()
 	close(w.chWatch)
 	return w.watcherMgr.recycle(w.idx)
+}
+
+type watcherMgr struct {
+	err              error
+	ctx              context.Context
+	cancel           context.CancelFunc
+	registry         *Registry
+	serviceName      string
+	serviceInstances sync.Map
+	watcher          clientv3.Watcher
+	chWatch          clientv3.WatchChan
+	idx              atomic.Int64
+	rw               sync.RWMutex
+	watchers         map[int64]*watcher
 }
 
 func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {

@@ -4,19 +4,30 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
+type state int32
+
+const (
+	stateInitial state = 0
+	stateRunning state = 1
+	stateStopped state = 2
+)
+
 type watcher struct {
 	idx        int64
-	state      atomic.Bool
 	ctx        context.Context
 	cancel     context.CancelFunc
 	watcherMgr *watcherMgr
+	rw         sync.RWMutex
+	state      state
 	chWatch    chan []*registry.ServiceInstance
 }
 
@@ -31,33 +42,36 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 func (w *watcher) notify(services []*registry.ServiceInstance) {
-	if w.state.Load() {
+	w.rw.RLock()
+	defer w.rw.RUnlock()
+
+	if w.state == stateRunning {
 		w.chWatch <- services
 	}
 }
 
 // Next 返回服务实例列表
-func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
-	if w.state.CompareAndSwap(false, true) {
-		return w.watcherMgr.services(), nil
+func (w *watcher) Next() <-chan []*registry.ServiceInstance {
+	w.rw.Lock()
+	if w.state == stateInitial {
+		w.state = stateRunning
+		w.chWatch <- w.watcherMgr.services()
 	}
+	w.rw.Unlock()
 
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case services, ok := <-w.chWatch:
-		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
-
-		return services, nil
-	}
+	return w.chWatch
 }
 
 // Stop 停止监听
 func (w *watcher) Stop() error {
+	w.rw.Lock()
+	defer w.rw.Unlock()
+
+	if w.state == stateStopped {
+		return errors.ErrIllegalOperation
+	}
+
+	w.state = stateStopped
 	w.cancel()
 	close(w.chWatch)
 	return w.watcherMgr.recycle(w.idx)
@@ -89,6 +103,33 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 
 	if err = wm.subscribe(); err != nil {
 		return nil, err
+	}
+
+	if wm.registry.opts.refreshInterval > 0 {
+		timer := time.NewTimer(wm.registry.opts.refreshInterval)
+
+		go func() {
+			defer timer.Stop()
+			for {
+				select {
+				case <-wm.ctx.Done():
+					return
+				case _, ok := <-timer.C:
+					if !ok {
+						return
+					}
+
+					services, err := wm.registry.services(wm.ctx, wm.serviceName)
+					if err != nil {
+						log.Warnf("refresh %s services failed: %v", wm.serviceName, err)
+						continue
+					}
+
+					wm.serviceInstances.Store(services)
+					wm.broadcast(services)
+				}
+			}
+		}()
 	}
 
 	return wm, nil
