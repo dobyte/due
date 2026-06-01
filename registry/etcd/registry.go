@@ -10,10 +10,11 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/client/v3"
-	"sync"
 )
 
 const name = "etcd"
@@ -45,6 +46,8 @@ func NewRegistry(opts ...Option) *Registry {
 		o.client, r.err = clientv3.New(clientv3.Config{
 			Endpoints:   o.addrs,
 			DialTimeout: o.dialTimeout,
+			Username:    o.username,
+			Password:    o.password,
 		})
 	}
 

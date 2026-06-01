@@ -377,6 +377,10 @@ shutdownMaxWaitTime = "0s"
         dialTimeout = "5s"
         # 命名空间，默认为services
         namespace = "services"
+        # 用户名
+        username = ""
+        # 密码
+        password = ""
         # 超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
         # 心跳重试次数，默认为3
@@ -446,6 +450,10 @@ shutdownMaxWaitTime = "0s"
         addrs = ["127.0.0.1:2379"]
         # 客户端拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
         dialTimeout = "5s"
+        # 用户名
+        username = ""
+        # 密码
+        password = ""
         # 路径。默认为/config
         path = "/config"
         # 读写模式。可选：read-only | write-only | read-write，默认为read-only

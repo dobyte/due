@@ -29,6 +29,10 @@ go get github.com/dobyte/due/registry/etcd/v2@latest
         namespace = "services"
         # 超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
         timeout = "3s"
+        # 用户名
+        username = ""
+        # 密码
+        password = ""
         # 心跳重试次数，默认为3
         retryTimes = 3
         # 心跳重试间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s

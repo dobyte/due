@@ -9,9 +9,10 @@ package etcd
 
 import (
 	"context"
+	"time"
+
 	"github.com/dobyte/due/v2/etc"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"time"
 )
 
 const (
@@ -28,6 +29,8 @@ const (
 	defaultDialTimeoutKey   = "etc.registry.etcd.dialTimeout"
 	defaultNamespaceKey     = "etc.registry.etcd.namespace"
 	defaultTimeoutKey       = "etc.registry.etcd.timeout"
+	defaultUsernameKey      = "etc.registry.etcd.username"
+	defaultPasswordKey      = "etc.registry.etcd.password"
 	defaultRetryTimesKey    = "etc.registry.etcd.retryTimes"
 	defaultRetryIntervalKey = "etc.registry.etcd.retryInterval"
 )
@@ -59,6 +62,12 @@ type options struct {
 	// 默认为3秒
 	timeout time.Duration
 
+	// 用户名
+	username string
+
+	// 密码
+	password string
+
 	// 心跳重试次数
 	// 默认为3次
 	retryTimes int
@@ -75,6 +84,8 @@ func defaultOptions() *options {
 		dialTimeout:   etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
 		namespace:     etc.Get(defaultNamespaceKey, defaultNamespace).String(),
 		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		username:      etc.Get(defaultUsernameKey).String(),
+		password:      etc.Get(defaultPasswordKey).String(),
 		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration(),
 	}
@@ -108,6 +119,16 @@ func WithNamespace(namespace string) Option {
 // WithTimeout 设置上下文超时时间
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
+}
+
+// WithUsername 设置用户名
+func WithUsername(username string) Option {
+	return func(o *options) { o.username = username }
+}
+
+// WithPassword 设置密码
+func WithPassword(password string) Option {
+	return func(o *options) { o.password = password }
 }
 
 // WithRetryTimes 设置心跳重试次数
