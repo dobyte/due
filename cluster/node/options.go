@@ -53,25 +53,26 @@ type SchedulingModel string
 type Option func(o *options)
 
 type options struct {
-	ctx               context.Context       // 上下文
-	id                string                // 实例ID
-	name              string                // 实例名称；相同实例名称的节点，用户只能绑定其中一个
-	codec             encoding.Codec        // 编解码器
-	weight            int                   // 服务器权重
-	locator           locate.Locator        // 用户定位器
-	registry          registry.Registry     // 服务注册器
-	encryptor         crypto.Encryptor      // 消息加密器
-	transporter       transport.Transporter // 消息传输器
-	metadata          map[string]string     // 元数据
-	addr              string                // 内部RPC监听地址
-	expose            bool                  // 内部RPC是否暴露到公网
-	connNum           int                   // 内部RPC拨号连接数
-	callTimeout       time.Duration         // 内部RPC调用超时时间
-	dialTimeout       time.Duration         // 内部RPC拨号超时时间
-	dialRetryTimes    int                   // 内部RPC拨号重试次数
-	writeTimeout      time.Duration         // 内部RPC写入超时时间
-	writeQueueSize    int32                 // 内部RPC写入队列大小
-	faultRecoveryTime time.Duration         // 内部RPC故障恢复时间
+	ctx               context.Context        // 启动上下文
+	id                string                 // 实例ID
+	name              string                 // 实例名称；相同实例名称的节点，用户只能绑定其中一个
+	codec             encoding.Codec         // 编解码器
+	weight            int                    // 服务器权重
+	locator           locate.Locator         // 用户定位器
+	registry          registry.Registry      // 服务注册器
+	encryptor         crypto.Encryptor       // 消息加密器
+	transporter       transport.Transporter  // 消息传输器
+	metadata          map[string]string      // 元数据
+	ctxFunc           func() context.Context // 自定义上下文生成器
+	addr              string                 // 内部RPC监听地址
+	expose            bool                   // 内部RPC是否暴露到公网
+	connNum           int                    // 内部RPC拨号连接数
+	callTimeout       time.Duration          // 内部RPC调用超时时间
+	dialTimeout       time.Duration          // 内部RPC拨号超时时间
+	dialRetryTimes    int                    // 内部RPC拨号重试次数
+	writeTimeout      time.Duration          // 内部RPC写入超时时间
+	writeQueueSize    int32                  // 内部RPC写入队列大小
+	faultRecoveryTime time.Duration          // 内部RPC故障恢复时间
 }
 
 func defaultOptions() *options {
@@ -219,7 +220,7 @@ func WithWeight(weight int) Option {
 	}
 }
 
-// WithContext 设置上下文
+// WithContext 设置启动上下文
 func WithContext(ctx context.Context) Option {
 	return func(o *options) {
 		if ctx != nil {
@@ -270,6 +271,17 @@ func WithTransporter(transporter transport.Transporter) Option {
 			o.transporter = transporter
 		} else {
 			log.Warnf("the specified transporter is nil and will be ignored")
+		}
+	}
+}
+
+// WithContextFunc 设置自定义上下文生成器
+func WithContextFunc(ctxFunc func() context.Context) Option {
+	return func(o *options) {
+		if ctxFunc != nil {
+			o.ctxFunc = ctxFunc
+		} else {
+			log.Warnf("the specified ctxFunc is nil and will be ignored")
 		}
 	}
 }

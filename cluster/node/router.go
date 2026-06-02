@@ -140,7 +140,6 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 
 func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data any) {
 	req := r.node.reqPool.Get().(*request)
-	req.ctx = context.Background()
 	req.gid = gid
 	req.nid = nid
 	req.pid = pid
@@ -149,6 +148,13 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 	req.message.Seq = seq
 	req.message.Route = route
 	req.message.Data = data
+
+	if r.node.opts.ctxFunc != nil {
+		req.ctx = r.node.opts.ctxFunc()
+	} else {
+		req.ctx = context.Background()
+	}
+
 	r.reqChan <- req
 }
 
