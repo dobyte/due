@@ -823,9 +823,14 @@ func (l *GateLinker) WatchUserLocate() {
 			select {
 			case <-l.ctx.Done():
 				return
-			case events, ok := <-watcher.Next():
-				if !ok {
-					return
+			default:
+				events, err := watcher.Next()
+				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					} else {
+						continue
+					}
 				}
 
 				for _, event := range events {
@@ -858,9 +863,14 @@ func (l *GateLinker) WatchClusterInstance() {
 			select {
 			case <-l.ctx.Done():
 				return
-			case services, ok := <-watcher.Next():
-				if !ok {
-					return
+			default:
+				services, err := watcher.Next()
+				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						return
+					} else {
+						continue
+					}
 				}
 
 				l.dispatcher.ReplaceServices(services...)

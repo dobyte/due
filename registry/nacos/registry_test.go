@@ -119,8 +119,9 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, ok := <-watcher1.Next()
-			if !ok {
+			services, err := watcher1.Next()
+			if err != nil {
+				t.Errorf("goroutine 1: %v", err)
 				return
 			}
 
@@ -132,8 +133,9 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, ok := <-watcher2.Next()
-			if !ok {
+			services, err := watcher2.Next()
+			if err != nil {
+				t.Errorf("goroutine 2: %v", err)
 				return
 			}
 
@@ -232,19 +234,22 @@ func (n *node) watch() {
 			select {
 			case <-n.ctx.Done():
 				return
-			case services, ok := <-watcher.Next():
-				if !ok {
-					return
-				}
-
-				fmt.Printf("node: %v services: %v\n", n.id, len(services))
-
-				for _, service := range services {
-					fmt.Printf("service id: %v\n", service.ID)
-				}
-
-				fmt.Println()
+			default:
+				// exec watch
 			}
+
+			services, err := watcher.Next()
+			if err != nil {
+				continue
+			}
+
+			fmt.Printf("node: %v services: %v\n", n.id, len(services))
+
+			for _, service := range services {
+				fmt.Printf("service id: %v\n", service.ID)
+			}
+
+			fmt.Println()
 		}
 	}()
 }

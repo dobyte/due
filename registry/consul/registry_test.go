@@ -117,8 +117,9 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, ok := <-watcher1.Next()
-			if !ok {
+			services, err := watcher1.Next()
+			if err != nil {
+				t.Errorf("goroutine 1: %v", err)
 				return
 			}
 
@@ -132,8 +133,9 @@ func TestRegistry_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			services, ok := <-watcher2.Next()
-			if !ok {
+			services, err := watcher2.Next()
+			if err != nil {
+				t.Errorf("goroutine 2: %v", err)
 				return
 			}
 

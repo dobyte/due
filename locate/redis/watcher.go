@@ -50,14 +50,25 @@ func (w *watcher) notify(events []*locate.Event) {
 }
 
 // Next 返回变动事件列表
-func (w *watcher) Next() <-chan []*locate.Event {
+func (w *watcher) Next() ([]*locate.Event, error) {
 	w.rw.Lock()
 	if w.state == stateInitial {
 		w.state = stateRunning
 	}
 	w.rw.Unlock()
 
-	return w.chEvent
+	select {
+	case <-w.ctx.Done():
+		return nil, w.ctx.Err()
+	case events, ok := <-w.chEvent:
+		if !ok {
+			if err := w.ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+
+		return events, nil
+	}
 }
 
 // Stop 停止监听

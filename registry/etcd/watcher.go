@@ -57,15 +57,27 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 }
 
 // Next 返回服务实例列表
-func (w *watcher) Next() <-chan []*registry.ServiceInstance {
+func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	w.rw.Lock()
 	if w.state == stateInitial {
 		w.state = stateRunning
-		w.chWatch <- w.watcherMgr.services()
+		w.rw.Unlock()
+		return w.watcherMgr.services(), nil
 	}
 	w.rw.Unlock()
 
-	return w.chWatch
+	select {
+	case <-w.ctx.Done():
+		return nil, w.ctx.Err()
+	case services, ok := <-w.chWatch:
+		if !ok {
+			if err := w.ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+
+		return services, nil
+	}
 }
 
 // Stop 停止监听

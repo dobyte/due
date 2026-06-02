@@ -84,8 +84,9 @@ func TestLocator_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			events, ok := <-watcher1.Next()
-			if !ok {
+			events, err := watcher1.Next()
+			if err != nil {
+				t.Errorf("goroutine 1: %v", err)
 				return
 			}
 
@@ -99,8 +100,9 @@ func TestLocator_Watch(t *testing.T) {
 
 	go func() {
 		for {
-			events, ok := <-watcher2.Next()
-			if !ok {
+			events, err := watcher2.Next()
+			if err != nil {
+				t.Errorf("goroutine 2: %v", err)
 				return
 			}
 
