@@ -1,11 +1,13 @@
 package grpc
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/transport/grpc/v2/internal/client"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
-	"sync"
 )
 
 const name = "grpc"
@@ -48,9 +50,19 @@ func (t *Transporter) NewServer() (transport.Server, error) {
 // 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
 func (t *Transporter) NewClient(target string) (transport.Client, error) {
+	var err error
+
 	t.once.Do(func() {
-		t.builder = client.NewBuilder(&t.opts.client)
+		if t.opts.client.Discovery == nil {
+			err = errors.New("grpc discovery client is not ready")
+		} else {
+			t.builder = client.NewBuilder(&t.opts.client)
+		}
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	cc, err := t.builder.Build(target)
 	if err != nil {
