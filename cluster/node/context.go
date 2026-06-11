@@ -87,7 +87,7 @@ type Context interface {
 	// Invoke 调用函数（线程安全）
 	// ctx在全局的处理器中，调用的就是proxy.Invoke
 	// ctx在Actor的处理器中，调用的就是actor.Invoke
-	Invoke(fn func())
+	Invoke(fn func()) error
 	// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 	// ctx在全局的处理器中，调用的就是proxy.AfterFunc
 	// ctx在Actor的处理器中，调用的就是actor.AfterFunc

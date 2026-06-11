@@ -1,11 +1,13 @@
 package node
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
@@ -26,8 +28,8 @@ type Actor struct {
 	defaultRouteHandler RouteHandler                   // 默认路由处理器
 	processor           Processor                      // 处理器
 	rw                  sync.RWMutex                   // 锁
-	mailbox             chan Context                   // 邮箱
-	fnChan              chan func()                    // 调用函数
+	taskQueue           chan func()                    // 任务队列
+	messageQueue        chan Context                   // 消息队列
 	binds               sync.Map                       // 绑定的用户
 }
 
@@ -57,15 +59,28 @@ func (a *Actor) Proxy() *Proxy {
 }
 
 // Invoke 调用函数（Actor内线程安全）
-func (a *Actor) Invoke(fn func()) {
+func (a *Actor) Invoke(fn func()) error {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
 	if a.state.Load() != started {
-		return
+		return errors.ErrActorNotStarted
 	}
 
-	a.fnChan <- fn
+	if a.opts.taskWriteTimeout > 0 && len(a.taskQueue) == cap(a.taskQueue) {
+		ctx, cancel := context.WithTimeout(context.Background(), a.opts.taskWriteTimeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case a.taskQueue <- fn:
+			return nil
+		}
+	} else {
+		a.taskQueue <- fn
+		return nil
+	}
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
@@ -102,7 +117,7 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
 			return
 		}
 
-		a.fnChan <- f
+		a.taskQueue <- f
 	})
 
 	return &Timer{timer: timer}
@@ -117,7 +132,7 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	case unstart:
 		a.defaultRouteHandler = handler
 	case started:
-		a.fnChan <- func() {
+		a.taskQueue <- func() {
 			a.defaultRouteHandler = handler
 		}
 	default:
@@ -134,7 +149,7 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.fnChan <- func() {
+		a.taskQueue <- func() {
 			a.routes[route] = handler
 
 			if a.opts.dispatch {
@@ -155,7 +170,7 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	case unstart:
 		a.events[event] = handler
 	case started:
-		a.fnChan <- func() {
+		a.taskQueue <- func() {
 			a.events[event] = handler
 		}
 	default:
@@ -178,7 +193,7 @@ func (a *Actor) Next(ctx Context) {
 
 	ctx.Cancel()
 
-	a.mailbox <- ctx
+	a.messageQueue <- ctx
 }
 
 // Deliver 投递消息到当前Actor中进行处理
@@ -240,9 +255,9 @@ func (a *Actor) destroy() bool {
 	a.rw.Lock()
 	defer a.rw.Unlock()
 
-	close(a.mailbox)
+	close(a.messageQueue)
 
-	close(a.fnChan)
+	close(a.taskQueue)
 
 	clear(a.routes)
 
@@ -270,7 +285,7 @@ func (a *Actor) unbindUser(uid int64) bool {
 func (a *Actor) dispatch() {
 	for {
 		select {
-		case ctx, ok := <-a.mailbox:
+		case ctx, ok := <-a.messageQueue:
 			if !ok {
 				return
 			}
@@ -296,7 +311,7 @@ func (a *Actor) dispatch() {
 			}
 
 			ctx.compareVersionRecycle(version)
-		case handle, ok := <-a.fnChan:
+		case handle, ok := <-a.taskQueue:
 			if !ok {
 				return
 			}

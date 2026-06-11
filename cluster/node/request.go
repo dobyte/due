@@ -329,11 +329,11 @@ func (r *request) Actor(kind, id string) (*Actor, bool) {
 // Invoke 调用函数（线程安全）
 // ctx在全局的处理器中，调用的就是proxy.Invoke
 // ctx在Actor的处理器中，调用的就是actor.Invoke
-func (r *request) Invoke(fn func()) {
+func (r *request) Invoke(fn func()) error {
 	if actor := r.actor.Load().(*Actor); actor != nil {
-		actor.Invoke(fn)
+		return actor.Invoke(fn)
 	} else {
-		r.node.proxy.Invoke(fn)
+		return r.node.proxy.Invoke(fn)
 	}
 }
 

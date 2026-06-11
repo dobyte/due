@@ -1,10 +1,11 @@
 package node
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"sync"
 )
 
 type Scheduler struct {
@@ -37,8 +38,8 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	act.state.Store(started)
 	act.routes = make(map[int32]RouteHandler)
 	act.events = make(map[cluster.Event]EventHandler, 3)
-	act.mailbox = make(chan Context, 4096)
-	act.fnChan = make(chan func(), 4096)
+	act.taskQueue = make(chan func(), o.taskQueueSize)
+	act.messageQueue = make(chan Context, o.messageQueueSize)
 	act.processor = creator(act, o.args...)
 
 	s.mu.Lock()

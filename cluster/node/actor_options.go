@@ -1,17 +1,30 @@
 package node
 
+import "time"
+
 type actorOptions struct {
-	id       string // Actor编号
-	kind     string // Actor类型
-	args     []any  // 传递到Processor中的参数
-	wait     bool   // 是否需要等待
-	dispatch bool   // 是否接受调度器调度
+	id                  string        // Actor编号
+	kind                string        // Actor类型
+	args                []any         // 传递到Processor中的参数
+	wait                bool          // 是否需要等待
+	dispatch            bool          // 是否接受调度器调度
+	taskQueueSize       int32         // 任务队列大小
+	taskWriteTimeout    time.Duration // 任务入入队超时时间
+	messageQueueSize    int32         // 消息队列大小
+	messageWriteTimeout time.Duration // 消息入入队超时时间
 }
 
 type ActorOption func(o *actorOptions)
 
 func defaultActorOptions() *actorOptions {
-	return &actorOptions{wait: true, dispatch: true}
+	return &actorOptions{
+		wait:                true,
+		dispatch:            true,
+		taskQueueSize:       1024,
+		taskWriteTimeout:    3 * time.Second,
+		messageQueueSize:    2024,
+		messageWriteTimeout: 3 * time.Second,
+	}
 }
 
 // WithActorID 设置Actor编号
@@ -37,4 +50,24 @@ func WithActorNonWait() ActorOption {
 // WithActorNonDispatch 设置Actor不可调度
 func WithActorNonDispatch() ActorOption {
 	return func(o *actorOptions) { o.dispatch = false }
+}
+
+// WithActorTaskQueueSize 设置任务队列大小
+func WithActorTaskQueueSize(size int32) ActorOption {
+	return func(o *actorOptions) { o.taskQueueSize = size }
+}
+
+// WithActorTaskWriteTimeout 设置任务入入队超时时间
+func WithActorTaskWriteTimeout(timeout time.Duration) ActorOption {
+	return func(o *actorOptions) { o.taskWriteTimeout = timeout }
+}
+
+// WithActorMessageQueueSize 设置消息队列大小
+func WithActorMessageQueueSize(size int32) ActorOption {
+	return func(o *actorOptions) { o.messageQueueSize = size }
+}
+
+// WithActorMessageWriteTimeout 设置消息入入队超时时间
+func WithActorMessageWriteTimeout(timeout time.Duration) ActorOption {
+	return func(o *actorOptions) { o.messageWriteTimeout = timeout }
 }

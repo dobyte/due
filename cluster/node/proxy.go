@@ -305,9 +305,11 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 }
 
 // Invoke 调用函数（线程安全）
-func (p *Proxy) Invoke(fn func()) {
+func (p *Proxy) Invoke(fn func()) error {
 	p.node.addWait()
 	p.node.fnChan <- fn
+
+	return nil
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
