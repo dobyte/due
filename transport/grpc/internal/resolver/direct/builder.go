@@ -14,14 +14,14 @@ const scheme = "direct"
 
 type Builder struct {
 	rw        sync.RWMutex
-	states    map[string]resolver.State
+	states    map[string]*resolver.State
 	resolvers sync.Map
 }
 
 var _ resolver.Builder = &Builder{}
 
 func NewBuilder() *Builder {
-	return &Builder{states: make(map[string]resolver.State)}
+	return &Builder{states: make(map[string]*resolver.State)}
 }
 
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
@@ -34,7 +34,7 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 		state := b.states[target.URL.Host]
 		b.rw.RUnlock()
 
-		r.updateState(state)
+		r.updateState(*state)
 		b.resolvers.Store(target.URL.Host, r)
 	}
 
@@ -46,7 +46,7 @@ func (b *Builder) Scheme() string {
 }
 
 func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
-	states := make(map[string]resolver.State, len(instances))
+	states := make(map[string]*resolver.State, len(instances))
 	for _, instance := range instances {
 		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
 		if err != nil {
@@ -57,7 +57,7 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		if state, ok := states[instance.ID]; ok {
 			state.Addresses = append(state.Addresses, resolver.Address{Addr: ep.Address()})
 		} else {
-			states[instance.ID] = resolver.State{Addresses: []resolver.Address{{Addr: ep.Address()}}}
+			states[instance.ID] = &resolver.State{Addresses: []resolver.Address{{Addr: ep.Address()}}}
 		}
 	}
 
@@ -67,7 +67,7 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 
 	b.resolvers.Range(func(key, value any) bool {
 		r := value.(*Resolver)
-		r.updateState(states[r.target.URL.Host])
+		r.updateState(*states[r.target.URL.Host])
 		return true
 	})
 }
