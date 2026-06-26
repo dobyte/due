@@ -2,15 +2,16 @@ package discovery
 
 import (
 	"context"
+	"net/url"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
-	"net/url"
-	"sync"
-	"time"
 )
 
 const scheme = "discovery"
@@ -107,7 +108,13 @@ func (b *Builder) watch() {
 }
 
 func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
-	pairs := make(map[string][]*cli.KVPair, len(instances))
+	var (
+		pairs     map[string][]*cli.KVPair
+		workPairs = make(map[string][]*cli.KVPair, len(instances))
+		busyPairs = make(map[string][]*cli.KVPair, len(instances))
+		hangPairs = make(map[string][]*cli.KVPair, len(instances))
+	)
+
 	for _, instance := range instances {
 		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
 		if err != nil {
@@ -115,9 +122,31 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 			continue
 		}
 
+		switch instance.State {
+		case cluster.Work.String():
+			pairs = workPairs
+		case cluster.Busy.String():
+			pairs = busyPairs
+		case cluster.Hang.String():
+			pairs = hangPairs
+		default:
+			continue
+		}
+
 		for _, service := range instance.Services {
 			pairs[service] = append(pairs[service], &cli.KVPair{Key: "tcp@" + ep.Address()})
 		}
+	}
+
+	switch {
+	case len(workPairs) > 0:
+		pairs = workPairs
+	case len(busyPairs) > 0:
+		pairs = busyPairs
+	case len(hangPairs) > 0:
+		pairs = hangPairs
+	default:
+		pairs = make(map[string][]*cli.KVPair)
 	}
 
 	b.rw.Lock()
@@ -127,7 +156,6 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	b.resolvers.Range(func(_, value any) bool {
 		r := value.(*Resolver)
 		r.updateState(pairs[r.name])
-
 		return true
 	})
 }
