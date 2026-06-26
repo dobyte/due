@@ -3,6 +3,7 @@ package discovery
 import (
 	"sync"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
@@ -40,11 +41,28 @@ func (b *Builder) Scheme() string {
 }
 
 func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
-	states := make(map[string]*resolver.State, len(instances))
+	var (
+		states     map[string]*resolver.State
+		workStates = make(map[string]*resolver.State, len(instances))
+		busyStates = make(map[string]*resolver.State, len(instances))
+		hangStates = make(map[string]*resolver.State, len(instances))
+	)
+
 	for _, instance := range instances {
 		ep, err := endpoint.ParseEndpoint(instance.Endpoint)
 		if err != nil {
 			log.Errorf("parse discovery endpoint failed: %v", err)
+			continue
+		}
+
+		switch instance.State {
+		case cluster.Work.String():
+			states = workStates
+		case cluster.Busy.String():
+			states = busyStates
+		case cluster.Hang.String():
+			states = hangStates
+		default:
 			continue
 		}
 
@@ -57,13 +75,28 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		}
 	}
 
+	switch {
+	case len(workStates) > 0:
+		states = workStates
+	case len(busyStates) > 0:
+		states = busyStates
+	case len(hangStates) > 0:
+		states = hangStates
+	default:
+		states = make(map[string]*resolver.State)
+	}
+
 	b.rw.Lock()
 	b.states = states
 	b.rw.Unlock()
 
 	b.resolvers.Range(func(key, value any) bool {
 		r := value.(*Resolver)
-		r.updateState(*states[r.target.URL.Host])
+		if state, ok := states[r.target.URL.Host]; ok {
+			r.updateState(*state)
+		} else {
+			r.updateState(resolver.State{})
+		}
 		return true
 	})
 }
