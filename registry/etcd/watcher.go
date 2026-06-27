@@ -19,12 +19,10 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-type state int32
-
 const (
-	stateInitial state = 0
-	stateRunning state = 1
-	stateStopped state = 2
+	stateInitial int32 = iota // 0
+	stateRunning              // 1
+	stateStopped              // 2
 )
 
 type watcher struct {
@@ -32,8 +30,8 @@ type watcher struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	watcherMgr *watcherMgr
-	rw         sync.RWMutex
-	state      state
+	state      atomic.Int32 // 状态，无锁读写
+	mu         sync.Mutex   // 协调 chWatch 的 send 与 close
 	chWatch    chan []*registry.ServiceInstance
 }
 
@@ -48,32 +46,44 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 func (w *watcher) notify(services []*registry.ServiceInstance) {
-	w.rw.RLock()
-	defer w.rw.RUnlock()
+	if w.state.Load() != stateRunning {
+		return
+	}
 
-	if w.state == stateRunning {
-		w.chWatch <- services
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.state.Load() != stateRunning {
+		return
+	}
+
+	select {
+	case w.chWatch <- services:
+	default:
+		// channel 满，丢弃一条旧数据后重试
+		select {
+		case <-w.chWatch:
+		default:
+		}
+		select {
+		case w.chWatch <- services:
+		default:
+		}
 	}
 }
 
 // Next 返回服务实例列表
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
-	w.rw.Lock()
-	if w.state == stateInitial {
-		w.state = stateRunning
-		w.rw.Unlock()
+	if w.state.CompareAndSwap(stateInitial, stateRunning) {
 		return w.watcherMgr.services(), nil
 	}
-	w.rw.Unlock()
 
 	select {
 	case <-w.ctx.Done():
 		return nil, w.ctx.Err()
 	case services, ok := <-w.chWatch:
 		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
+			return nil, errors.ErrWatcherStopped
 		}
 
 		return services, nil
@@ -82,16 +92,16 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 
 // Stop 停止监听
 func (w *watcher) Stop() error {
-	w.rw.Lock()
-	defer w.rw.Unlock()
-
-	if w.state == stateStopped {
+	if w.state.Swap(stateStopped) == stateStopped {
 		return errors.ErrIllegalOperation
 	}
 
-	w.state = stateStopped
 	w.cancel()
+
+	w.mu.Lock()
 	close(w.chWatch)
+	w.mu.Unlock()
+
 	return w.watcherMgr.recycle(w.idx)
 }
 

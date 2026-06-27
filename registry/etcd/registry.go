@@ -14,7 +14,8 @@ import (
 
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
-	"go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"golang.org/x/sync/singleflight"
 )
 
 const name = "etcd"
@@ -27,7 +28,9 @@ type Registry struct {
 	cancel     context.CancelFunc
 	opts       *options
 	builtin    bool
+	sfg1       singleflight.Group
 	watchers   sync.Map
+	sfg2       singleflight.Group
 	registrars sync.Map
 }
 
@@ -65,22 +68,28 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	insID := makeInsID(ins)
+	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
+}
 
-	v, ok := r.registrars.Load(insID)
-	if ok {
-		return v.(*registrar).register(ctx, ins)
+// 构建服务注册器
+func (r *Registry) doBuildRegistrar(insID string) *registrar {
+	if v, ok := r.registrars.Load(insID); ok {
+		return v.(*registrar)
 	}
 
-	reg := newRegistrar(r)
+	v, _, _ := r.sfg2.Do(insID, func() (any, error) {
+		if v, ok := r.registrars.Load(insID); ok {
+			return v, nil
+		}
 
-	if err := reg.register(ctx, ins); err != nil {
-		return err
-	}
+		reg := newRegistrar(r)
 
-	r.registrars.Store(insID, reg)
+		r.registrars.Store(insID, reg)
 
-	return nil
+		return reg, nil
+	})
+
+	return v.(*registrar)
 }
 
 // Deregister 解注册服务实例
@@ -102,19 +111,39 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, r.err
 	}
 
-	v, ok := r.watchers.Load(serviceName)
-	if ok {
-		return v.(*watcherMgr).fork(), nil
-	}
-
-	w, err := newWatcherMgr(r, ctx, serviceName)
+	w, err := r.doBuildWatcherMgr(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	r.watchers.Store(serviceName, w)
-
 	return w.fork(), nil
+}
+
+// 构建服务监听管理器
+func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
+	if v, ok := r.watchers.Load(serviceName); ok {
+		return v.(*watcherMgr), nil
+	}
+
+	v, err, _ := r.sfg1.Do(serviceName, func() (any, error) {
+		if v, ok := r.watchers.Load(serviceName); ok {
+			return v, nil
+		}
+
+		w, err := newWatcherMgr(r, ctx, serviceName)
+		if err != nil {
+			return nil, err
+		}
+
+		r.watchers.Store(serviceName, w)
+
+		return w, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return v.(*watcherMgr), nil
 }
 
 // Services 获取服务实例列表
@@ -123,8 +152,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 		return nil, r.err
 	}
 
-	v, ok := r.watchers.Load(serviceName)
-	if ok {
+	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr).services(), nil
 	} else {
 		return r.services(ctx, serviceName)
