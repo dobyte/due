@@ -130,14 +130,16 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 			return v, nil
 		}
 
-		w, err := newWatcherMgr(r, ctx, serviceName)
+		services, err := r.services(ctx, serviceName)
 		if err != nil {
 			return nil, err
 		}
 
-		r.watchers.Store(serviceName, w)
+		mgr := newWatcherMgr(r, serviceName, services)
 
-		return w, nil
+		r.watchers.Store(serviceName, mgr)
+
+		return mgr, nil
 	})
 	if err != nil {
 		return nil, err

@@ -37,7 +37,7 @@ func newRegistrar(registry *Registry) *registrar {
 	r.lease = clientv3.NewLease(registry.opts.client)
 	r.ctx, r.cancel = context.WithCancel(registry.ctx)
 	r.registry = registry
-	r.chHeartbeat = make(chan heartbeat)
+	r.chHeartbeat = make(chan heartbeat, 1)
 
 	go func() {
 		var (
@@ -95,8 +95,10 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 // 解注册服务
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	r.cancel()
-	close(r.chHeartbeat)
+	defer func() {
+		r.cancel()
+		close(r.chHeartbeat)
+	}()
 
 	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 
@@ -118,8 +120,7 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 		return 0, err
 	}
 
-	_, err = r.kv.Put(ctx, key, value, clientv3.WithLease(res.ID))
-	if err != nil {
+	if _, err = r.kv.Put(ctx, key, value, clientv3.WithLease(res.ID)); err != nil {
 		return 0, err
 	}
 

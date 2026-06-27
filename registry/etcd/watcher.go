@@ -106,7 +106,6 @@ func (w *watcher) Stop() error {
 }
 
 type watcherMgr struct {
-	err              error
 	ctx              context.Context
 	cancel           context.CancelFunc
 	registry         *Registry
@@ -117,14 +116,10 @@ type watcherMgr struct {
 	idx              atomic.Int64
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher
+	wg               sync.WaitGroup
 }
 
-func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
-	services, err := r.services(ctx, serviceName)
-	if err != nil {
-		return nil, err
-	}
-
+func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
 	w := &watcherMgr{}
 	w.ctx, w.cancel = context.WithCancel(r.ctx)
 	w.registry = r
@@ -137,16 +132,14 @@ func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watch
 		w.serviceInstances.Store(service.ID, service)
 	}
 
-	go func() {
+	w.wg.Go(func() {
 		for {
 			select {
 			case <-w.ctx.Done():
 				return
 			case res, ok := <-w.chWatch:
 				if !ok {
-					if err = w.ctx.Err(); err != nil {
-						return
-					}
+					return
 				}
 
 				if res.Err() != nil {
@@ -169,9 +162,9 @@ func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watch
 				w.broadcast()
 			}
 		}
-	}()
+	})
 
-	return w, nil
+	return w
 }
 
 func (wm *watcherMgr) fork() registry.Watcher {
@@ -192,6 +185,7 @@ func (wm *watcherMgr) recycle(idx int64) error {
 
 	if len(wm.watchers) == 0 {
 		wm.cancel()
+		wm.wg.Wait()
 		wm.registry.watchers.Delete(wm.serviceName)
 		return wm.watcher.Close()
 	}
