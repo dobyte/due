@@ -9,7 +9,6 @@ package etcd_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/registry"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -158,43 +156,4 @@ func TestRegistry_Watch(t *testing.T) {
 	//time.Sleep(60 * time.Second)
 
 	select {}
-}
-
-func TestRegistry_WatchMgr(t *testing.T) {
-	var (
-		sfg singleflight.Group
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	_, err, _ := sfg.Do("abc", func() (interface{}, error) {
-		t.Logf("do make 1")
-
-		fmt.Println(ctx)
-
-		time.Sleep(2 * time.Second)
-
-		fmt.Println(ctx)
-
-		return nil, errors.New("test 1 error")
-	})
-	if err != nil {
-		t.Logf("watch mgr not found: %v", err)
-	}
-
-	_, err, _ = sfg.Do("abc", func() (interface{}, error) {
-		t.Logf("do make 2")
-
-		fmt.Println(ctx)
-
-		time.Sleep(2 * time.Second)
-
-		fmt.Println(ctx)
-
-		return nil, errors.New("test 2 error")
-	})
-	if err != nil {
-		t.Logf("watch mgr not found: %v", err)
-	}
 }
