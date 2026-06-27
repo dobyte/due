@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	stateInitial int32 = iota // 0
-	stateRunning              // 1
-	stateStopped              // 2
+	stateInitial int32 = iota
+	stateRunning
+	stateStopped
 )
 
 type watcher struct {
@@ -23,8 +23,8 @@ type watcher struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	watcherMgr *watcherMgr
-	state      atomic.Int32 // 状态，无锁读写
-	mu         sync.Mutex   // 协调 chWatch 的 send 与 close
+	state      atomic.Int32
+	mu         sync.Mutex
 	chWatch    chan []*registry.ServiceInstance
 }
 
