@@ -109,12 +109,7 @@ type watcherMgr struct {
 	watchers         map[int64]*watcher
 }
 
-func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
-	services, err := registry.services(ctx, serviceName)
-	if err != nil {
-		return nil, err
-	}
-
+func newWatcherMgr(registry *Registry, serviceName string, services []*registry.ServiceInstance) (*watcherMgr, error) {
 	wm := &watcherMgr{}
 	wm.ctx, wm.cancel = context.WithCancel(registry.ctx)
 	wm.registry = registry
@@ -122,7 +117,7 @@ func newWatcherMgr(registry *Registry, ctx context.Context, serviceName string) 
 	wm.serviceInstances.Store(services)
 	wm.watchers = make(map[int64]*watcher)
 
-	if err = wm.subscribe(); err != nil {
+	if err := wm.subscribe(); err != nil {
 		wm.cancel()
 		return nil, err
 	}
