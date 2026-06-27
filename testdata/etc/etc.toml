@@ -243,6 +243,8 @@ shutdownMaxWaitTime = "0s"
             caFile = ""
             # 证书域名
             serverName = ""
+            # 分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）、一致性哈希（ch）。默认为rr
+            dispatch = "rr"
     # RPCX相关配置
     [transport.rpcx]
         # RPCX服务器相关配置
@@ -263,6 +265,8 @@ shutdownMaxWaitTime = "0s"
             serverName = ""
             # 连接池大小，默认为10
             poolSize = 10
+            # 分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）、一致性哈希（ch）。默认为rr
+            dispatch = "rr"
 
 # 框架默认打包器统一采用以下的打包格式，自定义打包器可自行定义打包规则
 # 心跳包

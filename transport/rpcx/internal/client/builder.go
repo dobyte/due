@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/discovery"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
@@ -30,6 +31,7 @@ type Options struct {
 	PoolSize   int
 	CAFile     string
 	ServerName string
+	Dispatch   cluster.Dispatch
 	Discovery  registry.Discovery
 	FailMode   cli.FailMode
 }
@@ -89,7 +91,19 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 			size = defaultPoolSize
 		}
 
-		pool := cli.NewOneClientPool(size, cli.Failtry, cli.RoundRobin, dis, b.dialOpts)
+		var selectMode cli.SelectMode
+		switch b.opts.Dispatch {
+		case cluster.Random:
+			selectMode = cli.RandomSelect
+		case cluster.WeightedRoundRobin:
+			selectMode = cli.WeightedRoundRobin
+		case cluster.ConsistentHash:
+			selectMode = cli.ConsistentHash
+		default:
+			selectMode = cli.RoundRobin
+		}
+
+		pool := cli.NewOneClientPool(size, cli.Failtry, selectMode, dis, b.dialOpts)
 
 		b.pools.Store(target, pool)
 

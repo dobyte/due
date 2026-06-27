@@ -3,13 +3,15 @@ package grpc
 import (
 	"github.com/dobyte/due/transport/grpc/v2/internal/client"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
 	"google.golang.org/grpc"
 )
 
 const (
-	defaultServerAddr = ":0" // 默认服务器地址
+	defaultServerAddr     = ":0"               // 默认服务器地址
+	defaultClientDispatch = cluster.RoundRobin // 默认客户端请求分发策略（负载均衡策略）
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 	defaultServerCertFileKey   = "etc.transport.grpc.server.certFile"
 	defaultClientCAFileKey     = "etc.transport.grpc.client.caFile"
 	defaultClientServerNameKey = "etc.transport.grpc.client.serverName"
+	defaultClientDispatchKey   = "etc.transport.grpc.client.dispatch"
 )
 
 type Option func(o *options)
@@ -36,6 +39,7 @@ func defaultOptions() *options {
 	opts.server.CertFile = etc.Get(defaultServerCertFileKey).String()
 	opts.client.CAFile = etc.Get(defaultClientCAFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
+	opts.client.Dispatch = cluster.Dispatch(etc.Get(defaultClientDispatchKey, defaultClientDispatch).String())
 
 	return opts
 }
@@ -63,6 +67,11 @@ func WithServerOptions(opts ...grpc.ServerOption) Option {
 // WithClientCredentials 设置客户端证书和校验域名
 func WithClientCredentials(caFile string, serverName string) Option {
 	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
+}
+
+// WithClientDispatch 设置客户端请求分发策略（负载均衡策略）
+func WithClientDispatch(dispatch cluster.Dispatch) Option {
+	return func(o *options) { o.client.Dispatch = dispatch }
 }
 
 // WithClientDiscovery 设置客户端服务发现组件

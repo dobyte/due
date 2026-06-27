@@ -3,13 +3,15 @@ package rpcx
 import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
 )
 
 const (
-	defaultServerAddr     = ":0" // 默认服务器地址
-	defaultClientPoolSize = 10   // 默认客户端连接池大小
+	defaultServerAddr     = ":0"               // 默认服务器地址
+	defaultClientPoolSize = 10                 // 默认客户端连接池大小
+	defaultClientDispatch = cluster.RoundRobin // 默认客户端请求分发策略
 )
 
 const (
@@ -20,6 +22,7 @@ const (
 	defaultClientPoolSizeKey   = "etc.transport.rpcx.client.poolSize"
 	defaultClientCAFileKey     = "etc.transport.rpcx.client.caFile"
 	defaultClientServerNameKey = "etc.transport.rpcx.client.serverName"
+	defaultClientDispatchKey   = "etc.transport.rpcx.client.dispatch"
 )
 
 type Option func(o *options)
@@ -38,6 +41,7 @@ func defaultOptions() *options {
 	opts.client.PoolSize = etc.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
 	opts.client.CAFile = etc.Get(defaultClientCAFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
+	opts.client.Dispatch = cluster.Dispatch(etc.Get(defaultClientDispatchKey, defaultClientDispatch).String())
 
 	return opts
 }
@@ -70,4 +74,9 @@ func WithClientCredentials(caFile string, serverName string) Option {
 // WithClientDiscovery 设置客户端服务发现组件
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
+}
+
+// WithClientDispatch 设置客户端请求分发策略（负载均衡策略）
+func WithClientDispatch(dispatch cluster.Dispatch) Option {
+	return func(o *options) { o.client.Dispatch = dispatch }
 }

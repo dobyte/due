@@ -22,6 +22,7 @@ const defaultTimeout = 10 * time.Second
 type Options struct {
 	CAFile     string
 	ServerName string
+	Dispatch   cluster.Dispatch
 	Discovery  registry.Discovery
 	DialOpts   []grpc.DialOption
 }
@@ -67,7 +68,17 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(cred))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
-	b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
+
+	switch opts.Dispatch {
+	case cluster.RoundRobin:
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
+	case cluster.WeightedRoundRobin:
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"weighted_target":{}}]}`))
+	case cluster.ConsistentHash:
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"ring_hash":{}}]}`))
+	default:
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
+	}
 
 	if err := b.init(); err != nil {
 		return &Builder{err: err}

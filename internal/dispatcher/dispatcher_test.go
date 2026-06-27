@@ -70,7 +70,7 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 		}
 	)
 
-	d := dispatcher.NewDispatcher(cluster.WeightRoundRobin)
+	d := dispatcher.NewDispatcher(cluster.WeightedRoundRobin)
 
 	d.ReplaceServices(instance1, instance2, instance3)
 
@@ -134,7 +134,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 	)
 
 	// 创建加权轮询调度器
-	d := dispatcher.NewDispatcher(cluster.WeightRoundRobin)
+	d := dispatcher.NewDispatcher(cluster.WeightedRoundRobin)
 	d.ReplaceServices(instance1, instance2, instance3)
 
 	// 统计每个实例被选中的次数
@@ -280,7 +280,7 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 			}
 
 			// 创建调度器
-			d := dispatcher.NewDispatcher(cluster.WeightRoundRobin)
+			d := dispatcher.NewDispatcher(cluster.WeightedRoundRobin)
 			d.ReplaceServices(testInstances...)
 
 			// 重置计时器

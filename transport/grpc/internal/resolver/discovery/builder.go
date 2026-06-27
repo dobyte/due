@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"google.golang.org/grpc/attributes"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -67,10 +68,16 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		}
 
 		for _, service := range instance.Services {
+			addr := resolver.Address{
+				Addr:       ep.Address(),
+				ServerName: service,
+				Attributes: attributes.New("weight", uint32(max(1, instance.Weight))),
+			}
+
 			if state, ok := states[service]; ok {
-				state.Addresses = append(state.Addresses, resolver.Address{Addr: ep.Address(), ServerName: service})
+				state.Addresses = append(state.Addresses, addr)
 			} else {
-				states[service] = &resolver.State{Addresses: []resolver.Address{{Addr: ep.Address(), ServerName: service}}}
+				states[service] = &resolver.State{Addresses: []resolver.Address{addr}}
 			}
 		}
 	}

@@ -58,7 +58,7 @@ func (r *Route) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 		switch r.dispatcher.dispatch {
 		case cluster.RoundRobin:
 			return r.roundRobinDispatch()
-		case cluster.WeightRoundRobin:
+		case cluster.WeightedRoundRobin:
 			return r.weightRoundRobinDispatch()
 		default:
 			return r.randomDispatch()
