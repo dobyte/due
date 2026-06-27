@@ -2,16 +2,17 @@ package direct
 
 import (
 	"context"
+	"net"
+	"net/url"
+	"sync"
+	"time"
+
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
-	"net"
-	"net/url"
-	"sync"
-	"time"
 )
 
 const scheme = "direct"

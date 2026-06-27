@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sync"
 	"time"
@@ -134,7 +135,10 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 		}
 
 		for _, service := range instance.Services {
-			pairs[service] = append(pairs[service], &cli.KVPair{Key: "tcp@" + ep.Address()})
+			pairs[service] = append(pairs[service], &cli.KVPair{
+				Key:   "tcp@" + ep.Address(),
+				Value: fmt.Sprintf("weight=%d", max(1, instance.Weight)),
+			})
 		}
 	}
 
