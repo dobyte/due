@@ -4,6 +4,7 @@ import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/def"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/registry"
 )
@@ -25,6 +26,16 @@ const (
 	defaultClientDispatchKey   = "etc.transport.rpcx.client.dispatch"
 )
 
+// 分发策略
+type Dispatch = def.Dispatch
+
+const (
+	Random             = def.Random             // 随机
+	RoundRobin         = def.RoundRobin         // 轮询
+	WeightedRoundRobin = def.WeightedRoundRobin // 加权轮询
+	ConsistentHash     = def.ConsistentHash     // 一致性哈希分发
+)
+
 type Option func(o *options)
 
 type options struct {
@@ -41,7 +52,7 @@ func defaultOptions() *options {
 	opts.client.PoolSize = etc.Get(defaultClientPoolSizeKey, defaultClientPoolSize).Int()
 	opts.client.CAFile = etc.Get(defaultClientCAFileKey).String()
 	opts.client.ServerName = etc.Get(defaultClientServerNameKey).String()
-	opts.client.Dispatch = cluster.Dispatch(etc.Get(defaultClientDispatchKey, defaultClientDispatch).String())
+	opts.client.Dispatch = Dispatch(etc.Get(defaultClientDispatchKey, defaultClientDispatch).String())
 
 	return opts
 }
@@ -77,6 +88,6 @@ func WithClientDiscovery(discovery registry.Discovery) Option {
 }
 
 // WithClientDispatch 设置客户端请求分发策略（负载均衡策略）
-func WithClientDispatch(dispatch cluster.Dispatch) Option {
+func WithClientDispatch(dispatch Dispatch) Option {
 	return func(o *options) { o.client.Dispatch = dispatch }
 }

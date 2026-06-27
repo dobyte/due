@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/discovery"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/def"
 	"github.com/dobyte/due/v2/registry"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
@@ -22,7 +23,7 @@ const defaultTimeout = 10 * time.Second
 type Options struct {
 	CAFile     string
 	ServerName string
-	Dispatch   cluster.Dispatch
+	Dispatch   def.Dispatch
 	Discovery  registry.Discovery
 	DialOpts   []grpc.DialOption
 }
@@ -70,11 +71,11 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
 
 	switch opts.Dispatch {
-	case cluster.RoundRobin:
+	case def.RoundRobin:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
-	case cluster.WeightedRoundRobin:
+	case def.WeightedRoundRobin:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"weighted_target":{}}]}`))
-	case cluster.ConsistentHash:
+	case def.ConsistentHash:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"ring_hash":{}}]}`))
 	default:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))

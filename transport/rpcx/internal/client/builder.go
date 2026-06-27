@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/discovery"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/def"
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
@@ -93,11 +94,11 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 
 		var selectMode cli.SelectMode
 		switch b.opts.Dispatch {
-		case cluster.Random:
+		case def.Random:
 			selectMode = cli.RandomSelect
-		case cluster.WeightedRoundRobin:
+		case def.WeightedRoundRobin:
 			selectMode = cli.WeightedRoundRobin
-		case cluster.ConsistentHash:
+		case def.ConsistentHash:
 			selectMode = cli.ConsistentHash
 		default:
 			selectMode = cli.RoundRobin

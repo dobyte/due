@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"github.com/dobyte/due/v2/core/def"
 	"github.com/dobyte/due/v2/session"
 )
 
@@ -96,13 +97,12 @@ func (h Hook) String() string {
 }
 
 // 无状态路由消息分发策略
-type Dispatch string
+type Dispatch = def.Dispatch
 
 const (
-	Random             Dispatch = "random" // 随机
-	RoundRobin         Dispatch = "rr"     // 轮询
-	WeightedRoundRobin Dispatch = "wrr"    // 加权轮询
-	ConsistentHash     Dispatch = "ch"     // 一致性哈希分发
+	Random             = def.Random             // 随机
+	RoundRobin         = def.RoundRobin         // 轮询
+	WeightedRoundRobin = def.WeightedRoundRobin // 加权轮询
 )
 
 type GetIPArgs struct {

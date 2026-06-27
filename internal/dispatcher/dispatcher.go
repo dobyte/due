@@ -10,6 +10,14 @@ import (
 	"github.com/dobyte/due/v2/registry"
 )
 
+type serviceEndpoint struct {
+	insID      string
+	state      string
+	endpoint   *endpoint.Endpoint
+	weight     int
+	currWeight int
+}
+
 type Dispatcher struct {
 	dispatch  cluster.Dispatch
 	rw        sync.RWMutex
