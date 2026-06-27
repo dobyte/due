@@ -68,6 +68,7 @@ var (
 	ErrMissingCacheInstance    = New("missing cache instance")
 	ErrMissingEventbusInstance = New("missing eventbus instance")
 	ErrActorNotStarted         = New("actor not started")
+	ErrWatcherStopped          = New("watcher stopped")
 )
 
 // NewError 新建一个错误

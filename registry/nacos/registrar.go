@@ -45,7 +45,6 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 	param := vo.RegisterInstanceParam{
 		Ip:          host,
 		Port:        port,
-		Weight:      1,
 		Enable:      true,
 		Healthy:     true,
 		Ephemeral:   true,
@@ -63,7 +62,10 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 	param.Metadata[metaFieldEndpoint] = ins.Endpoint
 
 	if ins.Weight > 0 {
+		param.Weight = float64(ins.Weight)
 		param.Metadata[metaFieldWeight] = xconv.String(ins.Weight)
+	} else {
+		param.Weight = 1
 	}
 
 	if len(ins.Routes) > 0 {
