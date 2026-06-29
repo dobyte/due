@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
@@ -45,6 +46,7 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	return w
 }
 
+// 通知监听器服务实例列表已更新
 func (w *watcher) notify(services []*registry.ServiceInstance) {
 	if w.state.Load() != stateRunning {
 		return
@@ -57,17 +59,19 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 		return
 	}
 
-	select {
-	case w.chWatch <- services:
-	default:
-		// channel 满，丢弃一条旧数据后重试
+	w.flush()
+
+	w.chWatch <- services
+}
+
+// 清空所有旧数据
+func (w *watcher) flush() {
+	for {
 		select {
 		case <-w.chWatch:
+			// continue
 		default:
-		}
-		select {
-		case w.chWatch <- services:
-		default:
+			return
 		}
 	}
 }
@@ -102,7 +106,9 @@ func (w *watcher) Stop() error {
 	close(w.chWatch)
 	w.mu.Unlock()
 
-	return w.watcherMgr.recycle(w.idx)
+	w.watcherMgr.recycle(w.idx)
+
+	return nil
 }
 
 type watcherMgr struct {
@@ -112,25 +118,19 @@ type watcherMgr struct {
 	serviceName      string
 	serviceInstances sync.Map
 	watcher          clientv3.Watcher
-	chWatch          clientv3.WatchChan
 	idx              atomic.Int64
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher
 	wg               sync.WaitGroup
+	stopped          atomic.Bool
 }
 
-func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
-	services, err := r.services(ctx, serviceName)
-	if err != nil {
-		return nil, err
-	}
-
+func newWatcherMgr(registry *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
 	w := &watcherMgr{}
-	w.ctx, w.cancel = context.WithCancel(r.ctx)
-	w.registry = r
+	w.ctx, w.cancel = context.WithCancel(registry.ctx)
+	w.registry = registry
 	w.serviceName = serviceName
-	w.watcher = clientv3.NewWatcher(r.opts.client)
-	w.chWatch = w.watcher.Watch(w.ctx, buildPrefixKey(r.opts.namespace, w.serviceName), clientv3.WithPrefix())
+	w.watcher = clientv3.NewWatcher(registry.opts.client)
 	w.watchers = make(map[int64]*watcher)
 
 	for _, service := range services {
@@ -138,43 +138,102 @@ func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watch
 	}
 
 	w.wg.Go(func() {
-		for {
-			select {
-			case <-w.ctx.Done():
-				return
-			case res, ok := <-w.chWatch:
-				if !ok {
-					return
-				}
-
-				if res.Err() != nil {
-					return
-				}
-
-				for _, ev := range res.Events {
-					switch ev.Type {
-					case mvccpb.PUT:
-						if service, err := unmarshal(ev.Kv.Value); err == nil {
-							w.serviceInstances.Store(service.ID, service)
-						}
-					case mvccpb.DELETE:
-						if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-							w.serviceInstances.Delete(parts[3])
-						}
-					}
-				}
-
-				w.broadcast()
-			}
-		}
+		w.watchLoop()
 	})
 
-	return w, nil
+	return w
 }
 
+// 监听循环，出错自动重试
+func (wm *watcherMgr) watchLoop() {
+	prefix := buildPrefixKey(wm.registry.opts.namespace, wm.serviceName)
+	backoff := 100 * time.Millisecond
+	maxBackoff := 10 * time.Second
+
+	for {
+		select {
+		case <-wm.ctx.Done():
+			return
+		default:
+		}
+
+		ch := wm.watcher.Watch(wm.ctx, prefix, clientv3.WithPrefix())
+
+		err := wm.watchEvents(ch)
+		if err == nil {
+			return
+		}
+
+		if wm.ctx.Err() != nil {
+			return
+		}
+
+		services, sErr := wm.registry.services(wm.ctx, wm.serviceName)
+		if sErr == nil {
+			wm.serviceInstances.Range(func(key, value any) bool {
+				wm.serviceInstances.Delete(key)
+				return true
+			})
+			for _, service := range services {
+				wm.serviceInstances.Store(service.ID, service)
+			}
+			wm.broadcast()
+		}
+
+		select {
+		case <-time.After(backoff):
+		case <-wm.ctx.Done():
+			return
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+// 处理单次 watch 的事件，返回错误表示需要重连
+func (wm *watcherMgr) watchEvents(ch clientv3.WatchChan) error {
+	for {
+		select {
+		case <-wm.ctx.Done():
+			return nil
+		case res, ok := <-ch:
+			if !ok {
+				return errors.ErrClientClosed
+			}
+
+			if res.Err() != nil {
+				return res.Err()
+			}
+
+			for _, ev := range res.Events {
+				switch ev.Type {
+				case mvccpb.PUT:
+					if service, err := unmarshal(ev.Kv.Value); err == nil {
+						wm.serviceInstances.Store(service.ID, service)
+					}
+				case mvccpb.DELETE:
+					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
+						wm.serviceInstances.Delete(parts[3])
+					}
+				}
+			}
+
+			wm.broadcast()
+		}
+	}
+}
+
+// 创建新监听器
 func (wm *watcherMgr) fork() registry.Watcher {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
+
+	if wm.stopped.Load() {
+		return nil
+	}
 
 	w := newWatcher(wm, wm.idx.Add(1))
 	wm.watchers[w.idx] = w
@@ -182,36 +241,63 @@ func (wm *watcherMgr) fork() registry.Watcher {
 	return w
 }
 
-func (wm *watcherMgr) recycle(idx int64) error {
+// 回收监听器
+func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
-	defer wm.rw.Unlock()
-
 	delete(wm.watchers, idx)
-
-	if len(wm.watchers) == 0 {
-		wm.cancel()
-		wm.wg.Wait()
-		wm.registry.watchers.Delete(wm.serviceName)
-		return wm.watcher.Close()
+	if len(wm.watchers) != 0 {
+		wm.rw.Unlock()
+		return
 	}
 
-	return nil
+	if !wm.stopped.CompareAndSwap(false, true) {
+		wm.rw.Unlock()
+		return
+	}
+
+	wm.registry.watchers.Delete(wm.serviceName)
+	wm.rw.Unlock()
+
+	wm.cancel()
+	wm.wg.Wait()
+	wm.watcher.Close()
 }
 
-func (wm *watcherMgr) broadcast() {
-	wm.rw.RLock()
-	defer wm.rw.RUnlock()
+// 停止监听
+func (wm *watcherMgr) stop() {
+	if !wm.stopped.CompareAndSwap(false, true) {
+		return
+	}
 
+	wm.cancel()
+	wm.wg.Wait()
+	wm.watcher.Close()
+}
+
+// 广播服务实例列表
+func (wm *watcherMgr) broadcast() {
 	services := wm.services()
+
+	wm.rw.RLock()
+	watchers := make([]*watcher, 0, len(wm.watchers))
 	for _, w := range wm.watchers {
+		watchers = append(watchers, w)
+	}
+	wm.rw.RUnlock()
+
+	for _, w := range watchers {
 		w.notify(services)
 	}
 }
 
-func (wm *watcherMgr) services() (services []*registry.ServiceInstance) {
+// 返回所有服务实例
+func (wm *watcherMgr) services() []*registry.ServiceInstance {
+	services := make([]*registry.ServiceInstance, 0)
+
 	wm.serviceInstances.Range(func(key, value any) bool {
 		services = append(services, value.(*registry.ServiceInstance))
 		return true
 	})
-	return
+
+	return services
 }

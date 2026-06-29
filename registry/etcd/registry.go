@@ -9,10 +9,8 @@ package etcd
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
-	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -22,13 +20,15 @@ const name = "etcd"
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err        error
-	ctx        context.Context
-	cancel     context.CancelFunc
-	opts       *options
-	builtin    bool
-	watchers   sync.Map
-	registrars sync.Map
+	err          error
+	ctx          context.Context
+	cancel       context.CancelFunc
+	opts         *options
+	builtin      bool
+	watchersMu   sync.Mutex
+	watchers     sync.Map
+	registrarsMu sync.Mutex
+	registrars   sync.Map
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -74,15 +74,18 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
+	r.registrarsMu.Lock()
+	defer r.registrarsMu.Unlock()
+
+	if v, ok := r.registrars.Load(insID); ok {
+		return v.(*registrar)
+	}
+
 	reg := newRegistrar(r)
 
-	if v, loaded := r.registrars.LoadOrStore(insID, reg); loaded {
-		reg.cancel()
+	r.registrars.Store(insID, reg)
 
-		return v.(*registrar)
-	} else {
-		return reg
-	}
+	return reg
 }
 
 // Deregister 解注册服务实例
@@ -104,12 +107,17 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, r.err
 	}
 
-	w, err := r.doBuildWatcherMgr(ctx, serviceName)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
+		if err != nil {
+			return nil, err
+		}
 
-	return w.fork(), nil
+		w := mgr.fork()
+		if w != nil {
+			return w, nil
+		}
+	}
 }
 
 // 构建服务监听管理器
@@ -118,18 +126,23 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return v.(*watcherMgr), nil
 	}
 
-	mgr, err := newWatcherMgr(r, ctx, serviceName)
+	services, err := r.services(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if v, loaded := r.watchers.LoadOrStore(serviceName, mgr); loaded {
-		mgr.cancel()
+	r.watchersMu.Lock()
+	defer r.watchersMu.Unlock()
 
+	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
-	} else {
-		return mgr, nil
 	}
+
+	mgr := newWatcherMgr(r, serviceName, services)
+
+	r.watchers.Store(serviceName, mgr)
+
+	return mgr, nil
 }
 
 // Services 获取服务实例列表
@@ -152,6 +165,18 @@ func (r *Registry) Close() error {
 	}
 
 	r.cancel()
+
+	r.registrars.Range(func(key, value any) bool {
+		value.(*registrar).stop()
+		r.registrars.Delete(key)
+		return true
+	})
+
+	r.watchers.Range(func(key, value any) bool {
+		value.(*watcherMgr).stop()
+		r.watchers.Delete(key)
+		return true
+	})
 
 	if r.builtin {
 		return r.opts.client.Close()
@@ -177,24 +202,4 @@ func (r *Registry) services(ctx context.Context, serviceName string) ([]*registr
 	}
 
 	return services, nil
-}
-
-func marshal(ins *registry.ServiceInstance) (string, error) {
-	buf, err := json.Marshal(ins)
-	if err != nil {
-		return "", err
-	}
-	return string(buf), nil
-}
-
-func unmarshal(data []byte) (*registry.ServiceInstance, error) {
-	ins := &registry.ServiceInstance{}
-	if err := json.Unmarshal(data, ins); err != nil {
-		return nil, err
-	}
-	return ins, nil
-}
-
-func buildPrefixKey(namespace, serviceName string) string {
-	return fmt.Sprintf("/%s/%s", namespace, serviceName)
 }

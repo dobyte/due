@@ -22,6 +22,7 @@ const (
 	defaultTimeout       = "3s"
 	defaultRetryTimes    = 3
 	defaultRetryInterval = "10s"
+	defaultLeaseTTL      = "15s"
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 	defaultPasswordKey      = "etc.registry.etcd.password"
 	defaultRetryTimesKey    = "etc.registry.etcd.retryTimes"
 	defaultRetryIntervalKey = "etc.registry.etcd.retryInterval"
+	defaultLeaseTTLKey      = "etc.registry.etcd.leaseTTL"
 )
 
 type Option func(o *options)
@@ -75,6 +77,10 @@ type options struct {
 	// 心跳重试间隔
 	// 默认为10秒
 	retryInterval time.Duration
+
+	// Lease存活时间
+	// 默认为15秒
+	leaseTTL time.Duration
 }
 
 func defaultOptions() *options {
@@ -88,6 +94,7 @@ func defaultOptions() *options {
 		password:      etc.Get(defaultPasswordKey).String(),
 		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration(),
+		leaseTTL:      etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
 	}
 }
 
@@ -139,4 +146,9 @@ func WithRetryTimes(retryTimes int) Option {
 // WithRetryInterval 设置心跳重试间隔时间
 func WithRetryInterval(retryInterval time.Duration) Option {
 	return func(o *options) { o.retryInterval = retryInterval }
+}
+
+// WithLeaseTTL 设置Lease存活时间
+func WithLeaseTTL(leaseTTL time.Duration) Option {
+	return func(o *options) { o.leaseTTL = leaseTTL }
 }
