@@ -119,7 +119,12 @@ type watcherMgr struct {
 	wg               sync.WaitGroup
 }
 
-func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
+func newWatcherMgr(r *Registry, ctx context.Context, serviceName string) (*watcherMgr, error) {
+	services, err := r.services(ctx, serviceName)
+	if err != nil {
+		return nil, err
+	}
+
 	w := &watcherMgr{}
 	w.ctx, w.cancel = context.WithCancel(r.ctx)
 	w.registry = r
@@ -164,7 +169,7 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 		}
 	})
 
-	return w
+	return w, nil
 }
 
 func (wm *watcherMgr) fork() registry.Watcher {

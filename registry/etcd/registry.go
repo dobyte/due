@@ -15,7 +15,6 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"golang.org/x/sync/singleflight"
 )
 
 const name = "etcd"
@@ -28,9 +27,7 @@ type Registry struct {
 	cancel     context.CancelFunc
 	opts       *options
 	builtin    bool
-	sfg1       singleflight.Group
 	watchers   sync.Map
-	sfg2       singleflight.Group
 	registrars sync.Map
 }
 
@@ -77,19 +74,15 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
-	v, _, _ := r.sfg2.Do(insID, func() (any, error) {
-		if v, ok := r.registrars.Load(insID); ok {
-			return v, nil
-		}
+	reg := newRegistrar(r)
 
-		reg := newRegistrar(r)
+	if v, loaded := r.registrars.LoadOrStore(insID, reg); loaded {
+		reg.cancel()
 
-		r.registrars.Store(insID, reg)
-
-		return reg, nil
-	})
-
-	return v.(*registrar)
+		return v.(*registrar)
+	} else {
+		return reg
+	}
 }
 
 // Deregister 解注册服务实例
@@ -125,27 +118,18 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return v.(*watcherMgr), nil
 	}
 
-	v, err, _ := r.sfg1.Do(serviceName, func() (any, error) {
-		if v, ok := r.watchers.Load(serviceName); ok {
-			return v, nil
-		}
-
-		services, err := r.services(ctx, serviceName)
-		if err != nil {
-			return nil, err
-		}
-
-		mgr := newWatcherMgr(r, serviceName, services)
-
-		r.watchers.Store(serviceName, mgr)
-
-		return mgr, nil
-	})
+	mgr, err := newWatcherMgr(r, ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	return v.(*watcherMgr), nil
+	if v, loaded := r.watchers.LoadOrStore(serviceName, mgr); loaded {
+		mgr.cancel()
+
+		return v.(*watcherMgr), nil
+	} else {
+		return mgr, nil
+	}
 }
 
 // Services 获取服务实例列表
