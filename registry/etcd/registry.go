@@ -126,7 +126,7 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return v.(*watcherMgr), nil
 	}
 
-	services, err := r.services(ctx, serviceName)
+	res, err := r.opts.client.Get(ctx, buildPrefixKey(r.opts.namespace, serviceName), clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return v.(*watcherMgr), nil
 	}
 
-	mgr := newWatcherMgr(r, serviceName, services)
+	mgr := newWatcherMgr(r, serviceName, res)
 
 	r.watchers.Store(serviceName, mgr)
 

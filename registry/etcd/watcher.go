@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -113,18 +114,28 @@ type watcherMgr struct {
 	serviceInstances map[string]*registry.ServiceInstance
 }
 
-func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
+func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = r
 	wm.serviceName = serviceName
 	wm.watcher = clientv3.NewWatcher(r.opts.client)
-	wm.chWatch = wm.watcher.Watch(r.ctx, buildPrefixKey(wm.registry.opts.namespace, wm.serviceName), clientv3.WithPrefix())
 	wm.watchers = make(map[int64]*watcher)
 	wm.serviceInstances = make(map[string]*registry.ServiceInstance)
 
-	for _, service := range services {
-		wm.serviceInstances[service.ID] = service
+	for _, kv := range res.Kvs {
+		if service, err := unmarshal(kv.Value); err != nil {
+			log.Warnf("etcd watch get failed: %v", err)
+		} else {
+			wm.serviceInstances[service.ID] = service
+		}
 	}
+
+	wm.chWatch = wm.watcher.Watch(
+		r.ctx,
+		buildPrefixKey(wm.registry.opts.namespace, wm.serviceName),
+		clientv3.WithPrefix(),
+		clientv3.WithRev(res.Header.Revision+1),
+	)
 
 	wm.wg.Go(func() {
 		for {
@@ -143,10 +154,14 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 				case mvccpb.PUT:
 					if service, err := unmarshal(ev.Kv.Value); err == nil {
 						wm.serviceInstances[service.ID] = service
+					} else {
+						log.Warnf("etcd watch put failed: %v", err)
 					}
 				case mvccpb.DELETE:
 					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
 						delete(wm.serviceInstances, parts[3])
+					} else {
+						log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
 					}
 				}
 			}

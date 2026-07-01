@@ -211,7 +211,16 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 			}
 
 			if !ok {
-				log.Warn("etcd keepalive failed, automatically exiting the retry process")
+				r.mu.Lock()
+				leaseID := r.leaseID
+				r.leaseID = 0
+				r.mu.Unlock()
+
+				if leaseID != 0 {
+					r.revoke(leaseID)
+				}
+
+				log.Warnf("etcd keepalive failed after %d retries, service registration lost", r.registry.opts.retryTimes)
 				return
 			}
 		}
