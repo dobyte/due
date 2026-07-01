@@ -5,9 +5,12 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
@@ -29,19 +32,88 @@ const (
 
 type registrar struct {
 	registry *Registry
+	mu       sync.Mutex
+	stopped  atomic.Bool
+	wg       sync.WaitGroup
+	ins      *registry.ServiceInstance
 }
 
 func newRegistrar(registry *Registry) *registrar {
-	return &registrar{registry: registry}
+	r := &registrar{}
+	r.registry = registry
+
+	return r
 }
 
-// 注册服务
-func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) error {
+func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
+	if r.stopped.Load() {
+		return errors.ErrIllegalOperation
+	}
+
 	host, port, err := r.parseHostPort(ins.Endpoint)
 	if err != nil {
 		return err
 	}
 
+	ok, err := r.put(ctx, ins, host, port)
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return errors.ErrServiceRegisterFailed
+	}
+
+	r.mu.Lock()
+
+	if r.stopped.Load() {
+		r.mu.Unlock()
+		r.delete(ctx, ins, host, port)
+		return errors.ErrIllegalOperation
+	}
+
+	r.ins = ins
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *registrar) deregister(_ context.Context, ins *registry.ServiceInstance) error {
+	host, port, err := r.parseHostPort(ins.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	ok, err := r.registry.opts.client.DeregisterInstance(vo.DeregisterInstanceParam{
+		Ip:          host,
+		Port:        port,
+		ServiceName: ins.Name,
+		Cluster:     r.registry.opts.clusterName,
+		GroupName:   r.registry.opts.groupName,
+		Ephemeral:   true,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return errors.ErrServiceDeregisterFailed
+	}
+
+	r.stop()
+
+	return nil
+}
+
+func (r *registrar) stop() {
+	if !r.stopped.CompareAndSwap(false, true) {
+		return
+	}
+
+	r.wg.Wait()
+}
+
+func (r *registrar) put(_ context.Context, ins *registry.ServiceInstance, host string, port uint64) (bool, error) {
 	param := vo.RegisterInstanceParam{
 		Ip:          host,
 		Port:        port,
@@ -70,7 +142,7 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 
 	if len(ins.Routes) > 0 {
 		if routes, err := json.Marshal(ins.Routes); err != nil {
-			return err
+			return false, err
 		} else {
 			param.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
 		}
@@ -78,7 +150,7 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 
 	if len(ins.Events) > 0 {
 		if events, err := json.Marshal(ins.Events); err != nil {
-			return err
+			return false, err
 		} else {
 			param.Metadata[metaFieldEvents] = xconv.BytesToString(events)
 		}
@@ -86,7 +158,7 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 
 	if len(ins.Services) > 0 {
 		if services, err := json.Marshal(ins.Services); err != nil {
-			return err
+			return false, err
 		} else {
 			param.Metadata[metaFieldServices] = xconv.BytesToString(services)
 		}
@@ -94,50 +166,26 @@ func (r *registrar) register(_ context.Context, ins *registry.ServiceInstance) e
 
 	if len(ins.Metadata) > 0 {
 		if metadata, err := json.Marshal(ins.Metadata); err != nil {
-			return err
+			return false, err
 		} else {
 			param.Metadata[metaFieldMetadata] = xconv.BytesToString(metadata)
 		}
 	}
 
-	ok, err := r.registry.opts.client.RegisterInstance(param)
-	if err != nil {
-		return err
-	}
-
-	if !ok {
-		return errors.ErrServiceRegisterFailed
-	}
-
-	return nil
+	return r.registry.opts.client.RegisterInstance(param)
 }
 
-// 解注册服务
-func (r *registrar) deregister(_ context.Context, ins *registry.ServiceInstance) error {
-	host, port, err := r.parseHostPort(ins.Endpoint)
-	if err != nil {
-		return err
-	}
-
-	param := vo.DeregisterInstanceParam{
+func (r *registrar) delete(_ context.Context, ins *registry.ServiceInstance, host string, port uint64) {
+	if _, err := r.registry.opts.client.DeregisterInstance(vo.DeregisterInstanceParam{
 		Ip:          host,
 		Port:        port,
 		ServiceName: ins.Name,
 		Cluster:     r.registry.opts.clusterName,
 		GroupName:   r.registry.opts.groupName,
 		Ephemeral:   true,
+	}); err != nil {
+		log.Errorf("deregister instance failed: %v", err)
 	}
-
-	ok, err := r.registry.opts.client.DeregisterInstance(param)
-	if err != nil {
-		return err
-	}
-
-	if !ok {
-		return errors.ErrServiceDeregisterFailed
-	}
-
-	return nil
 }
 
 func (r *registrar) parseHostPort(endpoint string) (string, uint64, error) {

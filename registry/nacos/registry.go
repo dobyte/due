@@ -16,7 +16,6 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
-	"golang.org/x/sync/singleflight"
 )
 
 const name = "nacos"
@@ -25,13 +24,11 @@ var _ registry.Registry = &Registry{}
 
 type Registry struct {
 	err        error
-	ctx        context.Context
-	cancel     context.CancelFunc
 	opts       *options
 	builtin    bool
-	sfg1       singleflight.Group
+	mu1        sync.Mutex
 	watchers   sync.Map
-	sfg2       singleflight.Group
+	mu2        sync.Mutex
 	registrars sync.Map
 }
 
@@ -43,7 +40,6 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
-	r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
 		param := vo.NacosClientParam{
@@ -115,12 +111,10 @@ func NewRegistry(opts ...Option) *Registry {
 	return r
 }
 
-// Name 获取服务注册发现组件名
 func (r *Registry) Name() string {
 	return name
 }
 
-// Register 注册服务实例
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -129,28 +123,25 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
 }
 
-// 构建服务注册器
 func (r *Registry) doBuildRegistrar(insID string) *registrar {
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
 	}
 
-	v, _, _ := r.sfg2.Do(insID, func() (any, error) {
-		if v, ok := r.registrars.Load(insID); ok {
-			return v, nil
-		}
+	r.mu2.Lock()
+	defer r.mu2.Unlock()
 
-		reg := newRegistrar(r)
+	if v, ok := r.registrars.Load(insID); ok {
+		return v.(*registrar)
+	}
 
-		r.registrars.Store(insID, reg)
+	reg := newRegistrar(r)
 
-		return reg, nil
-	})
+	r.registrars.Store(insID, reg)
 
-	return v.(*registrar)
+	return reg
 }
 
-// Deregister 解注册服务实例
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -163,66 +154,83 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
-// Watch 监听相同服务名的服务实例变化
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
 
-	w, err := r.doBuildWatcherMgr(ctx, serviceName)
+	mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	return w.fork(), nil
+	if w := mgr.fork(); w != nil {
+		return w, nil
+	}
+
+	return nil, errors.ErrWatcherStopped
 }
 
-// 构建服务监听管理器
 func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
 	}
 
-	v, err, _ := r.sfg1.Do(serviceName, func() (any, error) {
-		if v, ok := r.watchers.Load(serviceName); ok {
-			return v, nil
-		}
-
-		services, err := r.services(ctx, serviceName)
-		if err != nil {
-			return nil, err
-		}
-
-		mgr, err := newWatcherMgr(r, serviceName, services)
-		if err != nil {
-			return nil, err
-		}
-
-		r.watchers.Store(serviceName, mgr)
-
-		return mgr, nil
-	})
+	services, err := r.services(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	return v.(*watcherMgr), nil
+	r.mu1.Lock()
+	defer r.mu1.Unlock()
+
+	if v, ok := r.watchers.Load(serviceName); ok {
+		return v.(*watcherMgr), nil
+	}
+
+	mgr, err := newWatcherMgr(r, serviceName, services)
+	if err != nil {
+		return nil, err
+	}
+
+	r.watchers.Store(serviceName, mgr)
+
+	return mgr, nil
 }
 
-// Services 获取服务实例列表
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr).services(), nil
-	} else {
-		return r.services(ctx, serviceName)
+		if services, err := v.(*watcherMgr).services(); err == nil {
+			return services, nil
+		}
 	}
+
+	return r.services(ctx, serviceName)
 }
 
-// 获取服务实体列表
+func (r *Registry) Close() error {
+	if r.err != nil {
+		return r.err
+	}
+
+	r.registrars.Range(func(key, value any) bool {
+		value.(*registrar).stop()
+		r.registrars.Delete(key)
+		return true
+	})
+
+	r.watchers.Range(func(key, value any) bool {
+		value.(*watcherMgr).stop()
+		return true
+	})
+
+	return nil
+}
+
 func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	instances, err := r.opts.client.SelectInstances(vo.SelectInstancesParam{
 		ServiceName: serviceName,
