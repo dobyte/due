@@ -8,6 +8,7 @@
 package etcd
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -142,7 +143,7 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 		for {
 			wm.watchLoop()
 
-			if wm.stopped.Load() || wm.registry.ctx.Err() != nil {
+			if wm.stopped.Load() {
 				return
 			}
 
@@ -286,7 +287,7 @@ func (wm *watcherMgr) resyncWithRetry() bool {
 		wm.broadcast()
 
 		wm.watchChan = wm.watcher.Watch(
-			wm.registry.ctx,
+			context.Background(),
 			wm.watchKey,
 			clientv3.WithPrefix(),
 			clientv3.WithRev(res.Header.Revision+1),

@@ -21,9 +21,9 @@ const name = "etcd"
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err          error
-	ctx          context.Context
-	cancel       context.CancelFunc
+	err error
+	// ctx          context.Context
+	// cancel       context.CancelFunc
 	opts         *options
 	builtin      bool
 	watchersMu   sync.Mutex
@@ -40,7 +40,7 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
-	r.ctx, r.cancel = context.WithCancel(o.ctx)
+	// r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
 		r.builtin = true
@@ -165,8 +165,6 @@ func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
 	}
-
-	r.cancel()
 
 	r.registrars.Range(func(key, value any) bool {
 		value.(*registrar).stop()
