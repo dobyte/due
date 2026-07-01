@@ -57,28 +57,29 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
-	r.mu.Lock()
 	if r.stopped.Load() {
-		r.lease.Revoke(ctx, leaseID)
-		r.mu.Unlock()
+		r.revoke(leaseID)
 		return errors.ErrIllegalOperation
 	}
 
-	if r.cancel != nil {
-		r.cancel()
-	}
-
-	if r.leaseID != 0 {
-		r.lease.Revoke(ctx, r.leaseID)
-	}
-
-	ctx, cancel := context.WithCancel(r.registry.ctx)
-	r.cancel = cancel
+	r.mu.Lock()
+	oldCancel := r.cancel
+	oldLeaseID := r.leaseID
+	ctx, r.cancel = context.WithCancel(context.Background())
 	r.leaseID = leaseID
+	r.mu.Unlock()
+
+	if oldCancel != nil {
+		oldCancel()
+	}
+
+	if oldLeaseID != 0 {
+		r.revoke(oldLeaseID)
+	}
 
 	r.wg.Add(1)
+
 	go r.keepalive(ctx, leaseID, key, value)
-	r.mu.Unlock()
 
 	return nil
 }
@@ -93,27 +94,28 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 	return err
 }
 
+// 停止注册
 func (r *registrar) stop() {
 	if !r.stopped.CompareAndSwap(false, true) {
 		return
 	}
 
 	r.mu.Lock()
-	if r.cancel != nil {
-		r.cancel()
-	}
+	cancel := r.cancel
+	leaseID := r.leaseID
+	r.cancel = nil
+	r.leaseID = 0
 	r.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 
 	r.wg.Wait()
 
-	r.mu.Lock()
-	if r.leaseID != 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
-		r.lease.Revoke(ctx, r.leaseID)
-		cancel()
-		r.leaseID = 0
+	if leaseID != 0 {
+		r.revoke(leaseID)
 	}
-	r.mu.Unlock()
 
 	if r.lease != nil {
 		r.lease.Close()
@@ -133,6 +135,13 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 	}
 
 	return res.ID, nil
+}
+
+// 撤销租约
+func (r *registrar) revoke(leaseID clientv3.LeaseID) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
+	r.lease.Revoke(ctx, leaseID)
+	cancel()
 }
 
 // 保活

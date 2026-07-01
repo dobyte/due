@@ -11,6 +11,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -107,17 +108,16 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, r.err
 	}
 
-	for {
-		mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
-		if err != nil {
-			return nil, err
-		}
-
-		w := mgr.fork()
-		if w != nil {
-			return w, nil
-		}
+	mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
+	if err != nil {
+		return nil, err
 	}
+
+	if w := mgr.fork(); w != nil {
+		return w, nil
+	}
+
+	return nil, errors.ErrWatcherStopped
 }
 
 // 构建服务监听管理器
@@ -152,7 +152,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr).services(), nil
+		return v.(*watcherMgr).loadServices(), nil
 	} else {
 		return r.services(ctx, serviceName)
 	}
