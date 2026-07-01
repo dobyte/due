@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -105,12 +106,14 @@ type watcherMgr struct {
 	registry         *Registry
 	serviceName      string
 	watcher          clientv3.Watcher
-	chWatch          clientv3.WatchChan
+	watchKey         string
+	watchChan        clientv3.WatchChan
 	idx              atomic.Int64
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher
 	wg               sync.WaitGroup
 	stopped          atomic.Bool
+	err              error
 	serviceInstances map[string]*registry.ServiceInstance
 }
 
@@ -120,6 +123,7 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 	wm.serviceName = serviceName
 	wm.watcher = clientv3.NewWatcher(r.opts.client)
 	wm.watchers = make(map[int64]*watcher)
+	wm.watchKey = buildPrefixKey(r.opts.namespace, serviceName)
 	wm.serviceInstances = make(map[string]*registry.ServiceInstance)
 
 	for _, kv := range res.Kvs {
@@ -130,44 +134,29 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 		}
 	}
 
-	wm.chWatch = wm.watcher.Watch(
-		r.ctx,
-		buildPrefixKey(wm.registry.opts.namespace, wm.serviceName),
-		clientv3.WithPrefix(),
-		clientv3.WithRev(res.Header.Revision+1),
-	)
+	wm.watchChan = wm.watcher.Watch(r.ctx, wm.watchKey, clientv3.WithPrefix(), clientv3.WithRev(res.Header.Revision+1))
 
 	wm.wg.Go(func() {
+		defer wm.wg.Done()
+
 		for {
-			res, ok := <-wm.chWatch
-			if !ok {
+			wm.watchLoop()
+
+			if wm.stopped.Load() || wm.registry.ctx.Err() != nil {
 				return
 			}
 
-			if res.Err() != nil {
-				return
-			}
+			if !wm.resyncWithRetry() {
+				wm.rw.Lock()
+				wm.err = errors.ErrWatcherStopped
+				watchers := wm.loadWatchers()
+				wm.rw.Unlock()
 
-			wm.rw.Lock()
-			for _, ev := range res.Events {
-				switch ev.Type {
-				case mvccpb.PUT:
-					if service, err := unmarshal(ev.Kv.Value); err == nil {
-						wm.serviceInstances[service.ID] = service
-					} else {
-						log.Warnf("etcd watch put failed: %v", err)
-					}
-				case mvccpb.DELETE:
-					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-						delete(wm.serviceInstances, parts[3])
-					} else {
-						log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
-					}
+				for _, w := range watchers {
+					w.Stop()
 				}
+				return
 			}
-			wm.rw.Unlock()
-
-			wm.broadcast()
 		}
 	})
 
@@ -230,6 +219,85 @@ func (wm *watcherMgr) stop() {
 	wm.wg.Wait()
 }
 
+// watch 事件循环
+func (wm *watcherMgr) watchLoop() {
+	for {
+		res, ok := <-wm.watchChan
+		if !ok {
+			return
+		}
+
+		if res.Err() != nil {
+			log.Warnf("etcd watch error: %v", res.Err())
+			return
+		}
+
+		wm.rw.Lock()
+		for _, ev := range res.Events {
+			switch ev.Type {
+			case mvccpb.PUT:
+				if service, err := unmarshal(ev.Kv.Value); err == nil {
+					wm.serviceInstances[service.ID] = service
+				} else {
+					log.Warnf("etcd watch put failed: %v", err)
+				}
+			case mvccpb.DELETE:
+				if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
+					delete(wm.serviceInstances, parts[3])
+				} else {
+					log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
+				}
+			}
+		}
+		wm.rw.Unlock()
+
+		wm.broadcast()
+	}
+}
+
+// 全量重连并重试
+func (wm *watcherMgr) resyncWithRetry() bool {
+	for i := 0; i < wm.registry.opts.retryTimes; i++ {
+		select {
+		case <-time.After(wm.registry.opts.retryInterval):
+		case <-wm.registry.ctx.Done():
+			return false
+		}
+
+		if wm.stopped.Load() {
+			return false
+		}
+
+		res, err := wm.registry.opts.client.Get(wm.registry.ctx, wm.watchKey, clientv3.WithPrefix())
+		if err != nil {
+			log.Warnf("etcd watch resync failed, retry %d times, err: %v", i+1, err)
+			continue
+		}
+
+		wm.rw.Lock()
+		wm.serviceInstances = make(map[string]*registry.ServiceInstance)
+		for _, kv := range res.Kvs {
+			if service, err := unmarshal(kv.Value); err == nil {
+				wm.serviceInstances[service.ID] = service
+			}
+		}
+		wm.rw.Unlock()
+
+		wm.broadcast()
+
+		wm.watchChan = wm.watcher.Watch(
+			wm.registry.ctx,
+			wm.watchKey,
+			clientv3.WithPrefix(),
+			clientv3.WithRev(res.Header.Revision+1),
+		)
+
+		return true
+	}
+
+	return false
+}
+
 // 广播服务实例列表
 func (wm *watcherMgr) broadcast() {
 	wm.rw.RLock()
@@ -272,6 +340,10 @@ func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 
 	if wm.stopped.Load() {
 		return nil, errors.ErrWatcherStopped
+	}
+
+	if wm.err != nil {
+		return nil, wm.err
 	}
 
 	return wm.loadServices(), nil

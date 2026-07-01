@@ -220,7 +220,7 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 					r.revoke(leaseID)
 				}
 
-				log.Warnf("etcd keepalive failed after %d retries, service registration lost", r.registry.opts.retryTimes)
+				log.Errorf("etcd keepalive failed after %d retries, service registration lost", r.registry.opts.retryTimes)
 				return
 			}
 		}
