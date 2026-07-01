@@ -20,9 +20,9 @@ const (
 	defaultDialTimeout   = "5s"
 	defaultNamespace     = "services"
 	defaultTimeout       = "3s"
+	defaultLeaseTTL      = "15s"
 	defaultRetryTimes    = 3
 	defaultRetryInterval = "10s"
-	defaultLeaseTTL      = "15s"
 )
 
 const (
@@ -32,9 +32,9 @@ const (
 	defaultTimeoutKey       = "etc.registry.etcd.timeout"
 	defaultUsernameKey      = "etc.registry.etcd.username"
 	defaultPasswordKey      = "etc.registry.etcd.password"
+	defaultLeaseTTLKey      = "etc.registry.etcd.leaseTTL"
 	defaultRetryTimesKey    = "etc.registry.etcd.retryTimes"
 	defaultRetryIntervalKey = "etc.registry.etcd.retryInterval"
-	defaultLeaseTTLKey      = "etc.registry.etcd.leaseTTL"
 )
 
 type Option func(o *options)
@@ -70,6 +70,10 @@ type options struct {
 	// 密码
 	password string
 
+	// Lease存活时间
+	// 默认为15秒
+	leaseTTL time.Duration
+
 	// 心跳重试次数
 	// 默认为3次
 	retryTimes int
@@ -77,10 +81,6 @@ type options struct {
 	// 心跳重试间隔
 	// 默认为10秒
 	retryInterval time.Duration
-
-	// Lease存活时间
-	// 默认为15秒
-	leaseTTL time.Duration
 }
 
 func defaultOptions() *options {
@@ -92,9 +92,9 @@ func defaultOptions() *options {
 		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		username:      etc.Get(defaultUsernameKey).String(),
 		password:      etc.Get(defaultPasswordKey).String(),
+		leaseTTL:      etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
 		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration(),
-		leaseTTL:      etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
 	}
 }
 
@@ -138,6 +138,11 @@ func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
+// WithLeaseTTL 设置Lease存活时间
+func WithLeaseTTL(leaseTTL time.Duration) Option {
+	return func(o *options) { o.leaseTTL = leaseTTL }
+}
+
 // WithRetryTimes 设置心跳重试次数
 func WithRetryTimes(retryTimes int) Option {
 	return func(o *options) { o.retryTimes = retryTimes }
@@ -146,9 +151,4 @@ func WithRetryTimes(retryTimes int) Option {
 // WithRetryInterval 设置心跳重试间隔时间
 func WithRetryInterval(retryInterval time.Duration) Option {
 	return func(o *options) { o.retryInterval = retryInterval }
-}
-
-// WithLeaseTTL 设置Lease存活时间
-func WithLeaseTTL(leaseTTL time.Duration) Option {
-	return func(o *options) { o.leaseTTL = leaseTTL }
 }
