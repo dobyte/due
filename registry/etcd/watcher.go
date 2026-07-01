@@ -105,6 +105,8 @@ func (w *watcher) Stop() error {
 
 type watcherMgr struct {
 	registry         *Registry
+	ctx              context.Context
+	cancel           context.CancelFunc
 	serviceName      string
 	watcher          clientv3.Watcher
 	watchKey         string
@@ -121,6 +123,7 @@ type watcherMgr struct {
 func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = r
+	wm.ctx, wm.cancel = context.WithCancel(context.Background())
 	wm.serviceName = serviceName
 	wm.watcher = clientv3.NewWatcher(r.opts.client)
 	wm.watchers = make(map[int64]*watcher)
@@ -135,7 +138,12 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 		}
 	}
 
-	wm.watchChan = wm.watcher.Watch(r.ctx, wm.watchKey, clientv3.WithPrefix(), clientv3.WithRev(res.Header.Revision+1))
+	wm.watchChan = wm.watcher.Watch(
+		wm.ctx,
+		wm.watchKey,
+		clientv3.WithPrefix(),
+		clientv3.WithRev(res.Header.Revision+1),
+	)
 
 	wm.wg.Go(func() {
 		defer wm.wg.Done()
@@ -196,6 +204,7 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.registry.watchers.Delete(wm.serviceName)
 	wm.rw.Unlock()
 
+	wm.cancel()
 	wm.watcher.Close()
 	wm.wg.Wait()
 }
@@ -216,6 +225,7 @@ func (wm *watcherMgr) stop() {
 		w.Stop()
 	}
 
+	wm.cancel()
 	wm.watcher.Close()
 	wm.wg.Wait()
 }
@@ -223,36 +233,40 @@ func (wm *watcherMgr) stop() {
 // watch 事件循环
 func (wm *watcherMgr) watchLoop() {
 	for {
-		res, ok := <-wm.watchChan
-		if !ok {
+		select {
+		case <-wm.ctx.Done():
 			return
-		}
+		case res, ok := <-wm.watchChan:
+			if !ok {
+				return
+			}
 
-		if res.Err() != nil {
-			log.Warnf("etcd watch error: %v", res.Err())
-			return
-		}
+			if res.Err() != nil {
+				log.Warnf("etcd watch error: %v", res.Err())
+				return
+			}
 
-		wm.rw.Lock()
-		for _, ev := range res.Events {
-			switch ev.Type {
-			case mvccpb.PUT:
-				if service, err := unmarshal(ev.Kv.Value); err == nil {
-					wm.serviceInstances[service.ID] = service
-				} else {
-					log.Warnf("etcd watch put failed: %v", err)
-				}
-			case mvccpb.DELETE:
-				if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-					delete(wm.serviceInstances, parts[3])
-				} else {
-					log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
+			wm.rw.Lock()
+			for _, ev := range res.Events {
+				switch ev.Type {
+				case mvccpb.PUT:
+					if service, err := unmarshal(ev.Kv.Value); err == nil {
+						wm.serviceInstances[service.ID] = service
+					} else {
+						log.Warnf("etcd watch put failed: %v", err)
+					}
+				case mvccpb.DELETE:
+					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
+						delete(wm.serviceInstances, parts[3])
+					} else {
+						log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
+					}
 				}
 			}
-		}
-		wm.rw.Unlock()
+			wm.rw.Unlock()
 
-		wm.broadcast()
+			wm.broadcast()
+		}
 	}
 }
 
@@ -260,40 +274,41 @@ func (wm *watcherMgr) watchLoop() {
 func (wm *watcherMgr) resyncWithRetry() bool {
 	for i := 0; i < wm.registry.opts.retryTimes; i++ {
 		select {
+		case <-wm.ctx.Done():
+			return false
 		case <-time.After(wm.registry.opts.retryInterval):
-		case <-wm.registry.ctx.Done():
-			return false
-		}
-
-		if wm.stopped.Load() {
-			return false
-		}
-
-		res, err := wm.registry.opts.client.Get(wm.registry.ctx, wm.watchKey, clientv3.WithPrefix())
-		if err != nil {
-			log.Warnf("etcd watch resync failed, retry %d times, err: %v", i+1, err)
-			continue
-		}
-
-		wm.rw.Lock()
-		wm.serviceInstances = make(map[string]*registry.ServiceInstance)
-		for _, kv := range res.Kvs {
-			if service, err := unmarshal(kv.Value); err == nil {
-				wm.serviceInstances[service.ID] = service
+			if wm.stopped.Load() {
+				return false
 			}
+
+			ctx, cancel := context.WithTimeout(wm.ctx, wm.registry.opts.timeout)
+			res, err := wm.registry.opts.client.Get(ctx, wm.watchKey, clientv3.WithPrefix())
+			cancel()
+			if err != nil {
+				log.Warnf("etcd watch resync failed, retry %d times, err: %v", i+1, err)
+				continue
+			}
+
+			wm.rw.Lock()
+			wm.serviceInstances = make(map[string]*registry.ServiceInstance)
+			for _, kv := range res.Kvs {
+				if service, err := unmarshal(kv.Value); err == nil {
+					wm.serviceInstances[service.ID] = service
+				}
+			}
+			wm.rw.Unlock()
+
+			wm.broadcast()
+
+			wm.watchChan = wm.watcher.Watch(
+				wm.ctx,
+				wm.watchKey,
+				clientv3.WithPrefix(),
+				clientv3.WithRev(res.Header.Revision+1),
+			)
+
+			return true
 		}
-		wm.rw.Unlock()
-
-		wm.broadcast()
-
-		wm.watchChan = wm.watcher.Watch(
-			context.Background(),
-			wm.watchKey,
-			clientv3.WithPrefix(),
-			clientv3.WithRev(res.Header.Revision+1),
-		)
-
-		return true
 	}
 
 	return false

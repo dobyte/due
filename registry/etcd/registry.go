@@ -21,15 +21,13 @@ const name = "etcd"
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err error
-	// ctx          context.Context
-	// cancel       context.CancelFunc
-	opts         *options
-	builtin      bool
-	watchersMu   sync.Mutex
-	watchers     sync.Map
-	registrarsMu sync.Mutex
-	registrars   sync.Map
+	err        error
+	opts       *options
+	builtin    bool
+	mu1        sync.Mutex
+	watchers   sync.Map
+	mu2        sync.Mutex
+	registrars sync.Map
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -40,7 +38,6 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
-	// r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
 		r.builtin = true
@@ -75,8 +72,8 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
-	r.registrarsMu.Lock()
-	defer r.registrarsMu.Unlock()
+	r.mu2.Lock()
+	defer r.mu2.Unlock()
 
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
@@ -131,8 +128,8 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return nil, err
 	}
 
-	r.watchersMu.Lock()
-	defer r.watchersMu.Unlock()
+	r.mu1.Lock()
+	defer r.mu1.Unlock()
 
 	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
