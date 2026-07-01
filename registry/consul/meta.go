@@ -11,6 +11,19 @@ import (
 const metaValueSize = 512
 
 const (
+	metaFieldID           = "id"
+	metaFieldKind         = "kind"
+	metaFieldAlias        = "alias"
+	metaFieldState        = "state"
+	metaFieldRoutes       = "routes"
+	metaFieldEvents       = "events"
+	metaFieldWeight       = "weight"
+	metaFieldServices     = "services"
+	metaFieldEndpoint     = "endpoint"
+	defaultMetadataPrefix = "_"
+)
+
+const (
 	metaRouteInternal = 1 << iota
 	metaRouteStateful
 	metaRouteAuthorized

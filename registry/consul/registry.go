@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
@@ -17,10 +18,11 @@ var _ registry.Registry = &Registry{}
 
 type Registry struct {
 	err        error
-	ctx        context.Context
-	cancel     context.CancelFunc
 	opts       *options
+	builtin    bool
+	mu1        sync.Mutex
 	watchers   sync.Map
+	mu2        sync.Mutex
 	registrars sync.Map
 }
 
@@ -32,7 +34,6 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
-	r.ctx, r.cancel = context.WithCancel(o.ctx)
 
 	if o.client == nil {
 		config := api.DefaultConfig()
@@ -40,6 +41,7 @@ func NewRegistry(opts ...Option) *Registry {
 			config.Address = o.addr
 		}
 
+		r.builtin = true
 		o.client, r.err = api.NewClient(config)
 	}
 
@@ -57,22 +59,27 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return r.err
 	}
 
-	insID := makeInsID(ins)
+	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
+}
 
-	v, ok := r.registrars.Load(insID)
-	if ok {
-		return v.(*registrar).register(ctx, ins)
+// 构建服务注册器
+func (r *Registry) doBuildRegistrar(insID string) *registrar {
+	if v, ok := r.registrars.Load(insID); ok {
+		return v.(*registrar)
+	}
+
+	r.mu2.Lock()
+	defer r.mu2.Unlock()
+
+	if v, ok := r.registrars.Load(insID); ok {
+		return v.(*registrar)
 	}
 
 	reg := newRegistrar(r)
 
-	if err := reg.register(ctx, ins); err != nil {
-		return err
-	}
-
 	r.registrars.Store(insID, reg)
 
-	return nil
+	return reg
 }
 
 // Deregister 解注册服务实例
@@ -88,43 +95,89 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
+// Watch 监听相同服务名的服务实例变化
+func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if w := mgr.fork(); w != nil {
+		return w, nil
+	}
+
+	return nil, errors.ErrWatcherStopped
+}
+
+// 构建服务监听器管理器
+func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
+	if v, ok := r.watchers.Load(serviceName); ok {
+		return v.(*watcherMgr), nil
+	}
+
+	services, index, err := r.services(ctx, serviceName, 0, true)
+	if err != nil {
+		return nil, err
+	}
+
+	r.mu1.Lock()
+	defer r.mu1.Unlock()
+
+	if v, ok := r.watchers.Load(serviceName); ok {
+		return v.(*watcherMgr), nil
+	}
+
+	mgr := newWatcherMgr(r, serviceName, services, index)
+
+	r.watchers.Store(serviceName, mgr)
+
+	return mgr, nil
+}
+
+// Close 关闭服务注册发现
+func (r *Registry) Close() error {
+	if r.err != nil {
+		return r.err
+	}
+
+	r.registrars.Range(func(key, value any) bool {
+		value.(*registrar).stop()
+		r.registrars.Delete(key)
+		return true
+	})
+
+	r.watchers.Range(func(key, value any) bool {
+		value.(*watcherMgr).stop()
+		return true
+	})
+
+	return nil
+}
+
 // Services 获取服务实例列表
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
 
-	v, ok := r.watchers.Load(serviceName)
-	if ok {
-		return v.(*watcherMgr).services(), nil
-	} else {
-		services, _, err := r.services(ctx, serviceName, 0, true)
-		return services, err
+	if v, ok := r.watchers.Load(serviceName); ok {
+		if services, err := v.(*watcherMgr).services(); err == nil {
+			return services, nil
+		}
 	}
+
+	return r.queryServices(ctx, serviceName)
 }
 
-// Watch 监听服务
-func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-
-	v, ok := r.watchers.Load(serviceName)
-	if ok {
-		return v.(*watcherMgr).fork(), nil
-	}
-
-	w, err := newWatcherMgr(r, ctx, serviceName)
-	if err != nil {
-		return nil, err
-	}
-
-	r.watchers.Store(serviceName, w)
-
-	return w.fork(), nil
+func (r *Registry) queryServices(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
+	services, _, err := r.services(ctx, serviceName, 0, true)
+	return services, err
 }
 
-// 获取服务实体列表
 func (r *Registry) services(ctx context.Context, serviceName string, waitIndex uint64, passingOnly bool) ([]*registry.ServiceInstance, uint64, error) {
 	opts := &api.QueryOptions{
 		WaitIndex: waitIndex,
