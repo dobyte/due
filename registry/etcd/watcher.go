@@ -74,7 +74,7 @@ func (w *watcher) flush() {
 // Next 返回服务实例列表
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	if w.state.CompareAndSwap(stateInitial, stateRunning) {
-		return w.wm.loadServices(), nil
+		return w.wm.services()
 	}
 
 	services, ok := <-w.chWatch
@@ -103,7 +103,6 @@ func (w *watcher) Stop() error {
 type watcherMgr struct {
 	registry         *Registry
 	serviceName      string
-	serviceInstances sync.Map
 	watcher          clientv3.Watcher
 	chWatch          clientv3.WatchChan
 	idx              atomic.Int64
@@ -111,18 +110,20 @@ type watcherMgr struct {
 	watchers         map[int64]*watcher
 	wg               sync.WaitGroup
 	stopped          atomic.Bool
+	serviceInstances map[string]*registry.ServiceInstance
 }
 
-func newWatcherMgr(registry *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
+func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
 	wm := &watcherMgr{}
-	wm.registry = registry
+	wm.registry = r
 	wm.serviceName = serviceName
-	wm.watcher = clientv3.NewWatcher(registry.opts.client)
-	wm.chWatch = wm.watcher.Watch(registry.ctx, buildPrefixKey(wm.registry.opts.namespace, wm.serviceName), clientv3.WithPrefix())
+	wm.watcher = clientv3.NewWatcher(r.opts.client)
+	wm.chWatch = wm.watcher.Watch(r.ctx, buildPrefixKey(wm.registry.opts.namespace, wm.serviceName), clientv3.WithPrefix())
 	wm.watchers = make(map[int64]*watcher)
+	wm.serviceInstances = make(map[string]*registry.ServiceInstance)
 
 	for _, service := range services {
-		wm.serviceInstances.Store(service.ID, service)
+		wm.serviceInstances[service.ID] = service
 	}
 
 	wm.wg.Go(func() {
@@ -136,18 +137,20 @@ func newWatcherMgr(registry *Registry, serviceName string, services []*registry.
 				return
 			}
 
+			wm.rw.Lock()
 			for _, ev := range res.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
 					if service, err := unmarshal(ev.Kv.Value); err == nil {
-						wm.serviceInstances.Store(service.ID, service)
+						wm.serviceInstances[service.ID] = service
 					}
 				case mvccpb.DELETE:
 					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-						wm.serviceInstances.Delete(parts[3])
+						delete(wm.serviceInstances, parts[3])
 					}
 				}
 			}
+			wm.rw.Unlock()
 
 			wm.broadcast()
 		}
@@ -188,28 +191,36 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.registry.watchers.Delete(wm.serviceName)
 	wm.rw.Unlock()
 
-	wm.wg.Wait()
 	wm.watcher.Close()
+	wm.wg.Wait()
 }
 
 // 停止监听
 func (wm *watcherMgr) stop() {
+	wm.rw.Lock()
 	if !wm.stopped.CompareAndSwap(false, true) {
+		wm.rw.Unlock()
 		return
 	}
 
-	for _, w := range wm.loadWatchers() {
+	wm.registry.watchers.Delete(wm.serviceName)
+	watchers := wm.loadWatchers()
+	wm.rw.Unlock()
+
+	for _, w := range watchers {
 		w.Stop()
 	}
 
-	wm.wg.Wait()
 	wm.watcher.Close()
+	wm.wg.Wait()
 }
 
 // 广播服务实例列表
 func (wm *watcherMgr) broadcast() {
+	wm.rw.RLock()
 	services := wm.loadServices()
 	watchers := wm.loadWatchers()
+	wm.rw.RUnlock()
 
 	for _, w := range watchers {
 		w.notify(services)
@@ -218,12 +229,11 @@ func (wm *watcherMgr) broadcast() {
 
 // 返回所有监听器
 func (wm *watcherMgr) loadWatchers() []*watcher {
-	wm.rw.RLock()
 	watchers := make([]*watcher, 0, len(wm.watchers))
+
 	for _, w := range wm.watchers {
 		watchers = append(watchers, w)
 	}
-	wm.rw.RUnlock()
 
 	return watchers
 }
@@ -232,10 +242,22 @@ func (wm *watcherMgr) loadWatchers() []*watcher {
 func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0)
 
-	wm.serviceInstances.Range(func(key, value any) bool {
-		services = append(services, value.(*registry.ServiceInstance))
-		return true
-	})
+	for k := range wm.serviceInstances {
+		service := wm.serviceInstances[k]
+		services = append(services, service)
+	}
 
 	return services
+}
+
+// 返回所有服务实例
+func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
+	wm.rw.RLock()
+	defer wm.rw.RUnlock()
+
+	if wm.stopped.Load() {
+		return nil, errors.ErrWatcherStopped
+	}
+
+	return wm.loadServices(), nil
 }

@@ -152,10 +152,12 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr).loadServices(), nil
-	} else {
-		return r.services(ctx, serviceName)
+		if services, err := v.(*watcherMgr).services(); err == nil {
+			return services, nil
+		}
 	}
+
+	return r.services(ctx, serviceName)
 }
 
 // Close 关闭服务注册发现
@@ -174,7 +176,6 @@ func (r *Registry) Close() error {
 
 	r.watchers.Range(func(key, value any) bool {
 		value.(*watcherMgr).stop()
-		r.watchers.Delete(key)
 		return true
 	})
 

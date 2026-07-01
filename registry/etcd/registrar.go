@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type registrar struct {
 	registry *Registry
+	ctx      context.Context
 	cancel   context.CancelFunc
 	kv       clientv3.KV
 	lease    clientv3.Lease
@@ -57,16 +59,19 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return err
 	}
 
+	r.mu.Lock()
+
 	if r.stopped.Load() {
+		r.mu.Unlock()
 		r.revoke(leaseID)
 		return errors.ErrIllegalOperation
 	}
 
-	r.mu.Lock()
 	oldCancel := r.cancel
 	oldLeaseID := r.leaseID
-	ctx, r.cancel = context.WithCancel(context.Background())
+	r.ctx, r.cancel = context.WithCancel(context.Background())
 	r.leaseID = leaseID
+	r.wg.Add(1)
 	r.mu.Unlock()
 
 	if oldCancel != nil {
@@ -77,21 +82,22 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		r.revoke(oldLeaseID)
 	}
 
-	r.wg.Add(1)
-
-	go r.keepalive(ctx, leaseID, key, value)
+	go r.keepalive(r.ctx, leaseID, key, value)
 
 	return nil
 }
 
 // 解注册服务
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	defer r.stop()
-
 	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 
-	_, err := r.kv.Delete(ctx, key)
-	return err
+	if _, err := r.kv.Delete(ctx, key); err != nil {
+		return err
+	}
+
+	r.stop()
+
+	return nil
 }
 
 // 停止注册
@@ -130,7 +136,7 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 	}
 
 	if _, err = r.kv.Put(ctx, key, value, clientv3.WithLease(res.ID)); err != nil {
-		r.lease.Revoke(ctx, res.ID)
+		r.revoke(res.ID)
 		return 0, err
 	}
 
@@ -140,8 +146,11 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 // 撤销租约
 func (r *registrar) revoke(leaseID clientv3.LeaseID) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
-	r.lease.Revoke(ctx, leaseID)
-	cancel()
+	defer cancel()
+
+	if _, err := r.lease.Revoke(ctx, leaseID); err != nil {
+		log.Warnf("revoke lease %d failed: %v", leaseID, err)
+	}
 }
 
 // 保活
@@ -161,43 +170,48 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 				tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
 				newLeaseID, err := r.put(tctx, key, value)
 				tcancel()
+
 				if err != nil {
 					select {
 					case <-time.After(r.registry.opts.retryInterval):
+						log.Warnf("etcd put kv failed, retry %d times, err: %v", i+1, err)
 					case <-ctx.Done():
 						return
 					}
-					continue
-				}
+				} else {
+					if chKA, err = r.lease.KeepAlive(ctx, newLeaseID); err != nil {
+						r.revoke(newLeaseID)
 
-				r.mu.Lock()
-				if r.stopped.Load() {
-					r.lease.Revoke(ctx, newLeaseID)
-					r.mu.Unlock()
-					return
-				}
-				if r.leaseID != 0 {
-					r.lease.Revoke(ctx, r.leaseID)
-				}
-				r.leaseID = newLeaseID
-				leaseID = newLeaseID
-				r.mu.Unlock()
+						select {
+						case <-time.After(r.registry.opts.retryInterval):
+							log.Warnf("etcd keepalive failed, retry %d times, err: %v", i+1, err)
+						case <-ctx.Done():
+							return
+						}
+					} else {
+						r.mu.Lock()
+						if r.stopped.Load() {
+							r.mu.Unlock()
+							r.revoke(newLeaseID)
+							return
+						}
 
-				chKA, err = r.lease.KeepAlive(ctx, newLeaseID)
-				if err != nil {
-					select {
-					case <-time.After(r.registry.opts.retryInterval):
-					case <-ctx.Done():
-						return
+						oldLeaseID := r.leaseID
+						r.leaseID = newLeaseID
+						r.mu.Unlock()
+
+						if oldLeaseID != 0 {
+							r.revoke(oldLeaseID)
+						}
+
+						ok = true
+						break
 					}
-					continue
 				}
-
-				ok = true
-				break
 			}
 
 			if !ok {
+				log.Warn("etcd keepalive failed, automatically exiting the retry process")
 				return
 			}
 		}
