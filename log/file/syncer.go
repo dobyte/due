@@ -245,7 +245,14 @@ func (s *Syncer) flushToWriter(e ...*entry) error {
 
 // 写入日志
 func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
-	defer s.pool.Put(e)
+	defer func() {
+		if e.buf != nil {
+			e.buf.Release()
+			e.buf = nil
+		}
+
+		s.pool.Put(e)
+	}()
 
 	if s.opts.rotate != RotateNone {
 		if fileTag := s.makeFileTag(e.now); fileTag != s.fileTag {
@@ -261,8 +268,6 @@ func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 
 	if e.buf != nil {
 		size, err := s.writer.Write(e.buf.Bytes())
-		e.buf.Release()
-
 		if err != nil {
 			return err
 		}
