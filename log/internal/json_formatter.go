@@ -2,7 +2,6 @@ package internal
 
 import (
 	"bytes"
-	"strconv"
 	"sync"
 )
 
@@ -89,7 +88,7 @@ func (f *JsonFormatter) Format(entity *Entity) Buffer {
 			b.WriteString(`":"`)
 			b.WriteString(frame.File)
 			b.WriteString(`:`)
-			b.WriteString(strconv.Itoa(frame.Line))
+			b.WriteInt(frame.Line)
 			b.WriteString(`"`)
 		}
 		b.WriteString(`]`)

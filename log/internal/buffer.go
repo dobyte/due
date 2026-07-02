@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"strconv"
 	"sync"
 )
 
@@ -39,4 +40,9 @@ func (b *buffer) WriteRune(r rune) (n int, err error) {
 
 func (b *buffer) WriteString(s string) (n int, err error) {
 	return b.bufer.WriteString(s)
+}
+
+func (b *buffer) WriteInt(n int) {
+	var buf [20]byte
+	b.bufer.Write(strconv.AppendInt(buf[:0], int64(n), 10))
 }

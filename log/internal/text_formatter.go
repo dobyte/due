@@ -2,7 +2,6 @@ package internal
 
 import (
 	"bytes"
-	"strconv"
 	"sync"
 )
 
@@ -48,13 +47,13 @@ func (f *TextFormatter) Format(entity *Entity) Buffer {
 		b.WriteString("\nStack:")
 		for i, frame := range entity.Frames {
 			b.WriteByte('\n')
-			b.WriteString(strconv.Itoa(i + 1))
+			b.WriteInt(i + 1)
 			b.WriteString(".")
 			b.WriteString(frame.Function)
 			b.WriteString("\n\t")
 			b.WriteString(frame.File)
 			b.WriteString(":")
-			b.WriteString(strconv.Itoa(frame.Line))
+			b.WriteInt(frame.Line)
 		}
 	}
 
