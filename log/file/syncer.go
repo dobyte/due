@@ -43,6 +43,7 @@ type Syncer struct {
 	flushing    atomic.Bool
 	wg          sync.WaitGroup
 	formatter   internal.Formatter
+	pool        sync.Pool
 }
 
 type entry struct {
@@ -80,6 +81,7 @@ func (s *Syncer) init() {
 	s.fileDir = path
 	s.chEntry = make(chan *entry, 4096)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.pool = sync.Pool{New: func() any { return &entry{} }}
 
 	if s.opts.format == FormatJson {
 		s.formatter = internal.NewJsonFormatter()
@@ -118,10 +120,11 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 		return errors.ErrSyncerClosed
 	}
 
-	return s.doWrite(&entry{
-		buf: s.formatter.Format(entity),
-		now: entity.Now,
-	})
+	e := s.pool.Get().(*entry)
+	e.now = entity.Now
+	e.buf = s.formatter.Format(entity)
+
+	return s.doWrite(e)
 }
 
 // 执行写入日志操作
@@ -156,7 +159,9 @@ func (s *Syncer) Close() error {
 	}
 
 	s.cancel()
-	s.flushToFile(&entry{now: xtime.Now()})
+	e := s.pool.Get().(*entry)
+	e.now = xtime.Now()
+	s.flushToFile(e)
 	s.wg.Wait()
 	file := s.file
 	s.file = nil
@@ -240,6 +245,8 @@ func (s *Syncer) flushToWriter(e ...*entry) error {
 
 // 写入日志
 func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
+	defer s.pool.Put(e)
+
 	if s.opts.rotate != RotateNone {
 		if fileTag := s.makeFileTag(e.now); fileTag != s.fileTag {
 			if err := s.writer.Flush(); err != nil {
@@ -299,7 +306,9 @@ func (s *Syncer) tickRotateFile() {
 			}
 
 			if s.makeFileTag(now) != s.fileTag {
-				s.doWrite(&entry{now: now})
+				e := s.pool.Get().(*entry)
+				e.now = now
+				s.doWrite(e)
 			}
 		case <-s.ctx.Done():
 			return
