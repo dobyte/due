@@ -7,42 +7,46 @@ import (
 )
 
 const (
-	defaultPath     = "./log/due.log"
-	defaultMaxAge   = "7d"
-	defaultMaxSize  = "500M"
-	defaultRotate   = RotateNone
-	defaultCompress = false
-	defaultFormat   = FormatText
+	defaultPath       = "./log/due.log"
+	defaultMaxAge     = "7d"
+	defaultMaxSize    = "500M"
+	defaultBufferSize = "32K"
+	defaultRotate     = RotateNone
+	defaultCompress   = false
+	defaultFormat     = FormatText
 )
 
 const (
-	defaultPathKey     = "etc.log.file.path"
-	defaultFormatKey   = "etc.log.file.format"
-	defaultMaxAgeKey   = "etc.log.file.maxAge"
-	defaultMaxSizeKey  = "etc.log.file.maxSize"
-	defaultRotateKey   = "etc.log.file.rotate"
-	defaultCompressKey = "etc.log.file.compress"
+	defaultPathKey       = "etc.log.file.path"
+	defaultFormatKey     = "etc.log.file.format"
+	defaultMaxAgeKey     = "etc.log.file.maxAge"
+	defaultMaxSizeKey    = "etc.log.file.maxSize"
+	defaultBufferSizeKey = "etc.log.file.bufferSize"
+	defaultRotateKey     = "etc.log.file.rotate"
+	defaultCompressKey   = "etc.log.file.compress"
 )
 
 type Option func(o *options)
 
 type options struct {
-	path     string        // 文件路径
-	format   Format        // 输出格式
-	maxAge   time.Duration // 文件最大留存时间
-	maxSize  int64         // 单个文件最大尺寸
-	rotate   Rotate        // 文件反转规则
-	compress bool          // 是否对轮换的日志文件进行压缩
+	path       string        // 文件路径
+	format     Format        // 输出格式
+	maxAge     time.Duration // 文件最大留存时间
+	maxSize    int64         // 单个文件最大尺寸
+	bufferSize int           // 缓冲区大小
+	rotate     Rotate        // 文件反转规则
+	compress   bool          // 是否对轮换的日志文件进行压缩
 }
 
 func defaultOptions() *options {
 	return &options{
-		path:     etc.Get(defaultPathKey, defaultPath).String(),
-		format:   Format(etc.Get(defaultFormatKey, defaultFormat).String()),
-		maxAge:   etc.Get(defaultMaxAgeKey, defaultMaxAge).Duration(),
-		maxSize:  int64(etc.Get(defaultMaxSizeKey, defaultMaxSize).B()),
-		rotate:   Rotate(etc.Get(defaultRotateKey, defaultRotate).String()),
-		compress: etc.Get(defaultCompressKey, defaultCompress).Bool(),
+		path:       etc.Get(defaultPathKey, defaultPath).String(),
+		format:     Format(etc.Get(defaultFormatKey, defaultFormat).String()),
+		maxAge:     etc.Get(defaultMaxAgeKey, defaultMaxAge).Duration(),
+		maxSize:    int64(etc.Get(defaultMaxSizeKey, defaultMaxSize).B()),
+		bufferSize: int(etc.Get(defaultBufferSizeKey, defaultBufferSize).B()),
+		rotate:     Rotate(etc.Get(defaultRotateKey, defaultRotate).String()),
+		compress:   etc.Get(defaultCompressKey, defaultCompress).Bool(),
 	}
 }
 
@@ -64,6 +68,11 @@ func WithMaxAge(maxAge time.Duration) Option {
 // WithMaxSize 设置单个文件最大尺寸
 func WithMaxSize(maxSize int64) Option {
 	return func(o *options) { o.maxSize = maxSize }
+}
+
+// WithBufferSize 设置缓冲区大小
+func WithBufferSize(bufferSize int) Option {
+	return func(o *options) { o.bufferSize = bufferSize }
 }
 
 // WithRotate 设置文件反转规则

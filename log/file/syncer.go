@@ -33,15 +33,14 @@ type Syncer struct {
 	fileExt     string
 	fileTag     string
 	fileVersion int64
-	gzipExt     string
 	mu          sync.Mutex
 	size        int64
 	file        *os.File
 	writer      *bufio.Writer
 	acc         atomic.Int64
-	chEntry     chan entry
+	chEntry     chan *entry
 	closing     atomic.Bool
-	flushing    bool
+	flushing    atomic.Bool
 	wg          sync.WaitGroup
 	formatter   internal.Formatter
 }
@@ -61,6 +60,10 @@ func NewSyncer(opts ...Option) *Syncer {
 	s.opts = o
 	s.init()
 
+	s.cleanExpiredFiles()
+
+	go s.tickRotateFile()
+
 	return s
 }
 
@@ -75,8 +78,7 @@ func (s *Syncer) init() {
 	}
 
 	s.fileDir = path
-	s.gzipExt = gzipExt
-	s.chEntry = make(chan entry, 4096)
+	s.chEntry = make(chan *entry, 4096)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	if s.opts.format == FormatJson {
@@ -84,10 +86,6 @@ func (s *Syncer) init() {
 	} else {
 		s.formatter = internal.NewTextFormatter()
 	}
-
-	defer func() {
-		go s.tickRotateFile()
-	}()
 
 	if err := s.parseFileMark(); err != nil {
 		return
@@ -120,14 +118,14 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 		return errors.ErrSyncerClosed
 	}
 
-	return s.doWrite(entry{
+	return s.doWrite(&entry{
 		buf: s.formatter.Format(entity),
 		now: entity.Now,
 	})
 }
 
 // 执行写入日志操作
-func (s *Syncer) doWrite(e entry) error {
+func (s *Syncer) doWrite(e *entry) error {
 	if s.mu.TryLock() {
 		defer s.mu.Unlock()
 
@@ -137,9 +135,12 @@ func (s *Syncer) doWrite(e entry) error {
 
 		return s.flushToFile(e)
 	} else {
-		s.chEntry <- e
-		s.acc.Add(1)
+		if s.closing.Load() {
+			return errors.ErrSyncerClosed
+		}
 
+		s.acc.Add(1)
+		s.chEntry <- e
 		s.tryFlushToFile()
 
 		return nil
@@ -149,29 +150,35 @@ func (s *Syncer) doWrite(e entry) error {
 // Close 关闭同步器
 func (s *Syncer) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.closing.CompareAndSwap(false, true) {
+		s.mu.Unlock()
 		return errors.ErrSyncerClosed
 	}
 
 	s.cancel()
-
-	_ = s.flushToFile()
-
+	s.flushToFile(&entry{now: xtime.Now()})
 	s.wg.Wait()
+	file := s.file
+	s.file = nil
+	s.mu.Unlock()
 
-	if s.file == nil {
+	if file != nil {
+		_ = file.Sync()
+
+		return file.Close()
+	} else {
 		return nil
 	}
-
-	return s.file.Close()
 }
 
 // 尝试将数据刷入文件中
 func (s *Syncer) tryFlushToFile() {
 HEAD:
-	if s.flushing {
+	if s.closing.Load() {
+		return
+	}
+
+	if s.flushing.Load() {
 		return
 	}
 
@@ -185,7 +192,18 @@ HEAD:
 }
 
 // 写入将缓冲区数据写入文件
-func (s *Syncer) flushToFile(e ...entry) error {
+func (s *Syncer) flushToFile(e ...*entry) error {
+	s.flushToWriter(e...)
+
+	if len(e) > 0 {
+		return s.writeEntry(e[0], true)
+	} else {
+		return nil
+	}
+}
+
+// 写入将缓冲区数据写入writer
+func (s *Syncer) flushToWriter(e ...*entry) error {
 	acc := s.acc.Load()
 
 	if acc > 0 || len(e) > 0 {
@@ -197,36 +215,31 @@ func (s *Syncer) flushToFile(e ...entry) error {
 	}
 
 	if acc > 0 {
-		s.flushing = true
+		s.flushing.Store(true)
+		defer s.flushing.Store(false)
 
-		defer func() {
-			s.flushing = false
-		}()
+	FLUSH_LOOP:
+		for acc > 0 {
+			select {
+			case ent := <-s.chEntry:
+				s.acc.Add(-1)
 
-		for e := range s.chEntry {
-			s.acc.Add(-1)
+				if err := s.writeEntry(ent, false); err != nil {
+					return err
+				}
 
-			if err := s.writeEntry(e, false); err != nil {
-				return err
-			}
-
-			acc--
-
-			if acc == 0 {
-				break
+				acc--
+			default:
+				break FLUSH_LOOP
 			}
 		}
 	}
 
-	if len(e) > 0 {
-		return s.writeEntry(e[0], true)
-	} else {
-		return nil
-	}
+	return nil
 }
 
 // 写入日志
-func (s *Syncer) writeEntry(e entry, isAutoFlush bool) error {
+func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 	if s.opts.rotate != RotateNone {
 		if fileTag := s.makeFileTag(e.now); fileTag != s.fileTag {
 			if err := s.writer.Flush(); err != nil {
@@ -286,7 +299,7 @@ func (s *Syncer) tickRotateFile() {
 			}
 
 			if s.makeFileTag(now) != s.fileTag {
-				s.doWrite(entry{now: now})
+				s.doWrite(&entry{now: now})
 			}
 		case <-s.ctx.Done():
 			return
@@ -300,6 +313,10 @@ func (s *Syncer) rotateFile() error {
 		return nil
 	}
 
+	if err := s.file.Sync(); err != nil {
+		return err
+	}
+
 	if err := s.file.Close(); err != nil {
 		return err
 	}
@@ -310,6 +327,18 @@ func (s *Syncer) rotateFile() error {
 // 处理翻转文件
 func (s *Syncer) doRotateFile(fileTag string, fileVersion int64) (err error) {
 	filePath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, s.fileExt))
+	gzipPath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
+
+	for {
+		if _, err = os.Stat(filePath); os.IsNotExist(err) {
+			if _, err = os.Stat(gzipPath); os.IsNotExist(err) {
+				break
+			}
+		}
+		fileVersion++
+		filePath = filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, s.fileExt))
+		gzipPath = filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
+	}
 
 	if err = os.Rename(s.opts.path, filePath); err != nil {
 		return
@@ -320,18 +349,14 @@ func (s *Syncer) doRotateFile(fileTag string, fileVersion int64) (err error) {
 	}
 
 	if !s.opts.compress {
+		s.cleanExpiredFiles()
 		return
 	}
 
-	gzipPath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
-
-	s.wg.Add(1)
-
-	go func() {
+	s.wg.Go(func() {
 		_ = s.compressFile(gzipPath, filePath)
-
-		s.wg.Done()
-	}()
+		s.cleanExpiredFiles()
+	})
 
 	return
 }
@@ -366,20 +391,136 @@ func (s *Syncer) compressFile(dst, src string) (err error) {
 	dstWriter := gzip.NewWriter(dstFile)
 
 	defer func() {
-		_ = dstWriter.Close()
+		if closeErr := dstWriter.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
 	}()
 
-	if _, err = io.Copy(dstWriter, bufio.NewReader(srcFile)); err != nil {
+	if _, err = io.Copy(dstWriter, srcFile); err != nil {
 		return
 	}
 
 	return
 }
 
+// 清理过期文件
+func (s *Syncer) cleanExpiredFiles() {
+	if s.opts.maxAge <= 0 {
+		return
+	}
+
+	entries, err := os.ReadDir(s.fileDir)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	currentBase := filepath.Base(s.opts.path)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		fileName := entry.Name()
+
+		if fileName == currentBase {
+			continue
+		}
+
+		if len(fileName) < len(s.fileName)+len(s.fileExt)+1 {
+			continue
+		}
+
+		if s.fileName != fileName[0:len(s.fileName)] {
+			continue
+		}
+
+		var (
+			fileTime time.Time
+			fileTags []string
+			matched  bool
+		)
+
+		switch {
+		case s.fileExt == fileName[len(fileName)-len(s.fileExt):]:
+			fileTags = strings.Split(fileName[len(s.fileName):len(fileName)-len(s.fileExt)], ".")
+			matched = true
+		case gzipExt == fileName[len(fileName)-len(gzipExt):]:
+			fileTags = strings.Split(fileName[len(s.fileName):len(fileName)-len(gzipExt)], ".")
+			matched = true
+		}
+
+		if !matched {
+			continue
+		}
+
+		switch len(fileTags) {
+		case 2:
+			fileTime = s.fileModTime(entry)
+		case 3:
+			if t, ok := s.parseFileTagTime(fileTags[1]); ok {
+				fileTime = t
+			} else {
+				fileTime = s.fileModTime(entry)
+			}
+		default:
+			fileTime = s.fileModTime(entry)
+		}
+
+		if now.Sub(fileTime) > s.opts.maxAge {
+			_ = os.Remove(filepath.Join(s.fileDir, fileName))
+		}
+	}
+}
+
+// 从 fileTag 字符串解析时间
+func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
+	switch s.opts.rotate {
+	case RotateYear:
+		if t, err := time.Parse("2006", tag); err == nil {
+			return t, true
+		}
+	case RotateMonth:
+		if t, err := time.Parse("200601", tag); err == nil {
+			return t, true
+		}
+	case RotateWeek:
+		if len(tag) == 6 {
+			year, err1 := strconv.Atoi(tag[:4])
+			week, err2 := strconv.Atoi(tag[4:])
+			if err1 == nil && err2 == nil && week >= 1 && week <= 53 {
+				t := time.Date(year, 1, 1, 0, 0, 0, 0, time.Local)
+				_, w := t.ISOWeek()
+				daysToAdd := (week - w) * 7
+				return t.AddDate(0, 0, daysToAdd), true
+			}
+		}
+	case RotateDay:
+		if t, err := time.Parse("20060102", tag); err == nil {
+			return t, true
+		}
+	case RotateHour:
+		if t, err := time.Parse("2006010215", tag); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// 获取文件修改时间（兜底）
+func (s *Syncer) fileModTime(entry os.DirEntry) time.Time {
+	info, err := entry.Info()
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
 // 打开文件
 func (s *Syncer) openFile() error {
 	if _, err := os.Stat(s.fileDir); err != nil {
-		if err = os.MkdirAll(filepath.Dir(s.opts.path), 0755); err != nil {
+		if err = os.MkdirAll(s.fileDir, 0755); err != nil {
 			return err
 		}
 	}
@@ -405,7 +546,7 @@ func (s *Syncer) openFile() error {
 	s.file = file
 
 	if s.writer == nil {
-		s.writer = bufio.NewWriter(file)
+		s.writer = bufio.NewWriterSize(file, s.opts.bufferSize)
 	} else {
 		s.writer.Reset(file)
 	}
@@ -417,7 +558,7 @@ func (s *Syncer) openFile() error {
 func (s *Syncer) parseFileMark() error {
 	entries, err := os.ReadDir(s.fileDir)
 	if err != nil {
-		if err == io.EOF {
+		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
@@ -443,8 +584,8 @@ func (s *Syncer) parseFileMark() error {
 		switch {
 		case s.fileExt == fileName[len(fileName)-len(s.fileExt):]:
 			fileTags = strings.Split(fileName[len(s.fileName):len(fileName)-len(s.fileExt)], ".")
-		case s.gzipExt == fileName[len(fileName)-len(s.gzipExt):]:
-			fileTags = strings.Split(fileName[len(s.fileName):len(fileName)-len(s.gzipExt)], ".")
+		case gzipExt == fileName[len(fileName)-len(gzipExt):]:
+			fileTags = strings.Split(fileName[len(s.fileName):len(fileName)-len(gzipExt)], ".")
 		default:
 			continue
 		}
