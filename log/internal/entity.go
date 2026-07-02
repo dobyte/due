@@ -6,11 +6,10 @@ import (
 )
 
 type Entity struct {
-	Now      time.Time
-	Time     string
-	Datetime string
-	Level    Level
-	Message  string
-	Caller   string
-	Frames   []runtime.Frame
+	Now     time.Time
+	Time    string
+	Level   Level
+	Message string
+	Caller  string
+	Frames  []runtime.Frame
 }
