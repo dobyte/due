@@ -8,7 +8,7 @@ import (
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
-	"golang.org/x/sync/errgroup"
+	"github.com/dobyte/due/v2/task"
 )
 
 const (
@@ -51,11 +51,22 @@ func (s *Session) AddConn(conn network.Conn) {
 
 	cid, uid := conn.ID(), conn.UID()
 
+	if c, ok := s.conns[cid]; ok && c != conn {
+		s.doClearConnAttrs(c)
+	}
+
 	s.conns[cid] = conn
 
-	if uid != 0 {
-		s.users[uid] = conn
+	if uid == 0 {
+		return
 	}
+
+	if c, ok := s.users[uid]; ok && c != conn {
+		c.Unbind()
+		s.doClearConnAttrs(c)
+	}
+
+	s.users[uid] = conn
 }
 
 // RemConn 移除连接
@@ -71,11 +82,7 @@ func (s *Session) RemConn(conn network.Conn) {
 		delete(s.users, uid)
 	}
 
-	conn.Attr().Visit(func(channel, _ any) bool {
-		s.doUnsubscribe(channel.(string), conn)
-
-		return true
-	})
+	s.doClearConnAttrs(conn)
 }
 
 // Has 是否存在会话
@@ -206,9 +213,9 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 // Send 发送消息（同步）
 func (s *Session) Send(kind Kind, target int64, message []byte) error {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return err
 	}
@@ -243,141 +250,82 @@ func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, message
 		return 0, nil
 	}
 
-	var (
-		total int64
-		conns map[int64]network.Conn
-		eg, _ = errgroup.WithContext(context.Background())
-	)
+	var conns []network.Conn
 
 	s.rw.RLock()
-
 	switch kind {
 	case Conn:
-		conns = s.conns
+		for _, target := range targets {
+			if conn, ok := s.conns[target]; ok {
+				conns = append(conns, conn)
+			}
+		}
 	case User:
-		conns = s.users
+		for _, target := range targets {
+			if conn, ok := s.users[target]; ok {
+				conns = append(conns, conn)
+			}
+		}
 	default:
 		s.rw.RUnlock()
 		return 0, errors.ErrInvalidSessionKind
 	}
-
-	for _, target := range targets {
-		conn, ok := conns[target]
-		if !ok {
-			continue
-		}
-
-		eg.Go(func() error {
-			if err := conn.Push(message); err != nil {
-				return err
-			}
-
-			atomic.AddInt64(&total, 1)
-
-			if disconnect {
-				_ = conn.Close()
-			}
-
-			return nil
-		})
-	}
-
 	s.rw.RUnlock()
 
-	if err := eg.Wait(); err != nil && total == 0 {
-		return 0, err
-	} else {
-		return total, nil
+	if len(conns) == 0 {
+		return 0, nil
 	}
+
+	return s.doBatchPush(conns, disconnect, message)
 }
 
 // Broadcast 推送广播消息（异步）
 func (s *Session) Broadcast(kind Kind, disconnect bool, message []byte) (int64, error) {
-	var (
-		total int64
-		conns map[int64]network.Conn
-		eg, _ = errgroup.WithContext(context.Background())
-	)
+	var conns []network.Conn
 
 	s.rw.RLock()
-
 	switch kind {
 	case Conn:
-		conns = s.conns
+		conns = make([]network.Conn, 0, len(s.conns))
+		for _, conn := range s.conns {
+			conns = append(conns, conn)
+		}
 	case User:
-		conns = s.users
+		conns = make([]network.Conn, 0, len(s.users))
+		for _, conn := range s.users {
+			conns = append(conns, conn)
+		}
 	default:
 		s.rw.RUnlock()
 		return 0, errors.ErrInvalidSessionKind
 	}
-
-	for i := range conns {
-		conn := conns[i]
-
-		eg.Go(func() error {
-			if err := conn.Push(message); err != nil {
-				return err
-			}
-
-			atomic.AddInt64(&total, 1)
-
-			if disconnect {
-				_ = conn.Close()
-			}
-
-			return nil
-		})
-	}
-
 	s.rw.RUnlock()
 
-	if err := eg.Wait(); err != nil && total == 0 {
-		return 0, err
-	} else {
-		return total, nil
+	if len(conns) == 0 {
+		return 0, nil
 	}
+
+	return s.doBatchPush(conns, disconnect, message)
 }
 
 // Publish 发布频道消息（异步）
 func (s *Session) Publish(channel string, disconnect bool, message []byte) (int64, error) {
-	var (
-		total int64
-		eg, _ = errgroup.WithContext(context.Background())
-	)
+	var conns []network.Conn
 
 	s.rw.RLock()
+	if channels, ok := s.channels[channel]; ok {
+		conns = make([]network.Conn, 0, len(channels))
+		for conn := range channels {
+			conns = append(conns, conn)
+		}
+	}
+	s.rw.RUnlock()
 
-	channels, ok := s.channels[channel]
-	if !ok {
-		s.rw.RUnlock()
+	if len(conns) == 0 {
 		return 0, nil
 	}
 
-	for c := range channels {
-		conn := c
-
-		eg.Go(func() error {
-			if err := conn.Push(message); err != nil {
-				return err
-			}
-
-			atomic.AddInt64(&total, 1)
-
-			if disconnect {
-				_ = conn.Close()
-			}
-
-			return nil
-		})
-	}
-
-	s.rw.RUnlock()
-
-	if err := eg.Wait(); err != nil && total == 0 {
-		return 0, err
-	} else {
-		return total, nil
-	}
+	return s.doBatchPush(conns, disconnect, message)
 }
 
 // Subscribe 订阅频道
@@ -462,6 +410,15 @@ func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
 	}
 }
 
+// 清除连接属性
+func (s *Session) doClearConnAttrs(conn network.Conn) {
+	conn.Attr().Visit(func(channel, _ any) bool {
+		s.doUnsubscribe(channel.(string), conn)
+
+		return true
+	})
+}
+
 // Stat 统计会话总数
 func (s *Session) Stat(kind Kind) (int64, error) {
 	s.rw.RLock()
@@ -474,6 +431,51 @@ func (s *Session) Stat(kind Kind) (int64, error) {
 		return int64(len(s.users)), nil
 	default:
 		return 0, errors.ErrInvalidSessionKind
+	}
+}
+
+// 批量推送消息（异步）
+func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []byte) (int64, error) {
+	switch len(conns) {
+	case 0:
+		return 0, nil
+	case 1:
+		if err := conns[0].Push(message); err != nil {
+			return 0, err
+		}
+
+		if disconnect {
+			_ = conns[0].Close()
+		}
+
+		return 1, nil
+	default:
+		var (
+			total int64
+			eg, _ = task.WithContext(context.Background())
+		)
+
+		for _, conn := range conns {
+			eg.Go(func() error {
+				if err := conn.Push(message); err != nil {
+					return err
+				}
+
+				atomic.AddInt64(&total, 1)
+
+				if disconnect {
+					_ = conn.Close()
+				}
+
+				return nil
+			})
+		}
+
+		if err := eg.Wait(); err != nil && total == 0 {
+			return 0, err
+		} else {
+			return total, nil
+		}
 	}
 }
 
