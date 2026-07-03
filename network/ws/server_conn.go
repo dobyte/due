@@ -25,19 +25,19 @@ import (
 )
 
 type serverConn struct {
-	id                int64           // 连接ID
-	uid               atomic.Int64    // 用户ID
-	attr              *attr           // 连接属性
-	state             atomic.Int32    // 连接状态
-	connMgr           *serverConnMgr  // 连接管理
-	rw                sync.RWMutex    // 锁
-	conn              *websocket.Conn // WS源连接
-	taskPool          sync.Pool       // 任务对象池
-	lowPriorityQueue  chan *task      // 低优先级队列
-	highPriorityQueue chan *task      // 高优先级队列
-	done              chan struct{}   // 写入完成信号
-	lastHeartbeatTime atomic.Int64    // 上次心跳时间
-	authorizeTimer    atomic.Value    // 授权定时器
+	id                    int64           // 连接ID
+	uid                   atomic.Int64    // 用户ID
+	attr                  *attr           // 连接属性
+	state                 atomic.Int32    // 连接状态
+	connMgr               *serverConnMgr  // 连接管理
+	rw                    sync.RWMutex    // 锁
+	conn                  *websocket.Conn // WS源连接
+	taskPool              sync.Pool       // 任务对象池
+	lowPriorityTaskQueue  chan *task      // 低优先级队列
+	highPriorityTaskQueue chan *task      // 高优先级队列
+	done                  chan struct{}   // 写入完成信号
+	lastHeartbeatTime     atomic.Int64    // 上次心跳时间
+	authorizeTimer        atomic.Value    // 授权定时器
 }
 
 var _ network.Conn = &serverConn{}
@@ -59,6 +59,10 @@ func (c *serverConn) Attr() network.Attr {
 
 // Bind 绑定用户ID
 func (c *serverConn) Bind(uid int64) {
+	if err := c.checkState(); err != nil {
+		return
+	}
+
 	c.uid.Store(uid)
 
 	c.uncheckAuthorize()
@@ -66,6 +70,10 @@ func (c *serverConn) Bind(uid int64) {
 
 // Unbind 解绑用户ID
 func (c *serverConn) Unbind() {
+	if err := c.checkState(); err != nil {
+		return
+	}
+
 	c.uid.Store(0)
 
 	c.checkAuthorize()
@@ -84,7 +92,7 @@ func (c *serverConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
+	return c.doWriteToQueue(c.highPriorityTaskQueue, dataPacket, msg)
 }
 
 // Push 发送消息（异步）
@@ -100,7 +108,7 @@ func (c *serverConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
+	return c.doWriteToQueue(c.lowPriorityTaskQueue, dataPacket, msg)
 }
 
 // State 获取连接状态
@@ -179,8 +187,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.connMgr = cm
-	c.lowPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
-	c.highPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
+	c.lowPriorityTaskQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
+	c.highPriorityTaskQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
 	c.done = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
@@ -259,7 +267,9 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.lowPriorityQueue <- &task{typ: closeSig}
+	t := c.taskPool.Get().(*task)
+	t.typ = closeSig
+	c.lowPriorityTaskQueue <- t
 	c.rw.RUnlock()
 
 	<-c.done
@@ -273,10 +283,8 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 
 // 强制关闭
 func (c *serverConn) forceClose(isNeedRecycle bool) error {
-	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnClosed)) {
-		if !c.state.CompareAndSwap(int32(network.ConnHanged), int32(network.ConnClosed)) {
-			return errors.ErrConnectionClosed
-		}
+	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		return errors.ErrConnectionClosed
 	}
 
 	c.uncheckAuthorize()
@@ -293,8 +301,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 		return errors.ErrConnectionClosed
 	}
 
-	close(c.lowPriorityQueue)
-	close(c.highPriorityQueue)
+	close(c.lowPriorityTaskQueue)
+	close(c.highPriorityTaskQueue)
 	close(c.done)
 	conn := c.conn
 	c.conn = nil
@@ -365,7 +373,7 @@ func (c *serverConn) read() {
 			if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
 				c.rw.RLock()
 				if c.conn != nil {
-					c.doWriteToQueue(c.highPriorityQueue, heartbeatPacket)
+					c.doWriteToQueue(c.highPriorityTaskQueue, heartbeatPacket)
 				}
 				c.rw.RUnlock()
 			}
@@ -394,7 +402,7 @@ func (c *serverConn) write() {
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue:
+		case t, ok := <-c.highPriorityTaskQueue:
 			if !ok {
 				return
 			}
@@ -412,7 +420,7 @@ func (c *serverConn) write() {
 			}
 		default:
 			select {
-			case t, ok := <-c.highPriorityQueue:
+			case t, ok := <-c.highPriorityTaskQueue:
 				if !ok {
 					return
 				}
@@ -420,7 +428,7 @@ func (c *serverConn) write() {
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-c.lowPriorityQueue:
+			case t, ok := <-c.lowPriorityTaskQueue:
 				if !ok {
 					return
 				}

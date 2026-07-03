@@ -10,7 +10,9 @@ package ws
 import (
 	"net"
 	"net/http"
+	"sync/atomic"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -27,6 +29,7 @@ type Server interface {
 
 type server struct {
 	opts              *serverOptions            // 配置
+	started           atomic.Bool               // 是否已启动
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
@@ -64,7 +67,12 @@ func (s *server) Protocol() string {
 
 // Start 启动服务器
 func (s *server) Start() error {
+	if s.started.Swap(true) {
+		return errors.ErrIllegalOperation
+	}
+
 	if err := s.init(); err != nil {
+		s.started.Store(false)
 		return err
 	}
 
@@ -79,11 +87,21 @@ func (s *server) Start() error {
 
 // Stop 关闭服务器
 func (s *server) Stop() error {
-	if err := s.listener.Close(); err != nil {
-		return err
+	if !s.started.Swap(false) {
+		return errors.ErrIllegalOperation
+	}
+
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			return err
+		}
 	}
 
 	s.connMgr.close()
+
+	if s.stopHandler != nil {
+		s.stopHandler()
+	}
 
 	return nil
 }
@@ -138,13 +156,23 @@ func (s *server) serve() {
 		}
 	})
 
+	var err error
+
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
-		if err := http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile); err != nil {
-			log.Errorf("websocket server shutdown, err: %v", err)
-		}
+		err = http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile)
 	} else {
-		if err := http.Serve(s.listener, mux); err != nil {
-			log.Errorf("websocket server shutdown, err: %v", err)
+		err = http.Serve(s.listener, mux)
+	}
+
+	if err != nil {
+		log.Errorf("websocket server shutdown, err: %v", err)
+	}
+
+	if s.started.Load() {
+		s.started.Store(false)
+		s.connMgr.close()
+		if s.stopHandler != nil {
+			s.stopHandler()
 		}
 	}
 }

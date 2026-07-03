@@ -8,13 +8,14 @@
 package ws
 
 import (
+	"context"
 	"reflect"
 	"sync"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/utils/xcall"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/gorilla/websocket"
 )
 
@@ -41,17 +42,10 @@ func newConnMgr(server *server) *serverConnMgr {
 
 // 关闭连接
 func (cm *serverConnMgr) close() {
-	var wg sync.WaitGroup
+	wg, _ := taskpool.WithContext(context.Background())
 
-	wg.Add(len(cm.partitions))
-
-	for i := range cm.partitions {
-		p := cm.partitions[i]
-
-		xcall.Go(func() {
-			p.close()
-			wg.Done()
-		})
+	for _, p := range cm.partitions {
+		wg.Go(p.close)
 	}
 
 	wg.Wait()
@@ -59,9 +53,13 @@ func (cm *serverConnMgr) close() {
 
 // 分配连接
 func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
-	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
-		cm.total.Add(-1)
-		return errors.ErrTooManyConnection
+	maxConnNum := int64(cm.server.opts.maxConnNum)
+	for {
+		if total := cm.total.Load(); total >= maxConnNum {
+			return errors.ErrTooManyConnection
+		} else if cm.total.CompareAndSwap(total, total+1) {
+			break
+		}
 	}
 
 	conn := cm.pool.Get().(*serverConn)
@@ -107,7 +105,7 @@ func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 }
 
 // 关闭该分片内的所有连接
-func (p *partition) close() {
+func (p *partition) close() error {
 	p.rw.RLock()
 	conns := make([]network.Conn, 0, len(p.connections))
 	for _, conn := range p.connections {
@@ -115,7 +113,13 @@ func (p *partition) close() {
 	}
 	p.rw.RUnlock()
 
+	wg, _ := taskpool.WithContext(context.Background())
+
 	for _, conn := range conns {
-		_ = conn.Close()
+		wg.Go(func() error {
+			return conn.Close()
+		})
 	}
+
+	return wg.Wait()
 }

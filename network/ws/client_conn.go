@@ -77,17 +77,23 @@ func (c *clientConn) Attr() network.Attr {
 
 // Bind 绑定用户ID
 func (c *clientConn) Bind(uid int64) {
+	if err := c.checkState(); err != nil {
+		return
+	}
+
 	c.uid.Store(uid)
 }
 
 // Unbind 解绑用户ID
 func (c *clientConn) Unbind() {
+	if err := c.checkState(); err != nil {
+		return
+	}
+	
 	c.uid.Store(0)
 }
 
-// Send 发送消息（异步）
-// 由于gorilla/websocket库不支持一个连接得并发读写，因而使用Send方法会导致使用写锁操作
-// 建议使用Push方法替代Send
+// Send 发送消息（同步）
 func (c *clientConn) Send(msg []byte) (err error) {
 	if err := c.checkState(); err != nil {
 		return err
@@ -210,7 +216,9 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.lowPriorityTaskQueue <- &task{typ: closeSig}
+	t := c.taskPool.Get().(*task)
+	t.typ = closeSig
+	c.lowPriorityTaskQueue <- t
 	c.rw.RUnlock()
 
 	<-c.done
@@ -224,10 +232,8 @@ func (c *clientConn) graceClose() error {
 
 // 强制关闭
 func (c *clientConn) forceClose() error {
-	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnClosed)) {
-		if !c.state.CompareAndSwap(int32(network.ConnHanged), int32(network.ConnClosed)) {
-			return errors.ErrConnectionClosed
-		}
+	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		return errors.ErrConnectionClosed
 	}
 
 	return c.doClose()
