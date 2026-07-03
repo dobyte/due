@@ -8,12 +8,13 @@
 package ws
 
 import (
+	"net"
+	"net/http"
+
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
-	"net"
-	"net/http"
 )
 
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
@@ -113,7 +114,8 @@ func (s *server) serve() {
 		CheckOrigin:       s.opts.checkOrigin,
 	}
 
-	http.HandleFunc(s.opts.path, func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(s.opts.path, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
@@ -136,15 +138,14 @@ func (s *server) serve() {
 		}
 	})
 
-	var err error
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
-		err = http.ServeTLS(s.listener, nil, s.opts.certFile, s.opts.keyFile)
+		if err := http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile); err != nil {
+			log.Errorf("websocket server shutdown, err: %v", err)
+		}
 	} else {
-		err = http.Serve(s.listener, nil)
-	}
-
-	if err != nil {
-		log.Errorf("websocket server shutdown, err: %v", err)
+		if err := http.Serve(s.listener, mux); err != nil {
+			log.Errorf("websocket server shutdown, err: %v", err)
+		}
 	}
 }
 

@@ -30,7 +30,6 @@ type clientConn struct {
 	highPriorityTaskQueue chan *task      // 高优先级队列
 	lastHeartbeatTime     atomic.Int64    // 上次心跳时间
 	done                  chan struct{}   // 写入完成信号
-	close                 chan struct{}   // 关闭信号
 }
 
 var _ network.Conn = &clientConn{}
@@ -45,7 +44,6 @@ func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn 
 		lowPriorityTaskQueue:  make(chan *task, client.opts.writeQueueSize),
 		highPriorityTaskQueue: make(chan *task, client.opts.writeQueueSize),
 		done:                  make(chan struct{}),
-		close:                 make(chan struct{}),
 	}
 
 	c.state.Store(int32(network.ConnOpened))
@@ -246,7 +244,6 @@ func (c *clientConn) doClose() error {
 
 	close(c.lowPriorityTaskQueue)
 	close(c.highPriorityTaskQueue)
-	close(c.close)
 	close(c.done)
 	conn := c.conn
 	c.conn = nil
@@ -266,58 +263,53 @@ func (c *clientConn) read() {
 	conn := c.conn
 
 	for {
-		select {
-		case <-c.close:
+		msgType, msgData, err := conn.ReadMessage()
+		if err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				if _, ok := err.(*websocket.CloseError); !ok {
+					log.Warnf("read message failed: %v", err)
+				}
+			}
+			_ = c.forceClose()
+			return
+		}
+
+		if msgType != websocket.BinaryMessage {
+			continue
+		}
+
+		if c.client.opts.heartbeatInterval > 0 {
+			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+		}
+
+		switch c.State() {
+		case network.ConnHanged:
+			continue
+		case network.ConnClosed:
 			return
 		default:
-			msgType, msgData, err := conn.ReadMessage()
-			if err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					if _, ok := err.(*websocket.CloseError); !ok {
-						log.Warnf("read message failed: %v", err)
-					}
-				}
-				_ = c.forceClose()
-				return
-			}
+			// ignore
+		}
 
-			if msgType != websocket.BinaryMessage {
-				continue
-			}
+		// ignore empty packet
+		if len(msgData) == 0 {
+			continue
+		}
 
-			if c.client.opts.heartbeatInterval > 0 {
-				c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-			}
+		// check heartbeat packet
+		isHeartbeat, err := packet.CheckHeartbeat(msgData)
+		if err != nil {
+			log.Errorf("check heartbeat message error: %v", err)
+			continue
+		}
 
-			switch c.State() {
-			case network.ConnHanged:
-				continue
-			case network.ConnClosed:
-				return
-			default:
-				// ignore
-			}
+		// ignore heartbeat packet
+		if isHeartbeat {
+			continue
+		}
 
-			// ignore empty packet
-			if len(msgData) == 0 {
-				continue
-			}
-
-			// check heartbeat packet
-			isHeartbeat, err := packet.CheckHeartbeat(msgData)
-			if err != nil {
-				log.Errorf("check heartbeat message error: %v", err)
-				continue
-			}
-
-			// ignore heartbeat packet
-			if isHeartbeat {
-				continue
-			}
-
-			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, msgData)
-			}
+		if c.client.receiveHandler != nil {
+			c.client.receiveHandler(c, msgData)
 		}
 	}
 }
@@ -327,13 +319,13 @@ func (c *clientConn) write() {
 	var (
 		conn   = c.conn
 		ticker *time.Ticker
+		tickCh <-chan time.Time
 	)
 
 	if c.client.opts.heartbeatInterval > 0 {
 		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
-	} else {
-		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+		tickCh = ticker.C
 	}
 
 	for {
@@ -346,7 +338,7 @@ func (c *clientConn) write() {
 			if !c.doWrite(conn, t) {
 				return
 			}
-		case t, ok := <-ticker.C:
+		case t, ok := <-tickCh:
 			if !ok {
 				return
 			}
@@ -372,7 +364,7 @@ func (c *clientConn) write() {
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-ticker.C:
+			case t, ok := <-tickCh:
 				if !ok {
 					return
 				}

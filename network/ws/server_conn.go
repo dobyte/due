@@ -36,7 +36,6 @@ type serverConn struct {
 	lowPriorityQueue  chan *task      // 低优先级队列
 	highPriorityQueue chan *task      // 高优先级队列
 	done              chan struct{}   // 写入完成信号
-	close             chan struct{}   // 关闭信号
 	lastHeartbeatTime atomic.Int64    // 上次心跳时间
 	authorizeTimer    atomic.Value    // 授权定时器
 }
@@ -183,7 +182,6 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.lowPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
 	c.highPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
 	c.done = make(chan struct{})
-	c.close = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
 
@@ -218,8 +216,14 @@ func (c *serverConn) checkState() error {
 // 授权检查
 func (c *serverConn) checkAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
+		cid := c.ID()
+
 		timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 			if c.UID() != 0 {
+				return
+			}
+
+			if c.ID() != cid {
 				return
 			}
 
@@ -291,7 +295,6 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 
 	close(c.lowPriorityQueue)
 	close(c.highPriorityQueue)
-	close(c.close)
 	close(c.done)
 	conn := c.conn
 	c.conn = nil
@@ -316,64 +319,59 @@ func (c *serverConn) read() {
 	conn := c.conn
 
 	for {
-		select {
-		case <-c.close:
+		msgType, msgData, err := conn.ReadMessage()
+		if err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				if _, ok := err.(*websocket.CloseError); !ok {
+					log.Warnf("read message failed: %d %v", c.id, err)
+				}
+			}
+			_ = c.forceClose(true)
+			return
+		}
+
+		if msgType != websocket.BinaryMessage {
+			continue
+		}
+
+		if c.connMgr.server.opts.heartbeatInterval > 0 {
+			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+		}
+
+		switch c.State() {
+		case network.ConnHanged:
+			continue
+		case network.ConnClosed:
 			return
 		default:
-			msgType, msgData, err := conn.ReadMessage()
-			if err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					if _, ok := err.(*websocket.CloseError); !ok {
-						log.Warnf("read message failed: %d %v", c.id, err)
-					}
+			// ignore
+		}
+
+		// ignore empty packet
+		if len(msgData) == 0 {
+			continue
+		}
+
+		// check heartbeat packet
+		isHeartbeat, err := packet.CheckHeartbeat(msgData)
+		if err != nil {
+			log.Errorf("check heartbeat message error: %v", err)
+			continue
+		}
+
+		// ignore heartbeat packet
+		if isHeartbeat {
+			// responsive heartbeat
+			if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
+				c.rw.RLock()
+				if c.conn != nil {
+					c.doWriteToQueue(c.highPriorityQueue, heartbeatPacket)
 				}
-				_ = c.forceClose(true)
-				return
+				c.rw.RUnlock()
 			}
-
-			if msgType != websocket.BinaryMessage {
-				continue
-			}
-
-			if c.connMgr.server.opts.heartbeatInterval > 0 {
-				c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-			}
-
-			switch c.State() {
-			case network.ConnHanged:
-				continue
-			case network.ConnClosed:
-				return
-			default:
-				// ignore
-			}
-
-			// ignore empty packet
-			if len(msgData) == 0 {
-				continue
-			}
-
-			// check heartbeat packet
-			isHeartbeat, err := packet.CheckHeartbeat(msgData)
-			if err != nil {
-				log.Errorf("check heartbeat message error: %v", err)
-				continue
-			}
-
-			// ignore heartbeat packet
-			if isHeartbeat {
-				// responsive heartbeat
-				if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
-					c.rw.RLock()
-					if c.conn != nil {
-						c.doWriteToQueue(c.highPriorityQueue, heartbeatPacket)
-					}
-					c.rw.RUnlock()
-				}
-			} else {
-				if c.connMgr.server.receiveHandler != nil {
-					c.connMgr.server.receiveHandler(c, msgData)
-				}
+		} else {
+			if c.connMgr.server.receiveHandler != nil {
+				c.connMgr.server.receiveHandler(c, msgData)
 			}
 		}
 	}

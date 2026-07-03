@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
 )
@@ -58,16 +59,15 @@ func (cm *serverConnMgr) close() {
 
 // 分配连接
 func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
-	if cm.total.Load() >= int64(cm.server.opts.maxConnNum) {
+	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
+		cm.total.Add(-1)
 		return errors.ErrTooManyConnection
 	}
 
-	id := cm.id.Add(1)
 	conn := cm.pool.Get().(*serverConn)
-	conn.init(cm, id, c)
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
-	cm.total.Add(1)
+	conn.init(cm, cm.id.Add(1), c)
 
 	return nil
 }
@@ -108,7 +108,14 @@ func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 
 // 关闭该分片内的所有连接
 func (p *partition) close() {
+	p.rw.RLock()
+	conns := make([]network.Conn, 0, len(p.connections))
 	for _, conn := range p.connections {
+		conns = append(conns, conn)
+	}
+	p.rw.RUnlock()
+
+	for _, conn := range conns {
 		_ = conn.Close()
 	}
 }
