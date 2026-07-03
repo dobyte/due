@@ -63,7 +63,22 @@ func GetPool() Pool {
 }
 
 // AddTask 添加任务
+// Deprecated: As of due v2.6.0+, this function simply calls [Add].
 func AddTask(task func()) {
+	if globalPool == nil {
+		xcall.Go(task)
+		return
+	}
+
+	if err := globalPool.AddTask(task); err != nil {
+		xcall.Go(task)
+		log.Warnf("add task to the task pool failed: %v", err)
+		return
+	}
+}
+
+// Add 执行任务
+func Add(task func()) {
 	if globalPool == nil {
 		xcall.Go(task)
 		return
