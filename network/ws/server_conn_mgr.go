@@ -23,14 +23,16 @@ type serverConnMgr struct {
 	id         atomic.Int64 // 连接ID
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
-	pool       sync.Pool    // 连接池
+	connPool   sync.Pool    // 连接池
+	taskPool   sync.Pool    // 任务池
 	partitions []*partition // 连接管理
 }
 
 func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.pool = sync.Pool{New: func() any { return &serverConn{taskPool: sync.Pool{New: func() any { return &task{} }}} }}
+	cm.connPool = sync.Pool{New: func() any { return &serverConn{} }}
+	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
 	cm.partitions = make([]*partition, 10)
 
 	for i := 0; i < len(cm.partitions); i++ {
@@ -52,7 +54,7 @@ func (cm *serverConnMgr) close() {
 }
 
 // 分配连接
-func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
+func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 	maxConnNum := int64(cm.server.opts.maxConnNum)
 	for {
 		if total := cm.total.Load(); total >= maxConnNum {
@@ -62,7 +64,7 @@ func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
 		}
 	}
 
-	conn := cm.pool.Get().(*serverConn)
+	conn := cm.connPool.Get().(*serverConn)
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
 	conn.init(cm, cm.id.Add(1), c)
@@ -71,13 +73,30 @@ func (cm *serverConnMgr) allocate(c *websocket.Conn) error {
 }
 
 // 回收连接
-func (cm *serverConnMgr) recycle(c *websocket.Conn) {
+func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		conn.reset()
-		cm.pool.Put(conn)
+		cm.connPool.Put(conn)
 		cm.total.Add(-1)
 	}
+}
+
+// 分配任务对象
+func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
+	t := cm.taskPool.Get().(*task)
+	t.typ = typ
+	if len(msg) > 0 {
+		t.msg = msg[0]
+	}
+
+	return t
+}
+
+// 回收任务到对象池
+func (cm *serverConnMgr) recycleTask(t *task) {
+	t.msg = nil
+	cm.taskPool.Put(t)
 }
 
 type partition struct {

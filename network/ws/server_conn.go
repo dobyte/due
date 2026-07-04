@@ -32,7 +32,6 @@ type serverConn struct {
 	rw                sync.RWMutex    // 锁
 	wg                *sync.WaitGroup // 等待组
 	conn              *websocket.Conn // WS源连接
-	taskPool          sync.Pool       // 任务对象池
 	lowPriorityQueue  *queue          // 低优先级队列
 	highPriorityQueue *queue          // 高优先级队列
 	lastHeartbeatTime atomic.Int64    // 上次心跳时间
@@ -327,7 +326,7 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.wg.Wait()
 
 	if isNeedRecycle {
-		c.connMgr.recycle(conn)
+		c.connMgr.recycleConn(conn)
 	}
 
 	return err
@@ -477,7 +476,7 @@ func (c *serverConn) write() {
 
 // 执行写入操作
 func (c *serverConn) doWrite(conn *websocket.Conn, t *task) {
-	defer c.doRecycleToPool(t)
+	defer c.connMgr.recycleTask(t)
 
 	if t.typ == closeSig {
 		return
@@ -538,22 +537,12 @@ func (c *serverConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }
 
-// 回收任务到对象池
-func (c *serverConn) doRecycleToPool(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
-}
-
 // 写入任务到队列
 func (c *serverConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
+	t := c.connMgr.allocateTask(typ, msg...)
 
 	if err := q.write(t); err != nil {
-		c.doRecycleToPool(t)
+		c.connMgr.recycleTask(t)
 		return err
 	} else {
 		return nil

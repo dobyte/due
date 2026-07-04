@@ -150,7 +150,7 @@ func (s *server) serve() {
 			return
 		}
 
-		if err = s.connMgr.allocate(conn); err != nil {
+		if err = s.connMgr.allocateConn(conn); err != nil {
 			log.Errorf("connection allocate error: %v", err)
 
 			if err = conn.Close(); err != nil {
