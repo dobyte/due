@@ -552,5 +552,10 @@ func (c *serverConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
 		t.msg = msg[0]
 	}
 
-	return q.write(t)
+	if err := q.write(t); err != nil {
+		c.doRecycleToPool(t)
+		return err
+	} else {
+		return nil
+	}
 }
