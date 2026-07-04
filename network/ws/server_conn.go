@@ -30,6 +30,7 @@ type serverConn struct {
 	state             atomic.Int32    // 连接状态
 	connMgr           *serverConnMgr  // 连接管理
 	rw                sync.RWMutex    // 锁
+	wg                *sync.WaitGroup // 等待组
 	conn              *websocket.Conn // WS源连接
 	taskPool          sync.Pool       // 任务对象池
 	lowPriorityQueue  *queue          // 低优先级队列
@@ -183,12 +184,14 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.uid.Store(0)
 	c.attr = &attr{}
 	c.state.Store(int32(network.ConnOpened))
+	c.wg = &sync.WaitGroup{}
 	c.conn = conn
 	c.connMgr = cm
 	c.lowPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
 	c.highPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.wg.Add(2)
 
 	xcall.Go(c.read)
 
@@ -203,7 +206,9 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 
 // 重置连接
 func (c *serverConn) reset() {
+	c.wg = nil
 	c.attr = nil
+	c.conn = nil
 	c.lowPriorityQueue = nil
 	c.highPriorityQueue = nil
 	c.authorizeTimer.Store((*time.Timer)(nil))
@@ -319,6 +324,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
+	c.wg.Wait()
+
 	if isNeedRecycle {
 		c.connMgr.recycle(conn)
 	}
@@ -328,6 +335,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 
 // 读取消息
 func (c *serverConn) read() {
+	defer c.wg.Done()
+
 	conn := c.conn
 
 	for {
@@ -394,6 +403,8 @@ func (c *serverConn) read() {
 // 写入消息
 // 由于gorilla/websocket库并发写入的限制，同时为了保证心跳能够优先下发到客户端，故而实现一个优先队列
 func (c *serverConn) write() {
+	defer c.wg.Done()
+
 	var (
 		conn   = c.conn
 		ticker *time.Ticker
