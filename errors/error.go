@@ -70,6 +70,8 @@ var (
 	ErrActorNotStarted         = New("actor not started")
 	ErrWatcherStopped          = New("watcher stopped")
 	ErrWriteTimeout            = New("write timeout")
+	ErrQueueHanged             = New("queue is hanged")
+	ErrQueueClosed             = New("queue is closed")
 )
 
 // NewError 新建一个错误
