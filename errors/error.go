@@ -69,6 +69,7 @@ var (
 	ErrMissingEventbusInstance = New("missing eventbus instance")
 	ErrActorNotStarted         = New("actor not started")
 	ErrWatcherStopped          = New("watcher stopped")
+	ErrWriteTimeout            = New("write timeout")
 )
 
 // NewError 新建一个错误

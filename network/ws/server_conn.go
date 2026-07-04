@@ -33,8 +33,10 @@ type serverConn struct {
 	rw                    sync.RWMutex    // 锁
 	conn                  *websocket.Conn // WS源连接
 	taskPool              sync.Pool       // 任务对象池
-	lowPriorityTaskQueue  chan *task      // 低优先级队列
-	highPriorityTaskQueue chan *task      // 高优先级队列
+	lowPriorityQueue      chan *task      // 低优先级队列
+	lowPriorityQueueSize  atomic.Int32    // 低优先级队列大小
+	highPriorityQueue     chan *task      // 高优先级队列
+	highPriorityQueueSize atomic.Int32    // 高优先级队列大小
 	done                  chan struct{}   // 写入完成信号
 	lastHeartbeatTime     atomic.Int64    // 上次心跳时间
 	authorizeTimer        atomic.Value    // 授权定时器
@@ -92,7 +94,7 @@ func (c *serverConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(c.highPriorityTaskQueue, dataPacket, msg)
+	return c.doWriteToQueue(high, dataPacket, msg)
 }
 
 // Push 发送消息（异步）
@@ -108,7 +110,7 @@ func (c *serverConn) Push(msg []byte) error {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(c.lowPriorityTaskQueue, dataPacket, msg)
+	return c.doWriteToQueue(low, dataPacket, msg)
 }
 
 // State 获取连接状态
@@ -187,9 +189,11 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.connMgr = cm
-	c.lowPriorityTaskQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
-	c.highPriorityTaskQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
-	c.done = make(chan struct{})
+	c.lowPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
+	c.lowPriorityQueueSize.Store(0)
+	c.highPriorityQueue = make(chan *task, c.connMgr.server.opts.writeQueueSize)
+	c.highPriorityQueueSize.Store(0)
+	c.done = make(chan struct{}, 1)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
 
@@ -207,6 +211,9 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 // 重置连接
 func (c *serverConn) reset() {
 	c.attr = nil
+	c.lowPriorityQueue = nil
+	c.highPriorityQueue = nil
+	c.authorizeTimer.Store((*time.Timer)(nil))
 }
 
 // 检测连接状态
@@ -267,15 +274,13 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	t := c.taskPool.Get().(*task)
-	t.typ = closeSig
-	c.lowPriorityTaskQueue <- t
+	c.doWriteToQueue(low, closeSig)
 	c.rw.RUnlock()
 
 	<-c.done
 
-	if !c.state.CompareAndSwap(int32(network.ConnHanged), int32(network.ConnClosed)) {
-		return errors.ErrConnectionNotHanged
+	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		return errors.ErrConnectionClosed
 	}
 
 	return c.doClose(isNeedRecycle)
@@ -301,8 +306,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 		return errors.ErrConnectionClosed
 	}
 
-	close(c.lowPriorityTaskQueue)
-	close(c.highPriorityTaskQueue)
+	close(c.lowPriorityQueue)
+	close(c.highPriorityQueue)
 	close(c.done)
 	conn := c.conn
 	c.conn = nil
@@ -334,7 +339,11 @@ func (c *serverConn) read() {
 					log.Warnf("read message failed: %d %v", c.id, err)
 				}
 			}
-			_ = c.forceClose(true)
+
+			if err = c.forceClose(true); err != nil {
+				log.Warnf("conn close failed: %d %v", c.id, err)
+			}
+
 			return
 		}
 
@@ -346,13 +355,9 @@ func (c *serverConn) read() {
 			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 		}
 
-		switch c.State() {
-		case network.ConnHanged:
-			continue
-		case network.ConnClosed:
+		// stop read message
+		if state := c.State(); state == network.ConnHanged || state == network.ConnClosed {
 			return
-		default:
-			// ignore
 		}
 
 		// ignore empty packet
@@ -373,7 +378,7 @@ func (c *serverConn) read() {
 			if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
 				c.rw.RLock()
 				if c.conn != nil {
-					c.doWriteToQueue(c.highPriorityTaskQueue, heartbeatPacket)
+					c.doWriteToQueue(high, heartbeatPacket)
 				}
 				c.rw.RUnlock()
 			}
@@ -402,9 +407,13 @@ func (c *serverConn) write() {
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityTaskQueue:
+		case t, ok := <-c.highPriorityQueue:
 			if !ok {
 				return
+			}
+
+			if c.connMgr.server.opts.writeTimeout > 0 {
+				c.highPriorityQueueSize.Add(-1)
 			}
 
 			if !c.doWrite(conn, t) {
@@ -420,17 +429,25 @@ func (c *serverConn) write() {
 			}
 		default:
 			select {
-			case t, ok := <-c.highPriorityTaskQueue:
+			case t, ok := <-c.highPriorityQueue:
 				if !ok {
 					return
+				}
+
+				if c.connMgr.server.opts.writeTimeout > 0 {
+					c.highPriorityQueueSize.Add(-1)
 				}
 
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-c.lowPriorityTaskQueue:
+			case t, ok := <-c.lowPriorityQueue:
 				if !ok {
 					return
+				}
+
+				if c.connMgr.server.opts.writeTimeout > 0 {
+					c.lowPriorityQueueSize.Add(-1)
 				}
 
 				if !c.doWrite(conn, t) {
@@ -492,7 +509,11 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 
 	if c.lastHeartbeatTime.Load() < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
-		_ = c.forceClose(true)
+
+		if err := c.forceClose(true); err != nil {
+			log.Warnf("conn close failed: %d %v", c.id, err)
+		}
+
 		return false
 	} else {
 		if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
@@ -526,27 +547,65 @@ func (c *serverConn) doRecycleToPool(t *task) {
 }
 
 // 写入任务到队列
-func (c *serverConn) doWriteToQueue(queue chan *task, typ int8, msg ...[]byte) error {
+func (c *serverConn) doWriteToQueue(p priority, typ int8, msg ...[]byte) error {
+	var (
+		err           error
+		queue         chan *task
+		isWithTimeout bool
+	)
+
+	if p == low {
+		queue = c.lowPriorityQueue
+	} else {
+		queue = c.highPriorityQueue
+	}
+
+	if c.connMgr.server.opts.writeTimeout > 0 {
+		if p == low {
+			isWithTimeout = int(c.lowPriorityQueueSize.Add(1)) > cap(queue)
+		} else {
+			isWithTimeout = int(c.highPriorityQueueSize.Add(1)) > cap(queue)
+		}
+	}
+
 	t := c.taskPool.Get().(*task)
 	t.typ = typ
 	if len(msg) > 0 {
 		t.msg = msg[0]
 	}
 
-	if c.connMgr.server.opts.writeTimeout > 0 && len(queue) == cap(queue) {
+	defer func() {
+		if err != nil {
+			c.doRecycleToPool(t)
+
+			if c.connMgr.server.opts.writeTimeout > 0 {
+				if p == low {
+					c.lowPriorityQueueSize.Add(-1)
+				} else {
+					c.highPriorityQueueSize.Add(-1)
+				}
+			}
+		}
+	}()
+
+	if isWithTimeout {
 		ctx, cancel := context.WithTimeout(context.Background(), c.connMgr.server.opts.writeTimeout)
 		defer cancel()
 
 		select {
-		case <-ctx.Done():
-			c.doRecycleToPool(t)
-			return ctx.Err()
 		case queue <- t:
-			return nil
+			// write success
+		case <-ctx.Done():
+			err = errors.ErrWriteTimeout
+		}
+	} else {
+		select {
+		case queue <- t:
+			// write success
+		default:
+			err = errors.ErrWriteTimeout
 		}
 	}
 
-	queue <- t
-
-	return nil
+	return err
 }

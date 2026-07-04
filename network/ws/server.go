@@ -152,18 +152,19 @@ func (s *server) serve() {
 
 		if err = s.connMgr.allocate(conn); err != nil {
 			log.Errorf("connection allocate error: %v", err)
-			_ = conn.Close()
+
+			if err = conn.Close(); err != nil {
+				log.Errorf("connection close error: %v", err)
+			}
 		}
 	})
 
 	var err error
-
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
 		err = http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile)
 	} else {
 		err = http.Serve(s.listener, mux)
 	}
-
 	if err != nil {
 		log.Errorf("websocket server shutdown, err: %v", err)
 	}
