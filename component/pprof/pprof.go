@@ -2,12 +2,13 @@ package pprof
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/pprof"
+
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
-	"net/http"
-	_ "net/http/pprof"
 )
 
 var _ component.Component = &PProf{}
@@ -36,8 +37,15 @@ func (p *PProf) Start() {
 		log.Fatalf("pprof addr parse failed: %v", err)
 	}
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
 	go func() {
-		if err := http.ListenAndServe(listenAddr, nil); err != nil {
+		if err := http.ListenAndServe(listenAddr, mux); err != nil {
 			log.Fatalf("pprof server start failed: %v", err)
 		}
 	}()
