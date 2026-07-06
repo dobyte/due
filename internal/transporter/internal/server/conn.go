@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"sync/atomic"
@@ -50,16 +51,14 @@ func (c *Conn) Send(buf *buffer.NocopyBuffer) error {
 	}
 
 	if c.server.opts.WriteTimeout > 0 && len(c.chWrite) == cap(c.chWrite) {
-		if len(c.chWrite) == cap(c.chWrite) {
-			ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
-			defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), c.server.opts.WriteTimeout)
+		defer cancel()
 
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case c.chWrite <- buf:
-				return nil
-			}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.chWrite <- buf:
+			return nil
 		}
 	}
 
@@ -91,14 +90,17 @@ func (c *Conn) close(isNeedRecycle ...bool) error {
 
 // 读取消息
 func (c *Conn) read() {
-	conn := c.conn
+	var (
+		header [4]byte
+		reader = bufio.NewReaderSize(c.conn, 4096)
+	)
 
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
 		default:
-			isHeartbeat, route, _, data, err := protocol.ReadMessage(conn)
+			isHeartbeat, route, _, data, err := protocol.ReadMessage(reader, &header)
 			if err != nil {
 				_ = c.close(true)
 				return

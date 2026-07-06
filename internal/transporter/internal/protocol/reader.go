@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 
@@ -9,22 +10,22 @@ import (
 )
 
 // ReadMessage 读取消息
-func ReadMessage(reader io.Reader) (bool, uint8, uint64, []byte, error) {
-	buf := buffer.MallocBytes(defaultSizeBytes)
-	defer buf.Release()
-
-	if _, err := io.ReadFull(reader, buf.Bytes()); err != nil {
+func ReadMessage(reader *bufio.Reader, header *[4]byte) (bool, uint8, uint64, []byte, error) {
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
 		return false, 0, 0, nil, err
 	}
 
-	size := binary.BigEndian.Uint32(buf.Bytes())
+	size := binary.BigEndian.Uint32(header[:])
+	if size == 0 {
+		return false, 0, 0, nil, errors.ErrInvalidMessage
+	}
 
 	if size == 0 {
 		return false, 0, 0, nil, errors.ErrInvalidMessage
 	}
 
 	data := make([]byte, defaultSizeBytes+size)
-	copy(data[:defaultSizeBytes], buf.Bytes())
+	copy(data[:defaultSizeBytes], header[:])
 
 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
 		return false, 0, 0, nil, err
@@ -36,31 +37,27 @@ func ReadMessage(reader io.Reader) (bool, uint8, uint64, []byte, error) {
 }
 
 // ReadBuffer 以buffer的形式读取消息
-func ReaderBuffer(reader io.Reader) (buffer.Buffer, error) {
-	buf1 := buffer.MallocBytes(defaultSizeBytes)
-	defer buf1.Release()
-
-	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
+func ReaderBuffer(reader *bufio.Reader, header *[4]byte) (buffer.Buffer, error) {
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
 		return nil, err
 	}
 
-	size := binary.BigEndian.Uint32(buf1.Bytes())
-
+	size := binary.BigEndian.Uint32(header[:])
 	if size == 0 {
 		return nil, errors.ErrInvalidMessage
 	}
 
-	buf2 := buffer.MallocBytes(int(defaultSizeBytes + size))
-	data := buf2.Bytes()
+	buf := buffer.MallocBytes(int(defaultSizeBytes + size))
+	data := buf.Bytes()
 
-	copy(data[:defaultSizeBytes], buf1.Bytes())
+	copy(data[:defaultSizeBytes], header[:])
 
 	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
-		buf2.Release()
+		buf.Release()
 		return nil, err
 	}
 
-	return buf2, nil
+	return buf, nil
 }
 
 // ParseBuffer 解析buffer

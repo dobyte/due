@@ -37,7 +37,7 @@ func NewClient(addr string, opts *Options) *Client {
 	c := &Client{}
 	c.addr = addr
 	c.opts = opts
-	c.pool = sync.Pool{New: func() any { return &message{} }}
+	c.pool = sync.Pool{New: func() any { return &message{call: make(chan buffer.Buffer, 1)} }}
 	return c
 }
 
@@ -87,7 +87,6 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	msg := c.pool.Get().(*message)
 	msg.seq = seq
 	msg.buf = buf
-	msg.call = make(chan buffer.Buffer)
 	msg.state.Store(statePending)
 
 	if err := conn.send(msg); err != nil {
@@ -170,9 +169,13 @@ func (c *Client) release(msg *message, isNeedClose ...bool) {
 		msg.buf = nil
 	}
 
-	if msg.call != nil && len(isNeedClose) > 0 && isNeedClose[0] {
-		close(msg.call)
-		msg.call = nil
+	if len(isNeedClose) > 0 && isNeedClose[0] {
+		// 排空 channel 以便复用（超时/取消场景下读 goroutine 可能已写入）
+		select {
+		case buf := <-msg.call:
+			buf.Release()
+		default:
+		}
 	}
 
 	c.pool.Put(msg)

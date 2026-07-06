@@ -71,10 +71,10 @@ func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 }
 
 // 生成序列号，规避生成序列号为0的编号
-func (c *Client) doGenSequence() (seq uint64) {
-	for {
-		if seq = atomic.AddUint64(&c.seq, 1); seq != 0 {
-			return
-		}
+func (c *Client) doGenSequence() uint64 {
+	if seq := atomic.AddUint64(&c.seq, 1); seq == 0 {
+		return atomic.AddUint64(&c.seq, 1)
+	} else {
+		return seq
 	}
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"sync"
@@ -197,12 +198,17 @@ func (c *conn) send(msg *message) error {
 
 // 读取数据
 func (c *conn) read(conn net.Conn) {
+	var (
+		reader = bufio.NewReaderSize(conn, 4096)
+		header [4]byte
+	)
+
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
 		default:
-			buf, err := protocol.ReaderBuffer(conn)
+			buf, err := protocol.ReaderBuffer(reader, &header)
 			if err != nil {
 				c.retry(conn)
 				return
