@@ -20,10 +20,6 @@ func ReadMessage(reader *bufio.Reader, header *[4]byte) (bool, uint8, uint64, []
 		return false, 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	if size == 0 {
-		return false, 0, 0, nil, errors.ErrInvalidMessage
-	}
-
 	data := make([]byte, defaultSizeBytes+size)
 	copy(data[:defaultSizeBytes], header[:])
 

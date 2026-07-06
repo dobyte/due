@@ -109,6 +109,7 @@ func (c *conn) process(conn net.Conn) error {
 	c.conn = conn
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.state.Store(def.ConnOpened)
+	c.conn.(*net.TCPConn).SetNoDelay(true)
 
 	go c.read(conn)
 

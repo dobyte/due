@@ -106,6 +106,8 @@ func (s *Server) Start() error {
 
 		tempDelay = 0
 
+		conn.(*net.TCPConn).SetNoDelay(true)
+
 		s.allocate(conn)
 	}
 }
