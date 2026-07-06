@@ -125,14 +125,17 @@ func (s *server) init() error {
 
 // 启动服务器
 func (s *server) serve() {
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:    4096,
-		WriteBufferSize:   4096,
-		EnableCompression: false,
-		CheckOrigin:       s.opts.checkOrigin,
-	}
+	var (
+		err      error
+		mux      = http.NewServeMux()
+		upgrader = websocket.Upgrader{
+			ReadBufferSize:    4096,
+			WriteBufferSize:   4096,
+			EnableCompression: false,
+			CheckOrigin:       s.opts.checkOrigin,
+		}
+	)
 
-	mux := http.NewServeMux()
 	mux.HandleFunc(s.opts.path, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -159,7 +162,6 @@ func (s *server) serve() {
 		}
 	})
 
-	var err error
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
 		err = http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile)
 	} else {
@@ -169,9 +171,9 @@ func (s *server) serve() {
 		log.Errorf("websocket server shutdown, err: %v", err)
 	}
 
-	if s.started.Load() {
-		s.started.Store(false)
+	if s.started.CompareAndSwap(true, false) {
 		s.connMgr.close()
+
 		if s.stopHandler != nil {
 			s.stopHandler()
 		}

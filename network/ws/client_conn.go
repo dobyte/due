@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"context"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -18,42 +17,36 @@ import (
 )
 
 type clientConn struct {
-	rw                    sync.RWMutex    // 锁
-	id                    int64           // 连接ID
-	uid                   atomic.Int64    // 用户ID
-	attr                  *attr           // 连接属性
-	conn                  *websocket.Conn // TCP源连接
-	state                 atomic.Int32    // 连接状态
-	client                *client         // 客户端
-	taskPool              sync.Pool       // 任务对象池
-	lowPriorityQueue      chan *task      // 低优先级队列
-	lowPriorityQueueSize  atomic.Int32    // 低优先级队列大小
-	highPriorityQueue     chan *task      // 高优先级队列
-	highPriorityQueueSize atomic.Int32    // 高优先级队列大小
-	lastHeartbeatTime     atomic.Int64    // 上次心跳时间
-	done                  chan struct{}   // 写入完成信号
+	rw                sync.RWMutex    // 锁
+	id                int64           // 连接ID
+	uid               atomic.Int64    // 用户ID
+	attr              *attr           // 连接属性
+	conn              *websocket.Conn // TCP源连接
+	state             atomic.Int32    // 连接状态
+	client            *client         // 客户端
+	wg1               *sync.WaitGroup // 读等待组
+	wg2               *sync.WaitGroup // 写等待组
+	lowPriorityQueue  *queue          // 低优先级队列
+	highPriorityQueue *queue          // 高优先级队列
+	lastHeartbeatTime atomic.Int64    // 上次心跳时间
 }
 
 var _ network.Conn = &clientConn{}
 
 func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
-	c := &clientConn{
-		id:                id,
-		attr:              &attr{},
-		conn:              conn,
-		client:            client,
-		taskPool:          sync.Pool{New: func() any { return &task{} }},
-		lowPriorityQueue:  make(chan *task, client.opts.writeQueueSize),
-		highPriorityQueue: make(chan *task, client.opts.writeQueueSize),
-		done:              make(chan struct{}, 1),
-	}
-
+	c := &clientConn{}
+	c.id = id
+	c.attr = &attr{}
+	c.conn = conn
+	c.client = client
 	c.state.Store(int32(network.ConnOpened))
+	c.lowPriorityQueue = newQueue(client.opts.writeQueueSize, client.opts.writeTimeout)
+	c.highPriorityQueue = newQueue(client.opts.writeQueueSize, client.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-
-	xcall.Go(c.read)
-
-	xcall.Go(c.write)
+	c.wg1 = &sync.WaitGroup{}
+	c.wg1.Go(c.read)
+	c.wg2 = &sync.WaitGroup{}
+	c.wg2.Go(c.write)
 
 	if c.client.connectHandler != nil {
 		c.client.connectHandler(c)
@@ -108,7 +101,7 @@ func (c *clientConn) Send(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(high, dataPacket, msg)
+	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
 }
 
 // Push 发送消息（异步）
@@ -124,7 +117,7 @@ func (c *clientConn) Push(msg []byte) (err error) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doWriteToQueue(low, dataPacket, msg)
+	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
 }
 
 // State 获取连接状态
@@ -218,10 +211,17 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	c.doWriteToQueue(low, closeSig)
+	err1 := c.doWriteToQueue(c.lowPriorityQueue, closeSig)
+	err2 := c.doWriteToQueue(c.highPriorityQueue, closeSig)
 	c.rw.RUnlock()
 
-	<-c.done
+	if err1 == nil {
+		c.lowPriorityQueue.wait()
+	}
+
+	if err2 == nil {
+		c.highPriorityQueue.wait()
+	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -242,20 +242,22 @@ func (c *clientConn) forceClose() error {
 // 执行关闭操作
 func (c *clientConn) doClose() error {
 	c.rw.Lock()
-
 	if c.conn == nil {
 		c.rw.Unlock()
 		return errors.ErrConnectionClosed
 	}
 
-	close(c.lowPriorityQueue)
-	close(c.highPriorityQueue)
-	close(c.done)
+	c.lowPriorityQueue.close()
+	c.highPriorityQueue.close()
 	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
 
+	c.wg2.Wait()
+
 	err := conn.Close()
+
+	c.wg1.Wait()
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
@@ -277,9 +279,11 @@ func (c *clientConn) read() {
 				}
 			}
 
-			if err = c.forceClose(); err != nil {
-				log.Warnf("conn close failed: %v", err)
-			}
+			xcall.Go(func() {
+				if err = c.forceClose(); err != nil {
+					log.Warnf("conn close failed: %v", err)
+				}
+			})
 
 			return
 		}
@@ -321,6 +325,7 @@ func (c *clientConn) read() {
 }
 
 // 写入消息
+// 由于gorilla/websocket库并发写入的限制，同时为了保证心跳能够优先下发到客户端，故而实现一个优先队列
 func (c *clientConn) write() {
 	var (
 		conn   = c.conn
@@ -331,19 +336,17 @@ func (c *clientConn) write() {
 		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
-		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+		ticker = &time.Ticker{}
 	}
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue:
+		case t, ok := <-c.highPriorityQueue.read():
 			if !ok {
 				return
 			}
 
-			if c.client.opts.writeTimeout > 0 {
-				c.highPriorityQueueSize.Add(-1)
-			}
+			c.highPriorityQueue.done(t.typ == closeSig)
 
 			if !c.doWrite(conn, t) {
 				return
@@ -358,26 +361,22 @@ func (c *clientConn) write() {
 			}
 		default:
 			select {
-			case t, ok := <-c.highPriorityQueue:
+			case t, ok := <-c.highPriorityQueue.read():
 				if !ok {
 					return
 				}
 
-				if c.client.opts.writeTimeout > 0 {
-					c.highPriorityQueueSize.Add(-1)
-				}
+				c.highPriorityQueue.done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-c.lowPriorityQueue:
+			case t, ok := <-c.lowPriorityQueue.read():
 				if !ok {
 					return
 				}
 
-				if c.client.opts.writeTimeout > 0 {
-					c.lowPriorityQueueSize.Add(-1)
-				}
+				c.lowPriorityQueue.done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
@@ -397,19 +396,14 @@ func (c *clientConn) write() {
 
 // 执行写入操作
 func (c *clientConn) doWrite(conn *websocket.Conn, t *task) bool {
-	defer c.doRecycleToPool(t)
-
-	if t.typ == closeSig {
-		c.rw.RLock()
-		if c.conn != nil {
-			c.done <- struct{}{}
-		}
-		c.rw.RUnlock()
-		return false
-	}
+	defer c.client.recycleTask(t)
 
 	if c.isClosed() {
 		return false
+	}
+
+	if t.typ == closeSig {
+		return true
 	}
 
 	if t.typ == heartbeatPacket {
@@ -439,9 +433,11 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		if err := c.forceClose(); err != nil {
-			log.Warnf("conn close failed: %v", err)
-		}
+		xcall.Go(func() {
+			if err := c.forceClose(); err != nil {
+				log.Warnf("conn close failed: %v", err)
+			}
+		})
 
 		return false
 	} else {
@@ -467,72 +463,14 @@ func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }
 
-// 回收任务到对象池
-func (c *clientConn) doRecycleToPool(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
-}
-
 // 写入任务到队列
-func (c *clientConn) doWriteToQueue(p priority, typ int8, msg ...[]byte) error {
-	var (
-		err           error
-		queue         chan *task
-		isWithTimeout bool
-	)
+func (c *clientConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
+	t := c.client.allocateTask(typ, msg...)
 
-	if p == low {
-		queue = c.lowPriorityQueue
-	} else {
-		queue = c.highPriorityQueue
+	if err := q.write(t); err != nil {
+		c.client.recycleTask(t)
+		return err
 	}
 
-	if c.client.opts.writeTimeout > 0 {
-		if p == low {
-			isWithTimeout = int(c.lowPriorityQueueSize.Add(1)) > cap(queue)
-		} else {
-			isWithTimeout = int(c.highPriorityQueueSize.Add(1)) > cap(queue)
-		}
-	}
-
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	defer func() {
-		if err != nil {
-			c.doRecycleToPool(t)
-
-			if c.client.opts.writeTimeout > 0 {
-				if p == low {
-					c.lowPriorityQueueSize.Add(-1)
-				} else {
-					c.highPriorityQueueSize.Add(-1)
-				}
-			}
-		}
-	}()
-
-	if isWithTimeout {
-		ctx, cancel := context.WithTimeout(context.Background(), c.client.opts.writeTimeout)
-		defer cancel()
-
-		select {
-		case queue <- t:
-			// write success
-		case <-ctx.Done():
-			err = errors.ErrWriteTimeout
-		}
-	} else {
-		select {
-		case queue <- t:
-			// write success
-		default:
-			err = errors.ErrWriteTimeout
-		}
-	}
-
-	return err
+	return nil
 }

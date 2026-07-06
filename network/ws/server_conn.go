@@ -30,7 +30,8 @@ type serverConn struct {
 	state             atomic.Int32    // 连接状态
 	connMgr           *serverConnMgr  // 连接管理
 	rw                sync.RWMutex    // 锁
-	wg                *sync.WaitGroup // 等待组
+	wg1               *sync.WaitGroup // 读等待组
+	wg2               *sync.WaitGroup // 写等待组
 	conn              *websocket.Conn // WS源连接
 	lowPriorityQueue  *queue          // 低优先级队列
 	highPriorityQueue *queue          // 高优先级队列
@@ -183,18 +184,16 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.uid.Store(0)
 	c.attr = &attr{}
 	c.state.Store(int32(network.ConnOpened))
-	c.wg = &sync.WaitGroup{}
 	c.conn = conn
 	c.connMgr = cm
 	c.lowPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
 	c.highPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
-	c.wg.Add(2)
-
-	xcall.Go(c.read)
-
-	xcall.Go(c.write)
+	c.wg1 = &sync.WaitGroup{}
+	c.wg1.Go(c.read)
+	c.wg2 = &sync.WaitGroup{}
+	c.wg2.Go(c.write)
 
 	c.checkAuthorize()
 
@@ -205,7 +204,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 
 // 重置连接
 func (c *serverConn) reset() {
-	c.wg = nil
+	c.wg1 = nil
+	c.wg2 = nil
 	c.attr = nil
 	c.conn = nil
 	c.lowPriorityQueue = nil
@@ -304,7 +304,6 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 // 执行关闭操作
 func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.rw.Lock()
-
 	if c.conn == nil {
 		c.rw.Unlock()
 		return errors.ErrConnectionClosed
@@ -314,16 +313,17 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.highPriorityQueue.close()
 	conn := c.conn
 	c.conn = nil
-
 	c.rw.Unlock()
 
+	c.wg2.Wait()
+
 	err := conn.Close()
+
+	c.wg1.Wait()
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
-
-	c.wg.Wait()
 
 	if isNeedRecycle {
 		c.connMgr.recycleConn(conn)
@@ -334,8 +334,6 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 
 // 读取消息
 func (c *serverConn) read() {
-	defer c.wg.Done()
-
 	conn := c.conn
 
 	for {
@@ -347,9 +345,11 @@ func (c *serverConn) read() {
 				}
 			}
 
-			if err = c.forceClose(true); err != nil {
-				log.Warnf("conn close failed: %d %v", c.id, err)
-			}
+			xcall.Go(func() {
+				if err = c.forceClose(true); err != nil {
+					log.Warnf("conn close failed: %d %v", c.id, err)
+				}
+			})
 
 			return
 		}
@@ -402,8 +402,6 @@ func (c *serverConn) read() {
 // 写入消息
 // 由于gorilla/websocket库并发写入的限制，同时为了保证心跳能够优先下发到客户端，故而实现一个优先队列
 func (c *serverConn) write() {
-	defer c.wg.Done()
-
 	var (
 		conn   = c.conn
 		ticker *time.Ticker
@@ -413,7 +411,7 @@ func (c *serverConn) write() {
 		ticker = time.NewTicker(c.connMgr.server.opts.heartbeatInterval)
 		defer ticker.Stop()
 	} else {
-		ticker = &time.Ticker{C: make(chan time.Time, 1)}
+		ticker = &time.Ticker{}
 	}
 
 	for {
@@ -423,12 +421,11 @@ func (c *serverConn) write() {
 				return
 			}
 
-			if c.isClosed() {
+			c.highPriorityQueue.done(t.typ == closeSig)
+
+			if !c.doWrite(conn, t) {
 				return
 			}
-
-			c.highPriorityQueue.done(t.typ == closeSig)
-			c.doWrite(conn, t)
 		case t, ok := <-ticker.C:
 			if !ok {
 				return
@@ -444,23 +441,21 @@ func (c *serverConn) write() {
 					return
 				}
 
-				if c.isClosed() {
+				c.highPriorityQueue.done(t.typ == closeSig)
+
+				if !c.doWrite(conn, t) {
 					return
 				}
-
-				c.highPriorityQueue.done(t.typ == closeSig)
-				c.doWrite(conn, t)
 			case t, ok := <-c.lowPriorityQueue.read():
 				if !ok {
 					return
 				}
 
-				if c.isClosed() {
+				c.lowPriorityQueue.done(t.typ == closeSig)
+
+				if !c.doWrite(conn, t) {
 					return
 				}
-
-				c.lowPriorityQueue.done(t.typ == closeSig)
-				c.doWrite(conn, t)
 			case t, ok := <-ticker.C:
 				if !ok {
 					return
@@ -475,17 +470,21 @@ func (c *serverConn) write() {
 }
 
 // 执行写入操作
-func (c *serverConn) doWrite(conn *websocket.Conn, t *task) {
+func (c *serverConn) doWrite(conn *websocket.Conn, t *task) bool {
 	defer c.connMgr.recycleTask(t)
 
+	if c.isClosed() {
+		return false
+	}
+
 	if t.typ == closeSig {
-		return
+		return true
 	}
 
 	if t.typ == heartbeatPacket {
 		if msg, err := packet.PackHeartbeat(); err != nil {
 			log.Errorf("pack heartbeat message error: %v", err)
-			return
+			return true
 		} else {
 			t.msg = msg
 		}
@@ -498,6 +497,8 @@ func (c *serverConn) doWrite(conn *websocket.Conn, t *task) {
 			}
 		}
 	}
+
+	return true
 }
 
 // 处理心跳
@@ -507,9 +508,11 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		if err := c.forceClose(true); err != nil {
-			log.Warnf("conn close failed: %d %v", c.id, err)
-		}
+		xcall.Go(func() {
+			if err := c.forceClose(true); err != nil {
+				log.Warnf("conn close failed: %d %v", c.id, err)
+			}
+		})
 
 		return false
 	} else {
@@ -544,7 +547,7 @@ func (c *serverConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
 	if err := q.write(t); err != nil {
 		c.connMgr.recycleTask(t)
 		return err
-	} else {
-		return nil
 	}
+
+	return nil
 }
