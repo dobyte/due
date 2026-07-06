@@ -116,13 +116,10 @@ func (c *Conn) read() {
 				continue
 			}
 
-			handler, ok := c.server.handlers[route]
-			if !ok {
-				continue
-			}
-
-			if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-				log.Warnf("process route %d message failed: %v", route, err)
+			if handler := c.server.handlers[route]; handler != nil {
+				if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+					log.Warnf("process route %d message failed: %v", route, err)
+				}
 			}
 		}
 	}

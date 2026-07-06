@@ -19,13 +19,13 @@ type RouteHandler func(conn *Conn, data []byte) error
 
 type Server struct {
 	opts        *Options
-	listener    net.Listener           // 监听器
-	listenAddr  string                 // 监听地址
-	exposeAddr  string                 // 暴露地址
-	endpoint    *endpoint.Endpoint     // 暴露端点
-	handlers    map[uint8]RouteHandler // 路由处理器
-	rw          sync.RWMutex           // 锁
-	connections map[net.Conn]*Conn     // 连接
+	listener    net.Listener       // 监听器
+	listenAddr  string             // 监听地址
+	exposeAddr  string             // 暴露地址
+	endpoint    *endpoint.Endpoint // 暴露端点
+	handlers    [256]RouteHandler  // 路由处理器
+	rw          sync.RWMutex       // 锁
+	connections map[net.Conn]*Conn // 连接
 }
 
 func NewServer(opts *Options) (*Server, error) {
@@ -40,7 +40,6 @@ func NewServer(opts *Options) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.connections = make(map[net.Conn]*Conn)
-	s.handlers = make(map[uint8]RouteHandler)
 	s.handlers[route.Handshake] = s.handshake
 
 	return s, nil
