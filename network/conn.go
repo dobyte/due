@@ -31,9 +31,9 @@ type (
 		Bind(uid int64) error
 		// Unbind 解绑用户ID
 		Unbind() error
-		// Send 发送消息（同步）
+		// Send 高优先级发送消息
 		Send(msg []byte) error
-		// Push 发送消息（异步）
+		// Push 低优先级发送消息
 		Push(msg []byte) error
 		// State 获取连接状态
 		State() ConnState

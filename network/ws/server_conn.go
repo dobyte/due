@@ -359,7 +359,7 @@ func (c *serverConn) read() {
 		}
 
 		// stop read message
-		if state := c.State(); state == network.ConnHanged || state == network.ConnClosed {
+		if c.checkState() != nil {
 			return
 		}
 

@@ -99,7 +99,7 @@ func (c *clientConn) Unbind() error {
 	return nil
 }
 
-// Send 发送消息（同步）
+// Send 高优先级发送消息
 func (c *clientConn) Send(msg []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -111,8 +111,8 @@ func (c *clientConn) Send(msg []byte) error {
 	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
 }
 
-// Push 发送消息（异步）
-func (c *clientConn) Push(msg []byte) (err error) {
+// Push 低优先级发送消息
+func (c *clientConn) Push(msg []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -296,7 +296,7 @@ func (c *clientConn) read() {
 		}
 
 		// stop read message
-		if state := c.State(); state == network.ConnHanged || state == network.ConnClosed {
+		if c.checkState() != nil {
 			return
 		}
 
