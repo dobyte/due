@@ -12,7 +12,7 @@ const (
 	defaultClientUrl               = "ws://127.0.0.1:3553"
 	defaultClientDialTimeout       = "3s"
 	defaultClientWriteTimeout      = "0s"
-	defaultClientWriteQueueSize    = 1024
+	defaultClientWriteQueueSize    = 4096
 	defaultClientHeartbeatInterval = "10s"
 )
 

@@ -51,22 +51,17 @@ func (q *Queue[T]) Write(t T) error {
 		case q.ch <- t:
 			return nil
 		case <-ctx.Done():
-			// write timeout
+			if q.timeout > 0 {
+				q.count.Add(-1)
+			}
+
+			return errors.ErrWriteTimeout
 		}
 	} else {
-		select {
-		case q.ch <- t:
-			return nil
-		default:
-			// write timeout
-		}
+		q.ch <- t
 	}
 
-	if q.timeout > 0 {
-		q.count.Add(-1)
-	}
-
-	return errors.ErrWriteTimeout
+	return nil
 }
 
 // Read 读取队列

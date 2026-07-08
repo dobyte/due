@@ -279,9 +279,7 @@ func (c *clientConn) read() {
 			}
 
 			xcall.Go(func() {
-				if err = c.forceClose(); err != nil {
-					log.Warnf("conn close failed: %v", err)
-				}
+				_ = c.forceClose()
 			})
 
 			return
@@ -433,9 +431,7 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		xcall.Go(func() {
-			if err := c.forceClose(); err != nil {
-				log.Warnf("conn close failed: %v", err)
-			}
+			_ = c.forceClose()
 		})
 
 		return false

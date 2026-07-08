@@ -47,7 +47,8 @@ func TestClient_Dial(t *testing.T) {
 
 			conn, err := client.Dial()
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				return
 			}
 
 			ticker := time.NewTicker(time.Second)

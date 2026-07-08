@@ -342,9 +342,7 @@ func (c *serverConn) read() {
 			}
 
 			xcall.Go(func() {
-				if err = c.forceClose(true); err != nil {
-					log.Warnf("conn close failed: %d %v", c.id, err)
-				}
+				_ = c.forceClose(true)
 			})
 
 			return
