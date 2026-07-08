@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/task"
 )
@@ -120,10 +121,15 @@ func (s *Session) Bind(cid, uid int64) error {
 	}
 
 	if oldConn, ok := s.users[uid]; ok {
-		oldConn.Unbind()
+		if err := oldConn.Unbind(); err != nil {
+			log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", cid, uid, err)
+		}
 	}
 
-	conn.Bind(uid)
+	if err := conn.Bind(uid); err != nil {
+		return err
+	}
+
 	s.users[uid] = conn
 
 	return nil
@@ -139,7 +145,10 @@ func (s *Session) Unbind(uid int64) (int64, error) {
 		return 0, err
 	}
 
-	conn.Unbind()
+	if err := conn.Unbind(); err != nil {
+		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
+	}
+
 	delete(s.users, uid)
 
 	return conn.ID(), nil
@@ -148,9 +157,9 @@ func (s *Session) Unbind(uid int64) (int64, error) {
 // LocalIP 获取本地IP
 func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return "", err
 	}
@@ -161,9 +170,9 @@ func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
 // LocalAddr 获取本地地址
 func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return nil, err
 	}
@@ -174,9 +183,9 @@ func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
 // RemoteIP 获取远端IP
 func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return "", err
 	}
@@ -187,9 +196,9 @@ func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
 // RemoteAddr 获取远端地址
 func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 	s.rw.RLock()
-	defer s.rw.RUnlock()
-
 	conn, err := s.conn(kind, target)
+	s.rw.RUnlock()
+
 	if err != nil {
 		return nil, err
 	}
