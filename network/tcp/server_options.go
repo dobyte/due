@@ -12,7 +12,7 @@ const (
 	defaultServerAddr               = ":3553"
 	defaultServerMaxConnNum         = 5000
 	defaultServerWriteTimeout       = "0s"
-	defaultServerWriteQueueSize     = 512
+	defaultServerWriteQueueSize     = 1024
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"

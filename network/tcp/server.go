@@ -3,14 +3,18 @@ package tcp
 import (
 	"crypto/tls"
 	"net"
+	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type server struct {
 	opts              *serverOptions            // 配置
+	started           atomic.Bool               // 是否已启动
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
@@ -46,19 +50,25 @@ func (s *server) Start() error {
 		return err
 	}
 
+	xcall.Go(s.serve)
+
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
-	go s.serve()
 
 	return nil
 }
 
 // Stop 关闭服务器
 func (s *server) Stop() error {
-	if err := s.listener.Close(); err != nil {
-		return err
+	if !s.started.Swap(false) {
+		return errors.ErrIllegalOperation
+	}
+
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			return err
+		}
 	}
 
 	s.connMgr.close()
@@ -102,6 +112,16 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 
 // 初始化TCP服务器
 func (s *server) init() error {
+	if s.started.Swap(true) {
+		return errors.ErrIllegalOperation
+	}
+
+	defer func() {
+		if s.listener == nil {
+			s.started.Store(false)
+		}
+	}()
+
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
 		return err
@@ -129,10 +149,13 @@ func (s *server) init() error {
 
 // 等待连接
 func (s *server) serve() {
-	var tempDelay time.Duration
+	var (
+		listener  = s.listener
+		tempDelay time.Duration
+	)
 
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && e.Timeout() {
 				if tempDelay == 0 {
@@ -150,14 +173,24 @@ func (s *server) serve() {
 			}
 
 			log.Warnf("tcp accept error: %v", err)
-			return
+			break
 		}
 
 		tempDelay = 0
 
-		if err = s.connMgr.allocate(conn); err != nil {
+		conn.(*net.TCPConn).SetNoDelay(true)
+
+		if err = s.connMgr.allocateConn(conn); err != nil {
 			log.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
+		}
+	}
+
+	if s.started.CompareAndSwap(true, false) {
+		s.connMgr.close()
+
+		if s.stopHandler != nil {
+			s.stopHandler()
 		}
 	}
 }
