@@ -15,7 +15,7 @@ const (
 	defaultServerMaxConnNum         = 5000
 	defaultServerCheckOrigin        = "*"
 	defaultServerWriteTimeout       = "0s"
-	defaultServerWriteQueueSize     = 4096
+	defaultServerWriteQueueSize     = 1024
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
