@@ -503,9 +503,7 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		xcall.Go(func() {
-			if err := c.forceClose(true); err != nil {
-				log.Warnf("conn close failed: %d %v", c.id, err)
-			}
+			_ = c.forceClose(true)
 		})
 
 		return false
