@@ -72,34 +72,40 @@ func (c *clientConn) Attr() network.Attr {
 }
 
 // Bind 绑定用户ID
-func (c *clientConn) Bind(uid int64) {
-	if err := c.checkState(); err != nil {
-		return
-	}
-
-	c.uid.Store(uid)
-}
-
-// Unbind 解绑用户ID
-func (c *clientConn) Unbind() {
-	if err := c.checkState(); err != nil {
-		return
-	}
-
-	c.uid.Store(0)
-}
-
-// Send 发送消息（同步）
-func (c *clientConn) Send(msg []byte) (err error) {
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
+func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if c.conn == nil {
+	if c.isClosed() {
 		return errors.ErrConnectionClosed
+	}
+
+	c.uid.Store(uid)
+
+	return nil
+}
+
+// Unbind 解绑用户ID
+func (c *clientConn) Unbind() error {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	if c.isClosed() {
+		return errors.ErrConnectionClosed
+	}
+
+	c.uid.Store(0)
+
+	return nil
+}
+
+// Send 发送消息（同步）
+func (c *clientConn) Send(msg []byte) error {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
@@ -107,15 +113,11 @@ func (c *clientConn) Send(msg []byte) (err error) {
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) (err error) {
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if c.conn == nil {
-		return errors.ErrConnectionClosed
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
@@ -147,17 +149,15 @@ func (c *clientConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *clientConn) LocalAddr() (net.Addr, error) {
-	if err := c.checkState(); err != nil {
-		return nil, err
-	}
-
 	c.rw.RLock()
-	conn := c.conn
-	c.rw.RUnlock()
 
-	if conn == nil {
+	if c.isClosed() {
+		c.rw.RUnlock()
 		return nil, errors.ErrConnectionClosed
 	}
+
+	conn := c.conn
+	c.rw.RUnlock()
 
 	return conn.LocalAddr(), nil
 }
@@ -174,17 +174,15 @@ func (c *clientConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *clientConn) RemoteAddr() (net.Addr, error) {
-	if err := c.checkState(); err != nil {
-		return nil, err
-	}
-
 	c.rw.RLock()
-	conn := c.conn
-	c.rw.RUnlock()
 
-	if conn == nil {
+	if c.isClosed() {
+		c.rw.RUnlock()
 		return nil, errors.ErrConnectionClosed
 	}
+
+	conn := c.conn
+	c.rw.RUnlock()
 
 	return conn.RemoteAddr(), nil
 }

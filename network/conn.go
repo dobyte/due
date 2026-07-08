@@ -28,9 +28,9 @@ type (
 		// Attr 属性接口
 		Attr() Attr
 		// Bind 绑定用户ID
-		Bind(uid int64)
+		Bind(uid int64) error
 		// Unbind 解绑用户ID
-		Unbind()
+		Unbind() error
 		// Send 发送消息（同步）
 		Send(msg []byte) error
 		// Push 发送消息（异步）

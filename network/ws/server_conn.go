@@ -58,54 +58,54 @@ func (c *serverConn) Attr() network.Attr {
 }
 
 // Bind 绑定用户ID
-func (c *serverConn) Bind(uid int64) {
-	if err := c.checkState(); err != nil {
-		return
-	}
-
-	c.uid.Store(uid)
-
-	c.uncheckAuthorize()
-}
-
-// Unbind 解绑用户ID
-func (c *serverConn) Unbind() {
-	if err := c.checkState(); err != nil {
-		return
-	}
-
-	c.uid.Store(0)
-
-	c.checkAuthorize()
-}
-
-// Send 发送消息（同步）
-func (c *serverConn) Send(msg []byte) (err error) {
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
+func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if c.conn == nil {
+	if c.isClosed() {
 		return errors.ErrConnectionClosed
+	}
+
+	c.uid.Store(uid)
+	c.uncheckAuthorize()
+
+	return nil
+}
+
+// Unbind 解绑用户ID
+func (c *serverConn) Unbind() error {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	if c.isClosed() {
+		return errors.ErrConnectionClosed
+	}
+
+	c.uid.Store(0)
+	c.checkAuthorize()
+
+	return nil
+}
+
+// Send 高优先级发送消息
+func (c *serverConn) Send(msg []byte) (err error) {
+	c.rw.RLock()
+	defer c.rw.RUnlock()
+
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
 }
 
-// Push 发送消息（异步）
+// Push 低优先级发送消息
 func (c *serverConn) Push(msg []byte) error {
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if c.conn == nil {
-		return errors.ErrConnectionClosed
+	if err := c.checkState(); err != nil {
+		return err
 	}
 
 	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
@@ -137,17 +137,15 @@ func (c *serverConn) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *serverConn) LocalAddr() (net.Addr, error) {
-	if err := c.checkState(); err != nil {
-		return nil, err
-	}
-
 	c.rw.RLock()
-	conn := c.conn
-	c.rw.RUnlock()
 
-	if conn == nil {
+	if c.isClosed() {
+		c.rw.RUnlock()
 		return nil, errors.ErrConnectionClosed
 	}
+
+	conn := c.conn
+	c.rw.RUnlock()
 
 	return conn.LocalAddr(), nil
 }
@@ -164,29 +162,26 @@ func (c *serverConn) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
-	if err := c.checkState(); err != nil {
-		return nil, err
-	}
-
 	c.rw.RLock()
-	conn := c.conn
-	c.rw.RUnlock()
 
-	if conn == nil {
+	if c.isClosed() {
+		c.rw.RUnlock()
 		return nil, errors.ErrConnectionClosed
 	}
+
+	conn := c.conn
+	c.rw.RUnlock()
 
 	return conn.RemoteAddr(), nil
 }
 
 // 初始化连接
-func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
-	c.id = id
+func (c *serverConn) init(conn *websocket.Conn) {
+	c.id = c.connMgr.id.Add(1)
 	c.uid.Store(0)
-	c.attr = &attr{}
+	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
-	c.connMgr = cm
 	c.lowPriorityQueue = queue.NewQueue[*task](int32(c.connMgr.server.opts.writeQueueSize), c.connMgr.server.opts.writeTimeout)
 	c.highPriorityQueue = queue.NewQueue[*task](int32(c.connMgr.server.opts.writeQueueSize), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
@@ -207,10 +202,10 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
-	c.attr = nil
 	c.conn = nil
 	c.lowPriorityQueue = nil
 	c.highPriorityQueue = nil
+	c.attr.values.Clear()
 	c.authorizeTimer.Store((*time.Timer)(nil))
 }
 

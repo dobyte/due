@@ -31,7 +31,7 @@ type serverConnMgr struct {
 func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.connPool = sync.Pool{New: func() any { return &serverConn{} }}
+	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
 	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
 	cm.partitions = make([]*partition, 10)
 
@@ -67,7 +67,7 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 	conn := cm.connPool.Get().(*serverConn)
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
-	conn.init(cm, cm.id.Add(1), c)
+	conn.init(c)
 
 	return nil
 }
