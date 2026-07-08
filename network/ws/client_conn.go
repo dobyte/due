@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -17,18 +18,18 @@ import (
 )
 
 type clientConn struct {
-	rw                sync.RWMutex    // 锁
-	id                int64           // 连接ID
-	uid               atomic.Int64    // 用户ID
-	attr              *attr           // 连接属性
-	conn              *websocket.Conn // TCP源连接
-	state             atomic.Int32    // 连接状态
-	client            *client         // 客户端
-	wg1               *sync.WaitGroup // 读等待组
-	wg2               *sync.WaitGroup // 写等待组
-	lowPriorityQueue  *queue          // 低优先级队列
-	highPriorityQueue *queue          // 高优先级队列
-	lastHeartbeatTime atomic.Int64    // 上次心跳时间
+	rw                sync.RWMutex        // 锁
+	id                int64               // 连接ID
+	uid               atomic.Int64        // 用户ID
+	attr              *attr               // 连接属性
+	conn              *websocket.Conn     // TCP源连接
+	state             atomic.Int32        // 连接状态
+	client            *client             // 客户端
+	wg1               *sync.WaitGroup     // 读等待组
+	wg2               *sync.WaitGroup     // 写等待组
+	lowPriorityQueue  *queue.Queue[*task] // 低优先级队列
+	highPriorityQueue *queue.Queue[*task] // 高优先级队列
+	lastHeartbeatTime atomic.Int64        // 上次心跳时间
 }
 
 var _ network.Conn = &clientConn{}
@@ -40,8 +41,8 @@ func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn 
 	c.conn = conn
 	c.client = client
 	c.state.Store(int32(network.ConnOpened))
-	c.lowPriorityQueue = newQueue(client.opts.writeQueueSize, client.opts.writeTimeout)
-	c.highPriorityQueue = newQueue(client.opts.writeQueueSize, client.opts.writeTimeout)
+	c.lowPriorityQueue = queue.NewQueue[*task](int32(client.opts.writeQueueSize), client.opts.writeTimeout)
+	c.highPriorityQueue = queue.NewQueue[*task](int32(client.opts.writeQueueSize), client.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(c.read)
@@ -216,11 +217,11 @@ func (c *clientConn) graceClose() error {
 	c.rw.RUnlock()
 
 	if err1 == nil {
-		c.lowPriorityQueue.wait()
+		c.lowPriorityQueue.Wait()
 	}
 
 	if err2 == nil {
-		c.highPriorityQueue.wait()
+		c.highPriorityQueue.Wait()
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -247,8 +248,8 @@ func (c *clientConn) doClose() error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.lowPriorityQueue.close()
-	c.highPriorityQueue.close()
+	c.lowPriorityQueue.Close()
+	c.highPriorityQueue.Close()
 	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
@@ -341,12 +342,12 @@ func (c *clientConn) write() {
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue.read():
+		case t, ok := <-c.highPriorityQueue.Read():
 			if !ok {
 				return
 			}
 
-			c.highPriorityQueue.done(t.typ == closeSig)
+			c.highPriorityQueue.Done(t.typ == closeSig)
 
 			if !c.doWrite(conn, t) {
 				return
@@ -361,22 +362,22 @@ func (c *clientConn) write() {
 			}
 		default:
 			select {
-			case t, ok := <-c.highPriorityQueue.read():
+			case t, ok := <-c.highPriorityQueue.Read():
 				if !ok {
 					return
 				}
 
-				c.highPriorityQueue.done(t.typ == closeSig)
+				c.highPriorityQueue.Done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-c.lowPriorityQueue.read():
+			case t, ok := <-c.lowPriorityQueue.Read():
 				if !ok {
 					return
 				}
 
-				c.lowPriorityQueue.done(t.typ == closeSig)
+				c.lowPriorityQueue.Done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
@@ -464,10 +465,10 @@ func (c *clientConn) isClosed() bool {
 }
 
 // 写入任务到队列
-func (c *clientConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
+func (c *clientConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
 	t := c.client.allocateTask(typ, msg...)
 
-	if err := q.write(t); err != nil {
+	if err := q.Write(t); err != nil {
 		c.client.recycleTask(t)
 		return err
 	}

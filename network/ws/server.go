@@ -67,20 +67,15 @@ func (s *server) Protocol() string {
 
 // Start 启动服务器
 func (s *server) Start() error {
-	if s.started.Swap(true) {
-		return errors.ErrIllegalOperation
-	}
-
 	if err := s.init(); err != nil {
-		s.started.Store(false)
 		return err
 	}
+
+	xcall.Go(s.serve)
 
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
-	xcall.Go(s.serve)
 
 	return nil
 }
@@ -108,6 +103,16 @@ func (s *server) Stop() error {
 
 // 初始化服务器
 func (s *server) init() error {
+	if s.started.Swap(true) {
+		return errors.ErrIllegalOperation
+	}
+
+	defer func() {
+		if s.listener == nil {
+			s.started.Store(false)
+		}
+	}()
+
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
 		return err

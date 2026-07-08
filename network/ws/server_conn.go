@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -24,19 +25,19 @@ import (
 )
 
 type serverConn struct {
-	id                int64           // 连接ID
-	uid               atomic.Int64    // 用户ID
-	attr              *attr           // 连接属性
-	state             atomic.Int32    // 连接状态
-	connMgr           *serverConnMgr  // 连接管理
-	rw                sync.RWMutex    // 锁
-	wg1               *sync.WaitGroup // 读等待组
-	wg2               *sync.WaitGroup // 写等待组
-	conn              *websocket.Conn // WS源连接
-	lowPriorityQueue  *queue          // 低优先级队列
-	highPriorityQueue *queue          // 高优先级队列
-	lastHeartbeatTime atomic.Int64    // 上次心跳时间
-	authorizeTimer    atomic.Value    // 授权定时器
+	id                int64               // 连接ID
+	uid               atomic.Int64        // 用户ID
+	attr              *attr               // 连接属性
+	state             atomic.Int32        // 连接状态
+	connMgr           *serverConnMgr      // 连接管理
+	rw                sync.RWMutex        // 锁
+	wg1               *sync.WaitGroup     // 读等待组
+	wg2               *sync.WaitGroup     // 写等待组
+	conn              *websocket.Conn     // WS源连接
+	lowPriorityQueue  *queue.Queue[*task] // 低优先级队列
+	highPriorityQueue *queue.Queue[*task] // 高优先级队列
+	lastHeartbeatTime atomic.Int64        // 上次心跳时间
+	authorizeTimer    atomic.Value        // 授权定时器
 }
 
 var _ network.Conn = &serverConn{}
@@ -186,8 +187,8 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn *websocket.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.connMgr = cm
-	c.lowPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
-	c.highPriorityQueue = newQueue(c.connMgr.server.opts.writeQueueSize, c.connMgr.server.opts.writeTimeout)
+	c.lowPriorityQueue = queue.NewQueue[*task](int32(c.connMgr.server.opts.writeQueueSize), c.connMgr.server.opts.writeTimeout)
+	c.highPriorityQueue = queue.NewQueue[*task](int32(c.connMgr.server.opts.writeQueueSize), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
 	c.wg1 = &sync.WaitGroup{}
@@ -276,11 +277,11 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	c.rw.RUnlock()
 
 	if err1 == nil {
-		c.lowPriorityQueue.wait()
+		c.lowPriorityQueue.Wait()
 	}
 
 	if err2 == nil {
-		c.highPriorityQueue.wait()
+		c.highPriorityQueue.Wait()
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -309,8 +310,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.lowPriorityQueue.close()
-	c.highPriorityQueue.close()
+	c.lowPriorityQueue.Close()
+	c.highPriorityQueue.Close()
 	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
@@ -416,12 +417,12 @@ func (c *serverConn) write() {
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue.read():
+		case t, ok := <-c.highPriorityQueue.Read():
 			if !ok {
 				return
 			}
 
-			c.highPriorityQueue.done(t.typ == closeSig)
+			c.highPriorityQueue.Done(t.typ == closeSig)
 
 			if !c.doWrite(conn, t) {
 				return
@@ -436,22 +437,22 @@ func (c *serverConn) write() {
 			}
 		default:
 			select {
-			case t, ok := <-c.highPriorityQueue.read():
+			case t, ok := <-c.highPriorityQueue.Read():
 				if !ok {
 					return
 				}
 
-				c.highPriorityQueue.done(t.typ == closeSig)
+				c.highPriorityQueue.Done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
 				}
-			case t, ok := <-c.lowPriorityQueue.read():
+			case t, ok := <-c.lowPriorityQueue.Read():
 				if !ok {
 					return
 				}
 
-				c.lowPriorityQueue.done(t.typ == closeSig)
+				c.lowPriorityQueue.Done(t.typ == closeSig)
 
 				if !c.doWrite(conn, t) {
 					return
@@ -541,10 +542,10 @@ func (c *serverConn) isClosed() bool {
 }
 
 // 写入任务到队列
-func (c *serverConn) doWriteToQueue(q *queue, typ int8, msg ...[]byte) error {
+func (c *serverConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
 	t := c.connMgr.allocateTask(typ, msg...)
 
-	if err := q.write(t); err != nil {
+	if err := q.Write(t); err != nil {
 		c.connMgr.recycleTask(t)
 		return err
 	}
