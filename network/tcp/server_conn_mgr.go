@@ -27,7 +27,7 @@ func newServerConnMgr(server *server) *serverConnMgr {
 	cm.server = server
 	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
 	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
-	cm.partitions = make([]*partition, runtime.NumCPU())
+	cm.partitions = make([]*partition, runtime.NumCPU()*2)
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[net.Conn]*serverConn)}
