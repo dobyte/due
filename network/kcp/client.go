@@ -1,17 +1,20 @@
 package kcp
 
 import (
+	"sync"
+	"sync/atomic"
+
 	"github.com/dobyte/due/v2/network"
 	"github.com/xtaci/kcp-go/v5"
-	"sync/atomic"
 )
 
 type client struct {
 	opts              *clientOptions            // 配置
-	id                int64                     // 连接ID
+	id                atomic.Int64              // 连接ID
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
+	taskPool          sync.Pool                 // 任务对象池
 }
 
 var _ network.Client = &client{}
@@ -22,7 +25,11 @@ func NewClient(opts ...ClientOption) network.Client {
 		opt(o)
 	}
 
-	return &client{opts: o}
+	c := &client{}
+	c.opts = o
+	c.taskPool = sync.Pool{New: func() any { return &task{} }}
+
+	return c
 }
 
 // Dial 拨号连接
@@ -34,15 +41,12 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		address = c.opts.addr
 	}
 
-	//key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
-	//block, _ := kcp.NewAESBlockCrypt(key)
-
 	conn, err := kcp.DialWithOptions(address, nil, 10, 3)
 	if err != nil {
 		return nil, err
 	}
 
-	return newClientConn(c, atomic.AddInt64(&c.id, 1), conn), nil
+	return newClientConn(c.id.Add(1), conn, c), nil
 }
 
 // Protocol 协议
@@ -63,4 +67,21 @@ func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 // OnReceive 监听接收到消息
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
+}
+
+// 分配任务对象
+func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
+	t := c.taskPool.Get().(*task)
+	t.typ = typ
+	if len(msg) > 0 {
+		t.msg = msg[0]
+	}
+
+	return t
+}
+
+// 回收任务到对象池
+func (c *client) recycleTask(t *task) {
+	t.msg = nil
+	c.taskPool.Put(t)
 }

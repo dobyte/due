@@ -1,22 +1,19 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/7/12 12:43 上午
- * @Desc: TODO
- */
-
 package kcp
 
 import (
+	"sync/atomic"
+
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/xtaci/kcp-go/v5"
 )
 
 type server struct {
-	opts              *serverOptions
-	listener          *kcp.Listener
-	connMgr           *serverConnMgr
+	opts              *serverOptions            // 配置
+	started           atomic.Bool               // 是否已启动
+	listener          *kcp.Listener             // 监听器
+	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
@@ -50,22 +47,32 @@ func (s *server) Start() error {
 		return err
 	}
 
+	go s.serve()
+
 	if s.startHandler != nil {
 		s.startHandler()
 	}
-
-	go s.serve()
 
 	return nil
 }
 
 // Stop 关闭服务器
 func (s *server) Stop() error {
-	if err := s.listener.Close(); err != nil {
-		return err
+	if !s.started.Swap(false) {
+		return errors.ErrIllegalOperation
+	}
+
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			return err
+		}
 	}
 
 	s.connMgr.close()
+
+	if s.stopHandler != nil {
+		s.stopHandler()
+	}
 
 	return nil
 }
@@ -102,8 +109,15 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 
 // 初始化服务器
 func (s *server) init() error {
-	//key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
-	//block, _ := kcp.NewAESBlockCrypt(key)
+	if s.started.Swap(true) {
+		return errors.ErrIllegalOperation
+	}
+
+	defer func() {
+		if s.listener == nil {
+			s.started.Store(false)
+		}
+	}()
 
 	ln, err := kcp.ListenWithOptions(s.opts.addr, nil, 0, 0)
 	if err != nil {
@@ -117,15 +131,26 @@ func (s *server) init() error {
 
 // 启动服务器
 func (s *server) serve() {
+	listener := s.listener
+
 	for {
-		conn, err := s.listener.AcceptKCP()
+		conn, err := listener.AcceptKCP()
 		if err != nil {
 			log.Warnf("kcp accept error: %v", err)
-			return
+			break
 		}
 
-		if err = s.connMgr.allocate(conn); err != nil {
+		if err = s.connMgr.allocateConn(conn); err != nil {
+			log.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
+		}
+	}
+
+	if s.started.CompareAndSwap(true, false) {
+		s.connMgr.close()
+
+		if s.stopHandler != nil {
+			s.stopHandler()
 		}
 	}
 }

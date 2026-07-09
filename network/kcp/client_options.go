@@ -4,18 +4,28 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/etc"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
 	defaultClientDialAddr          = "127.0.0.1:3553"
 	defaultClientDialTimeout       = "5s"
+	defaultClientWriteTimeout      = "0s"
+	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+)
+
+var (
+	defaultClientNoDelay = []int{1, 10, 2, 1}
 )
 
 const (
 	defaultClientDialAddrKey          = "etc.network.kcp.client.addr"
 	defaultClientDialTimeoutKey       = "etc.network.kcp.client.timeout"
 	defaultClientHeartbeatIntervalKey = "etc.network.kcp.client.heartbeatInterval"
+	defaultClientWriteTimeoutKey      = "etc.network.kcp.client.writeTimeout"
+	defaultClientWriteQueueSizeKey    = "etc.network.kcp.client.writeQueueSize"
 	defaultClientMtuKey               = "etc.network.kcp.client.mtu"
 	defaultClientNoDelayKey           = "etc.network.kcp.client.noDelay"
 	defaultClientAckNoDelayKey        = "etc.network.kcp.client.ackNoDelay"
@@ -30,6 +40,8 @@ type ClientOption func(o *clientOptions)
 type clientOptions struct {
 	addr              string        // 地址
 	timeout           time.Duration // 拨号超时时间，默认5s
+	writeTimeout      time.Duration // 写入超时时间，默认无超时
+	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
 	mtu               int           // 最大传输单元，默认不设置
 	noDelay           []int         // 是否开启无延迟模式，默认不设置
@@ -41,18 +53,32 @@ type clientOptions struct {
 }
 
 func defaultClientOptions() *clientOptions {
-	return &clientOptions{
-		addr:              etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String(),
-		timeout:           etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration(),
-		heartbeatInterval: etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(),
-		mtu:               etc.Get(defaultClientMtuKey).Int(),
-		noDelay:           etc.Get(defaultClientNoDelayKey).Ints(),
-		ackNoDelay:        etc.Get(defaultClientAckNoDelayKey).Bool(),
-		writeDelay:        etc.Get(defaultClientWriteDelayKey).Bool(),
-		windowSize:        etc.Get(defaultClientWindowSizeKey).Ints(),
-		readBuffer:        int(etc.Get(defaultClientReadBufferKey).B()),
-		writeBuffer:       int(etc.Get(defaultClientWriteBufferKey).B()),
+	opts := &clientOptions{}
+	opts.addr = etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String()
+	opts.timeout = etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration()
+
+	if writeTimeout := etc.Get(defaultClientWriteTimeoutKey, defaultClientWriteTimeout).Duration(); writeTimeout >= 0 {
+		opts.writeTimeout = writeTimeout
+	} else {
+		opts.writeTimeout = xconv.Duration(defaultClientWriteTimeout)
 	}
+
+	if writeQueueSize := etc.Get(defaultClientWriteQueueSizeKey, defaultClientWriteQueueSize).Int(); writeQueueSize > 0 {
+		opts.writeQueueSize = writeQueueSize
+	} else {
+		opts.writeQueueSize = defaultClientWriteQueueSize
+	}
+
+	opts.heartbeatInterval = etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration()
+	opts.mtu = etc.Get(defaultClientMtuKey).Int()
+	opts.noDelay = etc.Get(defaultClientNoDelayKey, defaultClientNoDelay).Ints()
+	opts.ackNoDelay = etc.Get(defaultClientAckNoDelayKey).Bool()
+	opts.writeDelay = etc.Get(defaultClientWriteDelayKey).Bool()
+	opts.windowSize = etc.Get(defaultClientWindowSizeKey).Ints()
+	opts.readBuffer = int(etc.Get(defaultClientReadBufferKey).B())
+	opts.writeBuffer = int(etc.Get(defaultClientWriteBufferKey).B())
+
+	return opts
 }
 
 // WithClientDialAddr 设置拨号地址
@@ -103,4 +129,26 @@ func WithClientReadBuffer(readBuffer int) ClientOption {
 // WithClientWriteBuffer 设置写入缓冲区大小
 func WithClientWriteBuffer(writeBuffer int) ClientOption {
 	return func(o *clientOptions) { o.writeBuffer = writeBuffer }
+}
+
+// WithClientWriteTimeout 设置写超时时间
+func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if writeTimeout >= 0 {
+			o.writeTimeout = writeTimeout
+		} else {
+			log.Warnf("the specified writeTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientWriteQueueSize 设置写入队列大小
+func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
+	return func(o *clientOptions) {
+		if writeQueueSize > 0 {
+			o.writeQueueSize = writeQueueSize
+		} else {
+			log.Warnf("the specified writeQueueSize is less than zero and will be ignored")
+		}
+	}
 }

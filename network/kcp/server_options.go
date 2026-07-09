@@ -11,19 +11,29 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/etc"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
 	defaultServerAddr               = ":3553"
 	defaultServerMaxConnNum         = 5000
+	defaultServerWriteTimeout       = "0s"
+	defaultServerWriteQueueSize     = 1024
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
 )
 
+var (
+	defaultServerNoDelay = []int{1, 10, 2, 1}
+)
+
 const (
 	defaultServerAddrKey               = "etc.network.kcp.server.addr"
 	defaultServerMaxConnNumKey         = "etc.network.kcp.server.maxConnNum"
+	defaultServerWriteTimeoutKey       = "etc.network.kcp.server.writeTimeout"
+	defaultServerWriteQueueSizeKey     = "etc.network.kcp.server.writeQueueSize"
 	defaultServerHeartbeatIntervalKey  = "etc.network.kcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.kcp.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey   = "etc.network.kcp.server.authorizeTimeout"
@@ -48,6 +58,8 @@ type ServerOption func(o *serverOptions)
 type serverOptions struct {
 	addr               string             // 监听地址
 	maxConnNum         int                // 最大连接数
+	writeTimeout       time.Duration      // 写入超时时间，默认无超时
+	writeQueueSize     int                // 写入队列大小，默认1024
 	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
@@ -61,20 +73,34 @@ type serverOptions struct {
 }
 
 func defaultServerOptions() *serverOptions {
-	return &serverOptions{
-		addr:               etc.Get(defaultServerAddrKey, defaultServerAddr).String(),
-		maxConnNum:         etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(),
-		heartbeatInterval:  etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(),
-		heartbeatMechanism: HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()),
-		authorizeTimeout:   etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(),
-		mtu:                etc.Get(defaultServerMtuKey).Int(),
-		noDelay:            etc.Get(defaultServerNoDelayKey).Ints(),
-		ackNoDelay:         etc.Get(defaultServerAckNoDelayKey).Bool(),
-		writeDelay:         etc.Get(defaultServerWriteDelayKey).Bool(),
-		windowSize:         etc.Get(defaultServerWindowSizeKey).Ints(),
-		readBuffer:         int(etc.Get(defaultServerReadBufferKey).B()),
-		writeBuffer:        int(etc.Get(defaultServerWriteBufferKey).B()),
+	opts := &serverOptions{}
+	opts.addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
+	opts.maxConnNum = etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int()
+
+	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
+		opts.writeTimeout = writeTimeout
+	} else {
+		opts.writeTimeout = xconv.Duration(defaultServerWriteTimeout)
 	}
+
+	if writeQueueSize := etc.Get(defaultServerWriteQueueSizeKey, defaultServerWriteQueueSize).Int(); writeQueueSize > 0 {
+		opts.writeQueueSize = writeQueueSize
+	} else {
+		opts.writeQueueSize = defaultServerWriteQueueSize
+	}
+
+	opts.heartbeatInterval = etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration()
+	opts.heartbeatMechanism = HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String())
+	opts.authorizeTimeout = etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration()
+	opts.mtu = etc.Get(defaultServerMtuKey).Int()
+	opts.noDelay = etc.Get(defaultServerNoDelayKey, defaultServerNoDelay).Ints()
+	opts.ackNoDelay = etc.Get(defaultServerAckNoDelayKey).Bool()
+	opts.writeDelay = etc.Get(defaultServerWriteDelayKey).Bool()
+	opts.windowSize = etc.Get(defaultServerWindowSizeKey).Ints()
+	opts.readBuffer = int(etc.Get(defaultServerReadBufferKey).B())
+	opts.writeBuffer = int(etc.Get(defaultServerWriteBufferKey).B())
+
+	return opts
 }
 
 // WithServerListenAddr 设置监听地址
@@ -135,4 +161,26 @@ func WithServerReadBuffer(readBuffer int) ServerOption {
 // WithServerWriteBuffer 设置写入缓冲区大小
 func WithServerWriteBuffer(writeBuffer int) ServerOption {
 	return func(o *serverOptions) { o.writeBuffer = writeBuffer }
+}
+
+// WithServerWriteTimeout 设置写超时时间
+func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		if writeTimeout >= 0 {
+			o.writeTimeout = writeTimeout
+		} else {
+			log.Warnf("the specified writeTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerWriteQueueSize 设置写入队列大小
+func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
+	return func(o *serverOptions) {
+		if writeQueueSize > 0 {
+			o.writeQueueSize = writeQueueSize
+		} else {
+			log.Warnf("the specified writeQueueSize is less than zero and will be ignored")
+		}
+	}
 }

@@ -1,12 +1,16 @@
 package kcp
 
 import (
+	"context"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/dobyte/due/v2/network"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/xtaci/kcp-go/v5"
 )
 
@@ -14,15 +18,17 @@ type serverConnMgr struct {
 	id         atomic.Int64 // 连接ID
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
-	pool       sync.Pool    // 连接池
+	connPool   sync.Pool    // 连接池
+	taskPool   sync.Pool    // 任务池
 	partitions []*partition // 连接管理
 }
 
 func newServerConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.pool = sync.Pool{New: func() any { return &serverConn{} }}
-	cm.partitions = make([]*partition, 100)
+	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
+	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
+	cm.partitions = make([]*partition, runtime.NumCPU())
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[*kcp.UDPSession]*serverConn)}
@@ -33,46 +39,59 @@ func newServerConnMgr(server *server) *serverConnMgr {
 
 // 关闭连接
 func (cm *serverConnMgr) close() {
-	var wg sync.WaitGroup
+	wg, _ := taskpool.WithContext(context.Background())
 
-	wg.Add(len(cm.partitions))
-
-	for i := range cm.partitions {
-		p := cm.partitions[i]
-
-		xcall.Go(func() {
-			p.close()
-			wg.Done()
-		})
+	for _, p := range cm.partitions {
+		wg.Go(p.close)
 	}
 
 	wg.Wait()
 }
 
 // 分配连接
-func (cm *serverConnMgr) allocate(c *kcp.UDPSession) error {
-	if cm.total.Load() >= int64(cm.server.opts.maxConnNum) {
-		return errors.ErrTooManyConnection
+func (cm *serverConnMgr) allocateConn(c *kcp.UDPSession) error {
+	maxConnNum := int64(cm.server.opts.maxConnNum)
+	for {
+		if total := cm.total.Load(); total >= maxConnNum {
+			return errors.ErrTooManyConnection
+		} else if cm.total.CompareAndSwap(total, total+1) {
+			break
+		}
 	}
 
-	id := cm.id.Add(1)
-	conn := cm.pool.Get().(*serverConn)
-	conn.init(cm, id, c)
+	conn := cm.connPool.Get().(*serverConn)
 	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
-	cm.total.Add(1)
+	conn.init(c)
 
 	return nil
 }
 
 // 回收连接
-func (cm *serverConnMgr) recycle(c *kcp.UDPSession) {
-	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
+func (cm *serverConnMgr) recycleConn(c *kcp.UDPSession) {
+	index := int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		conn.reset()
-		cm.pool.Put(conn)
+		cm.connPool.Put(conn)
 		cm.total.Add(-1)
 	}
+}
+
+// 分配任务对象
+func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
+	t := cm.taskPool.Get().(*task)
+	t.typ = typ
+	if len(msg) > 0 {
+		t.msg = msg[0]
+	}
+
+	return t
+}
+
+// 回收任务到对象池
+func (cm *serverConnMgr) recycleTask(t *task) {
+	t.msg = nil
+	cm.taskPool.Put(t)
 }
 
 type partition struct {
@@ -100,8 +119,21 @@ func (p *partition) delete(c *kcp.UDPSession) (*serverConn, bool) {
 }
 
 // 关闭该分片内的所有连接
-func (p *partition) close() {
+func (p *partition) close() error {
+	p.rw.RLock()
+	conns := make([]network.Conn, 0, len(p.connections))
 	for _, conn := range p.connections {
-		_ = conn.Close()
+		conns = append(conns, conn)
 	}
+	p.rw.RUnlock()
+
+	wg, _ := taskpool.WithContext(context.Background())
+
+	for _, conn := range conns {
+		wg.Go(func() error {
+			return conn.Close()
+		})
+	}
+
+	return wg.Wait()
 }
