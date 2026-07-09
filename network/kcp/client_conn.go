@@ -41,8 +41,8 @@ func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn 
 	c.conn = conn
 	c.client = client
 	c.state.Store(int32(network.ConnOpened))
-	c.lowPriorityQueue = queue.NewQueue[*task](int32(client.opts.writeQueueSize), client.opts.writeTimeout)
-	c.highPriorityQueue = queue.NewQueue[*task](int32(client.opts.writeQueueSize), client.opts.writeTimeout)
+	c.lowPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.highPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize/2)), client.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(c.read)
@@ -361,10 +361,7 @@ func (c *clientConn) write() {
 			}
 
 			c.highPriorityQueue.Done(t.typ == closeSig)
-
-			if !c.doWrite(conn, t) {
-				return
-			}
+			c.doWrite(conn, t)
 		case t, ok := <-ticker.C:
 			if !ok {
 				return
@@ -381,20 +378,14 @@ func (c *clientConn) write() {
 				}
 
 				c.highPriorityQueue.Done(t.typ == closeSig)
-
-				if !c.doWrite(conn, t) {
-					return
-				}
+				c.doWrite(conn, t)
 			case t, ok := <-c.lowPriorityQueue.Read():
 				if !ok {
 					return
 				}
 
 				c.lowPriorityQueue.Done(t.typ == closeSig)
-
-				if !c.doWrite(conn, t) {
-					return
-				}
+				c.doWrite(conn, t)
 			case t, ok := <-ticker.C:
 				if !ok {
 					return
@@ -409,21 +400,17 @@ func (c *clientConn) write() {
 }
 
 // 执行写入操作
-func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) bool {
+func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) {
 	defer c.client.recycleTask(t)
 
-	if c.isClosed() {
-		return false
-	}
-
 	if t.typ == closeSig {
-		return true
+		return
 	}
 
 	if t.typ == heartbeatPacket {
 		if msg, err := packet.PackHeartbeat(); err != nil {
 			log.Errorf("pack heartbeat message error: %v", err)
-			return true
+			return
 		} else {
 			t.msg = msg
 		}
@@ -432,8 +419,6 @@ func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) bool {
 	if _, err := conn.Write(t.msg); err != nil {
 		log.Errorf("write message error: %v", err)
 	}
-
-	return true
 }
 
 // 处理心跳
@@ -449,10 +434,6 @@ func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 
 		return false
 	} else {
-		if c.isClosed() {
-			return false
-		}
-
 		if heartbeat, err := packet.PackHeartbeat(); err != nil {
 			log.Errorf("pack heartbeat message error: %v", err)
 		} else {
