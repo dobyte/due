@@ -3,9 +3,10 @@ package tcp
 import (
 	"context"
 	"net"
-	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
@@ -26,7 +27,7 @@ func newServerConnMgr(server *server) *serverConnMgr {
 	cm.server = server
 	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
 	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
-	cm.partitions = make([]*partition, 10)
+	cm.partitions = make([]*partition, runtime.NumCPU())
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[net.Conn]*serverConn)}
@@ -58,7 +59,7 @@ func (cm *serverConnMgr) allocateConn(c net.Conn) error {
 	}
 
 	conn := cm.connPool.Get().(*serverConn)
-	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
+	index := int(uintptr(unsafe.Pointer(c.(*net.TCPConn)))) % len(cm.partitions)
 	cm.partitions[index].store(c, conn)
 	conn.init(c)
 
@@ -67,7 +68,7 @@ func (cm *serverConnMgr) allocateConn(c net.Conn) error {
 
 // 回收连接
 func (cm *serverConnMgr) recycleConn(c net.Conn) {
-	index := int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
+	index := int(uintptr(unsafe.Pointer(c.(*net.TCPConn)))) % len(cm.partitions)
 	if conn, ok := cm.partitions[index].delete(c); ok {
 		conn.reset()
 		cm.connPool.Put(conn)

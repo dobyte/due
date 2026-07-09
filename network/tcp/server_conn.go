@@ -448,10 +448,6 @@ func (c *serverConn) write() {
 func (c *serverConn) doWrite(conn net.Conn, t *task) bool {
 	defer c.connMgr.recycleTask(t)
 
-	if c.isClosed() {
-		return false
-	}
-
 	if t.typ == closeSig {
 		return true
 	}
