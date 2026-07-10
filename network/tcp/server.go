@@ -69,6 +69,7 @@ func (s *server) Stop() error {
 		if err := s.listener.Close(); err != nil {
 			return err
 		}
+		s.listener = nil
 	}
 
 	s.connMgr.close()
@@ -185,6 +186,8 @@ func (s *server) serve() {
 			_ = conn.Close()
 		}
 	}
+
+	s.listener = nil
 
 	if s.started.CompareAndSwap(true, false) {
 		s.connMgr.close()
