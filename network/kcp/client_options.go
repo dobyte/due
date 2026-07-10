@@ -14,6 +14,7 @@ const (
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+	defaultClientMtu               = 1400
 )
 
 var (
@@ -70,7 +71,7 @@ func defaultClientOptions() *clientOptions {
 	}
 
 	opts.heartbeatInterval = etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration()
-	opts.mtu = etc.Get(defaultClientMtuKey).Int()
+	opts.mtu = etc.Get(defaultClientMtuKey, defaultClientMtu).Int()
 	opts.noDelay = etc.Get(defaultClientNoDelayKey, defaultClientNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultClientAckNoDelayKey).Bool()
 	opts.writeDelay = etc.Get(defaultClientWriteDelayKey).Bool()

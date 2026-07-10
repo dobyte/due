@@ -23,6 +23,7 @@ const (
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
+	defaultServerMtu                = 1400
 )
 
 var (
@@ -92,7 +93,7 @@ func defaultServerOptions() *serverOptions {
 	opts.heartbeatInterval = etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration()
 	opts.heartbeatMechanism = HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String())
 	opts.authorizeTimeout = etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration()
-	opts.mtu = etc.Get(defaultServerMtuKey).Int()
+	opts.mtu = etc.Get(defaultServerMtuKey, defaultServerMtu).Int()
 	opts.noDelay = etc.Get(defaultServerNoDelayKey, defaultServerNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultServerAckNoDelayKey).Bool()
 	opts.writeDelay = etc.Get(defaultServerWriteDelayKey).Bool()
