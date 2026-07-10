@@ -90,6 +90,7 @@ func (s *server) Stop() error {
 		if err := s.listener.Close(); err != nil {
 			return err
 		}
+		s.listener = nil
 	}
 
 	s.connMgr.close()
@@ -175,6 +176,8 @@ func (s *server) serve() {
 	if err != nil {
 		log.Errorf("websocket server shutdown, err: %v", err)
 	}
+
+	s.listener = nil
 
 	if s.started.CompareAndSwap(true, false) {
 		s.connMgr.close()

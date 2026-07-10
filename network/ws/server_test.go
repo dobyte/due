@@ -1,112 +1,41 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/29 10:59 上午
- * @Desc: TODO
- */
-
 package ws_test
 
 import (
-	"net/http"
+	"net"
 	"testing"
 
 	"github.com/dobyte/due/network/ws/v2"
-	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-func TestServer(t *testing.T) {
-	server := ws.NewServer()
-	server.OnStart(func() {
-		t.Logf("server is started")
-	})
-	server.OnConnect(func(conn network.Conn) {
-		t.Logf("connection is opened, connection id: %d", conn.ID())
-	})
-	server.OnDisconnect(func(conn network.Conn) {
-		t.Logf("connection is closed, connection id: %d", conn.ID())
-	})
-	server.OnReceive(func(conn network.Conn, data []byte) {
-		message, err := packet.UnpackMessage(data)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-
-		t.Logf("receive msg from client, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: []byte("I'm fine~~"),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = conn.Push(msg); err != nil {
-			t.Error(err)
-		}
-	})
-	server.OnUpgrade(func(w http.ResponseWriter, r *http.Request) (allowed bool) {
-		return true
-	})
+func TestServerStartFailureRollsBackState(t *testing.T) {
+	addr := reserveAddr(t)
+	server := ws.NewServer(ws.WithServerAddr(addr), ws.WithServerHeartbeatInterval(0))
 
 	if err := server.Start(); err != nil {
-		t.Fatal(err)
+		t.Fatalf("start server failed: %v", err)
+	}
+	if err := server.Stop(); err != nil {
+		t.Fatalf("stop server failed: %v", err)
 	}
 
-	xcall.Go(func() {
-		err := http.ListenAndServe(":8089", nil)
-		if err != nil {
-			log.Errorf("pprof server start failed: %v", err)
-		}
-	})
-
-	select {}
-}
-
-func TestServer_Benchmark(t *testing.T) {
-	server := ws.NewServer()
-	server.OnStart(func() {
-		t.Logf("server is started")
-	})
-	server.OnReceive(func(conn network.Conn, data []byte) {
-		if _, err := packet.UnpackMessage(data); err != nil {
-			t.Error(err)
-			return
-		}
-
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: []byte("I'm fine~~"),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = conn.Push(msg); err != nil {
-			t.Error(err)
-		}
-	})
-	server.OnUpgrade(func(w http.ResponseWriter, r *http.Request) (allowed bool) {
-		return true
-	})
-
-	if err := server.Start(); err != nil {
-		t.Fatal(err)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("occupy addr failed: %v", err)
 	}
 
-	xcall.Go(func() {
-		err := http.ListenAndServe(":8089", nil)
-		if err != nil {
-			log.Errorf("pprof server start failed: %v", err)
-		}
-	})
+	if err = server.Start(); err == nil {
+		ln.Close()
+		defer server.Stop()
+		t.Fatal("expected start to fail while addr is occupied")
+	}
+	if err = ln.Close(); err != nil {
+		t.Fatalf("release occupied addr failed: %v", err)
+	}
 
-	select {}
+	if err = server.Start(); err != nil {
+		t.Fatalf("restart after failed start should succeed: %v", err)
+	}
+	if err = server.Stop(); err != nil {
+		t.Fatalf("stop restarted server failed: %v", err)
+	}
 }

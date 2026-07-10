@@ -1,210 +1,84 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/8 12:22 上午
- * @Desc: TODO
- */
-
 package ws_test
 
 import (
-	"fmt"
-	"sync"
-	"sync/atomic"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/dobyte/due/network/ws/v2"
-	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
 
-func TestClient_Dial(t *testing.T) {
-	wg := sync.WaitGroup{}
-	for range 1 {
-		wg.Add(1)
+func TestClientServerEcho(t *testing.T) {
+	addr := reserveAddr(t)
 
-		go func() {
-			client := ws.NewClient()
-			client.OnConnect(func(conn network.Conn) {
-				t.Log("connection is opened")
-			})
-			client.OnDisconnect(func(conn network.Conn) {
-				t.Log("connection is closed")
-			})
-			client.OnReceive(func(conn network.Conn, data []byte) {
-				message, err := packet.UnpackMessage(data)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-
-				t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
-			})
-
-			defer wg.Done()
-
-			conn, err := client.Dial()
-			if err != nil {
-				t.Error(err)
-				return
-			}
-
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			defer conn.Close()
-
-			times := 0
-			msg, _ := packet.PackMessage(&packet.Message{
-				Seq:    1,
-				Route:  1,
-				Buffer: []byte("hello server~~"),
-			})
-
-			for range ticker.C {
-				if err = conn.Push(msg); err != nil {
-					t.Error(err)
-					return
-				}
-
-				times++
-
-				if times >= 5 {
-					return
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-}
-
-func TestNewClient(t *testing.T) {
-	client := ws.NewClient()
-
-	client.OnConnect(func(conn network.Conn) {
-		log.Info("connection is opened")
-	})
-	client.OnDisconnect(func(conn network.Conn) {
-		log.Info("connection is closed")
-	})
-	client.OnReceive(func(conn network.Conn, data []byte) {
-		message, err := packet.UnpackMessage(data)
-		if err != nil {
-			t.Error(err)
-			return
+	server := ws.NewServer(ws.WithServerAddr(addr), ws.WithServerHeartbeatInterval(0))
+	server.OnReceive(func(conn network.Conn, data []byte) {
+		if err := conn.Push(data); err != nil {
+			t.Errorf("push echo message failed: %v", err)
 		}
+	})
 
-		t.Logf("receive msg from server, connection id: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() {
+		if err := server.Stop(); err != nil {
+			t.Fatalf("stop server failed: %v", err)
+		}
+	}()
+
+	received := make(chan []byte, 1)
+	client := ws.NewClient(
+		ws.WithClientUrl("ws://"+addr),
+		ws.WithClientHeartbeatInterval(0),
+	)
+	client.OnReceive(func(conn network.Conn, data []byte) {
+		received <- data
 	})
 
 	conn, err := client.Dial()
 	if err != nil {
-		log.Fatalf("dial failed: %v", err)
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	want, err := packet.PackMessage(&packet.Message{
+		Seq:    1,
+		Route:  2,
+		Buffer: []byte("hello websocket"),
+	})
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
 	}
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	defer conn.Close()
+	if err = conn.Push(want); err != nil {
+		t.Fatalf("push message failed: %v", err)
+	}
 
-	times := 0
-	data, _ := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
-
-	for range ticker.C {
-		if err = conn.Push(data); err != nil {
-			log.Errorf("push message failed: %v", err)
-			return
+	select {
+	case got := <-received:
+		message, err := packet.UnpackMessage(got)
+		if err != nil {
+			t.Fatalf("unpack echo message failed: %v", err)
 		}
-
-		times++
-
-		if times >= 5 {
-			return
+		if message.Seq != 1 || message.Route != 2 || string(message.Buffer) != "hello websocket" {
+			t.Fatalf("unexpected echo message: seq=%d route=%d body=%q", message.Seq, message.Route, string(message.Buffer))
 		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for echo message")
 	}
 }
 
-func TestClient_Benchmark(t *testing.T) {
-	// 并发数
-	concurrency := 1000
-	// 消息量
-	total := 1000000
-	// 总共发送的消息条数
-	totalSent := int64(0)
-	// 总共接收的消息条数
-	totalRecv := int64(0)
+func reserveAddr(t *testing.T) string {
+	t.Helper()
 
-	// 准备消息
-	msg, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello server~~"),
-	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("reserve addr failed: %v", err)
 	}
+	defer ln.Close()
 
-	wg := sync.WaitGroup{}
-	client := ws.NewClient()
-	client.OnReceive(func(conn network.Conn, data []byte) {
-		atomic.AddInt64(&totalRecv, 1)
-
-		wg.Done()
-	})
-
-	wg.Add(total)
-
-	chMsg := make(chan struct{}, total)
-
-	// 准备连接
-	conns := make([]network.Conn, concurrency)
-	for i := 0; i < concurrency; i++ {
-		if conn, err := client.Dial(); err != nil {
-			fmt.Println("connect failed", i, err)
-			i--
-			continue
-		} else {
-			conns[i] = conn
-			time.Sleep(time.Millisecond)
-		}
-	}
-
-	// 发送消息
-	for _, conn := range conns {
-		go func(conn network.Conn) {
-			defer conn.Close(true)
-
-			for range chMsg {
-				if err = conn.Push(msg); err != nil {
-					t.Error(err)
-					return
-				}
-
-				atomic.AddInt64(&totalSent, 1)
-			}
-		}(conn)
-	}
-
-	startTime := time.Now().UnixNano()
-
-	for range total {
-		chMsg <- struct{}{}
-	}
-
-	wg.Wait()
-	close(chMsg)
-
-	totalTime := float64(time.Now().UnixNano()-startTime) / float64(time.Second)
-
-	fmt.Printf("server               : %s\n", "websocket")
-	fmt.Printf("concurrency          : %d\n", concurrency)
-	fmt.Printf("latency              : %fs\n", totalTime)
-	fmt.Printf("sent     requests    : %d\n", totalSent)
-	fmt.Printf("received requests    : %d\n", totalRecv)
-	fmt.Printf("throughput  (TPS)    : %d\n", int64(float64(totalRecv)/totalTime))
+	return ln.Addr().String()
 }
