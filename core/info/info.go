@@ -2,6 +2,7 @@ package info
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -41,6 +42,7 @@ func PrintFrameworkInfo() {
 
 func PrintGlobalInfo() {
 	PrintBoxInfo(global,
+		fmt.Sprintf("Go: %s", "v"+strings.TrimPrefix(runtime.Version(), "go")),
 		fmt.Sprintf("PID: %d", syscall.Getpid()),
 		fmt.Sprintf("Mode: %s", mode.GetMode()),
 		fmt.Sprintf("Time: %s", xtime.Now()),
