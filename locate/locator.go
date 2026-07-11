@@ -30,6 +30,8 @@ type Locator interface {
 	LocateNode(ctx context.Context, uid int64, name string) (string, error)
 	// LocateNodes 定位用户所在节点列表
 	LocateNodes(ctx context.Context, uid int64) (map[string]string, error)
+	// Close 关闭定位器
+	Close() error
 }
 
 type Watcher interface {

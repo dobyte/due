@@ -105,6 +105,10 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 	}
 
 	if err := sub.Subscribe(ctx, channels...); err != nil {
+		if e := sub.Close(); e != nil {
+			log.Errorf("close pubsub failed, %v", e)
+		}
+
 		return nil, err
 	}
 
@@ -137,14 +141,18 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 	return wm, nil
 }
 
-func (wm *watcherMgr) fork() locate.Watcher {
+func (wm *watcherMgr) fork() (locate.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
+
+	if err := wm.ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	w := newWatcher(wm, atomic.AddInt64(&wm.idx, 1))
 	wm.watchers[w.idx] = w
 
-	return w
+	return w, nil
 }
 
 func (wm *watcherMgr) recycle(idx int64) error {

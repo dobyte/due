@@ -3,13 +3,10 @@ package redis
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 	"sync"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/tls"
-	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -33,7 +30,10 @@ type Locator struct {
 	builtin          bool
 	ctx              context.Context
 	cancel           context.CancelFunc
-	sfg              singleflight.Group
+	sfg1             singleflight.Group
+	sfg2             singleflight.Group
+	sfg3             singleflight.Group
+	mu               sync.Mutex
 	watchers         sync.Map
 	unbindGateScript *redis.Script
 	unbindNodeScript *redis.Script
@@ -90,7 +90,7 @@ func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg.Do(key, func() (any, error) {
+	val, err, _ := l.sfg1.Do(key, func() (any, error) {
 		val, err := l.opts.client.Get(ctx, key).Result()
 		if err != nil && !errors.Is(err, redis.Nil) {
 			return "", err
@@ -113,7 +113,7 @@ func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (strin
 
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg.Do(key+name, func() (any, error) {
+	val, err, _ := l.sfg2.Do(key+name, func() (any, error) {
 		val, err := l.opts.client.HGet(ctx, key, name).Result()
 		if err != nil && !errors.Is(err, redis.Nil) {
 			return "", err
@@ -136,9 +136,9 @@ func (l *Locator) LocateNodes(ctx context.Context, uid int64) (map[string]string
 
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg.Do(key, func() (any, error) {
+	val, err, _ := l.sfg3.Do(key, func() (any, error) {
 		val, err := l.opts.client.HGetAll(ctx, key).Result()
-		if err != nil && !errors.Is(err, redis.Nil) {
+		if err != nil {
 			return nil, err
 		}
 
@@ -233,6 +233,21 @@ func (l *Locator) UnbindNode(ctx context.Context, uid int64, name, nid string) e
 	return nil
 }
 
+// Close 关闭定位器
+func (l *Locator) Close() error {
+	if l.err != nil {
+		return l.err
+	}
+
+	l.cancel()
+
+	if l.builtin {
+		return l.opts.client.Close()
+	}
+
+	return nil
+}
+
 // 广播事件
 func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64, insID string, insName ...string) error {
 	evt := &locate.Event{UID: uid, Type: typ, InsID: insID}
@@ -256,50 +271,42 @@ func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64
 	return l.opts.client.Publish(ctx, fmt.Sprintf(clusterEventKey, l.opts.prefix, evt.InsKind), msg).Err()
 }
 
-func (l *Locator) toUniqueKey(kinds ...string) string {
-	slices.Sort(kinds)
-
-	return strings.Join(kinds, "&")
-}
-
 // Watch 监听用户定位变化
 func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, error) {
 	if l.err != nil {
 		return nil, l.err
 	}
 
-	key := l.toUniqueKey(kinds...)
+	mgr, err := l.doBuildWatcherMgr(ctx, kinds...)
+	if err != nil {
+		return nil, err
+	}
+
+	return mgr.fork()
+}
+
+// 构建定位管理器
+func (l *Locator) doBuildWatcherMgr(ctx context.Context, kinds ...string) (*watcherMgr, error) {
+	key := toUniqueKey(kinds...)
 
 	v, ok := l.watchers.Load(key)
 	if ok {
-		return v.(*watcherMgr).fork(), nil
+		return v.(*watcherMgr), nil
 	}
 
-	w, err := newWatcherMgr(ctx, l, key, kinds...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if v, ok = l.watchers.Load(key); ok {
+		return v.(*watcherMgr), nil
+	}
+
+	mgr, err := newWatcherMgr(ctx, l, key, kinds...)
 	if err != nil {
 		return nil, err
 	}
 
-	l.watchers.Store(key, w)
+	l.watchers.Store(key, mgr)
 
-	return w.fork(), nil
-}
-
-func marshal(event *locate.Event) (string, error) {
-	buf, err := json.Marshal(event)
-	if err != nil {
-		return "", err
-	}
-
-	return string(buf), nil
-}
-
-func unmarshal(data []byte) (*locate.Event, error) {
-	evt := &locate.Event{}
-
-	if err := json.Unmarshal(data, evt); err != nil {
-		return nil, err
-	}
-
-	return evt, nil
+	return mgr, nil
 }
