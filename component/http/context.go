@@ -98,6 +98,7 @@ func (c *context) Success(data ...any) error {
 // Reset 重置上下文
 func (c *context) Reset(fctx *fasthttp.RequestCtx) {
 	c.DefaultCtx.Reset(fctx)
+	c.stdRequest = nil
 	c.stdRequestOnce = &sync.Once{}
 }
 
@@ -109,7 +110,7 @@ func (c *context) StdRequest() *http.Request {
 		}
 
 		if err := fasthttpadaptor.ConvertRequest(c.RequestCtx(), c.stdRequest, true); err != nil {
-			log.Error("ConvertRequest failed: %v", err)
+			log.Errorf("convert request failed: %v", err)
 		}
 	})
 

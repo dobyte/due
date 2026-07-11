@@ -42,7 +42,7 @@ func New(cfg Config) fiber.Handler {
 	}
 
 	// Generate URL path's for the middleware
-	specURL := path.Join(cfg.BasePath, cfg.FilePath)
+	specURL := path.Join(cfg.BasePath, strings.TrimPrefix(cfg.FilePath, "/"))
 	swaggerUIPath := path.Join("/", cfg.BasePath)
 
 	// Serve the Swagger spec from memory

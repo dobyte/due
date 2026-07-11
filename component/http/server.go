@@ -1,8 +1,10 @@
 package http
 
 import (
+	stctx "context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dobyte/due/component/http/v2/swagger"
 	"github.com/dobyte/due/v2/component"
@@ -10,6 +12,7 @@ import (
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/logger"
@@ -72,7 +75,7 @@ func NewServer(opts ...Option) *Server {
 		s.app.Use(logger.New())
 	}
 
-	s.app.Use(recover.New(recover.Config{EnableStackTrace: true}))
+	s.app.Use(recover.New(recover.Config{EnableStackTrace: !mode.IsReleaseMode()}))
 
 	if s.opts.corsOpts.Enable {
 		s.app.Use(cors.New(cors.Config{
@@ -150,6 +153,19 @@ func (s *Server) Start() {
 			log.Fatalf("http server startup failed: %v", errors.Unwrap(errors.Unwrap(err)))
 		}
 	}()
+}
+
+// Destroy 销毁组件
+func (s *Server) Destroy() {
+	if s.app != nil {
+		ctx, cancel := stctx.WithTimeout(stctx.Background(), 10*time.Second)
+		err := s.app.ShutdownWithContext(ctx)
+		cancel()
+
+		if err != nil {
+			log.Warnf("http server shutdown failed: %v", err)
+		}
+	}
 }
 
 func (s *Server) printInfo(addr string) {

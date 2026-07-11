@@ -213,7 +213,13 @@ func adaptHandlers(handlers []any) []any {
 	for i := range handlers {
 		handler := handlers[i]
 
-		if reflect.ValueOf(handler).IsNil() {
+		rv := reflect.ValueOf(handler)
+
+		if rv.Kind() != reflect.Func {
+			continue
+		}
+
+		if rv.IsNil() {
 			continue
 		}
 
