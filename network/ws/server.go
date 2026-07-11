@@ -148,6 +148,11 @@ func (s *server) serve() {
 			return
 		}
 
+		if !websocket.IsWebSocketUpgrade(r) {
+			http.Error(w, http.StatusText(http.StatusUpgradeRequired), http.StatusUpgradeRequired)
+			return
+		}
+
 		if s.upgradeHandler != nil && !s.upgradeHandler(w, r) {
 			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
