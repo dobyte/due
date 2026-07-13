@@ -46,13 +46,13 @@ const (
 	defaultTaskWriteTimeoutKey          = "etc.cluster.node.taskWriteTimeout"
 	defaultMessageQueueSizeKey          = "etc.cluster.node.messageQueueSize"
 	defaultMessageWriteTimeoutKey       = "etc.cluster.node.messageWriteTimeout"
-	defaultLinkerConnNumKey             = "etc.cluster.mesh.linker.connNum"
-	defaultLinkerCallTimeoutKey         = "etc.cluster.mesh.linker.callTimeout"
-	defaultLinkerDialTimeoutKey         = "etc.cluster.mesh.linker.dialTimeout"
-	defaultLinkerDialRetryTimesKey      = "etc.cluster.mesh.linker.dialRetryTimes"
-	defaultLinkerFaultRecoveryTimeKey   = "etc.cluster.mesh.linker.faultRecoveryTime"
-	defaultLinkerCommandQueueSizeKey    = "etc.cluster.mesh.linker.commandQueueSize"
-	defaultLinkerCommandWriteTimeoutKey = "etc.cluster.mesh.linker.commandWriteTimeout"
+	defaultLinkerConnNumKey             = "etc.cluster.node.linker.connNum"
+	defaultLinkerCallTimeoutKey         = "etc.cluster.node.linker.callTimeout"
+	defaultLinkerDialTimeoutKey         = "etc.cluster.node.linker.dialTimeout"
+	defaultLinkerDialRetryTimesKey      = "etc.cluster.node.linker.dialRetryTimes"
+	defaultLinkerFaultRecoveryTimeKey   = "etc.cluster.node.linker.faultRecoveryTime"
+	defaultLinkerCommandQueueSizeKey    = "etc.cluster.node.linker.commandQueueSize"
+	defaultLinkerCommandWriteTimeoutKey = "etc.cluster.node.linker.commandWriteTimeout"
 )
 
 type Option func(o *options)
