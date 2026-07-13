@@ -94,6 +94,8 @@ func (c *Client) Close() {
 			return
 		}
 	}
+
+	c.runHookFunc(cluster.Close)
 }
 
 // Destroy 销毁组件
@@ -251,11 +253,6 @@ func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
 			log.Warnf("client is working, can't add hook handler")
 		}
 	}
-}
-
-// 设置状态
-func (c *Client) setState(state cluster.State) {
-	c.state.Store(int32(state))
 }
 
 // 获取状态

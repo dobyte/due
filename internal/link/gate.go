@@ -40,8 +40,8 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 			CallTimeout:       opts.CallTimeout,
 			DialTimeout:       opts.DialTimeout,
 			DialRetryTimes:    opts.DialRetryTimes,
-			WriteTimeout:      opts.WriteTimeout,
-			WriteQueueSize:    opts.WriteQueueSize,
+			WriteTimeout:      opts.CommandWriteTimeout,
+			WriteQueueSize:    opts.CommandQueueSize,
 			FaultRecoveryTime: opts.FaultRecoveryTime,
 		}),
 	}

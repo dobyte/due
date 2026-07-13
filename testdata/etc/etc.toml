@@ -21,24 +21,26 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # 是否将内建RPC通信地址暴露到公网。默认为false
         expose = false
-        # RPC连接数，默认5
-        connNum = 5
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        callTimeout = "3s"
-        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        dialTimeout = "3s"
-        # RPC拨号重试次数，默认3
-        dialRetryTimes = 3
-        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
-        writeTimeout = "0s"
-        # RPC写入队列大小，默认2048
-        writeQueueSize = 2048
-        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
-        faultRecoveryTime = "5s"
         # 实例元数据
         [cluster.gate.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
             key = "value"
+        # 集群内RPC连接器配置
+        [cluster.gate.linker]
+            # RPC连接数，默认5
+            connNum = 5
+            # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            callTimeout = "3s"
+            # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
+            # RPC拨号重试次数，默认3
+            dialRetryTimes = 3
+            # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            faultRecoveryTime = "5s"
+            # 命令队列大小，默认4096
+            commandQueueSize = 4096
+            # 命令写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
+            commandWriteTimeout = "0s"
     # 集群节点配置
     [cluster.node]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -53,24 +55,34 @@ shutdownMaxWaitTime = "0s"
         addr = ":0"
         # 是否将内建RPC通信地址暴露到公网。默认为false
         expose = false
-        # RPC连接数，默认5
-        connNum = 5
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        callTimeout = "3s"
-        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        dialTimeout = "3s"
-        # RPC拨号重试次数，默认3
-        dialRetryTimes = 3
-        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
-        writeTimeout = "0s"
-        # RPC写入队列大小，默认2048
-        writeQueueSize = 2048
-        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
-        faultRecoveryTime = "5s"
+        # 任务队列大小，默认4096
+        taskQueueSize = 4096
+        # 任务写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
+        taskWriteTimeout = "0s"
+        # 消息队列大小，默认10240
+        messageQueueSize = 10240
+        # 消息写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
+        messageWriteTimeout = "0s"
         # 实例元数据
         [cluster.node.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
             key = "value"
+        # 集群内RPC连接器配置
+        [cluster.node.linker]
+            # RPC连接数，默认5
+            connNum = 5
+            # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            callTimeout = "3s"
+            # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
+            # RPC拨号重试次数，默认3
+            dialRetryTimes = 3
+            # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            faultRecoveryTime = "5s"
+            # 命令队列大小，默认4096
+            commandQueueSize = 4096
+            # 命令写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
+            commandWriteTimeout = "0s"
     # 集群网格配置
     [cluster.mesh]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -81,24 +93,26 @@ shutdownMaxWaitTime = "0s"
         expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
-        # RPC连接数，默认5
-        connNum = 5
-        # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        callTimeout = "3s"
-        # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-        dialTimeout = "3s"
-        # RPC拨号重试次数，默认3
-        dialRetryTimes = 3
-        # RPC写入队列超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s
-        writeTimeout = "0s"
-        # RPC写入队列大小，默认2048
-        writeQueueSize = 2048
-        # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
-        faultRecoveryTime = "5s"
         # 实例元数据
         [cluster.mesh.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
             key = "value"
+        # 集群内RPC连接器配置
+        [cluster.mesh.linker]
+            # RPC连接数，默认5
+            connNum = 5
+            # RPC调用超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            callTimeout = "3s"
+            # RPC拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
+            # RPC拨号重试次数，默认3
+            dialRetryTimes = 3
+            # RPC连接故障恢复时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            faultRecoveryTime = "5s"
+            # 命令队列大小，默认4096
+            commandQueueSize = 4096
+            # 命令写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
+            commandWriteTimeout = "0s"
     # 集群客户端配置，常用于调试使用
     [cluster.client]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID

@@ -22,7 +22,7 @@ func defaultActorOptions() *actorOptions {
 		dispatch:            true,
 		taskQueueSize:       1024,
 		taskWriteTimeout:    3 * time.Second,
-		messageQueueSize:    2024,
+		messageQueueSize:    2048,
 		messageWriteTimeout: 3 * time.Second,
 	}
 }
@@ -57,7 +57,7 @@ func WithActorTaskQueueSize(size int32) ActorOption {
 	return func(o *actorOptions) { o.taskQueueSize = size }
 }
 
-// WithActorTaskWriteTimeout 设置任务入入队超时时间
+// WithActorTaskWriteTimeout 设置任务入队超时时间
 func WithActorTaskWriteTimeout(timeout time.Duration) ActorOption {
 	return func(o *actorOptions) { o.taskWriteTimeout = timeout }
 }

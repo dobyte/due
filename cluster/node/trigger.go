@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 )
@@ -11,20 +12,20 @@ import (
 type EventHandler func(ctx Context)
 
 type Trigger struct {
-	node    *Node
-	events  map[cluster.Event]EventHandler
-	evtChan chan *event
+	node   *Node
+	queue  *queue.Queue[*event]
+	events map[cluster.Event]EventHandler
 }
 
 func newTrigger(node *Node) *Trigger {
 	return &Trigger{
-		node:    node,
-		events:  make(map[cluster.Event]EventHandler, 3),
-		evtChan: make(chan *event, 4096),
+		node:   node,
+		queue:  queue.NewQueue[*event](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		events: make(map[cluster.Event]EventHandler, 3),
 	}
 }
 
-func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) {
+func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error {
 	evt := e.node.evtPool.Get().(*event)
 	evt.event = kind
 	evt.gid = gid
@@ -37,15 +38,16 @@ func (e *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) {
 		evt.ctx = context.Background()
 	}
 
-	e.evtChan <- evt
+	return e.queue.Write(evt)
 }
 
 func (e *Trigger) receive() <-chan *event {
-	return e.evtChan
+	return e.queue.Read()
 }
 
 func (e *Trigger) close() {
-	close(e.evtChan)
+	e.queue.Close()
+	clear(e.events)
 }
 
 // 处理事件消息

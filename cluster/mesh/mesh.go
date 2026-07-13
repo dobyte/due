@@ -154,6 +154,10 @@ func (m *Mesh) startTransportServer() {
 
 // 停止传输服务器
 func (m *Mesh) stopTransportServer() {
+	if m.transporter == nil {
+		return
+	}
+
 	if err := m.transporter.Stop(); err != nil {
 		log.Errorf("transport server stop failed: %v", err)
 	}

@@ -30,8 +30,8 @@ type Actor struct {
 	defaultRouteHandler RouteHandler                   // 默认路由处理器
 	processor           Processor                      // 处理器
 	rw                  sync.RWMutex                   // 锁
-	fnQueue             *queue.Queue[func()]           // 任务队列
-	ctxQueue            *queue.Queue[Context]          // 消息队列
+	taskQueue           *queue.Queue[func()]           // 任务队列
+	messageQueue        *queue.Queue[Context]          // 消息队列
 	binds               sync.Map                       // 绑定的用户
 }
 
@@ -69,7 +69,7 @@ func (a *Actor) Invoke(fn func()) error {
 		return errors.ErrActorNotStarted
 	}
 
-	return a.fnQueue.Write(fn)
+	return a.taskQueue.Write(fn)
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
@@ -108,7 +108,7 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 			return
 		}
 
-		if err := a.fnQueue.Write(f); err != nil {
+		if err := a.taskQueue.Write(f); err != nil {
 			log.Warnf("actor %s write func task failed, err: %v", a.PID(), err)
 		}
 	})
@@ -125,7 +125,7 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	case unstart:
 		a.defaultRouteHandler = handler
 	case started:
-		a.fnQueue.Write(func() {
+		a.taskQueue.Write(func() {
 			a.defaultRouteHandler = handler
 		})
 	default:
@@ -142,7 +142,7 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.fnQueue.Write(func() {
+		a.taskQueue.Write(func() {
 			a.routes[route] = handler
 
 			if a.opts.dispatch {
@@ -163,7 +163,7 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	case unstart:
 		a.events[event] = handler
 	case started:
-		a.fnQueue.Write(func() {
+		a.taskQueue.Write(func() {
 			a.events[event] = handler
 		})
 	default:
@@ -184,7 +184,7 @@ func (a *Actor) Next(ctx Context) error {
 	ctx.incrVersion()
 	ctx.Cancel()
 
-	return a.ctxQueue.Write(ctx)
+	return a.messageQueue.Write(ctx)
 }
 
 // Deliver 投递消息到当前Actor中进行处理
@@ -212,9 +212,7 @@ func (a *Actor) Push(uid int64, message *cluster.Message) error {
 		return err
 	}
 
-	a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, buf)
-
-	return nil
+	return a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, buf)
 }
 
 // Destroy 销毁Actor
@@ -243,15 +241,20 @@ func (a *Actor) destroy() bool {
 	})
 
 	a.rw.Lock()
-	a.fnQueue.Close()
-	a.ctxQueue.Close()
+	a.clear()
+	a.rw.Unlock()
+
+	return true
+}
+
+// 清空Actor资源
+func (a *Actor) clear() {
+	a.taskQueue.Close()
+	a.messageQueue.Close()
 	clear(a.routes)
 	clear(a.events)
 	a.processor = nil
 	a.defaultRouteHandler = nil
-	a.rw.Unlock()
-
-	return true
 }
 
 // 绑定用户
@@ -269,7 +272,7 @@ func (a *Actor) unbindUser(uid int64) bool {
 func (a *Actor) dispatch() {
 	for {
 		select {
-		case ctx, ok := <-a.ctxQueue.Read():
+		case ctx, ok := <-a.messageQueue.Read():
 			if !ok {
 				return
 			}
@@ -295,7 +298,7 @@ func (a *Actor) dispatch() {
 			}
 
 			ctx.compareVersionRecycle(version)
-		case handle, ok := <-a.fnQueue.Read():
+		case handle, ok := <-a.taskQueue.Read():
 			if !ok {
 				return
 			}

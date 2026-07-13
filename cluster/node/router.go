@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 )
@@ -39,8 +40,8 @@ var (
 
 type Router struct {
 	node                *Node
+	queue               *queue.Queue[*request]
 	routes              map[int32]*routeEntity
-	reqChan             chan *request
 	preRouteHandler     RouteHandler
 	postRouteHandler    RouteHandler
 	defaultRouteHandler RouteHandler
@@ -54,9 +55,9 @@ type routeEntity struct {
 
 func newRouter(node *Node) *Router {
 	return &Router{
-		node:    node,
-		routes:  make(map[int32]*routeEntity),
-		reqChan: make(chan *request, 10240),
+		node:   node,
+		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		routes: make(map[int32]*routeEntity),
 	}
 }
 
@@ -138,7 +139,7 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	return group
 }
 
-func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data any) {
+func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data any) error {
 	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
 	req.nid = nid
@@ -155,15 +156,16 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 		req.ctx = context.Background()
 	}
 
-	r.reqChan <- req
+	return r.queue.Write(req)
 }
 
 func (r *Router) receive() <-chan *request {
-	return r.reqChan
+	return r.queue.Read()
 }
 
 func (r *Router) close() {
-	close(r.reqChan)
+	r.queue.Close()
+	clear(r.routes)
 }
 
 func (r *Router) handle(req *request) {

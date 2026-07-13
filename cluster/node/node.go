@@ -66,7 +66,7 @@ func NewNode(opts ...Option) *Node {
 	n.hooks = make(map[cluster.Hook][]HookHandler)
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
-	n.taskQueue = queue.NewQueue[func()](n.opts.writeQueueSize, n.opts.writeTimeout)
+	n.taskQueue = queue.NewQueue[func()](n.opts.taskQueueSize, n.opts.taskWriteTimeout)
 	n.state.Store(int32(cluster.Shut))
 	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() any {

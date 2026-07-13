@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type Scheduler struct {
@@ -33,33 +34,44 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 		opt(o)
 	}
 
+	if o.kind == "" || o.id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
+	if _, ok := s.load(o.kind, o.id); ok {
+		return nil, errors.ErrActorExists
+	}
+
+	if o.wait {
+		s.node.doWaitAdd()
+	}
+
 	act := &Actor{}
 	act.opts = o
 	act.scheduler = s
 	act.state.Store(started)
 	act.routes = make(map[int32]RouteHandler)
 	act.events = make(map[cluster.Event]EventHandler, 3)
-	act.ctxQueue = queue.NewQueue[Context](o.taskQueueSize, o.taskWriteTimeout)
-	act.fnQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
-	act.processor = creator(act, o.args...)
+	act.taskQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
+	act.messageQueue = queue.NewQueue[Context](o.messageQueueSize, o.messageWriteTimeout)
+
+	xcall.Call(func() {
+		act.processor = creator(act, o.args...)
+		act.processor.Init()
+	})
 
 	s.mu.Lock()
-
-	if _, ok := s.load(act.Kind(), act.ID()); ok {
+	if _, ok := s.load(o.kind, o.id); ok {
+		act.clear()
 		s.mu.Unlock()
+		s.node.doWaitDone()
+
 		return nil, errors.ErrActorExists
 	}
-
-	if act.opts.wait {
-		s.node.doWaitAdd()
-	}
-
-	act.processor.Init()
 
 	if act.opts.dispatch {
 		if _, ok := s.kinds.Load(act.Kind()); !ok {
 			s.kinds.Store(act.Kind(), struct{}{})
-
 			for route := range act.routes {
 				s.routes.Store(route, act.Kind())
 			}
@@ -67,12 +79,10 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	s.actors.Store(act.PID(), act)
-
 	s.mu.Unlock()
 
-	go act.dispatch()
-
-	act.processor.Start()
+	xcall.Go(act.dispatch)
+	xcall.Call(act.processor.Start)
 
 	return act, nil
 }

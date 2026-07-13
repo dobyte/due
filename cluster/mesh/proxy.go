@@ -18,19 +18,19 @@ type Proxy struct {
 
 func newProxy(mesh *Mesh) *Proxy {
 	opts := &link.Options{
-		ID:                mesh.opts.id,
-		Kind:              cluster.Mesh,
-		Codec:             mesh.opts.codec,
-		Locator:           mesh.opts.locator,
-		Registry:          mesh.opts.registry,
-		Encryptor:         mesh.opts.encryptor,
-		ConnNum:           mesh.opts.connNum,
-		CallTimeout:       mesh.opts.callTimeout,
-		DialTimeout:       mesh.opts.dialTimeout,
-		DialRetryTimes:    mesh.opts.dialRetryTimes,
-		WriteTimeout:      mesh.opts.writeTimeout,
-		WriteQueueSize:    mesh.opts.writeQueueSize,
-		FaultRecoveryTime: mesh.opts.faultRecoveryTime,
+		ID:                  mesh.opts.id,
+		Kind:                cluster.Mesh,
+		Codec:               mesh.opts.codec,
+		Locator:             mesh.opts.locator,
+		Registry:            mesh.opts.registry,
+		Encryptor:           mesh.opts.encryptor,
+		ConnNum:             mesh.opts.linker.connNum,
+		CallTimeout:         mesh.opts.linker.callTimeout,
+		DialTimeout:         mesh.opts.linker.dialTimeout,
+		DialRetryTimes:      mesh.opts.linker.dialRetryTimes,
+		FaultRecoveryTime:   mesh.opts.linker.faultRecoveryTime,
+		CommandQueueSize:    mesh.opts.linker.commandQueueSize,
+		CommandWriteTimeout: mesh.opts.linker.commandWriteTimeout,
 	}
 
 	return &Proxy{
