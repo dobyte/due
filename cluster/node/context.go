@@ -112,6 +112,8 @@ type Context interface {
 	compareVersionRecycle(version int32)
 	// 执行defer调用栈
 	compareVersionExecDefer(version int32)
+	// 释放上下文
+	release()
 }
 
 type Kind int

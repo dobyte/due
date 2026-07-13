@@ -235,11 +235,13 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 func (s *Scheduler) dispatchEvent(ctx Context) error {
 	s.actors.Range(func(_, actor any) bool {
 		if act := actor.(*Actor); act.opts.dispatch {
-			act.Next(ctx)
+			act.Next(ctx.Clone())
 		}
 
 		return true
 	})
+
+	ctx.release()
 
 	return nil
 }

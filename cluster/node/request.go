@@ -457,13 +457,12 @@ func (r *request) compareVersionRecycle(version int32) {
 			xcall.Call(func() { r.node.router.postRouteHandler(r) })
 		}
 
-		r.reset()
-		r.node.reqPool.Put(r)
+		r.release()
 	}
 }
 
-// 重置请求对象
-func (r *request) reset() {
+// 释放请求对象
+func (r *request) release() {
 	r.ctx = context.Background()
 	r.gid = ""
 	r.cid = 0
@@ -473,10 +472,13 @@ func (r *request) reset() {
 	r.message.Seq = 0
 	r.message.Route = 0
 	r.message.Data = nil
+	r.version.Store(0)
 	r.actor.Store((*Actor)(nil))
 
 	if r.chain != nil {
 		r.chain.Cancel()
 		r.chain = nil
 	}
+
+	r.node.reqPool.Put(r)
 }

@@ -398,17 +398,24 @@ func (e *event) loadVersion() int32 {
 // 比对版本号后进行回收对象
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
-		e.reset()
-		e.node.evtPool.Put(e)
+		e.release()
 	}
 }
 
-// 重置事件对象
-func (e *event) reset() {
+// 释放事件对象
+func (e *event) release() {
+	e.ctx = context.Background()
+	e.gid = ""
+	e.cid = 0
+	e.uid = 0
+	e.event = 0
+	e.version.Store(0)
+	e.actor.Store((*Actor)(nil))
+
 	if e.chain != nil {
 		e.chain.Cancel()
 		e.chain = nil
 	}
 
-	e.actor.Store((*Actor)(nil))
+	e.node.evtPool.Put(e)
 }
