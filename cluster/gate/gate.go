@@ -145,12 +145,8 @@ func (g *Gate) stopNetworkServer() {
 // 处理连接打开
 func (g *Gate) handleConnect(conn network.Conn) {
 	g.wg.Add(1)
-
 	g.session.AddConn(conn)
-
-	cid, uid := conn.ID(), conn.UID()
-
-	g.proxy.trigger(g.ctx, cluster.Connect, cid, uid)
+	g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 }
 
 // 处理断开连接
@@ -172,14 +168,12 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 // 处理接收到的消息
 func (g *Gate) handleReceive(conn network.Conn, data []byte) {
-	cid, uid := conn.ID(), conn.UID()
-
-	g.proxy.deliver(g.ctx, cid, uid, data)
+	g.proxy.deliver(g.ctx, conn.ID(), conn.UID(), data)
 }
 
 // 启动传输服务器
 func (g *Gate) startLinkerServer() {
-	transporter, err := gate.NewServer(&provider{gate: g}, &gate.ServerOptions{
+	linker, err := gate.NewServer(&provider{gate: g}, &gate.ServerOptions{
 		Addr:   g.opts.addr,
 		Expose: g.opts.expose,
 	})
@@ -187,7 +181,7 @@ func (g *Gate) startLinkerServer() {
 		log.Fatalf("link server create failed: %v", err)
 	}
 
-	g.linker = transporter
+	g.linker = linker
 
 	go func() {
 		if err = g.linker.Start(); err != nil {
@@ -198,6 +192,10 @@ func (g *Gate) startLinkerServer() {
 
 // 停止传输服务器
 func (g *Gate) stopLinkerServer() {
+	if g.linker == nil {
+		return
+	}
+
 	if err := g.linker.Stop(); err != nil {
 		log.Errorf("link server stop failed: %v", err)
 	}
@@ -216,9 +214,9 @@ func (g *Gate) registerServiceInstance() {
 	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
+	err := g.opts.registry.Register(ctx, g.instance)
+	cancel()
+	if err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
@@ -232,9 +230,9 @@ func (g *Gate) refreshServiceInstance() {
 	g.instance.State = g.getState().String()
 
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := g.opts.registry.Register(ctx, g.instance); err != nil {
+	err := g.opts.registry.Register(ctx, g.instance)
+	cancel()
+	if err != nil {
 		log.Fatalf("refresh cluster instance failed: %v", err)
 	}
 }
@@ -242,9 +240,9 @@ func (g *Gate) refreshServiceInstance() {
 // 解注册服务实例
 func (g *Gate) deregisterServiceInstance() {
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := g.opts.registry.Deregister(ctx, g.instance); err != nil {
+	err := g.opts.registry.Deregister(ctx, g.instance)
+	cancel()
+	if err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }

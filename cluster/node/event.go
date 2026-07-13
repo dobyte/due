@@ -302,7 +302,7 @@ func (e *event) Invoke(fn func()) error {
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 // ctx在全局的处理器中，调用的就是proxy.AfterFunc
 // ctx在Actor的处理器中，调用的就是actor.AfterFunc
-func (e *event) AfterFunc(d time.Duration, f func()) *Timer {
+func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if actor := e.actor.Load().(*Actor); actor != nil {
 		return actor.AfterFunc(d, f)
 	} else {

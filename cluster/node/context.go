@@ -91,11 +91,11 @@ type Context interface {
 	// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 	// ctx在全局的处理器中，调用的就是proxy.AfterFunc
 	// ctx在Actor的处理器中，调用的就是actor.AfterFunc
-	AfterFunc(d time.Duration, f func()) *Timer
+	AfterFunc(d time.Duration, f func()) (*Timer, error)
 	// AfterInvoke 延迟调用（线程安全）
 	// ctx在全局的处理器中，调用的就是proxy.AfterInvoke
 	// ctx在Actor的处理器中，调用的就是actor.AfterInvoke
-	AfterInvoke(d time.Duration, f func()) *Timer
+	AfterInvoke(d time.Duration, f func()) (*Timer, error)
 	// NewMeshClient 新建微服务客户端
 	// target参数可分为三种种模式:
 	// 服务直连模式: 	direct://127.0.0.1:8011

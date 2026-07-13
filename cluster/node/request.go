@@ -351,7 +351,7 @@ func (r *request) AfterFunc(d time.Duration, f func()) *Timer {
 // AfterInvoke 延迟调用（线程安全）
 // ctx在全局的处理器中，调用的就是proxy.AfterInvoke
 // ctx在Actor的处理器中，调用的就是actor.AfterInvoke
-func (r *request) AfterInvoke(d time.Duration, f func()) *Timer {
+func (r *request) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if actor := r.actor.Load().(*Actor); actor != nil {
 		return actor.AfterInvoke(d, f)
 	} else {

@@ -1,13 +1,14 @@
 package node
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
@@ -28,8 +29,8 @@ type Actor struct {
 	defaultRouteHandler RouteHandler                   // 默认路由处理器
 	processor           Processor                      // 处理器
 	rw                  sync.RWMutex                   // 锁
-	taskQueue           chan func()                    // 任务队列
-	messageQueue        chan Context                   // 消息队列
+	ctxQueue            *queue.Queue[Context]          // 消息队列
+	funcQueue           *queue.Queue[func()]           // 任务队列
 	binds               sync.Map                       // 绑定的用户
 }
 
@@ -67,26 +68,13 @@ func (a *Actor) Invoke(fn func()) error {
 		return errors.ErrActorNotStarted
 	}
 
-	if a.opts.taskWriteTimeout > 0 && len(a.taskQueue) == cap(a.taskQueue) {
-		ctx, cancel := context.WithTimeout(context.Background(), a.opts.taskWriteTimeout)
-		defer cancel()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case a.taskQueue <- fn:
-			return nil
-		}
-	} else {
-		a.taskQueue <- fn
-		return nil
-	}
+	return a.funcQueue.Write(fn)
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-func (a *Actor) AfterFunc(d time.Duration, f func()) *Timer {
+func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if a.state.Load() != started {
-		return nil
+		return nil, errors.ErrActorNotStarted
 	}
 
 	timer := time.AfterFunc(d, func() {
@@ -94,19 +82,20 @@ func (a *Actor) AfterFunc(d time.Duration, f func()) *Timer {
 		defer a.rw.RUnlock()
 
 		if a.state.Load() != started {
+			log.Warnf("actor %s write func task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
 			return
 		}
 
-		f()
+		xcall.Call(f)
 	})
 
-	return &Timer{timer: timer}
+	return &Timer{timer: timer}, nil
 }
 
 // AfterInvoke 延迟调用（线程安全）
-func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
+func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if a.state.Load() != started {
-		return nil
+		return nil, errors.ErrActorNotStarted
 	}
 
 	timer := time.AfterFunc(d, func() {
@@ -114,13 +103,16 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) *Timer {
 		defer a.rw.RUnlock()
 
 		if a.state.Load() != started {
+			log.Warnf("actor %s write func task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
 			return
 		}
 
-		a.taskQueue <- f
+		if err := a.funcQueue.Write(f); err != nil {
+			log.Warnf("actor %s write func task failed, err: %v", a.PID(), err)
+		}
 	})
 
-	return &Timer{timer: timer}
+	return &Timer{timer: timer}, nil
 }
 
 // SetDefaultRouteHandler 设置默认路由处理器
@@ -132,9 +124,9 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	case unstart:
 		a.defaultRouteHandler = handler
 	case started:
-		a.taskQueue <- func() {
+		a.funcQueue.Write(func() {
 			a.defaultRouteHandler = handler
-		}
+		})
 	default:
 		// ignore
 	}
@@ -149,13 +141,13 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.taskQueue <- func() {
+		a.funcQueue.Write(func() {
 			a.routes[route] = handler
 
 			if a.opts.dispatch {
 				a.scheduler.routes.Store(route, a.Kind())
 			}
-		}
+		})
 	default:
 		// ignore
 	}
@@ -170,30 +162,28 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	case unstart:
 		a.events[event] = handler
 	case started:
-		a.taskQueue <- func() {
+		a.funcQueue.Write(func() {
 			a.events[event] = handler
-		}
+		})
 	default:
 		// ignore
 	}
 }
 
 // Next 投递消息到Actor中进行处理
-func (a *Actor) Next(ctx Context) {
+func (a *Actor) Next(ctx Context) error {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
 	if a.state.Load() != started {
-		return
+		return errors.ErrActorNotStarted
 	}
 
 	ctx.storeActor(a)
-
 	ctx.incrVersion()
-
 	ctx.Cancel()
 
-	a.messageQueue <- ctx
+	return a.ctxQueue.Write(ctx)
 }
 
 // Deliver 投递消息到当前Actor中进行处理
@@ -210,9 +200,7 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	req.message.Route = message.Route
 	req.message.Data = buf
 
-	a.Next(req)
-
-	return nil
+	return a.Next(req)
 }
 
 // Push 推送消息到本地Node队列上进行处理
@@ -255,16 +243,11 @@ func (a *Actor) destroy() bool {
 	a.rw.Lock()
 	defer a.rw.Unlock()
 
-	close(a.messageQueue)
-
-	close(a.taskQueue)
-
+	a.ctxQueue.Close()
+	a.funcQueue.Close()
 	clear(a.routes)
-
 	clear(a.events)
-
 	a.processor = nil
-
 	a.defaultRouteHandler = nil
 
 	return true
@@ -285,7 +268,7 @@ func (a *Actor) unbindUser(uid int64) bool {
 func (a *Actor) dispatch() {
 	for {
 		select {
-		case ctx, ok := <-a.messageQueue:
+		case ctx, ok := <-a.ctxQueue.Read():
 			if !ok {
 				return
 			}
@@ -311,7 +294,7 @@ func (a *Actor) dispatch() {
 			}
 
 			ctx.compareVersionRecycle(version)
-		case handle, ok := <-a.taskQueue:
+		case handle, ok := <-a.funcQueue.Read():
 			if !ok {
 				return
 			}

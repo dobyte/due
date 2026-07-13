@@ -426,7 +426,9 @@ func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 		n.rw.Unlock()
 	default:
 		if n.getState() == cluster.Shut {
+			n.rw.Lock()
 			n.hooks[hook] = append(n.hooks[hook], handler)
+			n.rw.Unlock()
 		} else {
 			log.Warnf("server is working, can't add hook handler")
 		}
