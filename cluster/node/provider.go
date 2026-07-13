@@ -25,10 +25,8 @@ func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64,
 	}
 
 	stateful, ok := p.node.router.CheckRouteStateful(msg.Route)
-	if !ok {
-		if !p.node.router.HasDefaultRouteHandler() {
-			return nil
-		}
+	if !ok && !p.node.router.HasDefaultRouteHandler() {
+		return nil
 	}
 
 	if stateful {
