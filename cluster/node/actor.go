@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,8 +30,8 @@ type Actor struct {
 	defaultRouteHandler RouteHandler                   // 默认路由处理器
 	processor           Processor                      // 处理器
 	rw                  sync.RWMutex                   // 锁
+	fnQueue             *queue.Queue[func()]           // 任务队列
 	ctxQueue            *queue.Queue[Context]          // 消息队列
-	funcQueue           *queue.Queue[func()]           // 任务队列
 	binds               sync.Map                       // 绑定的用户
 }
 
@@ -68,7 +69,7 @@ func (a *Actor) Invoke(fn func()) error {
 		return errors.ErrActorNotStarted
 	}
 
-	return a.funcQueue.Write(fn)
+	return a.fnQueue.Write(fn)
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
@@ -107,7 +108,7 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 			return
 		}
 
-		if err := a.funcQueue.Write(f); err != nil {
+		if err := a.fnQueue.Write(f); err != nil {
 			log.Warnf("actor %s write func task failed, err: %v", a.PID(), err)
 		}
 	})
@@ -124,7 +125,7 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	case unstart:
 		a.defaultRouteHandler = handler
 	case started:
-		a.funcQueue.Write(func() {
+		a.fnQueue.Write(func() {
 			a.defaultRouteHandler = handler
 		})
 	default:
@@ -141,7 +142,7 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.funcQueue.Write(func() {
+		a.fnQueue.Write(func() {
 			a.routes[route] = handler
 
 			if a.opts.dispatch {
@@ -162,7 +163,7 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	case unstart:
 		a.events[event] = handler
 	case started:
-		a.funcQueue.Write(func() {
+		a.fnQueue.Write(func() {
 			a.events[event] = handler
 		})
 	default:
@@ -196,6 +197,7 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
 	req.uid = uid
+	req.ctx = context.Background()
 	req.message.Seq = message.Seq
 	req.message.Route = message.Route
 	req.message.Data = buf
@@ -241,14 +243,13 @@ func (a *Actor) destroy() bool {
 	})
 
 	a.rw.Lock()
-	defer a.rw.Unlock()
-
+	a.fnQueue.Close()
 	a.ctxQueue.Close()
-	a.funcQueue.Close()
 	clear(a.routes)
 	clear(a.events)
 	a.processor = nil
 	a.defaultRouteHandler = nil
+	a.rw.Unlock()
 
 	return true
 }
@@ -294,7 +295,7 @@ func (a *Actor) dispatch() {
 			}
 
 			ctx.compareVersionRecycle(version)
-		case handle, ok := <-a.funcQueue.Read():
+		case handle, ok := <-a.fnQueue.Read():
 			if !ok {
 				return
 			}

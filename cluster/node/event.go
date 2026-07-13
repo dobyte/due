@@ -19,7 +19,7 @@ type event struct {
 	gid     string          // 网关ID
 	cid     int64           // 连接ID
 	uid     int64           // 用户ID
-	event   cluster.Event   // 时间类型
+	event   cluster.Event   // 事件类型
 	version atomic.Int32    // 对象版本号
 	chain   *chains.Chain   // defer 调用链
 	actor   atomic.Value    // 当前Actor
@@ -104,14 +104,12 @@ func (e *event) compareVersionExecDefer(version int32) {
 
 // Clone 克隆Context
 func (e *event) Clone() Context {
-	c := &event{
-		node: e.node,
-		gid:  e.gid,
-		cid:  e.cid,
-		uid:  e.uid,
-		ctx:  context.Background(),
-	}
-
+	c := e.node.evtPool.Get().(*event)
+	c.gid = e.gid
+	c.cid = e.cid
+	c.uid = e.uid
+	c.ctx = e.ctx
+	c.event = e.event
 	c.actor.Store(e.actor.Load())
 
 	return c
@@ -124,15 +122,15 @@ func (e *event) Task(fn func(ctx Context)) {
 
 	e.Cancel()
 
-	e.node.addWait()
+	e.node.doWaitAdd()
 
-	task.AddTask(func() {
+	task.Add(func() {
 		defer func() {
 			e.compareVersionExecDefer(version)
 
 			e.compareVersionRecycle(version)
 
-			e.node.doneWait()
+			e.node.doWaitDone()
 		}()
 
 		fn(e)
@@ -313,7 +311,7 @@ func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 // AfterInvoke 延迟调用（线程安全）
 // ctx在全局的处理器中，调用的就是proxy.AfterInvoke
 // ctx在Actor的处理器中，调用的就是actor.AfterInvoke
-func (e *event) AfterInvoke(d time.Duration, f func()) *Timer {
+func (e *event) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if actor := e.actor.Load().(*Actor); actor != nil {
 		return actor.AfterInvoke(d, f)
 	} else {
@@ -323,6 +321,10 @@ func (e *event) AfterInvoke(d time.Duration, f func()) *Timer {
 
 // GetIP 获取客户端IP
 func (e *event) GetIP() (string, error) {
+	if e.gid == "" {
+		return "", errors.ErrIllegalOperation
+	}
+
 	return e.node.proxy.GetIP(e.ctx, &cluster.GetIPArgs{
 		GID:    e.gid,
 		Kind:   session.Conn,

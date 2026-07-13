@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
@@ -79,7 +80,7 @@ func (m *Mesh) Init() {
 
 // Start 启动
 func (m *Mesh) Start() {
-	if m.state.Swap(int32(cluster.Work)) != int32(cluster.Shut) {
+	if !m.state.CompareAndSwap(int32(cluster.Shut), int32(cluster.Work)) {
 		return
 	}
 
@@ -109,7 +110,7 @@ func (m *Mesh) Close() {
 
 // Destroy 销毁
 func (m *Mesh) Destroy() {
-	if m.state.Swap(int32(cluster.Shut)) == int32(cluster.Shut) {
+	if !m.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
 		return
 	}
 
@@ -175,43 +176,44 @@ func (m *Mesh) registerServiceInstance() {
 		m.instance.Services = append(m.instance.Services, item.name)
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
+	if err := m.doRegisterServiceInstance(); err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // 刷新服务实例状态
 func (m *Mesh) refreshServiceInstance() {
-	if m.instance == nil {
-		return
-	}
-
-	m.instance.State = m.getState().String()
-
-	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := m.opts.registry.Register(ctx, m.instance); err != nil {
-		log.Fatalf("refresh cluster instance failed: %v", err)
+	if err := m.doRefreshServiceInstance(m.getState()); err != nil {
+		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
 // 解注册服务实例
 func (m *Mesh) deregisterServiceInstance() {
 	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
-	defer cancel()
-
-	if err := m.opts.registry.Deregister(ctx, m.instance); err != nil {
+	err := m.opts.registry.Deregister(ctx, m.instance)
+	cancel()
+	if err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }
 
-// 获取状态
-func (m *Mesh) getState() cluster.State {
-	return cluster.State(m.state.Load())
+// 执行注册操作
+func (m *Mesh) doRegisterServiceInstance() error {
+	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
+	err := m.opts.registry.Register(ctx, m.instance)
+	cancel()
+
+	return err
+}
+
+// 刷新服务实例状态
+func (m *Mesh) doRefreshServiceInstance(state ...cluster.State) error {
+	if len(state) > 0 {
+		m.instance.State = state[0].String()
+	}
+
+	return m.doRegisterServiceInstance()
 }
 
 // 执行钩子函数
@@ -247,7 +249,9 @@ func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
 		m.rw.Unlock()
 	default:
 		if m.getState() == cluster.Shut {
+			m.rw.Lock()
 			m.hooks[hook] = append(m.hooks[hook], handler)
+			m.rw.Unlock()
 		} else {
 			log.Warnf("server is working, can't add hook handler")
 		}
@@ -264,6 +268,33 @@ func (m *Mesh) addServiceProvider(name string, desc, provider any) {
 		})
 	} else {
 		log.Warnf("mesh server is working, can't add service provider")
+	}
+}
+
+// 获取状态
+func (m *Mesh) getState() cluster.State {
+	return cluster.State(m.state.Load())
+}
+
+// 更新状态（仅能在Work或Busy状态间切换）
+func (m *Mesh) setState(state cluster.State) error {
+	if state > cluster.Busy {
+		return errors.ErrIllegalOperation
+	}
+
+	switch curr := m.getState(); curr {
+	case cluster.Work, cluster.Busy:
+		if curr == state {
+			return nil
+		}
+
+		if m.state.CompareAndSwap(int32(curr), int32(state)) {
+			return m.doRefreshServiceInstance(state)
+		} else {
+			return errors.ErrIllegalOperation
+		}
+	default:
+		return errors.ErrIllegalOperation
 	}
 }
 

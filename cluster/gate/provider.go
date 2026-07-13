@@ -7,7 +7,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/session"
-	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/dobyte/due/v2/task"
 )
 
 type provider struct {
@@ -71,7 +71,7 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, di
 	err := p.gate.session.Push(kind, target, disconnect, message)
 
 	if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
-		xcall.Go(func() {
+		task.Add(func() {
 			if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); e != nil {
 				log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, e)
 			}
@@ -108,12 +108,10 @@ func (p *provider) Unsubscribe(ctx context.Context, kind session.Kind, targets [
 
 // GetState 获取状态
 func (p *provider) GetState() (cluster.State, error) {
-	return cluster.State(p.gate.state.Load()), nil
+	return p.gate.getState(), nil
 }
 
 // SetState 设置状态
 func (p *provider) SetState(state cluster.State) error {
-	p.gate.state.Store(int32(state))
-
-	return nil
+	return p.gate.setState(state)
 }

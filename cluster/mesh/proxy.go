@@ -35,8 +35,8 @@ func newProxy(mesh *Mesh) *Proxy {
 
 	return &Proxy{
 		mesh:       mesh,
-		gateLinker: link.NewGateLinker(mesh.opts.ctx, opts),
-		nodeLinker: link.NewNodeLinker(mesh.opts.ctx, opts),
+		gateLinker: link.NewGateLinker(mesh.ctx, opts),
+		nodeLinker: link.NewNodeLinker(mesh.ctx, opts),
 	}
 }
 
@@ -48,6 +48,16 @@ func (p *Proxy) GetID() string {
 // GetName 获取当前实例名称
 func (p *Proxy) GetName() string {
 	return p.mesh.opts.name
+}
+
+// GetState 获取当前节点状态
+func (p *Proxy) GetState() cluster.State {
+	return p.mesh.getState()
+}
+
+// SetState 设置当前节点状态
+func (p *Proxy) SetState(state cluster.State) error {
+	return p.mesh.setState(state)
 }
 
 // AddServiceProvider 添加服务提供者

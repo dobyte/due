@@ -10,6 +10,8 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
+	"github.com/dobyte/due/v2/core/queue"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
@@ -40,7 +42,7 @@ type Node struct {
 	services    []*serviceEntity
 	instances   []*registry.ServiceInstance
 	linker      *node.Server
-	fnChan      chan func()
+	taskQueue   *queue.Queue[func()]
 	scheduler   *Scheduler
 	transporter transport.Server
 	wg          *sync.WaitGroup
@@ -64,7 +66,7 @@ func NewNode(opts ...Option) *Node {
 	n.hooks = make(map[cluster.Hook][]HookHandler)
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
-	n.fnChan = make(chan func(), 4096)
+	n.taskQueue = queue.NewQueue[func()](n.opts.writeQueueSize, n.opts.writeTimeout)
 	n.state.Store(int32(cluster.Shut))
 	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() any {
@@ -170,7 +172,7 @@ func (n *Node) Destroy() {
 
 	n.trigger.close()
 
-	close(n.fnChan)
+	n.taskQueue.Close()
 
 	n.cancel()
 }
@@ -196,14 +198,14 @@ func (n *Node) dispatch() {
 			}
 
 			n.router.handle(req)
-		case handle, ok := <-n.fnChan:
+		case handle, ok := <-n.taskQueue.Read():
 			if !ok {
 				return
 			}
 
 			xcall.Call(handle)
 
-			n.doneWait()
+			n.doWaitDone()
 		}
 	}
 }
@@ -364,8 +366,10 @@ func (n *Node) doRegisterServiceInstances() error {
 		instance := n.instances[i]
 		eg.Go(func() error {
 			tctx, tcancel := context.WithTimeout(ctx, 3*time.Second)
-			defer tcancel()
-			return n.opts.registry.Register(tctx, instance)
+			err := n.opts.registry.Register(tctx, instance)
+			tcancel()
+
+			return err
 		})
 	}
 
@@ -373,9 +377,11 @@ func (n *Node) doRegisterServiceInstances() error {
 }
 
 // 执行刷新实例状态操作
-func (n *Node) doRefreshServiceInstances() error {
-	for _, instance := range n.instances {
-		instance.State = n.getState().String()
+func (n *Node) doRefreshServiceInstances(state ...cluster.State) error {
+	if len(state) > 0 {
+		for _, instance := range n.instances {
+			instance.State = state[0].String()
+		}
 	}
 
 	return n.doRegisterServiceInstances()
@@ -386,11 +392,26 @@ func (n *Node) getState() cluster.State {
 	return cluster.State(n.state.Load())
 }
 
-// 更新状态
+// 更新状态（仅能在Work或Busy状态间切换）
 func (n *Node) setState(state cluster.State) error {
-	n.state.Store(int32(state))
+	if state > cluster.Busy {
+		return errors.ErrIllegalOperation
+	}
 
-	return n.doRefreshServiceInstances()
+	switch curr := n.getState(); curr {
+	case cluster.Work, cluster.Busy:
+		if curr == state {
+			return nil
+		}
+
+		if n.state.CompareAndSwap(int32(curr), int32(state)) {
+			return n.doRefreshServiceInstances(state)
+		} else {
+			return errors.ErrIllegalOperation
+		}
+	default:
+		return errors.ErrIllegalOperation
+	}
 }
 
 // 执行钩子函数
@@ -473,13 +494,13 @@ func (n *Node) printInfo() {
 	info.PrintBoxInfo("Node", infos...)
 }
 
-func (n *Node) doneWait() {
+func (n *Node) doWaitDone() {
 	if n.getState() != cluster.Shut {
 		n.wg.Done()
 	}
 }
 
-func (n *Node) addWait() {
+func (n *Node) doWaitAdd() {
 	if n.getState() != cluster.Shut {
 		n.wg.Add(1)
 	}

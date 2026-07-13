@@ -31,7 +31,7 @@ type Client struct {
 	events              map[cluster.Event][]EventHandler
 	defaultRouteHandler RouteHandler
 	proxy               *Proxy
-	state               int32
+	state               atomic.Int32
 	conns               sync.Map
 	rw                  sync.RWMutex
 	hooks               map[cluster.Hook][]HookHandler
@@ -50,7 +50,7 @@ func NewClient(opts ...Option) *Client {
 	c.events = make(map[cluster.Event][]EventHandler)
 	c.hooks = make(map[cluster.Hook][]HookHandler)
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
-	c.state = int32(cluster.Shut)
+	c.state.Store(int32(cluster.Shut))
 
 	return c
 }
@@ -75,7 +75,9 @@ func (c *Client) Init() {
 
 // Start 启动组件
 func (c *Client) Start() {
-	c.setState(cluster.Work)
+	if !c.state.CompareAndSwap(int32(cluster.Shut), int32(cluster.Work)) {
+		return
+	}
 
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
@@ -85,9 +87,27 @@ func (c *Client) Start() {
 	c.runHookFunc(cluster.Start)
 }
 
+// Close 关闭节点
+func (c *Client) Close() {
+	if !c.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
+		if !c.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
+			return
+		}
+	}
+}
+
 // Destroy 销毁组件
 func (c *Client) Destroy() {
-	c.setState(cluster.Shut)
+	if !c.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+		return
+	}
+
+	c.cancel()
+	c.conns.Range(func(conn, _ any) bool {
+		conn.(*Conn).Close()
+		return true
+	})
+	c.conns.Clear()
 
 	c.runHookFunc(cluster.Destroy)
 }
@@ -224,21 +244,23 @@ func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
 		c.rw.Unlock()
 	default:
 		if c.getState() == cluster.Shut {
+			c.rw.Lock()
 			c.hooks[hook] = append(c.hooks[hook], handler)
+			c.rw.Unlock()
 		} else {
-			log.Warnf("server is working, can't add hook handler")
+			log.Warnf("client is working, can't add hook handler")
 		}
 	}
 }
 
 // 设置状态
 func (c *Client) setState(state cluster.State) {
-	atomic.StoreInt32(&c.state, int32(state))
+	c.state.Store(int32(state))
 }
 
 // 获取状态
 func (c *Client) getState() cluster.State {
-	return cluster.State(atomic.LoadInt32(&c.state))
+	return cluster.State(c.state.Load())
 }
 
 // 执行钩子函数

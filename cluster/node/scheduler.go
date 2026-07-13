@@ -40,7 +40,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	act.routes = make(map[int32]RouteHandler)
 	act.events = make(map[cluster.Event]EventHandler, 3)
 	act.ctxQueue = queue.NewQueue[Context](o.taskQueueSize, o.taskWriteTimeout)
-	act.funcQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
+	act.fnQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
 	act.processor = creator(act, o.args...)
 
 	s.mu.Lock()
@@ -51,7 +51,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	if act.opts.wait {
-		s.node.addWait()
+		s.node.doWaitAdd()
 	}
 
 	act.processor.Init()
@@ -87,7 +87,7 @@ func (s *Scheduler) kill(kind, id string) bool {
 	ok = act.destroy()
 
 	if act.opts.wait {
-		s.node.doneWait()
+		s.node.doWaitDone()
 	}
 
 	return ok

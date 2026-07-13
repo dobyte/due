@@ -135,20 +135,15 @@ func (r *request) compareVersionExecDefer(version int32) {
 
 // Clone 克隆Context
 func (r *request) Clone() Context {
-	c := &request{
-		node: r.node,
-		gid:  r.gid,
-		nid:  r.nid,
-		cid:  r.cid,
-		uid:  r.uid,
-		ctx:  context.Background(),
-		message: &cluster.Message{
-			Seq:   r.message.Seq,
-			Route: r.message.Route,
-			Data:  r.message.Data,
-		},
-	}
-
+	c := r.node.reqPool.Get().(*request)
+	c.gid = r.gid
+	c.nid = r.nid
+	c.cid = r.cid
+	c.uid = r.uid
+	c.ctx = context.Background()
+	c.message.Seq = r.message.Seq
+	c.message.Route = r.message.Route
+	c.message.Data = r.message.Data
 	c.actor.Store(r.actor.Load())
 
 	return c
@@ -162,15 +157,15 @@ func (r *request) Task(fn func(ctx Context)) {
 
 	r.Cancel()
 
-	r.node.addWait()
+	r.node.doWaitAdd()
 
-	task.AddTask(func() {
+	task.Add(func() {
 		defer func() {
 			r.compareVersionExecDefer(version)
 
 			r.compareVersionRecycle(version)
 
-			r.node.doneWait()
+			r.node.doWaitDone()
 		}()
 
 		fn(r)
@@ -340,7 +335,7 @@ func (r *request) Invoke(fn func()) error {
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 // ctx在全局的处理器中，调用的就是proxy.AfterFunc
 // ctx在Actor的处理器中，调用的就是actor.AfterFunc
-func (r *request) AfterFunc(d time.Duration, f func()) *Timer {
+func (r *request) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if actor := r.actor.Load().(*Actor); actor != nil {
 		return actor.AfterFunc(d, f)
 	} else {
@@ -469,8 +464,15 @@ func (r *request) compareVersionRecycle(version int32) {
 
 // 重置请求对象
 func (r *request) reset() {
+	r.ctx = context.Background()
+	r.gid = ""
+	r.cid = 0
+	r.uid = 0
+	r.pid = ""
+	r.nid = ""
+	r.message.Seq = 0
+	r.message.Route = 0
 	r.message.Data = nil
-
 	r.actor.Store((*Actor)(nil))
 
 	if r.chain != nil {

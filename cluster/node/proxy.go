@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
@@ -22,7 +23,7 @@ type Proxy struct {
 func newProxy(node *Node) *Proxy {
 	return &Proxy{
 		node: node,
-		gateLinker: link.NewGateLinker(node.opts.ctx, &link.Options{
+		gateLinker: link.NewGateLinker(node.ctx, &link.Options{
 			ID:                node.opts.id,
 			Kind:              cluster.Node,
 			Codec:             node.opts.codec,
@@ -37,7 +38,7 @@ func newProxy(node *Node) *Proxy {
 			WriteQueueSize:    node.opts.writeQueueSize,
 			FaultRecoveryTime: node.opts.faultRecoveryTime,
 		}),
-		nodeLinker: link.NewNodeLinker(node.opts.ctx, &link.Options{
+		nodeLinker: link.NewNodeLinker(node.ctx, &link.Options{
 			ID:                node.opts.id,
 			Kind:              cluster.Node,
 			Codec:             node.opts.codec,
@@ -51,8 +52,8 @@ func newProxy(node *Node) *Proxy {
 			WriteTimeout:      node.opts.writeTimeout,
 			WriteQueueSize:    node.opts.writeQueueSize,
 			FaultRecoveryTime: node.opts.faultRecoveryTime,
-			WaitHandler:       node.addWait,
-			DoneHandler:       node.doneWait,
+			WaitHandler:       node.doWaitAdd,
+			DoneHandler:       node.doWaitDone,
 		}),
 	}
 }
@@ -305,35 +306,43 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 }
 
 // Invoke 调用函数（线程安全）
-func (p *Proxy) Invoke(fn func()) error {
-	p.node.addWait()
-	p.node.fnChan <- fn
+func (p *Proxy) Invoke(f func()) error {
+	p.node.doWaitAdd()
+
+	if err := p.node.taskQueue.Write(f); err != nil {
+		p.node.doWaitDone()
+		return err
+	}
 
 	return nil
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-func (p *Proxy) AfterFunc(d time.Duration, f func()) *Timer {
-	p.node.addWait()
+func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
+	p.node.doWaitAdd()
 
 	timer := time.AfterFunc(d, func() {
 		xcall.Call(f)
 
-		p.node.doneWait()
+		p.node.doWaitDone()
 	})
 
-	return &Timer{node: p.node, timer: timer}
+	return &Timer{node: p.node, timer: timer}, nil
 }
 
 // AfterInvoke 延迟调用（线程安全）
-func (p *Proxy) AfterInvoke(d time.Duration, f func()) *Timer {
-	p.node.addWait()
+func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
+	p.node.doWaitAdd()
 
 	timer := time.AfterFunc(d, func() {
-		p.node.fnChan <- f
+		if err := p.node.taskQueue.Write(f); err != nil {
+			log.Warnf("node write task failed: %v", err)
+
+			p.node.doWaitDone()
+		}
 	})
 
-	return &Timer{node: p.node, timer: timer}
+	return &Timer{node: p.node, timer: timer}, nil
 }
 
 // Spawn 衍生出一个新的Actor

@@ -18,6 +18,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -213,27 +214,15 @@ func (g *Gate) registerServiceInstance() {
 		Metadata: g.opts.metadata,
 	}
 
-	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-	err := g.opts.registry.Register(ctx, g.instance)
-	cancel()
-	if err != nil {
+	if err := g.doRegisterServiceInstance(); err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // 刷新服务实例状态
 func (g *Gate) refreshServiceInstance() {
-	if g.instance == nil {
-		return
-	}
-
-	g.instance.State = g.getState().String()
-
-	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-	err := g.opts.registry.Register(ctx, g.instance)
-	cancel()
-	if err != nil {
-		log.Fatalf("refresh cluster instance failed: %v", err)
+	if err := g.doRefreshServiceInstance(g.getState()); err != nil {
+		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
@@ -247,9 +236,49 @@ func (g *Gate) deregisterServiceInstance() {
 	}
 }
 
+// 执行注册操作
+func (g *Gate) doRegisterServiceInstance() error {
+	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+	err := g.opts.registry.Register(ctx, g.instance)
+	cancel()
+
+	return err
+}
+
+// 刷新服务实例状态
+func (g *Gate) doRefreshServiceInstance(state ...cluster.State) error {
+	if len(state) > 0 {
+		g.instance.State = state[0].String()
+	}
+
+	return g.doRegisterServiceInstance()
+}
+
 // 获取状态
 func (g *Gate) getState() cluster.State {
 	return cluster.State(g.state.Load())
+}
+
+// 更新状态（仅能在Work或Busy状态间切换）
+func (g *Gate) setState(state cluster.State) error {
+	if state > cluster.Busy {
+		return errors.ErrIllegalOperation
+	}
+
+	switch curr := g.getState(); curr {
+	case cluster.Work, cluster.Busy:
+		if curr == state {
+			return nil
+		}
+
+		if g.state.CompareAndSwap(int32(curr), int32(state)) {
+			return g.doRefreshServiceInstance(state)
+		} else {
+			return errors.ErrIllegalOperation
+		}
+	default:
+		return errors.ErrIllegalOperation
+	}
 }
 
 // 打印组件信息
