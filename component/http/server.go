@@ -142,8 +142,6 @@ func (s *Server) Start() {
 		s.opts.transporter.SetDefaultDiscovery(s.opts.registry)
 	}
 
-	s.printInfo(exposeAddr)
-
 	go func() {
 		if err = s.app.Listen(listenAddr, fiber.ListenConfig{
 			CertFile:              s.opts.certFile,
@@ -153,6 +151,8 @@ func (s *Server) Start() {
 			log.Fatalf("http server startup failed: %v", errors.Unwrap(errors.Unwrap(err)))
 		}
 	}()
+
+	s.printInfo(exposeAddr)
 }
 
 // Destroy 销毁组件
