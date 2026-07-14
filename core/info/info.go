@@ -57,6 +57,10 @@ func PrintBoxInfo(name string, infos ...string) {
 	fmt.Println(buildBottomBorder())
 }
 
+func MakeHorizontalLine() string {
+	return strings.Repeat(horizontalBorder, boxWidth-4)
+}
+
 func buildRowInfo(info string) string {
 	str := fmt.Sprintf("%s %s", verticalBorder, info)
 	str += strings.Repeat(" ", boxWidth-utf8.RuneCountInString(str)-1)
