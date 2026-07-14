@@ -14,11 +14,19 @@ type provider struct {
 
 // Trigger 触发事件
 func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, event cluster.Event) error {
-	return p.node.trigger.trigger(event, gid, cid, uid)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.node.trigger.trigger(event, gid, cid, uid)
+	}
 }
 
 // Deliver 投递消息
 func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message []byte) error {
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	}
+
 	msg, err := packet.UnpackMessage(message)
 	if err != nil {
 		return err

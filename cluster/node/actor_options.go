@@ -67,7 +67,7 @@ func WithActorMessageQueueSize(size int32) ActorOption {
 	return func(o *actorOptions) { o.messageQueueSize = size }
 }
 
-// WithActorMessageWriteTimeout 设置消息入入队超时时间
+// WithActorMessageWriteTimeout 设置消息入队超时时间
 func WithActorMessageWriteTimeout(timeout time.Duration) ActorOption {
 	return func(o *actorOptions) { o.messageWriteTimeout = timeout }
 }
