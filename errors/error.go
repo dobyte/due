@@ -72,6 +72,9 @@ var (
 	ErrWriteTimeout            = New("write timeout")
 	ErrQueueHanged             = New("queue is hanged")
 	ErrQueueClosed             = New("queue is closed")
+	ErrGateShutdown            = New("gate is shutdown")
+	ErrNodeShutdown            = New("node is shutdown")
+	ErrMeshShutdown            = New("mesh is shutdown")
 )
 
 // NewError 新建一个错误

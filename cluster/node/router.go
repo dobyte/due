@@ -2,8 +2,8 @@ package node
 
 import (
 	"context"
+	"sync"
 
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -40,6 +40,7 @@ var (
 
 type Router struct {
 	node                *Node
+	rw                  sync.RWMutex
 	queue               *queue.Queue[*request]
 	routes              map[int32]*routeEntity
 	preRouteHandler     RouteHandler
@@ -63,33 +64,31 @@ func newRouter(node *Node) *Router {
 
 // AddRouteHandler 添加路由处理器
 func (r *Router) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
-	if r.node.getState() != cluster.Shut {
-		log.Warnf("the node server is working, can't add route handler")
-		return
-	}
-
-	if len(opts) > 0 {
-		r.routes[route] = &routeEntity{
-			route:   route,
-			handler: handler,
-			options: opts[0],
+	if r.node.isShut() {
+		if len(opts) > 0 {
+			r.routes[route] = &routeEntity{
+				route:   route,
+				handler: handler,
+				options: opts[0],
+			}
+		} else {
+			r.routes[route] = &routeEntity{
+				route:   route,
+				handler: handler,
+			}
 		}
 	} else {
-		r.routes[route] = &routeEntity{
-			route:   route,
-			handler: handler,
-		}
+		log.Warnf("the node server is not shut, can't add route handler")
 	}
 }
 
 // SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
 func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
-	if r.node.getState() != cluster.Shut {
-		log.Warnf("the node server is working, can't set default route handler")
-		return
+	if r.node.isShut() {
+		r.defaultRouteHandler = handler
+	} else {
+		log.Warnf("the node server is not shut, can't set default route handler")
 	}
-
-	r.defaultRouteHandler = handler
 }
 
 // HasDefaultRouteHandler 是否存在默认路由处理器
@@ -99,22 +98,20 @@ func (r *Router) HasDefaultRouteHandler() bool {
 
 // SetPreRouteHandler 设置前置路由处理器
 func (r *Router) SetPreRouteHandler(handler RouteHandler) {
-	if r.node.getState() != cluster.Shut {
-		log.Warnf("the node server is working, can't set pre-route handler")
-		return
+	if r.node.isShut() {
+		r.preRouteHandler = handler
+	} else {
+		log.Warnf("the node server is not shut, can't set pre-route handler")
 	}
-
-	r.preRouteHandler = handler
 }
 
 // SetPostRouteHandler 设置后置路由处理器
 func (r *Router) SetPostRouteHandler(handler RouteHandler) {
-	if r.node.getState() != cluster.Shut {
-		log.Warnf("the node server is working, can't set post-route handler")
-		return
+	if r.node.isShut() {
+		r.postRouteHandler = handler
+	} else {
+		log.Warnf("the node server is not shut, can't set post-route handler")
 	}
-
-	r.postRouteHandler = handler
 }
 
 // CheckRouteStateful 是否为有状态路由
@@ -139,6 +136,7 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	return group
 }
 
+// 投递路由消息
 func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data any) error {
 	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
@@ -156,19 +154,45 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 		req.ctx = context.Background()
 	}
 
-	return r.queue.Write(req)
+	r.rw.RLock()
+	err := r.queue.Write(req)
+	r.rw.RUnlock()
+
+	return err
 }
 
+// 接收路由消息
 func (r *Router) receive() <-chan *request {
 	return r.queue.Read()
 }
 
+// 停止接收事件
+func (r *Router) done() error {
+	return r.queue.Write(nil)
+}
+
+// 等待所有事件完成
+func (r *Router) wait() {
+	r.queue.Wait()
+}
+
+// 关闭路由器
 func (r *Router) close() {
+	r.rw.Lock()
 	r.queue.Close()
+	r.rw.Unlock()
+
 	clear(r.routes)
 }
 
+// 处理路由消息
 func (r *Router) handle(req *request) {
+	r.queue.Done(req == nil)
+
+	if req == nil {
+		return
+	}
+
 	version := req.incrVersion()
 
 	route, ok := r.routes[req.message.Route]

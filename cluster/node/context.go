@@ -87,7 +87,8 @@ type Context interface {
 	// Invoke 调用函数（线程安全）
 	// ctx在全局的处理器中，调用的就是proxy.Invoke
 	// ctx在Actor的处理器中，调用的就是actor.Invoke
-	Invoke(fn func()) error
+	// isBlock 表示是否阻塞调用，默认阻塞调用
+	Invoke(fn func(), isBlock ...bool) error
 	// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 	// ctx在全局的处理器中，调用的就是proxy.AfterFunc
 	// ctx在Actor的处理器中，调用的就是actor.AfterFunc

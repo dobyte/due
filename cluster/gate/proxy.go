@@ -35,8 +35,11 @@ func newProxy(gate *Gate) *proxy {
 
 // 绑定用户与网关间的关系
 func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
-	err := p.gate.opts.locator.BindGate(ctx, uid, p.gate.opts.id)
-	if err != nil {
+	if p.gate.isShut() {
+		return errors.ErrGateShutdown
+	}
+
+	if err := p.gate.opts.locator.BindGate(ctx, uid, p.gate.opts.id); err != nil {
 		return err
 	}
 
@@ -47,16 +50,27 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 
 // 解绑用户与网关间的关系
 func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
-	err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id)
-	if err != nil {
-		log.Errorf("user unbind failed, gid: %s, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
+	if p.gate.isShut() {
+		return errors.ErrGateShutdown
 	}
 
-	return err
+	if err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id); err != nil {
+		if mode.IsDebugMode() {
+			log.Debugf("user unbind failed, gid: %s, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
+		}
+
+		return err
+	} else {
+		return nil
+	}
 }
 
 // 触发事件
 func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
+	if p.gate.isShut() {
+		return
+	}
+
 	if mode.IsDebugMode() {
 		log.Debugf("trigger event, event: %v cid: %d uid: %d", event.String(), cid, uid)
 	}
@@ -77,6 +91,10 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 
 // 投递消息
 func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
+	if p.gate.isShut() {
+		return
+	}
+
 	message, err := packet.UnpackMessage(data)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)

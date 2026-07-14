@@ -9,9 +9,9 @@ type actorOptions struct {
 	wait                bool          // 是否需要等待
 	dispatch            bool          // 是否接受调度器调度
 	taskQueueSize       int32         // 任务队列大小
-	taskWriteTimeout    time.Duration // 任务入入队超时时间
+	taskWriteTimeout    time.Duration // 任务入队超时时间
 	messageQueueSize    int32         // 消息队列大小
-	messageWriteTimeout time.Duration // 消息入入队超时时间
+	messageWriteTimeout time.Duration // 消息入队超时时间
 }
 
 type ActorOption func(o *actorOptions)

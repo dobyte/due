@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
-	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
@@ -36,13 +35,13 @@ type Node struct {
 	state       atomic.Int32
 	evtPool     *sync.Pool
 	reqPool     *sync.Pool
+	tasker      *Tasker
 	router      *Router
 	trigger     *Trigger
 	proxy       *Proxy
 	services    []*serviceEntity
 	instances   []*registry.ServiceInstance
 	linker      *node.Server
-	taskQueue   *queue.Queue[func()]
 	scheduler   *Scheduler
 	transporter transport.Server
 	wg          *sync.WaitGroup
@@ -60,13 +59,13 @@ func NewNode(opts ...Option) *Node {
 	n.opts = o
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 	n.proxy = newProxy(n)
+	n.tasker = newTasker(n)
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
 	n.scheduler = newScheduler(n)
 	n.hooks = make(map[cluster.Hook][]HookHandler)
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
-	n.taskQueue = queue.NewQueue[func()](n.opts.taskQueueSize, n.opts.taskWriteTimeout)
 	n.state.Store(int32(cluster.Shut))
 	n.wg = &sync.WaitGroup{}
 	n.evtPool = &sync.Pool{New: func() any {
@@ -124,7 +123,7 @@ func (n *Node) Start() {
 		return
 	}
 
-	n.startLinkServer()
+	n.startLinkerServer()
 
 	n.startTransportServer()
 
@@ -149,6 +148,22 @@ func (n *Node) Close() {
 
 	n.refreshServiceInstances()
 
+	err1 := n.tasker.done()
+	err2 := n.router.done()
+	err3 := n.trigger.done()
+
+	if err1 == nil {
+		n.tasker.wait()
+	}
+
+	if err2 == nil {
+		n.router.wait()
+	}
+
+	if err3 == nil {
+		n.trigger.wait()
+	}
+
 	n.runHookFunc(cluster.Close)
 
 	n.wg.Wait()
@@ -164,15 +179,15 @@ func (n *Node) Destroy() {
 
 	n.deregisterServiceInstances()
 
-	n.stopLinkServer()
+	n.stopLinkerServer()
 
 	n.stopTransportServer()
+
+	n.tasker.close()
 
 	n.router.close()
 
 	n.trigger.close()
-
-	n.taskQueue.Close()
 
 	n.cancel()
 }
@@ -186,53 +201,51 @@ func (n *Node) Proxy() *Proxy {
 func (n *Node) dispatch() {
 	for {
 		select {
-		case evt, ok := <-n.trigger.receive():
+		case handle, ok := <-n.tasker.receive():
 			if !ok {
 				return
 			}
 
-			n.trigger.handle(evt)
+			n.tasker.handle(handle)
 		case req, ok := <-n.router.receive():
 			if !ok {
 				return
 			}
 
 			n.router.handle(req)
-		case handle, ok := <-n.taskQueue.Read():
+		case evt, ok := <-n.trigger.receive():
 			if !ok {
 				return
 			}
 
-			xcall.Call(handle)
-
-			n.doWaitDone()
+			n.trigger.handle(evt)
 		}
 	}
 }
 
 // 启动连接服务器
-func (n *Node) startLinkServer() {
+func (n *Node) startLinkerServer() {
 	linker, err := node.NewServer(&provider{node: n}, &node.ServerOptions{
 		Addr:   n.opts.addr,
 		Expose: n.opts.expose,
 	})
 	if err != nil {
-		log.Fatalf("link server create failed: %v", err)
+		log.Fatalf("linker server create failed: %v", err)
 	}
 
 	n.linker = linker
 
 	go func() {
 		if err = n.linker.Start(); err != nil {
-			log.Fatalf("link server start failed: %v", err)
+			log.Fatalf("linker server start failed: %v", err)
 		}
 	}()
 }
 
 // 停止连接服务器
-func (n *Node) stopLinkServer() {
+func (n *Node) stopLinkerServer() {
 	if err := n.linker.Stop(); err != nil {
-		log.Errorf("link server stop failed: %v", err)
+		log.Errorf("linker server stop failed: %v", err)
 	}
 }
 
@@ -412,6 +425,11 @@ func (n *Node) setState(state cluster.State) error {
 	default:
 		return errors.ErrIllegalOperation
 	}
+}
+
+// 是否已关闭
+func (n *Node) isShut() bool {
+	return n.getState() == cluster.Shut
 }
 
 // 执行钩子函数

@@ -166,25 +166,25 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 }
 
 // 解绑用户与Actor关系
-func (s *Scheduler) unbindActor(uid int64, kind string) {
+func (s *Scheduler) unbindActor(uid int64, kind string) error {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
 	relations, ok := s.relations[uid]
 	if !ok {
-		return
+		return errors.ErrNotFoundActor
 	}
 
 	act, ok := relations[kind]
 	if !ok {
-		return
+		return errors.ErrNotFoundActor
 	}
 
-	if ok = act.unbindUser(uid); !ok {
-		return
+	if act.unbindUser(uid) {
+		delete(s.relations[uid], kind)
 	}
 
-	delete(s.relations[uid], kind)
+	return nil
 }
 
 // 批量解绑Actor

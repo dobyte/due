@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -105,7 +106,7 @@ func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
 
 // AddEventHandler 添加事件处理器
 func (p *Proxy) AddEventHandler(event cluster.Event, handler EventHandler) {
-	p.node.trigger.AddEventHandler(event, handler)
+	p.node.trigger.addEventHandler(event, handler)
 }
 
 // AddHookListener 添加钩子监听器
@@ -124,6 +125,10 @@ func (p *Proxy) AddServiceProvider(name string, desc, provider any) {
 // 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	}
+
 	if p.node.opts.transporter == nil {
 		return nil, errors.ErrMissingTransporter
 	}
@@ -132,33 +137,57 @@ func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 }
 
 // HasGate 检测是否存在某个网关
-func (p *Proxy) HasGate(gid string) bool {
-	return p.gateLinker.HasGate(gid)
+func (p *Proxy) HasGate(gid string) (bool, error) {
+	if p.node.isShut() {
+		return false, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.HasGate(gid), nil
+	}
 }
 
 // AskGate 检测用户是否在给定的网关上
 func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
-	return p.gateLinker.AskGate(ctx, gid, uid)
+	if p.node.isShut() {
+		return "", false, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.AskGate(ctx, gid, uid)
+	}
 }
 
 // LocateGate 定位用户所在网关
 func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
-	return p.gateLinker.LocateGate(ctx, uid)
+	if p.node.isShut() {
+		return "", errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.LocateGate(ctx, uid)
+	}
 }
 
 // BindGate 绑定网关
 func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
-	return p.gateLinker.BindGate(ctx, gid, cid, uid)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.BindGate(ctx, gid, cid, uid)
+	}
 }
 
 // UnbindGate 解绑网关
 func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
-	return p.gateLinker.UnbindGate(ctx, uid)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.UnbindGate(ctx, uid)
+	}
 }
 
 // FetchGateList 拉取网关列表
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.gateLinker.FetchGateList(ctx, states...)
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.FetchGateList(ctx, states...)
+	}
 }
 
 // HasNode 检测是否存在某个节点
@@ -168,58 +197,90 @@ func (p *Proxy) HasNode(nid string) bool {
 
 // AskNode 检测用户是否在给定的节点上
 func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
-	return p.nodeLinker.AskNode(ctx, uid, name, nid)
+	if p.node.isShut() {
+		return "", false, errors.ErrNodeShutdown
+	} else {
+		return p.nodeLinker.AskNode(ctx, uid, name, nid)
+	}
 }
 
 // LocateNode 定位用户所在节点
 func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
-	return p.nodeLinker.LocateNode(ctx, uid, name)
+	if p.node.isShut() {
+		return "", errors.ErrNodeShutdown
+	} else {
+		return p.nodeLinker.LocateNode(ctx, uid, name)
+	}
 }
 
 // LocateNodes 定位用户所在节点列表
 func (p *Proxy) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
-	return p.nodeLinker.LocateNodes(ctx, uid)
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		return p.nodeLinker.LocateNodes(ctx, uid)
+	}
 }
 
 // BindNode 绑定节点
 // 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
 // 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
-	name, nid := p.node.opts.name, p.node.opts.id
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		name, nid := p.node.opts.name, p.node.opts.id
 
-	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		name, nid = nameAndNID[0], nameAndNID[1]
+		if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
+			name, nid = nameAndNID[0], nameAndNID[1]
+		}
+
+		return p.nodeLinker.BindNode(ctx, uid, name, nid)
 	}
-
-	return p.nodeLinker.BindNode(ctx, uid, name, nid)
 }
 
 // UnbindNode 解绑节点
 // 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
 // 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
-	name, nid := p.node.opts.name, p.node.opts.id
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		name, nid := p.node.opts.name, p.node.opts.id
 
-	if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
-		name, nid = nameAndNID[0], nameAndNID[1]
+		if len(nameAndNID) >= 2 && nameAndNID[0] != "" && nameAndNID[1] != "" {
+			name, nid = nameAndNID[0], nameAndNID[1]
+		}
+
+		return p.nodeLinker.UnbindNode(ctx, uid, name, nid)
 	}
-
-	return p.nodeLinker.UnbindNode(ctx, uid, name, nid)
 }
 
 // FetchNodeList 拉取节点列表
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
-	return p.nodeLinker.FetchNodeList(ctx, states...)
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		return p.nodeLinker.FetchNodeList(ctx, states...)
+	}
 }
 
 // BindActor 绑定Actor
 func (p *Proxy) BindActor(uid int64, kind, id string) error {
-	return p.node.scheduler.bindActor(uid, kind, id)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.node.scheduler.bindActor(uid, kind, id)
+	}
 }
 
 // UnbindActor 解绑Actor
-func (p *Proxy) UnbindActor(uid int64, kind string) {
-	p.node.scheduler.unbindActor(uid, kind)
+func (p *Proxy) UnbindActor(uid int64, kind string) error {
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.node.scheduler.unbindActor(uid, kind)
+	}
 }
 
 // PackMessage 打包消息
@@ -239,60 +300,104 @@ func (p *Proxy) PackBuffer(message any) ([]byte, error) {
 
 // GetIP 获取客户端IP
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
-	return p.gateLinker.GetIP(ctx, args)
+	if p.node.isShut() {
+		return "", errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.GetIP(ctx, args)
+	}
 }
 
 // Stat 统计会话总数
 func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
-	return p.gateLinker.Stat(ctx, kind)
+	if p.node.isShut() {
+		return 0, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Stat(ctx, kind)
+	}
 }
 
 // IsOnline 检测是否在线
 func (p *Proxy) IsOnline(ctx context.Context, args *cluster.IsOnlineArgs) (bool, error) {
-	return p.gateLinker.IsOnline(ctx, args)
+	if p.node.isShut() {
+		return false, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.IsOnline(ctx, args)
+	}
 }
 
 // Disconnect 断开连接
 func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) error {
-	return p.gateLinker.Disconnect(ctx, args)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Disconnect(ctx, args)
+	}
 }
 
 // Push 推送消息
 // args.Ack设为true时可获得消息真实发送的情况
 func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
-	return p.gateLinker.Push(ctx, args)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Push(ctx, args)
+	}
 }
 
 // Multicast 推送组播消息
 // 要想获得推送成功的目标数，需将args.Ack设为true
 func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
-	return p.gateLinker.Multicast(ctx, args)
+	if p.node.isShut() {
+		return 0, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Multicast(ctx, args)
+	}
 }
 
 // Broadcast 推送广播消息
 // 要想获得推送成功的目标数，需将args.Ack设为true
 func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
-	return p.gateLinker.Broadcast(ctx, args)
+	if p.node.isShut() {
+		return 0, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Broadcast(ctx, args)
+	}
 }
 
 // Publish 发布消息
 // 要想获得推送成功的目标数，需将args.Ack设为true
 func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) (int64, error) {
-	return p.gateLinker.Publish(ctx, args)
+	if p.node.isShut() {
+		return 0, errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Publish(ctx, args)
+	}
 }
 
 // Subscribe 订阅频道
 func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
-	return p.gateLinker.Subscribe(ctx, args)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Subscribe(ctx, args)
+	}
 }
 
 // Unsubscribe 取消订阅频道
 func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
-	return p.gateLinker.Unsubscribe(ctx, args)
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		return p.gateLinker.Unsubscribe(ctx, args)
+	}
 }
 
 // Deliver 投递消息给节点处理
 func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	}
+
 	if args.NID == p.node.opts.id {
 		return errors.ErrIllegalOperation
 	}
@@ -306,53 +411,96 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 }
 
 // Invoke 调用函数（线程安全）
-func (p *Proxy) Invoke(f func()) error {
-	p.node.doWaitAdd()
+func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	} else {
+		p.node.doWaitAdd()
 
-	if err := p.node.taskQueue.Write(f); err != nil {
-		p.node.doWaitDone()
-		return err
+		if len(isBlock) > 0 && isBlock[0] {
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+
+			if err := p.node.tasker.commit(func() {
+				defer wg.Done()
+
+				f()
+			}); err != nil {
+				p.node.doWaitDone()
+				return err
+			}
+
+			wg.Wait()
+		} else {
+			if err := p.node.tasker.commit(f); err != nil {
+				p.node.doWaitDone()
+				return err
+			}
+		}
+
+		return nil
 	}
-
-	return nil
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
-	p.node.doWaitAdd()
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		p.node.doWaitAdd()
 
-	timer := time.AfterFunc(d, func() {
-		xcall.Call(f)
+		timer := time.AfterFunc(d, func() {
+			xcall.Call(f)
 
-		p.node.doWaitDone()
-	})
+			p.node.doWaitDone()
+		})
 
-	return &Timer{node: p.node, timer: timer}, nil
+		return &Timer{node: p.node, timer: timer}, nil
+	}
 }
 
 // AfterInvoke 延迟调用（线程安全）
 func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
-	p.node.doWaitAdd()
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		p.node.doWaitAdd()
 
-	timer := time.AfterFunc(d, func() {
-		if err := p.node.taskQueue.Write(f); err != nil {
-			log.Warnf("node write task failed: %v", err)
+		timer := time.AfterFunc(d, func() {
+			var err error
 
-			p.node.doWaitDone()
-		}
-	})
+			if p.node.isShut() {
+				err = errors.ErrNodeShutdown
+			} else {
+				err = p.node.tasker.commit(f)
+			}
 
-	return &Timer{node: p.node, timer: timer}, nil
+			if err != nil {
+				p.node.doWaitDone()
+				log.Warnf("node write task failed: %v", err)
+			}
+		})
+
+		return &Timer{node: p.node, timer: timer}, nil
+	}
 }
 
 // Spawn 衍生出一个新的Actor
 func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
-	return p.node.scheduler.spawn(creator, opts...)
+	if p.node.isShut() {
+		return nil, errors.ErrNodeShutdown
+	} else {
+		return p.node.scheduler.spawn(creator, opts...)
+	}
 }
 
 // Kill 杀死存在的一个Actor
 func (p *Proxy) Kill(kind, id string) bool {
-	return p.node.scheduler.kill(kind, id)
+	if p.node.isShut() {
+		return false
+	} else {
+		return p.node.scheduler.kill(kind, id)
+	}
 }
 
 // Actor 获取Actor

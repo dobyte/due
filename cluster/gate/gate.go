@@ -179,14 +179,14 @@ func (g *Gate) startLinkerServer() {
 		Expose: g.opts.expose,
 	})
 	if err != nil {
-		log.Fatalf("link server create failed: %v", err)
+		log.Fatalf("linker server create failed: %v", err)
 	}
 
 	g.linker = linker
 
 	go func() {
 		if err = g.linker.Start(); err != nil {
-			log.Errorf("link server start failed: %v", err)
+			log.Fatalf("linker server start failed: %v", err)
 		}
 	}()
 }
@@ -198,7 +198,7 @@ func (g *Gate) stopLinkerServer() {
 	}
 
 	if err := g.linker.Stop(); err != nil {
-		log.Errorf("link server stop failed: %v", err)
+		log.Errorf("linker server stop failed: %v", err)
 	}
 }
 
@@ -279,6 +279,11 @@ func (g *Gate) setState(state cluster.State) error {
 	default:
 		return errors.ErrIllegalOperation
 	}
+}
+
+// 是否已关闭
+func (g *Gate) isShut() bool {
+	return g.getState() == cluster.Shut
 }
 
 // 打印组件信息

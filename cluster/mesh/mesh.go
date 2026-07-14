@@ -302,6 +302,11 @@ func (m *Mesh) setState(state cluster.State) error {
 	}
 }
 
+// 是否已关闭
+func (m *Mesh) isShut() bool {
+	return m.getState() == cluster.Shut
+}
+
 // 打印组件信息
 func (m *Mesh) printInfo() {
 	infos := make([]string, 0, 7)

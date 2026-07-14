@@ -289,11 +289,12 @@ func (e *event) Actor(kind, id string) (*Actor, bool) {
 // Invoke 调用函数（线程安全）
 // ctx在全局的处理器中，调用的就是proxy.Invoke
 // ctx在Actor的处理器中，调用的就是actor.Invoke
-func (e *event) Invoke(fn func()) error {
+// isBlock 表示是否阻塞调用，默认阻塞调用
+func (e *event) Invoke(fn func(), isBlock ...bool) error {
 	if actor := e.actor.Load().(*Actor); actor != nil {
-		return actor.Invoke(fn)
+		return actor.Invoke(fn, isBlock...)
 	} else {
-		return e.node.proxy.Invoke(fn)
+		return e.node.proxy.Invoke(fn, isBlock...)
 	}
 }
 

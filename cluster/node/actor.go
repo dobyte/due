@@ -61,15 +61,16 @@ func (a *Actor) Proxy() *Proxy {
 }
 
 // Invoke 调用函数（Actor内线程安全）
-func (a *Actor) Invoke(fn func()) error {
-	a.rw.RLock()
-	defer a.rw.RUnlock()
-
+func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 	if a.state.Load() != started {
 		return errors.ErrActorNotStarted
 	}
 
-	return a.taskQueue.Write(fn)
+	a.rw.RLock()
+	err := a.taskQueue.Write(f)
+	a.rw.RUnlock()
+
+	return err
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
@@ -100,15 +101,15 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	}
 
 	timer := time.AfterFunc(d, func() {
-		a.rw.RLock()
-		defer a.rw.RUnlock()
-
 		if a.state.Load() != started {
 			log.Warnf("actor %s write func task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
 			return
 		}
 
-		if err := a.taskQueue.Write(f); err != nil {
+		a.rw.RLock()
+		err := a.taskQueue.Write(f)
+		a.rw.RUnlock()
+		if err != nil {
 			log.Warnf("actor %s write func task failed, err: %v", a.PID(), err)
 		}
 	})
