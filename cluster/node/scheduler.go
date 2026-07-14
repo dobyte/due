@@ -12,11 +12,10 @@ import (
 
 type Scheduler struct {
 	node      *Node
-	mu        sync.Mutex
+	rw        sync.RWMutex
 	actors    sync.Map
 	routes    sync.Map
 	kinds     sync.Map
-	rw        sync.RWMutex
 	relations map[int64]map[string]*Actor
 }
 
@@ -60,10 +59,10 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 		act.processor.Init()
 	})
 
-	s.mu.Lock()
+	s.rw.Lock()
 	if _, ok := s.load(o.kind, o.id); ok {
 		act.clear()
-		s.mu.Unlock()
+		s.rw.Unlock()
 		s.node.doWaitDone()
 
 		return nil, errors.ErrActorExists
@@ -79,7 +78,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	s.actors.Store(act.PID(), act)
-	s.mu.Unlock()
+	s.rw.Unlock()
 
 	xcall.Go(act.dispatch)
 	xcall.Call(act.processor.Start)
@@ -105,8 +104,8 @@ func (s *Scheduler) kill(kind, id string) bool {
 
 // 移除Actor
 func (s *Scheduler) remove(kind, id string) (*Actor, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.rw.Lock()
+	defer s.rw.Unlock()
 
 	act, ok := s.load(kind, id)
 	if !ok {
