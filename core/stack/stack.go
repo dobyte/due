@@ -49,6 +49,19 @@ func Callers(skip int, depth Depth) *Stack {
 	return stack
 }
 
+func CallersFromPC(pc uintptr, depth Depth) *Stack {
+	stack := stacks.Get().(*Stack)
+	stack.frames = runtime.CallersFrames([]uintptr{pc})
+	// switch depth {
+	// case First:
+	// 	stack.pcs = stack.storage[:1]
+	// case Full:
+	// 	stack.pcs = stack.storage
+	// }
+
+	return stack
+}
+
 type Stack struct {
 	pcs     []uintptr
 	frames  *runtime.Frames

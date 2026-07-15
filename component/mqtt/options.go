@@ -13,9 +13,9 @@ const (
 
 const (
 	defaultNameKey            = "etc.mqtt.name"
+	defaultAuthKey            = "etc.mqtt.auth"
 	defaultDebugKey           = "etc.mqtt.debug"
 	defaultListensKey         = "etc.mqtt.listens"
-	defaultAuthFileKey        = "etc.mqtt.authFile"
 	defaultReadBufferSizeKey  = "etc.mqtt.readBufferSize"
 	defaultWriteBufferSizeKey = "etc.mqtt.writeBufferSize"
 )
@@ -34,8 +34,8 @@ type ListenOptions struct {
 
 type options struct {
 	name            string           // MQTT服务名称
+	auth            string           // MQTT认证文件路径（支持json、yaml格式）
 	debug           bool             // 是否开启调试模式
-	authFile        string           // 认证文件路径（支持json、yaml格式）
 	listensOpts     []*ListenOptions // MQTT服务监听器
 	readBufferSize  int              // 读取缓冲区大小，默认为4096
 	writeBufferSize int              // 写入缓冲区大小，默认为4096
@@ -44,17 +44,17 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{
 		name:            etc.Get(defaultNameKey, defaultName).String(),
+		auth:            etc.Get(defaultAuthKey).String(),
 		debug:           etc.Get(defaultDebugKey).Bool(),
-		authFile:        etc.Get(defaultAuthFileKey).String(),
 		listensOpts:     make([]*ListenOptions, 0),
 		readBufferSize:  etc.Get(defaultReadBufferSizeKey, defaultReadBufferSize).Int(),
 		writeBufferSize: etc.Get(defaultWriteBufferSizeKey, defaultWriteBufferSize).Int(),
 	}
 
 	if err := etc.Get(defaultListensKey).Scan(&opts.listensOpts); err != nil {
-		log.Warnf("scan listen options failed: %v", err)
-	} else {
 		opts.listensOpts = defaultListensOptions()
+
+		log.Warnf("scan listen options failed: %v", err)
 	}
 
 	return opts
@@ -78,14 +78,14 @@ func WithName(name string) Option {
 	return func(o *options) { o.name = name }
 }
 
+// WithAuth 设置认证文件路径
+func WithAuth(auth string) Option {
+	return func(o *options) { o.auth = auth }
+}
+
 // WithDebug 设置是否开启调试模式
 func WithDebug(debug bool) Option {
 	return func(o *options) { o.debug = debug }
-}
-
-// WithAuthFile 设置认证文件路径
-func WithAuthFile(authFile string) Option {
-	return func(o *options) { o.authFile = authFile }
 }
 
 // WithListensOptions 设置监听配置

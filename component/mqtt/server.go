@@ -3,54 +3,59 @@ package mqtt
 import (
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/mode"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/hooks/debug"
 	"github.com/mochi-mqtt/server/v2/listeners"
 )
 
-type Broker struct {
+type Server struct {
 	component.Base
 	opts   *options
+	proxy  *Proxy
 	server *mqtt.Server
 }
 
-func NewBroker(opts ...Option) *Broker {
+func NewServer(opts ...Option) *Server {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
 
-	return &Broker{
-		opts: o,
-	}
+	s := &Server{}
+	s.opts = o
+	s.proxy = newProxy(s)
+
+	return s
 }
 
 // Name 组件名称
-func (b *Broker) Name() string {
-	return b.opts.name
+func (s *Server) Name() string {
+	return s.opts.name
 }
 
 // Init 初始化组件
-func (b *Broker) Init() {}
+func (s *Server) Init() {}
 
 // Start 启动组件
-func (b *Broker) Start() {
+func (s *Server) Start() {
 	opts := &mqtt.Options{}
+	opts.InlineClient = true
 	opts.Capabilities = mqtt.NewDefaultServerCapabilities()
-	opts.ClientNetReadBufferSize = b.opts.readBufferSize
-	opts.ClientNetWriteBufferSize = b.opts.writeBufferSize
-	opts.Listeners = make([]listeners.Config, 0, len(b.opts.listensOpts))
+	opts.ClientNetReadBufferSize = s.opts.readBufferSize
+	opts.ClientNetWriteBufferSize = s.opts.writeBufferSize
+	opts.Listeners = make([]listeners.Config, 0, len(s.opts.listensOpts))
 	opts.Hooks = make([]mqtt.HookLoadConfig, 0)
+	opts.Logger = slog.New(log.GetLogger())
 
-	for _, opt := range b.opts.listensOpts {
+	for _, opt := range s.opts.listensOpts {
 		if opt.Type != listeners.TypeWS && opt.Type != listeners.TypeTCP {
 			continue
 		}
@@ -79,8 +84,8 @@ func (b *Broker) Start() {
 		})
 	}
 
-	if b.opts.authFile != "" {
-		data, err := os.ReadFile(b.opts.authFile)
+	if s.opts.auth != "" {
+		data, err := os.ReadFile(s.opts.auth)
 		if err != nil {
 			log.Fatalf("auth file read failed: %v", err)
 		}
@@ -95,7 +100,7 @@ func (b *Broker) Start() {
 		})
 	}
 
-	if b.opts.debug && !mode.IsReleaseMode() {
+	if s.opts.debug {
 		opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
 			Hook: &debug.Hook{},
 			Config: &debug.Options{
@@ -107,29 +112,46 @@ func (b *Broker) Start() {
 		})
 	}
 
-	b.server = mqtt.New(opts)
+	s.server = mqtt.New(opts)
 
 	go func() {
-		if err := b.server.Serve(); err != nil {
+		if err := s.server.Serve(); err != nil {
 			log.Fatalf("mqtt server startup failed: %v", err)
 		}
 	}()
 
-	b.printInfo()
+	s.printInfo()
 }
 
 // Destroy 销毁组件
-func (b *Broker) Destroy() {
-	if b.server != nil {
-		if err := b.server.Close(); err != nil {
+func (s *Server) Destroy() {
+	if s.server != nil {
+		if err := s.server.Close(); err != nil {
 			log.Warnf("mqtt server shutdown failed: %v", err)
 		}
 	}
 }
 
-func (s *Broker) printInfo() {
+// Proxy 获取MQTT代理API
+func (s *Server) Proxy() *Proxy {
+	return s.proxy
+}
+
+func (s *Server) printInfo() {
 	infos := make([]string, 0, 3)
 	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
+
+	if s.opts.auth != "" {
+		infos = append(infos, fmt.Sprintf("Auth: %s", s.opts.auth))
+	} else {
+		infos = append(infos, "Auth: allow")
+	}
+
+	if s.opts.debug {
+		infos = append(infos, "Debug: true")
+	} else {
+		infos = append(infos, "Debug: false")
+	}
 
 	for _, opt := range s.opts.listensOpts {
 		infos = append(infos, info.MakeHorizontalLine())

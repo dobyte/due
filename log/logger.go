@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +20,7 @@ import (
 )
 
 type Logger interface {
+	slog.Handler
 	// Print 打印日志，不含堆栈信息
 	Print(level Level, a ...any)
 	// Printf 打印模板日志，不含堆栈信息
@@ -55,6 +57,8 @@ type terminal struct {
 	syncer Syncer
 	levels map[Level]bool
 }
+
+var _ slog.Handler = (*defaultLogger)(nil)
 
 type defaultLogger struct {
 	opts      *options
@@ -317,4 +321,107 @@ func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 	} else {
 		return caller, frames
 	}
+}
+
+// Enabled 是否启用日志
+func (l *defaultLogger) Enabled(ctx context.Context, level slog.Level) bool {
+	return l.convLevel(level).Priority() >= l.opts.level.Priority()
+}
+
+// Handle 处理日志记录
+func (l *defaultLogger) Handle(ctx context.Context, record slog.Record) error {
+	var (
+		level  = l.convLevel(record.Level)
+		entity *Entity
+	)
+
+	for i := range l.terminals {
+		t := l.terminals[i]
+
+		if len(t.levels) > 0 && !t.levels[level] {
+			continue
+		}
+
+		if entity == nil {
+			entity = l.convEntity(record)
+		}
+
+		t.syncer.Write(entity)
+	}
+
+	if entity != nil {
+		l.releaseEntity(entity)
+	}
+
+	return nil
+}
+
+func (l *defaultLogger) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return l
+}
+
+func (l *defaultLogger) WithGroup(name string) slog.Handler {
+	return l
+}
+
+// 转换成日志实体
+func (l *defaultLogger) convEntity(record slog.Record) *Entity {
+	entity := l.pool.Get().(*Entity)
+	entity.Now = record.Time
+	entity.Time = record.Time.Format(l.opts.timeFormat)
+	entity.Level = l.convLevel(record.Level)
+	entity.Message = record.Message
+
+	if l.opts.stackLevel != "" && l.opts.stackLevel != LevelNone && entity.Level.Priority() >= l.opts.stackLevel.Priority() {
+		entity.Caller, entity.Frames = l.convStack(record.PC, stack.Full)
+	} else {
+		entity.Caller, entity.Frames = l.makeStack(stack.First)
+	}
+
+	return entity
+}
+
+// 转换堆栈信息
+func (l *defaultLogger) convStack(pc uintptr, depth stack.Depth) (string, []runtime.Frame) {
+	st := stack.CallersFromPC(pc, stack.Full)
+	defer st.Free()
+
+	var (
+		caller string
+		frames = st.Frames()
+	)
+
+	if len(frames) > 0 {
+		file := frames[0].File
+		line := frames[0].Line
+
+		if !l.opts.callFullPath {
+			_, file = filepath.Split(file)
+		}
+
+		caller = file + ":" + strconv.Itoa(line)
+	}
+
+	if depth == stack.First {
+		return caller, nil
+	} else {
+		return caller, frames
+	}
+}
+
+// 转换日志级别
+func (l *defaultLogger) convLevel(level slog.Level) Level {
+	var lv Level
+	switch level {
+	case slog.LevelWarn:
+		lv = LevelWarn
+	case slog.LevelDebug:
+		lv = LevelDebug
+	case slog.LevelInfo:
+		lv = LevelInfo
+	case slog.LevelError:
+		lv = LevelError
+	}
+
+	return lv
 }
