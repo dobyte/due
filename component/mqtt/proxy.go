@@ -15,6 +15,28 @@ func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
 }
 
+// Client 获取客户端
+func (p *Proxy) Client(clientID string) (*mqtt.Client, bool) {
+	if p.server.server == nil {
+		return nil, false
+	} else {
+		return p.server.server.Clients.Get(clientID)
+	}
+}
+
+// Clients 获取所有客户端
+func (p *Proxy) Clients() (map[string]*mqtt.Client, error) {
+	if p.server.server == nil {
+		return nil, errors.ErrServerClosed
+	} else {
+		clients := p.server.server.Clients.GetAll()
+
+		delete(clients, mqtt.InlineClientId)
+
+		return clients, nil
+	}
+}
+
 // Publish 发布消息
 func (p *Proxy) Publish(topic string, payload []byte, retain bool, qos byte) error {
 	if p.server.server == nil {
@@ -39,27 +61,5 @@ func (p *Proxy) Unsubscribe(filter string, subscriptionID int) error {
 		return errors.ErrServerClosed
 	} else {
 		return p.server.server.Unsubscribe(filter, subscriptionID)
-	}
-}
-
-// Client 获取客户端
-func (p *Proxy) Client(clientID string) (*mqtt.Client, bool) {
-	if p.server.server == nil {
-		return nil, false
-	} else {
-		return p.server.server.Clients.Get(clientID)
-	}
-}
-
-// Clients 获取所有客户端
-func (p *Proxy) Clients() (map[string]*mqtt.Client, error) {
-	if p.server.server == nil {
-		return nil, errors.ErrServerClosed
-	} else {
-		clients := p.server.server.Clients.GetAll()
-
-		delete(clients, mqtt.InlineClientId)
-
-		return clients, nil
 	}
 }
