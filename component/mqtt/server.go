@@ -21,6 +21,7 @@ type Server struct {
 	opts   *options
 	proxy  *Proxy
 	server *mqtt.Server
+	events map[Event]EventHandler
 }
 
 func NewServer(opts ...Option) *Server {
@@ -32,6 +33,7 @@ func NewServer(opts ...Option) *Server {
 	s := &Server{}
 	s.opts = o
 	s.proxy = newProxy(s)
+	s.events = make(map[Event]EventHandler)
 
 	return s
 }
@@ -112,6 +114,10 @@ func (s *Server) Start() {
 		})
 	}
 
+	opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
+		Hook: &hook{server: s},
+	})
+
 	s.server = mqtt.New(opts)
 
 	go func() {
@@ -171,4 +177,11 @@ func (s *Server) printInfo() {
 	}
 
 	info.PrintBoxInfo("MQTT", infos...)
+}
+
+// 添加事件处理器
+func (s *Server) addEventHandler(event Event, handler EventHandler) {
+	if s.server == nil {
+		s.events[event] = handler
+	}
 }

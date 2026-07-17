@@ -15,6 +15,11 @@ func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
 }
 
+// AddEventHandler 添加事件处理器
+func (p *Proxy) AddEventHandler(event Event, handler EventHandler) {
+	p.server.addEventHandler(event, handler)
+}
+
 // Client 获取客户端
 func (p *Proxy) Client(clientID string) (*mqtt.Client, bool) {
 	if p.server.server == nil {
