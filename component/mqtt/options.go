@@ -23,13 +23,11 @@ const (
 type Option func(o *options)
 
 type ListenOptions struct {
-	ID         string `json:"id"`       // 监听器ID
-	Type       string `json:"type"`     // 监听类型（tcp/ws）
-	Addr       string `json:"addr"`     // 监听地址
-	KeyFile    string `json:"keyFile"`  // 私钥文件路径（选填）
-	CertFile   string `json:"certFile"` // 证书文件路径（选填）
-	listenAddr string // 监听地址
-	exposeAddr string // 暴露地址，默认与监听地址相同
+	ID       string `json:"id"`       // 监听器ID
+	Type     string `json:"type"`     // 监听类型（tcp/ws）
+	Addr     string `json:"addr"`     // 监听地址
+	KeyFile  string `json:"keyFile"`  // 私钥文件路径（选填）
+	CertFile string `json:"certFile"` // 证书文件路径（选填）
 }
 
 type options struct {

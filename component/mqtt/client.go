@@ -3,6 +3,7 @@ package mqtt
 import (
 	"net"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xnet"
 	mqtt "github.com/mochi-mqtt/server/v2"
 )
@@ -18,12 +19,23 @@ func (c *Client) ID() string {
 
 // Listener 获取客户端连接监听器ID
 func (c *Client) Listener() string {
-	return c.cli.Net.Listener
+	if c.cli.Net.Conn == nil {
+		return ""
+	} else {
+		return c.cli.Net.Listener
+	}
 }
 
-// Topic 获取客户端订阅的主题
-func (c *Client) Topic() string {
-	return c.cli.Properties.Will.TopicName
+// Topics 获取客户端订阅的主题列表
+func (c *Client) Topics() []string {
+	subscriptions := c.cli.State.Subscriptions.GetAll()
+
+	topics := make([]string, 0, len(subscriptions))
+	for k := range subscriptions {
+		topics = append(topics, k)
+	}
+
+	return topics
 }
 
 // LocalIP 获取本地IP
@@ -38,6 +50,10 @@ func (c *Client) LocalIP() (string, error) {
 
 // LocalAddr 获取本地地址
 func (c *Client) LocalAddr() (net.Addr, error) {
+	if c.cli.Net.Conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
 	return c.cli.Net.Conn.LocalAddr(), nil
 }
 
@@ -53,6 +69,10 @@ func (c *Client) RemoteIP() (string, error) {
 
 // RemoteAddr 获取远端地址
 func (c *Client) RemoteAddr() (net.Addr, error) {
+	if c.cli.Net.Conn == nil {
+		return nil, errors.ErrConnectionClosed
+	}
+
 	return c.cli.Net.Conn.RemoteAddr(), nil
 }
 

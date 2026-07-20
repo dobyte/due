@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
@@ -72,16 +73,15 @@ func (s *Server) Start() {
 			}
 		}
 
-		if listenAddr, exposeAddr, err := xnet.ParseAddr(opt.Addr); err != nil {
+		listenAddr, _, err := xnet.ParseAddr(opt.Addr)
+		if err != nil {
 			log.Fatalf("listener %s address parse failed: %v", opt.ID, err)
-		} else {
-			opt.listenAddr, opt.exposeAddr = listenAddr, exposeAddr
 		}
 
 		opts.Listeners = append(opts.Listeners, listeners.Config{
 			ID:        opt.ID,
 			Type:      opt.Type,
-			Address:   opt.listenAddr,
+			Address:   listenAddr,
 			TLSConfig: tlsConfig,
 		})
 	}
@@ -160,18 +160,23 @@ func (s *Server) printInfo() {
 	}
 
 	for _, opt := range s.opts.listensOpts {
+		_, exposeAddr, err := xnet.ParseAddr(opt.Addr)
+		if err != nil {
+			continue
+		}
+
 		infos = append(infos, info.MakeHorizontalLine())
 		infos = append(infos, fmt.Sprintf("ID: %s", opt.ID))
 		infos = append(infos, fmt.Sprintf("Type: %s", opt.Type))
 
 		switch opt.Type {
 		case listeners.TypeTCP:
-			infos = append(infos, fmt.Sprintf("Addr: %s", opt.exposeAddr))
+			infos = append(infos, fmt.Sprintf("Addr: %s", exposeAddr))
 		case listeners.TypeWS:
 			if opt.CertFile != "" && opt.KeyFile != "" {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", opt.exposeAddr)))
+				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", exposeAddr)))
 			} else {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", opt.exposeAddr)))
+				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", exposeAddr)))
 			}
 		}
 	}
@@ -180,8 +185,12 @@ func (s *Server) printInfo() {
 }
 
 // 添加事件处理器
-func (s *Server) addEventHandler(event Event, handler EventHandler) {
+func (s *Server) addEventHandler(event Event, handler EventHandler) error {
 	if s.server == nil {
 		s.events[event] = handler
+
+		return nil
+	} else {
+		return errors.ErrServerClosed
 	}
 }
