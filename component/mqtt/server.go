@@ -115,7 +115,7 @@ func (s *Server) Start() {
 	}
 
 	opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
-		Hook: &hook{server: s},
+		Hook: &eventHook{server: s},
 	})
 
 	s.server = mqtt.New(opts)
