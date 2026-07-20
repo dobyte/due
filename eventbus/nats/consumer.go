@@ -56,8 +56,7 @@ func (c *consumer) dispatch(data []byte) {
 	defer c.rw.RUnlock()
 
 	for _, handlers := range c.handlers {
-		for i := range handlers {
-			handler := handlers[i]
+		for _, handler := range handlers {
 			task.AddTask(func() { handler(event) })
 		}
 	}

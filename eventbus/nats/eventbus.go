@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/eventbus"
+	"github.com/dobyte/due/v2/log"
 	"github.com/nats-io/nats.go"
 )
 
@@ -101,6 +102,24 @@ func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler event
 	}
 
 	return nil
+}
+
+// SubscribeQueue 队列订阅事件
+func (eb *Eventbus) SubscribeQueue(ctx context.Context, topic string, handler eventbus.EventHandler) error {
+	if eb.err != nil {
+		return eb.err
+	}
+
+	_, err := eb.opts.conn.QueueSubscribe("", topic, func(msg *nats.Msg) {
+		event, err := deserialize(msg.Data)
+		if err != nil {
+			log.Error("invalid event data")
+			return
+		}
+
+		handler(event)
+	})
+	return err
 }
 
 // Close 停止监听
