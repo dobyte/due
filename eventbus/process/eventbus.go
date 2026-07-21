@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/core/value"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/eventbus/internal"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
@@ -25,9 +27,8 @@ func NewEventbus() *Eventbus {
 // Publish 发布事件
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	eb.rw.RLock()
-	defer eb.rw.RUnlock()
-
 	c, ok := eb.consumers[topic]
+	eb.rw.RUnlock()
 	if !ok {
 		return nil
 	}
@@ -43,31 +44,42 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 }
 
 // Subscribe 订阅事件
-func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler internal.EventHandler) error {
+func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, opts ...eventbus.SubscribeOptions) (eventbus.Subscription, error) {
+	eb.rw.Lock()
+	defer eb.rw.Unlock()
+
+	c, ok := eb.consumers[topic]
+	if ok {
+		if len(opts) > 0 && opts[0].IsSingleConsumer != c.isSingleConsumer {
+			return nil, errors.ErrInvalidArgument
+		}
+	} else {
+		c = &consumer{isSingleConsumer: len(opts) > 0 && opts[0].IsSingleConsumer, subscriptions: make([]*subscription, 0, 1)}
+		eb.consumers[topic] = c
+	}
+
+	sub := c.addSubscription(topic, handler)
+	sub.eb = eb
+
+	return sub, nil
+}
+
+// 取消订阅
+func (eb *Eventbus) unsubscribe(topic string, sub *subscription) error {
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
 	c, ok := eb.consumers[topic]
 	if !ok {
-		c = &consumer{handlers: make(map[uintptr][]internal.EventHandler, 1)}
-		eb.consumers[topic] = c
+		return errors.ErrIllegalOperation
 	}
 
-	c.addHandler(handler)
+	found, empty := c.delSubscription(sub)
+	if !found {
+		return errors.ErrIllegalOperation
+	}
 
-	return nil
-}
-
-// Unsubscribe 取消订阅
-func (eb *Eventbus) Unsubscribe(ctx context.Context, topic string, handler internal.EventHandler) error {
-	eb.rw.Lock()
-	defer eb.rw.Unlock()
-
-	if c, ok := eb.consumers[topic]; ok {
-		if c.delHandler(handler) != 0 {
-			return nil
-		}
-
+	if empty {
 		delete(eb.consumers, topic)
 	}
 
