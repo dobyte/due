@@ -2,11 +2,13 @@ package nats_test
 
 import (
 	"context"
-	"github.com/dobyte/due/eventbus/nats/v2"
-	"github.com/dobyte/due/v2/eventbus"
+	"fmt"
 	"log"
 	"testing"
 	"time"
+
+	"github.com/dobyte/due/eventbus/nats/v2"
+	"github.com/dobyte/due/v2/eventbus"
 )
 
 const (
@@ -31,13 +33,11 @@ func TestEventbus_Client1_Subscribe(t *testing.T) {
 
 	defer eb.Close()
 
-	err = eb.Subscribe(ctx, loginTopic, loginEventHandler)
-	if err != nil {
+	if _, err = eb.Subscribe(ctx, loginTopic, loginEventHandler); err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(ctx, paidTopic, paidEventHandler)
-	if err != nil {
+	if _, err = eb.Subscribe(ctx, paidTopic, paidEventHandler); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,18 +55,11 @@ func TestEventbus_Client2_Subscribe(t *testing.T) {
 
 	defer eb.Close()
 
-	err = eb.Subscribe(ctx, loginTopic, loginEventHandler)
-	if err != nil {
+	if _, err = eb.Subscribe(ctx, loginTopic, loginEventHandler); err != nil {
 		t.Fatal(err)
 	}
 
-	err = eb.Subscribe(ctx, paidTopic, paidEventHandler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = eb.Unsubscribe(context.Background(), loginTopic, loginEventHandler)
-	if err != nil {
+	if _, err = eb.Subscribe(ctx, paidTopic, paidEventHandler); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,4 +93,44 @@ func TestEventbus_Publish(t *testing.T) {
 	}
 
 	t.Log("publish success")
+}
+
+func TestEventbus_Subscribe_SingleConsumer(t *testing.T) {
+	var (
+		err error
+		eb  = nats.NewEventbus()
+		ctx = context.Background()
+	)
+
+	defer eb.Close()
+
+	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
+		fmt.Println("1-------------", event)
+	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
+		fmt.Println("2-------------", event)
+	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
+		fmt.Println("3-------------", event)
+	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("subscribe queue success")
+
+	for i := 0; i < 10; i++ {
+		if err = eb.Publish(ctx, loginTopic, "login"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Log("publish login success")
+
+	time.Sleep(2 * time.Second)
 }
