@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"reflect"
 	"sync"
 
 	"github.com/dobyte/due/v2/eventbus"
@@ -10,53 +9,60 @@ import (
 )
 
 type consumer struct {
-	rw       sync.RWMutex
-	handlers map[uintptr][]eventbus.EventHandler
+	eb   *Eventbus
+	rw   sync.RWMutex
+	subs []*subscription
 }
 
-// 添加处理器
-func (c *consumer) addHandler(handler eventbus.EventHandler) int {
-	pointer := reflect.ValueOf(handler).Pointer()
+func newConsumer(eb *Eventbus) *consumer {
+	return &consumer{eb: eb, subs: make([]*subscription, 0, 1)}
+}
 
+// addSubscription 添加订阅
+func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription {
+	sub := &subscription{consumer: c, handler: handler}
+
+	c.rw.Lock()
+	c.subs = append(c.subs, sub)
+	c.rw.Unlock()
+
+	return sub
+}
+
+// delSubscription 移除订阅
+func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
-	if _, ok := c.handlers[pointer]; !ok {
-		c.handlers[pointer] = make([]eventbus.EventHandler, 0, 1)
+	subs := make([]*subscription, 0, len(c.subs))
+	for _, s := range c.subs {
+		if s == sub {
+			found = true
+		} else {
+			subs = append(subs, s)
+		}
 	}
+	c.subs = subs
 
-	c.handlers[pointer] = append(c.handlers[pointer], handler)
-
-	return len(c.handlers[pointer])
-}
-
-// 移除处理器
-func (c *consumer) delHandler(handler eventbus.EventHandler) int {
-	pointer := reflect.ValueOf(handler).Pointer()
-
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
-	delete(c.handlers, pointer)
-
-	return len(c.handlers)
+	return found, len(c.subs) == 0
 }
 
 // 分发数据
 func (c *consumer) dispatch(data []byte) {
-	event, err := deserialize(data)
+	event, err := c.eb.deserialize(data)
 	if err != nil {
-		log.Error("invalid event data")
+		log.Errorf("invalid event data: %v", err)
 		return
 	}
 
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	for _, handlers := range c.handlers {
-		for i := range handlers {
-			handler := handlers[i]
-			task.AddTask(func() { handler(event) })
+	for _, sub := range c.subs {
+		handler := sub.handler
+		if handler == nil {
+			continue
 		}
+		task.AddTask(func() { handler(event) })
 	}
 }
