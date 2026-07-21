@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	defaultAddr   = "127.0.0.1:9092"
-	defaultPrefix = "due:eventbus"
+	defaultAddr            = "127.0.0.1:9092"
+	defaultPrefix          = "due:eventbus"
+	defaultAutoCreateTopic = true
 )
 
 const (
@@ -50,7 +51,7 @@ func defaultOptions() *options {
 		addrs:           etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		prefix:          etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		version:         etc.Get(defaultVersionKey).String(),
-		autoCreateTopic: etc.Get(defaultAutoCreateTopicKey).Bool(),
+		autoCreateTopic: etc.Get(defaultAutoCreateTopicKey, defaultAutoCreateTopic).Bool(),
 	}
 }
 
