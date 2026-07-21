@@ -21,9 +21,16 @@ type Eventbus interface {
 	// Publish 发布事件
 	Publish(ctx context.Context, topic string, message any) error
 	// Subscribe 订阅事件
-	Subscribe(ctx context.Context, topic string, handler EventHandler) error
+	Subscribe(ctx context.Context, topic string, handler EventHandler, opts ...SubscribeOptions) (Subscription, error)
+}
+
+type Subscription interface {
 	// Unsubscribe 取消订阅
-	Unsubscribe(ctx context.Context, topic string, handler EventHandler) error
+	Unsubscribe(ctx context.Context) error
+}
+
+type SubscribeOptions struct {
+	IsSingleConsumer bool // 是否单消费者
 }
 
 // SetEventbus 设置事件总线
@@ -57,21 +64,12 @@ func Publish(ctx context.Context, topic string, message any) error {
 }
 
 // Subscribe 订阅事件
-func Subscribe(ctx context.Context, topic string, handler EventHandler) error {
+func Subscribe(ctx context.Context, topic string, handler EventHandler, opts ...SubscribeOptions) (Subscription, error) {
 	if globalEventbus == nil {
-		return errors.ErrMissingEventbusInstance
+		return nil, errors.ErrMissingEventbusInstance
 	}
 
-	return globalEventbus.Subscribe(ctx, topic, handler)
-}
-
-// Unsubscribe 取消订阅
-func Unsubscribe(ctx context.Context, topic string, handler EventHandler) error {
-	if globalEventbus == nil {
-		return errors.ErrMissingEventbusInstance
-	}
-
-	return globalEventbus.Unsubscribe(ctx, topic, handler)
+	return globalEventbus.Subscribe(ctx, topic, handler, opts...)
 }
 
 // Close 关闭事件总线
