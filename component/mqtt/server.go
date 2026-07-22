@@ -118,6 +118,8 @@ func (s *Server) Start() {
 		Hook: &eventHook{server: s},
 	})
 
+	s.printInfo()
+
 	s.server = mqtt.New(opts)
 
 	go func() {
@@ -125,8 +127,6 @@ func (s *Server) Start() {
 			log.Fatalf("mqtt server startup failed: %v", err)
 		}
 	}()
-
-	s.printInfo()
 }
 
 // Destroy 销毁组件

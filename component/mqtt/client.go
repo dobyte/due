@@ -26,6 +26,11 @@ func (c *Client) Listener() string {
 	}
 }
 
+// Will 获取遗言信息
+func (c *Client) Will() *Will {
+	return &Will{cli: c.cli}
+}
+
 // Topics 获取客户端订阅的主题列表
 func (c *Client) Topics() []string {
 	subscriptions := c.cli.State.Subscriptions.GetAll()
