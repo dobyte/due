@@ -9,9 +9,9 @@ import (
 )
 
 type consumer struct {
-	isSingleConsumer bool
-	rw               sync.RWMutex
-	subscriptions    []*subscription
+	balance       bool
+	rw            sync.RWMutex
+	subscriptions []*subscription
 }
 
 // 添加订阅
@@ -48,7 +48,7 @@ func (c *consumer) dispatch(event *eventbus.Event) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if c.isSingleConsumer {
+	if c.balance {
 		if len(c.subscriptions) == 0 {
 			return
 		}
