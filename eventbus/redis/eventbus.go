@@ -101,18 +101,16 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 }
 
 // Subscribe 订阅事件
-func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, opts ...eventbus.SubscribeOptions) (eventbus.Subscription, error) {
+func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
 	}
 
-	single := len(opts) > 0 && opts[0].IsSingleConsumer
-
-	if single {
+	if len(balance) > 0 && balance[0] {
 		return eb.subscribeGroup(ctx, topic, handler)
+	} else {
+		return eb.subscribeBroadcast(ctx, topic, handler)
 	}
-
-	return eb.subscribeBroadcast(ctx, topic, handler)
 }
 
 func (eb *Eventbus) subscribeBroadcast(ctx context.Context, topic string, handler eventbus.EventHandler) (eventbus.Subscription, error) {
@@ -370,6 +368,7 @@ func (eb *Eventbus) doMakeGroupID(topic string) string {
 	}
 }
 
+// 序列化事件
 func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)
@@ -382,6 +381,7 @@ func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	return json.Marshal(d)
 }
 
+// 反序列化事件
 func (eb *Eventbus) deserialize(v []byte) (*eventbus.Event, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)
