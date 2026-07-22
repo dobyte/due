@@ -114,7 +114,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 }
 
 // Subscribe 订阅事件
-func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, opts ...eventbus.SubscribeOptions) (eventbus.Subscription, error) {
+func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
 	}
@@ -124,11 +124,11 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
-	single := len(opts) > 0 && opts[0].IsSingleConsumer
+	lb := len(balance) > 0 && balance[0]
 
 	c, ok := eb.consumers[channel]
 	if ok {
-		if c.single != single {
+		if c.balance != lb {
 			return nil, errors.ErrInvalidArgument
 		}
 	} else {
@@ -145,9 +145,9 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 			}
 		}
 
-		c = newConsumer(eb, single)
+		c = newConsumer(eb, lb)
 
-		if single {
+		if lb {
 			groupID := eb.doMakeGroupID(topic)
 			group, err := sarama.NewConsumerGroupFromClient(groupID, eb.opts.client)
 			if err != nil {

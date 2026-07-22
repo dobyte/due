@@ -113,19 +113,19 @@ func TestEventbus_Subscribe_SingleConsumer(t *testing.T) {
 
 	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
 		fmt.Println("1-------------", event)
-	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
 		fmt.Println("2-------------", event)
-	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err = eb.Subscribe(ctx, loginTopic, func(event *eventbus.Event) {
 		fmt.Println("3-------------", event)
-	}, eventbus.SubscribeOptions{IsSingleConsumer: true}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 

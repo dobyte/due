@@ -17,7 +17,7 @@ type consumer struct {
 	cancel      context.CancelFunc
 	rw          sync.RWMutex
 	subs        []*subscription
-	single      bool
+	balance     bool
 	idx         uint64
 	consumer    sarama.Consumer
 	group       sarama.ConsumerGroup
@@ -26,8 +26,8 @@ type consumer struct {
 	partitionPC []sarama.PartitionConsumer
 }
 
-func newConsumer(eb *Eventbus, single bool) *consumer {
-	c := &consumer{eb: eb, single: single, subs: make([]*subscription, 0, 1)}
+func newConsumer(eb *Eventbus, balance bool) *consumer {
+	c := &consumer{eb: eb, balance: balance, subs: make([]*subscription, 0, 1)}
 	c.ctx, c.cancel = context.WithCancel(eb.ctx)
 	return c
 }
@@ -156,7 +156,7 @@ func (c *consumer) dispatch(data []byte) {
 		return
 	}
 
-	if c.single {
+	if c.balance {
 		idx := atomic.AddUint64(&c.idx, 1) % uint64(len(c.subs))
 		handler := c.subs[idx].handler
 		if handler != nil {
