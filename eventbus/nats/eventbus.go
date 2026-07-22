@@ -54,7 +54,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 }
 
 // Subscribe 订阅事件
-func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, opts ...eventbus.SubscribeOptions) (eventbus.Subscription, error) {
+func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
 	}
@@ -65,7 +65,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		channel = eb.doMakeChannel(topic)
 	)
 
-	if len(opts) > 0 && opts[0].IsSingleConsumer {
+	if len(balance) > 0 && balance[0] {
 		sub, err = eb.opts.conn.QueueSubscribe(channel, "queue", eb.subscribeHandler(handler))
 	} else {
 		sub, err = eb.opts.conn.Subscribe(channel, eb.subscribeHandler(handler))
