@@ -8,26 +8,26 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/task"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 type consumer struct {
-	eb          *Eventbus
-	ctx         context.Context
-	cancel      context.CancelFunc
-	rw          sync.RWMutex
-	subs        []*subscription
-	balance     bool
-	idx         uint64
-	consumer    sarama.Consumer
-	group       sarama.ConsumerGroup
-	groupID     string
-	partitions  []int32
-	partitionPC []sarama.PartitionConsumer
+	eb            *Eventbus
+	ctx           context.Context
+	cancel        context.CancelFunc
+	rw            sync.RWMutex
+	subscriptions []*subscription
+	balance       bool
+	idx           uint64
+	consumer      sarama.Consumer
+	group         sarama.ConsumerGroup
+	groupID       string
+	partitions    []int32
+	partitionPC   []sarama.PartitionConsumer
 }
 
 func newConsumer(eb *Eventbus, balance bool) *consumer {
-	c := &consumer{eb: eb, balance: balance, subs: make([]*subscription, 0, 1)}
+	c := &consumer{eb: eb, balance: balance, subscriptions: make([]*subscription, 0, 1)}
 	c.ctx, c.cancel = context.WithCancel(eb.ctx)
 	return c
 }
@@ -37,7 +37,7 @@ func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription 
 	sub := &subscription{consumer: c, handler: handler}
 
 	c.rw.Lock()
-	c.subs = append(c.subs, sub)
+	c.subscriptions = append(c.subscriptions, sub)
 	c.rw.Unlock()
 
 	return sub
@@ -48,17 +48,17 @@ func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
 
-	subs := make([]*subscription, 0, len(c.subs))
-	for _, s := range c.subs {
+	subs := make([]*subscription, 0, len(c.subscriptions))
+	for _, s := range c.subscriptions {
 		if s == sub {
 			found = true
 		} else {
 			subs = append(subs, s)
 		}
 	}
-	c.subs = subs
+	c.subscriptions = subs
 
-	return found, len(c.subs) == 0
+	return found, len(c.subscriptions) == 0
 }
 
 // startBroadcastConsumer 启动广播模式消费
@@ -149,26 +149,40 @@ func (c *consumer) dispatch(data []byte) {
 		return
 	}
 
+	for _, handler := range c.loadHandlers() {
+		xcall.Call(func() {
+			handler(event)
+		})
+	}
+}
+
+// 加载订阅的事件处理函数
+func (c *consumer) loadHandlers() []eventbus.EventHandler {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if len(c.subs) == 0 {
-		return
+	if len(c.subscriptions) == 0 {
+		return nil
 	}
 
 	if c.balance {
-		idx := atomic.AddUint64(&c.idx, 1) % uint64(len(c.subs))
-		handler := c.subs[idx].handler
-		if handler != nil {
-			task.AddTask(func() { handler(event) })
+		idx := atomic.AddUint64(&c.idx, 1) % uint64(len(c.subscriptions))
+		handler := c.subscriptions[idx].handler
+
+		if handler == nil {
+			return nil
 		}
+
+		return []eventbus.EventHandler{handler}
 	} else {
-		for _, sub := range c.subs {
-			handler := sub.handler
-			if handler == nil {
-				continue
+		handlers := make([]eventbus.EventHandler, 0, len(c.subscriptions))
+
+		for _, sub := range c.subscriptions {
+			if sub.handler != nil {
+				handlers = append(handlers, sub.handler)
 			}
-			task.AddTask(func() { handler(event) })
 		}
+
+		return handlers
 	}
 }
