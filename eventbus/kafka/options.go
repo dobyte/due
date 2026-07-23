@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/dobyte/due/v2/etc"
@@ -11,6 +12,7 @@ const (
 	defaultAddr            = "127.0.0.1:9092"
 	defaultPrefix          = "due:eventbus"
 	defaultAutoCreateTopic = true
+	defaultStaleDuration   = 10 * time.Second
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 	defaultPrefixKey          = "etc.eventbus.kafka.prefix"
 	defaultVersionKey         = "etc.eventbus.kafka.version"
 	defaultAutoCreateTopicKey = "etc.eventbus.kafka.autoCreateTopic"
+	defaultStaleDurationKey   = "etc.eventbus.kafka.staleDuration"
 )
 
 type Option func(o *options)
@@ -41,8 +44,12 @@ type options struct {
 	client sarama.Client
 
 	// 自动创建topic
-	// 当为true时，若不存在该主题，会自动创建，默认为false
+	// 当为true时，若不存在该主题，会自动创建，默认为true
 	autoCreateTopic bool
+
+	// 过期时间
+	// 超过此时间的消息将被丢弃，默认为10秒
+	staleDuration time.Duration
 }
 
 func defaultOptions() *options {
@@ -52,6 +59,7 @@ func defaultOptions() *options {
 		prefix:          etc.Get(defaultPrefixKey, defaultPrefix).String(),
 		version:         etc.Get(defaultVersionKey).String(),
 		autoCreateTopic: etc.Get(defaultAutoCreateTopicKey, defaultAutoCreateTopic).Bool(),
+		staleDuration:   etc.Get(defaultStaleDurationKey, defaultStaleDuration).Duration(),
 	}
 }
 
@@ -83,4 +91,9 @@ func WithClient(client sarama.Client) Option {
 // WithAutoCreateTopic 设置自动创建topic
 func WithAutoCreateTopic(autoCreateTopic bool) Option {
 	return func(o *options) { o.autoCreateTopic = autoCreateTopic }
+}
+
+// WithStaleDuration 设置消息过期时间
+func WithStaleDuration(staleDuration time.Duration) Option {
+	return func(o *options) { o.staleDuration = staleDuration }
 }

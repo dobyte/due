@@ -4,11 +4,13 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 type consumer struct {
@@ -22,8 +24,7 @@ type consumer struct {
 	consumer      sarama.Consumer
 	group         sarama.ConsumerGroup
 	groupID       string
-	partitions    []int32
-	partitionPC   []sarama.PartitionConsumer
+	wg            sync.WaitGroup
 }
 
 func newConsumer(eb *Eventbus, balance bool) *consumer {
@@ -69,48 +70,99 @@ func (c *consumer) startBroadcastConsumer(consumer sarama.Consumer, topic string
 	}
 
 	c.consumer = consumer
-	c.partitions = partitions
-	c.partitionPC = make([]sarama.PartitionConsumer, 0, len(partitions))
 
 	for _, partition := range partitions {
-		pc, err := consumer.ConsumePartition(topic, partition, sarama.OffsetNewest)
-		if err != nil {
-			return err
-		}
-		c.partitionPC = append(c.partitionPC, pc)
-
-		go func(pc sarama.PartitionConsumer) {
-			defer pc.AsyncClose()
-
-			for {
-				select {
-				case <-c.ctx.Done():
-					return
-				case msg := <-pc.Messages():
-					c.dispatch(msg.Value)
-				case <-pc.Errors():
-					return
-				}
-			}
-		}(pc)
+		c.wg.Add(1)
+		go c.runPartitionConsumer(topic, partition)
 	}
 
 	return nil
+}
+
+// runPartitionConsumer 运行单个 partition 的消费循环（带重试）
+func (c *consumer) runPartitionConsumer(topic string, partition int32) {
+	defer c.wg.Done()
+
+	backoff := time.Millisecond * 100
+	maxBackoff := time.Second * 10
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+			pc, err := c.consumer.ConsumePartition(topic, partition, sarama.OffsetNewest)
+			if err != nil {
+				log.Errorf("kafka partition consumer create error, partition: %d, error: %v", partition, err)
+
+				select {
+				case <-c.ctx.Done():
+					return
+				case <-time.After(backoff):
+				}
+
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+
+				continue
+			}
+
+			backoff = time.Millisecond * 100
+
+		LOOP:
+			for {
+				select {
+				case <-c.ctx.Done():
+					pc.AsyncClose()
+					return
+				case msg := <-pc.Messages():
+					c.dispatch(msg.Value)
+				case err := <-pc.Errors():
+					log.Errorf("kafka partition consumer error, partition: %d, error: %v", partition, err)
+					pc.AsyncClose()
+					break LOOP
+				}
+			}
+		}
+	}
 }
 
 // startGroupConsumer 启动消费组模式消费
 func (c *consumer) startGroupConsumer(group sarama.ConsumerGroup, topic string) {
 	c.group = group
 
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
+
+		backoff := time.Millisecond * 100
+		maxBackoff := time.Second * 10
+
 		for {
 			select {
 			case <-c.ctx.Done():
 				return
 			default:
 				if err := group.Consume(c.ctx, []string{topic}, c); err != nil {
+					if err == sarama.ErrClosedConsumerGroup {
+						return
+					}
 					log.Errorf("kafka consumer group consume error: %v", err)
-					return
+
+					select {
+					case <-c.ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+				} else {
+					backoff = time.Millisecond * 100
 				}
 			}
 		}
@@ -131,6 +183,7 @@ func (c *consumer) Cleanup(sarama.ConsumerGroupSession) error {
 func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		c.dispatch(msg.Value)
+
 		session.MarkMessage(msg, "")
 	}
 	return nil
@@ -139,6 +192,7 @@ func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 // stop 停止消费
 func (c *consumer) stop() {
 	c.cancel()
+	c.wg.Wait()
 }
 
 // 分发数据
@@ -146,6 +200,11 @@ func (c *consumer) dispatch(data []byte) {
 	event, err := c.eb.deserialize(data)
 	if err != nil {
 		log.Errorf("invalid event data: %v", err)
+		return
+	}
+
+	if c.eb.opts.staleDuration > 0 && xtime.Now().Sub(event.Timestamp) > c.eb.opts.staleDuration {
+		log.Debugf("skip stale event, id: %s, topic: %s, timestamp: %v", event.ID, event.Topic, event.Timestamp)
 		return
 	}
 
