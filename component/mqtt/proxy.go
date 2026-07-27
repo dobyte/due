@@ -15,9 +15,9 @@ func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
 }
 
-// AddEventHandler 添加事件处理器
-func (p *Proxy) AddEventHandler(event Event, handler EventHandler) error {
-	return p.server.addEventHandler(event, handler)
+// AddHook 添加Hook
+func (p *Proxy) AddHook(hook Hook, config ...any) error {
+	return p.server.addHook(hook, config...)
 }
 
 // Client 获取客户端
@@ -26,7 +26,7 @@ func (p *Proxy) Client(clientID string) (*Client, bool) {
 		return nil, false
 	} else {
 		if cli, ok := p.server.server.Clients.Get(clientID); ok {
-			return &Client{cli: cli}, true
+			return cli, true
 		} else {
 			return nil, false
 		}
@@ -38,18 +38,7 @@ func (p *Proxy) Clients() (map[string]*Client, error) {
 	if p.server.server == nil {
 		return nil, errors.ErrServerClosed
 	} else {
-		clis := p.server.server.Clients.GetAll()
-
-		clients := make(map[string]*Client, len(clis))
-		for clientID, cli := range clis {
-			if clientID == mqtt.InlineClientId {
-				continue
-			}
-
-			clients[clientID] = &Client{cli: cli}
-		}
-
-		return clients, nil
+		return p.server.server.Clients.GetAll(), nil
 	}
 }
 

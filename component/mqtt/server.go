@@ -22,7 +22,7 @@ type Server struct {
 	opts   *options
 	proxy  *Proxy
 	server *mqtt.Server
-	events map[Event]EventHandler
+	hooks  []mqtt.HookLoadConfig
 }
 
 func NewServer(opts ...Option) *Server {
@@ -34,7 +34,6 @@ func NewServer(opts ...Option) *Server {
 	s := &Server{}
 	s.opts = o
 	s.proxy = newProxy(s)
-	s.events = make(map[Event]EventHandler)
 
 	return s
 }
@@ -114,9 +113,9 @@ func (s *Server) Start() {
 		})
 	}
 
-	opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
-		Hook: &eventHook{server: s},
-	})
+	for _, item := range s.hooks {
+		opts.Hooks = append(opts.Hooks, item)
+	}
 
 	s.printInfo()
 
@@ -184,13 +183,22 @@ func (s *Server) printInfo() {
 	info.PrintBoxInfo("MQTT", infos...)
 }
 
-// 添加事件处理器
-func (s *Server) addEventHandler(event Event, handler EventHandler) error {
+// 添加Hook
+func (s *Server) addHook(hook Hook, config ...any) error {
 	if s.server == nil {
-		s.events[event] = handler
+		if len(config) > 0 {
+			s.hooks = append(s.hooks, mqtt.HookLoadConfig{
+				Hook:   hook,
+				Config: config[0],
+			})
+		} else {
+			s.hooks = append(s.hooks, mqtt.HookLoadConfig{
+				Hook: hook,
+			})
+		}
 
 		return nil
 	} else {
-		return errors.ErrServerClosed
+		return errors.ErrServerStarted
 	}
 }
