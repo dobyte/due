@@ -68,7 +68,7 @@ type options struct {
 	// 默认为10秒
 	timeout time.Duration
 
-	// 心跳间隔
+	// Nacos客户端心跳间隔
 	// 默认为5秒
 	heartbeat time.Duration
 

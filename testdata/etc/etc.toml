@@ -498,8 +498,10 @@ shutdownMaxWaitTime = "0s"
         clusterName = "DEFAULT"
         # 群组名称。默认为DEFAULT_GROUP
         groupName = "DEFAULT_GROUP"
-        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3秒
-        timeout = "3s"
+        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10秒
+        timeout = "10s"
+        # Nacos客户端心跳间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5秒
+        heartbeat = "5s"
         # ACM的命名空间Id。默认为空
         namespaceId = ""
         # 当使用ACM时，需要该配置，默认为空。详见：https://help.aliyun.com/document_detail/130146.html
