@@ -5,7 +5,7 @@ import (
 )
 
 type Registry interface {
-	// Name 获取服务注册发现组件名
+	// Name 服务注册发现组件名
 	Name() string
 	// Register 注册服务实例
 	Register(ctx context.Context, ins *ServiceInstance) error
@@ -15,6 +15,8 @@ type Registry interface {
 	Watch(ctx context.Context, serviceName string) (Watcher, error)
 	// Services 获取服务实例列表
 	Services(ctx context.Context, serviceName string) ([]*ServiceInstance, error)
+	// Close 关闭服务注册发现组件
+	Close() error
 }
 
 type Discovery interface {

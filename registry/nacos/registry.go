@@ -2,11 +2,11 @@ package nacos
 
 import (
 	"context"
-	"net"
+	stdnet "net"
 	"net/url"
-	"strconv"
 	"sync"
 
+	"github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -14,22 +14,33 @@ import (
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
-	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
 const name = "nacos"
 
+const (
+	metaFieldID       = "id"
+	metaFieldName     = "name"
+	metaFieldKind     = "kind"
+	metaFieldAlias    = "alias"
+	metaFieldState    = "state"
+	metaFieldRoutes   = "routes"
+	metaFieldEvents   = "events"
+	metaFieldWeight   = "weight"
+	metaFieldServices = "services"
+	metaFieldEndpoint = "endpoint"
+	metaFieldMetadata = "metadata"
+)
+
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err        error
-	opts       *options
-	builtin    bool
-	mu1        sync.Mutex
-	watchers   sync.Map
-	mu2        sync.Mutex
-	registrars sync.Map
+	err      error
+	opts     *options
+	builtin  bool
+	mu       sync.Mutex
+	watchers sync.Map
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -42,118 +53,174 @@ func NewRegistry(opts ...Option) *Registry {
 	r.opts = o
 
 	if o.client == nil {
-		param := vo.NacosClientParam{
-			ServerConfigs: make([]constant.ServerConfig, 0, len(o.urls)),
-			ClientConfig: &constant.ClientConfig{
-				TimeoutMs:            uint64(r.opts.timeout.Microseconds()),
-				NamespaceId:          r.opts.namespaceId,
-				Endpoint:             r.opts.endpoint,
-				RegionId:             r.opts.regionId,
-				AccessKey:            r.opts.accessKey,
-				SecretKey:            r.opts.secretKey,
-				OpenKMS:              r.opts.openKMS,
-				CacheDir:             r.opts.cacheDir,
-				Username:             r.opts.username,
-				Password:             r.opts.password,
-				LogDir:               r.opts.logDir,
-				LogLevel:             r.opts.logLevel,
-				NotLoadCacheAtStart:  true,
-				UpdateCacheWhenEmpty: true,
-			},
-		}
-
-		var (
-			err      error
-			endpoint string
-		)
+		serverConfigs := make([]constant.ServerConfig, 0, len(o.urls))
 
 		for _, v := range o.urls {
-			if raw, e := url.Parse(v); e != nil {
-				err, endpoint = e, v
-			} else {
-				host, p, e := net.SplitHostPort(raw.Host)
-				if e != nil {
-					err, endpoint = e, v
-					continue
-				}
-
-				port, e := strconv.ParseUint(p, 10, 64)
-				if e != nil {
-					err, endpoint = e, v
-					continue
-				}
-
-				param.ServerConfigs = append(param.ServerConfigs, constant.ServerConfig{
-					Scheme:      raw.Scheme,
-					ContextPath: raw.Path,
-					IpAddr:      host,
-					Port:        port,
-				})
+			raw, err := url.Parse(v)
+			if err != nil {
+				log.Warnf("%s parse failed: %v", v, err)
+				continue
 			}
+
+			host, port, err := stdnet.SplitHostPort(raw.Host)
+			if err != nil {
+				log.Warnf("%s parse failed: %v", v, err)
+				continue
+			}
+
+			serverConfigs = append(serverConfigs, constant.ServerConfig{
+				Scheme:      raw.Scheme,
+				ContextPath: raw.Path,
+				IpAddr:      host,
+				Port:        xconv.Uint64(port),
+			})
 		}
 
-		if len(param.ServerConfigs) == 0 {
-			if err != nil {
-				r.err = err
-			} else {
-				r.err = errors.ErrInvalidArgument
-			}
+		if len(serverConfigs) == 0 {
+			r.err = errors.ErrInvalidArgument
 		} else {
-			if err != nil {
-				log.Warnf("%s parse failed: %v", endpoint, err)
-			}
-
-			o.client, r.err = clients.NewNamingClient(param)
 			r.builtin = true
+			o.client, r.err = clients.NewNamingClient(vo.NacosClientParam{
+				ServerConfigs: serverConfigs,
+				ClientConfig: &constant.ClientConfig{
+					TimeoutMs:            uint64(r.opts.timeout.Milliseconds()),
+					BeatInterval:         int64(r.opts.heartbeat.Milliseconds()),
+					NamespaceId:          r.opts.namespaceId,
+					Endpoint:             r.opts.endpoint,
+					RegionId:             r.opts.regionId,
+					AccessKey:            r.opts.accessKey,
+					SecretKey:            r.opts.secretKey,
+					OpenKMS:              r.opts.openKMS,
+					CacheDir:             r.opts.cacheDir,
+					Username:             r.opts.username,
+					Password:             r.opts.password,
+					LogDir:               r.opts.logDir,
+					LogLevel:             r.opts.logLevel,
+					NotLoadCacheAtStart:  true,
+					UpdateCacheWhenEmpty: true,
+					UpdateThreadNum:      20,
+				},
+			})
 		}
 	}
 
 	return r
 }
 
+// Name 服务注册发现组件名
 func (r *Registry) Name() string {
 	return name
 }
 
-func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
+// Register 注册服务实例
+func (r *Registry) Register(_ context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
 	}
 
-	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
-}
-
-func (r *Registry) doBuildRegistrar(insID string) *registrar {
-	if v, ok := r.registrars.Load(insID); ok {
-		return v.(*registrar)
+	host, port, err := net.ParseHostPort(ins.Endpoint)
+	if err != nil {
+		return err
 	}
 
-	r.mu2.Lock()
-	defer r.mu2.Unlock()
-
-	if v, ok := r.registrars.Load(insID); ok {
-		return v.(*registrar)
+	param := vo.RegisterInstanceParam{
+		Ip:          host,
+		Port:        port,
+		Enable:      true,
+		Healthy:     true,
+		Ephemeral:   true,
+		ServiceName: ins.Name,
+		ClusterName: r.opts.clusterName,
+		GroupName:   r.opts.groupName,
+		Metadata:    make(map[string]string, 11),
 	}
 
-	reg := newRegistrar(r)
+	param.Metadata[metaFieldID] = ins.ID
+	param.Metadata[metaFieldName] = ins.Name
+	param.Metadata[metaFieldKind] = ins.Kind
+	param.Metadata[metaFieldAlias] = ins.Alias
+	param.Metadata[metaFieldState] = ins.State
+	param.Metadata[metaFieldEndpoint] = ins.Endpoint
 
-	r.registrars.Store(insID, reg)
-
-	return reg
-}
-
-func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	if r.err != nil {
-		return r.err
+	if ins.Weight > 0 {
+		param.Weight = float64(ins.Weight)
+		param.Metadata[metaFieldWeight] = xconv.String(ins.Weight)
+	} else {
+		param.Weight = 1
 	}
 
-	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
-		return v.(*registrar).deregister(ctx, ins)
+	if len(ins.Routes) > 0 {
+		if routes, err := json.Marshal(ins.Routes); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
+		}
+	}
+
+	if len(ins.Events) > 0 {
+		if events, err := json.Marshal(ins.Events); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldEvents] = xconv.BytesToString(events)
+		}
+	}
+
+	if len(ins.Services) > 0 {
+		if services, err := json.Marshal(ins.Services); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldServices] = xconv.BytesToString(services)
+		}
+	}
+
+	if len(ins.Metadata) > 0 {
+		if metadata, err := json.Marshal(ins.Metadata); err != nil {
+			return err
+		} else {
+			param.Metadata[metaFieldMetadata] = xconv.BytesToString(metadata)
+		}
+	}
+
+	if ok, err := r.opts.client.RegisterInstance(param); err != nil {
+		return err
+	} else if !ok {
+		return errors.ErrServiceRegisterFailed
 	}
 
 	return nil
 }
 
+// Deregister 解注册服务实例
+func (r *Registry) Deregister(_ context.Context, ins *registry.ServiceInstance) error {
+	if r.err != nil {
+		return r.err
+	}
+
+	host, port, err := net.ParseHostPort(ins.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	ok, err := r.opts.client.DeregisterInstance(vo.DeregisterInstanceParam{
+		Ip:          host,
+		Port:        port,
+		ServiceName: ins.Name,
+		Cluster:     r.opts.clusterName,
+		GroupName:   r.opts.groupName,
+		Ephemeral:   true,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return errors.ErrServiceDeregisterFailed
+	}
+
+	return nil
+}
+
+// Watch 监听相同服务名的服务实例变化
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -171,6 +238,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	return nil, errors.ErrWatcherStopped
 }
 
+// 构建服务实例监听器
 func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
@@ -181,8 +249,8 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return nil, err
 	}
 
-	r.mu1.Lock()
-	defer r.mu1.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
@@ -198,13 +266,16 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 	return mgr, nil
 }
 
+// Services 获取服务实例列表
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		if services, err := v.(*watcherMgr).services(); err == nil {
+		if services, err := v.(*watcherMgr).services(); err != nil {
+			log.Warnf("load %s services failed: %v", serviceName, err)
+		} else {
 			return services, nil
 		}
 	}
@@ -212,25 +283,27 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	return r.services(ctx, serviceName)
 }
 
+// Close 关闭服务注册发现
 func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
 	}
 
-	r.registrars.Range(func(key, value any) bool {
-		value.(*registrar).stop()
-		r.registrars.Delete(key)
-		return true
-	})
-
+	r.mu.Lock()
 	r.watchers.Range(func(key, value any) bool {
 		value.(*watcherMgr).stop()
 		return true
 	})
+	r.mu.Unlock()
+
+	if r.builtin {
+		r.opts.client.CloseClient()
+	}
 
 	return nil
 }
 
+// 获取服务实例列表
 func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	instances, err := r.opts.client.SelectInstances(vo.SelectInstancesParam{
 		ServiceName: serviceName,
@@ -238,63 +311,9 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 		GroupName:   r.opts.groupName,
 		HealthyOnly: true,
 	})
-	if err != nil {
-		if instances == nil {
-			return nil, err
-		} else {
-			return nil, nil
-		}
+	if err != nil && instances == nil {
+		return nil, err
 	}
 
 	return parseInstances(instances)
-}
-
-func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, error) {
-	services := make([]*registry.ServiceInstance, 0, len(instances))
-	for _, instance := range instances {
-		if !instance.Healthy || !instance.Enable {
-			continue
-		}
-
-		ins := &registry.ServiceInstance{}
-		ins.ID = instance.Metadata[metaFieldID]
-		ins.Name = instance.Metadata[metaFieldName]
-		ins.Kind = instance.Metadata[metaFieldKind]
-		ins.Alias = instance.Metadata[metaFieldAlias]
-		ins.State = instance.Metadata[metaFieldState]
-		ins.Endpoint = instance.Metadata[metaFieldEndpoint]
-		ins.Routes = make([]registry.Route, 0)
-		ins.Events = make([]int, 0)
-		ins.Services = make([]string, 0)
-		ins.Weight = xconv.Int(instance.Metadata[metaFieldWeight])
-		ins.Metadata = make(map[string]string)
-
-		if v := instance.Metadata[metaFieldRoutes]; v != "" {
-			if err := json.Unmarshal([]byte(v), &ins.Routes); err != nil {
-				return nil, err
-			}
-		}
-
-		if v := instance.Metadata[metaFieldEvents]; v != "" {
-			if err := json.Unmarshal([]byte(v), &ins.Events); err != nil {
-				return nil, err
-			}
-		}
-
-		if v := instance.Metadata[metaFieldServices]; v != "" {
-			if err := json.Unmarshal([]byte(v), &ins.Services); err != nil {
-				return nil, err
-			}
-		}
-
-		if v := instance.Metadata[metaFieldMetadata]; v != "" {
-			if err := json.Unmarshal([]byte(v), &ins.Metadata); err != nil {
-				return nil, err
-			}
-		}
-
-		services = append(services, ins)
-	}
-
-	return services, nil
 }

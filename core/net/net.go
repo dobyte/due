@@ -2,6 +2,7 @@ package net
 
 import (
 	"net"
+	"net/url"
 	"strconv"
 
 	"github.com/dobyte/due/v2/errors"
@@ -138,4 +139,24 @@ func FulfillAddr(addr string) string {
 	}
 
 	return net.JoinHostPort(host, port)
+}
+
+// ParseHostPort 解析主机端口
+func ParseHostPort(endpoint string) (string, uint64, error) {
+	raw, err := url.Parse(endpoint)
+	if err != nil {
+		return "", 0, err
+	}
+
+	host, p, err := net.SplitHostPort(raw.Host)
+	if err != nil {
+		return "", 0, err
+	}
+
+	port, err := strconv.ParseUint(p, 10, 64)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return host, port, nil
 }

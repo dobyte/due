@@ -1,6 +1,7 @@
 package nacos
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 
@@ -95,7 +96,6 @@ type watcherMgr struct {
 	rw               sync.RWMutex
 	watchers         map[int64]*watcher
 	stopped          atomic.Bool
-	err              error
 	serviceInstances []*registry.ServiceInstance
 }
 
@@ -225,7 +225,26 @@ func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
 	for _, ins := range wm.serviceInstances {
-		services = append(services, ins)
+		service := &registry.ServiceInstance{
+			ID:       ins.ID,
+			Name:     ins.Name,
+			Kind:     ins.Kind,
+			Alias:    ins.Alias,
+			State:    ins.State,
+			Events:   make([]int, len(ins.Events)),
+			Routes:   make([]registry.Route, len(ins.Routes)),
+			Services: make([]string, len(ins.Services)),
+			Endpoint: ins.Endpoint,
+			Weight:   ins.Weight,
+			Metadata: make(map[string]string, len(ins.Metadata)),
+		}
+
+		copy(service.Events, ins.Events)
+		copy(service.Routes, ins.Routes)
+		copy(service.Services, ins.Services)
+		maps.Copy(service.Metadata, ins.Metadata)
+
+		services = append(services, service)
 	}
 
 	return services
@@ -237,10 +256,6 @@ func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 
 	if wm.stopped.Load() {
 		return nil, errors.ErrWatcherStopped
-	}
-
-	if wm.err != nil {
-		return nil, wm.err
 	}
 
 	return wm.loadServices(), nil

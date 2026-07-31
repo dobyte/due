@@ -8,43 +8,41 @@ import (
 )
 
 const (
-	defaultUrl           = "http://127.0.0.1:8848/nacos"
-	defaultClusterName   = "DEFAULT"
-	defaultGroupName     = "DEFAULT_GROUP"
-	defaultTimeout       = "3s"
-	defaultNamespaceId   = ""
-	defaultEndpoint      = ""
-	defaultRegionId      = ""
-	defaultAccessKey     = ""
-	defaultSecretKey     = ""
-	defaultOpenKMS       = false
-	defaultCacheDir      = "./run/nacos/naming/cache"
-	defaultUsername      = ""
-	defaultPassword      = ""
-	defaultLogDir        = "./run/nacos/naming/log"
-	defaultLogLevel      = "info"
-	defaultRetryTimes    = 3
-	defaultRetryInterval = "10s"
+	defaultUrl         = "http://127.0.0.1:8848/nacos"
+	defaultClusterName = "DEFAULT"
+	defaultGroupName   = "DEFAULT_GROUP"
+	defaultTimeout     = "10s"
+	defaultHeartbeat   = "5s"
+	defaultNamespaceId = ""
+	defaultEndpoint    = ""
+	defaultRegionId    = ""
+	defaultAccessKey   = ""
+	defaultSecretKey   = ""
+	defaultOpenKMS     = false
+	defaultCacheDir    = "./run/nacos/naming/cache"
+	defaultUsername    = ""
+	defaultPassword    = ""
+	defaultLogDir      = "./run/nacos/naming/log"
+	defaultLogLevel    = "info"
 )
 
 const (
-	defaultUrlsKey          = "etc.registry.nacos.urls"
-	defaultClusterNameKey   = "etc.registry.nacos.clusterName"
-	defaultGroupNameKey     = "etc.registry.nacos.groupName"
-	defaultTimeoutKey       = "etc.registry.nacos.timeout"
-	defaultNamespaceIdKey   = "etc.registry.nacos.namespaceId"
-	defaultEndpointKey      = "etc.registry.nacos.endpoint"
-	defaultRegionIdKey      = "etc.registry.nacos.regionId"
-	defaultAccessKeyKey     = "etc.registry.nacos.accessKey"
-	defaultSecretKeyKey     = "etc.registry.nacos.secretKey"
-	defaultOpenKMSKey       = "etc.registry.nacos.openKMS"
-	defaultCacheDirKey      = "etc.registry.nacos.cacheDir"
-	defaultUsernameKey      = "etc.registry.nacos.username"
-	defaultPasswordKey      = "etc.registry.nacos.password"
-	defaultLogDirKey        = "etc.registry.nacos.logDir"
-	defaultLogLevelKey      = "etc.registry.nacos.logLevel"
-	defaultRetryTimesKey    = "etc.registry.nacos.retryTimes"
-	defaultRetryIntervalKey = "etc.registry.nacos.retryInterval"
+	defaultUrlsKey        = "etc.registry.nacos.urls"
+	defaultClusterNameKey = "etc.registry.nacos.clusterName"
+	defaultGroupNameKey   = "etc.registry.nacos.groupName"
+	defaultTimeoutKey     = "etc.registry.nacos.timeout"
+	defaultHeartbeatKey   = "etc.registry.nacos.heartbeat"
+	defaultNamespaceIdKey = "etc.registry.nacos.namespaceId"
+	defaultEndpointKey    = "etc.registry.nacos.endpoint"
+	defaultRegionIdKey    = "etc.registry.nacos.regionId"
+	defaultAccessKeyKey   = "etc.registry.nacos.accessKey"
+	defaultSecretKeyKey   = "etc.registry.nacos.secretKey"
+	defaultOpenKMSKey     = "etc.registry.nacos.openKMS"
+	defaultCacheDirKey    = "etc.registry.nacos.cacheDir"
+	defaultUsernameKey    = "etc.registry.nacos.username"
+	defaultPasswordKey    = "etc.registry.nacos.password"
+	defaultLogDirKey      = "etc.registry.nacos.logDir"
+	defaultLogLevelKey    = "etc.registry.nacos.logLevel"
 )
 
 type Option func(o *options)
@@ -67,8 +65,12 @@ type options struct {
 	groupName string
 
 	// 请求Nacos服务端超时时间
-	// 默认为3秒
+	// 默认为10秒
 	timeout time.Duration
+
+	// 心跳间隔
+	// 默认为5秒
+	heartbeat time.Duration
 
 	// ACM的命名空间Id
 	// 默认为空
@@ -122,6 +124,7 @@ func defaultOptions() *options {
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		heartbeat:   etc.Get(defaultHeartbeatKey, defaultHeartbeat).Duration(),
 		namespaceId: etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
 		endpoint:    etc.Get(defaultEndpointKey, defaultEndpoint).String(),
 		regionId:    etc.Get(defaultRegionIdKey, defaultRegionId).String(),
@@ -159,6 +162,11 @@ func WithGroupName(groupName string) Option {
 // WithTimeout 设置请求Nacos服务端超时时间
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
+}
+
+// WithHeartbeat 设置心跳间隔
+func WithHeartbeat(heartbeat time.Duration) Option {
+	return func(o *options) { o.heartbeat = heartbeat }
 }
 
 // WithNamespaceId 设置ACM的命名空间Id
