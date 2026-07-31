@@ -108,6 +108,13 @@ func (r *registrar) stop() {
 		return
 	}
 
+	r.cleanup()
+
+	r.wg.Wait()
+}
+
+// 资源清理（不 wg.Wait，调用者需自行处理 goroutine 等待）
+func (r *registrar) cleanup() {
 	r.mu.Lock()
 	cancel := r.cancel
 	leaseID := r.leaseID
@@ -118,8 +125,6 @@ func (r *registrar) stop() {
 	if cancel != nil {
 		cancel()
 	}
-
-	r.wg.Wait()
 
 	if leaseID != 0 {
 		r.revoke(leaseID)
@@ -179,7 +184,7 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 
 				if err != nil {
 					select {
-					case <-time.After(r.registry.opts.retryInterval):
+					case <-time.After(backoff(i)):
 						log.Warnf("etcd put kv failed, retry %d times, err: %v", i+1, err)
 					case <-ctx.Done():
 						return
@@ -189,7 +194,7 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 						r.revoke(newLeaseID)
 
 						select {
-						case <-time.After(r.registry.opts.retryInterval):
+						case <-time.After(backoff(i)):
 							log.Warnf("etcd keepalive failed, retry %d times, err: %v", i+1, err)
 						case <-ctx.Done():
 							return
@@ -217,14 +222,11 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 			}
 
 			if !ok {
-				r.mu.Lock()
-				leaseID := r.leaseID
-				r.leaseID = 0
-				r.mu.Unlock()
-
-				if leaseID != 0 {
-					r.revoke(leaseID)
+				if !r.stopped.CompareAndSwap(false, true) {
+					return
 				}
+
+				r.cleanup()
 
 				log.Errorf("etcd keepalive failed after %d retries, service registration lost", r.registry.opts.retryTimes)
 				return

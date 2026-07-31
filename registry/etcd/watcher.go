@@ -277,7 +277,7 @@ func (wm *watcherMgr) resyncWithRetry() bool {
 		select {
 		case <-wm.ctx.Done():
 			return false
-		case <-time.After(wm.registry.opts.retryInterval):
+		case <-time.After(backoff(i)):
 			if wm.stopped.Load() {
 				return false
 			}
