@@ -91,13 +91,13 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 // 解注册服务
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	defer r.stop()
+
 	key := fmt.Sprintf("/%s/%s/%s", r.registry.opts.namespace, ins.Name, ins.ID)
 
 	if _, err := r.kv.Delete(ctx, key); err != nil {
 		return err
 	}
-
-	r.stop()
 
 	return nil
 }
@@ -126,8 +126,12 @@ func (r *registrar) stop() {
 	}
 
 	if r.lease != nil {
-		r.lease.Close()
+		if err := r.lease.Close(); err != nil {
+			log.Warnf("close lease failed: %v", err)
+		}
 	}
+
+	r.registry.registrars.Delete(r.insID)
 }
 
 // 写入KV

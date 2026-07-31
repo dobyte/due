@@ -9,6 +9,7 @@ package etcd
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -339,10 +340,28 @@ func (wm *watcherMgr) loadWatchers() []*watcher {
 
 // 返回所有服务实例
 func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
-	services := make([]*registry.ServiceInstance, 0)
+	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
-	for k := range wm.serviceInstances {
-		service := wm.serviceInstances[k]
+	for _, ins := range wm.serviceInstances {
+		service := &registry.ServiceInstance{
+			ID:       ins.ID,
+			Name:     ins.Name,
+			Kind:     ins.Kind,
+			Alias:    ins.Alias,
+			State:    ins.State,
+			Events:   make([]int, len(ins.Events)),
+			Routes:   make([]registry.Route, len(ins.Routes)),
+			Services: make([]string, len(ins.Services)),
+			Endpoint: ins.Endpoint,
+			Weight:   ins.Weight,
+			Metadata: make(map[string]string, len(ins.Metadata)),
+		}
+
+		copy(service.Events, ins.Events)
+		copy(service.Routes, ins.Routes)
+		copy(service.Services, ins.Services)
+		maps.Copy(service.Metadata, ins.Metadata)
+
 		services = append(services, service)
 	}
 

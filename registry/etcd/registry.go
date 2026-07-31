@@ -92,7 +92,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return r.err
 	}
 
-	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
+	if v, ok := r.registrars.Load(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
@@ -165,7 +165,6 @@ func (r *Registry) Close() error {
 
 	r.registrars.Range(func(key, value any) bool {
 		value.(*registrar).stop()
-		r.registrars.Delete(key)
 		return true
 	})
 
