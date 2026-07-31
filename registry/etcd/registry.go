@@ -79,7 +79,7 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
-	reg := newRegistrar(r)
+	reg := newRegistrar(r, insID)
 
 	r.registrars.Store(insID, reg)
 

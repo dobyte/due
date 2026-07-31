@@ -8,7 +8,6 @@
 package etcd
 
 import (
-	"context"
 	"time"
 
 	"github.com/dobyte/due/v2/etc"
@@ -52,10 +51,6 @@ type options struct {
 	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
 	client *clientv3.Client
 
-	// 上下文
-	// 默认context.Background
-	ctx context.Context
-
 	// 命名空间
 	// 默认为services
 	namespace string
@@ -85,7 +80,6 @@ type options struct {
 
 func defaultOptions() *options {
 	return &options{
-		ctx:           context.Background(),
 		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
 		dialTimeout:   etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
 		namespace:     etc.Get(defaultNamespaceKey, defaultNamespace).String(),
@@ -111,11 +105,6 @@ func WithDialTimeout(dialTimeout time.Duration) Option {
 // WithClient 设置外部客户端
 func WithClient(client *clientv3.Client) Option {
 	return func(o *options) { o.client = client }
-}
-
-// WithContext 设置上下文
-func WithContext(ctx context.Context) Option {
-	return func(o *options) { o.ctx = ctx }
 }
 
 // WithNamespace 设置命名空间

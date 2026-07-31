@@ -22,6 +22,7 @@ import (
 
 type registrar struct {
 	registry *Registry
+	insID    string
 	ctx      context.Context
 	cancel   context.CancelFunc
 	kv       clientv3.KV
@@ -32,9 +33,10 @@ type registrar struct {
 	wg       sync.WaitGroup
 }
 
-func newRegistrar(registry *Registry) *registrar {
+func newRegistrar(registry *Registry, insID string) *registrar {
 	r := &registrar{}
 	r.kv = clientv3.NewKV(registry.opts.client)
+	r.insID = insID
 	r.lease = clientv3.NewLease(registry.opts.client)
 	r.registry = registry
 
