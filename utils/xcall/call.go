@@ -2,9 +2,10 @@ package xcall
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/log"
 	"runtime"
 	"time"
+
+	"github.com/dobyte/due/v2/log"
 )
 
 // Call 安全地调用函数
@@ -30,6 +31,33 @@ func Call(fn func()) {
 // Go 执行单个协程
 func Go(fn func()) {
 	go Call(fn)
+}
+
+// Backoff 指数退避调用函数
+func Backoff(ctx context.Context, fn func(attempt int) error, retry int, baseDelay, maxDelay time.Duration) (err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			switch err.(type) {
+			case runtime.Error:
+				log.Panic(err)
+			default:
+				log.Panicf("panic error: %v", err)
+			}
+		}
+	}()
+
+	for i := range retry {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(min((1<<i)*baseDelay, maxDelay)):
+			if err = fn(i + 1); err == nil {
+				return
+			}
+		}
+	}
+
+	return
 }
 
 // GoWithTimeout 执行多个协程（附带超时时间）
