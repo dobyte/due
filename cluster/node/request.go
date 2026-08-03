@@ -150,7 +150,7 @@ func (r *request) Clone() Context {
 }
 
 // Task 投递任务
-// 推荐使用此方法替代task.AddTask和go func
+// 推荐使用此方法替代task.Add和go func
 // 调用此方法会自动取消Defer调用栈的所有执行函数
 func (r *request) Task(fn func(ctx Context)) {
 	version := r.incrVersion()
