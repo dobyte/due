@@ -113,44 +113,46 @@ func newWatcherMgr(registry *Registry, serviceName string, services []*registry.
 	return wm, nil
 }
 
+func (wm *watcherMgr) callback(instances []model.Instance, err error) {
+	if err != nil {
+		log.Warnf("%s subscribe callback failed: %v", wm.serviceName, err)
+		return
+	}
+
+	services, err := parseInstances(instances)
+	if err != nil {
+		log.Warnf("%s instances parse failed: %v", wm.serviceName, err)
+		return
+	}
+
+	wm.rw.Lock()
+	wm.serviceInstances = services
+	wm.rw.Unlock()
+
+	wm.broadcast()
+}
+
 func (wm *watcherMgr) subscribe() error {
 	return wm.registry.opts.client.Subscribe(&vo.SubscribeParam{
-		ServiceName: wm.serviceName,
-		Clusters:    []string{wm.registry.opts.clusterName},
-		GroupName:   wm.registry.opts.groupName,
-		SubscribeCallback: func(instances []model.Instance, err error) {
-			if err != nil {
-				log.Warnf("%s subscribe callback failed: %v", wm.serviceName, err)
-				return
-			}
-
-			services, err := parseInstances(instances)
-			if err != nil {
-				log.Warnf("%s instances parse failed: %v", wm.serviceName, err)
-				return
-			}
-
-			wm.rw.Lock()
-			wm.serviceInstances = services
-			wm.rw.Unlock()
-
-			wm.broadcast()
-		},
+		ServiceName:       wm.serviceName,
+		Clusters:          []string{wm.registry.opts.clusterName},
+		GroupName:         wm.registry.opts.groupName,
+		SubscribeCallback: wm.callback,
 	})
 }
 
-func (wm *watcherMgr) fork() registry.Watcher {
+func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
 	if wm.stopped.Load() {
-		return nil
+		return nil, errors.ErrWatcherStopped
 	}
 
 	w := newWatcher(wm, wm.idx.Add(1))
 	wm.watchers[w.idx] = w
 
-	return w
+	return w, nil
 }
 
 func (wm *watcherMgr) recycle(idx int64) {
@@ -192,9 +194,10 @@ func (wm *watcherMgr) stop() {
 
 func (wm *watcherMgr) unsubscribe() {
 	if err := wm.registry.opts.client.Unsubscribe(&vo.SubscribeParam{
-		ServiceName: wm.serviceName,
-		Clusters:    []string{wm.registry.opts.clusterName},
-		GroupName:   wm.registry.opts.groupName,
+		ServiceName:       wm.serviceName,
+		Clusters:          []string{wm.registry.opts.clusterName},
+		GroupName:         wm.registry.opts.groupName,
+		SubscribeCallback: wm.callback,
 	}); err != nil {
 		log.Warnf("%s unsubscribe failed: %v", wm.serviceName, err)
 	}

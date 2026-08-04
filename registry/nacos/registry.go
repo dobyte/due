@@ -4,6 +4,7 @@ import (
 	"context"
 	stdnet "net"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/dobyte/due/v2/core/net"
@@ -56,6 +57,9 @@ func NewRegistry(opts ...Option) *Registry {
 		serverConfigs := make([]constant.ServerConfig, 0, len(o.urls))
 
 		for _, v := range o.urls {
+			if !strings.Contains(v, "://") {
+				v = "http://" + v
+			}
 			raw, err := url.Parse(v)
 			if err != nil {
 				log.Warnf("%s parse failed: %v", v, err)
@@ -231,11 +235,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, err
 	}
 
-	if w := mgr.fork(); w != nil {
-		return w, nil
-	}
-
-	return nil, errors.ErrWatcherStopped
+	return mgr.fork()
 }
 
 // 构建服务实例监听器
