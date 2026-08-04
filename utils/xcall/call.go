@@ -34,7 +34,7 @@ func Go(fn func()) {
 }
 
 // Backoff 指数退避调用函数
-func Backoff(ctx context.Context, fn func(int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
+func Backoff(ctx context.Context, fn func(ctx context.Context, attempt int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
 	defer func() {
 		if err := recover(); err != nil {
 			switch err.(type) {
@@ -56,7 +56,7 @@ func Backoff(ctx context.Context, fn func(int) (bool, error), retry int, baseDel
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(min((1<<i)*baseDelay, maxDelay)):
-			if next, err = fn(i + 1); !next {
+			if next, err = fn(ctx, i+1); !next {
 				return err
 			}
 		}
