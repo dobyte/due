@@ -17,6 +17,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xcall"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -173,53 +174,40 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 
 	for {
 		if !ok {
-			for i := 0; i < r.registry.opts.retryTimes; i++ {
-				if ctx.Err() != nil {
-					return
-				}
-
+			xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
 				tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
 				newLeaseID, err := r.put(tctx, key, value)
 				tcancel()
 
 				if err != nil {
-					select {
-					case <-time.After(backoff(i)):
-						log.Warnf("etcd put kv failed, retry %d times, err: %v", i+1, err)
-					case <-ctx.Done():
-						return
-					}
-				} else {
-					if chKA, err = r.lease.KeepAlive(ctx, newLeaseID); err != nil {
-						r.revoke(newLeaseID)
-
-						select {
-						case <-time.After(backoff(i)):
-							log.Warnf("etcd keepalive failed, retry %d times, err: %v", i+1, err)
-						case <-ctx.Done():
-							return
-						}
-					} else {
-						r.mu.Lock()
-						if r.stopped.Load() {
-							r.mu.Unlock()
-							r.revoke(newLeaseID)
-							return
-						}
-
-						oldLeaseID := r.leaseID
-						r.leaseID = newLeaseID
-						r.mu.Unlock()
-
-						if oldLeaseID != 0 {
-							r.revoke(oldLeaseID)
-						}
-
-						ok = true
-						break
-					}
+					log.Warnf("etcd put kv failed, retry %d times, err: %v", attempt+1, err)
+					return true, nil
 				}
-			}
+
+				if chKA, err = r.lease.KeepAlive(ctx, newLeaseID); err != nil {
+					log.Warnf("etcd keepalive failed, retry %d times, err: %v", attempt+1, err)
+					return true, nil
+				}
+
+				r.mu.Lock()
+				if r.stopped.Load() {
+					r.mu.Unlock()
+					r.revoke(newLeaseID)
+					return false, nil
+				}
+
+				oldLeaseID := r.leaseID
+				r.leaseID = newLeaseID
+				r.mu.Unlock()
+
+				if oldLeaseID != 0 {
+					r.revoke(oldLeaseID)
+				}
+
+				ok = true
+
+				return false, nil
+			}, r.registry.opts.retryTimes, 100*time.Millisecond, 1000*time.Millisecond)
 
 			if !ok {
 				if !r.stopped.CompareAndSwap(false, true) {
