@@ -34,7 +34,7 @@ func Go(fn func()) {
 }
 
 // Backoff 指数退避调用函数
-func Backoff(ctx context.Context, fn func(attempt int) error, retry int, baseDelay, maxDelay time.Duration) (err error) {
+func Backoff(ctx context.Context, fn func(attempt int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
 	defer func() {
 		if err := recover(); err != nil {
 			switch err.(type) {
@@ -46,18 +46,23 @@ func Backoff(ctx context.Context, fn func(attempt int) error, retry int, baseDel
 		}
 	}()
 
+	var (
+		err  error
+		next bool
+	)
+
 	for i := range retry {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(min((1<<i)*baseDelay, maxDelay)):
-			if err = fn(i + 1); err == nil {
-				return
+			if next, err = fn(i + 1); !next {
+				return err
 			}
 		}
 	}
 
-	return
+	return err
 }
 
 // GoWithTimeout 执行多个协程（附带超时时间）

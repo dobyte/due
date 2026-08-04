@@ -11,13 +11,11 @@ import (
 )
 
 func TestBackoff(t *testing.T) {
-	xcall.Backoff(context.Background(), func(attempt int) error {
+	err := xcall.Backoff(context.Background(), func(attempt int) (bool, error) {
 		fmt.Printf("attempt: %d\n", attempt)
 
-		if attempt == 5 {
-			return nil
-		}
-
-		return errors.New("backoff test error")
+		return true, errors.New("backoff test error")
 	}, 5, 100*time.Millisecond, 1000*time.Millisecond)
+
+	t.Logf("err: %v", err)
 }
