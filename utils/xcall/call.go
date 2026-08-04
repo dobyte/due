@@ -34,7 +34,7 @@ func Go(fn func()) {
 }
 
 // Backoff 指数退避调用函数
-func Backoff(ctx context.Context, fn func(attempt int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
+func Backoff(ctx context.Context, fn func(int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
 	defer func() {
 		if err := recover(); err != nil {
 			switch err.(type) {
