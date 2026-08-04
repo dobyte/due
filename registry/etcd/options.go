@@ -15,25 +15,23 @@ import (
 )
 
 const (
-	defaultAddr          = "127.0.0.1:2379"
-	defaultDialTimeout   = "5s"
-	defaultNamespace     = "services"
-	defaultTimeout       = "3s"
-	defaultLeaseTTL      = "15s"
-	defaultRetryTimes    = 3
-	defaultRetryInterval = "10s"
+	defaultAddr        = "127.0.0.1:2379"
+	defaultDialTimeout = "5s"
+	defaultNamespace   = "services"
+	defaultTimeout     = "3s"
+	defaultLeaseTTL    = "15s"
+	defaultRetryTimes  = 3
 )
 
 const (
-	defaultAddrsKey         = "etc.registry.etcd.addrs"
-	defaultDialTimeoutKey   = "etc.registry.etcd.dialTimeout"
-	defaultNamespaceKey     = "etc.registry.etcd.namespace"
-	defaultTimeoutKey       = "etc.registry.etcd.timeout"
-	defaultUsernameKey      = "etc.registry.etcd.username"
-	defaultPasswordKey      = "etc.registry.etcd.password"
-	defaultLeaseTTLKey      = "etc.registry.etcd.leaseTTL"
-	defaultRetryTimesKey    = "etc.registry.etcd.retryTimes"
-	defaultRetryIntervalKey = "etc.registry.etcd.retryInterval"
+	defaultAddrsKey       = "etc.registry.etcd.addrs"
+	defaultDialTimeoutKey = "etc.registry.etcd.dialTimeout"
+	defaultNamespaceKey   = "etc.registry.etcd.namespace"
+	defaultTimeoutKey     = "etc.registry.etcd.timeout"
+	defaultUsernameKey    = "etc.registry.etcd.username"
+	defaultPasswordKey    = "etc.registry.etcd.password"
+	defaultLeaseTTLKey    = "etc.registry.etcd.leaseTTL"
+	defaultRetryTimesKey  = "etc.registry.etcd.retryTimes"
 )
 
 type Option func(o *options)
@@ -72,23 +70,18 @@ type options struct {
 	// 心跳重试次数
 	// 默认为3次
 	retryTimes int
-
-	// 心跳重试间隔
-	// 默认为10秒
-	retryInterval time.Duration
 }
 
 func defaultOptions() *options {
 	return &options{
-		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		dialTimeout:   etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
-		namespace:     etc.Get(defaultNamespaceKey, defaultNamespace).String(),
-		timeout:       etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
-		username:      etc.Get(defaultUsernameKey).String(),
-		password:      etc.Get(defaultPasswordKey).String(),
-		leaseTTL:      etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
-		retryTimes:    etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
-		retryInterval: etc.Get(defaultRetryIntervalKey, defaultRetryInterval).Duration(),
+		addrs:       etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		dialTimeout: etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
+		namespace:   etc.Get(defaultNamespaceKey, defaultNamespace).String(),
+		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		username:    etc.Get(defaultUsernameKey).String(),
+		password:    etc.Get(defaultPasswordKey).String(),
+		leaseTTL:    etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
+		retryTimes:  etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 	}
 }
 
@@ -135,9 +128,4 @@ func WithLeaseTTL(leaseTTL time.Duration) Option {
 // WithRetryTimes 设置心跳重试次数
 func WithRetryTimes(retryTimes int) Option {
 	return func(o *options) { o.retryTimes = retryTimes }
-}
-
-// WithRetryInterval 设置心跳重试间隔时间
-func WithRetryInterval(retryInterval time.Duration) Option {
-	return func(o *options) { o.retryInterval = retryInterval }
 }

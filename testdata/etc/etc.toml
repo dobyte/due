@@ -407,8 +407,6 @@ shutdownMaxWaitTime = "0s"
         leaseTTL = "15s"
         # 心跳重试次数，默认为3
         retryTimes = 3
-        # 心跳重试间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-        retryInterval = "10s"
     # consule注册中心
     [registry.consul]
         # 客户端连接地址，默认为127.0.0.1:8500
