@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 const (
@@ -137,18 +138,18 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 	return wm
 }
 
-func (wm *watcherMgr) fork() registry.Watcher {
+func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
 	if wm.stopped.Load() {
-		return nil
+		return nil, errors.ErrWatcherStopped
 	}
 
 	w := newWatcher(wm, wm.idx.Add(1))
 	wm.watchers[w.idx] = w
 
-	return w
+	return w, nil
 }
 
 func (wm *watcherMgr) recycle(idx int64) {
@@ -222,35 +223,30 @@ func (wm *watcherMgr) watchLoop() {
 }
 
 func (wm *watcherMgr) resyncWithRetry() bool {
-	for i := 0; i < wm.registry.opts.retryTimes; i++ {
-		select {
-		case <-wm.ctx.Done():
-			return false
-		case <-time.After(wm.registry.opts.retryInterval):
-			if wm.stopped.Load() {
-				return false
-			}
-
-			ctx, cancel := context.WithTimeout(wm.ctx, wm.registry.opts.timeout)
-			services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true)
-			cancel()
-			if err != nil {
-				log.Warnf("consul watch resync failed, retry %d times, err: %v", i+1, err)
-				continue
-			}
-
-			wm.rw.Lock()
-			wm.serviceInstances = services
-			wm.serviceWaitIndex = index
-			wm.rw.Unlock()
-
-			wm.broadcast()
-
-			return true
+	err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
+		if wm.stopped.Load() {
+			return false, errors.ErrWatcherStopped
 		}
-	}
 
-	return false
+		ctx, cancel := context.WithTimeout(ctx, wm.registry.opts.timeout)
+		services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true)
+		cancel()
+		if err != nil {
+			log.Warnf("consul watch resync failed, retry %d times, err: %v", attempt, err)
+			return true, err
+		}
+
+		wm.rw.Lock()
+		wm.serviceInstances = services
+		wm.serviceWaitIndex = index
+		wm.rw.Unlock()
+
+		wm.broadcast()
+
+		return false, nil
+	}, wm.registry.opts.retryTimes, 100*time.Millisecond, 3*time.Second)
+
+	return err == nil
 }
 
 func (wm *watcherMgr) broadcast() {

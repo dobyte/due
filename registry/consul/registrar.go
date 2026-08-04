@@ -14,6 +14,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
 )
@@ -59,8 +60,10 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	oldCancel := r.cancel
-	r.ctx, r.cancel = context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	r.insID = insID
+	r.ctx = ctx
+	r.cancel = cancel
 
 	if r.registry.opts.enableHeartbeatCheck {
 		r.wg.Add(1)
@@ -73,7 +76,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	if r.registry.opts.enableHeartbeatCheck {
-		go r.heartbeat(r.ctx, insID)
+		go r.heartbeat(ctx, insID)
 	}
 
 	return nil
@@ -205,25 +208,16 @@ func (r *registrar) heartbeat(ctx context.Context, insID string) {
 
 	for {
 		if !ok {
-			for i := 0; i < r.registry.opts.retryTimes; i++ {
-				if ctx.Err() != nil {
-					return
+			err = xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
+				if err = r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing); err != nil {
+					log.Warnf("consul heartbeat failed, retry %d times, err: %v", attempt, err)
+					return true, err
 				}
 
-				err = r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing)
+				return false, nil
+			}, r.registry.opts.retryTimes, 100*time.Millisecond, time.Second)
 
-				if err != nil {
-					select {
-					case <-time.After(r.registry.opts.retryInterval):
-						log.Warnf("consul heartbeat failed, retry %d times, err: %v", i+1, err)
-					case <-ctx.Done():
-						return
-					}
-				} else {
-					ok = true
-					break
-				}
-			}
+			ok = err == nil
 
 			if !ok {
 				log.Errorf("consul heartbeat failed after %d retries", r.registry.opts.retryTimes)

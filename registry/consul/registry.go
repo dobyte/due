@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/encoding/json"
-	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
@@ -106,11 +105,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, err
 	}
 
-	if w := mgr.fork(); w != nil {
-		return w, nil
-	}
-
-	return nil, errors.ErrWatcherStopped
+	return mgr.fork()
 }
 
 // 构建服务监听器管理器
@@ -183,7 +178,8 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 		WaitIndex: waitIndex,
 		WaitTime:  60 * time.Second,
 	}
-	opts.WithContext(ctx)
+
+	opts = opts.WithContext(ctx)
 
 	entries, meta, err := r.opts.client.Health().Service(serviceName, "", passingOnly, opts)
 	if err != nil {
