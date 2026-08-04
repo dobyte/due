@@ -18,6 +18,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -160,11 +161,21 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 				wm.rw.Lock()
 				wm.err = errors.ErrWatcherStopped
 				watchers := wm.loadWatchers()
-				wm.rw.Unlock()
 
-				for _, w := range watchers {
-					w.Stop()
+				if wm.stopped.CompareAndSwap(false, true) {
+					wm.registry.watchers.Delete(wm.serviceName)
+					wm.rw.Unlock()
+
+					for _, w := range watchers {
+						w.Stop()
+					}
+
+					wm.cancel()
+					wm.watcher.Close()
+					return
 				}
+
+				wm.rw.Unlock()
 				return
 			}
 		}
@@ -174,18 +185,18 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 }
 
 // 创建新监听器
-func (wm *watcherMgr) fork() registry.Watcher {
+func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
 	if wm.stopped.Load() {
-		return nil
+		return nil, errors.ErrWatcherStopped
 	}
 
 	w := newWatcher(wm, wm.idx.Add(1))
 	wm.watchers[w.idx] = w
 
-	return w
+	return w, nil
 }
 
 // 回收监听器
@@ -273,46 +284,41 @@ func (wm *watcherMgr) watchLoop() {
 
 // 全量重连并重试
 func (wm *watcherMgr) resyncWithRetry() bool {
-	for i := 0; i < wm.registry.opts.retryTimes; i++ {
-		select {
-		case <-wm.ctx.Done():
-			return false
-		case <-time.After(backoff(i)):
-			if wm.stopped.Load() {
-				return false
-			}
-
-			ctx, cancel := context.WithTimeout(wm.ctx, wm.registry.opts.timeout)
-			res, err := wm.registry.opts.client.Get(ctx, wm.watchKey, clientv3.WithPrefix())
-			cancel()
-			if err != nil {
-				log.Warnf("etcd watch resync failed, retry %d times, err: %v", i+1, err)
-				continue
-			}
-
-			wm.rw.Lock()
-			wm.serviceInstances = make(map[string]*registry.ServiceInstance)
-			for _, kv := range res.Kvs {
-				if service, err := unmarshal(kv.Value); err == nil {
-					wm.serviceInstances[service.ID] = service
-				}
-			}
-			wm.rw.Unlock()
-
-			wm.broadcast()
-
-			wm.watchChan = wm.watcher.Watch(
-				wm.ctx,
-				wm.watchKey,
-				clientv3.WithPrefix(),
-				clientv3.WithRev(res.Header.Revision+1),
-			)
-
-			return true
+	err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
+		if wm.stopped.Load() {
+			return false, errors.ErrWatcherStopped
 		}
-	}
 
-	return false
+		tctx, tcancel := context.WithTimeout(ctx, wm.registry.opts.timeout)
+		res, err := wm.registry.opts.client.Get(tctx, wm.watchKey, clientv3.WithPrefix())
+		tcancel()
+		if err != nil {
+			log.Warnf("etcd watch resync failed, retry %d times, err: %v", attempt, err)
+			return true, err
+		}
+
+		wm.rw.Lock()
+		wm.serviceInstances = make(map[string]*registry.ServiceInstance)
+		for _, kv := range res.Kvs {
+			if service, err := unmarshal(kv.Value); err == nil {
+				wm.serviceInstances[service.ID] = service
+			}
+		}
+		wm.rw.Unlock()
+
+		wm.broadcast()
+
+		wm.watchChan = wm.watcher.Watch(
+			wm.ctx,
+			wm.watchKey,
+			clientv3.WithPrefix(),
+			clientv3.WithRev(res.Header.Revision+1),
+		)
+
+		return false, nil
+	}, wm.registry.opts.retryTimes, 100*time.Millisecond, 3*time.Second)
+
+	return err == nil
 }
 
 // 广播服务实例列表

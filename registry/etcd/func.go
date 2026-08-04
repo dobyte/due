@@ -43,5 +43,5 @@ func unmarshal(data []byte) (*registry.ServiceInstance, error) {
 }
 
 func buildPrefixKey(namespace, serviceName string) string {
-	return fmt.Sprintf("/%s/%s", namespace, serviceName)
+	return fmt.Sprintf("/%s/%s/", namespace, serviceName)
 }
