@@ -4,7 +4,6 @@ import (
 	"context"
 	stdnet "net"
 	"net/url"
-	"strings"
 	"sync"
 
 	"github.com/dobyte/due/v2/core/net"
@@ -57,9 +56,6 @@ func NewRegistry(opts ...Option) *Registry {
 		serverConfigs := make([]constant.ServerConfig, 0, len(o.urls))
 
 		for _, v := range o.urls {
-			if !strings.Contains(v, "://") {
-				v = "http://" + v
-			}
 			raw, err := url.Parse(v)
 			if err != nil {
 				log.Warnf("%s parse failed: %v", v, err)
