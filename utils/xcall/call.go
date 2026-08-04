@@ -55,7 +55,7 @@ func Backoff(ctx context.Context, fn func(ctx context.Context, attempt int) (boo
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(min((1<<i)*baseDelay, maxDelay)):
+		case <-time.After(min(max(0, (1<<i)*baseDelay), maxDelay)):
 			if next, err = fn(ctx, i+1); !next {
 				return err
 			}
