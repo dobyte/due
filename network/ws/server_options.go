@@ -19,6 +19,7 @@ const (
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
+	defaultServerCompression        = false
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey   = "etc.network.ws.server.authorizeTimeout"
+	defaultServerCompressionKey        = "etc.network.ws.server.compression"
 )
 
 const (
@@ -58,6 +60,7 @@ type serverOptions struct {
 	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
+	compression        bool               // 是否开启压缩，默认false
 }
 
 func defaultServerOptions() *serverOptions {
@@ -108,6 +111,8 @@ func defaultServerOptions() *serverOptions {
 	} else {
 		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
 	}
+
+	opts.compression = etc.Get(defaultServerCompressionKey, defaultServerCompression).Bool()
 
 	origins := etc.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
 	opts.checkOrigin = func(r *http.Request) bool {
@@ -218,4 +223,9 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
 		}
 	}
+}
+
+// WithServerCompression 设置是否开启压缩
+func WithServerCompression(compression bool) ServerOption {
+	return func(o *serverOptions) { o.compression = compression }
 }

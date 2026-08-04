@@ -553,6 +553,8 @@ shutdownMaxWaitTime = "0s"
             heartbeatMechanism = "resp"
             # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
             authorizeTimeout = "0s"
+            # 是否开启压缩，默认为false
+            compression = false
         # ws网络客户端
         [network.ws.client]
             # 拨号地址
@@ -565,6 +567,8 @@ shutdownMaxWaitTime = "0s"
             writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
+            # 是否开启压缩，默认为false
+            compression = false
     # tcp网络模块
     [network.tcp]
         # tcp网络服务器

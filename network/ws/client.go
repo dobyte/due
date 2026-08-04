@@ -28,7 +28,10 @@ func NewClient(opts ...ClientOption) network.Client {
 
 	c := &client{}
 	c.opts = o
-	c.dialer = &websocket.Dialer{HandshakeTimeout: o.dialTimeout}
+	c.dialer = &websocket.Dialer{
+		HandshakeTimeout:  o.dialTimeout,
+		EnableCompression: o.compression,
+	}
 	c.taskPool = sync.Pool{New: func() any { return &task{} }}
 
 	return c

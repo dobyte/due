@@ -14,6 +14,7 @@ const (
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+	defaultClientCompression       = false
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 	defaultClientWriteTimeoutKey      = "etc.network.ws.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.ws.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.ws.client.heartbeatInterval"
+	defaultClientCompressionKey       = "etc.network.ws.client.compression"
 )
 
 type ClientOption func(o *clientOptions)
@@ -32,6 +34,7 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+	compression       bool          // 是否开启压缩，默认false
 }
 
 func defaultClientOptions() *clientOptions {
@@ -66,6 +69,8 @@ func defaultClientOptions() *clientOptions {
 	} else {
 		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
 	}
+
+	opts.compression = etc.Get(defaultClientCompressionKey, defaultClientCompression).Bool()
 
 	return opts
 }
@@ -123,4 +128,9 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
 		}
 	}
+}
+
+// WithClientCompression 设置是否开启压缩
+func WithClientCompression(compression bool) ClientOption {
+	return func(o *clientOptions) { o.compression = compression }
 }
