@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -11,7 +12,7 @@ type Locker struct {
 	key     string
 	version string
 	rw      sync.RWMutex
-	timer   *time.Timer
+	timer   atomic.Value
 }
 
 // Acquire 获取锁
@@ -20,23 +21,31 @@ func (l *Locker) Acquire(ctx context.Context) error {
 		return err
 	}
 
-	l.timer = time.AfterFunc(l.maker.opts.expiration/2, l.renewal)
+	l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
 
 	return nil
 }
 
 // TryAcquire 尝试获取锁
 func (l *Locker) TryAcquire(ctx context.Context, expiration ...time.Duration) error {
-	return l.maker.tryAcquire(ctx, l.key, l.version, expiration...)
+	if err := l.maker.tryAcquire(ctx, l.key, l.version, expiration...); err != nil {
+		return err
+	}
+
+	if len(expiration) == 0 {
+		l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
+	}
+
+	return nil
 }
 
 // Release 释放锁
 func (l *Locker) Release(ctx context.Context) error {
-	l.rw.RLock()
-	if l.timer != nil {
-		l.timer.Stop()
+	timer := l.timer.Swap((*time.Timer)(nil))
+
+	if t, ok := timer.(*time.Timer); ok && t != nil {
+		t.Stop()
 	}
-	l.rw.RUnlock()
 
 	return l.maker.release(ctx, l.key, l.version)
 }
@@ -47,7 +56,5 @@ func (l *Locker) renewal() {
 		return
 	}
 
-	l.rw.Lock()
-	l.timer = time.AfterFunc(l.maker.opts.expiration/2, l.renewal)
-	l.rw.Unlock()
+	l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
 }

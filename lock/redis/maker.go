@@ -31,31 +31,31 @@ func NewMaker(opts ...Option) *Maker {
 	}
 
 	m := &Maker{}
+	m.opts = o
 
 	defer func() {
 		if m.err == nil {
-			m.opts = o
 			m.releaseScript = redis.NewScript(releaseScript)
 			m.renewalScript = redis.NewScript(renewalScript)
 		}
 	}()
 
-	if o.client == nil {
+	if m.opts.client == nil {
 		options := &redis.UniversalOptions{
-			Addrs:      o.addrs,
-			DB:         o.db,
-			Username:   o.username,
-			Password:   o.password,
-			MaxRetries: o.maxRetries,
+			Addrs:      m.opts.addrs,
+			DB:         m.opts.db,
+			Username:   m.opts.username,
+			Password:   m.opts.password,
+			MaxRetries: m.opts.maxRetries,
 		}
 
-		if o.certFile != "" && o.keyFile != "" && o.caFile != "" {
-			if options.TLSConfig, m.err = tls.MakeRedisTLSConfig(o.certFile, o.keyFile, o.caFile); m.err != nil {
+		if m.opts.certFile != "" && m.opts.keyFile != "" && m.opts.caFile != "" {
+			if options.TLSConfig, m.err = tls.MakeRedisTLSConfig(m.opts.certFile, m.opts.keyFile, m.opts.caFile); m.err != nil {
 				return m
 			}
 		}
 
-		o.client, m.builtin = redis.NewUniversalClient(options), true
+		m.opts.client, m.builtin = redis.NewUniversalClient(options), true
 	}
 
 	return m
@@ -130,7 +130,7 @@ func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration 
 
 	args := redis.SetArgs{Mode: "NX", TTL: m.opts.expiration}
 
-	if len(expiration) > 0 {
+	if len(expiration) > 0 && expiration[0] > 0 {
 		args.TTL = expiration[0]
 	}
 

@@ -4,7 +4,7 @@ package redis
 const releaseScript = `
 	local val = redis.call('GET', KEYS[1])
 
-	if val == '' then
+	if not val then
 		return {'OK'}
 	end
 
@@ -21,7 +21,7 @@ const releaseScript = `
 const renewalScript = `
 	local val = redis.call('GET', KEYS[1])
 
-	if val == '' then
+	if not val then
 		return {'NO'}
 	end
 
