@@ -5,16 +5,16 @@ const releaseScript = `
 	local val = redis.call('GET', KEYS[1])
 
 	if not val then
-		return {'OK'}
+		return 1
 	end
 
 	if val ~= ARGV[1] then
-		return {'NO'}
+		return 0
 	end
 
 	redis.call('DEL', KEYS[1])
 
-	return {'OK'}
+	return 1
 `
 
 // 续租锁
@@ -22,14 +22,14 @@ const renewalScript = `
 	local val = redis.call('GET', KEYS[1])
 
 	if not val then
-		return {'NO'}
+		return 0
 	end
 
 	if val ~= ARGV[1] then
-		return {'NO'}
+		return 0
 	end
 
 	redis.call('PEXPIRE', KEYS[1], ARGV[2])
 
-	return {'OK'}
+	return 1
 `

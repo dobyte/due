@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"github.com/redis/go-redis/v9"
@@ -118,7 +119,14 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 			retries++
 		}
 
-		time.Sleep(m.opts.acquireInterval)
+		ticker := time.NewTimer(m.opts.acquireInterval)
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return ctx.Err()
+		case <-ticker.C:
+			ticker.Stop()
+		}
 	}
 }
 
@@ -152,12 +160,12 @@ func (m *Maker) release(ctx context.Context, key, version string) error {
 		return m.err
 	}
 
-	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{key}, version).StringSlice()
+	rst, err := m.releaseScript.Run(ctx, m.opts.client, []string{key}, version).Int()
 	if err != nil {
 		return err
 	}
 
-	if rst[0] != "OK" {
+	if rst != 1 {
 		return errors.ErrIllegalOperation
 	}
 
@@ -170,14 +178,29 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 		return m.err
 	}
 
-	rst, err := m.renewalScript.Run(ctx, m.opts.client, []string{key}, version, m.opts.expiration.Milliseconds()).StringSlice()
-	if err != nil {
-		return err
+	var (
+		keys       = []string{key}
+		expiration = m.opts.expiration.Milliseconds()
+	)
+
+	if rst, err := m.renewalScript.Run(ctx, m.opts.client, keys, version, expiration).Int(); err == nil {
+		if rst != 1 {
+			return errors.ErrIllegalOperation
+		}
+
+		return nil
 	}
 
-	if rst[0] != "OK" {
-		return errors.ErrIllegalOperation
-	}
+	return xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
+		rst, err := m.renewalScript.Run(ctx, m.opts.client, keys, version, expiration).Int()
+		if err != nil {
+			return true, err
+		}
 
-	return nil
+		if rst != 1 {
+			return true, errors.ErrIllegalOperation
+		}
+
+		return false, nil
+	}, 3, 100*time.Millisecond, time.Second)
 }

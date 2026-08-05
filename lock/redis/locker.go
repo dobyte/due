@@ -2,8 +2,6 @@ package redis
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -11,8 +9,7 @@ type Locker struct {
 	maker   *Maker
 	key     string
 	version string
-	rw      sync.RWMutex
-	timer   atomic.Value
+	cancel  context.CancelFunc
 }
 
 // Acquire 获取锁
@@ -21,19 +18,22 @@ func (l *Locker) Acquire(ctx context.Context) error {
 		return err
 	}
 
-	l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
+	ctx, l.cancel = context.WithCancel(context.Background())
+	go l.renewal(ctx)
 
 	return nil
 }
 
 // TryAcquire 尝试获取锁
+// expiration 用于设置固定过期时间
 func (l *Locker) TryAcquire(ctx context.Context, expiration ...time.Duration) error {
 	if err := l.maker.tryAcquire(ctx, l.key, l.version, expiration...); err != nil {
 		return err
 	}
 
 	if len(expiration) == 0 {
-		l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
+		ctx, l.cancel = context.WithCancel(context.Background())
+		go l.renewal(ctx)
 	}
 
 	return nil
@@ -41,20 +41,26 @@ func (l *Locker) TryAcquire(ctx context.Context, expiration ...time.Duration) er
 
 // Release 释放锁
 func (l *Locker) Release(ctx context.Context) error {
-	timer := l.timer.Swap((*time.Timer)(nil))
-
-	if t, ok := timer.(*time.Timer); ok && t != nil {
-		t.Stop()
+	if l.cancel != nil {
+		l.cancel()
 	}
 
 	return l.maker.release(ctx, l.key, l.version)
 }
 
 // 续租锁
-func (l *Locker) renewal() {
-	if err := l.maker.renewal(context.Background(), l.key, l.version); err != nil {
-		return
-	}
+func (l *Locker) renewal(ctx context.Context) {
+	ticker := time.NewTicker(l.maker.opts.expiration / 2)
+	defer ticker.Stop()
 
-	l.timer.Store(time.AfterFunc(l.maker.opts.expiration/2, l.renewal))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := l.maker.renewal(ctx, l.key, l.version); err != nil {
+				return
+			}
+		}
+	}
 }
