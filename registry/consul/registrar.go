@@ -221,7 +221,6 @@ func (r *registrar) heartbeat(ctx context.Context, insID string) {
 
 			if !ok {
 				log.Errorf("consul heartbeat failed after %d retries", r.registry.opts.retryTimes)
-				return
 			}
 		}
 
@@ -233,8 +232,9 @@ func (r *registrar) heartbeat(ctx context.Context, insID string) {
 
 			if err = r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing); err != nil {
 				log.Warnf("update heartbeat ttl failed: %v", err)
-				ok = false
 			}
+
+			ok = err == nil
 		case <-ctx.Done():
 			return
 		}
