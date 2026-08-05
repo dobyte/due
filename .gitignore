@@ -8,9 +8,11 @@ docker/*/
 testdata/log/
 
 # Develop tools
-.vscode
+.vscode/
 .idea/
-.qoder
+.qoder/
+.tmp-gocache/
+.agents/
 
 # Go workspace
 go.work
@@ -23,9 +25,6 @@ go.work.sum
 
 # log gzip file
 *.gz
-
-# goland idea
-.idea
 
 # project run dir
 *run/
