@@ -34,7 +34,12 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 		state := b.states[target.URL.Host]
 		b.rw.RUnlock()
 
-		r.updateState(*state)
+		if state != nil {
+			r.updateState(*state)
+		} else {
+			r.updateState(resolver.State{})
+		}
+
 		b.resolvers.Store(target.URL.Host, r)
 	}
 

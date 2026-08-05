@@ -3,6 +3,7 @@ package random
 import (
 	"math/rand"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/connectivity"
@@ -19,7 +20,6 @@ type Balancer struct {
 	cse      balancer.ConnectivityStateEvaluator
 	picker   balancer.Picker
 	mu       sync.Mutex
-	rng      *rand.Rand
 }
 
 func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
@@ -87,7 +87,7 @@ func (b *Balancer) updatePicker() {
 
 	b.picker = &Picker{
 		subConns: readyConns,
-		rng:      b.rng,
+		rng:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -160,6 +160,7 @@ func (b *Balancer) ExitIdle() {
 type Picker struct {
 	subConns []balancer.SubConn
 	rng      *rand.Rand
+	mu       sync.Mutex
 	err      error
 }
 
@@ -178,7 +179,9 @@ func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 		return balancer.PickResult{SubConn: p.subConns[0]}, nil
 	}
 
+	p.mu.Lock()
 	idx := p.rng.Intn(len(p.subConns))
+	p.mu.Unlock()
 
 	return balancer.PickResult{SubConn: p.subConns[idx]}, nil
 }
