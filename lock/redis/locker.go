@@ -18,8 +18,7 @@ func (l *Locker) Acquire(ctx context.Context) error {
 		return err
 	}
 
-	ctx, l.cancel = context.WithCancel(context.Background())
-	go l.renewal(ctx)
+	l.renewal()
 
 	return nil
 }
@@ -31,9 +30,8 @@ func (l *Locker) TryAcquire(ctx context.Context, expiration ...time.Duration) er
 		return err
 	}
 
-	if len(expiration) == 0 {
-		ctx, l.cancel = context.WithCancel(context.Background())
-		go l.renewal(ctx)
+	if len(expiration) == 0 || expiration[0] <= 0 {
+		l.renewal()
 	}
 
 	return nil
@@ -49,18 +47,23 @@ func (l *Locker) Release(ctx context.Context) error {
 }
 
 // 续租锁
-func (l *Locker) renewal(ctx context.Context) {
-	ticker := time.NewTicker(l.maker.opts.expiration / 2)
-	defer ticker.Stop()
+func (l *Locker) renewal() {
+	ctx, cancel := context.WithCancel(context.Background())
+	l.cancel = cancel
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := l.maker.renewal(ctx, l.key, l.version); err != nil {
+	go func() {
+		ticker := time.NewTicker(l.maker.opts.expiration / 2)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case <-ticker.C:
+				if err := l.maker.renewal(ctx, l.key, l.version); err != nil {
+					return
+				}
 			}
 		}
-	}
+	}()
 }
