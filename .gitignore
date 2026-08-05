@@ -11,6 +11,7 @@ testdata/log/
 .vscode/
 .idea/
 .qoder/
+.tmp/
 .tmp-gocache/
 .agents/
 
