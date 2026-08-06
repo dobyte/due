@@ -35,6 +35,7 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	return w
 }
 
+// 通知监听器服务实例更新
 func (w *watcher) notify(services []*registry.ServiceInstance) {
 	if w.state.Load() != stateRunning {
 		return
@@ -52,6 +53,7 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 	w.chWatch <- services
 }
 
+// 清空监听队列
 func (w *watcher) flush() {
 	for {
 		select {
@@ -62,9 +64,35 @@ func (w *watcher) flush() {
 	}
 }
 
+// 获取最新的服务实例
+func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
+	var (
+		exist     bool
+		instances []*registry.ServiceInstance
+	)
+
+	for {
+		select {
+		case services, ok := <-w.chWatch:
+			if !ok && !exist {
+				return nil, errors.ErrWatcherStopped
+			}
+
+			exist, instances = true, services
+		default:
+			if exist {
+				return instances, nil
+			} else {
+				return w.wm.services()
+			}
+		}
+	}
+}
+
+// Next 返回服务实例列表
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	if w.state.CompareAndSwap(stateInitial, stateRunning) {
-		return w.wm.services()
+		return w.latest()
 	}
 
 	services, ok := <-w.chWatch
@@ -75,6 +103,7 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	return services, nil
 }
 
+// Stop 停止监听
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
 		return errors.ErrIllegalOperation
@@ -138,6 +167,7 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 	return wm
 }
 
+// 创建新的服务实例监听器
 func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
@@ -152,6 +182,7 @@ func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	return w, nil
 }
 
+// 回收服务实例监听器
 func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
 	delete(wm.watchers, idx)
@@ -172,6 +203,7 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.wg.Wait()
 }
 
+// 停止监听服务实例更新
 func (wm *watcherMgr) stop() {
 	wm.rw.Lock()
 	if !wm.stopped.CompareAndSwap(false, true) {
@@ -191,6 +223,7 @@ func (wm *watcherMgr) stop() {
 	wm.wg.Wait()
 }
 
+// 监听服务实例更新
 func (wm *watcherMgr) watchLoop() {
 	for {
 		select {
@@ -222,6 +255,7 @@ func (wm *watcherMgr) watchLoop() {
 	}
 }
 
+// 重试同步服务实例
 func (wm *watcherMgr) resyncWithRetry() bool {
 	err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
 		if wm.stopped.Load() {
@@ -249,6 +283,7 @@ func (wm *watcherMgr) resyncWithRetry() bool {
 	return err == nil
 }
 
+// 通知监听器服务实例更新
 func (wm *watcherMgr) broadcast() {
 	wm.rw.RLock()
 	services := wm.loadServices()
@@ -260,6 +295,7 @@ func (wm *watcherMgr) broadcast() {
 	}
 }
 
+// 加载所有监听器
 func (wm *watcherMgr) loadWatchers() []*watcher {
 	watchers := make([]*watcher, 0, len(wm.watchers))
 
@@ -270,6 +306,7 @@ func (wm *watcherMgr) loadWatchers() []*watcher {
 	return watchers
 }
 
+// 加载所有服务实例
 func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
@@ -280,6 +317,7 @@ func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	return services
 }
 
+// 返回所有服务实例
 func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 	wm.rw.RLock()
 	defer wm.rw.RUnlock()
