@@ -76,10 +76,35 @@ func (w *watcher) flush() {
 	}
 }
 
+// 获取最新的服务实例
+func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
+	var (
+		exist     bool
+		instances []*registry.ServiceInstance
+	)
+
+	for {
+		select {
+		case services, ok := <-w.chWatch:
+			if !ok && !exist {
+				return nil, errors.ErrWatcherStopped
+			}
+
+			exist, instances = true, services
+		default:
+			if exist {
+				return instances, nil
+			} else {
+				return w.wm.services()
+			}
+		}
+	}
+}
+
 // Next 返回服务实例列表
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	if w.state.CompareAndSwap(stateInitial, stateRunning) {
-		return w.wm.services()
+		return w.latest()
 	}
 
 	services, ok := <-w.chWatch
