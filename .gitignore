@@ -3,6 +3,7 @@
 
 # Docker container's temp data
 docker/*/
+!docker/nacos/conf/application.properties
 
 # Test data
 testdata/log/

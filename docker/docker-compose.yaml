@@ -1,60 +1,7 @@
-version: "3"
 
 services:
-  mysql:
-    image: mysql:5.7
-    container_name: dev-mysql
-    platform: linux/x86_64
-    command: --default-authentication-plugin=mysql_native_password
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: 123456
-    ports:
-      - '3306:3306'
-    volumes:
-      - ./mysql:/var/lib/mysql
-    networks:
-      - middleware
-  redis:
-    image: redis:6.0
-    container_name: dev-redis
-    platform: linux/x86_64
-    restart: always
-    ports:
-      - '6379:6379'
-    volumes:
-      - ./redis:/data
-    networks:
-      - middleware
-  etcd:
-    image: bitnami/etcd:latest
-    container_name: dev-etcd
-    platform: linux/x86_64
-    restart: always
-    environment:
-      - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
-    ports:
-      - '2379:2379'
-      - '2380:2380'
-    networks:
-      - middleware
-  consul:
-    image: bitnami/consul:latest
-    container_name: dev-consul
-    platform: linux/x86_64
-    restart: always
-    ports:
-      - '8300:8300'
-      - '8301:8301'
-      - '8301:8301/udp'
-      - '8500:8500'
-      - '8600:8600'
-      - '8600:8600/udp'
-    volumes:
-      - ./consul:/bitnami
   nacos:
-    image: nacos/nacos-server:2.3.2
+    image: nacos/nacos-server:v3.2.3
     container_name: dev-nacos
     platform: linux/x86_64
     restart: always
@@ -68,27 +15,81 @@ services:
       - ./nacos:/home/nacos/logs
     ports:
       - '8848:8848'
+      - '8880:8080'
       - '9848:9848'
-  redis-cluster:
-    image: grokzen/redis-cluster:latest
-    container_name: dev-redis-cluster
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.2
+  redis:
+    image: redis:8.10.0
+    container_name: dev-redis
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./redis:/data
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.3
+  memcached:
+    image: memcached:1.6.45
+    container_name: dev-memcached
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '11211:11211'
+    command:
+      - --conn-limit=1024
+      - --memory-limit=64
+      - --threads=4
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.4
+  consul:
+    image: consul:1.15.4
+    container_name: dev-consul
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '8300:8300'
+      - '8301:8301'
+      - '8301:8301/udp'
+      - '8500:8500'
+      - '8600:8600'
+      - '8600:8600/udp'
+    volumes:
+      - ./consul/data:/consul/data
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.5
+  etcd:
+    image: openeuler/etcd:3.6.11-oe2403sp4
+    container_name: dev-etcd
     platform: linux/x86_64
     restart: always
     environment:
-      - IP=0.0.0.0
-      - STANDALONE=true
-      - SENTINEL=true
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
     ports:
-      - '7000-7005:7000-7005'
-  nats:
-    image: nats:latest
-    container_name: dev-nats
-    platform: linux/x86_64
-    restart: always
-    ports:
-      - '4222:4222'
-      - '6222:6222'
-      - '8222:8222'
+      - '2379:2379'
+      - '2380:2380'
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.6
+  # nats:
+  #   image: nats:latest
+  #   container_name: dev-nats
+  #   platform: linux/x86_64
+  #   restart: always
+  #   ports:
+  #     - '4222:4222'
+  #     - '6222:6222'
+  #     - '8222:8222'
 networks:
-  middleware:
+  cluster-network:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.10.0/24
