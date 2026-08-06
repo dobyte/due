@@ -9,28 +9,26 @@ import (
 
 const (
 	defaultAddr                           = "127.0.0.1:8500"
+	defaultTimeout                        = "3s"
+	defaultRetryTimes                     = 3
 	defaultHealthCheck                    = true
 	defaultHealthCheckInterval            = 10
 	defaultHealthCheckTimeout             = 5
 	defaultHeartbeatCheck                 = true
 	defaultHeartbeatCheckInterval         = 10
 	defaultDeregisterCriticalServiceAfter = 30
-	defaultTimeout                        = "3s"
-	defaultRetryTimes                     = 3
-	defaultRetryInterval                  = "10s"
 )
 
 const (
 	defaultAddrKey                           = "etc.registry.consul.addr"
+	defaultTimeoutKey                        = "etc.registry.consul.timeout"
+	defaultRetryTimesKey                     = "etc.registry.consul.retryTimes"
 	defaultHealthCheckKey                    = "etc.registry.consul.healthCheck"
 	defaultHealthCheckIntervalKey            = "etc.registry.consul.healthCheckInterval"
 	defaultHealthCheckTimeoutKey             = "etc.registry.consul.healthCheckTimeout"
 	defaultHeartbeatCheckKey                 = "etc.registry.consul.heartbeatCheck"
 	defaultHeartbeatCheckIntervalKey         = "etc.registry.consul.heartbeatCheckInterval"
 	defaultDeregisterCriticalServiceAfterKey = "etc.registry.consul.deregisterCriticalServiceAfter"
-	defaultTimeoutKey                        = "etc.registry.consul.timeout"
-	defaultRetryTimesKey                     = "etc.registry.consul.retryTimes"
-	defaultRetryIntervalKey                  = "etc.registry.consul.retryInterval"
 )
 
 type Option func(o *options)
@@ -48,7 +46,7 @@ type options struct {
 	// 默认值 3s
 	timeout time.Duration
 
-	// 重试次数
+	// 异常重试次数
 	// 默认值 3
 	retryTimes int
 
@@ -106,7 +104,7 @@ func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithRetryTimes 设置重试次数
+// WithRetryTimes 设置异常重试次数
 func WithRetryTimes(retryTimes int) Option {
 	return func(o *options) { o.retryTimes = retryTimes }
 }

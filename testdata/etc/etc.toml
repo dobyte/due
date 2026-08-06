@@ -411,6 +411,10 @@ shutdownMaxWaitTime = "0s"
     [registry.consul]
         # 客户端连接地址，默认为127.0.0.1:8500
         addr = "127.0.0.1:8500"
+        # 超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
+        # 心跳重试次数，默认为3
+        retryTimes = 3
         # 是否启用健康检查，默认为true
         healthCheck = true
         # 健康检查时间间隔（秒），仅在启用健康检查后生效，默认为10
