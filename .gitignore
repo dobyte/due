@@ -13,6 +13,7 @@ testdata/log/
 .qoder/
 .tmp/
 .tmp-gocache/
+.tmp-go-cache/
 .agents/
 
 # Go workspace

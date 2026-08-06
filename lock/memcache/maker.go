@@ -7,12 +7,14 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/lock"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
 type Maker struct {
+	err     error
 	opts    *options
 	builtin bool
 }
@@ -21,6 +23,10 @@ func NewMaker(opts ...Option) *Maker {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	if o.expiration <= 0 {
+		o.expiration = xconv.Duration(defaultExpiration)
 	}
 
 	m := &Maker{}
@@ -51,6 +57,10 @@ func (m *Maker) Make(name string) lock.Locker {
 
 // Close 关闭构建器
 func (m *Maker) Close() error {
+	if m.err != nil {
+		return m.err
+	}
+
 	if m.builtin {
 		return m.opts.client.Close()
 	}
@@ -59,7 +69,11 @@ func (m *Maker) Close() error {
 }
 
 // 执行获取锁操作
-func (m *Maker) acquire(_ context.Context, key, version string) error {
+func (m *Maker) acquire(ctx context.Context, key, version string) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	var (
 		err     error
 		retries int
@@ -87,12 +101,23 @@ func (m *Maker) acquire(_ context.Context, key, version string) error {
 			retries++
 		}
 
-		time.Sleep(m.opts.acquireInterval)
+		ticker := time.NewTimer(m.opts.acquireInterval)
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return ctx.Err()
+		case <-ticker.C:
+			ticker.Stop()
+		}
 	}
 }
 
 // 尝试获取锁
 func (m *Maker) tryAcquire(_ context.Context, key, version string, expiration ...time.Duration) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	item := &memcache.Item{Key: key, Value: xconv.Bytes(version)}
 
 	if len(expiration) > 0 && expiration[0] > 0 {
@@ -114,12 +139,32 @@ func (m *Maker) tryAcquire(_ context.Context, key, version string, expiration ..
 
 // 执行释放锁操作
 func (m *Maker) release(ctx context.Context, key, version string) error {
+	if m.err != nil {
+		return m.err
+	}
+
 	return m.swap(ctx, key, version, int32(xtime.Now().AddDate(-1, 0, 0).Unix()))
 }
 
 // 执行续租锁操作
 func (m *Maker) renewal(ctx context.Context, key, version string) error {
-	return m.swap(ctx, key, version, int32(m.opts.expiration.Seconds()))
+	if m.err != nil {
+		return m.err
+	}
+
+	expiration := int32(m.opts.expiration.Seconds())
+
+	if err := m.swap(ctx, key, version, expiration); err == nil {
+		return nil
+	}
+
+	return xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
+		if err := m.swap(ctx, key, version, expiration); err != nil {
+			return true, err
+		}
+
+		return false, nil
+	}, 3, 100*time.Millisecond, time.Second)
 }
 
 // 执行替换操作
