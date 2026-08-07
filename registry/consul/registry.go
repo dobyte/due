@@ -165,10 +165,6 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 		}
 	}
 
-	return r.queryServices(ctx, serviceName)
-}
-
-func (r *Registry) queryServices(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	services, _, err := r.services(ctx, serviceName, 0, true)
 	return services, err
 }

@@ -2,6 +2,7 @@ package consul
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -311,7 +312,26 @@ func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
 	for _, ins := range wm.serviceInstances {
-		services = append(services, ins)
+		service := &registry.ServiceInstance{
+			ID:       ins.ID,
+			Name:     ins.Name,
+			Kind:     ins.Kind,
+			Alias:    ins.Alias,
+			State:    ins.State,
+			Events:   make([]int, len(ins.Events)),
+			Routes:   make([]registry.Route, len(ins.Routes)),
+			Services: make([]string, len(ins.Services)),
+			Endpoint: ins.Endpoint,
+			Weight:   ins.Weight,
+			Metadata: make(map[string]string, len(ins.Metadata)),
+		}
+
+		copy(service.Events, ins.Events)
+		copy(service.Routes, ins.Routes)
+		copy(service.Services, ins.Services)
+		maps.Copy(service.Metadata, ins.Metadata)
+
+		services = append(services, service)
 	}
 
 	return services
