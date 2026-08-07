@@ -64,16 +64,26 @@ services:
       cluster-network:
         ipv4_address: 192.168.10.5
   etcd:
-    image: openeuler/etcd:3.6.11-oe2403sp4
+    image: kubesphere/etcd:3.6.4-0
     container_name: dev-etcd
     platform: linux/x86_64
     restart: always
-    environment:
-      - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
     ports:
       - '2379:2379'
       - '2380:2380'
+    volumes:
+      - /etcd:/var/lib/etcd
+    environment:
+      - ETCD_NAME=etcd-node01
+      - ETCD_DATA_DIR=/var/lib/etcd
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_INITIAL_CLUSTER=etcd-node01=http://0.0.0.0:2380
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster-token
+      - ETCD_INITIAL_CLUSTER_STATE=new
+    command: etcd
     networks:
       cluster-network:
         ipv4_address: 192.168.10.6
