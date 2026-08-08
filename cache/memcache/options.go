@@ -86,15 +86,27 @@ func WithNilValue(nilValue string) Option {
 
 // WithNilExpiration 设置空值过期时间
 func WithNilExpiration(nilExpiration time.Duration) Option {
-	return func(o *options) { o.nilExpiration = nilExpiration }
+	return func(o *options) {
+		if nilExpiration > 0 {
+			o.nilExpiration = nilExpiration
+		}
+	}
 }
 
 // WithMinExpiration 设置最小过期时间
 func WithMinExpiration(minExpiration time.Duration) Option {
-	return func(o *options) { o.minExpiration = minExpiration }
+	return func(o *options) {
+		if minExpiration > 0 {
+			o.minExpiration = minExpiration
+		}
+	}
 }
 
 // WithMaxExpiration 设置最大过期时间
 func WithMaxExpiration(maxExpiration time.Duration) Option {
-	return func(o *options) { o.maxExpiration = maxExpiration }
+	return func(o *options) {
+		if maxExpiration > 0 {
+			o.maxExpiration = maxExpiration
+		}
+	}
 }

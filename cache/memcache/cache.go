@@ -2,6 +2,7 @@ package memcache
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,9 +17,10 @@ import (
 )
 
 type Cache struct {
-	opts    *options
-	builtin bool
-	sfg     singleflight.Group
+	opts      *options
+	builtin   bool
+	sfg       singleflight.Group
+	closeOnce sync.Once
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -30,8 +32,8 @@ func NewCache(opts ...Option) *Cache {
 	c := &Cache{}
 	c.opts = o
 
-	if o.client == nil {
-		o.client, c.builtin = memcache.New(o.addrs...), true
+	if c.opts.client == nil {
+		c.opts.client, c.builtin = memcache.New(c.opts.addrs...), true
 	}
 
 	return c
@@ -41,45 +43,28 @@ func NewCache(opts ...Option) *Cache {
 func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (any, error) {
-		item, err := c.opts.client.Get(key)
-		if err != nil {
-			return nil, err
-		}
-
-		return xconv.String(item.Value), nil
-	})
+	item, err := c.opts.client.Get(key)
 	if err != nil {
 		if errors.Is(err, memcache.ErrCacheMiss) {
 			return false, nil
+		} else {
+			return false, err
 		}
-		return false, err
 	}
 
-	if val.(string) == c.opts.nilValue {
-		return false, nil
-	}
-
-	return true, nil
+	return xconv.String(item.Value) != c.opts.nilValue, nil
 }
 
 // Get 获取缓存值
 func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (any, error) {
-		item, err := c.opts.client.Get(key)
-		if err != nil {
-			return nil, err
-		}
-
-		return xconv.String(item.Value), nil
-	})
+	item, err := c.opts.client.Get(key)
 	if err != nil && !errors.Is(err, memcache.ErrCacheMiss) {
 		return cache.NewResult(nil, err)
 	}
 
-	if errors.Is(err, memcache.ErrCacheMiss) || val.(string) == c.opts.nilValue {
+	if errors.Is(err, memcache.ErrCacheMiss) || xconv.String(item.Value) == c.opts.nilValue {
 		if len(def) > 0 {
 			return cache.NewResult(def[0])
 		} else {
@@ -87,21 +72,24 @@ func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 		}
 	}
 
-	return cache.NewResult(val)
+	return cache.NewResult(xconv.String(item.Value))
 }
 
 // Set 设置缓存值
 func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...time.Duration) error {
-	if len(expiration) > 0 && expiration[0] > 0 {
+	if len(expiration) > 0 {
 		return c.opts.client.Set(&memcache.Item{
 			Key:        c.AddPrefix(key),
 			Value:      []byte(xconv.String(value)),
 			Expiration: int32(expiration[0].Seconds()),
 		})
 	} else {
+		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
+
 		return c.opts.client.Set(&memcache.Item{
-			Key:   c.AddPrefix(key),
-			Value: []byte(xconv.String(value)),
+			Key:        c.AddPrefix(key),
+			Value:      []byte(xconv.String(value)),
+			Expiration: int32(expiration.Seconds()),
 		})
 	}
 }
@@ -110,27 +98,29 @@ func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...ti
 func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
 	key = c.AddPrefix(key)
 
-	val, err, _ := c.sfg.Do(key, func() (any, error) {
-		item, err := c.opts.client.Get(key)
-		if err != nil {
-			return nil, err
-		}
-
-		return xconv.String(item.Value), nil
-	})
-	if err != nil && !errors.Is(err, memcache.ErrCacheMiss) {
-		return cache.NewResult(nil, err)
-	}
-
-	if err == nil {
+	if item, err := c.opts.client.Get(key); err == nil {
+		val := xconv.String(item.Value)
 		if val == c.opts.nilValue {
 			return cache.NewResult(nil, errors.ErrNil)
 		} else {
 			return cache.NewResult(val)
 		}
+	} else if !errors.Is(err, memcache.ErrCacheMiss) {
+		return cache.NewResult(nil, err)
 	}
 
 	rst, _, _ := c.sfg.Do(key+":set", func() (any, error) {
+		if item, err := c.opts.client.Get(key); err == nil {
+			val := xconv.String(item.Value)
+			if val == c.opts.nilValue {
+				return cache.NewResult(nil, errors.ErrNil), nil
+			} else {
+				return cache.NewResult(val), nil
+			}
+		} else if !errors.Is(err, memcache.ErrCacheMiss) {
+			return cache.NewResult(nil, err), nil
+		}
+
 		val, err := fn()
 		if err != nil {
 			return cache.NewResult(nil, err), nil
@@ -143,8 +133,9 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 				Expiration: int32(c.opts.nilExpiration.Seconds()),
 			}); err != nil {
 				return cache.NewResult(nil, err), nil
+			} else {
+				return cache.NewResult(nil, errors.ErrNil), nil
 			}
-			return cache.NewResult(nil, errors.ErrNil), nil
 		}
 
 		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
@@ -155,9 +146,9 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 			Expiration: int32(expiration.Seconds()),
 		}); err != nil {
 			return cache.NewResult(nil, err), nil
+		} else {
+			return cache.NewResult(val, nil), nil
 		}
-
-		return cache.NewResult(val, nil), nil
 	})
 
 	return rst.(cache.Result)
@@ -165,6 +156,10 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 
 // Delete 删除缓存
 func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
 	total := int64(0)
 
 	eg, _ := errgroup.WithContext(ctx)
@@ -301,10 +296,14 @@ func (c *Cache) Client() any {
 }
 
 // Close 关闭客户端
-func (c *Cache) Close() error {
+func (c *Cache) Close() (err error) {
 	if !c.builtin {
 		return nil
 	}
 
-	return c.opts.client.Close()
+	c.closeOnce.Do(func() {
+		err = c.opts.client.Close()
+	})
+
+	return err
 }
