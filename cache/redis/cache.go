@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/cache"
@@ -15,10 +16,11 @@ import (
 )
 
 type Cache struct {
-	err     error
-	opts    *options
-	builtin bool
-	sfg     singleflight.Group
+	err       error
+	opts      *options
+	builtin   bool
+	sfg       singleflight.Group
+	closeOnce sync.Once
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -237,14 +239,16 @@ func (c *Cache) Client() any {
 }
 
 // Close 关闭缓存
-func (c *Cache) Close() error {
+func (c *Cache) Close() (err error) {
 	if c.err != nil {
 		return c.err
 	}
 
 	if c.builtin {
-		return c.opts.client.Close()
+		c.closeOnce.Do(func() {
+			err = c.opts.client.Close()
+		})
 	}
 
-	return nil
+	return
 }
