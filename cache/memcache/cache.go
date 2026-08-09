@@ -2,7 +2,6 @@ package memcache
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,10 +16,10 @@ import (
 )
 
 type Cache struct {
-	opts      *options
-	builtin   bool
-	sfg       singleflight.Group
-	closeOnce sync.Once
+	opts    *options
+	builtin bool
+	closed  atomic.Bool
+	sfg     singleflight.Group
 }
 
 func NewCache(opts ...Option) *Cache {
@@ -297,13 +296,13 @@ func (c *Cache) Client() any {
 
 // Close 关闭客户端
 func (c *Cache) Close() (err error) {
-	if !c.builtin {
-		return nil
+	if c.closed.Swap(true) {
+		return errors.ErrCacheClosed
 	}
 
-	c.closeOnce.Do(func() {
-		err = c.opts.client.Close()
-	})
+	if c.builtin && c.opts.client != nil {
+		return c.opts.client.Close()
+	}
 
-	return err
+	return nil
 }
