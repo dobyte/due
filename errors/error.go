@@ -77,6 +77,7 @@ var (
 	ErrGateShutdown            = New("gate is shutdown")
 	ErrNodeShutdown            = New("node is shutdown")
 	ErrMeshShutdown            = New("mesh is shutdown")
+	ErrCacheClosed             = New("cache is closed")
 )
 
 // NewError 新建一个错误
