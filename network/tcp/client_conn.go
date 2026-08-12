@@ -47,6 +47,7 @@ func newClientConn(client *client, id int64, conn net.Conn) network.Conn {
 
 	c.state.Store(int32(network.ConnOpened))
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+	c.client.metrics.ConnectionOpened()
 
 	xcall.Go(c.read)
 
@@ -87,6 +88,7 @@ func (c *clientConn) Unbind() {
 // Send 发送消息（同步）
 func (c *clientConn) Send(msg []byte) error {
 	if err := c.checkState(); err != nil {
+		recordError(c.client.metrics, network.OperationWrite, err)
 		return err
 	}
 
@@ -95,16 +97,20 @@ func (c *clientConn) Send(msg []byte) error {
 	c.rw.RUnlock()
 
 	if conn == nil {
+		recordError(c.client.metrics, network.OperationWrite, errors.ErrConnectionClosed)
 		return errors.ErrConnectionClosed
 	}
 
-	_, err := conn.Write(msg)
+	n, err := conn.Write(msg)
+	c.client.metrics.Send(n, err == nil && n == len(msg))
+	recordError(c.client.metrics, network.OperationWrite, err)
 	return err
 }
 
 // Push 发送消息（异步）
 func (c *clientConn) Push(msg []byte) error {
 	if err := c.checkState(); err != nil {
+		recordError(c.client.metrics, network.OperationWrite, err)
 		return err
 	}
 
@@ -112,6 +118,7 @@ func (c *clientConn) Push(msg []byte) error {
 	defer c.rw.RUnlock()
 
 	if c.conn == nil {
+		recordError(c.client.metrics, network.OperationWrite, errors.ErrConnectionClosed)
 		return errors.ErrConnectionClosed
 	}
 
@@ -249,6 +256,8 @@ func (c *clientConn) doClose() error {
 	c.rw.Unlock()
 
 	err := conn.Close()
+	c.client.metrics.ConnectionClosed()
+	recordError(c.client.metrics, network.OperationClose, err)
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
@@ -271,8 +280,9 @@ func (c *clientConn) read() {
 		case <-c.close:
 			return
 		default:
-			data, err := packet.ReadMessage(conn)
+			data, err := readMessage(conn, c.client.metrics)
 			if err != nil {
+				recordError(c.client.metrics, network.OperationRead, err)
 				_ = c.forceClose()
 				return
 			}
@@ -297,6 +307,7 @@ func (c *clientConn) read() {
 
 			isHeartbeat, err := packet.CheckHeartbeat(data)
 			if err != nil {
+				recordError(c.client.metrics, network.OperationDecode, err)
 				log.Errorf("check heartbeat message error: %v", err)
 				continue
 			}
@@ -305,6 +316,8 @@ func (c *clientConn) read() {
 			if isHeartbeat {
 				continue
 			}
+
+			c.client.metrics.MessageReceived()
 
 			if c.client.receiveHandler != nil {
 				c.client.receiveHandler(c, data)
@@ -366,7 +379,10 @@ func (c *clientConn) doWrite(conn net.Conn, t *task) bool {
 		return false
 	}
 
-	if _, err := conn.Write(t.msg); err != nil {
+	n, err := conn.Write(t.msg)
+	c.client.metrics.Send(n, err == nil && n == len(t.msg))
+	if err != nil {
+		recordError(c.client.metrics, network.OperationWrite, err)
 		log.Errorf("write message error: %v", err)
 	}
 
@@ -378,6 +394,7 @@ func (c *clientConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
 
 	if c.lastHeartbeatTime.Load() < deadline {
+		c.client.metrics.Error(network.OperationHeartbeat, network.ErrorTypeTimeout)
 		log.Debugf("connection heartbeat timeout")
 		_ = c.forceClose()
 		return false
@@ -387,9 +404,13 @@ func (c *clientConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 		}
 
 		if heartbeat, err := packet.PackHeartbeat(); err != nil {
+			recordError(c.client.metrics, network.OperationHeartbeat, err)
 			log.Errorf("pack heartbeat message error: %v", err)
 		} else {
-			if _, err = conn.Write(heartbeat); err != nil {
+			n, err := conn.Write(heartbeat)
+			c.client.metrics.Send(n, false)
+			if err != nil {
+				recordError(c.client.metrics, network.OperationHeartbeat, err)
 				log.Errorf("write heartbeat message error: %v", err)
 			}
 		}
@@ -419,6 +440,7 @@ func (c *clientConn) doWriteToQueue(queue chan *task, typ int8, msg ...[]byte) e
 		select {
 		case <-ctx.Done():
 			c.doRecycleToPool(t)
+			recordError(c.client.metrics, network.OperationQueue, ctx.Err())
 			return ctx.Err()
 		case queue <- t:
 			return nil

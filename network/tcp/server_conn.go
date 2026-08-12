@@ -66,6 +66,7 @@ func (c *serverConn) Unbind() {
 // Send 发送消息（同步）
 func (c *serverConn) Send(msg []byte) error {
 	if err := c.checkState(); err != nil {
+		recordError(c.connMgr.server.metrics, network.OperationWrite, err)
 		return err
 	}
 
@@ -74,16 +75,20 @@ func (c *serverConn) Send(msg []byte) error {
 	c.rw.RUnlock()
 
 	if conn == nil {
+		recordError(c.connMgr.server.metrics, network.OperationWrite, errors.ErrConnectionClosed)
 		return errors.ErrConnectionClosed
 	}
 
-	_, err := conn.Write(msg)
+	n, err := conn.Write(msg)
+	c.connMgr.server.metrics.Send(n, err == nil && n == len(msg))
+	recordError(c.connMgr.server.metrics, network.OperationWrite, err)
 	return err
 }
 
 // Push 发送消息（异步）
 func (c *serverConn) Push(msg []byte) error {
 	if err := c.checkState(); err != nil {
+		recordError(c.connMgr.server.metrics, network.OperationWrite, err)
 		return err
 	}
 
@@ -91,6 +96,7 @@ func (c *serverConn) Push(msg []byte) error {
 	defer c.rw.RUnlock()
 
 	if c.conn == nil {
+		recordError(c.connMgr.server.metrics, network.OperationWrite, errors.ErrConnectionClosed)
 		return errors.ErrConnectionClosed
 	}
 
@@ -185,6 +191,7 @@ func (c *serverConn) checkAuthorize() {
 				return
 			}
 
+			c.connMgr.server.metrics.Error(network.OperationAuthorize, network.ErrorTypeTimeout)
 			c.forceClose(true)
 		}))
 		if t, ok := timer.(*time.Timer); ok && t != nil {
@@ -217,6 +224,7 @@ func (c *serverConn) init(cm *serverConnMgr, id int64, conn net.Conn) {
 	c.close = make(chan struct{})
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.connMgr.server.metrics.ConnectionOpened()
 
 	xcall.Go(c.read)
 
@@ -290,6 +298,8 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.rw.Unlock()
 
 	err := conn.Close()
+	c.connMgr.server.metrics.ConnectionClosed()
+	recordError(c.connMgr.server.metrics, network.OperationClose, err)
 
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
@@ -311,8 +321,9 @@ func (c *serverConn) read() {
 		case <-c.close:
 			return
 		default:
-			data, err := packet.ReadMessage(conn)
+			data, err := readMessage(conn, c.connMgr.server.metrics)
 			if err != nil {
+				recordError(c.connMgr.server.metrics, network.OperationRead, err)
 				_ = c.forceClose(true)
 				return
 			}
@@ -337,6 +348,7 @@ func (c *serverConn) read() {
 
 			isHeartbeat, err := packet.CheckHeartbeat(data)
 			if err != nil {
+				recordError(c.connMgr.server.metrics, network.OperationDecode, err)
 				log.Errorf("check heartbeat message error: %v", err)
 				continue
 			}
@@ -348,6 +360,7 @@ func (c *serverConn) read() {
 					c.doSendHeartbeat(conn)
 				}
 			} else {
+				c.connMgr.server.metrics.MessageReceived()
 				if c.connMgr.server.receiveHandler != nil {
 					c.connMgr.server.receiveHandler(c, data)
 				}
@@ -409,7 +422,10 @@ func (c *serverConn) doWrite(conn net.Conn, t *task) bool {
 		return false
 	}
 
-	if _, err := conn.Write(t.msg); err != nil {
+	n, err := conn.Write(t.msg)
+	c.connMgr.server.metrics.Send(n, err == nil && n == len(t.msg))
+	if err != nil {
+		recordError(c.connMgr.server.metrics, network.OperationWrite, err)
 		log.Errorf("write message error: %v", err)
 	}
 
@@ -421,6 +437,7 @@ func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	deadline := t.Add(-2 * c.connMgr.server.opts.heartbeatInterval).UnixNano()
 
 	if c.lastHeartbeatTime.Load() < deadline {
+		c.connMgr.server.metrics.Error(network.OperationHeartbeat, network.ErrorTypeTimeout)
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 		_ = c.forceClose(true)
 		return false
@@ -445,9 +462,13 @@ func (c *serverConn) isClosed() bool {
 // 发送心跳包
 func (c *serverConn) doSendHeartbeat(conn net.Conn) {
 	if heartbeat, err := packet.PackHeartbeat(); err != nil {
+		recordError(c.connMgr.server.metrics, network.OperationHeartbeat, err)
 		log.Errorf("pack heartbeat message error: %v", err)
 	} else {
-		if _, err = conn.Write(heartbeat); err != nil {
+		n, err := conn.Write(heartbeat)
+		c.connMgr.server.metrics.Send(n, false)
+		if err != nil {
+			recordError(c.connMgr.server.metrics, network.OperationHeartbeat, err)
 			log.Errorf("write heartbeat message error: %v", err)
 		}
 	}
@@ -474,6 +495,7 @@ func (c *serverConn) doWriteToQueue(queue chan *task, typ int8, msg ...[]byte) e
 		select {
 		case <-ctx.Done():
 			c.doRecycleToPool(t)
+			recordError(c.connMgr.server.metrics, network.OperationQueue, ctx.Err())
 			return ctx.Err()
 		case queue <- t:
 			return nil

@@ -11,6 +11,7 @@ import (
 
 type server struct {
 	opts              *serverOptions            // 配置
+	metrics           *network.MetricsRecorder  // 指标记录器
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
@@ -30,6 +31,7 @@ func NewServer(opts ...ServerOption) network.Server {
 
 	s := &server{}
 	s.opts = o
+	s.metrics = network.NewMetricsRecorder(protocol, network.NetServer)
 	s.connMgr = newServerConnMgr(s)
 
 	return s
@@ -104,22 +106,26 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 func (s *server) init() error {
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
+		recordError(s.metrics, network.OperationResolve, err)
 		return err
 	}
 
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(s.opts.certFile, s.opts.keyFile)
 		if err != nil {
+			s.metrics.Error(network.OperationListen, network.ErrorTypeTLS)
 			return err
 		}
 
 		if s.listener, err = tls.Listen(addr.Network(), addr.String(), &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		}); err != nil {
+			s.metrics.Error(network.OperationListen, network.ErrorTypeTLS)
 			return err
 		}
 	} else {
 		if s.listener, err = net.ListenTCP(addr.Network(), addr); err != nil {
+			recordError(s.metrics, network.OperationListen, err)
 			return err
 		}
 	}
@@ -134,6 +140,7 @@ func (s *server) serve() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
+			recordError(s.metrics, network.OperationAccept, err)
 			if e, ok := err.(net.Error); ok && e.Timeout() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -156,6 +163,7 @@ func (s *server) serve() {
 		tempDelay = 0
 
 		if err = s.connMgr.allocate(conn); err != nil {
+			recordError(s.metrics, network.OperationAccept, err)
 			log.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
 		}
