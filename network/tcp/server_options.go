@@ -24,6 +24,7 @@ const (
 	defaultServerKeyFileKey            = "etc.network.tcp.server.keyFile"
 	defaultServerMaxConnNumKey         = "etc.network.tcp.server.maxConnNum"
 	defaultServerWriteTimeoutKey       = "etc.network.tcp.server.writeTimeout"
+	defaultServerMetricsEnabledKey     = "etc.network.tcp.server.metrics.enable"
 	defaultServerWriteQueueSizeKey     = "etc.network.tcp.server.writeQueueSize"
 	defaultServerHeartbeatIntervalKey  = "etc.network.tcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey = "etc.network.tcp.server.heartbeatMechanism"
@@ -49,12 +50,14 @@ type serverOptions struct {
 	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
+	metricsEnabled     bool               // 是否开启指标采集
 }
 
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
+	opts.metricsEnabled = etc.Get(defaultServerMetricsEnabledKey).Bool()
 
 	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
 		opts.addr = addr
@@ -182,4 +185,9 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
 		}
 	}
+}
+
+// WithServerMetricsEnabled 设置是否开启指标采集
+func WithServerMetricsEnabled(enabled bool) ServerOption {
+	return func(o *serverOptions) { o.metricsEnabled = enabled }
 }

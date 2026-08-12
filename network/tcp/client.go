@@ -12,6 +12,7 @@ import (
 type client struct {
 	opts              *clientOptions            // 配置
 	id                atomic.Int64              // 连接ID
+	metrics           *network.MetricsRecorder  // 指标记录器
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
@@ -25,7 +26,10 @@ func NewClient(opts ...ClientOption) network.Client {
 		opt(o)
 	}
 
-	return &client{opts: o}
+	return &client{
+		opts:    o,
+		metrics: network.NewMetricsRecorder(protocol, network.NetClient),
+	}
 }
 
 // Dial 拨号连接
@@ -43,22 +47,26 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
+		recordError(c.metrics, network.OperationResolve, err)
 		return nil, err
 	}
 
 	if c.opts.caFile != "" {
 		config, err := ctls.MakeTCPClientTLSConfig(c.opts.caFile, c.opts.serverName)
 		if err != nil {
+			c.metrics.Error(network.OperationDial, network.ErrorTypeTLS)
 			return nil, err
 		}
 
 		dialer := &net.Dialer{Timeout: c.opts.dialTimeout}
 
 		if conn, err = tls.DialWithDialer(dialer, tcpAddr.Network(), tcpAddr.String(), config); err != nil {
+			recordError(c.metrics, network.OperationDial, err)
 			return nil, err
 		}
 	} else {
 		if conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout); err != nil {
+			recordError(c.metrics, network.OperationDial, err)
 			return nil, err
 		}
 	}

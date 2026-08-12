@@ -23,6 +23,7 @@ const (
 	defaultClientDialTimeoutKey       = "etc.network.tcp.client.dialTimeout"
 	defaultClientWriteTimeoutKey      = "etc.network.tcp.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.tcp.client.writeQueueSize"
+	defaultClientMetricsEnabledKey    = "etc.network.tcp.client.metrics.enable"
 	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
 )
 
@@ -36,12 +37,14 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写超时时间，默认无超时
 	writeQueueSize    int           // 写队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+	metricsEnabled    bool          // 是否开启指标采集
 }
 
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 	opts.caFile = etc.Get(defaultClientCAFileKey).String()
 	opts.serverName = etc.Get(defaultClientServerNameKey).String()
+	opts.metricsEnabled = etc.Get(defaultClientMetricsEnabledKey).Bool()
 
 	if addr := etc.Get(defaultClientAddrKey, defaultClientAddr).String(); addr != "" {
 		opts.addr = addr
@@ -140,4 +143,9 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
 		}
 	}
+}
+
+// WithClientMetricsEnabled 设置是否开启指标采集
+func WithClientMetricsEnabled(enabled bool) ClientOption {
+	return func(o *clientOptions) { o.metricsEnabled = enabled }
 }

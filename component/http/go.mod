@@ -6,6 +6,7 @@ require (
 	github.com/dobyte/due/v2 v2.5.8
 	github.com/go-openapi/runtime v0.28.0
 	github.com/gofiber/fiber/v3 v3.2.0
+	github.com/valyala/fasthttp v1.70.0
 )
 
 require (
@@ -43,13 +44,12 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.70.0 // indirect
 	go.mongodb.org/mongo-driver v1.16.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

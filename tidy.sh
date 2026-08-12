@@ -6,6 +6,7 @@ readonly modules=(
 	"./cache/redis"
     "./cache/memcache"
 	"./component/http"
+	"./component/otel"
     "./config/consul"
     "./config/etcd"
     "./config/nacos"
