@@ -65,26 +65,36 @@ func defaultOptions() *options {
 }
 
 // WithAddrs 设置连接地址
+// @param addrs ...string 一个或多个 Memcache 节点地址
+// @return @1 Option 配置项
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
 // WithClient 设置外部客户端
+// @param client *memcache.Client 外部客户端实例
+// @return @1 Option 配置项
 func WithClient(client *memcache.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
 // WithPrefix 设置前缀
+// @param prefix string key 前缀
+// @return @1 Option 配置项
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
 // WithNilValue 设置空值
+// @param nilValue string 空值占位字符串
+// @return @1 Option 配置项
 func WithNilValue(nilValue string) Option {
 	return func(o *options) { o.nilValue = nilValue }
 }
 
 // WithNilExpiration 设置空值过期时间
+// @param nilExpiration time.Duration 空值过期时间
+// @return @1 Option 配置项
 func WithNilExpiration(nilExpiration time.Duration) Option {
 	return func(o *options) {
 		if nilExpiration > 0 {
@@ -94,6 +104,8 @@ func WithNilExpiration(nilExpiration time.Duration) Option {
 }
 
 // WithMinExpiration 设置最小过期时间
+// @param minExpiration time.Duration 最小过期时间
+// @return @1 Option 配置项
 func WithMinExpiration(minExpiration time.Duration) Option {
 	return func(o *options) {
 		if minExpiration > 0 {
@@ -103,6 +115,8 @@ func WithMinExpiration(minExpiration time.Duration) Option {
 }
 
 // WithMaxExpiration 设置最大过期时间
+// @param maxExpiration time.Duration 最大过期时间
+// @return @1 Option 配置项
 func WithMaxExpiration(maxExpiration time.Duration) Option {
 	return func(o *options) {
 		if maxExpiration > 0 {
