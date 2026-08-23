@@ -1,9 +1,7 @@
 package xrand
 
 import (
-	"math"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,18 +14,11 @@ const (
 	LetterUpperSeed      = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"                           // 大写字母
 	DigitSeed            = "0123456789"                                           // 数字
 	DigitWithoutZeroSeed = "123456789"                                            // 无0数字
-	SymbolSeed           = "!\\\"#$%&'()*+,-./:;<=>?@[\\\\]^_`{|}~"               // 特殊字符
+	SymbolSeed           = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"                   // 特殊字符
 )
 
-var globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-// Rand 获取全局随机对象
-func Rand() *rand.Rand {
-	return globalRand
-}
-
 // Str 生成指定长度的字符串
-func Str(seed string, length int) (str string) {
+func Str(seed string, length int) string {
 	if length <= 0 {
 		return ""
 	}
@@ -36,15 +27,17 @@ func Str(seed string, length int) (str string) {
 	n := len(r)
 	if n == 0 {
 		log.Warnf("invalid seed")
-		return
+		return ""
 	}
+
+	builder := strings.Builder{}
+	builder.Grow(length)
 
 	for range length {
-		pos := globalRand.Intn(n)
-		str += string(r[pos : pos+1])
+		builder.WriteRune(r[rand.Intn(n)])
 	}
 
-	return
+	return builder.String()
 }
 
 // Letters 生成指定长度的字母字符串
@@ -54,6 +47,10 @@ func Letters(length int) string {
 
 // Digits 生成指定长度的数字字符串
 func Digits(length int, hasLeadingZero ...bool) string {
+	if length <= 0 {
+		return ""
+	}
+
 	if len(hasLeadingZero) > 0 && hasLeadingZero[0] {
 		return Str(DigitSeed, length)
 	}
@@ -80,7 +77,22 @@ func Int(min, max int) int {
 		min, max = max, min
 	}
 
-	return globalRand.Intn(max+1-min) + min
+	span := uint64(max) - uint64(min) + 1
+	if span == 0 {
+		return int(rand.Uint64())
+	}
+
+	// 拒绝采样，避免 max+1 溢出导致的 panic 及取模偏差
+	limit := ^uint64(0) - (^uint64(0) % span)
+
+	for {
+		r := rand.Uint64()
+		if r >= limit {
+			continue
+		}
+
+		return int(uint64(min) + r%span)
+	}
 }
 
 // Int32 生成[min,max]范围间的32位整数，
@@ -93,7 +105,21 @@ func Int32(min, max int32) int32 {
 		min, max = max, min
 	}
 
-	return globalRand.Int31n(max+1-min) + min
+	span := uint32(max) - uint32(min) + 1
+	if span == 0 {
+		return int32(rand.Uint32())
+	}
+
+	limit := ^uint32(0) - (^uint32(0) % span)
+
+	for {
+		r := rand.Uint32()
+		if r >= limit {
+			continue
+		}
+
+		return int32(uint32(min) + r%span)
+	}
 }
 
 // Int64 生成[min,max]范围间的64位整数
@@ -106,7 +132,21 @@ func Int64(min, max int64) int64 {
 		min, max = max, min
 	}
 
-	return globalRand.Int63n(max+1-min) + min
+	span := uint64(max) - uint64(min) + 1
+	if span == 0 {
+		return int64(rand.Uint64())
+	}
+
+	limit := ^uint64(0) - (^uint64(0) % span)
+
+	for {
+		r := rand.Uint64()
+		if r >= limit {
+			continue
+		}
+
+		return int64(uint64(min) + r%span)
+	}
 }
 
 // Float32 生成[min,max)范围间的32位浮点数
@@ -119,7 +159,7 @@ func Float32(min, max float32) float32 {
 		min, max = max, min
 	}
 
-	return min + globalRand.Float32()*(max-min)
+	return min + rand.Float32()*(max-min)
 }
 
 // Float64 生成[min,max)范围间的64位浮点数
@@ -132,7 +172,7 @@ func Float64(min, max float64) float64 {
 		min, max = max, min
 	}
 
-	return min + globalRand.Float64()*(max-min)
+	return min + rand.Float64()*(max-min)
 }
 
 // Duration 生成[min,max]范围间的时间间隔
@@ -147,66 +187,68 @@ func Lucky(probability float64, base ...float64) bool {
 	}
 
 	b := float64(100)
+
 	if len(base) > 0 {
-		b = base[0]
+		if base[0] <= 0 {
+			return false
+		} else {
+			b = base[0]
+		}
 	}
 
 	if probability >= b {
 		return true
 	}
 
-	str := strconv.FormatFloat(probability, 'f', -1, 64)
-	scale := float64(0)
-
-	if i := strings.IndexByte(str, '.'); i > 0 {
-		scale = math.Pow10(len(str) - i - 1)
-	}
-
-	return Int64(1, int64(b*scale)) <= int64(probability*scale)
+	return rand.Float64() < probability/b
 }
 
-// Weight 权重随机
-func Weight(fn func(v any) float64, list ...any) int {
+// Weight 权重随机；权重合计无效（<=0）时返回 false
+func Weight[T any](fn func(v T) float64, list ...T) (int, T, bool) {
+	var v T
+
 	if len(list) == 0 {
-		return -1
+		return -1, v, false
 	}
 
-	total := float64(0)
-	scale := float64(1)
-
-	for _, item := range list {
-		weight := fn(item)
-		str := strconv.FormatFloat(weight, 'f', -1, 64)
-
-		if i := strings.IndexByte(str, '.'); i > 0 {
-			scale = math.Max(scale, math.Pow10(len(str)-i-1))
-		}
-
-		total += weight
-	}
-
-	sum := int64(total * scale)
-
-	if sum == 0 {
-		return Int(1, len(list))
-	}
-
-	weight := Int64(1, sum)
-	acc := int64(0)
+	var (
+		total   = float64(0)
+		weights = make([]float64, len(list))
+	)
 
 	for i, item := range list {
-		acc += int64(fn(item) * scale)
-		if weight <= acc {
-			return i
+		weight := fn(item)
+		weights[i] = weight
+
+		if weight > 0 {
+			total += weight
 		}
 	}
 
-	return Int(1, len(list))
+	if total <= 0 {
+		return -1, v, false
+	}
+
+	r := rand.Float64() * total
+	acc := float64(0)
+
+	for i, w := range weights {
+		if w <= 0 {
+			continue
+		}
+
+		acc += w
+		if r < acc {
+			return i, list[i], true
+		}
+	}
+
+	return -1, v, false
 }
 
 // Shuffle 打乱数组
-func Shuffle(list []any) {
-	globalRand.Shuffle(len(list), func(i, j int) {
+func Shuffle[T any](list []T) {
+	rand.Shuffle(len(list), func(i, j int) {
 		list[i], list[j] = list[j], list[i]
 	})
 }

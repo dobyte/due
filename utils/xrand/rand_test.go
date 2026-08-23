@@ -2,6 +2,7 @@ package xrand_test
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -17,7 +18,15 @@ func Test_Symbols(t *testing.T) {
 }
 
 func Test_Int(t *testing.T) {
-	t.Log(xrand.Int(1, 2))
+	t.Log(xrand.Int(1, math.MaxInt))
+}
+
+func Test_Int32(t *testing.T) {
+	t.Log(xrand.Int32(1, math.MaxInt32))
+}
+
+func Test_Int64(t *testing.T) {
+	t.Log(xrand.Int64(1, math.MaxInt64))
 }
 
 func Test_Float32(t *testing.T) {
@@ -34,7 +43,7 @@ func TestLucky(t *testing.T) {
 func TestWeight(t *testing.T) {
 	total := 1000000
 
-	weights := []any{
+	weights := []float32{
 		50,
 		20.3,
 		29.7,
@@ -42,11 +51,11 @@ func TestWeight(t *testing.T) {
 
 	counters := []int{0, 0, 0}
 
-	for i := 0; i < total; i++ {
-		index := xrand.Weight(func(v any) float64 {
+	for range total {
+		i, _, _ := xrand.Weight(func(v float32) float64 {
 			return xconv.Float64(v)
 		}, weights...)
-		counters[index] = counters[index] + 1
+		counters[i] = counters[i] + 1
 	}
 
 	for i, num := range counters {
