@@ -106,51 +106,73 @@ func defaultOptions() *options {
 }
 
 // WithAddrs 设置连接地址
+// @param addrs ...string 一个或多个 Redis 节点地址
+// @return @1 Option 配置项
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
 // WithDB 设置数据库号
+// @param db int 数据库编号
+// @return @1 Option 配置项
 func WithDB(db int) Option {
 	return func(o *options) { o.db = db }
 }
 
 // WithUsername 设置用户名
+// @param username string 认证用户名
+// @return @1 Option 配置项
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
 // WithPassword 设置密码
+// @param password string 认证密码
+// @return @1 Option 配置项
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
 // WithCredentials 设置证书、密钥、CA证书
+// @param certFile string 客户端证书文件路径
+// @param keyFile string 客户端私钥文件路径
+// @param caFile string CA 证书文件路径
+// @return @1 Option 配置项
 func WithCredentials(certFile, keyFile, caFile string) Option {
 	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
 // WithMaxRetries 设置最大重试次数
+// @param maxRetries int 最大重试次数
+// @return @1 Option 配置项
 func WithMaxRetries(maxRetries int) Option {
 	return func(o *options) { o.maxRetries = maxRetries }
 }
 
 // WithClient 设置外部客户端
+// @param client redis.UniversalClient 外部客户端实例
+// @return @1 Option 配置项
 func WithClient(client redis.UniversalClient) Option {
 	return func(o *options) { o.client = client }
 }
 
 // WithPrefix 设置前缀
+// @param prefix string key 前缀
+// @return @1 Option 配置项
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
 // WithNilValue 设置空值
+// @param nilValue string 空值占位字符串
+// @return @1 Option 配置项
 func WithNilValue(nilValue string) Option {
 	return func(o *options) { o.nilValue = nilValue }
 }
 
 // WithNilExpiration 设置空值过期时间
+// @param nilExpiration time.Duration 空值过期时间
+// @return @1 Option 配置项
 func WithNilExpiration(nilExpiration time.Duration) Option {
 	return func(o *options) {
 		if nilExpiration > 0 {
@@ -160,6 +182,8 @@ func WithNilExpiration(nilExpiration time.Duration) Option {
 }
 
 // WithMinExpiration 设置最小过期时间
+// @param minExpiration time.Duration 最小过期时间
+// @return @1 Option 配置项
 func WithMinExpiration(minExpiration time.Duration) Option {
 	return func(o *options) {
 		if minExpiration > 0 {
@@ -169,6 +193,8 @@ func WithMinExpiration(minExpiration time.Duration) Option {
 }
 
 // WithMaxExpiration 设置最大过期时间
+// @param maxExpiration time.Duration 最大过期时间
+// @return @1 Option 配置项
 func WithMaxExpiration(maxExpiration time.Duration) Option {
 	return func(o *options) {
 		if maxExpiration > 0 {

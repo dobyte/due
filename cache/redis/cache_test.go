@@ -95,3 +95,15 @@ func TestCache_GetSet(t *testing.T) {
 
 	fmt.Println(value)
 }
+
+func TestCache_Set(t *testing.T) {
+	ctx := context.Background()
+
+	if err := cache.Set(ctx, "key", "value", 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cache.Set(ctx, "key", "value", -1); err != nil {
+		t.Fatal(err)
+	}
+}
