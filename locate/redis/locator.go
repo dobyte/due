@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	userGateKey     = "%s:locate:user:%d:gate"     // string
-	userNodeKey     = "%s:locate:user:%d:node"     // hash
-	clusterEventKey = "%s:locate:cluster:%s:event" // channel
+	userGateKey     = "%s:locate:user:%d:gate"           // string
+	userNodeKey     = "%s:locate:user:%d:node"           // hash
+	clusterEventKey = "%s:locate:db:%d:cluster:%s:event" // channel
 )
 
 const name = "redis"
@@ -268,7 +268,7 @@ func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64
 		return err
 	}
 
-	return l.opts.client.Publish(ctx, fmt.Sprintf(clusterEventKey, l.opts.prefix, evt.InsKind), msg).Err()
+	return l.opts.client.Publish(ctx, fmt.Sprintf(clusterEventKey, l.opts.prefix, l.opts.db, evt.InsKind), msg).Err()
 }
 
 // Watch 监听用户定位变化

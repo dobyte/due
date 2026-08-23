@@ -101,7 +101,7 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 	sub := l.opts.client.Subscribe(ctx)
 	channels := make([]string, 0, len(kinds))
 	for _, kind := range kinds {
-		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, kind))
+		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, l.opts.db, kind))
 	}
 
 	if err := sub.Subscribe(ctx, channels...); err != nil {
