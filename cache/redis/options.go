@@ -71,7 +71,7 @@ type options struct {
 	client redis.UniversalClient
 
 	// 前缀
-	// key前缀，默认为cache
+	// key前缀，默认为due:cache
 	prefix string
 
 	// 空值，默认为cache@nil

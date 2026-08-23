@@ -8,6 +8,7 @@ import (
 	"github.com/dobyte/due/v2/cache"
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xrand"
 	"github.com/dobyte/due/v2/utils/xreflect"
@@ -45,6 +46,10 @@ func NewCache(opts ...Option) *Cache {
 			if options.TLSConfig, c.err = tls.MakeRedisTLSConfig(c.opts.certFile, c.opts.keyFile, c.opts.caFile); c.err != nil {
 				return c
 			}
+		} else {
+			if c.opts.certFile != "" || c.opts.keyFile != "" || c.opts.caFile != "" {
+				log.Warn("redis cache: certFile or keyFile or caFile is empty")
+			}
 		}
 
 		c.opts.client, c.builtin = redis.NewUniversalClient(options), true
@@ -55,8 +60,8 @@ func NewCache(opts ...Option) *Cache {
 
 // Has 检测缓存是否存在
 func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
-	if c.err != nil {
-		return false, c.err
+	if err := c.check(); err != nil {
+		return false, err
 	}
 
 	key = c.AddPrefix(key)
@@ -75,8 +80,8 @@ func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 
 // Get 获取缓存值
 func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
-	if c.err != nil {
-		return cache.NewResult(nil, c.err)
+	if err := c.check(); err != nil {
+		return cache.NewResult(nil, err)
 	}
 
 	key = c.AddPrefix(key)
@@ -99,11 +104,11 @@ func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 
 // Set 设置缓存值
 func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...time.Duration) error {
-	if c.err != nil {
-		return c.err
+	if err := c.check(); err != nil {
+		return err
 	}
 
-	if len(expiration) > 0 {
+	if len(expiration) > 0 && expiration[0] > 0 {
 		return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), expiration[0]).Err()
 	} else {
 		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
@@ -114,8 +119,8 @@ func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...ti
 
 // GetSet 获取设置缓存值
 func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
-	if c.err != nil {
-		return cache.NewResult(nil, c.err)
+	if err := c.check(); err != nil {
+		return cache.NewResult(nil, err)
 	}
 
 	key = c.AddPrefix(key)
@@ -168,8 +173,8 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 
 // Delete 删除缓存
 func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
-	if c.err != nil {
-		return 0, c.err
+	if err := c.check(); err != nil {
+		return 0, err
 	}
 
 	if len(keys) == 0 {
@@ -186,8 +191,8 @@ func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
 
 // IncrInt 整数自增
 func (c *Cache) IncrInt(ctx context.Context, key string, value int64) (int64, error) {
-	if c.err != nil {
-		return 0, c.err
+	if err := c.check(); err != nil {
+		return 0, err
 	}
 
 	return c.opts.client.IncrBy(ctx, c.AddPrefix(key), value).Result()
@@ -195,8 +200,8 @@ func (c *Cache) IncrInt(ctx context.Context, key string, value int64) (int64, er
 
 // IncrFloat 浮点数自增
 func (c *Cache) IncrFloat(ctx context.Context, key string, value float64) (float64, error) {
-	if c.err != nil {
-		return 0, c.err
+	if err := c.check(); err != nil {
+		return 0, err
 	}
 
 	return c.opts.client.IncrByFloat(ctx, c.AddPrefix(key), value).Result()
@@ -204,8 +209,8 @@ func (c *Cache) IncrFloat(ctx context.Context, key string, value float64) (float
 
 // DecrInt 整数自减
 func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, error) {
-	if c.err != nil {
-		return 0, c.err
+	if err := c.check(); err != nil {
+		return 0, err
 	}
 
 	return c.opts.client.DecrBy(ctx, c.AddPrefix(key), value).Result()
@@ -213,8 +218,8 @@ func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, er
 
 // DecrFloat 浮点数自减
 func (c *Cache) DecrFloat(ctx context.Context, key string, value float64) (float64, error) {
-	if c.err != nil {
-		return 0, c.err
+	if err := c.check(); err != nil {
+		return 0, err
 	}
 
 	return c.opts.client.IncrByFloat(ctx, c.AddPrefix(key), -value).Result()
@@ -231,11 +236,24 @@ func (c *Cache) AddPrefix(key string) string {
 
 // Client 获取客户端
 func (c *Cache) Client() any {
-	if c.err != nil {
+	if err := c.check(); err != nil {
 		return nil
 	}
 
 	return c.opts.client
+}
+
+// check 检查缓存是否已关闭
+func (c *Cache) check() error {
+	if c.err != nil {
+		return c.err
+	}
+
+	if c.closed.Load() {
+		return errors.ErrCacheClosed
+	}
+
+	return nil
 }
 
 // Close 关闭缓存
