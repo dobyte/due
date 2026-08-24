@@ -18,19 +18,19 @@ func Test_Symbols(t *testing.T) {
 }
 
 func Test_Int(t *testing.T) {
-	t.Log(xrand.Int(1, math.MaxInt))
+	t.Log(xrand.IntR(1, math.MaxInt))
 }
 
 func Test_Int32(t *testing.T) {
-	t.Log(xrand.Int32(1, math.MaxInt32))
+	t.Log(xrand.Int32R(1, math.MaxInt32))
 }
 
 func Test_Int64(t *testing.T) {
-	t.Log(xrand.Int64(1, math.MaxInt64))
+	t.Log(xrand.Int64R(1, math.MaxInt64))
 }
 
 func Test_Float32(t *testing.T) {
-	t.Log(xrand.Float32(-50, 5))
+	t.Log(xrand.Float32R(-50, 5))
 }
 
 func TestLucky(t *testing.T) {

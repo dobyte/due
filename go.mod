@@ -1,11 +1,11 @@
 module github.com/dobyte/due/v2
 
-go 1.25.0
+go 1.27.0
 
 require (
 	dario.cat/mergo v1.0.2
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bytedance/sonic v1.14.2
+	github.com/bytedance/sonic v1.15.2
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/jinzhu/copier v0.4.0
@@ -18,7 +18,7 @@ require (
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
