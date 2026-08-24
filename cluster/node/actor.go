@@ -66,11 +66,31 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 		return errors.ErrActorNotStarted
 	}
 
-	a.rw.RLock()
-	err := a.taskQueue.Write(f)
-	a.rw.RUnlock()
+	if len(isBlock) > 0 && isBlock[0] {
+		wg := sync.WaitGroup{}
+		wg.Add(1)
 
-	return err
+		a.rw.RLock()
+		err := a.taskQueue.Write(func() {
+			defer wg.Done()
+
+			xcall.Call(f)
+		})
+		a.rw.RUnlock()
+
+		if err != nil {
+			return err
+		}
+
+		wg.Wait()
+
+		return nil
+	} else {
+		a.rw.RLock()
+		defer a.rw.RUnlock()
+
+		return a.taskQueue.Write(f)
+	}
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
