@@ -23,24 +23,24 @@ type intType interface {
 }
 
 type Random interface {
-	ExpFloat64() float64
-	Float32() float32
-	Float64() float64
 	Int() int
+	IntN(n int) int
 	Int32() int32
 	Int32N(n int32) int32
 	Int64() int64
 	Int64N(n int64) int64
-	IntN(n int) int
-	NormFloat64() float64
-	Perm(n int) []int
-	Shuffle(n int, swap func(i, j int))
 	Uint() uint
+	UintN(n uint) uint
 	Uint32() uint32
 	Uint32N(n uint32) uint32
 	Uint64() uint64
 	Uint64N(n uint64) uint64
-	UintN(n uint) uint
+	Float32() float32
+	Float64() float64
+	ExpFloat64() float64
+	NormFloat64() float64
+	Perm(n int) []int
+	Shuffle(n int, swap func(i, j int))
 }
 
 type Rand struct {
@@ -49,7 +49,7 @@ type Rand struct {
 }
 
 // NewRand 创建一个新的随机数生成器
-// @param rng Random 随机数生成器实例（*rand.Rand或*MathRand等实现了Random接口的类型）
+// @param rng Random 随机数生成器实例（如*rand.Rand、*PseudoRandom或*TrueRandom等实现了Random接口的类型）
 // @param safe ...bool 可选，是否启用并发安全模式（使用互斥锁）
 // @return @1 *Rand 随机数生成器实例
 func NewRand(rng Random, safe ...bool) *Rand {
@@ -530,8 +530,8 @@ func (rd *Rand) Weight[T any](fn func(v T) float64, list ...T) (int, T, bool) {
 }
 
 // Shuffle 打乱切片
-// @param list ...T 待打乱的切片
-func (r *Rand) Shuffle[T any](list ...T) {
+// @param list []T 待打乱的切片
+func (r *Rand) Shuffle[T any](list []T) {
 	if r.mu != nil {
 		r.mu.Lock()
 		defer r.mu.Unlock()
