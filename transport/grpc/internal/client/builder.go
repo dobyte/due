@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/ch"
 	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/random"
 	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/wrr"
 	iresolver "github.com/dobyte/due/transport/grpc/v2/internal/resolver"
@@ -86,7 +87,7 @@ func NewBuilder(opts *Options) *Builder {
 	case def.WeightedRoundRobin:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"wrr":{}}]}`))
 	case def.ConsistentHash:
-		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"ring_hash":{}}]}`))
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"ch":{}}]}`))
 	default:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
 	}
