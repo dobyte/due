@@ -10,7 +10,7 @@ import (
 )
 
 // byteRegexp 匹配存储容量字符串，如 "10KB"、"5M"、"1.5GB" 等，数字部分支持小数
-var byteRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
+var byteRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?$`)
 
 // toB 将存储容量字符串解析为字节数
 // 支持 b/k/m/g/t/p/e/z 及带 b 后缀的单位（不区分大小写），数字部分支持小数（如 1.5GB），
