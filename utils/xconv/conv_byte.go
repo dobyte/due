@@ -95,8 +95,14 @@ func Bytes(val any) []byte {
 		}
 		err = binary.Write(buf, binary.BigEndian, *v)
 	case *float32:
+		if v == nil {
+			return nil
+		}
 		err = binary.Write(buf, binary.BigEndian, *v)
 	case *float64:
+		if v == nil {
+			return nil
+		}
 		err = binary.Write(buf, binary.BigEndian, *v)
 	case uintptr:
 		err = binary.Write(buf, binary.BigEndian, uint64(v))
@@ -110,10 +116,16 @@ func Bytes(val any) []byte {
 	case string:
 		return StringToBytes(v)
 	case *string:
+		if v == nil {
+			return nil
+		}
 		return StringToBytes(*v)
 	case []byte:
 		return v
 	case *[]byte:
+		if v == nil {
+			return nil
+		}
 		return *v
 	default:
 		switch rk, rv := xreflect.Value(val); rk {

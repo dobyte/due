@@ -21,58 +21,100 @@ func Uint64(val any) uint64 {
 	case int:
 		return uint64(v)
 	case *int:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case int8:
 		return uint64(v)
 	case *int8:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case int16:
 		return uint64(v)
 	case *int16:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case int32:
 		return uint64(v)
 	case *int32:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case int64:
 		return uint64(v)
 	case *int64:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case uint:
 		return uint64(v)
 	case *uint:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case uint8:
 		return uint64(v)
 	case *uint8:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case uint16:
 		return uint64(v)
 	case *uint16:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case uint32:
 		return uint64(v)
 	case *uint32:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case uint64:
 		return v
 	case *uint64:
+		if v == nil {
+			return 0
+		}
 		return *v
 	case float32:
 		return uint64(v)
 	case *float32:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case float64:
 		return uint64(v)
 	case *float64:
+		if v == nil {
+			return 0
+		}
 		return uint64(*v)
 	case complex64:
 		return uint64(real(v))
 	case *complex64:
+		if v == nil {
+			return 0
+		}
 		return uint64(real(*v))
 	case complex128:
 		return uint64(real(v))
 	case *complex128:
+		if v == nil {
+			return 0
+		}
 		return uint64(real(*v))
 	case bool:
 		if v {
@@ -80,6 +122,9 @@ func Uint64(val any) uint64 {
 		}
 		return 0
 	case *bool:
+		if v == nil {
+			return 0
+		}
 		if *v {
 			return 1
 		}
@@ -87,6 +132,9 @@ func Uint64(val any) uint64 {
 	case time.Time:
 		return uint64(v.UnixNano())
 	case *time.Time:
+		if v == nil {
+			return 0
+		}
 		return uint64(v.UnixNano())
 	default:
 		switch rk, rv := xreflect.Value(val); rk {
@@ -128,6 +176,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -138,6 +189,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -148,6 +202,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -158,6 +215,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -168,6 +228,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -178,6 +241,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -188,6 +254,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -198,6 +267,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -208,6 +280,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -215,6 +290,9 @@ func Uint64s(val any) (slice []uint64) {
 	case []uint64:
 		return v
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		return *v
 	case []float32:
 		slice = make([]uint64, len(v))
@@ -222,6 +300,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -232,6 +313,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -242,6 +326,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -252,6 +339,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -262,6 +352,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -272,6 +365,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -282,6 +378,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
@@ -292,6 +391,9 @@ func Uint64s(val any) (slice []uint64) {
 			slice[i] = Uint64(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		slice = make([]uint64, len(*v))
 		for i := range *v {
 			slice[i] = Uint64((*v)[i])
