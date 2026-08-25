@@ -433,6 +433,9 @@ func Bs(val any) (slice []float64) {
 	case []bool:
 		return make([]float64, len(v))
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		return make([]float64, len(*v))
 	case []any:
 		slice = make([]float64, len(v))

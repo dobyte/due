@@ -1,6 +1,8 @@
 package xconv
 
 import (
+	"bytes"
+	"encoding/binary"
 	"reflect"
 	"strconv"
 	"time"
@@ -9,7 +11,8 @@ import (
 )
 
 // Uint64 将任意值转换为 uint64
-// 支持所有基础数值类型、bool、time.Time 及通过反射处理的字符串等类型；无法转换时返回 0
+// 支持所有基础数值类型、bool、time.Time、[]byte（按大端序解析为64位整数，长度不超过8）及
+// 通过反射处理的字符串等类型；无法转换时返回 0
 // @param val any 待转换的值
 // @return @1 uint64 转换后的 uint64
 func Uint64(val any) uint64 {
@@ -136,12 +139,31 @@ func Uint64(val any) uint64 {
 			return 0
 		}
 		return uint64(v.UnixNano())
+	case []byte:
+		if len(v) > 8 {
+			return 0
+		}
+
+		buf := make([]byte, 8)
+		copy(buf[len(buf)-len(v):], v)
+
+		var u uint64
+		if err := binary.Read(bytes.NewReader(buf), binary.BigEndian, &u); err == nil {
+			return u
+		} else {
+			return 0
+		}
+	case *[]byte:
+		if v == nil {
+			return 0
+		}
+		return Uint64(*v)
 	default:
 		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
 			return Uint64(rv.Bool())
 		case reflect.String:
-			i, _ := strconv.ParseUint(rv.String(), 0, 64)
+			i, _ := strconv.ParseUint(rv.String(), 10, 64)
 			return i
 		case reflect.Uintptr:
 			return rv.Uint()
