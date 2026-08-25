@@ -151,7 +151,7 @@ func TestPickerRebalance(t *testing.T) {
 }
 
 func TestGetHashKey(t *testing.T) {
-	if key := getHashKey(nil); key != "" {
+	if key := getHashKey(context.Background()); key != "" {
 		t.Errorf("want empty key for nil ctx, got %q", key)
 	}
 
