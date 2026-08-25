@@ -53,7 +53,7 @@ func (c *consumer) dispatch(event *eventbus.Event) {
 			return
 		}
 
-		sub := c.subscriptions[xrand.Int(0, len(c.subscriptions)-1)]
+		sub := c.subscriptions[xrand.IntR(0, len(c.subscriptions)-1)]
 
 		if sub.handler == nil {
 			return
