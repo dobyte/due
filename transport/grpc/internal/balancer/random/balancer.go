@@ -33,6 +33,7 @@ func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 
 	for sc, addr := range b.subConns {
 		if _, ok := addrsSet[addr.Addr]; !ok {
+			b.cse.RecordTransition(b.scStates[sc], connectivity.Shutdown)
 			sc.Shutdown()
 			delete(b.subConns, sc)
 			delete(b.scStates, sc)
@@ -63,6 +64,11 @@ func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 	}
 
 	b.updatePicker()
+
+	b.cc.UpdateState(balancer.State{
+		ConnectivityState: b.cse.CurrentState(),
+		Picker:            b.picker,
+	})
 
 	return nil
 }

@@ -72,7 +72,11 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 
 	b.resolvers.Range(func(key, value any) bool {
 		r := value.(*Resolver)
-		r.updateState(*states[r.target.URL.Host])
+		if state, ok := states[r.target.URL.Host]; ok {
+			r.updateState(*state)
+		} else {
+			r.updateState(resolver.State{})
+		}
 		return true
 	})
 }

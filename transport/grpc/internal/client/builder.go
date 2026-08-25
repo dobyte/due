@@ -5,11 +5,14 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/random"
 	iresolver "github.com/dobyte/due/transport/grpc/v2/internal/resolver"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/discovery"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/def"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
@@ -51,6 +54,10 @@ func NewBuilder(opts *Options) *Builder {
 			return &Builder{err: err}
 		}
 	} else {
+		if opts.CAFile != "" || opts.ServerName != "" {
+			log.Warn("grpc client use insecure credentials")
+		}
+
 		cred = insecure.NewCredentials()
 	}
 
@@ -71,8 +78,8 @@ func NewBuilder(opts *Options) *Builder {
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
 
 	switch opts.Dispatch {
-	case def.RoundRobin:
-		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
+	case def.Random:
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"random":{}}]}`))
 	case def.WeightedRoundRobin:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"weighted_target":{}}]}`))
 	case def.ConsistentHash:
@@ -116,25 +123,23 @@ func (b *Builder) init() error {
 }
 
 func (b *Builder) watch() {
-	var skipped bool
-
 	for {
 		select {
 		case <-b.ctx.Done():
 			return
 		default:
-			// exec watch
 		}
+
 		instances, err := b.watcher.Next()
 		if err != nil {
+			if errors.Is(err, errors.ErrWatcherStopped) {
+				return
+			}
+			time.Sleep(time.Second)
 			continue
 		}
 
-		if skipped {
-			b.updateInstances(instances)
-		} else {
-			skipped = true
-		}
+		b.updateInstances(instances)
 	}
 }
 
