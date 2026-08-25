@@ -6,10 +6,16 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Int8 将任意值转换为 int8
+// @param val any 待转换的值
+// @return @1 int8 转换后的 int8
 func Int8(val any) int8 {
 	return int8(Int64(val))
 }
 
+// Int8s 将任意值转换为 int8 切片
+// @param val any 待转换的值
+// @return @1 []int8 转换后的 int8 切片
 func Int8s(val any) (slice []int8) {
 	if val == nil {
 		return
@@ -204,11 +210,17 @@ func Int8s(val any) (slice []int8) {
 	return
 }
 
+// Int8Pointer 将任意值转换为 int8 指针
+// @param val any 待转换的值
+// @return @1 *int8 转换后的 int8 指针
 func Int8Pointer(any any) *int8 {
 	v := Int8(any)
 	return &v
 }
 
+// Int8sPointer 将任意值转换为 int8 切片指针
+// @param val any 待转换的值
+// @return @1 *[]int8 转换后的 int8 切片指针
 func Int8sPointer(any any) *[]int8 {
 	v := Int8s(any)
 	return &v

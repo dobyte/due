@@ -7,11 +7,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+var durationRegexp = regexp.MustCompile(`(((-?\d+)(\.\d+)?)(d))`)
+
+// Duration 将任意值转换为时间间隔
+// 数值类型直接按纳秒换算；字符串支持 "ns"、"us"（或 "µs"）、"ms"、"s"、"m"、"h"、"d"（天）
+// 等时间单位，其中 "d" 天会被替换为对应的纳秒数后解析
+// @param val any 待转换的值
+// @return @1 time.Duration 转换后的时间间隔
 func Duration(val any) time.Duration {
 	if val == nil {
 		return 0
@@ -19,8 +25,7 @@ func Duration(val any) time.Duration {
 
 	// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h", "d".
 	toDuration := func(s string) time.Duration {
-		reg := regexp.MustCompile(`(((-?\d+)(\.\d+)?)(d))`)
-		d, _ := time.ParseDuration(reg.ReplaceAllStringFunc(strings.ToLower(s), func(ss string) string {
+		d, _ := time.ParseDuration(durationRegexp.ReplaceAllStringFunc(strings.ToLower(s), func(ss string) string {
 			v, err := strconv.ParseFloat(strings.TrimSuffix(ss, "d"), 64)
 			if err != nil {
 				return ""
@@ -96,9 +101,9 @@ func Duration(val any) time.Duration {
 	case *string:
 		return toDuration(*v)
 	case []byte:
-		return toDuration(*(*string)(unsafe.Pointer(&v)))
+		return toDuration(BytesToString(v))
 	case *[]byte:
-		return toDuration(*(*string)(unsafe.Pointer(v)))
+		return toDuration(BytesToString(*v))
 	case time.Time:
 		return time.Duration(v.UnixNano())
 	case *time.Time:
@@ -131,6 +136,9 @@ func Duration(val any) time.Duration {
 	}
 }
 
+// Durations 将任意值转换为时间间隔切片
+// @param val any 待转换的值
+// @return @1 []time.Duration 转换后的时间间隔切片
 func Durations(val any) (slice []time.Duration) {
 	if val == nil {
 		return
@@ -331,11 +339,17 @@ func Durations(val any) (slice []time.Duration) {
 	return
 }
 
+// DurationPointer 将任意值转换为时间间隔指针
+// @param val any 待转换的值
+// @return @1 *time.Duration 转换后的时间间隔指针
 func DurationPointer(any any) *time.Duration {
 	v := Duration(any)
 	return &v
 }
 
+// DurationsPointer 将任意值转换为时间间隔切片指针
+// @param val any 待转换的值
+// @return @1 *[]time.Duration 转换后的时间间隔切片指针
 func DurationsPointer(any any) *[]time.Duration {
 	v := Durations(any)
 	return &v

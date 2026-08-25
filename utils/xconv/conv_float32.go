@@ -6,10 +6,16 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Float32 将任意值转换为 float32
+// @param val any 待转换的值
+// @return @1 float32 转换后的 float32
 func Float32(val any) float32 {
 	return float32(Float64(val))
 }
 
+// Float32s 将任意值转换为 float32 切片
+// @param val any 待转换的值
+// @return @1 []float32 转换后的 float32 切片
 func Float32s(val any) (slice []float32) {
 	if val == nil {
 		return
@@ -204,11 +210,17 @@ func Float32s(val any) (slice []float32) {
 	return
 }
 
+// Float32Pointer 将任意值转换为 float32 指针
+// @param val any 待转换的值
+// @return @1 *float32 转换后的 float32 指针
 func Float32Pointer(any any) *float32 {
 	v := Float32(any)
 	return &v
 }
 
+// Float32sPointer 将任意值转换为 float32 切片指针
+// @param val any 待转换的值
+// @return @1 *[]float32 转换后的 float32 切片指针
 func Float32sPointer(any any) *[]float32 {
 	v := Float32s(any)
 	return &v

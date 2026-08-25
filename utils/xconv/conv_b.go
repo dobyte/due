@@ -5,15 +5,19 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-func toB(val string) float64 {
-	reg := regexp.MustCompile(`(?i)^(\d+)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
+// byteRegexp 匹配存储容量字符串，如 "10KB"、"5M"、"1.5GB" 等
+var byteRegexp = regexp.MustCompile(`(?i)^(\d+)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
 
-	if rst := reg.FindStringSubmatch(val); len(rst) == 3 {
+// toB 将存储容量字符串解析为字节数
+// 支持 b/k/m/g/t/p/e/z 及带 b 后缀的单位（不区分大小写），无法解析时返回 0
+// @param val string 存储容量字符串
+// @return @1 float64 解析后的字节数
+func toB(val string) float64 {
+	if rst := byteRegexp.FindStringSubmatch(val); len(rst) == 3 {
 		var unit float64
 
 		switch strings.ToUpper(rst[2]) {
@@ -43,6 +47,11 @@ func toB(val string) float64 {
 	}
 }
 
+// B 将任意值转换为存储容量字节数（float64）
+// 数值类型直接返回；字符串支持 "10KB"、"5M" 等容量单位（不区分大小写）；
+// 无法转换时返回 0
+// @param val any 待转换的值
+// @return @1 float64 转换后的字节数
 func B(val any) float64 {
 	switch v := val.(type) {
 	case int:
@@ -110,9 +119,9 @@ func B(val any) float64 {
 	case *string:
 		return toB(*v)
 	case []byte:
-		return toB(*(*string)(unsafe.Pointer(&v)))
+		return toB(BytesToString(v))
 	case *[]byte:
-		return toB(*(*string)(unsafe.Pointer(v)))
+		return toB(BytesToString(*v))
 	case time.Time:
 		return 0
 	case *time.Time:
@@ -143,6 +152,9 @@ func B(val any) float64 {
 	}
 }
 
+// Bs 将任意值转换为存储容量字节数切片（float64 切片）
+// @param val any 待转换的值
+// @return @1 []float64 转换后的字节数切片
 func Bs(val any) (slice []float64) {
 	if val == nil {
 		return

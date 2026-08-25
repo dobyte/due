@@ -8,6 +8,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Uint64 将任意值转换为 uint64
+// 支持所有基础数值类型、bool、time.Time 及通过反射处理的字符串等类型；无法转换时返回 0
+// @param val any 待转换的值
+// @return @1 uint64 转换后的 uint64
 func Uint64(val any) uint64 {
 	if val == nil {
 		return 0
@@ -109,6 +113,9 @@ func Uint64(val any) uint64 {
 	}
 }
 
+// Uint64s 将任意值转换为 uint64 切片
+// @param val any 待转换的值
+// @return @1 []uint64 转换后的 uint64 切片
 func Uint64s(val any) (slice []uint64) {
 	if val == nil {
 		return
@@ -306,11 +313,17 @@ func Uint64s(val any) (slice []uint64) {
 	return
 }
 
+// Uint64Pointer 将任意值转换为 uint64 指针
+// @param val any 待转换的值
+// @return @1 *uint64 转换后的 uint64 指针
 func Uint64Pointer(val any) *uint64 {
 	v := Uint64(val)
 	return &v
 }
 
+// Uint64sPointer 将任意值转换为 uint64 切片指针
+// @param val any 待转换的值
+// @return @1 *[]uint64 转换后的 uint64 切片指针
 func Uint64sPointer(val any) *[]uint64 {
 	v := Uint64s(val)
 	return &v

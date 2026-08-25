@@ -6,10 +6,16 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Uint32 将任意值转换为 uint32
+// @param val any 待转换的值
+// @return @1 uint32 转换后的 uint32
 func Uint32(val any) uint32 {
 	return uint32(Uint64(val))
 }
 
+// Uint32s 将任意值转换为 uint32 切片
+// @param val any 待转换的值
+// @return @1 []uint32 转换后的 uint32 切片
 func Uint32s(val any) (slice []uint32) {
 	if val == nil {
 		return
@@ -204,11 +210,17 @@ func Uint32s(val any) (slice []uint32) {
 	return
 }
 
+// Uint32Pointer 将任意值转换为 uint32 指针
+// @param val any 待转换的值
+// @return @1 *uint32 转换后的 uint32 指针
 func Uint32Pointer(val any) *uint32 {
 	v := Uint32(val)
 	return &v
 }
 
+// Uint32sPointer 将任意值转换为 uint32 切片指针
+// @param val any 待转换的值
+// @return @1 *[]uint32 转换后的 uint32 切片指针
 func Uint32sPointer(val any) *[]uint32 {
 	v := Uint32s(val)
 	return &v

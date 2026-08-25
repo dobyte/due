@@ -7,6 +7,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// GenericNumbers 将任意数值类型的切片/数组转换为指定泛型类型的数值切片
+// 内部通过 JSON 序列化与反序列化实现类型转换，转换失败时返回空切片
+// @param val any 待转换的切片或数组
+// @return @1 []T 转换后的数值切片
 func GenericNumbers[T any](val any) (slice []T) {
 	if val == nil {
 		return

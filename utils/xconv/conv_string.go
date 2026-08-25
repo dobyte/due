@@ -5,12 +5,16 @@ import (
 	"reflect"
 	"strconv"
 	"time"
-	"unsafe"
 
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// String 将任意值转换为字符串
+// 数值类型使用十进制格式化，float32/float64 按最短表示格式化，bool 转为 true/false，
+// []byte 无拷贝转字符串，time.Time 零值返回空串，其他类型优先 JSON 序列化
+// @param val any 待转换的值
+// @return @1 string 转换后的字符串
 func String(val any) string {
 	if val == nil {
 		return ""
@@ -60,7 +64,7 @@ func String(val any) string {
 	case float32:
 		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case *float32:
-		return strconv.FormatFloat(float64(*v), 'f', -1, 64)
+		return strconv.FormatFloat(float64(*v), 'f', -1, 32)
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case *float64:
@@ -116,11 +120,14 @@ func String(val any) string {
 			if err != nil {
 				return fmt.Sprintf("%v", v)
 			}
-			return *(*string)(unsafe.Pointer(&b))
+			return BytesToString(b)
 		}
 	}
 }
 
+// Strings 将任意值转换为字符串切片
+// @param val any 待转换的值
+// @return @1 []string 转换后的字符串切片
 func Strings(val any) (slice []string) {
 	if val == nil {
 		return
@@ -315,11 +322,17 @@ func Strings(val any) (slice []string) {
 	return
 }
 
+// StringPointer 将任意值转换为字符串指针
+// @param val any 待转换的值
+// @return @1 *string 转换后的字符串指针
 func StringPointer(val any) *string {
 	v := String(val)
 	return &v
 }
 
+// StringsPointer 将任意值转换为字符串切片指针
+// @param val any 待转换的值
+// @return @1 *[]string 转换后的字符串切片指针
 func StringsPointer(val any) *[]string {
 	v := Strings(val)
 	return &v

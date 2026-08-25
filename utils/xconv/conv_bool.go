@@ -4,11 +4,15 @@ import (
 	"reflect"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Bool 将任意值转换为布尔值
+// 数值类型非零为 true；字符串非空、非"0"、非"false"（不区分大小写）为 true；
+// 零值时间返回 false；切片/映射非 nil 且非空为 true；其他类型按反射结果判定
+// @param val any 待转换的值
+// @return @1 bool 转换后的布尔值
 func Bool(val any) bool {
 	if val == nil {
 		return false
@@ -84,13 +88,13 @@ func Bool(val any) bool {
 	case *string:
 		return toBool(*v)
 	case []byte:
-		return toBool(*(*string)(unsafe.Pointer(&v)))
+		return toBool(BytesToString(v))
 	case *[]byte:
-		return toBool(*(*string)(unsafe.Pointer(v)))
+		return toBool(BytesToString(*v))
 	case time.Time:
-		return v.IsZero()
+		return !v.IsZero()
 	case *time.Time:
-		return v.IsZero()
+		return !v.IsZero()
 	default:
 		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
@@ -123,6 +127,9 @@ func Bool(val any) bool {
 	}
 }
 
+// Bools 将任意值转换为布尔切片
+// @param val any 待转换的值
+// @return @1 []bool 转换后的布尔切片
 func Bools(val any) (slice []bool) {
 	if val == nil {
 		return
@@ -317,11 +324,17 @@ func Bools(val any) (slice []bool) {
 	return
 }
 
+// BoolPointer 将任意值转换为布尔指针
+// @param val any 待转换的值
+// @return @1 *bool 转换后的布尔指针
 func BoolPointer(any any) *bool {
 	v := Bool(any)
 	return &v
 }
 
+// BoolsPointer 将任意值转换为布尔切片指针
+// @param val any 待转换的值
+// @return @1 *[]bool 转换后的布尔切片指针
 func BoolsPointer(any any) *[]bool {
 	v := Bools(any)
 	return &v

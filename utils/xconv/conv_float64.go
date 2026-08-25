@@ -8,15 +8,18 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
+// Float64 将任意值转换为 float64
+// 支持所有基础数值类型（复数取实部）、bool、time.Time（Unix纳秒）及
+// 通过反射处理的字符串等类型；无法转换时返回 0
+// @param val any 待转换的值
+// @return @1 float64 转换后的 float64
 func Float64(val any) float64 {
 	if val == nil {
 		return 0
 	}
 
 	toFloat64 := func(v complex128) float64 {
-		s := strconv.FormatComplex(v, 'f', -1, 64)
-		f, _ := strconv.ParseFloat(s, 64)
-		return f
+		return real(v)
 	}
 
 	switch v := val.(type) {
@@ -115,6 +118,9 @@ func Float64(val any) float64 {
 	}
 }
 
+// Float64s 将任意值转换为 float64 切片
+// @param val any 待转换的值
+// @return @1 []float64 转换后的 float64 切片
 func Float64s(val any) (slice []float64) {
 	if val == nil {
 		return
@@ -309,11 +315,17 @@ func Float64s(val any) (slice []float64) {
 	return
 }
 
+// Float64Pointer 将任意值转换为 float64 指针
+// @param val any 待转换的值
+// @return @1 *float64 转换后的 float64 指针
 func Float64Pointer(any any) *float64 {
 	v := Float64(any)
 	return &v
 }
 
+// Float64sPointer 将任意值转换为 float64 切片指针
+// @param val any 待转换的值
+// @return @1 *[]float64 转换后的 float64 切片指针
 func Float64sPointer(any any) *[]float64 {
 	v := Float64s(any)
 	return &v
