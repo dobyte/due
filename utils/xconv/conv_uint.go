@@ -28,6 +28,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -38,6 +41,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -48,6 +54,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -58,6 +67,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -68,6 +80,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -78,6 +93,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -88,6 +106,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -98,6 +119,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -108,6 +132,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -118,6 +145,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -128,6 +158,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -138,6 +171,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -148,6 +184,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -158,6 +197,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -168,6 +210,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -178,6 +223,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -188,6 +236,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])
@@ -198,6 +249,9 @@ func Uints(val any) (slice []uint) {
 			slice[i] = Uint(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		slice = make([]uint, len(*v))
 		for i := range *v {
 			slice[i] = Uint((*v)[i])

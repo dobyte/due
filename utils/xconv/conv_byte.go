@@ -35,16 +35,75 @@ func Bytes(val any) []byte {
 	case int:
 		err = binary.Write(buf, binary.BigEndian, int64(v))
 	case *int:
+		if v == nil {
+			return nil
+		}
+
 		err = binary.Write(buf, binary.BigEndian, int64(*v))
 	case uint:
 		err = binary.Write(buf, binary.BigEndian, uint64(v))
 	case *uint:
+		if v == nil {
+			return nil
+		}
 		err = binary.Write(buf, binary.BigEndian, uint64(*v))
-	case bool, *bool, int8, *int8, int16, *int16, int32, *int32, int64, *int64, uint8, *uint8, uint16, *uint16, uint32, *uint32, uint64, *uint64, float32, *float32, float64, *float64:
+	case bool, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64:
 		err = binary.Write(buf, binary.BigEndian, v)
+	case *bool:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *int8:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *int16:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *int32:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *int64:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *uint8:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *uint16:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *uint32:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *uint64:
+		if v == nil {
+			return nil
+		}
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *float32:
+		err = binary.Write(buf, binary.BigEndian, *v)
+	case *float64:
+		err = binary.Write(buf, binary.BigEndian, *v)
 	case uintptr:
 		err = binary.Write(buf, binary.BigEndian, uint64(v))
 	case *uintptr:
+		if v == nil {
+			return nil
+		}
 		err = binary.Write(buf, binary.BigEndian, uint64(*v))
 	case complex64, *complex64, complex128, *complex128:
 		return nil

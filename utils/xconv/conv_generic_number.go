@@ -25,58 +25,100 @@ func GenericNumbers[T any](val any) (slice []T) {
 	case []int:
 		b, err = json.Marshal(v)
 	case *[]int:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []int8:
 		b, err = json.Marshal(v)
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []int16:
 		b, err = json.Marshal(v)
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []int32:
 		b, err = json.Marshal(v)
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []int64:
 		b, err = json.Marshal(v)
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []uint:
 		b, err = json.Marshal(v)
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []uint8:
 		b, err = json.Marshal(v)
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []uint16:
 		b, err = json.Marshal(v)
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []uint32:
 		b, err = json.Marshal(v)
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []uint64:
 		b, err = json.Marshal(v)
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []float32:
 		b, err = json.Marshal(v)
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []float64:
 		b, err = json.Marshal(v)
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []complex64:
 		b, err = json.Marshal(v)
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []complex128:
 		b, err = json.Marshal(v)
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		b, err = json.Marshal(*v)
 	case []string:
 		temp := make([]int64, len(v))
@@ -86,6 +128,9 @@ func GenericNumbers[T any](val any) (slice []T) {
 
 		b, err = json.Marshal(temp)
 	case *[]string:
+		if v == nil {
+			return
+		}
 		temp := make([]int64, len(*v))
 		for i := range *v {
 			temp[i] = Int64((*v)[i])
@@ -100,6 +145,9 @@ func GenericNumbers[T any](val any) (slice []T) {
 
 		b, err = json.Marshal(temp)
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		temp := make([]int8, len(*v))
 		for i := range *v {
 			temp[i] = Int8((*v)[i])
@@ -114,6 +162,9 @@ func GenericNumbers[T any](val any) (slice []T) {
 
 		b, err = json.Marshal(temp)
 	case *[]any:
+		if v == nil {
+			return
+		}
 		temp := make([]int64, len(*v))
 		for i := range *v {
 			temp[i] = Int64((*v)[i])
@@ -128,6 +179,9 @@ func GenericNumbers[T any](val any) (slice []T) {
 
 		b, err = json.Marshal(temp)
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		temp := make([]int64, len(*v))
 		for i := range *v {
 			temp[i] = Int64((*v)[i])

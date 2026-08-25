@@ -24,70 +24,121 @@ func String(val any) string {
 	case int:
 		return strconv.FormatInt(int64(v), 10)
 	case *int:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatInt(int64(*v), 10)
 	case int8:
 		return strconv.FormatInt(int64(v), 10)
 	case *int8:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatInt(int64(*v), 10)
 	case int16:
 		return strconv.FormatInt(int64(v), 10)
 	case *int16:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatInt(int64(*v), 10)
 	case int32:
 		return strconv.FormatInt(int64(v), 10)
 	case *int32:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatInt(int64(*v), 10)
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case *int64:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatInt(*v, 10)
 	case uint:
 		return strconv.FormatUint(uint64(v), 10)
 	case *uint:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatUint(uint64(*v), 10)
 	case uint8:
 		return strconv.FormatUint(uint64(v), 10)
 	case *uint8:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatUint(uint64(*v), 10)
 	case uint16:
 		return strconv.FormatUint(uint64(v), 10)
 	case *uint16:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatUint(uint64(*v), 10)
 	case uint32:
 		return strconv.FormatUint(uint64(v), 10)
 	case *uint32:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatUint(uint64(*v), 10)
 	case uint64:
 		return strconv.FormatUint(v, 10)
 	case *uint64:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatUint(*v, 10)
 	case float32:
 		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case *float32:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatFloat(float64(*v), 'f', -1, 32)
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case *float64:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatFloat(*v, 'f', -1, 64)
 	case complex64:
 		return strconv.FormatComplex(complex128(v), 'e', -1, 64)
 	case complex128:
 		return strconv.FormatComplex(v, 'e', -1, 128)
 	case *complex64:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatComplex(complex128(*v), 'e', -1, 64)
 	case *complex128:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatComplex(*v, 'e', -1, 128)
 	case bool:
 		return strconv.FormatBool(v)
 	case *bool:
+		if v == nil {
+			return ""
+		}
 		return strconv.FormatBool(*v)
 	case string:
 		return v
 	case *string:
+		if v == nil {
+			return ""
+		}
 		return *v
 	case []byte:
 		return BytesToString(v)
 	case *[]byte:
+		if v == nil {
+			return ""
+		}
 		return BytesToString(*v)
 	case time.Time:
 		if v.IsZero() {
@@ -95,7 +146,7 @@ func String(val any) string {
 		}
 		return v.String()
 	case *time.Time:
-		if v.IsZero() {
+		if v == nil || v.IsZero() {
 			return ""
 		}
 		return v.String()
@@ -140,6 +191,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -150,6 +204,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -160,6 +217,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -170,6 +230,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -180,6 +243,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -190,6 +256,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -200,6 +269,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -210,6 +282,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -220,6 +295,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -230,6 +308,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -240,6 +321,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -250,6 +334,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -260,6 +347,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -270,6 +360,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -277,6 +370,9 @@ func Strings(val any) (slice []string) {
 	case []string:
 		return v
 	case *[]string:
+		if v == nil {
+			return
+		}
 		return *v
 	case []bool:
 		slice = make([]string, len(v))
@@ -284,6 +380,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -294,6 +393,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])
@@ -304,6 +406,9 @@ func Strings(val any) (slice []string) {
 			slice[i] = String(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		slice = make([]string, len(*v))
 		for i := range *v {
 			slice[i] = String((*v)[i])

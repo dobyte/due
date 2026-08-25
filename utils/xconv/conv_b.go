@@ -9,11 +9,12 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// byteRegexp 匹配存储容量字符串，如 "10KB"、"5M"、"1.5GB" 等
-var byteRegexp = regexp.MustCompile(`(?i)^(\d+)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
+// byteRegexp 匹配存储容量字符串，如 "10KB"、"5M"、"1.5GB" 等，数字部分支持小数
+var byteRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?`)
 
 // toB 将存储容量字符串解析为字节数
-// 支持 b/k/m/g/t/p/e/z 及带 b 后缀的单位（不区分大小写），无法解析时返回 0
+// 支持 b/k/m/g/t/p/e/z 及带 b 后缀的单位（不区分大小写），数字部分支持小数（如 1.5GB），
+// 无法解析时返回 0
 // @param val string 存储容量字符串
 // @return @1 float64 解析后的字节数
 func toB(val string) float64 {
@@ -57,59 +58,115 @@ func B(val any) float64 {
 	case int:
 		return float64(v)
 	case *int:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case int8:
 		return float64(v)
 	case *int8:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case int16:
 		return float64(v)
 	case *int16:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case int32:
 		return float64(v)
 	case *int32:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case int64:
 		return float64(v)
 	case *int64:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case uint:
 		return float64(v)
 	case *uint:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case uint8:
 		return float64(v)
 	case *uint8:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case uint16:
 		return float64(v)
 	case *uint16:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case uint32:
 		return float64(v)
 	case *uint32:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case uint64:
 		return float64(v)
 	case *uint64:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case float32:
 		return float64(v)
 	case *float32:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case float64:
 		return v
 	case *float64:
-		return float64(*v)
+		if v == nil {
+			return 0
+		} else {
+			return float64(*v)
+		}
 	case complex64:
 		return float64(real(v))
 	case *complex64:
-		return float64(real(*v))
+		if v == nil {
+			return 0
+		} else {
+			return float64(real(*v))
+		}
 	case complex128:
 		return float64(real(v))
 	case *complex128:
-		return float64(real(*v))
+		if v == nil {
+			return 0
+		} else {
+			return float64(real(*v))
+		}
 	case bool:
 		return 0
 	case *bool:
@@ -117,11 +174,19 @@ func B(val any) float64 {
 	case string:
 		return toB(v)
 	case *string:
-		return toB(*v)
+		if v == nil {
+			return 0
+		} else {
+			return toB(*v)
+		}
 	case []byte:
 		return toB(BytesToString(v))
 	case *[]byte:
-		return toB(BytesToString(*v))
+		if v == nil {
+			return 0
+		} else {
+			return toB(BytesToString(*v))
+		}
 	case time.Time:
 		return 0
 	case *time.Time:
@@ -167,6 +232,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -177,6 +246,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -187,6 +260,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -197,6 +274,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -207,6 +288,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -217,6 +302,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -227,6 +316,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -237,6 +330,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -247,6 +344,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -257,6 +358,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -267,6 +372,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -274,6 +383,10 @@ func Bs(val any) (slice []float64) {
 	case []float64:
 		return v
 	case *[]float64:
+		if v == nil {
+			return
+		}
+
 		return *v
 	case []complex64:
 		slice = make([]float64, len(v))
@@ -281,6 +394,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -291,6 +408,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -301,6 +422,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -315,6 +440,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])
@@ -325,6 +454,10 @@ func Bs(val any) (slice []float64) {
 			slice[i] = B(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
+
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = B((*v)[i])

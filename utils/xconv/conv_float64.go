@@ -26,72 +26,119 @@ func Float64(val any) float64 {
 	case int:
 		return float64(v)
 	case *int:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case int8:
 		return float64(v)
 	case *int8:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case int16:
 		return float64(v)
 	case *int16:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case int32:
 		return float64(v)
 	case *int32:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case int64:
 		return float64(v)
 	case *int64:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case uint:
 		return float64(v)
 	case *uint:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case uint8:
 		return float64(v)
 	case *uint8:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case uint16:
 		return float64(v)
 	case *uint16:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case uint32:
 		return float64(v)
 	case *uint32:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case uint64:
 		return float64(v)
 	case *uint64:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case float32:
 		return float64(v)
 	case *float32:
+		if v == nil {
+			return 0
+		}
 		return float64(*v)
 	case float64:
 		return v
 	case *float64:
+		if v == nil {
+			return 0
+		}
 		return *v
 	case complex64:
 		return toFloat64(complex128(v))
 	case *complex64:
+		if v == nil {
+			return 0
+		}
 		return toFloat64(complex128(*v))
 	case complex128:
 		return toFloat64(v)
 	case *complex128:
+		if v == nil {
+			return 0
+		}
 		return toFloat64(*v)
 	case bool:
 		if v {
 			return 1
+		} else {
+			return 0
 		}
-		return 0
 	case *bool:
-		if *v {
+		if v != nil && *v {
 			return 1
+		} else {
+			return 0
 		}
-		return 0
 	case time.Time:
 		return float64(v.UnixNano())
 	case *time.Time:
+		if v == nil {
+			return 0
+		}
 		return float64(v.UnixNano())
 	default:
 		switch rk, rv := xreflect.Value(val); rk {
@@ -133,6 +180,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -143,6 +193,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -153,6 +206,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -163,6 +219,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -173,6 +232,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -183,6 +245,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -193,6 +258,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -203,6 +271,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -213,6 +284,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -223,6 +297,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -233,6 +310,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -240,6 +320,9 @@ func Float64s(val any) (slice []float64) {
 	case []float64:
 		return v
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		return *v
 	case []complex64:
 		slice = make([]float64, len(v))
@@ -247,6 +330,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -257,6 +343,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -267,6 +356,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -277,6 +369,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -287,6 +382,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])
@@ -297,6 +395,9 @@ func Float64s(val any) (slice []float64) {
 			slice[i] = Float64(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		slice = make([]float64, len(*v))
 		for i := range *v {
 			slice[i] = Float64((*v)[i])

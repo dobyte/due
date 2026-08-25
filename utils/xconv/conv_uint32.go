@@ -28,6 +28,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -38,6 +41,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -48,6 +54,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -58,6 +67,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -68,6 +80,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -78,6 +93,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -88,6 +106,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -98,6 +119,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -105,6 +129,9 @@ func Uint32s(val any) (slice []uint32) {
 	case []uint32:
 		return v
 	case *[]uint32:
+		if v == nil {
+			return
+		}
 		return *v
 	case []uint64:
 		slice = make([]uint32, len(v))
@@ -112,6 +139,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -122,6 +152,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -132,6 +165,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]float64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -142,6 +178,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -152,6 +191,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -162,6 +204,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -172,6 +217,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]bool:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -182,6 +230,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])
@@ -192,6 +243,9 @@ func Uint32s(val any) (slice []uint32) {
 			slice[i] = Uint32(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
 		slice = make([]uint32, len(*v))
 		for i := range *v {
 			slice[i] = Uint32((*v)[i])

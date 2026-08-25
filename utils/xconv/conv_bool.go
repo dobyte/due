@@ -26,75 +26,75 @@ func Bool(val any) bool {
 	case int:
 		return v != 0
 	case *int:
-		return *v != 0
+		return v != nil && *v != 0
 	case int8:
 		return v != 0
 	case *int8:
-		return *v != 0
+		return v != nil && *v != 0
 	case int16:
 		return v != 0
 	case *int16:
-		return *v != 0
+		return v != nil && *v != 0
 	case int32:
 		return v != 0
 	case *int32:
-		return *v != 0
+		return v != nil && *v != 0
 	case int64:
 		return v != 0
 	case *int64:
-		return *v != 0
+		return v != nil && *v != 0
 	case uint:
 		return v != 0
 	case *uint:
-		return *v != 0
+		return v != nil && *v != 0
 	case uint8:
 		return v != 0
 	case *uint8:
-		return *v != 0
+		return v != nil && *v != 0
 	case uint16:
 		return v != 0
 	case *uint16:
-		return *v != 0
+		return v != nil && *v != 0
 	case uint32:
 		return v != 0
 	case *uint32:
-		return *v != 0
+		return v != nil && *v != 0
 	case uint64:
 		return v != 0
 	case *uint64:
-		return *v != 0
+		return v != nil && *v != 0
 	case float32:
 		return v != 0
 	case *float32:
-		return *v != 0
+		return v != nil && *v != 0
 	case float64:
 		return v != 0
 	case *float64:
-		return *v != 0
+		return v != nil && *v != 0
 	case complex64:
 		return toBool(String(v))
 	case *complex64:
-		return toBool(String(*v))
+		return v != nil && toBool(String(*v))
 	case complex128:
 		return toBool(String(v))
 	case *complex128:
-		return toBool(String(*v))
+		return v != nil && toBool(String(*v))
 	case bool:
 		return v
 	case *bool:
-		return *v
+		return v != nil && *v
 	case string:
 		return toBool(v)
 	case *string:
-		return toBool(*v)
+		return v != nil && toBool(*v)
 	case []byte:
 		return toBool(BytesToString(v))
 	case *[]byte:
-		return toBool(BytesToString(*v))
+		return v != nil && toBool(BytesToString(*v))
 	case time.Time:
 		return !v.IsZero()
 	case *time.Time:
-		return !v.IsZero()
+		return v != nil && !v.IsZero()
 	default:
 		switch rk, rv := xreflect.Value(val); rk {
 		case reflect.Bool:
@@ -142,6 +142,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]int:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -152,6 +156,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]int8:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -162,6 +170,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]int16:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -172,6 +184,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]int32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -182,6 +198,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]int64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -192,6 +212,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]uint:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -202,6 +226,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]uint8:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -212,6 +240,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]uint16:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -222,6 +254,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]uint32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -232,6 +268,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]uint64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -242,6 +282,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]float32:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -252,6 +296,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]float64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -262,6 +310,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]complex64:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -272,6 +324,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]complex128:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -282,6 +338,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]string:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -289,6 +349,10 @@ func Bools(val any) (slice []bool) {
 	case []bool:
 		return v
 	case *[]bool:
+		if v == nil {
+			return
+		}
+
 		return *v
 	case []any:
 		slice = make([]bool, len(v))
@@ -296,6 +360,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[]any:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])
@@ -306,6 +374,10 @@ func Bools(val any) (slice []bool) {
 			slice[i] = Bool(v[i])
 		}
 	case *[][]byte:
+		if v == nil {
+			return
+		}
+
 		slice = make([]bool, len(*v))
 		for i := range *v {
 			slice[i] = Bool((*v)[i])

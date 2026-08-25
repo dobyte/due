@@ -215,10 +215,7 @@ func Uint64s(val any) (slice []uint64) {
 	case []uint64:
 		return v
 	case *[]uint64:
-		slice = make([]uint64, len(*v))
-		for i := range *v {
-			slice[i] = Uint64((*v)[i])
-		}
+		return *v
 	case []float32:
 		slice = make([]uint64, len(v))
 		for i := range v {

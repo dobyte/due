@@ -24,6 +24,9 @@ func Json(val any) string {
 			return v
 		}
 	case *string:
+		if v == nil {
+			return ""
+		}
 		if isJson(*v) {
 			return *v
 		}
@@ -32,6 +35,9 @@ func Json(val any) string {
 			return s
 		}
 	case *[]byte:
+		if v == nil {
+			return ""
+		}
 		if s := BytesToString(*v); isJson(s) {
 			return s
 		}
