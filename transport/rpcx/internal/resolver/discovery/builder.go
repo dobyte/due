@@ -19,6 +19,8 @@ const scheme = "discovery"
 
 const defaultTimeout = 10 * time.Second
 
+// Builder 服务发现模式解析器构建器
+// 通过注册中心获取服务实例，并按服务名与实例状态聚合地址
 type Builder struct {
 	dis       registry.Discovery
 	err       error
@@ -30,6 +32,9 @@ type Builder struct {
 	resolvers sync.Map
 }
 
+// NewBuilder 新建服务发现解析器构建器
+// @param dis registry.Discovery 服务发现组件
+// @return @1 *Builder 构建器实例
 func NewBuilder(dis registry.Discovery) *Builder {
 	b := &Builder{}
 	b.dis = dis
@@ -42,10 +47,17 @@ func NewBuilder(dis registry.Discovery) *Builder {
 	return b
 }
 
+// Scheme 获取解析器协议
+// @return @1 string 协议名称
 func (b *Builder) Scheme() string {
 	return scheme
 }
 
+// Build 构建服务发现器
+// 从缓存状态中查找服务名对应的地址并下发
+// @param target *url.URL 目标地址
+// @return @1 cli.ServiceDiscovery 服务发现器
+// @return @2 error 错误信息
 func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -67,6 +79,8 @@ func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
 	return r, nil
 }
 
+// init 初始化服务发现，加载初始实例并启动实例变更监听
+// @return @1 error 错误信息
 func (b *Builder) init() error {
 	if b.dis == nil {
 		return errors.ErrMissingDiscovery
@@ -96,6 +110,7 @@ func (b *Builder) init() error {
 	return nil
 }
 
+// watch 监听服务实例变更，并同步到各服务发现器
 func (b *Builder) watch() {
 	for {
 		select {
@@ -119,6 +134,10 @@ func (b *Builder) watch() {
 	}
 }
 
+// updateInstances 更新服务实例状态并同步到各服务发现器
+// 按实例状态（工作/繁忙/挂起）分组，优先下发高可用性分组，
+// 并将实例权重附加到地址值供加权负载均衡使用
+// @param instances []*registry.ServiceInstance 服务实例列表
 func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	var (
 		pairs     map[string][]*cli.KVPair
@@ -175,11 +194,14 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	})
 }
 
+// removeResolver 移除服务发现器
+// @param r *Resolver 服务发现器
 func (b *Builder) removeResolver(r *Resolver) {
 	b.resolvers.Delete(r.name)
 }
 
 // Close 关闭构建器，释放 watch 协程与监听资源
+// @return @1 error 错误信息
 func (b *Builder) Close() (err error) {
 	// 通知 watch 协程退出
 	if b.cancel != nil {

@@ -21,6 +21,7 @@ import (
 
 const defaultPoolSize = 10
 
+// Builder 客户端连接池构建器，负责创建 rpcx 连接池并管理其生命周期
 type Builder struct {
 	err      error
 	opts     *Options
@@ -31,6 +32,7 @@ type Builder struct {
 	closed   atomic.Bool
 }
 
+// Options 客户端配置项
 type Options struct {
 	PoolSize   int
 	CAFile     string
@@ -40,6 +42,10 @@ type Options struct {
 	FailMode   cli.FailMode
 }
 
+// NewBuilder 新建客户端连接池构建器
+// 注册直连与服务发现解析器，并按需初始化 TLS 传输配置
+// @param opts *Options 客户端配置项
+// @return @1 *Builder 构建器实例
 func NewBuilder(opts *Options) *Builder {
 	b := &Builder{}
 	b.opts = opts
@@ -60,12 +66,17 @@ func NewBuilder(opts *Options) *Builder {
 	return b
 }
 
-// RegisterBuilder 注册构建器
+// RegisterBuilder 注册解析器构建器
+// @param builder resolver.Builder 解析器构建器
 func (b *Builder) RegisterBuilder(builder resolver.Builder) {
 	b.builders[builder.Scheme()] = builder
 }
 
-// Build 建立Discovery
+// Build 构建客户端
+// 相同 target 的连接池会被缓存复用，单飞避免并发重复建池
+// @param target string 目标服务地址
+// @return @1 *cli.OneClient 客户端实例
+// @return @2 error 错误信息
 func (b *Builder) Build(target string) (*cli.OneClient, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -131,6 +142,7 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 }
 
 // Close 关闭构建器，释放全部连接池与监听资源（幂等）
+// @return @1 error 关闭过程中的错误信息
 func (b *Builder) Close() error {
 	if !b.closed.CompareAndSwap(false, true) {
 		return nil

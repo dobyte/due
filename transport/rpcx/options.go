@@ -29,7 +29,7 @@ const (
 	defaultClientFailModeKey   = "etc.transport.rpcx.client.failMode"
 )
 
-// 分发策略
+// Dispatch 分发策略
 type Dispatch = def.Dispatch
 
 const (
@@ -39,13 +39,17 @@ const (
 	ConsistentHash     = def.ConsistentHash     // 一致性哈希分发
 )
 
+// Option 传输器配置项
 type Option func(o *options)
 
+// options 传输器配置
 type options struct {
 	server server.Options
 	client client.Options
 }
 
+// defaultOptions 获取默认配置项，配置值优先从配置中心读取
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	opts := &options{}
 	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
@@ -62,31 +66,45 @@ func defaultOptions() *options {
 }
 
 // WithServerAddr 设置服务器监听地址
+// @param addr string 服务器监听地址
+// @return @1 Option 配置项
 func WithServerAddr(addr string) Option {
 	return func(o *options) { o.server.Addr = addr }
 }
 
 // WithServerExpose 设置是否将内部通信地址暴露到公网
+// @param expose bool 是否暴露到公网
+// @return @1 Option 配置项
 func WithServerExpose(expose bool) Option {
 	return func(o *options) { o.server.Expose = expose }
 }
 
 // WithServerCredentials 设置服务器证书和秘钥
+// @param certFile string 证书文件路径
+// @param keyFile string 秘钥文件路径
+// @return @1 Option 配置项
 func WithServerCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.server.CertFile, o.server.KeyFile = certFile, keyFile }
 }
 
 // WithClientPoolSize 设置客户端连接池大小
+// @param size int 连接池大小
+// @return @1 Option 配置项
 func WithClientPoolSize(size int) Option {
 	return func(o *options) { o.client.PoolSize = size }
 }
 
 // WithClientCredentials 设置客户端证书和校验域名
+// @param caFile string 证书文件路径
+// @param serverName string 服务器校验域名
+// @return @1 Option 配置项
 func WithClientCredentials(caFile string, serverName string) Option {
 	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
 }
 
 // WithClientDiscovery 设置客户端服务发现组件
+// @param discovery registry.Discovery 服务发现组件
+// @return @1 Option 配置项
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
 }

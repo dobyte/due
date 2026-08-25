@@ -8,6 +8,8 @@ import (
 	cli "github.com/smallnest/rpcx/client"
 )
 
+// Resolver 直连模式服务发现器
+// 维护服务地址列表，并支持订阅者接收地址变更通知
 type Resolver struct {
 	builder *Builder
 	name    string
@@ -19,6 +21,10 @@ type Resolver struct {
 	closed  bool
 }
 
+// newResolver 新建直连模式服务发现器
+// @param name string 实例ID
+// @param builder *Builder 所属构建器
+// @return @1 *Resolver 服务发现器实例
 func newResolver(name string, builder *Builder) *Resolver {
 	return &Resolver{
 		name:    name,
@@ -26,7 +32,8 @@ func newResolver(name string, builder *Builder) *Resolver {
 	}
 }
 
-// GetServices returns the servers
+// GetServices 获取服务地址列表
+// @return @1 []*cli.KVPair 服务地址列表
 func (r *Resolver) GetServices() []*cli.KVPair {
 	r.prw.RLock()
 	defer r.prw.RUnlock()
@@ -34,7 +41,9 @@ func (r *Resolver) GetServices() []*cli.KVPair {
 	return r.pairs
 }
 
-// WatchService returns a nil chan.
+// WatchService 监听服务地址变更
+// 返回带缓冲的变更通知通道
+// @return @1 chan []*cli.KVPair 变更通知通道
 func (r *Resolver) WatchService() chan []*cli.KVPair {
 	ch := make(chan []*cli.KVPair, 10)
 
@@ -45,7 +54,8 @@ func (r *Resolver) WatchService() chan []*cli.KVPair {
 	return ch
 }
 
-// RemoveWatcher remove a non-nil chan.
+// RemoveWatcher 移除监听通道
+// @param ch chan []*cli.KVPair 待移除的通道
 func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 	r.crw.Lock()
 	defer r.crw.Unlock()
@@ -64,15 +74,23 @@ func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 	r.chans = r.chans[:i+1]
 }
 
-// Clone clone a new resolver
+// Clone 克隆服务发现器
+// 直连模式直接复用当前实例
+// @param servicePath string 服务路径
+// @return @1 cli.ServiceDiscovery 服务发现器
+// @return @2 error 错误信息
 func (r *Resolver) Clone(servicePath string) (cli.ServiceDiscovery, error) {
 	return r, nil
 }
 
+// SetFilter 设置服务过滤函数
+// @param filter cli.ServiceDiscoveryFilter 过滤函数
 func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
 	r.filter = filter
 }
 
+// Close 关闭服务发现器
+// 从构建器移除自身并关闭全部监听通道
 func (r *Resolver) Close() {
 	r.builder.removeResolver(r)
 
@@ -89,6 +107,8 @@ func (r *Resolver) Close() {
 	r.crw.Unlock()
 }
 
+// updateState 更新服务地址状态并广播变更
+// @param list []*cli.KVPair 最新服务地址列表
 func (r *Resolver) updateState(list []*cli.KVPair) {
 	var pairs []*cli.KVPair
 
@@ -108,10 +128,12 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 	r.prw.Unlock()
 
 	r.crw.RLock()
+	defer r.crw.RUnlock()
+
 	if r.closed {
-		r.crw.RUnlock()
 		return
 	}
+
 	for _, ch := range r.chans {
 		select {
 		case ch <- pairs:
@@ -129,5 +151,4 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 			}(ch)
 		}
 	}
-	r.crw.RUnlock()
 }
