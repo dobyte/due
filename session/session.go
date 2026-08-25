@@ -48,26 +48,8 @@ func NewSession() *Session {
 // AddConn 添加连接
 func (s *Session) AddConn(conn network.Conn) {
 	s.rw.Lock()
-	defer s.rw.Unlock()
-
-	cid, uid := conn.ID(), conn.UID()
-
-	if c, ok := s.conns[cid]; ok && c != conn {
-		s.doClearConnAttrs(c)
-	}
-
-	s.conns[cid] = conn
-
-	if uid == 0 {
-		return
-	}
-
-	if c, ok := s.users[uid]; ok && c != conn {
-		c.Unbind()
-		s.doClearConnAttrs(c)
-	}
-
-	s.users[uid] = conn
+	s.conns[conn.ID()] = conn
+	s.rw.Unlock()
 }
 
 // RemConn 移除连接
@@ -80,7 +62,9 @@ func (s *Session) RemConn(conn network.Conn) {
 	delete(s.conns, cid)
 
 	if uid != 0 {
-		delete(s.users, uid)
+		if c, ok := s.users[uid]; ok && c == conn {
+			delete(s.users, uid)
+		}
 	}
 
 	s.doClearConnAttrs(conn)
@@ -106,33 +90,51 @@ func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
 // Bind 绑定用户ID
 func (s *Session) Bind(cid, uid int64) error {
 	s.rw.Lock()
-	defer s.rw.Unlock()
+	old, err := s.bind(cid, uid)
+	s.rw.Unlock()
 
-	conn, err := s.conn(Conn, cid)
 	if err != nil {
 		return err
 	}
 
-	if oldUID := conn.UID(); oldUID != 0 {
-		if uid == oldUID {
-			return nil
-		}
-		delete(s.users, oldUID)
-	}
-
-	if oldConn, ok := s.users[uid]; ok {
-		if err := oldConn.Unbind(); err != nil {
-			log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", cid, uid, err)
+	if old != nil {
+		if err = old.Close(true); err != nil {
+			log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", cid, uid, err)
 		}
 	}
-
-	if err := conn.Bind(uid); err != nil {
-		return err
-	}
-
-	s.users[uid] = conn
 
 	return nil
+}
+
+// 执行绑定用户ID操作
+func (s *Session) bind(cid, uid int64) (network.Conn, error) {
+	conn, err := s.conn(Conn, cid)
+	if err != nil {
+		return nil, err
+	}
+
+	if oldUID := conn.UID(); oldUID != 0 {
+		if uid == oldUID {
+			return nil, nil
+		}
+
+		if err := conn.Bind(uid); err != nil {
+			return nil, err
+		}
+
+		if c, ok := s.users[oldUID]; ok && c == conn {
+			delete(s.users, oldUID)
+		}
+	} else {
+		if err := conn.Bind(uid); err != nil {
+			return nil, err
+		}
+	}
+
+	old := s.users[uid]
+	s.users[uid] = conn
+
+	return old, nil
 }
 
 // Unbind 解绑用户ID
@@ -421,11 +423,16 @@ func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
 
 // 清除连接属性
 func (s *Session) doClearConnAttrs(conn network.Conn) {
-	conn.Attr().Visit(func(channel, _ any) bool {
-		s.doUnsubscribe(channel.(string), conn)
+	if attr := conn.Attr(); attr != nil {
+		attr.Visit(func(key, _ any) bool {
+			if channel, ok := key.(string); ok {
+				s.doUnsubscribe(channel, conn)
+			}
+			return true
+		})
 
-		return true
-	})
+		attr.Clear()
+	}
 }
 
 // Stat 统计会话总数
@@ -460,7 +467,7 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []b
 		return 1, nil
 	default:
 		var (
-			total int64
+			total atomic.Int64
 			eg, _ = task.WithContext(context.Background())
 		)
 
@@ -470,7 +477,7 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []b
 					return err
 				}
 
-				atomic.AddInt64(&total, 1)
+				total.Add(1)
 
 				if disconnect {
 					_ = conn.Close()
@@ -480,11 +487,18 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []b
 			})
 		}
 
-		if err := eg.Wait(); err != nil && total == 0 {
-			return 0, err
-		} else {
-			return total, nil
+		err := eg.Wait()
+		num := total.Load()
+
+		if err != nil {
+			if num == 0 {
+				return 0, err
+			} else {
+				log.Warnf("batch push partial failed: total = %d, err = %v", num, err)
+			}
 		}
+
+		return num, nil
 	}
 }
 
