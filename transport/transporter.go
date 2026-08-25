@@ -42,6 +42,8 @@ type Transporter interface {
 	NewClient(target string) (Client, error)
 	// SetDefaultDiscovery 设置默认的服务发现组件
 	SetDefaultDiscovery(discovery registry.Discovery)
+	// Close 关闭传输器，释放全部客户端连接与资源
+	Close() error
 }
 
 type NewMeshClient func(target string) (Client, error)

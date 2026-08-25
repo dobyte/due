@@ -59,3 +59,12 @@ func (t *Transporter) NewClient(target string) (transport.Client, error) {
 
 	return client.NewClient(cc), nil
 }
+
+// Close 关闭传输器，释放全部客户端连接与资源
+func (t *Transporter) Close() error {
+	if t.builder == nil {
+		return nil
+	}
+
+	return t.builder.Close()
+}

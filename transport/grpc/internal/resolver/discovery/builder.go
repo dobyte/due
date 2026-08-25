@@ -3,6 +3,7 @@ package discovery
 import (
 	"sync"
 
+	"github.com/dobyte/due/transport/grpc/v2/internal/balancer/wrr"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/log"
@@ -31,13 +32,13 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 	b.rw.RUnlock()
 
 	r := &Resolver{builder: b, target: target, cc: cc}
-	
+
 	if state != nil {
 		r.updateState(*state)
 	} else {
 		r.updateState(resolver.State{})
 	}
-	
+
 	b.resolvers.Store(target.URL.Host, r)
 
 	return r, nil
@@ -77,7 +78,7 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 			addr := resolver.Address{
 				Addr:       ep.Address(),
 				ServerName: service,
-				Attributes: attributes.New("weight", uint32(max(1, instance.Weight))),
+				Attributes: attributes.New(wrr.WeightAttrKey, uint32(max(1, instance.Weight))),
 			}
 
 			if state, ok := states[service]; ok {

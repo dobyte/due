@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/random"
+	_ "github.com/dobyte/due/transport/grpc/v2/internal/balancer/wrr"
 	iresolver "github.com/dobyte/due/transport/grpc/v2/internal/resolver"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/direct"
 	"github.com/dobyte/due/transport/grpc/v2/internal/resolver/discovery"
@@ -41,6 +43,7 @@ type Builder struct {
 	sfg         singleflight.Group
 	connections sync.Map
 	watcher     registry.Watcher
+	closed      atomic.Bool
 }
 
 func NewBuilder(opts *Options) *Builder {
@@ -81,7 +84,7 @@ func NewBuilder(opts *Options) *Builder {
 	case def.Random:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"random":{}}]}`))
 	case def.WeightedRoundRobin:
-		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"weighted_target":{}}]}`))
+		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"wrr":{}}]}`))
 	case def.ConsistentHash:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"ring_hash":{}}]}`))
 	default:
@@ -156,17 +159,32 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 		return nil, b.err
 	}
 
+	if b.closed.Load() {
+		return nil, errors.ErrClientClosed
+	}
+
 	if c, ok := b.connections.Load(target); ok {
 		return c.(*grpc.ClientConn), nil
 	}
 
 	c, err, _ := b.sfg.Do(target, func() (any, error) {
+		if b.closed.Load() {
+			return nil, errors.ErrClientClosed
+		}
+
 		cc, err := grpc.NewClient(target, b.dialOpts...)
 		if err != nil {
 			return nil, err
 		}
 
 		b.connections.Store(target, cc)
+
+		// 防止 Close 与 Build 并发时 Store 进已关闭的连接
+		if b.closed.Load() {
+			_ = cc.Close()
+			b.connections.Delete(target)
+			return nil, errors.ErrClientClosed
+		}
 
 		return cc, nil
 	})
@@ -175,4 +193,33 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 	}
 
 	return c.(*grpc.ClientConn), nil
+}
+
+// Close 关闭构建器，释放全部连接与资源（幂等）
+func (b *Builder) Close() error {
+	if !b.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// 通知 watch 协程退出
+	if b.cancel != nil {
+		b.cancel()
+	}
+
+	// 停止服务发现监听，触发 Next() 返回 ErrWatcherStopped
+	if b.watcher != nil {
+		_ = b.watcher.Stop()
+	}
+
+	// 关闭全部连接并清空缓存
+	var firstErr error
+	b.connections.Range(func(key, value any) bool {
+		if err := value.(*grpc.ClientConn).Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		b.connections.Delete(key)
+		return true
+	})
+
+	return firstErr
 }

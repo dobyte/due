@@ -19,6 +19,8 @@ func (r *Resolver) ResolveNow(_ resolver.ResolveNowOptions) {
 
 func (r *Resolver) Close() {
 	log.Warnf("discovery resolver close")
+	// 从构建器中移除自身，释放引用
+	r.builder.resolvers.Delete(r.target.URL.Host)
 }
 
 func (r *Resolver) updateState(state resolver.State) {
