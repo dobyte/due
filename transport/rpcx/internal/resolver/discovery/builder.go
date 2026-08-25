@@ -21,6 +21,7 @@ const defaultTimeout = 10 * time.Second
 
 type Builder struct {
 	dis       registry.Discovery
+	err       error
 	ctx       context.Context
 	cancel    context.CancelFunc
 	watcher   registry.Watcher
@@ -35,7 +36,7 @@ func NewBuilder(dis registry.Discovery) *Builder {
 	b.ctx, b.cancel = context.WithCancel(context.Background())
 
 	if err := b.init(); err != nil {
-		log.Fatalf("init client builder failed: %v", err)
+		b.err = err
 	}
 
 	return b
@@ -46,6 +47,10 @@ func (b *Builder) Scheme() string {
 }
 
 func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
+	if b.err != nil {
+		return nil, b.err
+	}
+
 	b.rw.RLock()
 	pairs, ok := b.pairs[target.Host]
 	b.rw.RUnlock()
@@ -97,10 +102,16 @@ func (b *Builder) watch() {
 		case <-b.ctx.Done():
 			return
 		default:
-			// exec watch
 		}
+
 		instances, err := b.watcher.Next()
 		if err != nil {
+			if errors.Is(err, errors.ErrWatcherStopped) {
+				// watcher 已停止，退出循环，避免空转
+				return
+			}
+			// 其他异常，短暂退避后重试，避免忙循环
+			time.Sleep(time.Second)
 			continue
 		}
 
@@ -166,4 +177,25 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 
 func (b *Builder) removeResolver(r *Resolver) {
 	b.resolvers.Delete(r.name)
+}
+
+// Close 关闭构建器，释放 watch 协程与监听资源
+func (b *Builder) Close() (err error) {
+	// 通知 watch 协程退出
+	if b.cancel != nil {
+		b.cancel()
+	}
+
+	// 停止服务发现监听，解除 Next() 阻塞
+	if b.watcher != nil {
+		err = b.watcher.Stop()
+	}
+
+	// 关闭全部解析器
+	b.resolvers.Range(func(_, value any) bool {
+		value.(*Resolver).Close()
+		return true
+	})
+
+	return
 }

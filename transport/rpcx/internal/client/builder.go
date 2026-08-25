@@ -3,6 +3,7 @@ package client
 import (
 	"net/url"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
@@ -11,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/core/def"
 	"github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	cli "github.com/smallnest/rpcx/client"
 	proto "github.com/smallnest/rpcx/protocol"
@@ -26,6 +28,7 @@ type Builder struct {
 	builders map[string]resolver.Builder
 	sfg      singleflight.Group
 	pools    sync.Map
+	closed   atomic.Bool
 }
 
 type Options struct {
@@ -48,8 +51,10 @@ func NewBuilder(opts *Options) *Builder {
 		b.RegisterBuilder(discovery.NewBuilder(opts.Discovery))
 	}
 
-	if opts.CAFile != "" {
+	if opts.CAFile != "" && opts.ServerName != "" {
 		b.dialOpts.TLSConfig, b.err = tls.MakeTCPClientTLSConfig(opts.CAFile, opts.ServerName)
+	} else if opts.CAFile != "" || opts.ServerName != "" {
+		log.Warn("grpc client use insecure credentials")
 	}
 
 	return b
@@ -66,6 +71,10 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 		return nil, b.err
 	}
 
+	if b.closed.Load() {
+		return nil, errors.ErrClientClosed
+	}
+
 	u, err := url.Parse(target)
 	if err != nil {
 		return nil, err
@@ -77,6 +86,10 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 	}
 
 	val, err, _ = b.sfg.Do(target, func() (any, error) {
+		if b.closed.Load() {
+			return nil, errors.ErrClientClosed
+		}
+
 		builder, ok := b.builders[u.Scheme]
 		if !ok {
 			return nil, errors.ErrMissingResolver
@@ -104,7 +117,7 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 			selectMode = cli.RoundRobin
 		}
 
-		pool := cli.NewOneClientPool(size, cli.Failtry, selectMode, dis, b.dialOpts)
+		pool := cli.NewOneClientPool(size, b.opts.FailMode, selectMode, dis, b.dialOpts)
 
 		b.pools.Store(target, pool)
 
@@ -115,4 +128,29 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 	}
 
 	return val.(*cli.OneClientPool).Get(), nil
+}
+
+// Close 关闭构建器，释放全部连接池与监听资源（幂等）
+func (b *Builder) Close() error {
+	if !b.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	var firstErr error
+
+	// 关闭全部连接池
+	b.pools.Range(func(_, value any) bool {
+		value.(*cli.OneClientPool).Close()
+		return true
+	})
+	b.pools.Clear()
+
+	// 关闭解析器构建器，释放 watch 协程与监听资源
+	for _, builder := range b.builders {
+		if err := builder.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
 }

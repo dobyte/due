@@ -1,10 +1,11 @@
 package discovery
 
 import (
-	"github.com/dobyte/due/v2/log"
-	cli "github.com/smallnest/rpcx/client"
 	"sync"
 	"time"
+
+	"github.com/dobyte/due/v2/log"
+	cli "github.com/smallnest/rpcx/client"
 )
 
 type Resolver struct {
@@ -15,6 +16,7 @@ type Resolver struct {
 	pairs   []*cli.KVPair
 	crw     sync.RWMutex
 	chans   []chan []*cli.KVPair
+	closed  bool
 }
 
 func newResolver(name string, builder *Builder) *Resolver {
@@ -37,6 +39,11 @@ func (r *Resolver) WatchService() chan []*cli.KVPair {
 	ch := make(chan []*cli.KVPair, 10)
 
 	r.crw.Lock()
+	if r.closed {
+		r.crw.Unlock()
+		close(ch)
+		return ch
+	}
 	r.chans = append(r.chans, ch)
 	r.crw.Unlock()
 
@@ -74,11 +81,17 @@ func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
 func (r *Resolver) Close() {
 	r.builder.removeResolver(r)
 
-	r.crw.RLock()
+	r.crw.Lock()
+	if r.closed {
+		r.crw.Unlock()
+		return
+	}
+	r.closed = true
 	for _, c := range r.chans {
 		close(c)
 	}
-	r.crw.RUnlock()
+	r.chans = nil
+	r.crw.Unlock()
 }
 
 func (r *Resolver) updateState(list []*cli.KVPair) {
@@ -100,16 +113,26 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 	r.prw.Unlock()
 
 	r.crw.RLock()
+	if r.closed {
+		r.crw.RUnlock()
+		return
+	}
 	for _, ch := range r.chans {
-		go func(ch chan []*cli.KVPair) {
-			defer func() { recover() }()
+		select {
+		case ch <- pairs:
+			// 快速路径：消费方及时读，不产生协程
+		default:
+			// 慢路径：通道已满，最多等 1 分钟后丢弃
+			go func(ch chan []*cli.KVPair) {
+				defer func() { recover() }()
 
-			select {
-			case ch <- pairs:
-			case <-time.After(time.Minute):
-				log.Warn("chan is full and new change has been dropped")
-			}
-		}(ch)
+				select {
+				case ch <- pairs:
+				case <-time.After(time.Minute):
+					log.Warn("chan is full and new change has been dropped")
+				}
+			}(ch)
+		}
 	}
 	r.crw.RUnlock()
 }

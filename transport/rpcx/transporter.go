@@ -1,12 +1,13 @@
 package rpcx
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/transport/rpcx/v2/internal/client"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/logger"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/server"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
-	"sync"
 )
 
 const name = "rpcx"
@@ -16,6 +17,8 @@ type Transporter struct {
 	once    sync.Once
 	builder *client.Builder
 }
+
+var _ transport.Transporter = &Transporter{}
 
 func NewTransporter(opts ...Option) *Transporter {
 	o := defaultOptions()
@@ -61,4 +64,13 @@ func (t *Transporter) NewClient(target string) (transport.Client, error) {
 	}
 
 	return client.NewClient(cli), nil
+}
+
+// Close 关闭传输器，释放全部客户端连接与资源
+func (t *Transporter) Close() error {
+	if t.builder == nil {
+		return nil
+	}
+
+	return t.builder.Close()
 }
