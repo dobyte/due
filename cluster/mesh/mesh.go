@@ -49,8 +49,8 @@ func NewMesh(opts ...Option) *Mesh {
 	m.opts = o
 	m.hooks = make(map[cluster.Hook][]HookHandler)
 	m.services = make([]*serviceEntity, 0)
-	m.proxy = newProxy(m)
 	m.ctx, m.cancel = context.WithCancel(o.ctx)
+	m.proxy = newProxy(m)
 	m.state.Store(int32(cluster.Shut))
 
 	return m
