@@ -22,8 +22,11 @@ type options struct {
 	disablePurge bool // 是否禁用清除
 }
 
+// Option 任务池配置项
 type Option func(o *options)
 
+// defaultOptions 获取默认配置项，配置值优先从配置中心读取
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	opts := &options{
 		size:         defaultSize,
@@ -42,16 +45,24 @@ func defaultOptions() *options {
 }
 
 // WithSize 设置任务池大小
+// @param size int 任务池大小
+// @return @1 Option 配置项
 func WithSize(size int) Option {
 	return func(o *options) { o.size = size }
 }
 
 // WithNonblocking 设置是否非阻塞
+// 非阻塞模式下池满时任务提交立即返回错误，而非阻塞等待
+// @param nonblocking bool 是否非阻塞
+// @return @1 Option 配置项
 func WithNonblocking(nonblocking bool) Option {
 	return func(o *options) { o.nonblocking = nonblocking }
 }
 
 // WithDisablePurge 设置是否禁用清除
+// 禁用后空闲协程不会被定期回收
+// @param disablePurge bool 是否禁用清除
+// @return @1 Option 配置项
 func WithDisablePurge(disablePurge bool) Option {
 	return func(o *options) { o.disablePurge = disablePurge }
 }
