@@ -25,7 +25,7 @@ const (
 	defaultClientDispatchKey   = "etc.transport.grpc.client.dispatch"
 )
 
-// 分发策略
+// Dispatch 分发策略
 type Dispatch = def.Dispatch
 
 const (
@@ -91,6 +91,8 @@ func WithClientDiscovery(discovery registry.Discovery) Option {
 }
 
 // WithClientDialOptions 设置客户端拨号选项
+// @param opts ...grpc.DialOption 拨号选项
+// @return @1 Option 配置项
 func WithClientDialOptions(opts ...grpc.DialOption) Option {
 	return func(o *options) { o.client.DialOpts = opts }
 }

@@ -14,6 +14,8 @@ import (
 
 const scheme = "discovery"
 
+// Builder 服务发现模式解析器构建器
+// 通过注册中心获取服务实例，并按服务名与实例状态聚合地址
 type Builder struct {
 	rw        sync.RWMutex
 	states    map[string]*resolver.State
@@ -22,10 +24,19 @@ type Builder struct {
 
 var _ resolver.Builder = &Builder{}
 
+// NewBuilder 新建服务发现解析器构建器
+// @return @1 *Builder 构建器实例
 func NewBuilder() *Builder {
 	return &Builder{states: make(map[string]*resolver.State)}
 }
 
+// Build 构建解析器
+// 从缓存状态中查找服务名对应的地址并下发
+// @param target resolver.Target 目标
+// @param cc resolver.ClientConn 客户端连接
+// @param opts resolver.BuildOptions 构建选项
+// @return @1 resolver.Resolver 解析器实例
+// @return @2 error 错误信息
 func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
 	b.rw.RLock()
 	state := b.states[target.URL.Host]
@@ -44,10 +55,16 @@ func (b *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts res
 	return r, nil
 }
 
+// Scheme 获取解析器协议
+// @return @1 string 协议名称
 func (b *Builder) Scheme() string {
 	return scheme
 }
 
+// UpdateStates 更新服务实例状态并同步到各解析器
+// 按实例状态（工作/繁忙/挂起）分组，优先下发高可用性分组，
+// 并将实例权重附加到地址属性供加权负载均衡使用
+// @param instances []*registry.ServiceInstance 服务实例列表
 func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 	var (
 		states     map[string]*resolver.State

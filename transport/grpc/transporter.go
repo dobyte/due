@@ -1,21 +1,27 @@
+// Package grpc 基于 gRPC 协议实现微服务传输组件，提供服务端与客户端的创建、连接管理与资源释放能力
 package grpc
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/transport/grpc/v2/internal/client"
 	"github.com/dobyte/due/transport/grpc/v2/internal/server"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
-	"sync"
 )
 
 const name = "grpc"
 
+// Transporter 微服务传输器，负责创建服务端与客户端，并管理客户端连接生命周期
 type Transporter struct {
 	opts    *options
 	once    sync.Once
 	builder *client.Builder
 }
 
+// NewTransporter 新建传输器
+// @param opts ...Option 可选配置项
+// @return @1 *Transporter 传输器实例
 func NewTransporter(opts ...Option) *Transporter {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -61,6 +67,7 @@ func (t *Transporter) NewClient(target string) (transport.Client, error) {
 }
 
 // Close 关闭传输器，释放全部客户端连接与资源
+// @return @1 error 错误信息
 func (t *Transporter) Close() error {
 	if t.builder == nil {
 		return nil

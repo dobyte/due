@@ -17,6 +17,8 @@ const virtualNodes = 150
 
 var _ balancer.Balancer = &Balancer{}
 
+// Balancer 一致性哈希负载均衡器
+// 通过维护哈希环实现相同请求键固定路由到同一子连接
 type Balancer struct {
 	cc       balancer.ClientConn
 	opts     balancer.BuildOptions
@@ -27,6 +29,10 @@ type Balancer struct {
 	mu       sync.Mutex
 }
 
+// UpdateClientConnState 更新客户端连接状态
+// 同步解析器下发的地址列表，移除失效子连接并新建缺失子连接
+// @param s balancer.ClientConnState 客户端连接状态
+// @return @1 error 错误信息
 func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -154,6 +160,7 @@ func (b *Balancer) Close() {
 	b.picker = nil
 }
 
+// ExitIdle 退出空闲状态，触发全部空闲子连接建立连接
 func (b *Balancer) ExitIdle() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -238,6 +245,7 @@ func getHashKey(ctx context.Context) string {
 	return ""
 }
 
+// Picker 一致性哈希选择器，依据哈希环选取目标子连接
 type Picker struct {
 	ring *consistentRing
 	err  error
@@ -245,6 +253,11 @@ type Picker struct {
 
 var _ balancer.Picker = &Picker{}
 
+// Pick 选择目标子连接
+// 以请求上下文的哈希键进行路由，未指定时回退使用 RPC 方法名
+// @param info balancer.PickInfo 请求信息
+// @return @1 balancer.PickResult 选择结果
+// @return @2 error 错误信息
 func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 	if p.err != nil {
 		return balancer.PickResult{}, p.err

@@ -26,6 +26,7 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+// Options 客户端配置项
 type Options struct {
 	CAFile     string
 	ServerName string
@@ -34,6 +35,7 @@ type Options struct {
 	DialOpts   []grpc.DialOption
 }
 
+// Builder 客户端连接构建器，负责创建 gRPC 连接并管理其生命周期
 type Builder struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -47,6 +49,10 @@ type Builder struct {
 	closed      atomic.Bool
 }
 
+// NewBuilder 新建客户端连接构建器
+// 根据配置初始化传输凭证、解析器与负载均衡策略
+// @param opts *Options 客户端配置项
+// @return @1 *Builder 构建器实例
 func NewBuilder(opts *Options) *Builder {
 	var (
 		err  error
@@ -99,6 +105,8 @@ func NewBuilder(opts *Options) *Builder {
 	return b
 }
 
+// init 初始化服务发现，加载初始实例并启动实例变更监听
+// @return @1 error 错误信息
 func (b *Builder) init() error {
 	if b.opts.Discovery == nil {
 		return nil
@@ -155,6 +163,10 @@ func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 }
 
 // Build 构建连接
+// 相同 target 的连接会被缓存复用，单飞避免并发重复建连
+// @param target string 目标服务地址
+// @return @1 *grpc.ClientConn 客户端连接
+// @return @2 error 错误信息
 func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 	if b.err != nil {
 		return nil, b.err
