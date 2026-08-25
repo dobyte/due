@@ -43,21 +43,26 @@ type serverConn struct {
 var _ network.Conn = &serverConn{}
 
 // ID 获取连接ID
+// @return @1 int64 连接ID
 func (c *serverConn) ID() int64 {
 	return c.id
 }
 
 // UID 获取用户ID
+// @return @1 int64 用户ID
 func (c *serverConn) UID() int64 {
 	return c.uid.Load()
 }
 
 // Attr 获取属性接口
+// @return @1 network.Attr 属性接口
 func (c *serverConn) Attr() network.Attr {
 	return c.attr
 }
 
 // Bind 绑定用户ID
+// @param uid int64 用户ID
+// @return @1 error 错误信息
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -73,6 +78,7 @@ func (c *serverConn) Bind(uid int64) error {
 }
 
 // Unbind 解绑用户ID
+// @return @1 error 错误信息
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -88,6 +94,8 @@ func (c *serverConn) Unbind() error {
 }
 
 // Send 高优先级发送消息
+// @param msg []byte 消息内容
+// @return @1 error 错误信息
 func (c *serverConn) Send(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -100,6 +108,8 @@ func (c *serverConn) Send(msg []byte) (err error) {
 }
 
 // Push 低优先级发送消息
+// @param msg []byte 消息内容
+// @return @1 error 错误信息
 func (c *serverConn) Push(msg []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -112,11 +122,14 @@ func (c *serverConn) Push(msg []byte) error {
 }
 
 // State 获取连接状态
+// @return @1 network.ConnState 连接状态
 func (c *serverConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
 // Close 关闭连接
+// @param force ...bool 是否强制关闭
+// @return @1 error 错误信息
 func (c *serverConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose(true)
@@ -126,6 +139,8 @@ func (c *serverConn) Close(force ...bool) error {
 }
 
 // LocalIP 获取本地IP
+// @return @1 string 本地IP地址
+// @return @2 error 错误信息
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -136,6 +151,8 @@ func (c *serverConn) LocalIP() (string, error) {
 }
 
 // LocalAddr 获取本地地址
+// @return @1 net.Addr 本地地址
+// @return @2 error 错误信息
 func (c *serverConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -151,6 +168,8 @@ func (c *serverConn) LocalAddr() (net.Addr, error) {
 }
 
 // RemoteIP 获取远端IP
+// @return @1 string 远端IP地址
+// @return @2 error 错误信息
 func (c *serverConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -161,6 +180,8 @@ func (c *serverConn) RemoteIP() (string, error) {
 }
 
 // RemoteAddr 获取远端地址
+// @return @1 net.Addr 远端地址
+// @return @2 error 错误信息
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -175,7 +196,8 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
-// 初始化连接
+// init 初始化连接
+// @param conn *websocket.Conn WS连接
 func (c *serverConn) init(conn *websocket.Conn) {
 	c.id = c.connMgr.id.Add(1)
 	c.uid.Store(0)
@@ -198,7 +220,7 @@ func (c *serverConn) init(conn *websocket.Conn) {
 	}
 }
 
-// 重置连接
+// reset 重置连接
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
@@ -209,7 +231,8 @@ func (c *serverConn) reset() {
 	c.authorizeTimer.Store((*time.Timer)(nil))
 }
 
-// 检测连接状态
+// checkState 检测连接状态
+// @return @1 error 错误信息
 func (c *serverConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -221,7 +244,7 @@ func (c *serverConn) checkState() error {
 	}
 }
 
-// 授权检查
+// checkAuthorize 授权检查
 func (c *serverConn) checkAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		cid := c.ID()
@@ -243,7 +266,7 @@ func (c *serverConn) checkAuthorize() {
 	}
 }
 
-// 取消授权检查
+// uncheckAuthorize 取消授权检查
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		timer := c.authorizeTimer.Swap((*time.Timer)(nil))
@@ -254,7 +277,9 @@ func (c *serverConn) uncheckAuthorize() {
 	}
 }
 
-// 优雅关闭
+// graceClose 优雅关闭
+// @param isNeedRecycle bool 是否需要回收
+// @return @1 error 错误信息
 func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -286,7 +311,9 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 	return c.doClose(isNeedRecycle)
 }
 
-// 强制关闭
+// forceClose 强制关闭
+// @param isNeedRecycle bool 是否需要回收
+// @return @1 error 错误信息
 func (c *serverConn) forceClose(isNeedRecycle bool) error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -297,7 +324,9 @@ func (c *serverConn) forceClose(isNeedRecycle bool) error {
 	return c.doClose(isNeedRecycle)
 }
 
-// 执行关闭操作
+// doClose 执行关闭操作
+// @param isNeedRecycle bool 是否需要回收
+// @return @1 error 错误信息
 func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
@@ -328,7 +357,7 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	return err
 }
 
-// 读取消息
+// read 读取消息
 func (c *serverConn) read() {
 	conn := c.conn
 
@@ -393,7 +422,7 @@ func (c *serverConn) read() {
 	}
 }
 
-// 写入消息
+// write 写入消息
 // 由于gorilla/websocket库并发写入的限制，同时为了保证心跳能够优先下发到客户端，故而实现一个优先队列
 func (c *serverConn) write() {
 	var (
@@ -457,7 +486,9 @@ func (c *serverConn) write() {
 	}
 }
 
-// 执行写入操作
+// doWrite 执行写入操作
+// @param conn *websocket.Conn WS连接
+// @param t *task 任务对象
 func (c *serverConn) doWrite(conn *websocket.Conn, t *task) {
 	defer c.connMgr.recycleTask(t)
 
@@ -483,7 +514,10 @@ func (c *serverConn) doWrite(conn *websocket.Conn, t *task) {
 	}
 }
 
-// 处理心跳
+// doHandleHeartbeat 处理心跳
+// @param conn *websocket.Conn WS连接
+// @param t time.Time 当前时间
+// @return @1 bool 是否继续运行
 func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	deadline := t.Add(-2 * c.connMgr.server.opts.heartbeatInterval).UnixNano()
 
@@ -511,12 +545,17 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	}
 }
 
-// 是否已关闭
+// isClosed 是否已关闭
+// @return @1 bool 是否已关闭
 func (c *serverConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }
 
-// 写入任务到队列
+// doWriteToQueue 写入任务到队列
+// @param q *queue.Queue[*task] 队列
+// @param typ int8 任务类型
+// @param msg ...[]byte 消息内容
+// @return @1 error 错误信息
 func (c *serverConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
 	t := c.connMgr.allocateTask(typ, msg...)
 

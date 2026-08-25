@@ -56,6 +56,8 @@ type (
 		Get(key any) (any, bool)
 		// Del 删除属性值
 		Del(key any) bool
+		// Clear 清空所有属性值
+		Clear()
 		// Visit 访问所有的属性值
 		Visit(fn func(key, value any) bool)
 	}

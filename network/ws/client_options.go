@@ -37,6 +37,8 @@ type clientOptions struct {
 	compression       bool          // 是否开启压缩，默认false
 }
 
+// defaultClientOptions 创建默认客户端配置
+// @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 
@@ -76,6 +78,8 @@ func defaultClientOptions() *clientOptions {
 }
 
 // WithClientUrl 设置拨号链接
+// @param url string 拨号地址
+// @return @1 ClientOption 客户端配置项
 func WithClientUrl(url string) ClientOption {
 	return func(o *clientOptions) {
 		if url != "" {
@@ -87,6 +91,8 @@ func WithClientUrl(url string) ClientOption {
 }
 
 // WithClientDialTimeout 设置拨号超时时间
+// @param dialTimeout time.Duration 拨号超时时间
+// @return @1 ClientOption 客户端配置项
 func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if dialTimeout >= 0 {
@@ -98,6 +104,8 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 }
 
 // WithClientWriteTimeout 设置写超时时间
+// @param writeTimeout time.Duration 写超时时间
+// @return @1 ClientOption 客户端配置项
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -109,6 +117,8 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 }
 
 // WithClientWriteQueueSize 设置写队列大小
+// @param writeQueueSize int 写队列大小
+// @return @1 ClientOption 客户端配置项
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {
@@ -120,6 +130,8 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 }
 
 // WithClientHeartbeatInterval 设置心跳间隔时间
+// @param heartbeatInterval time.Duration 心跳间隔时间
+// @return @1 ClientOption 客户端配置项
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if heartbeatInterval >= 0 {
@@ -131,6 +143,8 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 }
 
 // WithClientCompression 设置是否开启压缩
+// @param compression bool 是否开启压缩
+// @return @1 ClientOption 客户端配置项
 func WithClientCompression(compression bool) ClientOption {
 	return func(o *clientOptions) { o.compression = compression }
 }

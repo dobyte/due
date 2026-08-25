@@ -63,6 +63,8 @@ type serverOptions struct {
 	compression        bool               // 是否开启压缩，默认false
 }
 
+// defaultServerOptions 创建默认服务器配置
+// @return @1 *serverOptions 服务器配置
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.path = etc.Get(defaultServerPathKey, defaultServerPath).String()
@@ -134,6 +136,8 @@ func defaultServerOptions() *serverOptions {
 }
 
 // WithServerAddr 设置监听地址
+// @param addr string 监听地址
+// @return @1 ServerOption 服务器配置项
 func WithServerAddr(addr string) ServerOption {
 	return func(o *serverOptions) {
 		if addr != "" {
@@ -145,11 +149,16 @@ func WithServerAddr(addr string) ServerOption {
 }
 
 // WithServerPath 设置Websocket的连接路径
+// @param path string 连接路径
+// @return @1 ServerOption 服务器配置项
 func WithServerPath(path string) ServerOption {
 	return func(o *serverOptions) { o.path = path }
 }
 
 // WithServerCredentials 设置服务器证书和秘钥
+// @param certFile string 证书文件
+// @param keyFile string 秘钥文件
+// @return @1 ServerOption 服务器配置项
 func WithServerCredentials(certFile, keyFile string) ServerOption {
 	return func(o *serverOptions) {
 		if certFile != "" && keyFile != "" {
@@ -161,11 +170,15 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 }
 
 // WithServerCheckOrigin 设置Websocket跨域检测函数
+// @param checkOrigin CheckOriginFunc 跨域检测函数
+// @return @1 ServerOption 服务器配置项
 func WithServerCheckOrigin(checkOrigin CheckOriginFunc) ServerOption {
 	return func(o *serverOptions) { o.checkOrigin = checkOrigin }
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数
+// @param maxConnNum int 最大连接数
+// @return @1 ServerOption 服务器配置项
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) {
 		if maxConnNum > 0 {
@@ -177,6 +190,8 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 }
 
 // WithServerWriteTimeout 设置写超时时间
+// @param writeTimeout time.Duration 写超时时间
+// @return @1 ServerOption 服务器配置项
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if writeTimeout >= 0 {
@@ -188,6 +203,8 @@ func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 }
 
 // WithServerWriteQueueSize 设置写入队列大小
+// @param writeQueueSize int 写入队列大小
+// @return @1 ServerOption 服务器配置项
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeQueueSize > 0 {
@@ -199,6 +216,8 @@ func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 }
 
 // WithServerHeartbeatInterval 设置心跳检测间隔时间
+// @param heartbeatInterval time.Duration 心跳间隔时间
+// @return @1 ServerOption 服务器配置项
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatInterval >= 0 {
@@ -210,11 +229,15 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 }
 
 // WithServerHeartbeatMechanism 设置心跳机制
+// @param heartbeatMechanism HeartbeatMechanism 心跳机制
+// @return @1 ServerOption 服务器配置项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间
+// @param authorizeTimeout time.Duration 授权超时时间
+// @return @1 ServerOption 服务器配置项
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if authorizeTimeout >= 0 {
@@ -226,6 +249,8 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 }
 
 // WithServerCompression 设置是否开启压缩
+// @param compression bool 是否开启压缩
+// @return @1 ServerOption 服务器配置项
 func WithServerCompression(compression bool) ServerOption {
 	return func(o *serverOptions) { o.compression = compression }
 }
