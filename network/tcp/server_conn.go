@@ -208,6 +208,8 @@ func (c *serverConn) init(conn net.Conn) {
 
 	c.checkAuthorize()
 
+	c.connMgr.storeConn(conn, c)
+
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
 	}
