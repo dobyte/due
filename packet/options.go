@@ -2,8 +2,9 @@ package packet
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/v2/etc"
 	"strings"
+
+	"github.com/dobyte/due/v2/etc"
 )
 
 // heartbeat packet
@@ -63,6 +64,9 @@ type options struct {
 
 type Option func(o *options)
 
+// defaultOptions 默认配置
+// 从配置中心读取各配置项，生成默认打包配置
+// @return @1 *options 打包配置
 func defaultOptions() *options {
 	opts := &options{
 		byteOrder:     binary.BigEndian,
@@ -72,8 +76,7 @@ func defaultOptions() *options {
 		heartbeatTime: etc.Get(defaultHeartbeatTimeKey, defaultHeartbeatTime).Bool(),
 	}
 
-	endian := etc.Get(defaultEndianKey, bigEndian).String()
-	switch strings.ToLower(endian) {
+	switch endian := etc.Get(defaultEndianKey, bigEndian).String(); strings.ToLower(endian) {
 	case littleEndian:
 		opts.byteOrder = binary.LittleEndian
 	case bigEndian:
@@ -84,26 +87,39 @@ func defaultOptions() *options {
 }
 
 // WithByteOrder 设置字节序
+// @param byteOrder binary.ByteOrder 字节序
+// @return @1 Option 打包配置选项
 func WithByteOrder(byteOrder binary.ByteOrder) Option {
 	return func(o *options) { o.byteOrder = byteOrder }
 }
 
 // WithRouteBytes 设置路由字节数
+// 路由字节数需为1、2或4
+// @param routeBytes int 路由字节数
+// @return @1 Option 打包配置选项
 func WithRouteBytes(routeBytes int) Option {
 	return func(o *options) { o.routeBytes = routeBytes }
 }
 
 // WithSeqBytes 设置序列号字节数
+// 可取0、1、2或4，为0时不开启序列号编码
+// @param seqBytes int 序列号字节数
+// @return @1 Option 打包配置选项
 func WithSeqBytes(seqBytes int) Option {
 	return func(o *options) { o.seqBytes = seqBytes }
 }
 
 // WithBufferBytes 设置消息字节数
+// 最大允许的消息字节数
+// @param bufferBytes int 消息字节数
+// @return @1 Option 打包配置选项
 func WithBufferBytes(bufferBytes int) Option {
 	return func(o *options) { o.bufferBytes = bufferBytes }
 }
 
 // WithHeartbeatTime 是否携带心跳时间
+// @param heartbeatTime bool 是否携带心跳时间
+// @return @1 Option 打包配置选项
 func WithHeartbeatTime(heartbeatTime bool) Option {
 	return func(o *options) { o.heartbeatTime = heartbeatTime }
 }

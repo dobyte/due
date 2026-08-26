@@ -16,6 +16,8 @@ const (
 	heartbeatBit = 1 << 7 // 心跳标识
 )
 
+// NocopyReader 无拷贝读取器接口
+// 用于在读取消息时避免不必要的内存拷贝
 type NocopyReader interface {
 	// Next returns a slice containing the next n bytes from the buffer,
 	// advancing the buffer as if the bytes had been returned by Read.
@@ -30,6 +32,8 @@ type NocopyReader interface {
 	Slice(n int) (r NocopyReader, err error)
 }
 
+// Packer 打包器接口
+// 定义消息的编码与解码能力
 type Packer interface {
 	// ReadBuffer 以buffer的形式读取消息
 	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
@@ -47,11 +51,16 @@ type Packer interface {
 	CheckHeartbeat(data []byte) (bool, error)
 }
 
+// defaultPacker 默认打包器
 type defaultPacker struct {
-	opts      *options
-	heartbeat []byte
+	opts      *options // 打包配置
+	heartbeat []byte   // 预构建的心跳包
 }
 
+// NewPacker 创建默认打包器
+// 校验配置合法性并预构建心跳包；传入参数不合法时将直接终止程序
+// @param opts ...Option 打包配置选项
+// @return @1 *defaultPacker 默认打包器
 func NewPacker(opts ...Option) *defaultPacker {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -77,6 +86,10 @@ func NewPacker(opts ...Option) *defaultPacker {
 }
 
 // ReadBuffer 以buffer的形式读取消息
+// 先读取4字节长度，再一次性读取完整消息体，返回封装好的缓冲区
+// @param reader io.Reader 数据读取源
+// @return @1 buffer.Buffer 读取到的消息缓冲区；无消息时返回nil
+// @return @2 error 读取失败或数据不完整时返回的错误
 func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	buf1 := buffer.MallocBytes(defaultSizeBytes)
 	defer buf1.Release()
@@ -105,6 +118,10 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 }
 
 // PackBuffer 以buffer的形式打包消息
+// 校验路由、序列号及消息长度后将消息编码为无拷贝缓冲区
+// @param message *Message 待打包的消息
+// @return @1 *buffer.NocopyBuffer 打包后的无拷贝缓冲区
+// @return @2 error 路由/序列号溢出或消息过大时返回的错误
 func (p *defaultPacker) PackBuffer(message *Message) (*buffer.NocopyBuffer, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
@@ -146,6 +163,10 @@ func (p *defaultPacker) PackBuffer(message *Message) (*buffer.NocopyBuffer, erro
 }
 
 // ReadMessage 读取消息
+// 先读取4字节长度，再一次性读取完整消息体
+// @param reader io.Reader 数据读取源
+// @return @1 []byte 读取到的消息字节；无消息时返回nil
+// @return @2 error 读取失败或数据不完整时返回的错误
 func (p *defaultPacker) ReadMessage(reader io.Reader) ([]byte, error) {
 	buf := make([]byte, defaultSizeBytes)
 
@@ -170,7 +191,11 @@ func (p *defaultPacker) ReadMessage(reader io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-// 无拷贝读取消息
+// nocopyReadMessage 无拷贝读取消息
+// 通过Peek/Slice的方式直接从底层缓冲区切取消息，避免内存拷贝
+// @param reader NocopyReader 无拷贝读取器
+// @return @1 []byte 读取到的消息字节；无消息时返回nil
+// @return @2 error 读取失败或数据不完整时返回的错误
 func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 	buf, err := reader.Peek(defaultSizeBytes)
 	if err != nil {
@@ -209,6 +234,10 @@ func (p *defaultPacker) nocopyReadMessage(reader NocopyReader) ([]byte, error) {
 }
 
 // PackMessage 打包消息
+// 校验路由、序列号及消息长度后按配置的字节序编码为字节数组
+// @param message *Message 待打包的消息
+// @return @1 []byte 打包后的消息字节
+// @return @2 error 路由/序列号溢出、消息过大或编码失败时返回的错误
 func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
@@ -274,6 +303,10 @@ func (p *defaultPacker) PackMessage(message *Message) ([]byte, error) {
 }
 
 // UnpackMessage 解包消息
+// 校验消息长度与数据标识后解析原始字节为消息对象
+// @param data []byte 待解包的原始消息字节
+// @return @1 *Message 解包后的消息对象
+// @return @2 error 消息非法或解析失败时返回的错误
 func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 	var (
 		ln     = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
@@ -360,6 +393,9 @@ func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 }
 
 // PackHeartbeat 打包心跳
+// 开启心跳时间时携带当前时间戳，否则返回预构建的心跳包
+// @return @1 []byte 心跳包字节
+// @return @2 error 编码失败时返回的错误
 func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
 	if p.opts.heartbeatTime {
 		var (
@@ -388,6 +424,10 @@ func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
 }
 
 // CheckHeartbeat 检测心跳包
+// 校验消息长度与心跳标识，判断给定数据是否为心跳包
+// @param data []byte 待检测的消息字节
+// @return @1 bool 是否为心跳包
+// @return @2 error 消息非法或解析失败时返回的错误
 func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 	if len(data) < defaultSizeBytes+defaultHeaderBytes {
 		return false, errors.ErrInvalidMessage
@@ -414,7 +454,10 @@ func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
 	return header&heartbeatBit == heartbeatBit, nil
 }
 
-// 构建心跳包
+// makeHeartbeat 构建心跳包
+// 按指定字节序生成不含时间戳的基础心跳包
+// @param byteOrder binary.ByteOrder 字节序
+// @return @1 []byte 心跳包字节
 func makeHeartbeat(byteOrder binary.ByteOrder) []byte {
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(defaultSizeBytes + defaultHeaderBytes)
