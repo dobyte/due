@@ -13,7 +13,6 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
-	"github.com/petermattis/goid"
 )
 
 type Proxy struct {
@@ -417,10 +416,6 @@ func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
 		return errors.ErrNodeShutdown
 	} else {
 		if len(isBlock) > 0 && isBlock[0] {
-			if p.node.dispatchGoid.Load() == goid.Get() {
-				return errors.ErrIllegalInvoke
-			}
-
 			p.node.doAddWait()
 
 			wg := &sync.WaitGroup{}
