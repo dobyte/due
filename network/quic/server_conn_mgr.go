@@ -68,19 +68,21 @@ func (cm *serverConnMgr) allocateConn(qc *quic.Conn, stream *quic.Stream) error 
 	}
 
 	conn := cm.connPool.Get().(*serverConn)
-	index := connHash(qc, len(cm.partitions))
-	cm.partitions[index].store(qc, conn)
 	conn.init(qc, stream)
 
 	return nil
+}
+
+// 存储连接
+func (cm *serverConnMgr) storeConn(qc *quic.Conn, conn *serverConn) {
+	cm.partitions[cm.connHash(qc)].store(qc, conn)
 }
 
 // recycleConn 回收连接
 // 从分片中移除连接对象，重置后归还连接池并递减总连接数
 // @param qc *quic.Conn 待回收的QUIC连接
 func (cm *serverConnMgr) recycleConn(qc *quic.Conn) {
-	index := connHash(qc, len(cm.partitions))
-	if conn, ok := cm.partitions[index].delete(qc); ok {
+	if conn, ok := cm.partitions[cm.connHash(qc)].delete(qc); ok {
 		conn.reset()
 		cm.connPool.Put(conn)
 		cm.total.Add(-1)
@@ -113,10 +115,9 @@ func (cm *serverConnMgr) recycleTask(t *task) {
 // connHash 通过连接指针计算哈希
 // 根据连接对象指针地址取模确定其所属分片索引
 // @param qc *quic.Conn QUIC连接
-// @param n int 分片数量
 // @return @1 int 分片索引
-func connHash(qc *quic.Conn, n int) int {
-	return int(uintptr(unsafe.Pointer(qc)) % uintptr(n))
+func (cm *serverConnMgr) connHash(qc *quic.Conn) int {
+	return int(uintptr(unsafe.Pointer(qc)) % uintptr(len(cm.partitions)))
 }
 
 type partition struct {

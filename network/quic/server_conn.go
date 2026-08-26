@@ -216,6 +216,8 @@ func (c *serverConn) init(qc *quic.Conn, stream *quic.Stream) {
 
 	c.checkAuthorize()
 
+	c.connMgr.storeConn(qc, c)
+
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
 	}
