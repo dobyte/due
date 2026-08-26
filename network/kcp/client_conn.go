@@ -34,6 +34,12 @@ type clientConn struct {
 
 var _ network.Conn = &clientConn{}
 
+// newClientConn 创建客户端连接
+// 初始化连接状态、读写队列及两路读写协程，并应用客户端相关KCP参数
+// @param id int64 连接ID
+// @param conn *kcp.UDPSession KCP源连接
+// @param client *client 客户端实例
+// @return @1 network.Conn 客户端连接实例
 func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn {
 	c := &clientConn{}
 	c.id = id
@@ -45,9 +51,9 @@ func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn 
 	c.highPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize/2)), client.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
-	c.wg1.Go(c.read)
+	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
-	c.wg2.Go(c.write)
+	c.wg2.Go(func() { c.write(conn) })
 
 	if c.client.opts.mtu > 0 {
 		conn.SetMtu(c.client.opts.mtu)
@@ -85,21 +91,26 @@ func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn 
 }
 
 // ID 获取连接ID
+// @return @1 int64 连接ID
 func (c *clientConn) ID() int64 {
 	return c.id
 }
 
 // UID 获取用户ID
+// @return @1 int64 已绑定的用户ID，未绑定时为0
 func (c *clientConn) UID() int64 {
 	return c.uid.Load()
 }
 
 // Attr 获取属性接口
+// @return @1 network.Attr 连接属性接口，用于读写自定义属性
 func (c *clientConn) Attr() network.Attr {
 	return c.attr
 }
 
 // Bind 绑定用户ID
+// @param uid int64 待绑定的用户ID
+// @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -114,6 +125,7 @@ func (c *clientConn) Bind(uid int64) error {
 }
 
 // Unbind 解绑用户ID
+// @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -128,6 +140,9 @@ func (c *clientConn) Unbind() error {
 }
 
 // Send 高优先级发送消息
+// 消息写入高优先级队列，保证心跳等关键消息优先下发
+// @param msg []byte 待发送的消息字节
+// @return @1 error 连接状态异常或队列写入失败时返回的错误
 func (c *clientConn) Send(msg []byte) (err error) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -140,6 +155,9 @@ func (c *clientConn) Send(msg []byte) (err error) {
 }
 
 // Push 低优先级发送消息
+// 消息写入低优先级队列，在高优先级队列空闲时才会被下发
+// @param msg []byte 待发送的消息字节
+// @return @1 error 连接状态异常或队列写入失败时返回的错误
 func (c *clientConn) Push(msg []byte) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -152,11 +170,14 @@ func (c *clientConn) Push(msg []byte) error {
 }
 
 // State 获取连接状态
+// @return @1 network.ConnState 当前连接状态
 func (c *clientConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
 // Close 关闭连接（主动关闭）
+// @param force ...bool 是否强制关闭；为true时立即关闭，缺省或为false时执行优雅关闭
+// @return @1 error 关闭失败或连接已处于关闭态时返回的错误
 func (c *clientConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
@@ -166,6 +187,8 @@ func (c *clientConn) Close(force ...bool) error {
 }
 
 // LocalIP 获取本地IP
+// @return @1 string 本地IP地址
+// @return @2 error 连接已关闭或地址解析失败时返回的错误
 func (c *clientConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -176,6 +199,8 @@ func (c *clientConn) LocalIP() (string, error) {
 }
 
 // LocalAddr 获取本地地址
+// @return @1 net.Addr 本地网络地址
+// @return @2 error 连接已关闭时返回的错误
 func (c *clientConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -191,6 +216,8 @@ func (c *clientConn) LocalAddr() (net.Addr, error) {
 }
 
 // RemoteIP 获取远端IP
+// @return @1 string 远端IP地址
+// @return @2 error 连接已关闭或地址解析失败时返回的错误
 func (c *clientConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -201,6 +228,8 @@ func (c *clientConn) RemoteIP() (string, error) {
 }
 
 // RemoteAddr 获取远端地址
+// @return @1 net.Addr 远端网络地址
+// @return @2 error 连接已关闭时返回的错误
 func (c *clientConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -215,7 +244,9 @@ func (c *clientConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
-// 检测连接状态
+// checkState 检测连接状态
+// 依据挂起/关闭状态返回对应错误，正常时返回nil
+// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
 func (c *clientConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -227,7 +258,9 @@ func (c *clientConn) checkState() error {
 	}
 }
 
-// 优雅关闭
+// graceClose 优雅关闭
+// 向两个写队列写入关闭信号，等待队列排空后关闭连接，便于尽量下发完已缓冲的消息
+// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
 func (c *clientConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -257,7 +290,9 @@ func (c *clientConn) graceClose() error {
 	return c.doClose()
 }
 
-// 强制关闭
+// forceClose 强制关闭
+// 直接切换连接状态为关闭并执行关闭操作，不等待队列排空
+// @return @1 error 连接已处于关闭态或关闭过程中出错时返回的错误
 func (c *clientConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -266,7 +301,9 @@ func (c *clientConn) forceClose() error {
 	return c.doClose()
 }
 
-// 执行关闭操作
+// doClose 执行关闭操作
+// 关闭读写队列，等待写协程退出后关闭底层连接，并触发断开hook函数
+// @return @1 error 连接已关闭或关闭底层连接失败时返回的错误
 func (c *clientConn) doClose() error {
 	c.rw.Lock()
 	if c.conn == nil {
@@ -293,10 +330,10 @@ func (c *clientConn) doClose() error {
 	return err
 }
 
-// 读取消息
-func (c *clientConn) read() {
-	conn := c.conn
-
+// read 读取消息
+// 循环读取KCP数据，校验连接状态与心跳包，并将有效消息交给接收hook函数处理
+// @param conn *kcp.UDPSession KCP连接
+func (c *clientConn) read(conn *kcp.UDPSession) {
 	for {
 		data, err := packet.ReadMessage(conn)
 		if err != nil {
@@ -338,11 +375,11 @@ func (c *clientConn) read() {
 	}
 }
 
-// 写入消息
-// 为了保证心跳能够优先下发到客户端，故而实现一个优先队列
-func (c *clientConn) write() {
+// write 写入消息
+// 从高低优先级队列及心跳定时器中选择待写入数据，为了保证心跳能够优先下发到客户端，故而实现一个优先队列
+// @param conn *kcp.UDPSession KCP连接
+func (c *clientConn) write(conn *kcp.UDPSession) {
 	var (
-		conn   = c.conn
 		ticker *time.Ticker
 	)
 
@@ -399,7 +436,10 @@ func (c *clientConn) write() {
 	}
 }
 
-// 执行写入操作
+// doWrite 执行写入操作
+// 根据任务类型组装心跳包并写入底层连接，完成后回收任务对象
+// @param conn *kcp.UDPSession KCP连接
+// @param t *task 待写入的任务对象
 func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) {
 	defer c.client.recycleTask(t)
 
@@ -421,7 +461,11 @@ func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) {
 	}
 }
 
-// 处理心跳
+// doHandleHeartbeat 处理心跳
+// 超过心跳超时阈值则强制关闭连接，否则向对端发送心跳包
+// @param conn *kcp.UDPSession KCP连接
+// @param t time.Time 当前心跳时刻
+// @return @1 bool 是否继续运行（心跳超时强制关闭返回false）
 func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
 
@@ -447,12 +491,18 @@ func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 	return true
 }
 
-// 是否已关闭
+// isClosed 是否已关闭
+// @return @1 bool 连接状态是否为关闭
 func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }
 
-// 写入任务到队列
+// doWriteToQueue 写入任务到队列
+// 从对象池分配任务并写入指定队列，写入失败时回收任务对象
+// @param q *queue.Queue[*task] 目标写入队列
+// @param typ int8 任务类型
+// @param msg ...[]byte 待发送的消息字节，可选
+// @return @1 error 队列写入失败或已关闭时返回的错误
 func (c *clientConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
 	t := c.client.allocateTask(typ, msg...)
 

@@ -10,7 +10,6 @@ import (
 
 const (
 	defaultClientDialAddr          = "127.0.0.1:3553"
-	defaultClientDialTimeout       = "5s"
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
@@ -40,7 +39,6 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	addr              string        // 地址
-	timeout           time.Duration // 拨号超时时间，默认5s
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
@@ -53,10 +51,12 @@ type clientOptions struct {
 	writeBuffer       int           // 写入缓冲区大小，默认不设置
 }
 
+// defaultClientOptions 默认客户端配置
+// 从配置中心读取各配置项，生成默认客户端配置
+// @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 	opts.addr = etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String()
-	opts.timeout = etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration()
 
 	if writeTimeout := etc.Get(defaultClientWriteTimeoutKey, defaultClientWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
@@ -83,56 +83,71 @@ func defaultClientOptions() *clientOptions {
 }
 
 // WithClientDialAddr 设置拨号地址
+// @param addr string 拨号地址
+// @return @1 ClientOption 客户端配置选项
 func WithClientDialAddr(addr string) ClientOption {
 	return func(o *clientOptions) { o.addr = addr }
 }
 
-// WithClientDialTimeout 设置拨号超时时间
-func WithClientDialTimeout(timeout time.Duration) ClientOption {
-	return func(o *clientOptions) { o.timeout = timeout }
-}
-
 // WithClientHeartbeatInterval 设置心跳间隔时间
+// @param heartbeatInterval time.Duration 心跳间隔时间
+// @return @1 ClientOption 客户端配置选项
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) { o.heartbeatInterval = heartbeatInterval }
 }
 
 // WithClientMtu 设置最大传输单元
+// @param mtu int 最大传输单元
+// @return @1 ClientOption 客户端配置选项
 func WithClientMtu(mtu int) ClientOption {
 	return func(o *clientOptions) { o.mtu = mtu }
 }
 
 // WithClientNoDelay 设置是否开启无延迟模式
+// @param noDelay int 是否开启无延迟模式的取值
+// @return @1 ClientOption 客户端配置选项
 func WithClientNoDelay(noDelay int) ClientOption {
 	return func(o *clientOptions) { o.noDelay = append(o.noDelay, noDelay) }
 }
 
 // WithClientAckNoDelay 设置是否开启ACK延迟确认
+// @param ackNoDelay bool 是否开启ACK延迟确认
+// @return @1 ClientOption 客户端配置选项
 func WithClientAckNoDelay(ackNoDelay bool) ClientOption {
 	return func(o *clientOptions) { o.ackNoDelay = ackNoDelay }
 }
 
 // WithClientWriteDelay 设置是否开启写延迟
+// @param writeDelay bool 是否开启写延迟
+// @return @1 ClientOption 客户端配置选项
 func WithClientWriteDelay(writeDelay bool) ClientOption {
 	return func(o *clientOptions) { o.writeDelay = writeDelay }
 }
 
 // WithClientWindowSize 设置窗口大小
+// @param windowSize int 窗口大小取值
+// @return @1 ClientOption 客户端配置选项
 func WithClientWindowSize(windowSize int) ClientOption {
 	return func(o *clientOptions) { o.windowSize = append(o.windowSize, windowSize) }
 }
 
 // WithClientReadBuffer 设置读取缓冲区大小
+// @param readBuffer int 读取缓冲区大小
+// @return @1 ClientOption 客户端配置选项
 func WithClientReadBuffer(readBuffer int) ClientOption {
 	return func(o *clientOptions) { o.readBuffer = readBuffer }
 }
 
 // WithClientWriteBuffer 设置写入缓冲区大小
+// @param writeBuffer int 写入缓冲区大小
+// @return @1 ClientOption 客户端配置选项
 func WithClientWriteBuffer(writeBuffer int) ClientOption {
 	return func(o *clientOptions) { o.writeBuffer = writeBuffer }
 }
 
 // WithClientWriteTimeout 设置写超时时间
+// @param writeTimeout time.Duration 写超时时间，小于0时忽略
+// @return @1 ClientOption 客户端配置选项
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -144,6 +159,8 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 }
 
 // WithClientWriteQueueSize 设置写入队列大小
+// @param writeQueueSize int 写入队列大小，小于等于0时忽略
+// @return @1 ClientOption 客户端配置选项
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {

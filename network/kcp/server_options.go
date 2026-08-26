@@ -73,6 +73,9 @@ type serverOptions struct {
 	writeBuffer        int                // 写入缓冲区大小，默认不设置
 }
 
+// defaultServerOptions 默认服务器配置
+// 从配置中心读取各配置项，生成默认服务器配置
+// @return @1 *serverOptions 服务器配置
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
@@ -105,66 +108,92 @@ func defaultServerOptions() *serverOptions {
 }
 
 // WithServerListenAddr 设置监听地址
+// @param addr string 监听地址
+// @return @1 ServerOption 服务器配置选项
 func WithServerListenAddr(addr string) ServerOption {
 	return func(o *serverOptions) { o.addr = addr }
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数
+// @param maxConnNum int 最大连接数
+// @return @1 ServerOption 服务器配置选项
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) { o.maxConnNum = maxConnNum }
 }
 
 // WithServerHeartbeatInterval 设置心跳检测间隔时间
+// @param heartbeatInterval time.Duration 心跳检测间隔时间
+// @return @1 ServerOption 服务器配置选项
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) { o.heartbeatInterval = heartbeatInterval }
 }
 
 // WithServerHeartbeatMechanism 设置心跳机制
+// @param heartbeatMechanism HeartbeatMechanism 心跳机制
+// @return @1 ServerOption 服务器配置选项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间
+// @param authorizeTimeout time.Duration 授权超时时间
+// @return @1 ServerOption 服务器配置选项
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) { o.authorizeTimeout = authorizeTimeout }
 }
 
 // WithServerMtu 设置最大传输单元
+// @param mtu int 最大传输单元
+// @return @1 ServerOption 服务器配置选项
 func WithServerMtu(mtu int) ServerOption {
 	return func(o *serverOptions) { o.mtu = mtu }
 }
 
 // WithServerNoDelay 设置是否开启无延迟模式
+// @param noDelay []int 是否开启无延迟模式的取值
+// @return @1 ServerOption 服务器配置选项
 func WithServerNoDelay(noDelay []int) ServerOption {
 	return func(o *serverOptions) { o.noDelay = noDelay }
 }
 
 // WithServerAckNoDelay 设置是否开启ACK延迟确认
+// @param ackNoDelay bool 是否开启ACK延迟确认
+// @return @1 ServerOption 服务器配置选项
 func WithServerAckNoDelay(ackNoDelay bool) ServerOption {
 	return func(o *serverOptions) { o.ackNoDelay = ackNoDelay }
 }
 
 // WithServerWriteDelay 设置是否开启写延迟
+// @param writeDelay bool 是否开启写延迟
+// @return @1 ServerOption 服务器配置选项
 func WithServerWriteDelay(writeDelay bool) ServerOption {
 	return func(o *serverOptions) { o.writeDelay = writeDelay }
 }
 
 // WithServerWindowSize 设置窗口大小
+// @param windowSize []int 窗口大小取值
+// @return @1 ServerOption 服务器配置选项
 func WithServerWindowSize(windowSize []int) ServerOption {
 	return func(o *serverOptions) { o.windowSize = windowSize }
 }
 
 // WithServerReadBuffer 设置读取缓冲区大小
+// @param readBuffer int 读取缓冲区大小
+// @return @1 ServerOption 服务器配置选项
 func WithServerReadBuffer(readBuffer int) ServerOption {
 	return func(o *serverOptions) { o.readBuffer = readBuffer }
 }
 
 // WithServerWriteBuffer 设置写入缓冲区大小
+// @param writeBuffer int 写入缓冲区大小
+// @return @1 ServerOption 服务器配置选项
 func WithServerWriteBuffer(writeBuffer int) ServerOption {
 	return func(o *serverOptions) { o.writeBuffer = writeBuffer }
 }
 
 // WithServerWriteTimeout 设置写超时时间
+// @param writeTimeout time.Duration 写超时时间，小于0时忽略
+// @return @1 ServerOption 服务器配置选项
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if writeTimeout >= 0 {
@@ -176,6 +205,8 @@ func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 }
 
 // WithServerWriteQueueSize 设置写入队列大小
+// @param writeQueueSize int 写入队列大小，小于等于0时忽略
+// @return @1 ServerOption 服务器配置选项
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeQueueSize > 0 {
