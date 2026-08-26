@@ -14,7 +14,7 @@ func (t *Timer) Stop() (ok bool) {
 	}
 
 	if ok = t.timer.Stop(); ok && t.node != nil {
-		t.node.doWaitDone()
+		t.node.doDoneWait()
 	}
 
 	return

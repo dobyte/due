@@ -61,5 +61,5 @@ func (t *Tasker) handle(f func()) {
 
 	xcall.Call(f)
 
-	t.node.doWaitDone()
+	t.node.doDoneWait()
 }

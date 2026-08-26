@@ -516,13 +516,13 @@ func (n *Node) printInfo() {
 	info.PrintBoxInfo("Node", infos...)
 }
 
-func (n *Node) doWaitDone() {
+func (n *Node) doDoneWait() {
 	if n.getState() != cluster.Shut {
 		n.wg.Done()
 	}
 }
 
-func (n *Node) doWaitAdd() {
+func (n *Node) doAddWait() {
 	if n.getState() != cluster.Shut {
 		n.wg.Add(1)
 	}

@@ -271,7 +271,7 @@ func (a *Actor) destroy() bool {
 	a.rw.Unlock()
 
 	if a.opts.wait {
-		a.scheduler.node.doWaitDone()
+		a.scheduler.node.doDoneWait()
 	}
 
 	if processor != nil {

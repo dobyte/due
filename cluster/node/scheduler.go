@@ -42,7 +42,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	if o.wait {
-		s.node.doWaitAdd()
+		s.node.doAddWait()
 	}
 
 	act := &Actor{}

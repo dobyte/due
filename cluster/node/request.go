@@ -158,7 +158,7 @@ func (r *request) Task(fn func(ctx Context)) {
 
 	r.Cancel()
 
-	r.node.doWaitAdd()
+	r.node.doAddWait()
 
 	task.Add(func() {
 		defer func() {
@@ -166,7 +166,7 @@ func (r *request) Task(fn func(ctx Context)) {
 
 			r.compareVersionRecycle(version)
 
-			r.node.doWaitDone()
+			r.node.doDoneWait()
 		}()
 
 		fn(r)

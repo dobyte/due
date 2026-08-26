@@ -54,8 +54,8 @@ func newProxy(node *Node) *Proxy {
 			FaultRecoveryTime:   node.opts.linker.faultRecoveryTime,
 			CommandQueueSize:    node.opts.linker.commandQueueSize,
 			CommandWriteTimeout: node.opts.linker.commandWriteTimeout,
-			WaitHandler:         node.doWaitAdd,
-			DoneHandler:         node.doWaitDone,
+			WaitHandler:         node.doAddWait,
+			DoneHandler:         node.doDoneWait,
 		}),
 	}
 }
@@ -421,7 +421,7 @@ func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
 				return errors.ErrIllegalInvoke
 			}
 
-			p.node.doWaitAdd()
+			p.node.doAddWait()
 
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
@@ -431,16 +431,16 @@ func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
 
 				f()
 			}); err != nil {
-				p.node.doWaitDone()
+				p.node.doDoneWait()
 				return err
 			}
 
 			wg.Wait()
 		} else {
-			p.node.doWaitAdd()
+			p.node.doAddWait()
 
 			if err := p.node.tasker.commit(f); err != nil {
-				p.node.doWaitDone()
+				p.node.doDoneWait()
 				return err
 			}
 		}
@@ -454,12 +454,12 @@ func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
 	} else {
-		p.node.doWaitAdd()
+		p.node.doAddWait()
 
 		timer := time.AfterFunc(d, func() {
 			xcall.Call(f)
 
-			p.node.doWaitDone()
+			p.node.doDoneWait()
 		})
 
 		return &Timer{node: p.node, timer: timer}, nil
@@ -471,7 +471,7 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
 	} else {
-		p.node.doWaitAdd()
+		p.node.doAddWait()
 
 		timer := time.AfterFunc(d, func() {
 			var err error
@@ -483,7 +483,7 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 			}
 
 			if err != nil {
-				p.node.doWaitDone()
+				p.node.doDoneWait()
 				log.Warnf("node write task failed: %v", err)
 			}
 		})
