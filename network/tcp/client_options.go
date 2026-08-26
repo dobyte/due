@@ -1,8 +1,10 @@
 package tcp
 
 import (
+	"crypto/tls"
 	"time"
 
+	ctls "github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -30,20 +32,18 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	addr              string        // 地址
-	caFile            string        // CA证书文件
-	serverName        string        // 服务器名称
+	tlsConfig         *tls.Config   // TLS配置
 	dialTimeout       time.Duration // 拨号超时时间，默认3s
 	writeTimeout      time.Duration // 写超时时间，默认无超时
 	writeQueueSize    int           // 写队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+
 }
 
 // defaultClientOptions 创建默认客户端配置
 // @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
-	opts.caFile = etc.Get(defaultClientCAFileKey).String()
-	opts.serverName = etc.Get(defaultClientServerNameKey).String()
 
 	if addr := etc.Get(defaultClientAddrKey, defaultClientAddr).String(); addr != "" {
 		opts.addr = addr
@@ -75,6 +75,17 @@ func defaultClientOptions() *clientOptions {
 		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
 	}
 
+	caFile := etc.Get(defaultClientCAFileKey).String()
+	serverName := etc.Get(defaultClientServerNameKey).String()
+
+	if caFile != "" || serverName != "" {
+		if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
+			log.Warnf("make tcp client tls config failed: %v", err)
+		} else {
+			opts.tlsConfig = config
+		}
+	}
+
 	return opts
 }
 
@@ -97,11 +108,24 @@ func WithClientAddr(addr string) ClientOption {
 // @return @1 ClientOption 客户端配置项
 func WithClientCredentials(caFile string, serverName string) ClientOption {
 	return func(o *clientOptions) {
-		if caFile != "" && serverName != "" {
-			o.caFile, o.serverName = caFile, serverName
+		if caFile != "" || serverName != "" {
+			if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
+				log.Warnf("make tcp client tls config failed: %v", err)
+			} else {
+				o.tlsConfig = config
+			}
 		} else {
 			log.Warnf("the specified caFile or serverName is empty and will be ignored")
 		}
+	}
+}
+
+// WithClientTLSConfig 设置TLS配置
+// @param tlsConfig *tls.Config TLS配置
+// @return @1 ClientOption 客户端配置项
+func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
+	return func(o *clientOptions) {
+		o.tlsConfig = tlsConfig
 	}
 }
 

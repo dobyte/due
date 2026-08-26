@@ -124,7 +124,8 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 }
 
 // init 初始化TCP服务器
-// @return @1 error 错误信息
+// 解析TCP地址，按配置创建TLS或原生TCP监听器；若任一环节失败则回滚启动状态
+// @return @1 error 已启动、证书加载失败或监听地址不合法时返回的错误
 func (s *server) init() error {
 	if s.started.Swap(true) {
 		return errors.ErrIllegalOperation
@@ -162,6 +163,7 @@ func (s *server) init() error {
 }
 
 // serve 等待连接
+// 循环接受TCP连接并分配到独立协程处理；对瞬时错误采用指数退避重试，服务器关闭时结束
 func (s *server) serve() {
 	var (
 		listener  = s.listener

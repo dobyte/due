@@ -51,7 +51,8 @@ type serverOptions struct {
 	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
 }
 
-// defaultServerOptions 创建默认服务器配置
+// defaultServerOptions 构建默认服务器配置
+// 优先读取环境配置（etc.network.tcp.server.*），缺失时回退到内置默认值
 // @return @1 *serverOptions 服务器配置
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}

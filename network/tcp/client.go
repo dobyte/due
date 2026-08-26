@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	ctls "github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/network"
 )
 
@@ -58,15 +57,8 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	if c.opts.caFile != "" {
-		config, err := ctls.MakeTCPClientTLSConfig(c.opts.caFile, c.opts.serverName)
-		if err != nil {
-			return nil, err
-		}
-
-		dialer := &net.Dialer{Timeout: c.opts.dialTimeout}
-
-		if conn, err = tls.DialWithDialer(dialer, tcpAddr.Network(), tcpAddr.String(), config); err != nil {
+	if c.opts.tlsConfig != nil {
+		if conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.opts.dialTimeout}, tcpAddr.Network(), tcpAddr.String(), c.opts.tlsConfig); err != nil {
 			return nil, err
 		}
 	} else {
@@ -105,8 +97,9 @@ func (c *client) OnReceive(handler network.ReceiveHandler) {
 }
 
 // allocateTask 分配任务对象
+// 从任务对象池中获取并复用任务对象，避免频繁分配
 // @param typ int8 任务类型
-// @param msg ...[]byte 消息内容
+// @param msg ...[]byte 待发送的消息字节，可缺省
 // @return @1 *task 任务对象
 func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 	t := c.taskPool.Get().(*task)
@@ -119,7 +112,8 @@ func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 }
 
 // recycleTask 回收任务到对象池
-// @param t *task 任务对象
+// 清理任务数据后将对象归还池中以供复用
+// @param t *task 待回收的任务对象
 func (c *client) recycleTask(t *task) {
 	t.msg = nil
 	c.taskPool.Put(t)
