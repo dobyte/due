@@ -146,7 +146,7 @@ func (n *Node) Close() {
 		}
 	}
 
-	n.refreshServiceInstances()
+	n.refreshServiceInstances(cluster.Hang)
 
 	err1 := n.tasker.done()
 	err2 := n.router.done()
@@ -175,8 +175,6 @@ func (n *Node) Destroy() {
 		return
 	}
 
-	n.runHookFunc(cluster.Destroy)
-
 	n.deregisterServiceInstances()
 
 	n.stopLinkerServer()
@@ -190,6 +188,8 @@ func (n *Node) Destroy() {
 	n.trigger.close()
 
 	n.cancel()
+
+	n.runHookFunc(cluster.Destroy)
 }
 
 // Proxy 获取节点代理
@@ -348,8 +348,8 @@ func (n *Node) registerServiceInstances() {
 }
 
 // 刷新服务实例状态
-func (n *Node) refreshServiceInstances() {
-	if err := n.doRefreshServiceInstances(); err != nil {
+func (n *Node) refreshServiceInstances(state ...cluster.State) {
+	if err := n.doRefreshServiceInstances(state...); err != nil {
 		log.Errorf("refresh cluster instances failed: %v", err)
 	}
 }

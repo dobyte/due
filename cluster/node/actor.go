@@ -252,8 +252,6 @@ func (a *Actor) destroy() bool {
 		return false
 	}
 
-	a.processor.Destroy()
-
 	a.scheduler.batchUnbindActor(func(relations map[int64]map[string]*Actor) {
 		a.binds.Range(func(uid, _ any) bool {
 			delete(relations[uid.(int64)], a.Kind())
@@ -262,8 +260,17 @@ func (a *Actor) destroy() bool {
 	})
 
 	a.rw.Lock()
+	processor := a.processor
 	a.clear()
 	a.rw.Unlock()
+
+	if a.opts.wait {
+		a.scheduler.node.doWaitDone()
+	}
+
+	if processor != nil {
+		processor.Destroy()
+	}
 
 	return true
 }
@@ -272,8 +279,6 @@ func (a *Actor) destroy() bool {
 func (a *Actor) clear() {
 	a.taskQueue.Close()
 	a.messageQueue.Close()
-	clear(a.routes)
-	clear(a.events)
 	a.processor = nil
 	a.defaultRouteHandler = nil
 }

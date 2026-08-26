@@ -52,6 +52,7 @@ var (
 	ErrServerClosed            = New("server is closed")
 	ErrServerStarted           = New("server is started")
 	ErrActorExists             = New("actor exists")
+	ErrActorCreateFailed       = New("actor create failed")
 	ErrMissingDispatchStrategy = New("missing dispatch strategy")
 	ErrUnregisterRoute         = New("unregistered route")
 	ErrNotBindActor            = New("not bind actor")

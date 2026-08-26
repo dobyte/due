@@ -55,19 +55,23 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	act.messageQueue = queue.NewQueue[Context](o.messageQueueSize, o.messageWriteTimeout)
 
 	xcall.Call(func() {
-		act.processor = creator(act, o.args...)
-		act.processor.Init()
+		if act.processor = creator(act, o.args...); act.processor != nil {
+			act.processor.Init()
+		}
 	})
 
-	s.rw.Lock()
-	if _, ok := s.load(o.kind, o.id); ok {
-		act.clear()
-		s.rw.Unlock()
-		s.node.doWaitDone()
+	// actor处理器创建失败
+	if act.processor == nil {
+		act.destroy()
+		return nil, errors.ErrActorCreateFailed
+	}
 
+	if _, ok := s.load(o.kind, o.id); ok {
+		act.destroy()
 		return nil, errors.ErrActorExists
 	}
 
+	s.rw.Lock()
 	if act.opts.dispatch {
 		if _, ok := s.kinds.Load(act.Kind()); !ok {
 			s.kinds.Store(act.Kind(), struct{}{})
@@ -88,18 +92,11 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 
 // 杀死Actor
 func (s *Scheduler) kill(kind, id string) bool {
-	act, ok := s.remove(kind, id)
-	if !ok {
+	if act, ok := s.remove(kind, id); ok {
+		return act.destroy()
+	} else {
 		return false
 	}
-
-	ok = act.destroy()
-
-	if act.opts.wait {
-		s.node.doWaitDone()
-	}
-
-	return ok
 }
 
 // 移除Actor
@@ -244,7 +241,11 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 func (s *Scheduler) dispatchEvent(ctx Context) error {
 	s.actors.Range(func(_, actor any) bool {
 		if act := actor.(*Actor); act.opts.dispatch {
-			act.Next(ctx.Clone())
+			c := ctx.Clone()
+
+			if err := act.Next(c); err != nil {
+				c.release()
+			}
 		}
 
 		return true

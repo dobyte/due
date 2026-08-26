@@ -8,13 +8,6 @@ type Middleware struct {
 	routeHandler RouteHandler
 }
 
-// 重置中间件
-func (m *Middleware) reset(middlewares []MiddlewareHandler, routeHandler RouteHandler) {
-	m.index = -1
-	m.middlewares = middlewares
-	m.routeHandler = routeHandler
-}
-
 // Next 下一个中间件
 func (m *Middleware) Next(ctx Context) {
 	m.Skip(ctx, 1)

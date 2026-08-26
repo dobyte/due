@@ -140,6 +140,7 @@ func (r *request) Clone() Context {
 	c.nid = r.nid
 	c.cid = r.cid
 	c.uid = r.uid
+	c.pid = r.pid
 	c.ctx = context.Background()
 	c.message.Seq = r.message.Seq
 	c.message.Route = r.message.Route
