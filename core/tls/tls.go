@@ -35,16 +35,20 @@ func MakeRedisTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 }
 
 func MakeTCPClientTLSConfig(caFile string, serverName string) (*tls.Config, error) {
-	caCert, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, err
+	if caFile == "" {
+		return &tls.Config{ServerName: serverName, InsecureSkipVerify: true}, nil
+	} else {
+		caCert, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, err
+		}
+
+		caCertPool := x509.NewCertPool()
+
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, errors.ErrInvalidCertFile
+		}
+
+		return &tls.Config{ServerName: serverName, RootCAs: caCertPool}, nil
 	}
-
-	caCertPool := x509.NewCertPool()
-
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		return nil, errors.ErrInvalidCertFile
-	}
-
-	return &tls.Config{ServerName: serverName, RootCAs: caCertPool}, nil
 }
