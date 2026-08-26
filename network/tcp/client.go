@@ -21,6 +21,9 @@ type client struct {
 
 var _ network.Client = &client{}
 
+// NewClient 创建一个客户端
+// @param opts ...ClientOption 客户端配置项
+// @return @1 network.Client 客户端实例
 func NewClient(opts ...ClientOption) network.Client {
 	o := defaultClientOptions()
 	for _, opt := range opts {
@@ -35,6 +38,9 @@ func NewClient(opts ...ClientOption) network.Client {
 }
 
 // Dial 拨号连接
+// @param addr ...string 拨号地址
+// @return @1 network.Conn 连接对象
+// @return @2 error 错误信息
 func (c *client) Dial(addr ...string) (network.Conn, error) {
 	var (
 		conn    net.Conn
@@ -74,27 +80,34 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	return newClientConn(c.id.Add(1), conn, c), nil
 }
 
-// Protocol 协议
+// Protocol 获取协议名称
+// @return @1 string 协议名称
 func (c *client) Protocol() string {
 	return protocol
 }
 
 // OnConnect 监听连接打开
+// @param handler network.ConnectHandler 连接打开处理函数
 func (c *client) OnConnect(handler network.ConnectHandler) {
 	c.connectHandler = handler
 }
 
 // OnDisconnect 监听连接关闭
+// @param handler network.DisconnectHandler 连接关闭处理函数
 func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
 }
 
 // OnReceive 监听接收到消息
+// @param handler network.ReceiveHandler 消息接收处理函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
 }
 
-// 分配任务对象
+// allocateTask 分配任务对象
+// @param typ int8 任务类型
+// @param msg ...[]byte 消息内容
+// @return @1 *task 任务对象
 func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 	t := c.taskPool.Get().(*task)
 	t.typ = typ
@@ -105,7 +118,8 @@ func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 	return t
 }
 
-// 回收任务到对象池
+// recycleTask 回收任务到对象池
+// @param t *task 任务对象
 func (c *client) recycleTask(t *task) {
 	t.msg = nil
 	c.taskPool.Put(t)

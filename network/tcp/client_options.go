@@ -38,6 +38,8 @@ type clientOptions struct {
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
 }
 
+// defaultClientOptions 创建默认客户端配置
+// @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 	opts.caFile = etc.Get(defaultClientCAFileKey).String()
@@ -77,6 +79,8 @@ func defaultClientOptions() *clientOptions {
 }
 
 // WithClientAddr 设置拨号地址
+// @param addr string 拨号地址
+// @return @1 ClientOption 客户端配置项
 func WithClientAddr(addr string) ClientOption {
 	return func(o *clientOptions) {
 		if addr != "" {
@@ -88,6 +92,9 @@ func WithClientAddr(addr string) ClientOption {
 }
 
 // WithClientCredentials 设置CA证书和校验域名
+// @param caFile string CA证书文件
+// @param serverName string 服务器名称
+// @return @1 ClientOption 客户端配置项
 func WithClientCredentials(caFile string, serverName string) ClientOption {
 	return func(o *clientOptions) {
 		if caFile != "" && serverName != "" {
@@ -99,6 +106,8 @@ func WithClientCredentials(caFile string, serverName string) ClientOption {
 }
 
 // WithClientDialTimeout 设置拨号超时时间
+// @param dialTimeout time.Duration 拨号超时时间
+// @return @1 ClientOption 客户端配置项
 func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if dialTimeout >= 0 {
@@ -110,6 +119,8 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 }
 
 // WithClientWriteTimeout 设置写超时时间
+// @param writeTimeout time.Duration 写超时时间
+// @return @1 ClientOption 客户端配置项
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -121,6 +132,8 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 }
 
 // WithClientWriteQueueSize 设置写队列大小
+// @param writeQueueSize int 写队列大小
+// @return @1 ClientOption 客户端配置项
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {
@@ -132,6 +145,8 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 }
 
 // WithClientHeartbeatInterval 设置心跳间隔时间
+// @param heartbeatInterval time.Duration 心跳间隔时间
+// @return @1 ClientOption 客户端配置项
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if heartbeatInterval >= 0 {

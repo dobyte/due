@@ -26,6 +26,9 @@ type server struct {
 
 var _ network.Server = &server{}
 
+// NewServer 创建一个服务器
+// @param opts ...ServerOption 服务器配置项
+// @return @1 network.Server 服务器实例
 func NewServer(opts ...ServerOption) network.Server {
 	o := defaultServerOptions()
 	for _, opt := range opts {
@@ -39,12 +42,14 @@ func NewServer(opts ...ServerOption) network.Server {
 	return s
 }
 
-// Addr 监听地址
+// Addr 获取监听地址
+// @return @1 string 监听地址
 func (s *server) Addr() string {
 	return s.opts.addr
 }
 
 // Start 启动服务器
+// @return @1 error 错误信息
 func (s *server) Start() error {
 	if err := s.init(); err != nil {
 		return err
@@ -60,6 +65,7 @@ func (s *server) Start() error {
 }
 
 // Stop 关闭服务器
+// @return @1 error 错误信息
 func (s *server) Stop() error {
 	if !s.started.Swap(false) {
 		return errors.ErrIllegalOperation
@@ -81,37 +87,44 @@ func (s *server) Stop() error {
 	return nil
 }
 
-// Protocol 协议
+// Protocol 获取协议名称
+// @return @1 string 协议名称
 func (s *server) Protocol() string {
 	return protocol
 }
 
 // OnStart 监听服务器启动
+// @param handler network.StartHandler 服务器启动处理函数
 func (s *server) OnStart(handler network.StartHandler) {
 	s.startHandler = handler
 }
 
 // OnStop 监听服务器关闭
+// @param handler network.CloseHandler 服务器关闭处理函数
 func (s *server) OnStop(handler network.CloseHandler) {
 	s.stopHandler = handler
 }
 
 // OnConnect 监听连接打开
+// @param handler network.ConnectHandler 连接打开处理函数
 func (s *server) OnConnect(handler network.ConnectHandler) {
 	s.connectHandler = handler
 }
 
 // OnDisconnect 监听连接关闭
+// @param handler network.DisconnectHandler 连接关闭处理函数
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
 }
 
 // OnReceive 监听接收到消息
+// @param handler network.ReceiveHandler 消息接收处理函数
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
 }
 
-// 初始化TCP服务器
+// init 初始化TCP服务器
+// @return @1 error 错误信息
 func (s *server) init() error {
 	if s.started.Swap(true) {
 		return errors.ErrIllegalOperation
@@ -148,7 +161,7 @@ func (s *server) init() error {
 	return nil
 }
 
-// 等待连接
+// serve 等待连接
 func (s *server) serve() {
 	var (
 		listener  = s.listener
