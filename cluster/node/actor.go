@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/petermattis/goid"
 )
 
 type Creator func(actor *Actor, args ...any) Processor
@@ -33,6 +34,7 @@ type Actor struct {
 	taskQueue           *queue.Queue[func()]           // 任务队列
 	messageQueue        *queue.Queue[Context]          // 消息队列
 	binds               sync.Map                       // 绑定的用户
+	dispatchGoid        atomic.Int64                   // 分发器协程ID
 }
 
 // ID 获取Actor的ID
@@ -67,6 +69,10 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 	}
 
 	if len(isBlock) > 0 && isBlock[0] {
+		if a.dispatchGoid.Load() == goid.Get() {
+			return errors.ErrIllegalInvoke
+		}
+
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
@@ -296,6 +302,8 @@ func (a *Actor) unbindUser(uid int64) bool {
 
 // 分发
 func (a *Actor) dispatch() {
+	a.dispatchGoid.Store(goid.Get())
+
 	for {
 		select {
 		case ctx, ok := <-a.messageQueue.Read():

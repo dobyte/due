@@ -16,6 +16,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/petermattis/goid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,24 +30,25 @@ type serviceEntity struct {
 
 type Node struct {
 	component.Base
-	opts        *options
-	ctx         context.Context
-	cancel      context.CancelFunc
-	state       atomic.Int32
-	evtPool     *sync.Pool
-	reqPool     *sync.Pool
-	tasker      *Tasker
-	router      *Router
-	trigger     *Trigger
-	proxy       *Proxy
-	services    []*serviceEntity
-	instances   []*registry.ServiceInstance
-	linker      *node.Server
-	scheduler   *Scheduler
-	transporter transport.Server
-	wg          *sync.WaitGroup
-	rw          sync.RWMutex
-	hooks       map[cluster.Hook][]HookHandler
+	opts         *options
+	ctx          context.Context
+	cancel       context.CancelFunc
+	state        atomic.Int32
+	evtPool      *sync.Pool
+	reqPool      *sync.Pool
+	tasker       *Tasker
+	router       *Router
+	trigger      *Trigger
+	proxy        *Proxy
+	services     []*serviceEntity
+	instances    []*registry.ServiceInstance
+	linker       *node.Server
+	scheduler    *Scheduler
+	transporter  transport.Server
+	wg           *sync.WaitGroup
+	rw           sync.RWMutex
+	hooks        map[cluster.Hook][]HookHandler
+	dispatchGoid atomic.Int64
 }
 
 func NewNode(opts ...Option) *Node {
@@ -199,6 +201,8 @@ func (n *Node) Proxy() *Proxy {
 
 // 分发处理消息
 func (n *Node) dispatch() {
+	n.dispatchGoid.Store(goid.Get())
+
 	for {
 		select {
 		case handle, ok := <-n.tasker.receive():

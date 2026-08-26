@@ -9,6 +9,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jinzhu/copier v0.4.0
 	github.com/panjf2000/ants/v2 v2.12.1
+	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261
 	github.com/shamaton/msgpack/v2 v2.4.1
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12
