@@ -29,8 +29,9 @@ type serverConnMgr struct {
 	partitions []*partition // 连接管理
 }
 
-// newConnMgr 创建一个连接管理器
-// @param server *server 服务器
+// newConnMgr 创建连接管理器
+// 初始化连接池、任务池以及按 CPU 数量动态扩容的分片结构
+// @param server *server 所属服务器
 // @return @1 *serverConnMgr 连接管理器
 func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
@@ -46,7 +47,8 @@ func newConnMgr(server *server) *serverConnMgr {
 	return cm
 }
 
-// close 关闭连接
+// close 关闭所有连接
+// 并行遍历所有分片，逐个关闭其中的连接并等待完成
 func (cm *serverConnMgr) close() {
 	wg, _ := taskpool.WithContext(context.Background())
 
@@ -58,8 +60,9 @@ func (cm *serverConnMgr) close() {
 }
 
 // allocateConn 分配连接
+// 自增总连接数并校验上限，从连接池取用连接对象存入分片后完成初始化
 // @param c *websocket.Conn WS连接
-// @return @1 error 错误信息
+// @return @1 error 连接数已达上限时返回errors.ErrTooManyConnection
 func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 	maxConnNum := int64(cm.server.opts.maxConnNum)
 	for {
@@ -79,6 +82,7 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 }
 
 // recycleConn 回收连接
+// 从分片中移除连接对象，重置后归还连接池并递减总连接数
 // @param c *websocket.Conn WS连接
 func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 	index := int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
@@ -90,8 +94,9 @@ func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 }
 
 // allocateTask 分配任务对象
+// 从任务对象池中获取并复用任务对象，避免频繁分配
 // @param typ int8 任务类型
-// @param msg ...[]byte 消息内容
+// @param msg ...[]byte 待发送的消息字节，可缺省
 // @return @1 *task 任务对象
 func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
 	t := cm.taskPool.Get().(*task)
@@ -104,7 +109,8 @@ func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
 }
 
 // recycleTask 回收任务到对象池
-// @param t *task 任务对象
+// 清理任务数据后将对象归还池中以供复用
+// @param t *task 待回收的任务对象
 func (cm *serverConnMgr) recycleTask(t *task) {
 	t.msg = nil
 	cm.taskPool.Put(t)
@@ -116,8 +122,9 @@ type partition struct {
 }
 
 // store 存储连接
+// 将连接映射写入分片
 // @param c *websocket.Conn WS连接
-// @param conn *serverConn 服务端连接
+// @param conn *serverConn 对应的连接对象
 func (p *partition) store(c *websocket.Conn, conn *serverConn) {
 	p.rw.Lock()
 	p.connections[c] = conn
@@ -125,9 +132,10 @@ func (p *partition) store(c *websocket.Conn, conn *serverConn) {
 }
 
 // delete 删除连接
+// 从分片中移除并返回对应的连接对象
 // @param c *websocket.Conn WS连接
-// @return @1 *serverConn 服务端连接
-// @return @2 bool 是否存在
+// @return @1 *serverConn 对应的连接对象，不存在时为nil
+// @return @2 bool 连接是否存在
 func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 	p.rw.Lock()
 	conn, ok := p.connections[c]
@@ -140,7 +148,8 @@ func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 }
 
 // close 关闭该分片内的所有连接
-// @return @1 error 错误信息
+// 并发关闭分片下所有连接并等待完成
+// @return @1 error 任一连接关闭失败时返回的错误
 func (p *partition) close() error {
 	p.rw.RLock()
 	conns := make([]network.Conn, 0, len(p.connections))

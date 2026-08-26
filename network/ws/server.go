@@ -109,8 +109,9 @@ func (s *server) Stop() error {
 	return nil
 }
 
-// init 初始化服务器
-// @return @1 error 错误信息
+// init 初始化WS服务器
+// 解析TCP地址并创建TCP监听器；若任一环节失败则回滚启动状态
+// @return @1 error 已启动或监听地址不合法时返回的错误
 func (s *server) init() error {
 	if s.started.Swap(true) {
 		return errors.ErrIllegalOperation
@@ -138,6 +139,8 @@ func (s *server) init() error {
 }
 
 // serve 启动服务器
+// 注册Websocket升级处理器，按配置以HTTP或HTTPS方式启动服务：
+// 升级请求校验方法/升级头/自定义升级钩子后，分配连接对象，失败则关闭连接
 func (s *server) serve() {
 	var (
 		err      error

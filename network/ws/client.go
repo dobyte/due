@@ -10,7 +10,7 @@ import (
 
 type client struct {
 	opts              *clientOptions            // 配置
-	id                int64                     // 连接ID
+	id                atomic.Int64              // 连接ID
 	dialer            *websocket.Dialer         // 拨号器
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
@@ -58,7 +58,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	return newClientConn(atomic.AddInt64(&c.id, 1), conn, c), nil
+	return newClientConn(c.id.Add(1), conn, c), nil
 }
 
 // Protocol 获取协议名称
@@ -86,8 +86,9 @@ func (c *client) OnReceive(handler network.ReceiveHandler) {
 }
 
 // allocateTask 分配任务对象
+// 从任务对象池中获取并复用任务对象，避免频繁分配
 // @param typ int8 任务类型
-// @param msg ...[]byte 消息内容
+// @param msg ...[]byte 待发送的消息字节，可缺省
 // @return @1 *task 任务对象
 func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 	t := c.taskPool.Get().(*task)
@@ -100,7 +101,8 @@ func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
 }
 
 // recycleTask 回收任务到对象池
-// @param t *task 任务对象
+// 清理任务数据后将对象归还池中以供复用
+// @param t *task 待回收的任务对象
 func (c *client) recycleTask(t *task) {
 	t.msg = nil
 	c.taskPool.Put(t)

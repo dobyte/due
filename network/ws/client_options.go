@@ -37,7 +37,8 @@ type clientOptions struct {
 	compression       bool          // 是否开启压缩，默认false
 }
 
-// defaultClientOptions 创建默认客户端配置
+// defaultClientOptions 构建默认客户端配置
+// 优先读取环境配置（etc.network.ws.client.*），缺失时回退到内置默认值
 // @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
