@@ -216,6 +216,8 @@ func (c *serverConn) init(conn *websocket.Conn) {
 
 	c.checkAuthorize()
 
+	c.connMgr.storeConn(conn, c)
+
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
 	}

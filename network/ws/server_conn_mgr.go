@@ -74,23 +74,33 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 	}
 
 	conn := cm.connPool.Get().(*serverConn)
-	index := int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
-	cm.partitions[index].store(c, conn)
 	conn.init(c)
 
 	return nil
+}
+
+// 存储连接
+func (cm *serverConnMgr) storeConn(c *websocket.Conn, conn *serverConn) {
+	cm.partitions[cm.connHash(c)].store(c, conn)
 }
 
 // recycleConn 回收连接
 // 从分片中移除连接对象，重置后归还连接池并递减总连接数
 // @param c *websocket.Conn WS连接
 func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
-	index := int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
-	if conn, ok := cm.partitions[index].delete(c); ok {
+	if conn, ok := cm.partitions[cm.connHash(c)].delete(c); ok {
 		conn.reset()
 		cm.connPool.Put(conn)
 		cm.total.Add(-1)
 	}
+}
+
+// connHash 通过连接指针计算哈希
+// 根据连接对象指针地址取模确定其所属分片索引
+// @param c *websocket.Conn WS连接
+// @return @1 int 分片索引
+func (cm *serverConnMgr) connHash(c *websocket.Conn) int {
+	return int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
 }
 
 // allocateTask 分配任务对象
