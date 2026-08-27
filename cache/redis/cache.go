@@ -129,7 +129,7 @@ func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...ti
 	if len(expiration) > 0 {
 		ttl = expiration[0]
 	} else {
-		ttl = time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
+		ttl = xrand.Duration(c.opts.minExpiration, c.opts.maxExpiration)
 	}
 
 	return c.opts.client.Set(ctx, c.AddPrefix(key), xconv.String(value), ttl).Err()
@@ -181,9 +181,9 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 			}
 		}
 
-		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
+		ttl := xrand.Duration(c.opts.minExpiration, c.opts.maxExpiration)
 
-		if err = c.opts.client.Set(ctx, key, xconv.String(val), expiration).Err(); err != nil {
+		if err = c.opts.client.Set(ctx, key, xconv.String(val), ttl).Err(); err != nil {
 			return cache.NewResult(nil, err), nil
 		} else {
 			return cache.NewResult(val, nil), nil
