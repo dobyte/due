@@ -104,7 +104,7 @@ func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...ti
 	if len(expiration) > 0 {
 		ttl = int32(expiration[0].Seconds())
 	} else {
-		ttl = int32(time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration))).Seconds())
+		ttl = int32(xrand.Duration(c.opts.minExpiration, c.opts.maxExpiration).Seconds())
 	}
 
 	return c.opts.client.Set(&memcache.Item{
@@ -166,12 +166,12 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 			}
 		}
 
-		expiration := time.Duration(xrand.Int64(int64(c.opts.minExpiration), int64(c.opts.maxExpiration)))
+		ttl := int32(xrand.Duration(c.opts.minExpiration, c.opts.maxExpiration).Seconds())
 
 		if err = c.opts.client.Set(&memcache.Item{
 			Key:        key,
 			Value:      xconv.Bytes(val),
-			Expiration: int32(expiration.Seconds()),
+			Expiration: ttl,
 		}); err != nil {
 			return cache.NewResult(nil, err), nil
 		} else {
