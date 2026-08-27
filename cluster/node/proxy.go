@@ -13,6 +13,7 @@ import (
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/petermattis/goid"
 )
 
 type Proxy struct {
@@ -414,8 +415,12 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
-	} else {
-		if len(isBlock) > 0 && isBlock[0] {
+	}
+
+	if len(isBlock) > 0 && isBlock[0] {
+		if p.node.dispatchGoid.Load() == goid.Get() {
+			xcall.Call(f)
+		} else {
 			p.node.doAddWait()
 
 			wg := &sync.WaitGroup{}
@@ -431,60 +436,64 @@ func (p *Proxy) Invoke(f func(), isBlock ...bool) error {
 			}
 
 			wg.Wait()
-		} else {
-			p.node.doAddWait()
-
-			if err := p.node.tasker.commit(f); err != nil {
-				p.node.doDoneWait()
-				return err
-			}
 		}
+	} else {
+		p.node.doAddWait()
 
-		return nil
+		if err := p.node.tasker.commit(f); err != nil {
+			p.node.doDoneWait()
+			return err
+		}
 	}
+
+	return nil
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
-	} else {
-		p.node.doAddWait()
-
-		timer := time.AfterFunc(d, func() {
-			xcall.Call(f)
-
-			p.node.doDoneWait()
-		})
-
-		return &Timer{node: p.node, timer: timer}, nil
 	}
+
+	p.node.doAddWait()
+
+	timer := time.AfterFunc(d, func() {
+		defer p.node.doDoneWait()
+
+		if p.node.isShut() {
+			log.Warnf("node after func failed: %v", errors.ErrNodeShutdown)
+		} else {
+			xcall.Call(f)
+		}
+	})
+
+	return &Timer{node: p.node, timer: timer}, nil
 }
 
 // AfterInvoke 延迟调用（线程安全）
 func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
-	} else {
-		p.node.doAddWait()
-
-		timer := time.AfterFunc(d, func() {
-			var err error
-
-			if p.node.isShut() {
-				err = errors.ErrNodeShutdown
-			} else {
-				err = p.node.tasker.commit(f)
-			}
-
-			if err != nil {
-				p.node.doDoneWait()
-				log.Warnf("node write task failed: %v", err)
-			}
-		})
-
-		return &Timer{node: p.node, timer: timer}, nil
 	}
+
+	p.node.doAddWait()
+
+	timer := time.AfterFunc(d, func() {
+		var err error
+
+		if p.node.isShut() {
+			err = errors.ErrNodeShutdown
+		} else {
+			err = p.node.tasker.commit(f)
+		}
+
+		if err != nil {
+			log.Warnf("node after invoke failed: %v", err)
+			p.node.doDoneWait()
+		}
+	})
+
+	return &Timer{node: p.node, timer: timer}, nil
 }
 
 // Spawn 衍生出一个新的Actor

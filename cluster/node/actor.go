@@ -70,33 +70,36 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 
 	if len(isBlock) > 0 && isBlock[0] {
 		if a.dispatchGoid.Load() == goid.Get() {
-			return errors.ErrIllegalInvoke
-		}
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-
-		a.rw.RLock()
-		err := a.taskQueue.Write(func() {
-			defer wg.Done()
-
 			xcall.Call(f)
-		})
+		} else {
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+
+			a.rw.RLock()
+			err := a.taskQueue.Write(func() {
+				defer wg.Done()
+
+				f()
+			})
+			a.rw.RUnlock()
+
+			if err != nil {
+				return err
+			}
+
+			wg.Wait()
+		}
+	} else {
+		a.rw.RLock()
+		err := a.taskQueue.Write(f)
 		a.rw.RUnlock()
 
 		if err != nil {
 			return err
 		}
-
-		wg.Wait()
-
-		return nil
-	} else {
-		a.rw.RLock()
-		defer a.rw.RUnlock()
-
-		return a.taskQueue.Write(f)
 	}
+
+	return nil
 }
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
@@ -105,16 +108,25 @@ func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 		return nil, errors.ErrActorNotStarted
 	}
 
+	node := a.scheduler.node
+	node.doAddWait()
+
 	timer := time.AfterFunc(d, func() {
+		var err error
+
 		a.rw.RLock()
-		defer a.rw.RUnlock()
-
 		if a.state.Load() != started {
-			log.Warnf("actor %s write func task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
-			return
+			err = errors.ErrActorNotStarted
 		}
+		a.rw.RUnlock()
 
-		xcall.Call(f)
+		defer node.doDoneWait()
+
+		if err != nil {
+			log.Warnf("actor %s exec task failed, err: %v", a.PID(), err)
+		} else {
+			xcall.Call(f)
+		}
 	})
 
 	return &Timer{timer: timer}, nil
@@ -126,17 +138,23 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 		return nil, errors.ErrActorNotStarted
 	}
 
+	node := a.scheduler.node
+	node.doAddWait()
+
 	timer := time.AfterFunc(d, func() {
-		if a.state.Load() != started {
-			log.Warnf("actor %s write func task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
-			return
-		}
+		var err error
 
 		a.rw.RLock()
-		err := a.taskQueue.Write(f)
+		if a.state.Load() != started {
+			err = errors.ErrActorNotStarted
+		} else {
+			err = a.taskQueue.Write(f)
+		}
 		a.rw.RUnlock()
+
 		if err != nil {
-			log.Warnf("actor %s write func task failed, err: %v", a.PID(), err)
+			log.Warnf("actor %s exec task failed, err: %v", a.PID(), err)
+			node.doDoneWait()
 		}
 	})
 
@@ -209,9 +227,16 @@ func (a *Actor) Next(ctx Context) error {
 
 	ctx.storeActor(a)
 	ctx.incrVersion()
-	ctx.Cancel()
+	ctx.cancelDefer()
 
-	return a.messageQueue.Write(ctx)
+	if err := a.messageQueue.Write(ctx); err != nil {
+		ctx.deleteActor()
+		ctx.decrVersion()
+		ctx.recoverDefer()
+		return err
+	}
+
+	return nil
 }
 
 // Deliver 投递消息到当前Actor中进行处理

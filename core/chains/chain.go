@@ -1,10 +1,13 @@
 package chains
 
-import "github.com/dobyte/due/v2/utils/xcall"
+import (
+	"github.com/dobyte/due/v2/utils/xcall"
+)
 
 type Chain struct {
-	head *node
-	tail *node
+	head     *node
+	tail     *node
+	canceled bool
 }
 
 type node struct {
@@ -19,7 +22,7 @@ func NewChain() *Chain {
 
 // AddToHead 添加头部
 func (c *Chain) AddToHead(fn func()) {
-	if c.head == nil {
+	if c.head == nil || c.canceled {
 		c.head = &node{fn: fn}
 		c.tail = c.head
 	} else {
@@ -31,7 +34,7 @@ func (c *Chain) AddToHead(fn func()) {
 
 // AddToTail 添加到尾部
 func (c *Chain) AddToTail(fn func()) {
-	if c.tail == nil {
+	if c.tail == nil || c.canceled {
 		c.tail = &node{fn: fn}
 		c.head = c.tail
 	} else {
@@ -43,6 +46,10 @@ func (c *Chain) AddToTail(fn func()) {
 
 // FireHead 从头部开始执行
 func (c *Chain) FireHead() {
+	if c.canceled {
+		return
+	}
+
 	for head := c.head; head != nil; {
 		xcall.Call(head.fn)
 		next := head.next
@@ -58,6 +65,10 @@ func (c *Chain) FireHead() {
 
 // FireTail 从尾部开始执行
 func (c *Chain) FireTail() {
+	if c.canceled {
+		return
+	}
+
 	for tail := c.tail; tail != nil; {
 		xcall.Call(tail.fn)
 		prev := tail.prev
@@ -73,6 +84,17 @@ func (c *Chain) FireTail() {
 
 // Cancel 取消调用栈
 func (c *Chain) Cancel() {
+	c.canceled = true
+}
+
+// Recover 恢复调用栈
+func (c *Chain) Recover() {
+	c.canceled = false
+}
+
+// Release 释放调用栈
+func (c *Chain) Release() {
+	c.canceled = true
 	c.head = nil
 	c.tail = nil
 }

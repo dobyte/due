@@ -122,7 +122,7 @@ func (r *request) Defer(fn func(), bottom ...bool) {
 // Cancel 取消Defer调用栈
 func (r *request) Cancel() {
 	if r.chain != nil {
-		r.chain.Cancel()
+		r.chain.Release()
 	}
 }
 
@@ -442,14 +442,38 @@ func (r *request) storeActor(actor *Actor) {
 	r.actor.Store(actor)
 }
 
+// 删除当前Actor
+func (r *request) deleteActor() {
+	r.actor.Store((*Actor)(nil))
+}
+
 // 增长版本号
 func (r *request) incrVersion() int32 {
 	return r.version.Add(1)
 }
 
+// 减少版本号
+func (r *request) decrVersion() int32 {
+	return r.version.Add(-1)
+}
+
 // 获取版本号
 func (r *request) loadVersion() int32 {
 	return r.version.Load()
+}
+
+// 取消Defer调用栈
+func (r *request) cancelDefer() {
+	if r.chain != nil {
+		r.chain.Cancel()
+	}
+}
+
+// 恢复Defer调用栈
+func (r *request) recoverDefer() {
+	if r.chain != nil {
+		r.chain.Recover()
+	}
 }
 
 // 比对版本号后进行回收对象
@@ -478,7 +502,7 @@ func (r *request) release() {
 	r.actor.Store((*Actor)(nil))
 
 	if r.chain != nil {
-		r.chain.Cancel()
+		r.chain.Release()
 		r.chain = nil
 	}
 

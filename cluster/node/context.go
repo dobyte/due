@@ -105,14 +105,22 @@ type Context interface {
 	NewMeshClient(target string) (transport.Client, error)
 	// 保存当前Actor
 	storeActor(actor *Actor)
+	// 删除当前Actor
+	deleteActor()
 	// 增长版本号
 	incrVersion() int32
+	// 减少版本号
+	decrVersion() int32
 	// 获取版本号
 	loadVersion() int32
 	// 比对版本号后进行回收对象
 	compareVersionRecycle(version int32)
 	// 执行defer调用栈
 	compareVersionExecDefer(version int32)
+	// 取消Defer调用栈
+	cancelDefer()
+	// 恢复Defer调用栈
+	recoverDefer()
 	// 释放上下文
 	release()
 }

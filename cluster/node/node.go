@@ -517,13 +517,17 @@ func (n *Node) printInfo() {
 }
 
 func (n *Node) doDoneWait() {
-	if n.getState() != cluster.Shut {
-		n.wg.Done()
+	if n == nil || n.getState() == cluster.Shut {
+		return
 	}
+
+	n.wg.Done()
 }
 
 func (n *Node) doAddWait() {
-	if n.getState() != cluster.Shut {
-		n.wg.Add(1)
+	if n == nil || n.getState() == cluster.Shut {
+		return
 	}
+
+	n.wg.Add(1)
 }

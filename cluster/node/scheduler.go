@@ -232,9 +232,7 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 		return errors.ErrNotBindActor
 	}
 
-	act.Next(ctx)
-
-	return nil
+	return act.Next(ctx)
 }
 
 // 分发事件
