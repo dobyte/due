@@ -166,9 +166,9 @@ func (n *Node) Close() {
 		n.trigger.wait()
 	}
 
-	n.runHookFunc(cluster.Close)
-
 	n.wg.Wait()
+
+	n.runHookFunc(cluster.Close)
 }
 
 // Destroy 销毁节点服务器

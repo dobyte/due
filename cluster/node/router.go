@@ -157,8 +157,12 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 	r.rw.RLock()
 	err := r.queue.Write(req)
 	r.rw.RUnlock()
+	if err != nil {
+		req.release()
+		return err
+	}
 
-	return err
+	return nil
 }
 
 // 接收路由消息

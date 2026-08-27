@@ -45,7 +45,12 @@ func (t *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error 
 	err := t.queue.Write(evt)
 	t.rw.RUnlock()
 
-	return err
+	if err != nil {
+		evt.release()
+		return err
+	}
+
+	return nil
 }
 
 // 接收事件消息

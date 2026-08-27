@@ -64,7 +64,7 @@ func (a *Actor) Proxy() *Proxy {
 
 // Invoke 调用函数（Actor内线程安全）
 func (a *Actor) Invoke(f func(), isBlock ...bool) error {
-	if a.state.Load() != started {
+	if !a.started() {
 		return errors.ErrActorNotStarted
 	}
 
@@ -79,7 +79,9 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 			err := a.taskQueue.Write(func() {
 				defer wg.Done()
 
-				f()
+				if a.started() {
+					f()
+				}
 			})
 			a.rw.RUnlock()
 
@@ -91,7 +93,11 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 		}
 	} else {
 		a.rw.RLock()
-		err := a.taskQueue.Write(f)
+		err := a.taskQueue.Write(func() {
+			if a.started() {
+				f()
+			}
+		})
 		a.rw.RUnlock()
 
 		if err != nil {
@@ -104,28 +110,15 @@ func (a *Actor) Invoke(f func(), isBlock ...bool) error {
 
 // AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
 func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
-	if a.state.Load() != started {
+	if !a.started() {
 		return nil, errors.ErrActorNotStarted
 	}
 
-	node := a.scheduler.node
-	node.doAddWait()
-
 	timer := time.AfterFunc(d, func() {
-		var err error
-
-		a.rw.RLock()
-		if a.state.Load() != started {
-			err = errors.ErrActorNotStarted
-		}
-		a.rw.RUnlock()
-
-		defer node.doDoneWait()
-
-		if err != nil {
-			log.Warnf("actor %s exec task failed, err: %v", a.PID(), err)
-		} else {
+		if a.started() {
 			xcall.Call(f)
+		} else {
+			log.Warnf("actor %s exec task failed, err: %v", a.PID(), errors.ErrActorNotStarted)
 		}
 	})
 
@@ -134,27 +127,27 @@ func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 
 // AfterInvoke 延迟调用（线程安全）
 func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
-	if a.state.Load() != started {
+	if !a.started() {
 		return nil, errors.ErrActorNotStarted
 	}
-
-	node := a.scheduler.node
-	node.doAddWait()
 
 	timer := time.AfterFunc(d, func() {
 		var err error
 
 		a.rw.RLock()
-		if a.state.Load() != started {
-			err = errors.ErrActorNotStarted
+		if a.started() {
+			err = a.taskQueue.Write(func() {
+				if a.started() {
+					f()
+				}
+			})
 		} else {
-			err = a.taskQueue.Write(f)
+			err = errors.ErrActorNotStarted
 		}
 		a.rw.RUnlock()
 
 		if err != nil {
 			log.Warnf("actor %s exec task failed, err: %v", a.PID(), err)
-			node.doDoneWait()
 		}
 	})
 
@@ -171,7 +164,9 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 		a.defaultRouteHandler = handler
 	case started:
 		a.taskQueue.Write(func() {
-			a.defaultRouteHandler = handler
+			if a.started() {
+				a.defaultRouteHandler = handler
+			}
 		})
 	default:
 		// ignore
@@ -188,10 +183,12 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 		a.routes[route] = handler
 	case started:
 		a.taskQueue.Write(func() {
-			a.routes[route] = handler
+			if a.started() {
+				a.routes[route] = handler
 
-			if a.opts.dispatch {
-				a.scheduler.routes.Store(route, a.Kind())
+				if a.opts.dispatch {
+					a.scheduler.routes.Store(route, a.Kind())
+				}
 			}
 		})
 	default:
@@ -209,7 +206,9 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 		a.events[event] = handler
 	case started:
 		a.taskQueue.Write(func() {
-			a.events[event] = handler
+			if a.started() {
+				a.events[event] = handler
+			}
 		})
 	default:
 		// ignore
@@ -292,26 +291,30 @@ func (a *Actor) destroy() bool {
 
 	a.rw.Lock()
 	processor := a.processor
-	a.clear()
+	a.processor = nil
+	a.taskQueue.Close()
+	a.messageQueue.Close()
 	a.rw.Unlock()
+
+	// 释放掉所有任务队列中的任务
+	for handle := range a.taskQueue.Read() {
+		xcall.Call(handle)
+	}
+
+	// 释放掉所有消息队列中的消息
+	for ctx := range a.messageQueue.Read() {
+		ctx.release()
+	}
+
+	if processor != nil {
+		xcall.Call(processor.Destroy)
+	}
 
 	if a.opts.wait {
 		a.scheduler.node.doDoneWait()
 	}
 
-	if processor != nil {
-		processor.Destroy()
-	}
-
 	return true
-}
-
-// 清空Actor资源
-func (a *Actor) clear() {
-	a.taskQueue.Close()
-	a.messageQueue.Close()
-	a.processor = nil
-	a.defaultRouteHandler = nil
 }
 
 // 绑定用户
@@ -365,4 +368,9 @@ func (a *Actor) dispatch() {
 			xcall.Call(handle)
 		}
 	}
+}
+
+// 是否已启动
+func (a *Actor) started() bool {
+	return a.state.Load() == started
 }

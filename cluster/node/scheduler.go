@@ -66,12 +66,14 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 		return nil, errors.ErrActorCreateFailed
 	}
 
+	s.rw.Lock()
+
 	if _, ok := s.load(o.kind, o.id); ok {
+		s.rw.Unlock()
 		act.destroy()
 		return nil, errors.ErrActorExists
 	}
 
-	s.rw.Lock()
 	if act.opts.dispatch {
 		if _, ok := s.kinds.Load(act.Kind()); !ok {
 			s.kinds.Store(act.Kind(), struct{}{})
@@ -248,8 +250,6 @@ func (s *Scheduler) dispatchEvent(ctx Context) error {
 
 		return true
 	})
-
-	ctx.release()
 
 	return nil
 }
