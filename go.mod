@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	dario.cat/mergo v1.0.2
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bytedance/sonic v1.15.2
+	github.com/bytedance/sonic v1.15.3
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jinzhu/copier v0.4.0
 	github.com/panjf2000/ants/v2 v2.12.1
@@ -18,7 +18,7 @@ require (
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.5.1 // indirect
+	github.com/bytedance/sonic/loader v0.5.2 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
