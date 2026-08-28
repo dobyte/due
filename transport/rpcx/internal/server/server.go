@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 
 	"github.com/dobyte/due/v2/core/endpoint"
@@ -89,7 +90,7 @@ func (s *Server) Start() error {
 // Stop 停止服务器
 // @return @1 error 错误信息
 func (s *Server) Stop() error {
-	return s.server.Close()
+	return s.server.Shutdown(context.Background())
 }
 
 // RegisterService 注册服务
