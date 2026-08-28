@@ -1,6 +1,8 @@
 package http
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -20,6 +22,8 @@ type Resp struct {
 	Data    any    `json:"data,omitempty"`    // 响应数据
 }
 
+// Context HTTP上下文接口
+// 扩展fiber.Ctx，提供代理API、响应处理及标准请求等能力
 type Context interface {
 	fiber.Ctx
 	// CTX 获取fiber.Ctx
@@ -34,6 +38,7 @@ type Context interface {
 	StdRequest() *http.Request
 }
 
+// HTTP上下文
 type context struct {
 	*fiber.DefaultCtx
 	proxy          *Proxy
@@ -41,6 +46,10 @@ type context struct {
 	stdRequestOnce *sync.Once
 }
 
+// 创建HTTP上下文
+// @param ctx *fiber.DefaultCtx fiber默认上下文
+// @param proxy *Proxy HTTP代理
+// @return @1 *context HTTP上下文
 func newContext(ctx *fiber.DefaultCtx, proxy *Proxy) *context {
 	return &context{
 		DefaultCtx: ctx,
@@ -59,6 +68,9 @@ func (c *context) Proxy() *Proxy {
 }
 
 // Failure 失败响应
+// 根据响应内容的类型转换为对应的HTTP错误响应
+// @param rst any 响应内容，支持error、codes.Code及*codes.Code
+// @return @1 error 写入响应失败时返回的错误
 func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
@@ -103,6 +115,8 @@ func (c *context) Reset(fctx *fasthttp.RequestCtx) {
 }
 
 // StdRequest 获取标准请求（net/http）
+// 注意：返回的请求体已拷贝为独立内存，可在处理器返回后安全使用
+// @return @1 *http.Request 标准请求
 func (c *context) StdRequest() *http.Request {
 	c.stdRequestOnce.Do(func() {
 		if c.stdRequest == nil {
@@ -111,6 +125,17 @@ func (c *context) StdRequest() *http.Request {
 
 		if err := fasthttpadaptor.ConvertRequest(c.RequestCtx(), c.stdRequest, true); err != nil {
 			log.Errorf("convert request failed: %v", err)
+		}
+
+		// 拷贝请求体，避免引用fasthttp请求池内存（连接复用后会被覆盖）
+		if c.stdRequest.Body != nil {
+			body, err := io.ReadAll(c.stdRequest.Body)
+			if err != nil {
+				log.Errorf("copy request body failed: %v", err)
+			} else {
+				c.stdRequest.Body = io.NopCloser(bytes.NewReader(body))
+				c.stdRequest.ContentLength = int64(len(body))
+			}
 		}
 	})
 

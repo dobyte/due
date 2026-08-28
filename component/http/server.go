@@ -2,6 +2,7 @@ package http
 
 import (
 	stctx "context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
-	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
 	"github.com/gofiber/fiber/v3"
@@ -19,6 +19,8 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
+// Server HTTP服务器
+// 基于fiber框架实现的HTTP服务组件，支持路由注册、中间件、跨域、Swagger等能力
 type Server struct {
 	component.Base
 	opts  *options
@@ -105,12 +107,11 @@ func NewServer(opts ...Option) *Server {
 	}
 
 	for i := range o.middlewares {
-		switch handler := o.middlewares[i].(type) {
-		case Handler:
+		if handler, ok := o.middlewares[i].(Handler); ok {
 			s.app.Use(func(ctx fiber.Ctx) error {
 				return handler(ctx.(Context))
 			})
-		case fiber.Handler:
+		} else {
 			s.app.Use(handler)
 		}
 	}
@@ -168,6 +169,8 @@ func (s *Server) Destroy() {
 	}
 }
 
+// 打印服务启动信息
+// @param addr string 对外暴露的服务地址
 func (s *Server) printInfo(addr string) {
 	infos := make([]string, 0, 3)
 	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))

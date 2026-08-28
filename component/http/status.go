@@ -71,6 +71,9 @@ const (
 	StatusNetworkAuthenticationRequired = http.StatusNetworkAuthenticationRequired // RFC 6585, 6
 )
 
+// StatusText 获取HTTP状态码文本
+// @param code int HTTP状态码
+// @return @1 string 状态码对应的文本
 func StatusText(code int) string {
 	return http.StatusText(code)
 }

@@ -3,6 +3,8 @@ package http
 import (
 	"reflect"
 
+	"net/http"
+
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -64,17 +66,24 @@ type Router interface {
 	Group(prefix string, middlewares ...any) Router
 }
 
+// 路由器
 type router struct {
 	app   *fiber.App
 	proxy *Proxy
 }
 
 // Get 添加GET请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Get(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodGet}, path, handlers...)
 }
 
 // Post 添加POST请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Post(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPost}, path, handlers...)
 }
@@ -90,6 +99,9 @@ func (r *router) Put(path string, handlers ...any) Router {
 }
 
 // Delete 添加DELETE请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Delete(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodDelete}, path, handlers...)
 }
@@ -100,11 +112,17 @@ func (r *router) Connect(path string, handlers ...any) Router {
 }
 
 // Options 添加OPTIONS请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Options(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodOptions}, path, handlers...)
 }
 
 // Trace 添加TRACE请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Trace(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodTrace}, path, handlers...)
 }
@@ -120,6 +138,10 @@ func (r *router) All(path string, handlers ...any) Router {
 }
 
 // Add 添加路由处理器
+// @param methods []string 请求方法列表
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由器（支持链式调用）
 func (r *router) Add(methods []string, path string, handlers ...any) Router {
 	if len(handlers) > 0 {
 		if handlers = adaptHandlers(handlers); len(handlers) > 0 {
@@ -131,6 +153,9 @@ func (r *router) Add(methods []string, path string, handlers ...any) Router {
 }
 
 // Group 路由组
+// @param prefix string 路由前缀
+// @param middlewares ...any 中间件
+// @return @1 Router 路由组（支持链式调用）
 func (r *router) Group(prefix string, middlewares ...any) Router {
 	return &routeGroup{proxy: r.proxy, router: r.app.Group(prefix, adaptHandlers(middlewares)...)}
 }
@@ -146,6 +171,9 @@ func (r *routeGroup) Get(path string, handlers ...any) Router {
 }
 
 // Post 添加POST请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由组（支持链式调用）
 func (r *routeGroup) Post(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPost}, path, handlers...)
 }
@@ -156,6 +184,9 @@ func (r *routeGroup) Head(path string, handlers ...any) Router {
 }
 
 // Put 添加PUT请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由组（支持链式调用）
 func (r *routeGroup) Put(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPut}, path, handlers...)
 }
@@ -166,6 +197,9 @@ func (r *routeGroup) Delete(path string, handlers ...any) Router {
 }
 
 // Connect 添加CONNECT请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由组（支持链式调用）
 func (r *routeGroup) Connect(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodConnect}, path, handlers...)
 }
@@ -186,11 +220,18 @@ func (r *routeGroup) Patch(path string, handlers ...any) Router {
 }
 
 // All 添加任意请求处理器
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由组（支持链式调用）
 func (r *routeGroup) All(path string, handlers ...any) Router {
 	return r.Add(fiber.DefaultMethods, path, handlers...)
 }
 
 // Add 添加路由处理器
+// @param methods []string 请求方法列表
+// @param path string 路由路径
+// @param handlers ...any 路由处理器
+// @return @1 Router 路由组（支持链式调用）
 func (r *routeGroup) Add(methods []string, path string, handlers ...any) Router {
 	if len(handlers) > 0 {
 		if handlers = adaptHandlers(handlers); len(handlers) > 0 {
@@ -207,6 +248,9 @@ func (r *routeGroup) Group(prefix string, middlewares ...any) Router {
 }
 
 // 适配处理器
+// 将各种风格的处理器统一适配为fiber处理器
+// @param handlers []any 待适配的处理器
+// @return @1 []any 适配后的处理器
 func adaptHandlers(handlers []any) []any {
 	adaptedHandlers := make([]any, 0, len(handlers))
 
@@ -214,13 +258,16 @@ func adaptHandlers(handlers []any) []any {
 		handler := handlers[i]
 
 		rv := reflect.ValueOf(handler)
+		rk := rv.Kind()
 
-		if rv.Kind() != reflect.Func {
-			continue
-		}
-
-		if rv.IsNil() {
-			continue
+		if rk == reflect.Func {
+			if rv.IsNil() {
+				continue
+			}
+		} else {
+			if _, ok := handler.(http.Handler); !ok {
+				continue
+			}
 		}
 
 		if h, ok := handler.(Handler); ok {

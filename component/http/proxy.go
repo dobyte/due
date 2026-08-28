@@ -6,10 +6,15 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// Proxy HTTP代理
+// 提供HTTP服务器对外可见的完整功能API
 type Proxy struct {
 	server *Server
 }
 
+// 创建HTTP代理
+// @param s *Server HTTP服务器
+// @return @1 *Proxy HTTP代理
 func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
 }
@@ -20,6 +25,7 @@ func (p *Proxy) App() *fiber.App {
 }
 
 // Router 获取路由器
+// @return @1 Router 路由器
 func (p *Proxy) Router() Router {
 	return &router{app: p.server.app, proxy: p}
 }

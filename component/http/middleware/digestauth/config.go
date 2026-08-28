@@ -6,72 +6,65 @@ import (
 	"github.com/dobyte/due/component/http/v2"
 )
 
-// Config defines the config for middleware.
+// Config Digest认证中间件配置
 type Config struct {
-	// Next defines a function to skip this middleware when returned true.
+	// Next 定义跳过中间件的判断函数，返回true时跳过本中间件
 	//
-	// Optional. Default: nil
+	// 可选。默认: nil
 	Next func(ctx http.Context) bool
 
-	// Users defines the allowed credentials.
-	// The key is the username, the value is the pre-computed HA1:
+	// Users 允许的凭据列表
+	// key为用户名，value为预计算的HA1:
 	// HA1 = MD5(username:realm:password)
 	//
-	// If Users is empty, Authorizer must be set.
+	// 若Users为空，则必须设置Authorizer
 	//
-	// Optional. Default: map[string]string{}
+	// 可选。默认: map[string]string{}
 	Users map[string]string
 
-	// Authorizer defines a function you can pass
-	// to check the credentials however you want.
-	// It will be called with a username and is expected to return
-	// the corresponding HA1 string and true to indicate the
-	// credentials were approved.
-	// If the user does not exist, return "", false.
+	// Authorizer 自定义凭据校验函数
+	// 使用用户名校验凭据，返回对应的HA1字符串及是否通过
+	// 用户不存在时返回"", false
 	//
-	// Optional. Default: nil
+	// 可选。默认: nil
 	Authorizer func(username string) (ha1 string, ok bool)
 
-	// Unauthorized defines the response body for unauthorized responses.
-	// By default it will return with a 401 Unauthorized and the correct
-	// WWW-Authenticate header.
+	// Unauthorized 未授权响应处理函数
+	// 默认返回401 Unauthorized并携带正确的WWW-Authenticate头
 	//
-	// Optional. Default: nil
+	// 可选。默认: nil
 	Unauthorized http.Handler
 
-	// BadRequest defines the response body for malformed Authorization headers.
-	// By default it will return with a 400 Bad Request without the
-	// WWW-Authenticate header.
+	// BadRequest 错误Authorization头响应处理函数
+	// 默认返回400 Bad Request且不携带WWW-Authenticate头
 	//
-	// Optional. Default: nil
+	// 可选。默认: nil
 	BadRequest http.Handler
 
-	// Realm is a string to define realm attribute of DigestAuth.
-	// The realm identifies the system to authenticate against.
+	// Realm 定义DigestAuth的realm属性，用于标识认证系统
 	//
-	// Optional. Default: "Restricted".
+	// 可选。默认: "Restricted"
 	Realm string
 
-	// HeaderLimit specifies the maximum allowed length of the
-	// Authorization header. Requests exceeding this limit will
-	// be rejected.
+	// HeaderLimit Authorization头的最大长度限制
+	// 超过该长度的请求将被拒绝
 	//
-	// Optional. Default: 8192.
+	// 可选。默认: 8192
 	HeaderLimit int
 
-	// NonceTTL specifies the time-to-live for nonce values.
-	// Each nonce can only be used once within this time window.
+	// NonceTTL nonce值的有效期
+	// 在该窗口内，每个请求必须携带单调递增的nonce计数(nc)，否则将被视为重放而拒绝
 	//
-	// Optional. Default: 5 * time.Minute.
+	// 可选。默认: 5 * time.Minute
 	NonceTTL time.Duration
 
-	// ContextUsernameKey is the key to store the username in the context.
+	// ContextUsernameKey 用户名在上下文中的存储key
 	//
-	// Optional. Default: "username".
+	// 可选。默认: "username"
 	ContextUsernameKey string
 }
 
-// ConfigDefault is the default config
+// ConfigDefault 默认配置
 var ConfigDefault = Config{
 	Next:               nil,
 	Users:              map[string]string{},
@@ -84,7 +77,10 @@ var ConfigDefault = Config{
 	ContextUsernameKey: "username",
 }
 
-// Helper function to set default values
+// 填充配置默认值
+// 未提供的配置项使用默认值补齐
+// @param config ...Config 待处理的配置
+// @return @1 Config 填充默认值后的配置
 func configDefault(config ...Config) Config {
 	// Return default config if nothing provided
 	if len(config) < 1 {

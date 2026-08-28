@@ -50,6 +50,7 @@ const (
 	defaultEnableSplittingOnParsersKey     = "etc.http.enableSplittingOnParsers"
 )
 
+// Option HTTP服务器配置函数
 type Option func(o *options)
 
 type options struct {
@@ -118,6 +119,9 @@ type TrustProxyOptions struct {
 	Private   bool     `json:"private"`   // 支持信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
 }
 
+// 创建默认配置
+// 从配置环境读取各参数并填充默认值
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	opts := &options{
 		name:                         etc.Get(defaultNameKey, defaultName).String(),
@@ -165,6 +169,7 @@ func defaultOptions() *options {
 }
 
 // WithName 设置实例名称
+// @param name string 实例名称
 func WithName(name string) Option {
 	return func(o *options) { o.name = name }
 }
@@ -185,6 +190,7 @@ func WithConsole(enable bool) Option {
 }
 
 // WithRegistry 设置服务注册器
+// @param r registry.Registry 服务注册器
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
 }
@@ -210,6 +216,7 @@ func WithMiddlewares(middlewares ...any) Option {
 }
 
 // WithStrictRouting 设置是否启用严格路由模式
+// @param enable bool 是否启用严格路由模式
 func WithStrictRouting(enable bool) Option {
 	return func(o *options) { o.strictRouting = enable }
 }
@@ -235,16 +242,19 @@ func WithUnescapePath(enable bool) Option {
 }
 
 // WithBodyLimit 设置body大小
+// @param bodyLimit int body大小
 func WithBodyLimit(bodyLimit int) Option {
 	return func(o *options) { o.bodyLimit = bodyLimit }
 }
 
 // WithConcurrency 设置最大并发连接数
+// @param concurrency int 最大并发连接数
 func WithConcurrency(concurrency int) Option {
 	return func(o *options) { o.concurrency = concurrency }
 }
 
 // WithViews 设置视图引擎
+// @param views fiber.Views 视图引擎
 func WithViews(views fiber.Views) Option {
 	return func(o *options) { o.views = views }
 }
@@ -285,6 +295,7 @@ func WithDisableKeepalive(disable bool) Option {
 }
 
 // WithDisableDefaultDate 设置是否禁用默认日期
+// @param disable bool 是否禁用默认日期
 func WithDisableDefaultDate(disable bool) Option {
 	return func(o *options) { o.disableDefaultDate = disable }
 }
@@ -295,6 +306,7 @@ func WithDisableDefaultContentType(disable bool) Option {
 }
 
 // WithDisableHeaderNormalizing 设置是否禁用默认头部归一化
+// @param disable bool 是否禁用默认头部归一化
 func WithDisableHeaderNormalizing(disable bool) Option {
 	return func(o *options) { o.disableHeaderNormalizing = disable }
 }
@@ -305,16 +317,19 @@ func WithStreamRequestBody(enable bool) Option {
 }
 
 // WithDisablePreParseMultipartForm 设置是否禁用预解析multipart/form-data
+// @param disable bool 是否禁用预解析multipart/form-data
 func WithDisablePreParseMultipartForm(disable bool) Option {
 	return func(o *options) { o.disablePreParseMultipartForm = disable }
 }
 
 // WithReduceMemoryUsage 设置是否减少内存占用
+// @param enable bool 是否减少内存占用
 func WithReduceMemoryUsage(enable bool) Option {
 	return func(o *options) { o.reduceMemoryUsage = enable }
 }
 
 // WithTrustProxy 设置是否信任代理
+// @param enable bool 是否信任代理
 func WithTrustProxy(enable bool) Option {
 	return func(o *options) { o.trustProxy = enable }
 }
@@ -330,6 +345,7 @@ func WithEnableIPValidation(enable bool) Option {
 }
 
 // WithEnableSplittingOnParsers 设置是否在解析器上拆分请求体
+// @param enable bool 是否在解析器上拆分请求体
 func WithEnableSplittingOnParsers(enable bool) Option {
 	return func(o *options) { o.enableSplittingOnParsers = enable }
 }

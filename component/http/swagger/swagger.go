@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/adaptor"
 )
 
+// Config swagger中间件配置
 type Config struct {
 	Title            string // 文档标题
 	FilePath         string // 文档路径
@@ -22,11 +23,15 @@ type Config struct {
 }
 
 const (
-	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-bundle.js"
-	defaultSwaggerPresetUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js"
-	defaultSwaggerStylesUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css"
+	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-bundle.js"             // swagger-ui-bundle.js默认地址
+	defaultSwaggerPresetUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js" // swagger-ui-standalone-preset.js默认地址
+	defaultSwaggerStylesUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css"                  // swagger-ui.css默认地址
 )
 
+// New 创建swagger中间件
+// 校验并读取swagger文件，文件不存在或读取失败时返回nil
+// @param cfg Config swagger配置
+// @return @1 fiber.Handler swagger中间件
 func New(cfg Config) fiber.Handler {
 	// Verify Swagger file exists
 	if _, err := os.Stat(cfg.FilePath); os.IsNotExist(err) {
