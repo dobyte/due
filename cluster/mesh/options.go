@@ -19,6 +19,7 @@ import (
 const (
 	defaultName                      = "mesh"  // 默认节点名称
 	defaultCodec                     = "proto" // 默认编解码器名称
+	defaultWeight                    = 1       // 默认权重
 	defaultLinkerConnNum             = 5       // 默认连接数
 	defaultLinkerCallTimeout         = "3s"    // 默认调用超时时间
 	defaultLinkerDialTimeout         = "3s"    // 默认拨号超时时间
@@ -32,6 +33,7 @@ const (
 	defaultIDKey                        = "etc.cluster.mesh.id"
 	defaultNameKey                      = "etc.cluster.mesh.name"
 	defaultCodecKey                     = "etc.cluster.mesh.codec"
+	defaultWeightKey                    = "etc.cluster.mesh.weight"
 	defaultMetadataKey                  = "etc.cluster.mesh.metadata"
 	defaultLinkerConnNumKey             = "etc.cluster.mesh.linker.connNum"
 	defaultLinkerCallTimeoutKey         = "etc.cluster.mesh.linker.callTimeout"
@@ -42,8 +44,10 @@ const (
 	defaultLinkerCommandWriteTimeoutKey = "etc.cluster.mesh.linker.commandWriteTimeout"
 )
 
+// Option 微服务配置函数
 type Option func(o *options)
 
+// 内部RPC选项
 type linkerOptions struct {
 	connNum             int           // 内部RPC拨号连接数
 	callTimeout         time.Duration // 内部RPC调用超时时间
@@ -54,6 +58,7 @@ type linkerOptions struct {
 	commandWriteTimeout time.Duration // 消息写入超时时间
 }
 
+// 微服务配置项
 type options struct {
 	id          string                // 实例ID
 	name        string                // 实例名称
@@ -64,9 +69,13 @@ type options struct {
 	encryptor   crypto.Encryptor      // 消息加密器
 	transporter transport.Transporter // 消息传输器
 	linker      *linkerOptions        // 连接器配置
+	weight      int                   // 服务权重
 	metadata    map[string]string     // 元数据
 }
 
+// 创建默认微服务配置项
+// 从配置环境读取各参数并填充默认值，为未指定的参数生成默认实现
+// @return @1 *options 默认微服务配置项
 func defaultOptions() *options {
 	opts := &options{}
 	opts.ctx = context.Background()
@@ -89,6 +98,12 @@ func defaultOptions() *options {
 		opts.codec = encoding.Invoke(codec)
 	} else {
 		opts.codec = encoding.Invoke(defaultCodec)
+	}
+
+	if weight := etc.Get(defaultWeightKey, defaultWeight).Int(); weight > 0 {
+		opts.weight = weight
+	} else {
+		opts.weight = defaultWeight
 	}
 
 	if connNum := etc.Get(defaultLinkerConnNumKey, defaultLinkerConnNum).Int(); connNum > 0 {
@@ -141,6 +156,8 @@ func defaultOptions() *options {
 }
 
 // WithID 设置实例ID
+// @param id string 实例ID
+// @return @1 Option 微服务配置项
 func WithID(id string) Option {
 	return func(o *options) {
 		if id != "" {
@@ -152,6 +169,8 @@ func WithID(id string) Option {
 }
 
 // WithName 设置实例名称
+// @param name string 实例名称
+// @return @1 Option 微服务配置项
 func WithName(name string) Option {
 	return func(o *options) {
 		if name != "" {
@@ -163,6 +182,8 @@ func WithName(name string) Option {
 }
 
 // WithCodec 设置编解码器
+// @param codec encoding.Codec 编解码器
+// @return @1 Option 微服务配置项
 func WithCodec(codec encoding.Codec) Option {
 	return func(o *options) {
 		if codec != nil {
@@ -173,7 +194,9 @@ func WithCodec(codec encoding.Codec) Option {
 	}
 }
 
-// WithContext 设置上下文
+// WithContext 设置启动上下文
+// @param ctx context.Context 启动上下文
+// @return @1 Option 微服务配置项
 func WithContext(ctx context.Context) Option {
 	return func(o *options) {
 		if ctx != nil {
@@ -185,6 +208,8 @@ func WithContext(ctx context.Context) Option {
 }
 
 // WithLocator 设置定位器
+// @param locator locate.Locator 用户定位器
+// @return @1 Option 微服务配置项
 func WithLocator(locator locate.Locator) Option {
 	return func(o *options) {
 		if locator != nil {
@@ -196,6 +221,8 @@ func WithLocator(locator locate.Locator) Option {
 }
 
 // WithRegistry 设置服务注册器
+// @param r registry.Registry 服务注册器
+// @return @1 Option 微服务配置项
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) {
 		if r != nil {
@@ -207,6 +234,8 @@ func WithRegistry(r registry.Registry) Option {
 }
 
 // WithEncryptor 设置消息加密器
+// @param encryptor crypto.Encryptor 消息加密器
+// @return @1 Option 微服务配置项
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) {
 		if encryptor != nil {
@@ -218,6 +247,8 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 }
 
 // WithTransporter 设置消息传输器
+// @param transporter transport.Transporter 消息传输器
+// @return @1 Option 微服务配置项
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) {
 		if transporter != nil {
@@ -228,7 +259,22 @@ func WithTransporter(transporter transport.Transporter) Option {
 	}
 }
 
+// WithWeight 设置权重
+// @param weight int 服务器权重
+// @return @1 Option 微服务配置项
+func WithWeight(weight int) Option {
+	return func(o *options) {
+		if weight > 0 {
+			o.weight = weight
+		} else {
+			log.Warnf("the specified weight is less than zero and will be ignored")
+		}
+	}
+}
+
 // WithMetadata 设置元数据
+// @param metadata map[string]string 元数据
+// @return @1 Option 微服务配置项
 func WithMetadata(metadata map[string]string) Option {
 	return func(o *options) {
 		if len(metadata) != 0 {
@@ -244,6 +290,8 @@ func WithMetadata(metadata map[string]string) Option {
 }
 
 // WithLinkerConnNum 设置连接数
+// @param connNum int 内部RPC拨号连接数
+// @return @1 Option 微服务配置项
 func WithLinkerConnNum(connNum int) Option {
 	return func(o *options) {
 		if connNum > 0 {
@@ -255,6 +303,8 @@ func WithLinkerConnNum(connNum int) Option {
 }
 
 // WithLinkerCallTimeout 设置RPC调用超时时间
+// @param callTimeout time.Duration 内部RPC调用超时时间
+// @return @1 Option 微服务配置项
 func WithLinkerCallTimeout(callTimeout time.Duration) Option {
 	return func(o *options) {
 		if callTimeout >= 0 {
@@ -266,6 +316,8 @@ func WithLinkerCallTimeout(callTimeout time.Duration) Option {
 }
 
 // WithLinkerDialTimeout 设置内部RPC拨号超时时间
+// @param dialTimeout time.Duration 内部RPC拨号超时时间
+// @return @1 Option 微服务配置项
 func WithLinkerDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) {
 		if dialTimeout >= 0 {
@@ -277,6 +329,8 @@ func WithLinkerDialTimeout(dialTimeout time.Duration) Option {
 }
 
 // WithLinkerDialRetryTimes 设置内部RPC拨号重试次数
+// @param dialRetryTimes int 内部RPC拨号重试次数
+// @return @1 Option 微服务配置项
 func WithLinkerDialRetryTimes(dialRetryTimes int) Option {
 	return func(o *options) {
 		if dialRetryTimes >= 0 {
@@ -288,6 +342,8 @@ func WithLinkerDialRetryTimes(dialRetryTimes int) Option {
 }
 
 // WithLinkerFaultRecoveryTime 设置内部RPC故障恢复时间
+// @param faultRecoveryTime time.Duration 内部RPC故障恢复时间
+// @return @1 Option 微服务配置项
 func WithLinkerFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 	return func(o *options) {
 		if faultRecoveryTime >= 0 {
@@ -299,6 +355,8 @@ func WithLinkerFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 }
 
 // WithLinkerCommandQueueSize 设置消息队列大小
+// @param commandQueueSize int32 消息队列大小
+// @return @1 Option 微服务配置项
 func WithLinkerCommandQueueSize(commandQueueSize int32) Option {
 	return func(o *options) {
 		if commandQueueSize > 0 {
@@ -310,6 +368,8 @@ func WithLinkerCommandQueueSize(commandQueueSize int32) Option {
 }
 
 // WithLinkerCommandWriteTimeout 设置写入超时时间
+// @param commandWriteTimeout time.Duration 消息写入超时时间
+// @return @1 Option 微服务配置项
 func WithLinkerCommandWriteTimeout(commandWriteTimeout time.Duration) Option {
 	return func(o *options) {
 		if commandWriteTimeout >= 0 {
