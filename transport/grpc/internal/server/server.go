@@ -100,7 +100,7 @@ func (s *Server) Start() error {
 // Stop 停止服务器
 // @return @1 error 错误信息
 func (s *Server) Stop() error {
-	s.server.Stop()
+	s.server.GracefulStop()
 	return nil
 }
 
