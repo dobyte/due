@@ -103,6 +103,9 @@ func (s *Scheduler) remove(kind, id string) (*Actor, bool) {
 
 	s.actors.Delete(act.PID())
 
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
 	for _, relations := range s.relations {
 		if a, ok := relations[act.Kind()]; ok && a == act {
 			delete(relations, act.Kind())
