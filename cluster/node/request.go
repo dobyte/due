@@ -22,6 +22,7 @@ import (
 	"github.com/jinzhu/copier"
 )
 
+// 请求上下文
 type request struct {
 	node    *Node
 	ctx     context.Context  // 上下文

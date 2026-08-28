@@ -13,6 +13,7 @@ import (
 	"github.com/dobyte/due/v2/transport"
 )
 
+// 事件上下文
 type event struct {
 	node    *Node           // 代理API
 	ctx     context.Context // 上下文
