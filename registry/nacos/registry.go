@@ -132,6 +132,7 @@ func (r *Registry) Register(_ context.Context, ins *registry.ServiceInstance) er
 		ServiceName: ins.Name,
 		ClusterName: r.opts.clusterName,
 		GroupName:   r.opts.groupName,
+		Weight:      float64(max(ins.Weight, 1)),
 		Metadata:    make(map[string]string, 11),
 	}
 
@@ -141,13 +142,7 @@ func (r *Registry) Register(_ context.Context, ins *registry.ServiceInstance) er
 	param.Metadata[metaFieldAlias] = ins.Alias
 	param.Metadata[metaFieldState] = ins.State
 	param.Metadata[metaFieldEndpoint] = ins.Endpoint
-
-	if ins.Weight > 0 {
-		param.Weight = float64(ins.Weight)
-		param.Metadata[metaFieldWeight] = xconv.String(ins.Weight)
-	} else {
-		param.Weight = 1
-	}
+	param.Metadata[metaFieldWeight] = xconv.String(int(param.Weight))
 
 	if len(ins.Routes) > 0 {
 		if routes, err := json.Marshal(ins.Routes); err != nil {
