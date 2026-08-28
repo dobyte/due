@@ -20,8 +20,10 @@ const (
 	defaultWriteBufferSizeKey = "etc.mqtt.writeBufferSize"
 )
 
+// Option MQTT服务器配置函数
 type Option func(o *options)
 
+// ListenOptions 监听器配置
 type ListenOptions struct {
 	ID       string `json:"id"`       // 监听器ID
 	Type     string `json:"type"`     // 监听类型（tcp/ws）
@@ -30,6 +32,7 @@ type ListenOptions struct {
 	CertFile string `json:"certFile"` // 证书文件路径（选填）
 }
 
+// MQTT服务器配置项
 type options struct {
 	name            string           // MQTT服务名称
 	auth            string           // MQTT认证文件路径（支持json、yaml格式）
@@ -39,6 +42,9 @@ type options struct {
 	writeBufferSize int              // 写入缓冲区大小，默认为4096
 }
 
+// 创建默认配置
+// 从配置环境读取各参数并填充默认值
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	opts := &options{
 		name:            etc.Get(defaultNameKey, defaultName).String(),
@@ -92,6 +98,7 @@ func WithListensOptions(listensOpts ...*ListenOptions) Option {
 }
 
 // WithReadBufferSize 设置读取缓冲区大小
+// @param size int 读取缓冲区大小
 func WithReadBufferSize(size int) Option {
 	return func(o *options) { o.readBufferSize = size }
 }

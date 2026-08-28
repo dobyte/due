@@ -5,17 +5,19 @@ import (
 	"github.com/mochi-mqtt/server/v2/packets"
 )
 
+// 对外暴露的mochi-mqtt类型别名
 type (
-	Client           = mqtt.Client
-	ClientState      = mqtt.ClientState
-	ClientProperties = mqtt.ClientProperties
-	ClientConnection = mqtt.ClientConnection
-	Packet           = packets.Packet
-	Hook             = mqtt.Hook
-	HookBase         = mqtt.HookBase
-	Will             = mqtt.Will
+	Client           = mqtt.Client           // 客户端
+	ClientState      = mqtt.ClientState      // 客户端状态
+	ClientProperties = mqtt.ClientProperties // 客户端属性
+	ClientConnection = mqtt.ClientConnection // 客户端连接信息
+	Packet           = packets.Packet        // MQTT数据包
+	Hook             = mqtt.Hook             // Hook接口
+	HookBase         = mqtt.HookBase         // Hook基类
+	Will             = mqtt.Will             // 遗嘱消息
 )
 
+// 对外暴露的mochi-mqtt Hook事件及存储能力常量
 const (
 	SetOptions             = mqtt.SetOptions
 	OnSysInfoTick          = mqtt.OnSysInfoTick

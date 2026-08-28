@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
@@ -48,6 +49,10 @@ func (s *Server) Init() {}
 
 // Start 启动组件
 func (s *Server) Start() {
+	if len(s.opts.listensOpts) == 0 {
+		log.Fatalf("mqtt server listens opts is empty")
+	}
+
 	opts := &mqtt.Options{}
 	opts.InlineClient = true
 	opts.Capabilities = mqtt.NewDefaultServerCapabilities()
@@ -58,7 +63,7 @@ func (s *Server) Start() {
 	opts.Logger = slog.New(log.GetLogger())
 
 	for _, opt := range s.opts.listensOpts {
-		if opt.Type != listeners.TypeWS && opt.Type != listeners.TypeTCP {
+		if typ := strings.ToLower(opt.Type); typ != listeners.TypeWS && typ != listeners.TypeTCP {
 			continue
 		}
 
@@ -85,6 +90,10 @@ func (s *Server) Start() {
 		})
 	}
 
+	if len(opts.Listeners) == 0 {
+		log.Fatalf("mqtt server listens opts is empty")
+	}
+
 	if s.opts.auth != "" {
 		data, err := os.ReadFile(s.opts.auth)
 		if err != nil {
@@ -96,9 +105,14 @@ func (s *Server) Start() {
 			Config: &auth.Options{Data: data},
 		})
 	} else {
-		opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
-			Hook: &auth.AllowHook{},
-		})
+		hasAuth, hasACL := s.hookCapabilities()
+		if !hasAuth && !hasACL {
+			opts.Hooks = append(opts.Hooks, mqtt.HookLoadConfig{
+				Hook: &auth.AllowHook{},
+			})
+		} else if !hasAuth || !hasACL {
+			log.Warnf("mqtt server auth or acl capability is missing: auth=%v acl=%v", hasAuth, hasACL)
+		}
 	}
 
 	if s.opts.debug {
@@ -134,14 +148,17 @@ func (s *Server) Destroy() {
 		if err := s.server.Close(); err != nil {
 			log.Warnf("mqtt server shutdown failed: %v", err)
 		}
+		s.server = nil
 	}
 }
 
 // Proxy 获取MQTT代理API
+// @return @1 *Proxy MQTT代理
 func (s *Server) Proxy() *Proxy {
 	return s.proxy
 }
 
+// 打印服务启动信息
 func (s *Server) printInfo() {
 	infos := make([]string, 0, 3)
 	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
@@ -184,6 +201,10 @@ func (s *Server) printInfo() {
 }
 
 // 添加Hook
+// 服务启动前添加的Hook会在启动时加载，服务启动后添加返回错误
+// @param hook Hook 待添加的Hook
+// @param config ...any 可选，Hook配置
+// @return @1 error 服务已启动时返回的错误
 func (s *Server) addHook(hook Hook, config ...any) error {
 	if s.server == nil {
 		if len(config) > 0 {
@@ -201,4 +222,15 @@ func (s *Server) addHook(hook Hook, config ...any) error {
 	} else {
 		return errors.ErrServerStarted
 	}
+}
+
+// 检测已注册Hook提供的认证与ACL能力
+// @return @1 bool 是否存在提供认证能力（OnConnectAuthenticate）的Hook
+// @return @2 bool 是否存在提供ACL能力（OnACLCheck）的Hook
+func (s *Server) hookCapabilities() (hasAuth, hasACL bool) {
+	for _, item := range s.hooks {
+		hasAuth = hasAuth || item.Hook.Provides(mqtt.OnConnectAuthenticate)
+		hasACL = hasACL || item.Hook.Provides(mqtt.OnACLCheck)
+	}
+	return
 }
