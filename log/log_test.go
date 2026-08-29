@@ -100,6 +100,31 @@ func TestConsoleSyncerText(t *testing.T) {
 	}
 }
 
+// TestConsoleSyncerTextNoColor 验证设置 NO_COLOR 后不输出 ANSI 颜色码
+func TestConsoleSyncerTextNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	entity := &log.Entity{
+		Time:    "2026/08/29 12:00:00.000000",
+		Level:   log.LevelWarn,
+		Message: "something went wrong",
+		Caller:  "main.go:20",
+	}
+
+	output := captureStdout(t, func() {
+		syncer := console.NewSyncer(console.WithFormat(console.FormatText))
+		defer syncer.Close()
+
+		if err := syncer.Write(entity); err != nil {
+			t.Errorf("write text log failed: %v", err)
+		}
+	})
+
+	if strings.Contains(output, "\x1b") {
+		t.Errorf("output should not contain ANSI color codes when NO_COLOR is set: %q", output)
+	}
+}
+
 // captureStdout 捕获 os.Stdout 输出
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()

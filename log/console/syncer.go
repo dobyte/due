@@ -3,6 +3,7 @@ package console
 import (
 	"io"
 	"os"
+	"strings"
 
 	"github.com/dobyte/due/v2/log/internal"
 )
@@ -40,8 +41,28 @@ func (s *Syncer) init() {
 	if s.opts.format == FormatJson {
 		s.formatter = internal.NewJsonFormatter()
 	} else {
-		s.formatter = internal.NewTextFormatter(true)
+		s.formatter = internal.NewTextFormatter(s.checkSupportColor())
 	}
+}
+
+// checkSupportColor 检测输出流是否支持彩色输出
+func (s *Syncer) checkSupportColor() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+
+	term := os.Getenv("TERM")
+	if term == "dumb" {
+		return false
+	}
+
+	if f, ok := s.writer.(*os.File); ok {
+		if fi, err := f.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+			return true
+		}
+	}
+
+	return strings.Contains(term, "color") || strings.HasPrefix(term, "xterm")
 }
 
 // Name 同步器名称
