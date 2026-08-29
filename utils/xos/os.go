@@ -40,12 +40,20 @@ func IsFile(path string) bool {
 // @return @4 string 后缀
 func Split(path string) (dir, file, name, ext string) {
 	dir, file = filepath.Split(path)
-	for i := len(file) - 1; i >= 0 && !os.IsPathSeparator(file[i]); i-- {
-		if file[i] == '.' {
-			name = file[:i]
-			ext = file[i+1:]
-			return
-		}
+
+	ext = filepath.Ext(file)
+	if ext == file {
+		// 以点开头的隐藏文件（如 .gitignore）视为无后缀
+		name = file
+		ext = ""
+		return
+	}
+
+	if ext != "" {
+		name = file[:len(file)-len(ext)]
+		ext = ext[1:] // 去掉后缀前导的点
+	} else {
+		name = file
 	}
 	return
 }
@@ -55,11 +63,8 @@ func Split(path string) (dir, file, name, ext string) {
 // @param data []byte 待写入的数据
 // @return @1 error 错误信息
 func WriteFile(file string, data []byte) error {
-	path := filepath.Dir(file)
-
-	if !IsDir(path) {
-		err := os.MkdirAll(path, fs.ModePerm)
-		if err != nil {
+	if path := filepath.Dir(file); !IsDir(path) {
+		if err := os.MkdirAll(path, fs.ModePerm); err != nil {
 			return err
 		}
 	}
