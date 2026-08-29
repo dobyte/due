@@ -21,6 +21,7 @@ const (
 	aliyunSourceKey          = "etc.log.aliyun.source"
 )
 
+// Option 日志同步器选项
 type Option func(o *options)
 
 type options struct {
@@ -46,36 +47,50 @@ func defaultOptions() *options {
 }
 
 // WithProject 设置项目名称
+// @param project string 阿里云SLS项目名称
+// @return @1 Option 日志同步器选项
 func WithProject(project string) Option {
 	return func(o *options) { o.project = project }
 }
 
 // WithLogstore 设置日志存储
+// @param logstore string 阿里云SLS日志存储
+// @return @1 Option 日志同步器选项
 func WithLogstore(logstore string) Option {
 	return func(o *options) { o.logstore = logstore }
 }
 
-// WithEndpoint 设置端口
+// WithEndpoint 设置服务域名
+// @param endpoint string 阿里云SLS服务域名，公网使用公网域名，内网使用私网域名
+// @return @1 Option 日志同步器选项
 func WithEndpoint(endpoint string) Option {
 	return func(o *options) { o.endpoint = endpoint }
 }
 
 // WithAccessKeyID 设置访问密钥ID
+// @param accessKeyID string 阿里云SLS访问密钥ID
+// @return @1 Option 日志同步器选项
 func WithAccessKeyID(accessKeyID string) Option {
 	return func(o *options) { o.accessKeyID = accessKeyID }
 }
 
 // WithAccessKeySecret 设置访问密钥密码
+// @param accessKeySecret string 阿里云SLS访问密钥密码
+// @return @1 Option 日志同步器选项
 func WithAccessKeySecret(accessKeySecret string) Option {
 	return func(o *options) { o.accessKeySecret = accessKeySecret }
 }
 
 // WithTopic 设置主题标签
+// @param topic string 主题标签
+// @return @1 Option 日志同步器选项
 func WithTopic(topic string) Option {
 	return func(o *options) { o.topic = topic }
 }
 
 // WithSource 设置来源标签
+// @param source string 来源标签
+// @return @1 Option 日志同步器选项
 func WithSource(source string) Option {
 	return func(o *options) { o.source = source }
 }
