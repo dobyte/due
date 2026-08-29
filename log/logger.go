@@ -78,7 +78,9 @@ func NewLogger(opts ...Option) *defaultLogger {
 
 	syncers := make(map[string]Syncer, len(l.opts.syncers))
 	for _, syncer := range l.opts.syncers {
-		syncers[syncer.Name()] = syncer
+		if syncer != nil {
+			syncers[syncer.Name()] = syncer
+		}
 	}
 
 	switch v := l.opts.terminals.(type) {

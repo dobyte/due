@@ -1,34 +1,41 @@
 package tencent
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
-	"time"
 
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/log"
 	cls "github.com/tencentcloud/tencentcloud-cls-sdk-go"
 )
 
 const (
-	fieldKeyLevel     = "level"
-	fieldKeyTime      = "time"
-	fieldKeyFile      = "file"
-	fieldKeyMsg       = "msg"
-	fieldKeyStack     = "stack"
-	fieldKeyStackFunc = "func"
-	fieldKeyStackFile = "file"
+	fieldKeyLevel = "level"
+	fieldKeyTime  = "time"
+	fieldKeyFile  = "file"
+	fieldKeyMsg   = "msg"
+	fieldKeyStack = "stack"
 )
 
+// Name 同步器名称
 const Name = "tencent"
 
+// Syncer 腾讯云CLS日志同步器
 type Syncer struct {
-	opts       *options
-	producer   *cls.AsyncProducerClient
-	rawPool    sync.Pool
-	bufferPool sync.Pool
+	opts     *options
+	producer *cls.AsyncProducerClient
+	rawPool  sync.Pool
 }
 
+// stackFrame 堆栈帧
+type stackFrame struct {
+	Func string `json:"func"`
+	File string `json:"file"`
+}
+
+// NewSyncer 创建一个腾讯云CLS日志同步器实例
+// @param opts ...Option 可选配置项
+// @return @1 *Syncer 同步器实例
 func NewSyncer(opts ...Option) *Syncer {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -42,7 +49,7 @@ func NewSyncer(opts ...Option) *Syncer {
 
 	producer, err := cls.NewAsyncProducerClient(config)
 	if err != nil {
-		panic(err)
+		return nil
 	} else {
 		producer.Start()
 	}
@@ -51,22 +58,25 @@ func NewSyncer(opts ...Option) *Syncer {
 	s.opts = o
 	s.producer = producer
 	s.rawPool = sync.Pool{New: func() any { return make(map[string]string, 5) }}
-	s.bufferPool = sync.Pool{New: func() any { return &bytes.Buffer{} }}
 
 	return s
 }
 
 // Name 同步器名称
+// @return @1 string 同步器名称
 func (s *Syncer) Name() string {
 	return Name
 }
 
 // Write 写入日志
+// @param entity *log.Entity 日志实体
+// @return @1 error 写入过程中产生的错误
 func (s *Syncer) Write(entity *log.Entity) error {
 	return s.producer.SendLog(s.opts.topicID, s.makeLog(entity), nil)
 }
 
 // Close 关闭同步器
+// @return @1 error 关闭过程中产生的错误
 func (s *Syncer) Close() error {
 	return s.producer.Close(60000)
 }
@@ -85,25 +95,17 @@ func (s *Syncer) makeLog(entity *log.Entity) *cls.Log {
 	raw[fieldKeyMsg] = entity.Message
 
 	if len(entity.Frames) > 0 {
-		b := s.bufferPool.Get().(*bytes.Buffer)
-		defer func() {
-			b.Reset()
-			s.bufferPool.Put(b)
-		}()
-
-		fmt.Fprint(b, "[")
-		for i, frame := range entity.Frames {
-			if i == 0 {
-				fmt.Fprintf(b, `{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
-			} else {
-				fmt.Fprintf(b, `,{"%s":"%s"`, fieldKeyStackFunc, frame.Function)
-			}
-			fmt.Fprintf(b, `,"%s":"%s:%d"}`, fieldKeyStackFile, frame.File, frame.Line)
+		frames := make([]stackFrame, 0, len(entity.Frames))
+		for _, f := range entity.Frames {
+			frames = append(frames, stackFrame{
+				Func: f.Function,
+				File: fmt.Sprintf("%s:%d", f.File, f.Line),
+			})
 		}
-		fmt.Fprint(b, "]")
 
-		raw[fieldKeyStack] = b.String()
+		data, _ := json.Marshal(frames)
+		raw[fieldKeyStack] = string(data)
 	}
 
-	return cls.NewCLSLog(time.Now().Unix(), raw)
+	return cls.NewCLSLog(entity.Now.Unix(), raw)
 }
