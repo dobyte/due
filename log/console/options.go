@@ -12,6 +12,7 @@ const (
 	defaultFormatKey = "etc.log.console.format"
 )
 
+// Option 配置项
 type Option func(o *options)
 
 type options struct {
