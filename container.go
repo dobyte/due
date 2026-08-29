@@ -32,26 +32,30 @@ type Container struct {
 }
 
 // NewContainer 创建一个容器
+// @return @1 *Container 容器实例
 func NewContainer() *Container {
 	return &Container{}
 }
 
 // Add 添加组件
+// @param components ...component.Component 待添加的组件
 func (c *Container) Add(components ...component.Component) {
 	c.components = append(c.components, components...)
 }
 
 // Serve 启动容器
-func (c *Container) Serve(once ...bool) {
-	c.doSaveProcessID()
-
+// 依次初始化并启动所有组件；在等待系统信号后，关闭并销毁组件，最终清理相关模块
+// @param isNonWaitSignal ...bool 是否不等待系统信号，true 时启动完成后直接进入关闭流程
+func (c *Container) Serve(isNonWaitSignal ...bool) {
 	c.doPrintFrameworkInfo()
 
 	c.doInitComponents()
 
 	c.doStartComponents()
 
-	if len(once) == 0 || !once[0] {
+	c.doSaveProcessID()
+
+	if len(isNonWaitSignal) == 0 || !isNonWaitSignal[0] {
 		c.doWaitSystemSignal()
 	}
 
@@ -59,24 +63,27 @@ func (c *Container) Serve(once ...bool) {
 
 	c.doDestroyComponents()
 
+	c.doRemoveProcessID()
+
 	c.doClearModules()
 }
 
-// 初始化所有组件
+// doInitComponents 初始化所有组件
 func (c *Container) doInitComponents() {
 	for _, comp := range c.components {
 		comp.Init()
 	}
 }
 
-// 启动所有组件
+// doStartComponents 启动所有组件
 func (c *Container) doStartComponents() {
 	for _, comp := range c.components {
 		comp.Start()
 	}
 }
 
-// 关闭所有组件
+// doCloseComponents 关闭所有组件
+// 所有组件在独立协程中并发关闭，整体受 etc.shutdownMaxWaitTime 超时控制
 func (c *Container) doCloseComponents() {
 	g := xcall.NewGoroutines()
 
@@ -87,7 +94,8 @@ func (c *Container) doCloseComponents() {
 	g.Run(context.Background(), etc.Get(defaultShutdownMaxWaitTimeKey).Duration())
 }
 
-// 销毁所有组件
+// doDestroyComponents 销毁所有组件
+// 所有组件在独立协程中并发销毁，整体受 5 秒超时控制
 func (c *Container) doDestroyComponents() {
 	g := xcall.NewGoroutines()
 
@@ -98,15 +106,16 @@ func (c *Container) doDestroyComponents() {
 	g.Run(context.Background(), 5*time.Second)
 }
 
-// 等待系统信号
+// doWaitSystemSignal 等待系统信号
+// 阻塞等待进程退出信号，收到后停止监听并记录日志
 func (c *Container) doWaitSystemSignal() {
-	sig := make(chan os.Signal)
+	sig := make(chan os.Signal, 1)
 
 	switch runtime.GOOS {
 	case `windows`:
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
+		signal.Notify(sig, os.Interrupt)
 	default:
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGKILL, syscall.SIGTERM)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT, syscall.SIGTERM)
 	}
 
 	s := <-sig
@@ -116,7 +125,7 @@ func (c *Container) doWaitSystemSignal() {
 	log.Warnf("process got signal %v, container will close", s)
 }
 
-// 清理所有模块
+// doClearModules 清理所有模块
 func (c *Container) doClearModules() {
 	if err := eventbus.Close(); err != nil {
 		log.Warnf("eventbus close failed: %v", err)
@@ -139,7 +148,7 @@ func (c *Container) doClearModules() {
 	log.Close()
 }
 
-// 保存进程号
+// doSaveProcessID 保存进程号
 func (c *Container) doSaveProcessID() {
 	filename := etc.Get(defaultPIDKey).String()
 	if filename == "" {
@@ -151,7 +160,19 @@ func (c *Container) doSaveProcessID() {
 	}
 }
 
-// 打印框架信息
+// doRemoveProcessID 删除进程号文件
+func (c *Container) doRemoveProcessID() {
+	filename := etc.Get(defaultPIDKey).String()
+	if filename == "" {
+		return
+	}
+
+	if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
+		log.Warnf("pid file remove failed: %v", err)
+	}
+}
+
+// doPrintFrameworkInfo 打印框架信息
 func (c *Container) doPrintFrameworkInfo() {
 	info.PrintFrameworkInfo()
 
