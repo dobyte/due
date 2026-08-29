@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
-	"hash"
 	"hash/fnv"
 	"io"
 )
@@ -17,18 +16,16 @@ func MD5(str string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// SHA256 计算 SHA-256 哈希值
-func SHA256(data string, key ...string) string {
-	var h hash.Hash
-
-	if len(key) > 0 {
-		h = hmac.New(sha256.New, []byte(key[0]))
-	} else {
-		h = hmac.New(sha256.New, nil)
+// SHA256 计算 SHA-256 哈希值，key 非空时计算 HMAC-SHA256
+func SHA256(data string, key string) string {
+	if key != "" {
+		h := hmac.New(sha256.New, []byte(key))
+		h.Write([]byte(data))
+		return hex.EncodeToString(h.Sum(nil))
 	}
 
-	h.Write([]byte(data))
-	return hex.EncodeToString(h.Sum(nil))
+	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:])
 }
 
 // FNV32 计算 FNV-32 哈希值
