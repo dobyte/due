@@ -11,9 +11,10 @@ const (
 	defaultMaxAge     = "7d"
 	defaultMaxSize    = "500M"
 	defaultBufferSize = "32K"
-	defaultRotate     = RotateNone
-	defaultCompress   = false
-	defaultFormat     = FormatText
+	defaultRotate       = RotateNone
+	defaultCompress     = false
+	defaultFormat       = FormatText
+	defaultFlushInterval = "1s"
 )
 
 const (
@@ -24,6 +25,7 @@ const (
 	defaultBufferSizeKey = "etc.log.file.bufferSize"
 	defaultRotateKey     = "etc.log.file.rotate"
 	defaultCompressKey   = "etc.log.file.compress"
+	defaultFlushIntervalKey = "etc.log.file.flushInterval"
 )
 
 type Option func(o *options)
@@ -34,8 +36,9 @@ type options struct {
 	maxAge     time.Duration // 文件最大留存时间
 	maxSize    int64         // 单个文件最大尺寸
 	bufferSize int           // 缓冲区大小
-	rotate     Rotate        // 文件反转规则
-	compress   bool          // 是否对轮换的日志文件进行压缩
+	rotate        Rotate        // 文件反转规则
+	compress      bool          // 是否对轮换的日志文件进行压缩
+	flushInterval time.Duration // 定时刷盘间隔
 }
 
 func defaultOptions() *options {
@@ -47,6 +50,7 @@ func defaultOptions() *options {
 		bufferSize: int(etc.Get(defaultBufferSizeKey, defaultBufferSize).B()),
 		rotate:     Rotate(etc.Get(defaultRotateKey, defaultRotate).String()),
 		compress:   etc.Get(defaultCompressKey, defaultCompress).Bool(),
+		flushInterval: etc.Get(defaultFlushIntervalKey, defaultFlushInterval).Duration(),
 	}
 }
 
@@ -83,4 +87,9 @@ func WithRotate(rotate Rotate) Option {
 // WithCompress 设置是否对轮换日志文件进行压缩
 func WithCompress(compress bool) Option {
 	return func(o *options) { o.compress = compress }
+}
+
+// WithFlushInterval 设置定时刷盘间隔，<=0 表示禁用定时刷盘
+func WithFlushInterval(flushInterval time.Duration) Option {
+	return func(o *options) { o.flushInterval = flushInterval }
 }

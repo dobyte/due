@@ -12,7 +12,7 @@ type TextFormatter struct {
 
 func NewTextFormatter(isSupportColor ...bool) *TextFormatter {
 	return &TextFormatter{
-		pool:           &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, 1024))} }},
+		pool:           &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, defaultBufferSize))} }},
 		isSupportColor: len(isSupportColor) > 0 && isSupportColor[0],
 	}
 }

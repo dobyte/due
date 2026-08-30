@@ -2,7 +2,6 @@ package internal
 
 import (
 	"bytes"
-	"encoding/json"
 	"strconv"
 	"sync"
 )
@@ -23,7 +22,7 @@ type JsonFormatter struct {
 
 func NewJsonFormatter() *JsonFormatter {
 	return &JsonFormatter{
-		pool: &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, 1024))} }},
+		pool: &sync.Pool{New: func() any { return &buffer{bufer: bytes.NewBuffer(make([]byte, 0, defaultBufferSize))} }},
 	}
 }
 
@@ -82,6 +81,37 @@ func (f *JsonFormatter) Format(entity *Entity) Buffer {
 }
 
 func writeJSONString(b *buffer, s string) {
-	data, _ := json.Marshal(s)
-	b.Write(data)
+	const hex = "0123456789abcdef"
+
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '<':
+			b.WriteString(`\u003c`)
+		case '>':
+			b.WriteString(`\u003e`)
+		case '&':
+			b.WriteString(`\u0026`)
+		default:
+			if c < 0x20 {
+				b.WriteString(`\u00`)
+				b.WriteByte(hex[c>>4])
+				b.WriteByte(hex[c&0x0f])
+			} else {
+				b.WriteByte(c)
+			}
+		}
+	}
+	b.WriteByte('"')
 }

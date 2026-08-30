@@ -41,7 +41,6 @@ type Syncer struct {
 	acc         atomic.Int64
 	chEntry     chan *entry
 	closing     atomic.Bool
-	flushing    atomic.Bool
 	wg          sync.WaitGroup
 	formatter   internal.Formatter
 	pool        sync.Pool
@@ -67,6 +66,7 @@ func NewSyncer(opts ...Option) *Syncer {
 
 	s.cleanExpiredFiles()
 
+	go s.tickFlushFile()
 	go s.tickRotateFile()
 
 	return s
@@ -181,6 +181,9 @@ func (s *Syncer) Close() error {
 	e := s.pool.Get().(*entry)
 	e.now = xtime.Now()
 	s.flushToFile(e)
+	if s.writer != nil {
+		_ = s.writer.Flush()
+	}
 	s.wg.Wait()
 	file := s.file
 	s.file = nil
@@ -201,10 +204,6 @@ func (s *Syncer) tryFlushToFile() {
 		return
 	}
 
-	if s.flushing.Load() {
-		return
-	}
-
 	s.mu.Lock()
 	_ = s.flushToFile()
 	s.mu.Unlock()
@@ -220,7 +219,7 @@ func (s *Syncer) flushToFile(e ...*entry) error {
 	}
 
 	if len(e) > 0 {
-		return s.writeEntry(e[0], true)
+		return s.writeEntry(e[0], false)
 	} else {
 		return nil
 	}
@@ -239,9 +238,6 @@ func (s *Syncer) flushToWriter(isOpenFile bool) error {
 	}
 
 	if acc > 0 {
-		s.flushing.Store(true)
-		defer s.flushing.Store(false)
-
 	FLUSH_LOOP:
 		for acc > 0 {
 			select {
@@ -314,6 +310,29 @@ func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 	}
 
 	return nil
+}
+
+// 定时刷盘
+func (s *Syncer) tickFlushFile() {
+	if s.opts.flushInterval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(s.opts.flushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.mu.Lock()
+			if s.writer != nil {
+				_ = s.writer.Flush()
+			}
+			s.mu.Unlock()
+		case <-s.ctx.Done():
+			return
+		}
+	}
 }
 
 // 定时翻滚文件
