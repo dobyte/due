@@ -31,9 +31,10 @@ type Syncer struct {
 	fileDir     string
 	fileName    string
 	fileExt     string
-	fileTag     string
+	fileTag     atomic.Pointer[string]
 	fileVersion int64
 	mu          sync.Mutex
+	chMu        sync.Mutex
 	size        int64
 	file        *os.File
 	writer      *bufio.Writer
@@ -59,7 +60,10 @@ func NewSyncer(opts ...Option) *Syncer {
 
 	s := &Syncer{}
 	s.opts = o
-	s.init()
+
+	if err := s.init(); err != nil {
+		return nil
+	}
 
 	s.cleanExpiredFiles()
 
@@ -68,7 +72,7 @@ func NewSyncer(opts ...Option) *Syncer {
 	return s
 }
 
-func (s *Syncer) init() {
+func (s *Syncer) init() error {
 	path, file := filepath.Split(s.opts.path)
 	list := strings.Split(file, ".")
 	switch c := len(list); c {
@@ -90,23 +94,29 @@ func (s *Syncer) init() {
 	}
 
 	if err := s.parseFileMark(); err != nil {
-		return
+		return err
 	}
 
 	fi, err := xos.Stat(s.opts.path)
 	if err != nil {
-		return
+		if os.IsNotExist(err) {
+			return nil
+		} else {
+			return err
+		}
 	}
 
 	fileTag := s.makeFileTag(fi.CreateTime())
 
-	if fileTag == s.fileTag {
-		return
+	if fileTag == s.getFileTag() {
+		return nil
 	}
 
 	if err = s.doRotateFile(fileTag, s.fileVersion); err != nil {
-		return
+		return err
 	}
+
+	return nil
 }
 
 // Name 同步器名称
@@ -133,17 +143,23 @@ func (s *Syncer) doWrite(e *entry) error {
 		defer s.mu.Unlock()
 
 		if s.closing.Load() {
+			s.releaseEntry(e)
 			return errors.ErrSyncerClosed
 		}
 
 		return s.flushToFile(e)
 	} else {
+		s.chMu.Lock()
 		if s.closing.Load() {
+			s.chMu.Unlock()
+			s.releaseEntry(e)
 			return errors.ErrSyncerClosed
 		}
 
 		s.acc.Add(1)
 		s.chEntry <- e
+		s.chMu.Unlock()
+
 		s.tryFlushToFile()
 
 		return nil
@@ -152,13 +168,16 @@ func (s *Syncer) doWrite(e *entry) error {
 
 // Close 关闭同步器
 func (s *Syncer) Close() error {
-	s.mu.Lock()
+	s.chMu.Lock()
 	if !s.closing.CompareAndSwap(false, true) {
-		s.mu.Unlock()
+		s.chMu.Unlock()
 		return errors.ErrSyncerClosed
 	}
+	s.chMu.Unlock()
 
 	s.cancel()
+
+	s.mu.Lock()
 	e := s.pool.Get().(*entry)
 	e.now = xtime.Now()
 	s.flushToFile(e)
@@ -178,7 +197,6 @@ func (s *Syncer) Close() error {
 
 // 尝试将数据刷入文件中
 func (s *Syncer) tryFlushToFile() {
-HEAD:
 	if s.closing.Load() {
 		return
 	}
@@ -187,18 +205,19 @@ HEAD:
 		return
 	}
 
-	if s.mu.TryLock() {
-		_ = s.flushToFile()
-
-		s.mu.Unlock()
-	} else {
-		goto HEAD
-	}
+	s.mu.Lock()
+	_ = s.flushToFile()
+	s.mu.Unlock()
 }
 
 // 写入将缓冲区数据写入文件
 func (s *Syncer) flushToFile(e ...*entry) error {
-	s.flushToWriter(e...)
+	if err := s.flushToWriter(len(e) > 0); err != nil {
+		if len(e) > 0 {
+			s.releaseEntry(e[0])
+		}
+		return err
+	}
 
 	if len(e) > 0 {
 		return s.writeEntry(e[0], true)
@@ -208,10 +227,10 @@ func (s *Syncer) flushToFile(e ...*entry) error {
 }
 
 // 写入将缓冲区数据写入writer
-func (s *Syncer) flushToWriter(e ...*entry) error {
+func (s *Syncer) flushToWriter(isOpenFile bool) error {
 	acc := s.acc.Load()
 
-	if acc > 0 || len(e) > 0 {
+	if acc > 0 || isOpenFile {
 		if s.file == nil {
 			if err := s.openFile(); err != nil {
 				return err
@@ -243,19 +262,22 @@ func (s *Syncer) flushToWriter(e ...*entry) error {
 	return nil
 }
 
+// 释放日志实体
+func (s *Syncer) releaseEntry(e *entry) {
+	if e.buf != nil {
+		e.buf.Release()
+		e.buf = nil
+	}
+
+	s.pool.Put(e)
+}
+
 // 写入日志
 func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
-	defer func() {
-		if e.buf != nil {
-			e.buf.Release()
-			e.buf = nil
-		}
-
-		s.pool.Put(e)
-	}()
+	defer s.releaseEntry(e)
 
 	if s.opts.rotate != RotateNone {
-		if fileTag := s.makeFileTag(e.now); fileTag != s.fileTag {
+		if fileTag := s.makeFileTag(e.now); fileTag != s.getFileTag() {
 			if err := s.writer.Flush(); err != nil {
 				return err
 			}
@@ -281,7 +303,7 @@ func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 		}
 	}
 
-	if s.size >= s.opts.maxSize {
+	if s.opts.maxSize > 0 && s.size >= s.opts.maxSize {
 		if err := s.writer.Flush(); err != nil {
 			return err
 		}
@@ -310,7 +332,7 @@ func (s *Syncer) tickRotateFile() {
 				return
 			}
 
-			if s.makeFileTag(now) != s.fileTag {
+			if s.makeFileTag(now) != s.getFileTag() {
 				e := s.pool.Get().(*entry)
 				e.now = now
 				s.doWrite(e)
@@ -335,7 +357,7 @@ func (s *Syncer) rotateFile() error {
 		return err
 	}
 
-	return s.doRotateFile(s.fileTag, s.fileVersion)
+	return s.doRotateFile(s.getFileTag(), s.fileVersion)
 }
 
 // 处理翻转文件
@@ -344,11 +366,20 @@ func (s *Syncer) doRotateFile(fileTag string, fileVersion int64) (err error) {
 	gzipPath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
 
 	for {
-		if _, err = os.Stat(filePath); os.IsNotExist(err) {
-			if _, err = os.Stat(gzipPath); os.IsNotExist(err) {
-				break
+		if _, statErr := os.Stat(filePath); statErr == nil {
+			// 文件已存在，尝试下一个版本号
+		} else if os.IsNotExist(statErr) {
+			if _, gzErr := os.Stat(gzipPath); gzErr == nil {
+				// gzip 文件已存在，尝试下一个版本号
+			} else if os.IsNotExist(gzErr) {
+				break // 两者都不存在，找到可用版本号
+			} else {
+				return gzErr
 			}
+		} else {
+			return statErr
 		}
+
 		fileVersion++
 		filePath = filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, s.fileExt))
 		gzipPath = filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
@@ -428,7 +459,7 @@ func (s *Syncer) cleanExpiredFiles() {
 		return
 	}
 
-	now := time.Now()
+	now := xtime.Now()
 	currentBase := filepath.Base(s.opts.path)
 
 	for _, entry := range entries {
@@ -492,11 +523,11 @@ func (s *Syncer) cleanExpiredFiles() {
 func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
 	switch s.opts.rotate {
 	case RotateYear:
-		if t, err := time.Parse("2006", tag); err == nil {
+		if t, err := xtime.Parse("2006", tag); err == nil {
 			return t, true
 		}
 	case RotateMonth:
-		if t, err := time.Parse("200601", tag); err == nil {
+		if t, err := xtime.Parse("200601", tag); err == nil {
 			return t, true
 		}
 	case RotateWeek:
@@ -504,18 +535,22 @@ func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
 			year, err1 := strconv.Atoi(tag[:4])
 			week, err2 := strconv.Atoi(tag[4:])
 			if err1 == nil && err2 == nil && week >= 1 && week <= 53 {
-				t := time.Date(year, 1, 1, 0, 0, 0, 0, time.Local)
-				_, w := t.ISOWeek()
-				daysToAdd := (week - w) * 7
-				return t.AddDate(0, 0, daysToAdd), true
+				// 1月4日始终属于 ISO 第1周，据此推算出第1周的周一
+				jan4 := time.Date(year, 1, 4, 0, 0, 0, 0, xtime.GetLocation())
+				weekday := int(jan4.Weekday())
+				if weekday == 0 {
+					weekday = 7 // 周日
+				}
+				monday := jan4.AddDate(0, 0, -(weekday - 1))
+				return monday.AddDate(0, 0, (week-1)*7), true
 			}
 		}
 	case RotateDay:
-		if t, err := time.Parse("20060102", tag); err == nil {
+		if t, err := xtime.Parse("20060102", tag); err == nil {
 			return t, true
 		}
 	case RotateHour:
-		if t, err := time.Parse("2006010215", tag); err == nil {
+		if t, err := xtime.Parse("2006010215", tag); err == nil {
 			return t, true
 		}
 	}
@@ -539,10 +574,10 @@ func (s *Syncer) openFile() error {
 		}
 	}
 
-	if fileTag := s.makeFileTag(xtime.Now()); fileTag == s.fileTag {
+	if fileTag := s.makeFileTag(xtime.Now()); fileTag == s.getFileTag() {
 		s.fileVersion++
 	} else {
-		s.fileTag = fileTag
+		s.setFileTag(fileTag)
 		s.fileVersion = 1
 	}
 
@@ -622,8 +657,8 @@ func (s *Syncer) parseFileMark() error {
 		}
 	}
 
-	if fileTag := s.makeFileTag(xtime.Now()); fileTag != s.fileTag {
-		s.fileTag = fileTag
+	if fileTag := s.makeFileTag(xtime.Now()); fileTag != s.getFileTag() {
+		s.setFileTag(fileTag)
 		s.fileVersion = 0
 	}
 
@@ -633,10 +668,10 @@ func (s *Syncer) parseFileMark() error {
 // 过滤文件标识
 func (s *Syncer) filterFileMark(fileTag string, fileVersion int64) {
 	switch {
-	case fileTag > s.fileTag:
-		s.fileTag = fileTag
+	case fileTag > s.getFileTag():
+		s.setFileTag(fileTag)
 		s.fileVersion = fileVersion
-	case fileTag == s.fileTag:
+	case fileTag == s.getFileTag():
 		if fileVersion > s.fileVersion {
 			s.fileVersion = fileVersion
 		}
@@ -652,6 +687,19 @@ func (s *Syncer) makeFileName(fileTag string, fileVersion int64, fileExt string)
 	} else {
 		return fmt.Sprintf("%s.%s.%d%s", s.fileName, fileTag, fileVersion, fileExt)
 	}
+}
+
+// getFileTag 获取当前文件标签
+func (s *Syncer) getFileTag() string {
+	if tag := s.fileTag.Load(); tag != nil {
+		return *tag
+	}
+	return ""
+}
+
+// setFileTag 设置当前文件标签
+func (s *Syncer) setFileTag(fileTag string) {
+	s.fileTag.Store(&fileTag)
 }
 
 // 生成文件标签
