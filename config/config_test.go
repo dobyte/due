@@ -9,10 +9,10 @@ import (
 	"github.com/dobyte/due/v2/config/file"
 )
 
-func init() {
-	source := file.NewSource(file.WithMode(config.ReadWrite))
-	config.SetConfigurator(config.NewConfigurator(config.WithSources(source)))
-}
+// func init() {
+// 	source := file.NewSource(file.WithMode(config.ReadWrite))
+// 	config.SetConfigurator(config.NewConfigurator(config.WithSources(source)))
+// }
 
 func TestWatch(t *testing.T) {
 	ticker1 := time.NewTicker(2 * time.Second)

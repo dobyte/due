@@ -2,13 +2,6 @@ package nacos
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/log"
-	"github.com/nacos-group/nacos-sdk-go/v2/clients"
-	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
-	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
-	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -16,6 +9,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
+	"github.com/nacos-group/nacos-sdk-go/v2/clients"
+	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
 const Name = "nacos"
@@ -30,8 +31,8 @@ type Source struct {
 	versions map[string]uint64
 	chListen chan string
 	chCancel chan string
-	rw       sync.RWMutex
-	watchers map[*watcher]struct{}
+	watchers sync.Map
+	once     sync.Once
 }
 
 func NewSource(opts ...Option) config.Source {
@@ -46,7 +47,6 @@ func NewSource(opts ...Option) config.Source {
 	s.versions = make(map[string]uint64)
 	s.chListen = make(chan string)
 	s.chCancel = make(chan string)
-	s.watchers = make(map[*watcher]struct{})
 
 	if o.client == nil {
 		o.client, s.err = s.buildClient()
@@ -71,17 +71,11 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 {
-		content, err := s.opts.client.GetConfig(vo.ConfigParam{
-			DataId: file[0],
-			Group:  s.opts.groupName,
-		})
-		if err != nil {
+		if configuration, err := s.load(file[0]); err != nil {
 			return nil, err
+		} else {
+			return []*config.Configuration{configuration}, nil
 		}
-
-		configuration := conv(file[0], content)
-
-		return []*config.Configuration{configuration}, nil
 	} else {
 		index := 1
 		configurations := make([]*config.Configuration, 0)
@@ -94,12 +88,15 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 				PageSize: 10,
 			})
 			if err != nil {
-				log.Warnf("search config list failed: %v", err)
-				break
+				return nil, err
 			}
 
 			for _, item := range result.PageItems {
-				configurations = append(configurations, conv(item.DataId, item.Content))
+				if configuration, err := s.load(item.DataId); err != nil {
+					return nil, err
+				} else {
+					configurations = append(configurations, configuration)
+				}
 			}
 
 			if result.PageNumber >= result.PagesAvailable {
@@ -111,6 +108,21 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 		return configurations, nil
 	}
+}
+
+// load 加载配置项
+func (s *Source) load(file string) (*config.Configuration, error) {
+	content, err := s.opts.client.GetConfig(vo.ConfigParam{
+		DataId: file,
+		Group:  s.opts.groupName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	configuration := conv(file, content)
+
+	return configuration, nil
 }
 
 // Store 保存配置项
@@ -126,16 +138,17 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	data := string(content)
 
 	ok, err := s.opts.client.PublishConfig(vo.ConfigParam{
-		DataId:  file,
-		Group:   s.opts.groupName,
-		Content: data,
+		DataId:   file,
+		Group:    s.opts.groupName,
+		Content:  data,
+		OnChange: s.onChange,
 	})
 	if err != nil {
 		return err
 	}
 
-	if ok {
-		s.onChange(s.opts.namespaceId, s.opts.groupName, file, data)
+	if !ok {
+		return errors.ErrStoreConfigFailed
 	}
 
 	return nil
@@ -152,9 +165,7 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, err
 	}
 
-	s.rw.Lock()
-	s.watchers[w] = struct{}{}
-	s.rw.Unlock()
+	s.watchers.Store(w, struct{}{})
 
 	return w, nil
 }
@@ -165,13 +176,14 @@ func (s *Source) Close() error {
 		return s.err
 	}
 
-	if s.builtin {
-		s.opts.client.CloseClient()
-	}
+	// 保证关闭操作只执行一次，避免重复关闭通道导致panic
+	s.once.Do(func() {
+		if s.builtin {
+			s.opts.client.CloseClient()
+		}
 
-	s.cancel()
-	close(s.chListen)
-	close(s.chCancel)
+		s.cancel()
+	})
 
 	return nil
 }
@@ -258,7 +270,11 @@ func (s *Source) search() {
 
 		for _, item := range result.PageItems {
 			if _, ok := s.versions[item.DataId]; !ok {
-				s.chListen <- item.DataId
+				select {
+				case s.chListen <- item.DataId:
+				case <-s.ctx.Done():
+					return
+				}
 			}
 
 			s.versions[item.DataId] = s.version
@@ -273,7 +289,11 @@ func (s *Source) search() {
 
 	for dataId, version := range s.versions {
 		if version != s.version {
-			s.chCancel <- dataId
+			select {
+			case s.chCancel <- dataId:
+			case <-s.ctx.Done():
+				return
+			}
 		}
 	}
 }
@@ -281,11 +301,11 @@ func (s *Source) search() {
 func (s *Source) onChange(_, _, file, content string) {
 	configuration := conv(file, content)
 
-	s.rw.RLock()
-	for w := range s.watchers {
+	s.watchers.Range(func(key, value any) bool {
+		w := key.(*watcher)
 		w.notice(configuration)
-	}
-	s.rw.RUnlock()
+		return true
+	})
 }
 
 // 构建客户端
@@ -293,8 +313,9 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 	param := vo.NacosClientParam{
 		ServerConfigs: make([]constant.ServerConfig, 0, len(s.opts.urls)),
 		ClientConfig: &constant.ClientConfig{
-			TimeoutMs:            uint64(s.opts.timeout.Microseconds()),
+			TimeoutMs:            uint64(s.opts.timeout.Milliseconds()),
 			NamespaceId:          s.opts.namespaceId,
+			ClusterName:          s.opts.clusterName,
 			Endpoint:             s.opts.endpoint,
 			RegionId:             s.opts.regionId,
 			AccessKey:            s.opts.accessKey,
@@ -320,7 +341,7 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 			err, endpoint = e, v
 		} else {
 			host, p, e := net.SplitHostPort(raw.Host)
-			if err != nil {
+			if e != nil {
 				err, endpoint = e, v
 				continue
 			}

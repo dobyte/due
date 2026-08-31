@@ -80,6 +80,7 @@ var (
 	ErrMeshShutdown            = New("mesh is shutdown")
 	ErrCacheClosed             = New("cache is closed")
 	ErrIllegalInvoke           = New("illegal invoke")
+	ErrStoreConfigFailed       = New("store config failed")
 )
 
 // NewError 新建一个错误

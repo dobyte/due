@@ -2,14 +2,10 @@ package nacos
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/config"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
-
-type chWatch struct {
-	key     string
-	content string
-}
 
 type watcher struct {
 	ctx     context.Context
@@ -28,7 +24,21 @@ func newWatcher(ctx context.Context, s *Source) (*watcher, error) {
 }
 
 func (w *watcher) notice(configuration *config.Configuration) {
-	w.chWatch <- []*config.Configuration{configuration}
+	// 丢弃旧数据，保证只发送最新的配置
+	for {
+		select {
+		case <-w.chWatch:
+		default:
+			goto SEND
+		}
+	}
+
+SEND:
+	// 非阻塞发送，避免消费缓慢或已停止的监听器阻塞通知流程
+	select {
+	case w.chWatch <- []*config.Configuration{configuration}:
+	default:
+	}
 }
 
 func (w *watcher) Next() ([]*config.Configuration, error) {
@@ -49,6 +59,8 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 // Stop 停止监听
 func (w *watcher) Stop() error {
 	w.cancel()
+	w.source.watchers.Delete(w)
+
 	return w.source.opts.client.CancelListenConfig(vo.ConfigParam{
 		Group: w.source.opts.groupName,
 	})
