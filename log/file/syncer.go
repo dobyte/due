@@ -219,7 +219,7 @@ func (s *Syncer) flushToFile(e ...*entry) error {
 	}
 
 	if len(e) > 0 {
-		return s.writeEntry(e[0], false)
+		return s.writeEntry(e[0], s.opts.flushInterval <= 0)
 	} else {
 		return nil
 	}
