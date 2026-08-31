@@ -51,7 +51,7 @@ type defaultConfigurator struct {
 	cancel   context.CancelFunc
 	sources  map[string]Source
 	mu       sync.Mutex
-	idx      int64
+	idx      atomic.Int64
 	values   [2]map[string]any
 	rw       sync.RWMutex
 	watchers []*watcher
@@ -112,14 +112,12 @@ func (c *defaultConfigurator) init() {
 
 // 保存配置
 func (c *defaultConfigurator) store(values map[string]any) {
-	idx := atomic.AddInt64(&c.idx, 1) % int64(len(c.values))
-	c.values[idx] = values
+	c.values[c.idx.Add(1)%int64(len(c.values))] = values
 }
 
 // 加载配置
 func (c *defaultConfigurator) load() map[string]any {
-	idx := atomic.LoadInt64(&c.idx) % int64(len(c.values))
-	return c.values[idx]
+	return c.values[c.idx.Load()%int64(len(c.values))]
 }
 
 // 拷贝配置
