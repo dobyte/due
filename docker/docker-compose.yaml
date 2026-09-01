@@ -87,6 +87,24 @@ services:
     networks:
       cluster-network:
         ipv4_address: 192.168.10.6
+  polaris:
+    image: yuebanfuxiao/polaris-standalone:v1.18.1
+    container_name: dev-polaris
+    platform: linux/x86_64
+    restart: always
+    ports:
+      - '8080:8080'
+      - '8090:8090'
+      - '8091:8091'
+      - '8093:8093'
+      - '8094:8094'
+      - '8761:8761'
+      - '9090:9090'
+      - '9091:9091'
+      - '15010:15010'
+    networks:
+      cluster-network:
+        ipv4_address: 192.168.10.7
   # nats:
   #   image: nats:latest
   #   container_name: dev-nats
