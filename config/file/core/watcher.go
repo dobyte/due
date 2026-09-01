@@ -2,12 +2,14 @@ package core
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
-	"github.com/fsnotify/fsnotify"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dobyte/due/v2/config"
+	"github.com/fsnotify/fsnotify"
 )
 
 type watcher struct {
@@ -44,6 +46,7 @@ func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
 		err = fsWatcher.Add(source.path)
 	}
 	if err != nil {
+		_ = fsWatcher.Close()
 		return nil, err
 	}
 
@@ -55,27 +58,44 @@ func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
 	return w, nil
 }
 
-// Next 返回服务实例列表
+// Next 返回配置列表
 func (w *watcher) Next() ([]*config.Configuration, error) {
-	select {
-	case event, ok := <-w.watcher.Events:
-		if !ok {
-			return nil, nil
-		}
-		if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-			c, err := w.source.loadFile(event.Name)
-			if err != nil {
-				return nil, err
+	for {
+		select {
+		case event, ok := <-w.watcher.Events:
+			if !ok {
+				return nil, io.EOF
 			}
-			return []*config.Configuration{c}, nil
-		}
-	case err := <-w.watcher.Errors:
-		return nil, err
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	}
 
-	return nil, nil
+			// 忽略点文件等临时文件，与加载目录配置时的过滤规则保持一致
+			if strings.HasPrefix(filepath.Base(event.Name), ".") {
+				continue
+			}
+
+			// 新建目录需添加到监听器，否则其内部配置文件的变更无法被感知
+			if event.Has(fsnotify.Create) {
+				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+					_ = w.watcher.Add(event.Name)
+					continue
+				}
+			}
+
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				c, err := w.source.loadFile(event.Name)
+				if err != nil {
+					return nil, err
+				}
+				return []*config.Configuration{c}, nil
+			}
+		case err, ok := <-w.watcher.Errors:
+			if !ok {
+				return nil, io.EOF
+			}
+			return nil, err
+		case <-w.ctx.Done():
+			return nil, w.ctx.Err()
+		}
+	}
 }
 
 // Stop 停止监听

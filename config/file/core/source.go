@@ -45,6 +45,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			return nil, errors.New("the specified file cannot be loaded at the file path")
 		}
 
+		if err = checkFilePath(s.path, file[0]); err != nil {
+			return nil, err
+		}
+
 		path = filepath.Join(s.path, file[0])
 	}
 
@@ -80,7 +84,45 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.New("the specified file cannot be modified under the file path")
 	}
 
+	if err = checkFilePath(s.path, file); err != nil {
+		return err
+	}
+
 	return xos.WriteFile(filepath.Join(s.path, file), content)
+}
+
+// 校验保存路径，拒绝绝对路径与包含 .. 的路径穿越
+func checkFilePath(root, file string) error {
+	if file == "" {
+		return errors.New("invalid file path: empty")
+	}
+
+	if filepath.IsAbs(file) {
+		return errors.New("invalid file path: absolute path is not allowed")
+	}
+
+	for _, item := range strings.Split(filepath.ToSlash(file), "/") {
+		if item == ".." {
+			return errors.New("invalid file path: directory traversal is not allowed")
+		}
+	}
+
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+
+	absTarget, err := filepath.Abs(filepath.Join(root, file))
+	if err != nil {
+		return err
+	}
+
+	rel, err := filepath.Rel(absRoot, absTarget)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errors.New("invalid file path: directory traversal is not allowed")
+	}
+
+	return nil
 }
 
 // Watch 监听配置变化
@@ -111,13 +153,31 @@ func (s *Source) loadFile(path string) (*config.Configuration, error) {
 	}
 
 	ext := filepath.Ext(info.Name())
-	path1, _ := filepath.Abs(path)
-	path2, _ := filepath.Abs(s.path)
-	path = strings.TrimPrefix(path1, path2)
-	fullPath := s.path + path
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
+	absRoot, err := filepath.Abs(s.path)
+	if err != nil {
+		return nil, err
+	}
+
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 单文件模式下相对路径为当前目录，使用文件名称作为路径
+	fullPath := filepath.Join(s.path, rel)
+	if rel == "." {
+		rel = info.Name()
+		fullPath = s.path
+	}
 
 	return &config.Configuration{
-		Path:     path,
+		Path:     rel,
 		File:     info.Name(),
 		Name:     strings.TrimSuffix(info.Name(), ext),
 		Format:   strings.TrimPrefix(ext, "."),
