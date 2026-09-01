@@ -13,14 +13,20 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// Name 配置源名称
 const Name = "etcd"
 
+// Source 配置源
 type Source struct {
-	err     error
-	opts    *options
-	builtin bool
+	err     error    // 构建客户端错误信息
+	opts    *options // 配置项
+	builtin bool     // 是否为内建客户端
 }
 
+// NewSource 创建配置源
+// 根据选项构建etcd配置中心客户端；未指定外部客户端时创建内建客户端
+// @param opts ...Option 配置选项
+// @return @1 config.Source 配置源
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -51,12 +57,18 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 配置源名称
+// Name 获取配置源名称
+// @return @1 string 配置源名称
 func (s *Source) Name() string {
 	return Name
 }
 
 // Load 加载配置项
+// 传入file参数时仅加载指定的配置项；未传入file参数时，加载基础路径下所有配置项
+// @param ctx context.Context 上下文
+// @param file ...string 待加载的配置文件名称
+// @return @1 []*config.Configuration 配置项列表
+// @return @2 error 错误信息
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -98,6 +110,11 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 }
 
 // Store 保存配置项
+// 仅支持write-only和read-write模式，其他模式返回无操作权限错误
+// @param ctx context.Context 上下文
+// @param file string 配置文件名称
+// @param content []byte 配置内容
+// @return @1 error 错误信息
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -113,6 +130,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 }
 
 // Watch 监听配置项
+// 先全量拉取一次配置作为初始快照，再创建监听器监听后续变更
+// @param ctx context.Context 上下文
+// @return @1 config.Watcher 监听器
+// @return @2 error 错误信息
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -129,6 +150,8 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 }
 
 // Close 关闭资源
+// 内建客户端时关闭客户端连接，外部客户端由调用方负责关闭
+// @return @1 error 错误信息
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err

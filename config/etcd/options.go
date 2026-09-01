@@ -35,8 +35,10 @@ const (
 	defaultRetryTimesKey  = "etc.config.etcd.retryTimes"
 )
 
+// Option 配置选项函数
 type Option func(o *options)
 
+// 配置项
 type options struct {
 	// 客户端连接地址
 	// 内建客户端配置，默认为[]string{"localhost:2379"}
@@ -73,6 +75,9 @@ type options struct {
 	retryTimes int
 }
 
+// 创建默认配置项
+// 从配置环境中读取各参数并填充默认值
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	return &options{
 		addrs:       etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
@@ -87,11 +92,15 @@ func defaultOptions() *options {
 }
 
 // WithAddrs 设置客户端连接地址
+// @param addrs ...string 客户端连接地址列表
+// @return @1 Option 配置选项函数
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
 // WithDialTimeout 设置客户端拨号超时时间
+// @param dialTimeout time.Duration 客户端拨号超时时间
+// @return @1 Option 配置选项函数
 func WithDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) { o.dialTimeout = dialTimeout }
 }
@@ -107,26 +116,36 @@ func WithPath(path string) Option {
 }
 
 // WithMode 设置读写模式
+// @param mode config.Mode 读写模式
+// @return @1 Option 配置选项函数
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }
 
 // WithUsername 设置用户名
+// @param username string 用户名
+// @return @1 Option 配置选项函数
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
 // WithPassword 设置密码
+// @param password string 密码
+// @return @1 Option 配置选项函数
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
 // WithTimeout 设置上下文超时时间
+// @param timeout time.Duration 上下文超时时间
+// @return @1 Option 配置选项函数
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
 // WithRetryTimes 设置重连重试次数
+// @param retryTimes int 重连重试次数
+// @return @1 Option 配置选项函数
 func WithRetryTimes(retryTimes int) Option {
 	return func(o *options) { o.retryTimes = retryTimes }
 }

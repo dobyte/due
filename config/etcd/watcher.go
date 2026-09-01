@@ -16,20 +16,28 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// 监听器
 type watcher struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	source  *Source
-	watcher clientv3.Watcher
-	watchCh clientv3.WatchChan
-	mu      sync.Mutex
-	chWatch chan []*config.Configuration
-	rw      sync.RWMutex
-	configs map[string]*config.Configuration
-	stopped atomic.Bool
-	wg      sync.WaitGroup
+	ctx     context.Context                  // 上下文
+	cancel  context.CancelFunc               // 取消函数
+	source  *Source                          // 配置源
+	watcher clientv3.Watcher                 // etcd监听器
+	watchCh clientv3.WatchChan               // etcd监听通道
+	mu      sync.Mutex                       // 发送锁
+	chWatch chan []*config.Configuration     // 配置变更通道
+	rw      sync.RWMutex                     // 配置快照读写锁
+	configs map[string]*config.Configuration // 配置快照
+	stopped atomic.Bool                      // 是否已停止
+	wg      sync.WaitGroup                   // 等待协程退出
 }
 
+// 创建监听器
+// 以全量拉取结果作为初始快照，并从拉取时的版本号之后开始监听，避免丢失配置变更
+// @param ctx context.Context 上下文
+// @param s *Source 配置源
+// @param res *clientv3.GetResponse 初始快照拉取结果
+// @return @1 config.Watcher 监听器
+// @return @2 error 错误信息
 func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) (config.Watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
@@ -79,7 +87,10 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) (conf
 	return w, nil
 }
 
-// Next 返回配置列表，阻塞等待配置变更
+// Next 返回配置列表
+// 阻塞等待配置变更，监听被停止时返回错误
+// @return @1 []*config.Configuration 配置项列表
+// @return @2 error 错误信息
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
@@ -94,6 +105,10 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 }
 
 // 解析配置
+// 将etcd的键值对转换为统一的配置结构
+// @param key []byte 配置键名
+// @param value []byte 配置内容
+// @return @1 *config.Configuration 配置项
 func (w *watcher) parseKV(key []byte, value []byte) *config.Configuration {
 	fullPath := string(key)
 	path := strings.TrimPrefix(fullPath, w.source.opts.path)
@@ -110,7 +125,8 @@ func (w *watcher) parseKV(key []byte, value []byte) *config.Configuration {
 	}
 }
 
-// watch 事件循环
+// 监听事件循环
+// 处理etcd监听事件：PUT更新配置快照，DELETE删除配置快照，然后广播最新配置
 func (w *watcher) watchLoop() {
 	for {
 		select {
@@ -143,7 +159,9 @@ func (w *watcher) watchLoop() {
 	}
 }
 
-// 全量重连并重试，watch失效后重新拉取全量配置并重建监听，直到成功或监听被停止
+// 全量重连并重试
+// watch失效后重新拉取全量配置并重建监听，直到成功或监听被停止
+// @return @1 bool 是否重建成功
 func (w *watcher) resync() bool {
 	retryTimes := max(1, w.source.opts.retryTimes)
 
@@ -191,6 +209,7 @@ func (w *watcher) resync() bool {
 }
 
 // 广播配置列表
+// 从配置快照中获取全量配置并通知监听器
 func (w *watcher) broadcast() {
 	w.rw.RLock()
 	configs := w.snapshot()
@@ -200,6 +219,8 @@ func (w *watcher) broadcast() {
 }
 
 // 通知监听器配置列表已更新
+// 清空旧数据后非阻塞发送最新配置快照
+// @param configs []*config.Configuration 配置项列表
 func (w *watcher) notify(configs []*config.Configuration) {
 	if w.stopped.Load() {
 		return
@@ -243,6 +264,7 @@ func (w *watcher) snapshot() []*config.Configuration {
 }
 
 // Stop 停止监听
+// @return @1 error 错误信息
 func (w *watcher) Stop() error {
 	w.release()
 
@@ -252,6 +274,7 @@ func (w *watcher) Stop() error {
 }
 
 // 释放资源
+// 取消上下文、关闭etcd监听器并关闭配置变更通道
 func (w *watcher) release() {
 	if !w.stopped.CompareAndSwap(false, true) {
 		return
