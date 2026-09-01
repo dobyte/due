@@ -1,4 +1,4 @@
-package nacos
+package polaris
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
+// watcher 监听器
 type watcher struct {
 	ctx     context.Context              // 上下文
 	cancel  context.CancelFunc           // 取消函数
@@ -23,23 +24,28 @@ func newWatcher(ctx context.Context, s *Source) (*watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
 	w.source = s
-	w.chWatch = make(chan struct{}, 1)
-	w.pending = make(map[string]*config.Configuration)
+	w.chWatch = make(chan []*config.Configuration, 2)
 
-	return w
+	return w, nil
 }
 
 // notice 通知配置变更
 // 丢弃旧的未消费数据，保证只发送最新的配置，并以非阻塞方式发送，避免阻塞通知流程
 // @param configuration *config.Configuration 变更后的配置项
 func (w *watcher) notice(configuration *config.Configuration) {
-	w.mu.Lock()
-	w.pending[configuration.File] = configuration
-	w.mu.Unlock()
+	// 丢弃旧数据，保证只发送最新的配置
+	for {
+		select {
+		case <-w.chWatch:
+		default:
+			goto SEND
+		}
+	}
 
-	// 非阻塞发送信号，避免消费缓慢或已停止的监听器阻塞通知流程
+SEND:
+	// 非阻塞发送，避免消费缓慢或已停止的监听器阻塞通知流程
 	select {
-	case w.chWatch <- struct{}{}:
+	case w.chWatch <- []*config.Configuration{configuration}:
 	default:
 	}
 }

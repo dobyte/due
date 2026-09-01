@@ -2,19 +2,27 @@ package consul
 
 import (
 	"context"
-	"github.com/dobyte/due/v2/config"
-	"github.com/hashicorp/consul/api"
 	"path/filepath"
 	"strings"
+
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/hashicorp/consul/api"
 )
 
+// Name 配置源名称
 const Name = "consul"
 
+// Source 配置源
 type Source struct {
-	err  error
-	opts *options
+	err  error    // 构建客户端错误信息
+	opts *options // 配置项
 }
 
+// NewSource 创建配置源
+// 根据选项构建Consul配置中心客户端；未指定外部客户端时创建内建客户端
+// @param opts ...Option 配置选项
+// @return @1 config.Source 配置源
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -37,12 +45,18 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 配置源名称
+// Name 获取配置源名称
+// @return @1 string 配置源名称
 func (s *Source) Name() string {
 	return Name
 }
 
 // Load 加载配置项
+// 传入file参数时仅加载指定的配置项；未传入file参数时，加载基础路径下所有配置项
+// @param ctx context.Context 上下文
+// @param file ...string 待加载的配置文件名称
+// @return @1 []*config.Configuration 配置项列表
+// @return @2 error 错误信息
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -87,9 +101,18 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 }
 
 // Store 保存配置项
+// 仅支持write-only和read-write模式，其他模式返回无操作权限错误
+// @param ctx context.Context 上下文
+// @param file string 配置文件名称
+// @param content []byte 配置内容
+// @return @1 error 错误信息
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
+	}
+
+	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
+		return errors.ErrNoOperationPermission
 	}
 
 	var key string
@@ -109,6 +132,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 }
 
 // Watch 监听配置项
+// 创建监听器并监听基础路径下的配置变更
+// @param ctx context.Context 上下文
+// @return @1 config.Watcher 监听器
+// @return @2 error 错误信息
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -118,6 +145,7 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 }
 
 // Close 关闭配置源
+// @return @1 error 错误信息
 func (s *Source) Close() error {
 	return nil
 }

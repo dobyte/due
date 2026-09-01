@@ -86,7 +86,11 @@ func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	for {
 		select {
 		case services, ok := <-w.chWatch:
-			if !ok && !exist {
+			if !ok {
+				if exist {
+					return instances, nil
+				}
+
 				return nil, errors.ErrWatcherStopped
 			}
 
@@ -173,8 +177,6 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 	)
 
 	wm.wg.Go(func() {
-		defer wm.wg.Done()
-
 		for {
 			wm.watchLoop()
 

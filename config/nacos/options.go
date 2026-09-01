@@ -47,8 +47,10 @@ const (
 	defaultLogLevelKey    = "etc.config.nacos.logLevel"
 )
 
+// Option 配置项
 type Option func(o *options)
 
+// options 配置选项
 type options struct {
 	// 上下文
 	// 默认context.Background
@@ -124,6 +126,8 @@ type options struct {
 	logLevel string
 }
 
+// defaultOptions 获取默认配置项
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	return &options{
 		ctx:         context.Background(),
@@ -146,92 +150,128 @@ func defaultOptions() *options {
 	}
 }
 
-// WithContext 设置context
+// WithContext 设置上下文
+// @param ctx context.Context 上下文
+// @return @1 Option 配置项
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
 // WithMode 设置读写模式
+// @param mode config.Mode 读写模式
+// @return @1 Option 配置项
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }
 
 // WithUrls 设置服务器地址
+// @param urls ...string 服务器地址列表
+// @return @1 Option 配置项
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
 }
 
 // WithClient 设置外部客户端
+// @param client config_client.IConfigClient 外部客户端
+// @return @1 Option 配置项
 func WithClient(client config_client.IConfigClient) Option {
 	return func(o *options) { o.client = client }
 }
 
 // WithClusterName 设置集群名称
+// @param clusterName string 集群名称
+// @return @1 Option 配置项
 func WithClusterName(clusterName string) Option {
 	return func(o *options) { o.clusterName = clusterName }
 }
 
 // WithGroupName 设置群组名称
+// @param groupName string 群组名称
+// @return @1 Option 配置项
 func WithGroupName(groupName string) Option {
 	return func(o *options) { o.groupName = groupName }
 }
 
 // WithTimeout 设置请求Nacos服务端超时时间
+// @param timeout time.Duration 请求超时时间
+// @return @1 Option 配置项
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
 // WithNamespaceId 设置ACM的命名空间Id
+// @param namespaceId string 命名空间Id
+// @return @1 Option 配置项
 func WithNamespaceId(namespaceId string) Option {
 	return func(o *options) { o.namespaceId = namespaceId }
 }
 
 // WithEndpoint 设置ACM的服务端点
+// @param endpoint string 服务端点
+// @return @1 Option 配置项
 func WithEndpoint(endpoint string) Option {
 	return func(o *options) { o.endpoint = endpoint }
 }
 
 // WithRegionId 设置ACM&KMS的regionId
+// @param regionId string regionId
+// @return @1 Option 配置项
 func WithRegionId(regionId string) Option {
 	return func(o *options) { o.regionId = regionId }
 }
 
 // WithAccessKey 设置ACM&KMS的AccessKey
+// @param accessKey string AccessKey
+// @return @1 Option 配置项
 func WithAccessKey(accessKey string) Option {
 	return func(o *options) { o.accessKey = accessKey }
 }
 
 // WithSecretKey 设置ACM&KMS的SecretKey
+// @param secretKey string SecretKey
+// @return @1 Option 配置项
 func WithSecretKey(secretKey string) Option {
 	return func(o *options) { o.secretKey = secretKey }
 }
 
-// WithOpenKMS 设置是否是否开启KMS
+// WithOpenKMS 设置是否开启KMS
+// @param openKMS bool 是否开启KMS
+// @return @1 Option 配置项
 func WithOpenKMS(openKMS bool) Option {
 	return func(o *options) { o.openKMS = openKMS }
 }
 
 // WithCacheDir 设置service信息的缓存目录
+// @param cacheDir string 缓存目录
+// @return @1 Option 配置项
 func WithCacheDir(cacheDir string) Option {
 	return func(o *options) { o.cacheDir = cacheDir }
 }
 
 // WithUsername 设置Nacos服务端的API鉴权Username
+// @param username string API鉴权用户名
+// @return @1 Option 配置项
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
 // WithPassword 设置Nacos服务端的API鉴权Password
+// @param password string API鉴权密码
+// @return @1 Option 配置项
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
 // WithLogDir 设置日志存储路径
+// @param logDir string 日志存储路径
+// @return @1 Option 配置项
 func WithLogDir(logDir string) Option {
 	return func(o *options) { o.logDir = logDir }
 }
 
 // WithLogLevel 设置日志输出级别
+// @param logLevel string 日志输出级别
+// @return @1 Option 配置项
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) { o.logLevel = logLevel }
 }

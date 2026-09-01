@@ -186,6 +186,7 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 
 				if chKA, err = r.lease.KeepAlive(ctx, newLeaseID); err != nil {
 					log.Warnf("etcd keepalive failed, retry %d times, err: %v", attempt+1, err)
+					r.revoke(newLeaseID)
 					return true, nil
 				}
 
@@ -210,6 +211,14 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 			}, r.registry.opts.retryTimes, 100*time.Millisecond, 1000*time.Millisecond)
 
 			if !ok {
+				// 已被重新注册取代的旧保活协程直接退出，不得销毁新的注册
+				r.mu.Lock()
+				current := r.ctx == ctx
+				r.mu.Unlock()
+				if !current {
+					return
+				}
+
 				if !r.stopped.CompareAndSwap(false, true) {
 					return
 				}

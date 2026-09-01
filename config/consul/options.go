@@ -2,6 +2,7 @@ package consul
 
 import (
 	"context"
+
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/hashicorp/consul/api"
@@ -19,8 +20,10 @@ const (
 	defaultModeKey = "etc.config.consul.mode"
 )
 
+// Option 配置选项函数
 type Option func(o *options)
 
+// 配置项
 type options struct {
 	// 上下文
 	// 默认为context.Background
@@ -43,6 +46,9 @@ type options struct {
 	mode config.Mode
 }
 
+// 创建默认配置项
+// 从配置环境中读取各参数并填充默认值
+// @return @1 *options 默认配置项
 func defaultOptions() *options {
 	return &options{
 		ctx:  context.Background(),
@@ -62,12 +68,16 @@ func WithClient(client *api.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithContext 设置context
+// WithContext 设置上下文
+// @param ctx context.Context 上下文
+// @return @1 Option 配置选项函数
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
 // WithPath 设置基础路径
+// @param path string 基础路径
+// @return @1 Option 配置选项函数
 func WithPath(path string) Option {
 	return func(o *options) { o.path = path }
 }
