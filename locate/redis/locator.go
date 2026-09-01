@@ -202,7 +202,7 @@ func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
 		return err
 	}
 
-	if rst[0] == "OK" {
+	if len(rst) > 0 && rst[0] == "OK" {
 		if err = l.broadcast(ctx, locate.UnbindGate, uid, gid); err != nil {
 			log.Errorf("location event broadcast failed: %v", err)
 		}
@@ -229,7 +229,7 @@ func (l *Locator) UnbindNode(ctx context.Context, uid int64, name, nid string) e
 		return err
 	}
 
-	if rst[0] == "OK" {
+	if len(rst) > 0 && rst[0] == "OK" {
 		if err = l.broadcast(ctx, locate.UnbindNode, uid, nid, name); err != nil {
 			log.Errorf("location event broadcast failed: %v", err)
 		}
@@ -253,7 +253,9 @@ func (l *Locator) Close() error {
 			if err := wm.sub.Close(); err != nil && !errors.Is(err, redis.ErrClosed) {
 				log.Errorf("close pubsub failed, %v", err)
 			}
+			wm.wg.Wait()
 		}
+		l.watchers.Delete(key)
 		return true
 	})
 
@@ -304,7 +306,7 @@ func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, e
 		return nil, l.err
 	}
 
-	mgr, err := l.doBuildWatcherMgr(ctx, kinds...)
+	mgr, err := l.doBuildWatcherMgr(kinds...)
 	if err != nil {
 		return nil, err
 	}
@@ -314,11 +316,10 @@ func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, e
 
 // 构建定位管理器
 // 复用相同实例类型组合的监听管理器，不存在时创建新的监听管理器
-// @param ctx context.Context 上下文
 // @param kinds ...string 实例类型列表
 // @return @1 *watcherMgr 定位监听管理器
 // @return @2 error 构建失败时返回的错误
-func (l *Locator) doBuildWatcherMgr(ctx context.Context, kinds ...string) (*watcherMgr, error) {
+func (l *Locator) doBuildWatcherMgr(kinds ...string) (*watcherMgr, error) {
 	key := toUniqueKey(kinds...)
 
 	v, ok := l.watchers.Load(key)
@@ -333,7 +334,7 @@ func (l *Locator) doBuildWatcherMgr(ctx context.Context, kinds ...string) (*watc
 		return v.(*watcherMgr), nil
 	}
 
-	mgr, err := newWatcherMgr(ctx, l, key, kinds...)
+	mgr, err := newWatcherMgr(l, key, kinds...)
 	if err != nil {
 		return nil, err
 	}

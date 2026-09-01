@@ -126,19 +126,19 @@ type watcherMgr struct {
 	key      string             // 唯一键
 	sub      *redis.PubSub      // Redis发布订阅
 	rw       sync.RWMutex       // 读写锁
+	wg       sync.WaitGroup     // 接收协程等待组
 	idx      atomic.Int64       // 监听器序号
 	watchers map[int64]*watcher // 监听器集合
 }
 
 // 创建定位监听管理器
 // 订阅指定实例类型的事件通道，并启动协程消费发布订阅消息
-// @param ctx context.Context 上下文
 // @param l *Locator 定位器
 // @param key string 唯一键
 // @param kinds ...string 实例类型列表
 // @return @1 *watcherMgr 定位监听管理器
 // @return @2 error 订阅失败时返回的错误
-func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string) (*watcherMgr, error) {
+func newWatcherMgr(l *Locator, key string, kinds ...string) (*watcherMgr, error) {
 	if len(kinds) == 0 {
 		return nil, errors.ErrInvalidArgument
 	}
@@ -148,9 +148,9 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, l.opts.db, kind))
 	}
 
-	sub := l.opts.client.Subscribe(ctx)
+	sub := l.opts.client.Subscribe(l.ctx)
 
-	if err := sub.Subscribe(ctx, channels...); err != nil {
+	if err := sub.Subscribe(l.ctx, channels...); err != nil {
 		if e := sub.Close(); e != nil {
 			log.Errorf("close pubsub failed, %v", e)
 		}
@@ -165,10 +165,16 @@ func newWatcherMgr(ctx context.Context, l *Locator, key string, kinds ...string)
 	wm.key = key
 	wm.sub = sub
 
+	wm.wg.Add(1)
 	go func() {
+		defer wm.wg.Done()
+
 		for {
 			iface, err := wm.sub.Receive(wm.ctx)
 			if err != nil {
+				if !errors.Is(err, redis.ErrClosed) && wm.ctx.Err() == nil {
+					log.Errorf("receive pubsub message failed: %v", err)
+				}
 				return
 			}
 
@@ -211,14 +217,19 @@ func (wm *watcherMgr) fork() (locate.Watcher, error) {
 // @return @1 error 关闭订阅失败时返回的错误
 func (wm *watcherMgr) recycle(idx int64) error {
 	wm.rw.Lock()
-	defer wm.rw.Unlock()
-
 	delete(wm.watchers, idx)
 
-	if len(wm.watchers) == 0 {
+	shouldClose := len(wm.watchers) == 0
+	if shouldClose {
 		wm.cancel()
 		wm.locator.watchers.Delete(wm.key)
-		return wm.sub.Close()
+	}
+	wm.rw.Unlock()
+
+	if shouldClose {
+		if err := wm.sub.Close(); err != nil && !errors.Is(err, redis.ErrClosed) {
+			return err
+		}
 	}
 
 	return nil
