@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 )
 
 type watcher struct {
@@ -58,9 +59,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 		return nil, w.ctx.Err()
 	case configs, ok := <-w.chWatch:
 		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
+			return nil, errors.ErrWatcherStopped
 		}
 
 		return configs, nil
