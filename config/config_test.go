@@ -70,7 +70,7 @@ func TestLoad(t *testing.T) {
 }
 
 func BenchmarkGet(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		config.Get("config").Value()
 	}
 }
