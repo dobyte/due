@@ -11,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -24,21 +23,23 @@ const name = "redis"
 
 var _ locate.Locator = &Locator{}
 
+// Locator Redis定位器
 type Locator struct {
 	err              error
 	opts             *options
 	builtin          bool
 	ctx              context.Context
 	cancel           context.CancelFunc
-	sfg1             singleflight.Group
-	sfg2             singleflight.Group
-	sfg3             singleflight.Group
 	mu               sync.Mutex
 	watchers         sync.Map
 	unbindGateScript *redis.Script
 	unbindNodeScript *redis.Script
 }
 
+// NewLocator 创建Redis定位器
+// 初始化定位器及内建Redis客户端，未注入外部客户端时默认连接127.0.0.1:6379
+// @param opts ...Option 定位器配置项
+// @return @1 *Locator Redis定位器实例
 func NewLocator(opts ...Option) *Locator {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -78,11 +79,16 @@ func NewLocator(opts ...Option) *Locator {
 }
 
 // Name 获取定位器组件名
+// @return @1 string 定位器组件名
 func (l *Locator) Name() string {
 	return name
 }
 
 // LocateGate 定位用户所在网关
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @return @1 string 用户所在的网关ID
+// @return @2 error 定位失败时返回的错误
 func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 	if l.err != nil {
 		return "", l.err
@@ -90,22 +96,19 @@ func (l *Locator) LocateGate(ctx context.Context, uid int64) (string, error) {
 
 	key := fmt.Sprintf(userGateKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg1.Do(key, func() (any, error) {
-		val, err := l.opts.client.Get(ctx, key).Result()
-		if err != nil && !errors.Is(err, redis.Nil) {
-			return "", err
-		}
-
-		return val, nil
-	})
-	if err != nil {
+	if val, err := l.opts.client.Get(ctx, key).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return "", err
+	} else {
+		return val, nil
 	}
-
-	return val.(string), nil
 }
 
 // LocateNode 定位用户所在节点
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @param name string 节点名称
+// @return @1 string 用户所在的节点ID
+// @return @2 error 定位失败时返回的错误
 func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
 	if l.err != nil {
 		return "", l.err
@@ -113,22 +116,18 @@ func (l *Locator) LocateNode(ctx context.Context, uid int64, name string) (strin
 
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg2.Do(key+name, func() (any, error) {
-		val, err := l.opts.client.HGet(ctx, key, name).Result()
-		if err != nil && !errors.Is(err, redis.Nil) {
-			return "", err
-		}
-
-		return val, nil
-	})
-	if err != nil {
+	if val, err := l.opts.client.HGet(ctx, key, name).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return "", err
+	} else {
+		return val, nil
 	}
-
-	return val.(string), nil
 }
 
 // LocateNodes 定位用户所在节点列表
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @return @1 map[string]string 用户绑定的节点名称到节点ID的映射
+// @return @2 error 定位失败时返回的错误
 func (l *Locator) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
 	if l.err != nil {
 		return nil, l.err
@@ -136,22 +135,14 @@ func (l *Locator) LocateNodes(ctx context.Context, uid int64) (map[string]string
 
 	key := fmt.Sprintf(userNodeKey, l.opts.prefix, uid)
 
-	val, err, _ := l.sfg3.Do(key, func() (any, error) {
-		val, err := l.opts.client.HGetAll(ctx, key).Result()
-		if err != nil {
-			return nil, err
-		}
-
-		return val, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return val.(map[string]string), nil
+	return l.opts.client.HGetAll(ctx, key).Result()
 }
 
 // BindGate 绑定网关
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @param gid string 网关ID
+// @return @1 error 绑定失败时返回的错误
 func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
 	if l.err != nil {
 		return l.err
@@ -171,6 +162,11 @@ func (l *Locator) BindGate(ctx context.Context, uid int64, gid string) error {
 }
 
 // BindNode 绑定节点
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @param name string 节点名称
+// @param nid string 节点ID
+// @return @1 error 绑定失败时返回的错误
 func (l *Locator) BindNode(ctx context.Context, uid int64, name, nid string) error {
 	if l.err != nil {
 		return l.err
@@ -190,6 +186,10 @@ func (l *Locator) BindNode(ctx context.Context, uid int64, name, nid string) err
 }
 
 // UnbindGate 解绑网关
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @param gid string 网关ID
+// @return @1 error 解绑失败时返回的错误
 func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
 	if l.err != nil {
 		return l.err
@@ -212,6 +212,11 @@ func (l *Locator) UnbindGate(ctx context.Context, uid int64, gid string) error {
 }
 
 // UnbindNode 解绑节点
+// @param ctx context.Context 上下文
+// @param uid int64 用户ID
+// @param name string 节点名称
+// @param nid string 节点ID
+// @return @1 error 解绑失败时返回的错误
 func (l *Locator) UnbindNode(ctx context.Context, uid int64, name, nid string) error {
 	if l.err != nil {
 		return l.err
@@ -234,12 +239,23 @@ func (l *Locator) UnbindNode(ctx context.Context, uid int64, name, nid string) e
 }
 
 // Close 关闭定位器
+// @return @1 error 关闭失败时返回的错误
 func (l *Locator) Close() error {
 	if l.err != nil {
 		return l.err
 	}
 
 	l.cancel()
+
+	l.watchers.Range(func(key, value any) bool {
+		if wm, ok := value.(*watcherMgr); ok {
+			wm.cancel()
+			if err := wm.sub.Close(); err != nil && !errors.Is(err, redis.ErrClosed) {
+				log.Errorf("close pubsub failed, %v", err)
+			}
+		}
+		return true
+	})
 
 	if l.builtin {
 		return l.opts.client.Close()
@@ -248,7 +264,14 @@ func (l *Locator) Close() error {
 	return nil
 }
 
-// 广播事件
+// 广播定位事件
+// 将定位事件通过Redis发布订阅广播给所有监听者
+// @param ctx context.Context 上下文
+// @param typ locate.EventType 事件类型
+// @param uid int64 用户ID
+// @param insID string 实例ID
+// @param insName ...string 可选，实例名称
+// @return @1 error 广播失败时返回的错误
 func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64, insID string, insName ...string) error {
 	evt := &locate.Event{UID: uid, Type: typ, InsID: insID}
 
@@ -272,6 +295,10 @@ func (l *Locator) broadcast(ctx context.Context, typ locate.EventType, uid int64
 }
 
 // Watch 监听用户定位变化
+// @param ctx context.Context 上下文
+// @param kinds ...string 实例类型列表
+// @return @1 locate.Watcher 定位监听器
+// @return @2 error 监听失败时返回的错误
 func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, error) {
 	if l.err != nil {
 		return nil, l.err
@@ -286,6 +313,11 @@ func (l *Locator) Watch(ctx context.Context, kinds ...string) (locate.Watcher, e
 }
 
 // 构建定位管理器
+// 复用相同实例类型组合的监听管理器，不存在时创建新的监听管理器
+// @param ctx context.Context 上下文
+// @param kinds ...string 实例类型列表
+// @return @1 *watcherMgr 定位监听管理器
+// @return @2 error 构建失败时返回的错误
 func (l *Locator) doBuildWatcherMgr(ctx context.Context, kinds ...string) (*watcherMgr, error) {
 	key := toUniqueKey(kinds...)
 
