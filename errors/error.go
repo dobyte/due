@@ -37,6 +37,7 @@ var (
 	ErrNoOperationPermission   = New("no operation permission")
 	ErrInvalidConfigContent    = New("invalid config content")
 	ErrNotFoundConfigSource    = New("not found config source")
+	ErrConfigStoreFailed       = New("config store failed")
 	ErrInvalidFormat           = New("invalid format")
 	ErrIllegalRequest          = New("illegal request")
 	ErrIllegalOperation        = New("illegal operation")
@@ -80,7 +81,6 @@ var (
 	ErrMeshShutdown            = New("mesh is shutdown")
 	ErrCacheClosed             = New("cache is closed")
 	ErrIllegalInvoke           = New("illegal invoke")
-	ErrStoreConfigFailed       = New("store config failed")
 )
 
 // NewError 新建一个错误

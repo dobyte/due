@@ -70,7 +70,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
-	if len(file) > 0 {
+	if len(file) > 0 && file[0] != "" {
 		if configuration, err := s.load(file[0]); err != nil {
 			return nil, err
 		} else {
@@ -138,17 +138,16 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	data := string(content)
 
 	ok, err := s.opts.client.PublishConfig(vo.ConfigParam{
-		DataId:   file,
-		Group:    s.opts.groupName,
-		Content:  data,
-		OnChange: s.onChange,
+		DataId:  file,
+		Group:   s.opts.groupName,
+		Content: data,
 	})
 	if err != nil {
 		return err
 	}
 
-	if !ok {
-		return errors.ErrStoreConfigFailed
+	if ok {
+		s.onChange(s.opts.namespaceId, s.opts.groupName, file, data)
 	}
 
 	return nil
@@ -160,11 +159,7 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, s.err
 	}
 
-	w, err := newWatcher(ctx, s)
-	if err != nil {
-		return nil, err
-	}
-
+	w := newWatcher(ctx, s)
 	s.watchers.Store(w, struct{}{})
 
 	return w, nil
@@ -231,6 +226,8 @@ func (s *Source) refresh() {
 		return
 	}
 
+	s.search()
+
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
@@ -265,7 +262,7 @@ func (s *Source) search() {
 		})
 		if err != nil {
 			log.Warnf("search config list failed: %v", err)
-			break
+			return
 		}
 
 		for _, item := range result.PageItems {
@@ -294,6 +291,8 @@ func (s *Source) search() {
 			case <-s.ctx.Done():
 				return
 			}
+
+			delete(s.versions, dataId)
 		}
 	}
 }
