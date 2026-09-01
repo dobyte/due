@@ -20,6 +20,8 @@ const (
 	defaultDialTimeout = "5s"
 	defaultPath        = "/config"
 	defaultMode        = config.ReadOnly
+	defaultTimeout     = "3s"
+	defaultRetryTimes  = 3
 )
 
 const (
@@ -29,6 +31,8 @@ const (
 	defaultModeKey        = "etc.config.etcd.mode"
 	defaultUsernameKey    = "etc.config.etcd.username"
 	defaultPasswordKey    = "etc.config.etcd.password"
+	defaultTimeoutKey     = "etc.config.etcd.timeout"
+	defaultRetryTimesKey  = "etc.config.etcd.retryTimes"
 )
 
 type Option func(o *options)
@@ -59,6 +63,14 @@ type options struct {
 
 	// 密码
 	password string
+
+	// 上下文超时时间
+	// 默认为3秒
+	timeout time.Duration
+
+	// 重连重试次数
+	// 监听失效后重建监听的退避重试次数，默认为3次
+	retryTimes int
 }
 
 func defaultOptions() *options {
@@ -69,6 +81,8 @@ func defaultOptions() *options {
 		mode:        config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
 		username:    etc.Get(defaultUsernameKey).String(),
 		password:    etc.Get(defaultPasswordKey).String(),
+		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
+		retryTimes:  etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 	}
 }
 
@@ -105,4 +119,14 @@ func WithUsername(username string) Option {
 // WithPassword 设置密码
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
+}
+
+// WithTimeout 设置上下文超时时间
+func WithTimeout(timeout time.Duration) Option {
+	return func(o *options) { o.timeout = timeout }
+}
+
+// WithRetryTimes 设置重连重试次数
+func WithRetryTimes(retryTimes int) Option {
+	return func(o *options) { o.retryTimes = retryTimes }
 }

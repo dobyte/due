@@ -8,6 +8,7 @@ import (
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -28,7 +29,14 @@ func NewSource(opts ...Option) config.Source {
 
 	s := &Source{}
 	s.opts = o
-	s.opts.path = fmt.Sprintf("/%s", strings.TrimSuffix(strings.TrimPrefix(s.opts.path, "/"), "/"))
+
+	// 归一化路径并强制追加尾部斜杠，避免WithPrefix误匹配兄弟命名空间的键（如/config2、/confighost）
+	path := strings.Trim(o.path, "/")
+	if path == "" {
+		log.Warnf("invalid config path, use default path: %s", defaultPath)
+		path = strings.Trim(defaultPath, "/")
+	}
+	s.opts.path = fmt.Sprintf("/%s/", path)
 
 	if o.client == nil {
 		s.builtin = true
@@ -60,7 +68,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	)
 
 	if len(file) > 0 && file[0] != "" {
-		key += "/" + strings.TrimPrefix(file[0], "/")
+		key += strings.TrimPrefix(file[0], "/")
 	} else {
 		opts = append(opts, clientv3.WithPrefix())
 	}
@@ -99,7 +107,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
+	key := s.opts.path + strings.TrimPrefix(file, "/")
 	_, err := s.opts.client.Put(ctx, key, xconv.String(content))
 	return err
 }
@@ -110,7 +118,14 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, s.err
 	}
 
-	return newWatcher(ctx, s)
+	// 先全量拉取一次配置，作为监听初始快照，并记录监听起始版本号
+	res, err := s.opts.client.Get(ctx, s.opts.path, clientv3.WithPrefix())
+	if err != nil {
+		log.Warnf("etcd watch get failed: %v", err)
+		res = nil
+	}
+
+	return newWatcher(ctx, s, res)
 }
 
 // Close 关闭资源
