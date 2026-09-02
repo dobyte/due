@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
@@ -34,9 +33,10 @@ type registrar struct {
 	wg       sync.WaitGroup
 }
 
-func newRegistrar(registry *Registry) *registrar {
+func newRegistrar(registry *Registry, insID string) *registrar {
 	r := &registrar{}
 	r.registry = registry
+	r.insID = insID
 
 	return r
 }
@@ -46,7 +46,9 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 		return errors.ErrIllegalOperation
 	}
 
-	insID, err := r.put(ctx, ins)
+	tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+	insID, err := r.put(tctx, ins)
+	tcancel()
 	if err != nil {
 		return err
 	}
@@ -61,7 +63,6 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	oldCancel := r.cancel
 	ctx, cancel := context.WithCancel(context.Background())
-	r.insID = insID
 	r.ctx = ctx
 	r.cancel = cancel
 
@@ -76,27 +77,48 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	}
 
 	if r.registry.opts.enableHeartbeatCheck {
-		go r.heartbeat(ctx, insID)
+		go r.heartbeat(ctx, ins)
 	}
 
 	return nil
 }
 
-func (r *registrar) deregister(_ context.Context, ins *registry.ServiceInstance) error {
-	if err := r.registry.opts.client.Agent().ServiceDeregister(makeInsID(ins)); err != nil {
+func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	defer r.stop()
+
+	dctx, cancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+	defer cancel()
+
+	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(makeInsID(ins), (&api.QueryOptions{}).WithContext(dctx)); err != nil {
 		return err
 	}
 
-	r.stop()
-
 	return nil
 }
 
+// 停止注册
+// 仅停止心跳并等待协程退出，不主动注销服务
 func (r *registrar) stop() {
 	if !r.stopped.CompareAndSwap(false, true) {
 		return
 	}
 
+	r.cleanup()
+
+	r.wg.Wait()
+}
+
+// 关闭注册
+// 主动注销服务并停止心跳，等待协程退出
+func (r *registrar) close() {
+	r.deregisterService(r.insID)
+
+	r.stop()
+}
+
+// 清理注册资源
+// 取消心跳并移除注册器，不等待心跳协程退出（供心跳协程自身调用，避免自等待）
+func (r *registrar) cleanup() {
 	r.mu.Lock()
 	cancel := r.cancel
 	r.cancel = nil
@@ -106,10 +128,10 @@ func (r *registrar) stop() {
 		cancel()
 	}
 
-	r.wg.Wait()
+	r.registry.registrars.Delete(r.insID)
 }
 
-func (r *registrar) put(_ context.Context, ins *registry.ServiceInstance) (string, error) {
+func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (string, error) {
 	raw, err := url.Parse(ins.Endpoint)
 	if err != nil {
 		return "", err
@@ -145,18 +167,24 @@ func (r *registrar) put(_ context.Context, ins *registry.ServiceInstance) (strin
 	}
 
 	if len(ins.Events) > 0 {
-		if events, err := json.Marshal(ins.Events); err != nil {
+		metas, err := marshalMetaList(metaFieldEvents, ins.Events)
+		if err != nil {
 			return "", err
-		} else {
-			registration.Meta[metaFieldEvents] = xconv.BytesToString(events)
+		}
+
+		for field, value := range metas {
+			registration.Meta[field] = value
 		}
 	}
 
 	if len(ins.Services) > 0 {
-		if services, err := json.Marshal(ins.Services); err != nil {
+		metas, err := marshalMetaList(metaFieldServices, ins.Services)
+		if err != nil {
 			return "", err
-		} else {
-			registration.Meta[metaFieldServices] = xconv.BytesToString(services)
+		}
+
+		for field, value := range metas {
+			registration.Meta[field] = value
 		}
 	}
 
@@ -185,7 +213,7 @@ func (r *registrar) put(_ context.Context, ins *registry.ServiceInstance) (strin
 		})
 	}
 
-	if err = r.registry.opts.client.Agent().ServiceRegister(registration); err != nil {
+	if err = r.registry.opts.client.Agent().ServiceRegisterOpts(registration, api.ServiceRegisterOpts{}.WithContext(ctx)); err != nil {
 		return "", err
 	}
 
@@ -193,34 +221,79 @@ func (r *registrar) put(_ context.Context, ins *registry.ServiceInstance) (strin
 }
 
 func (r *registrar) deregisterService(insID string) {
-	if err := r.registry.opts.client.Agent().ServiceDeregister(insID); err != nil {
+	dctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
+	defer cancel()
+
+	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(insID, (&api.QueryOptions{}).WithContext(dctx)); err != nil {
 		log.Warnf("deregister service %s failed: %v", insID, err)
 	}
 }
 
-func (r *registrar) heartbeat(ctx context.Context, insID string) {
+// 心跳保活
+// 心跳更新失败时，在退避重试中尝试重新注册实现自愈；连续失败时长超过
+// deregisterCriticalServiceAfter 阈值后，判定注册已丢失，停止维护并清理
+func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance) {
 	defer r.wg.Done()
 
-	checkID := fmt.Sprintf(checkIDFormat, insID)
+	if ctx.Err() != nil {
+		return
+	}
 
-	err := r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing)
-	ok := err == nil
+	insID := makeInsID(ins)
+	checkID := fmt.Sprintf(checkIDFormat, insID)
+	critical := time.Duration(r.registry.opts.deregisterCriticalServiceAfter) * time.Second
+
+	var (
+		ok        bool
+		failureAt time.Time
+	)
+
+	if err := r.updateTTL(ctx, checkID); err == nil {
+		ok = true
+	}
 
 	for {
 		if !ok {
-			err = xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
-				if err = r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing); err != nil {
-					log.Warnf("consul heartbeat failed, retry %d times, err: %v", attempt, err)
+			if failureAt.IsZero() {
+				failureAt = time.Now()
+				log.Warnf("consul heartbeat failed, retry to register service %s", insID)
+			}
+
+			err := xcall.Backoff(ctx, func(ctx context.Context, attempt int) (bool, error) {
+				tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+				_, err := r.put(tctx, ins)
+				tcancel()
+
+				if err != nil {
 					return true, err
 				}
 
 				return false, nil
 			}, r.registry.opts.retryTimes, 100*time.Millisecond, time.Second)
 
-			ok = err == nil
+			if err == nil {
+				// 重新注册成功，服务已自愈
+				failureAt = time.Time{}
+				ok = true
+			} else if critical <= 0 || time.Since(failureAt) >= critical {
+				// 连续失败已超过自动注销阈值，注册不可恢复，放弃维护
+				r.mu.Lock()
+				current := r.ctx == ctx
+				r.mu.Unlock()
+				if !current {
+					// 已被新的注册取代，直接退出，不影响新注册
+					return
+				}
 
-			if !ok {
-				log.Errorf("consul heartbeat failed after %d retries", r.registry.opts.retryTimes)
+				if !r.stopped.CompareAndSwap(false, true) {
+					return
+				}
+
+				r.cleanup()
+
+				log.Errorf("consul heartbeat failed, service registration lost")
+
+				return
 			}
 		}
 
@@ -230,13 +303,27 @@ func (r *registrar) heartbeat(ctx context.Context, insID string) {
 				return
 			}
 
-			if err = r.registry.opts.client.Agent().UpdateTTL(checkID, checkUpdateOutput, api.HealthPassing); err != nil {
-				log.Warnf("update heartbeat ttl failed: %v", err)
-			}
+			if err := r.updateTTL(ctx, checkID); err != nil {
+				if failureAt.IsZero() {
+					failureAt = time.Now()
+					log.Warnf("update heartbeat ttl failed: %v", err)
+				}
 
-			ok = err == nil
+				ok = false
+			} else {
+				failureAt = time.Time{}
+				ok = true
+			}
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+// 更新服务健康检查心跳
+func (r *registrar) updateTTL(ctx context.Context, checkID string) error {
+	tctx, cancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+	defer cancel()
+
+	return r.registry.opts.client.Agent().UpdateTTLOpts(checkID, checkUpdateOutput, api.HealthPassing, (&api.QueryOptions{}).WithContext(tctx))
 }

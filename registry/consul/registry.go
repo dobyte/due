@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/hashicorp/consul/api"
@@ -16,13 +16,13 @@ const name = "consul"
 var _ registry.Registry = &Registry{}
 
 type Registry struct {
-	err        error
-	opts       *options
-	builtin    bool
-	mu1        sync.Mutex
-	watchers   sync.Map
-	mu2        sync.Mutex
-	registrars sync.Map
+	err          error
+	opts         *options
+	builtin      bool
+	watchersMu   sync.Mutex
+	watchers     sync.Map
+	registrarsMu sync.Mutex
+	registrars   sync.Map
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -67,14 +67,14 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
-	r.mu2.Lock()
-	defer r.mu2.Unlock()
+	r.registrarsMu.Lock()
+	defer r.registrarsMu.Unlock()
 
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
 	}
 
-	reg := newRegistrar(r)
+	reg := newRegistrar(r, insID)
 
 	r.registrars.Store(insID, reg)
 
@@ -87,7 +87,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return r.err
 	}
 
-	if v, ok := r.registrars.LoadAndDelete(makeInsID(ins)); ok {
+	if v, ok := r.registrars.Load(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx, ins)
 	}
 
@@ -119,8 +119,8 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 		return nil, err
 	}
 
-	r.mu1.Lock()
-	defer r.mu1.Unlock()
+	r.watchersMu.Lock()
+	defer r.watchersMu.Unlock()
 
 	if v, ok := r.watchers.Load(serviceName); ok {
 		return v.(*watcherMgr), nil
@@ -140,8 +140,7 @@ func (r *Registry) Close() error {
 	}
 
 	r.registrars.Range(func(key, value any) bool {
-		value.(*registrar).stop()
-		r.registrars.Delete(key)
+		value.(*registrar).close()
 		return true
 	})
 
@@ -186,7 +185,6 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 	for _, entry := range entries {
 		ins := &registry.ServiceInstance{
 			Name:     entry.Service.Service,
-			Routes:   unmarshalMetaRoutes(entry.Service.Meta),
 			Events:   make([]int, 0),
 			Services: make([]string, 0),
 			Metadata: make(map[string]string),
@@ -204,21 +202,32 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 				ins.State = v
 			case metaFieldWeight:
 				ins.Weight = xconv.Int(v)
-			case metaFieldEvents:
-				if err = json.Unmarshal(xconv.StringToBytes(v), &ins.Events); err != nil {
-					continue
-				}
-			case metaFieldServices:
-				if err = json.Unmarshal(xconv.StringToBytes(v), &ins.Services); err != nil {
-					continue
-				}
 			case metaFieldEndpoint:
 				ins.Endpoint = v
 			default:
-				if len(k) > 0 && string(k[0]) == defaultMetadataPrefix {
-					ins.Metadata[string(k[1:])] = v
+				if len(k) > 0 && k[0] == defaultMetadataPrefix[0] {
+					ins.Metadata[k[1:]] = v
 				}
 			}
+		}
+
+		// 跳过非 due 框架注册的服务实例（缺少 ID 元数据），避免混入非法实例
+		if ins.ID == "" {
+			continue
+		}
+
+		ins.Routes = unmarshalMetaRoutes(entry.Service.Meta)
+
+		if events, err := unmarshalMetaList[int](metaFieldEvents, entry.Service.Meta); err != nil {
+			log.Warnf("consul unmarshal meta events failed: %v", err)
+		} else {
+			ins.Events = events
+		}
+
+		if subs, err := unmarshalMetaList[string](metaFieldServices, entry.Service.Meta); err != nil {
+			log.Warnf("consul unmarshal meta services failed: %v", err)
+		} else {
+			ins.Services = subs
 		}
 
 		services = append(services, ins)

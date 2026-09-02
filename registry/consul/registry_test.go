@@ -9,6 +9,7 @@ import (
 
 	"github.com/dobyte/due/registry/consul/v2"
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xnet"
 )
@@ -26,19 +27,28 @@ func server(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go func(ls net.Listener) {
+	t.Cleanup(func() { _ = ls.Close() })
+
+	go func() {
 		for {
 			conn, err := ls.Accept()
 			if err != nil {
-				t.Error(err)
 				return
 			}
-			var buff []byte
-			if _, err = conn.Read(buff); err != nil {
-				t.Error(err)
-			}
+
+			go func(conn net.Conn) {
+				defer conn.Close()
+
+				buff := make([]byte, 1024)
+
+				for {
+					if _, err := conn.Read(buff); err != nil {
+						return
+					}
+				}
+			}(conn)
 		}
-	}(ls)
+	}()
 }
 
 func TestRegistry_Register(t *testing.T) {
@@ -74,14 +84,15 @@ func TestRegistry_Register(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(10 * time.Second)
+	// 等待 Consul 完成健康检查后再更新实例状态
+	time.Sleep(5 * time.Second)
 
 	ins.State = cluster.Busy.String()
 	if err = reg.Register(ctx, ins); err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(5 * time.Second)
 }
 
 func TestRegistry_Services(t *testing.T) {
@@ -119,6 +130,10 @@ func TestRegistry_Watch(t *testing.T) {
 		for {
 			services, err := watcher1.Next()
 			if err != nil {
+				if errors.Is(err, errors.ErrWatcherStopped) {
+					return
+				}
+
 				t.Errorf("goroutine 1: %v", err)
 				return
 			}
@@ -135,6 +150,10 @@ func TestRegistry_Watch(t *testing.T) {
 		for {
 			services, err := watcher2.Next()
 			if err != nil {
+				if errors.Is(err, errors.ErrWatcherStopped) {
+					return
+				}
+
 				t.Errorf("goroutine 2: %v", err)
 				return
 			}
@@ -147,5 +166,5 @@ func TestRegistry_Watch(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(60 * time.Second)
+	time.Sleep(15 * time.Second)
 }

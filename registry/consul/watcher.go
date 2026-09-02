@@ -51,7 +51,11 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 
 	w.flush()
 
-	w.chWatch <- services
+	select {
+	case w.chWatch <- services:
+	default:
+		// 监听端消费不及时，丢弃本次更新，保持最新数据语义
+	}
 }
 
 // 清空监听队列
@@ -75,7 +79,11 @@ func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	for {
 		select {
 		case services, ok := <-w.chWatch:
-			if !ok && !exist {
+			if !ok {
+				if exist {
+					return instances, nil
+				}
+
 				return nil, errors.ErrWatcherStopped
 			}
 
@@ -155,11 +163,22 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 				wm.rw.Lock()
 				wm.err = errors.ErrWatcherStopped
 				watchers := wm.loadWatchers()
+
+				if wm.stopped.CompareAndSwap(false, true) {
+					wm.registry.watchers.Delete(wm.serviceName)
+					wm.rw.Unlock()
+
+					for _, w := range watchers {
+						w.Stop()
+					}
+
+					wm.cancel()
+
+					return
+				}
+
 				wm.rw.Unlock()
 
-				for _, w := range watchers {
-					w.Stop()
-				}
 				return
 			}
 		}
