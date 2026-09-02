@@ -202,9 +202,11 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return err
 	}
 
-	if ok {
-		s.onChange(s.opts.namespaceId, s.opts.groupName, file, data)
+	if !ok {
+		return errors.ErrConfigStoreFailed
 	}
+
+	s.onChange(s.opts.namespaceId, s.opts.groupName, file, data)
 
 	return nil
 }
