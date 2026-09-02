@@ -516,13 +516,13 @@ shutdownMaxWaitTime = "0s"
         secretKey = ""
         # 是否开启kms，同时DataId必须以"cipher-"作为前缀才会启动加解密逻辑。kms可以参考文档：https://help.aliyun.com/product/28933.html
         openKMS = false
-        # 缓存service信息的目录。默认为./run/nacos/naming/cache
+        # 缓存service信息的目录。默认为./run/nacos/config/cache
         cacheDir = "./run/nacos/config/cache"
         # Nacos服务端的API鉴权Username。默认为空
         username = ""
         # Nacos服务端的API鉴权Password。默认为空
         password = ""
-        # 日志存储路径。默认为./run/nacos/naming/log
+        # 日志存储路径。默认为./run/nacos/config/log
         logDir = "./run/nacos/config/log"
         # 日志输出级别，可选：debug、info、warn、error。默认为info
         logLevel = "info"
