@@ -8,23 +8,27 @@ import (
 )
 
 const (
-	defaultAddr              = "127.0.0.1:11211"
-	defaultPrefix            = "due:lock"
-	defaultExpiration        = "3s"
-	defaultAcquireInterval   = "20ms"
-	defaultAcquireMaxRetries = 0
+	defaultAddr              = "127.0.0.1:11211" // 默认客户端连接地址
+	defaultPrefix            = "due:lock"        // 默认key前缀
+	defaultExpiration        = "3s"              // 默认锁过期时间
+	defaultAcquireInterval   = "20ms"            // 默认循环获取锁的时间间隔
+	defaultAcquireMaxRetries = 0                 // 默认循环获取锁的最大重试次数，0表示无限次重试
 )
 
 const (
-	defaultAddrsKey             = "etc.lock.memcache.addrs"
-	defaultPrefixKey            = "etc.lock.memcache.prefix"
-	defaultExpirationKey        = "etc.lock.memcache.expiration"
-	defaultAcquireIntervalKey   = "etc.lock.memcache.acquireInterval"
-	defaultAcquireMaxRetriesKey = "etc.lock.memcache.acquireMaxRetries"
+	defaultAddrsKey             = "etc.lock.memcache.addrs"             // 连接地址配置key
+	defaultPrefixKey            = "etc.lock.memcache.prefix"            // key前缀配置key
+	defaultExpirationKey        = "etc.lock.memcache.expiration"        // 锁过期时间配置key
+	defaultAcquireIntervalKey   = "etc.lock.memcache.acquireInterval"   // 循环获取锁间隔配置key
+	defaultAcquireMaxRetriesKey = "etc.lock.memcache.acquireMaxRetries" // 循环获取锁最大重试次数配置key
 )
 
+// Option 锁配置函数
 type Option func(o *options)
 
+// 锁配置项
+// 控制 memcached 客户端、key前缀、锁过期时间以及循环获取锁的行为；
+// 各参数均优先从配置环境读取，未配置时采用默认值
 type options struct {
 	// 客户端连接地址
 	// 内建客户端配置，默认为[]string{"127.0.0.1:11211"}
@@ -49,6 +53,9 @@ type options struct {
 	acquireMaxRetries int
 }
 
+// 创建默认锁配置项
+// 依次从配置环境读取各参数并填充默认值，未配置时采用内置默认值
+// @return @1 *options 默认锁配置项
 func defaultOptions() *options {
 	return &options{
 		addrs:             etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
@@ -59,32 +66,50 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddrs 设置连接地址
+// WithAddrs 设置客户端连接地址
+// 设置内建客户端的连接地址，未指定外部客户端时生效
+// @param addrs ...string 客户端连接地址
+// @return @1 Option 锁配置函数
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
 // WithClient 设置外部客户端
+// 设置外部客户端，存在外部客户端时优先使用之；此时构建器关闭将不再管理客户端生命周期
+// @param client *memcache.Client 外部客户端
+// @return @1 Option 锁配置函数
 func WithClient(client *memcache.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
 // WithPrefix 设置前缀
+// 设置key前缀，最终锁key为 prefix + ":" + name；前缀为空时不进行拼接
+// @param prefix string key前缀
+// @return @1 Option 锁配置函数
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
-// WithExpiration 锁过期时间
+// WithExpiration 设置锁过期时间
+// 锁的过期时长；memcached 精度为秒，小于1秒的配置会被收敛为1秒
+// @param expiration time.Duration 锁过期时间
+// @return @1 Option 锁配置函数
 func WithExpiration(expiration time.Duration) Option {
 	return func(o *options) { o.expiration = expiration }
 }
 
 // WithAcquireInterval 设置获取锁的时间间隔
+// 循环获取锁失败后再次尝试的时间间隔
+// @param acquireInterval time.Duration 获取锁的时间间隔
+// @return @1 Option 锁配置函数
 func WithAcquireInterval(acquireInterval time.Duration) Option {
 	return func(o *options) { o.acquireInterval = acquireInterval }
 }
 
 // WithAcquireMaxRetries 设置循环获取锁的最大重试次数
+// 达到最大重试次数后仍未获取成功则返回超时错误；0表示无限次重试直至成功或上下文取消
+// @param acquireMaxRetries int 最大重试次数
+// @return @1 Option 锁配置函数
 func WithAcquireMaxRetries(acquireMaxRetries int) Option {
 	return func(o *options) { o.acquireMaxRetries = acquireMaxRetries }
 }
