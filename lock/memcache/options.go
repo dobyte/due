@@ -39,6 +39,7 @@ type options struct {
 	prefix string
 
 	// 锁过期时间，默认为3s
+	// 注意：memcached 过期精度为秒且 0 表示永不过期，NewMaker 会将小于 1s 的配置收敛为 1s
 	expiration time.Duration
 
 	// 循环获取锁的频率间隔时间，默认为20ms
