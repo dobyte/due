@@ -1,10 +1,10 @@
 package redis
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/locate"
 )
 
