@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -47,7 +49,7 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 }
 
 // 通知监听器
-// 将变动事件发送给监听器，事件通道未满时直接发送，已满时丢弃旧事件并保留最新事件，避免阻塞广播协程
+// 将变动事件发送给监听器，事件通道未满时直接发送，已满时丢弃最旧事件后发送最新事件，避免阻塞广播协程
 // @param events []*locate.Event 变动事件列表
 func (w *watcher) notify(events []*locate.Event) {
 	w.rw.RLock()
@@ -64,17 +66,16 @@ func (w *watcher) notify(events []*locate.Event) {
 	default:
 	}
 
-	// 通道已满时丢弃旧事件，保留最新事件
-	for {
-		select {
-		case <-w.chEvent:
-		default:
-			select {
-			case w.chEvent <- events:
-			default:
-			}
-			return
-		}
+	// 通道已满时丢弃最旧事件
+	select {
+	case <-w.chEvent:
+	default:
+	}
+
+	// 发送最新事件
+	select {
+	case w.chEvent <- events:
+	default:
 	}
 }
 
@@ -90,12 +91,10 @@ func (w *watcher) Next() ([]*locate.Event, error) {
 
 	select {
 	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
+		return nil, errors.ErrWatcherStopped
 	case events, ok := <-w.chEvent:
 		if !ok {
-			if err := w.ctx.Err(); err != nil {
-				return nil, err
-			}
+			return nil, errors.ErrWatcherStopped
 		}
 
 		return events, nil
@@ -106,16 +105,19 @@ func (w *watcher) Next() ([]*locate.Event, error) {
 // @return @1 error 重复停止时返回的错误
 func (w *watcher) Stop() error {
 	w.rw.Lock()
-	defer w.rw.Unlock()
-
 	if w.state == stateStopped {
+		w.rw.Unlock()
 		return errors.ErrIllegalOperation
 	}
 
 	w.state = stateStopped
 	w.cancel()
 	close(w.chEvent)
-	return w.watcherMgr.recycle(w.idx)
+	w.rw.Unlock()
+
+	w.watcherMgr.recycle(w.idx)
+
+	return nil
 }
 
 // 定位监听管理器
@@ -124,10 +126,11 @@ type watcherMgr struct {
 	cancel   context.CancelFunc // 取消函数
 	locator  *Locator           // 定位器
 	key      string             // 唯一键
-	sub      *redis.PubSub      // Redis发布订阅
+	channels []string           // 订阅频道
 	rw       sync.RWMutex       // 读写锁
 	wg       sync.WaitGroup     // 接收协程等待组
 	idx      atomic.Int64       // 监听器序号
+	stopped  atomic.Bool        // 停止标志
 	watchers map[int64]*watcher // 监听器集合
 }
 
@@ -148,49 +151,106 @@ func newWatcherMgr(l *Locator, key string, kinds ...string) (*watcherMgr, error)
 		channels = append(channels, fmt.Sprintf(clusterEventKey, l.opts.prefix, l.opts.db, kind))
 	}
 
-	sub := l.opts.client.Subscribe(l.ctx)
-
-	if err := sub.Subscribe(l.ctx, channels...); err != nil {
-		if e := sub.Close(); e != nil {
-			log.Errorf("close pubsub failed, %v", e)
-		}
-
-		return nil, err
-	}
-
 	wm := &watcherMgr{}
 	wm.ctx, wm.cancel = context.WithCancel(l.ctx)
 	wm.locator = l
 	wm.watchers = make(map[int64]*watcher)
 	wm.key = key
-	wm.sub = sub
+	wm.channels = channels
 
-	wm.wg.Add(1)
-	go func() {
-		defer wm.wg.Done()
+	sub, err := wm.subscribe()
+	if err != nil {
+		return nil, err
+	}
 
-		for {
-			iface, err := wm.sub.Receive(wm.ctx)
-			if err != nil {
-				if !errors.Is(err, redis.ErrClosed) && wm.ctx.Err() == nil {
-					log.Errorf("receive pubsub message failed: %v", err)
-				}
-				return
-			}
+	wm.wg.Go(func() {
+		wm.watch(sub)
+	})
 
-			switch v := iface.(type) {
-			case *redis.Message:
-				event, err := unmarshal([]byte(v.Payload))
-				if err != nil {
-					log.Errorf("invalid payload, %s", v.Payload)
-					continue
-				}
-				wm.broadcast(event)
-			}
+	return wm, nil
+}
+
+// 订阅事件频道
+// 创建Redis发布订阅并订阅全部事件频道
+// @return @1 *redis.PubSub Redis发布订阅
+// @return @2 error 订阅失败时返回的错误
+func (wm *watcherMgr) subscribe() (*redis.PubSub, error) {
+	sub := wm.locator.opts.client.Subscribe(wm.ctx)
+
+	if err := sub.Subscribe(wm.ctx, wm.channels...); err != nil {
+		_ = sub.Close()
+		return nil, err
+	}
+
+	return sub, nil
+}
+
+// 消费发布订阅消息
+// 持续接收并广播发布订阅消息，连接异常时退避重连并重新订阅
+// @param sub *redis.PubSub Redis发布订阅
+func (wm *watcherMgr) watch(sub *redis.PubSub) {
+	defer func() {
+		if sub != nil {
+			_ = sub.Close()
 		}
 	}()
 
-	return wm, nil
+	for {
+		iface, err := sub.Receive(wm.ctx)
+		if err != nil {
+			if wm.ctx.Err() != nil {
+				return
+			}
+
+			if !errors.Is(err, redis.ErrClosed) {
+				log.Errorf("receive pubsub message failed: %v", err)
+			}
+
+			var ok bool
+			if sub, ok = wm.resubscribe(sub); !ok {
+				wm.shutdown()
+				return
+			}
+			continue
+		}
+
+		switch v := iface.(type) {
+		case *redis.Message:
+			event, err := unmarshal([]byte(v.Payload))
+			if err != nil {
+				log.Errorf("invalid payload, %s", v.Payload)
+				continue
+			}
+			wm.broadcast(event)
+		}
+	}
+}
+
+// 重连并重新订阅
+// 关闭旧订阅，以指数退避重试重新订阅事件频道
+// @param old *redis.PubSub 旧发布订阅
+// @return @1 *redis.PubSub 新发布订阅
+// @return @2 bool 是否重连成功
+func (wm *watcherMgr) resubscribe(old *redis.PubSub) (*redis.PubSub, bool) {
+	_ = old.Close()
+
+	var sub *redis.PubSub
+	err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
+		sub = wm.locator.opts.client.Subscribe(ctx)
+		if err := sub.Subscribe(ctx, wm.channels...); err != nil {
+			_ = sub.Close()
+			log.Warnf("resubscribe failed, retry %d times, err: %v", attempt, err)
+			return true, err
+		}
+
+		return false, nil
+	}, defaultRetryTimes, 100*time.Millisecond, 3*time.Second)
+
+	if err != nil {
+		return nil, false
+	}
+
+	return sub, true
 }
 
 // 派生监听器
@@ -201,8 +261,8 @@ func (wm *watcherMgr) fork() (locate.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
 
-	if err := wm.ctx.Err(); err != nil {
-		return nil, err
+	if wm.stopped.Load() || wm.ctx.Err() != nil {
+		return nil, errors.ErrWatcherStopped
 	}
 
 	w := newWatcher(wm, wm.idx.Add(1))
@@ -211,28 +271,51 @@ func (wm *watcherMgr) fork() (locate.Watcher, error) {
 	return w, nil
 }
 
+// 关闭监听管理器
+// 重连彻底失败时由接收协程调用，删除缓存、停止所有监听器并取消上下文
+func (wm *watcherMgr) shutdown() {
+	wm.rw.Lock()
+	watchers := make([]*watcher, 0, len(wm.watchers))
+	for _, w := range wm.watchers {
+		watchers = append(watchers, w)
+	}
+
+	if !wm.stopped.CompareAndSwap(false, true) {
+		wm.rw.Unlock()
+		return
+	}
+
+	wm.locator.watchers.Delete(wm.key)
+	wm.rw.Unlock()
+
+	for _, w := range watchers {
+		w.Stop()
+	}
+
+	wm.cancel()
+}
+
 // 回收监听器
 // 从监听管理器中移除指定监听器，无监听器时关闭监听管理器
 // @param idx int64 监听器序号
-// @return @1 error 关闭订阅失败时返回的错误
-func (wm *watcherMgr) recycle(idx int64) error {
+func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
 	delete(wm.watchers, idx)
-
-	shouldClose := len(wm.watchers) == 0
-	if shouldClose {
-		wm.cancel()
-		wm.locator.watchers.Delete(wm.key)
+	if len(wm.watchers) != 0 {
+		wm.rw.Unlock()
+		return
 	}
+
+	if !wm.stopped.CompareAndSwap(false, true) {
+		wm.rw.Unlock()
+		return
+	}
+
+	wm.locator.watchers.Delete(wm.key)
 	wm.rw.Unlock()
 
-	if shouldClose {
-		if err := wm.sub.Close(); err != nil && !errors.Is(err, redis.ErrClosed) {
-			return err
-		}
-	}
-
-	return nil
+	wm.cancel()
+	wm.wg.Wait()
 }
 
 // 广播事件

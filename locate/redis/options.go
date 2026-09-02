@@ -11,6 +11,7 @@ const (
 	defaultAddr       = "127.0.0.1:6379" // 默认连接地址
 	defaultDB         = 0                // 默认数据库号
 	defaultMaxRetries = 3                // 默认最大重试次数
+	defaultRetryTimes = 3                // 默认重连重试次数
 	defaultPrefix     = "due:locate"     // 默认key前缀
 )
 

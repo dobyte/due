@@ -250,9 +250,6 @@ func (l *Locator) Close() error {
 	l.watchers.Range(func(key, value any) bool {
 		if wm, ok := value.(*watcherMgr); ok {
 			wm.cancel()
-			if err := wm.sub.Close(); err != nil && !errors.Is(err, redis.ErrClosed) {
-				log.Errorf("close pubsub failed, %v", err)
-			}
 			wm.wg.Wait()
 		}
 		l.watchers.Delete(key)
@@ -340,6 +337,12 @@ func (l *Locator) doBuildWatcherMgr(kinds ...string) (*watcherMgr, error) {
 	}
 
 	l.watchers.Store(key, mgr)
+
+	// 处理接收协程在 Store 前已因重连彻底失败而停止的竞态
+	if mgr.stopped.Load() {
+		l.watchers.Delete(key)
+		return nil, errors.ErrWatcherStopped
+	}
 
 	return mgr, nil
 }

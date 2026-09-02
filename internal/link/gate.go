@@ -826,7 +826,7 @@ func (l *GateLinker) WatchUserLocate() {
 			default:
 				events, err := watcher.Next()
 				if err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, errors.ErrWatcherStopped) {
 						return
 					} else {
 						continue
