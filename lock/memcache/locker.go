@@ -71,8 +71,6 @@ func (l *Locker) Release(ctx context.Context) error {
 func (l *Locker) renewal() {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// 原子换出上一次续租的取消函数并取消之，防止同一 Locker 被重复获取时产生多个续租协程；
-	// 取消函数幂等，被换出后旧的续租协程会在下一个周期观测到 ctx 取消而退出
 	if prev := l.cancel.Swap(cancel).(context.CancelFunc); prev != nil {
 		prev()
 	}
