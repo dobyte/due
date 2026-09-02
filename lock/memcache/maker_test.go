@@ -2,22 +2,40 @@ package memcache_test
 
 import (
 	"context"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	gomemcache "github.com/bradfitz/gomemcache/memcache"
 	"github.com/dobyte/due/lock/memcache/v2"
 	"github.com/dobyte/due/v2/errors"
 )
 
+// requireMemcache 探测本地 memcached 服务是否可用，不可用时跳过测试
+func requireMemcache(t *testing.T) {
+	t.Helper()
+
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:11211", 200*time.Millisecond)
+	if err != nil {
+		t.Skipf("local memcached is not available: %v", err)
+	}
+
+	conn.Close()
+}
+
 func TestLocker_Acquire(t *testing.T) {
+	requireMemcache(t)
+
 	var (
 		ctx    = context.Background()
 		maker  = memcache.NewMaker()
 		locker = maker.Make("lockName")
 		other  = maker.Make("lockName")
 	)
+
+	t.Cleanup(func() { _ = maker.Close() })
 
 	if err := locker.Acquire(ctx); err != nil {
 		t.Fatal(err)
@@ -41,12 +59,16 @@ func TestLocker_Acquire(t *testing.T) {
 }
 
 func TestLocker_Parallel_Acquire(t *testing.T) {
+	requireMemcache(t)
+
 	var (
 		wg      sync.WaitGroup
 		ctx     = context.Background()
 		maker   = memcache.NewMaker()
 		holders atomic.Int32
 	)
+
+	t.Cleanup(func() { _ = maker.Close() })
 
 	for i := range 10 {
 		wg.Add(1)
@@ -82,4 +104,80 @@ func TestLocker_Parallel_Acquire(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestLocker_Renewal(t *testing.T) {
+	requireMemcache(t)
+
+	var (
+		ctx    = context.Background()
+		maker  = memcache.NewMaker(memcache.WithExpiration(3 * time.Second))
+		locker = maker.Make("lockRenewal")
+		other  = maker.Make("lockRenewal")
+	)
+
+	t.Cleanup(func() { _ = maker.Close() })
+
+	if err := locker.Acquire(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	defer locker.Release(ctx)
+
+	// 等待时长超过锁的自然过期时间；若后台续租未生效，锁早已过期、他人应能获取
+	// (memcached 按整秒记录过期时间，3s 的实际存活时长可能为2~3s)
+	time.Sleep(4500 * time.Millisecond)
+
+	if err := other.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
+		t.Fatalf("expect ErrIllegalOperation since the lock is renewed, got: %v", err)
+	}
+}
+
+func TestLocker_Expired_Release(t *testing.T) {
+	requireMemcache(t)
+
+	var (
+		ctx    = context.Background()
+		maker  = memcache.NewMaker()
+		locker = maker.Make("lockExpired")
+	)
+
+	t.Cleanup(func() { _ = maker.Close() })
+
+	// 以固定过期时间获取锁，不开启后台续租
+	// (memcached 过期精度为秒，固定过期时间会被取整为1s)
+	if err := locker.TryAcquire(ctx, time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// 等待锁自然过期后再释放，应能感知锁已丢失
+	time.Sleep(1600 * time.Millisecond)
+
+	if err := locker.Release(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
+		t.Fatalf("expect ErrIllegalOperation when release an expired lock, got: %v", err)
+	}
+}
+
+func TestMaker_Closed(t *testing.T) {
+	requireMemcache(t)
+
+	var (
+		ctx = context.Background()
+		// 外部客户端，生命周期不由 Maker 管理，用于验证 Close 后获取锁能快速失败
+		// (外部客户端在 Maker.Close 后仍可用，若未显式拦截将获取成功)
+		client = gomemcache.New("127.0.0.1:11211")
+		maker  = memcache.NewMaker(memcache.WithClient(client))
+		locker = maker.Make("lockClosed")
+	)
+
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := maker.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close 后获取锁应快速失败，而非获取成功但后台续租因生命周期上下文取消而静默失效
+	if err := locker.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
+		t.Fatalf("expect ErrIllegalOperation after maker closed, got: %v", err)
+	}
 }

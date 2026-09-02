@@ -43,10 +43,13 @@ type options struct {
 	prefix string
 
 	// 锁过期时间，默认为3s
-	// 注意：memcached 过期精度为秒且 0 表示永不过期，NewMaker 会将小于 1s 的配置收敛为 1s
+	// 注意：memcached 过期精度为秒且 0 表示永不过期，NewMaker 会将小于 1s 的配置收敛为 1s；
+	// memcached 按整秒记录过期时间，实际存活时长可能比配置值短近1秒；Acquire/TryAcquire(未指定固定过期)
+	// 会自动续租，续租间隔为过期时间的一半，过期时间小于等于2s时续租难以在锁过期前完成刷新，建议不小于3s
 	expiration time.Duration
 
 	// 循环获取锁的频率间隔时间，默认为20ms
+	// 注意：小于等于0时在 NewMaker 中收敛为默认值20ms，避免重试退化为无退避忙等循环
 	acquireInterval time.Duration
 
 	// 循环获取锁的最大重试次数，默认为无限次
@@ -91,7 +94,9 @@ func WithPrefix(prefix string) Option {
 }
 
 // WithExpiration 设置锁过期时间
-// 锁的过期时长；memcached 精度为秒，小于1秒的配置会被收敛为1秒
+// 锁的过期时长，同时是后台续租刷新的目标时长；memcached 精度为秒，小于1秒的配置会被收敛为1秒；
+// 注意：memcached 按整秒记录过期时间，实际存活时长可能比配置值短近1秒；后台续租间隔为过期时间的一半，
+// 小于2秒的过期时间可能使续租难以在锁过期前完成刷新，需持续持有锁的续租场景建议不小于3s
 // @param expiration time.Duration 锁过期时间
 // @return @1 Option 锁配置函数
 func WithExpiration(expiration time.Duration) Option {
@@ -99,7 +104,7 @@ func WithExpiration(expiration time.Duration) Option {
 }
 
 // WithAcquireInterval 设置获取锁的时间间隔
-// 循环获取锁失败后再次尝试的时间间隔
+// 循环获取锁失败后再次尝试的时间间隔；小于等于0时在 NewMaker 中收敛为默认值20ms
 // @param acquireInterval time.Duration 获取锁的时间间隔
 // @return @1 Option 锁配置函数
 func WithAcquireInterval(acquireInterval time.Duration) Option {
