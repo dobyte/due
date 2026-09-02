@@ -23,6 +23,13 @@ import (
 // Name 配置源名称
 const Name = "nacos"
 
+// listenRequest 监听请求
+// 携带dataId及用于回传监听结果的通道
+type listenRequest struct {
+	dataId string     // 配置dataId
+	done   chan error // 监听结果回传通道
+}
+
 type Source struct {
 	err      error              // 构建客户端错误信息
 	opts     *options           // 配置项
@@ -31,7 +38,7 @@ type Source struct {
 	builtin  bool               // 是否为内置客户端
 	version  uint64             // 当前搜索版本号
 	versions map[string]uint64  // 各dataId对应的搜索版本号
-	chListen chan string        // 监听指令通道
+	chListen chan listenRequest // 监听指令通道
 	chCancel chan string        // 取消监听指令通道
 	watchers sync.Map           // 监听器集合
 	once     sync.Once          // 保证关闭操作只执行一次
@@ -52,7 +59,7 @@ func NewSource(opts ...Option) config.Source {
 	s.opts = o
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
 	s.versions = make(map[string]uint64)
-	s.chListen = make(chan string)
+	s.chListen = make(chan listenRequest)
 	s.chCancel = make(chan string)
 
 	if o.client == nil {
@@ -171,7 +178,7 @@ func (s *Source) load(file string) (*config.Configuration, error) {
 		return nil, err
 	}
 
-	configuration := conv(file, content)
+	configuration := s.conv(file, content)
 
 	return configuration, nil
 }
@@ -197,6 +204,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		DataId:  file,
 		Group:   s.opts.groupName,
 		Content: data,
+		Type:    s.parseFileType(file),
 	})
 	if err != nil {
 		return err
@@ -258,17 +266,24 @@ func (s *Source) listen() {
 		select {
 		case <-s.ctx.Done():
 			return
-		case dataId, ok := <-s.chListen:
+		case req, ok := <-s.chListen:
 			if !ok {
 				return
 			}
 
-			if err := s.opts.client.ListenConfig(vo.ConfigParam{
-				DataId:   dataId,
+			err := s.opts.client.ListenConfig(vo.ConfigParam{
+				DataId:   req.dataId,
 				Group:    s.opts.groupName,
 				OnChange: s.onChange,
-			}); err != nil {
-				log.Warnf("%s %s listen failed: %v", s.opts.groupName, dataId, err)
+			})
+			if err != nil {
+				log.Warnf("%s %s listen failed: %v", s.opts.groupName, req.dataId, err)
+			}
+
+			// 非阻塞回传监听结果，避免请求方已退出时阻塞
+			select {
+			case req.done <- err:
+			default:
 			}
 		case dataId, ok := <-s.chCancel:
 			if !ok {
@@ -337,10 +352,9 @@ func (s *Source) search() {
 
 		for _, item := range result.PageItems {
 			if _, ok := s.versions[item.DataId]; !ok {
-				select {
-				case s.chListen <- item.DataId:
-				case <-s.ctx.Done():
-					return
+				// 监听失败时跳过版本标记，留待下次搜索重试
+				if err := s.requestListen(item.DataId); err != nil {
+					continue
 				}
 			}
 
@@ -369,12 +383,34 @@ func (s *Source) search() {
 	}
 }
 
+// requestListen 请求监听配置
+// 向监听协程发送监听指令并等待监听结果返回
+// @param dataId string 配置dataId
+// @return @1 error 错误信息
+func (s *Source) requestListen(dataId string) error {
+	done := make(chan error, 1)
+	req := listenRequest{dataId: dataId, done: done}
+
+	select {
+	case s.chListen <- req:
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	}
+
+	select {
+	case err := <-done:
+		return err
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	}
+}
+
 // onChange 配置变更回调
 // Nacos服务端推送配置变更时触发，将变更后的配置通知给所有已注册的监听器
 // @param file string 配置文件(dataId)
 // @param content string 配置内容
 func (s *Source) onChange(_, _, file, content string) {
-	configuration := conv(file, content)
+	configuration := s.conv(file, content)
 
 	s.watchers.Range(func(key, value any) bool {
 		w := key.(*watcher)
@@ -415,33 +451,34 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 	)
 
 	for _, v := range s.opts.urls {
-		// scheme为可选项，缺省时默认使用http
 		if !strings.Contains(v, "://") {
 			v = "http://" + v
 		}
 
-		if raw, e := url.Parse(v); e != nil {
+		raw, e := url.Parse(v)
+		if e != nil {
 			err, endpoint = e, v
-		} else {
-			host, p, e := net.SplitHostPort(raw.Host)
-			if e != nil {
-				err, endpoint = e, v
-				continue
-			}
-
-			port, e := strconv.ParseUint(p, 10, 64)
-			if e != nil {
-				err, endpoint = e, v
-				continue
-			}
-
-			param.ServerConfigs = append(param.ServerConfigs, constant.ServerConfig{
-				Scheme:      raw.Scheme,
-				ContextPath: raw.Path,
-				IpAddr:      host,
-				Port:        port,
-			})
+			continue
 		}
+
+		host, p, e := net.SplitHostPort(raw.Host)
+		if e != nil {
+			err, endpoint = e, v
+			continue
+		}
+
+		port, e := strconv.ParseUint(p, 10, 64)
+		if e != nil {
+			err, endpoint = e, v
+			continue
+		}
+
+		param.ServerConfigs = append(param.ServerConfigs, constant.ServerConfig{
+			Scheme:      raw.Scheme,
+			ContextPath: raw.Path,
+			IpAddr:      host,
+			Port:        port,
+		})
 	}
 
 	if len(param.ServerConfigs) == 0 {
@@ -459,12 +496,30 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 	}
 }
 
+// parseFileType 转换配置类型
+// 将dataId的文件后缀转换为Nacos支持的配置类型，仅支持json、xml和yaml，
+// 其余格式统一转换为默认的text类型
+// @param file string 配置文件(dataId)
+// @return @1 string Nacos配置类型
+func (s *Source) parseFileType(file string) string {
+	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(file), ".")) {
+	case "json":
+		return "json"
+	case "xml":
+		return "xml"
+	case "yml", "yaml":
+		return "yaml"
+	default:
+		return "text"
+	}
+}
+
 // conv 转换配置
 // 将dataId和内容转换为统一的配置结构，dataId的文件后缀作为配置格式
 // @param file string 配置文件(dataId)
 // @param content string 配置内容
 // @return @1 *config.Configuration 配置项
-func conv(file, content string) *config.Configuration {
+func (s *Source) conv(file, content string) *config.Configuration {
 	ext := filepath.Ext(file)
 
 	return &config.Configuration{

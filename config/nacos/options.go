@@ -106,7 +106,7 @@ type options struct {
 	openKMS bool
 
 	// 缓存service信息的目录
-	// 默认为./run/nacos/naming/cache
+	// 默认为./run/nacos/config/cache
 	cacheDir string
 
 	// Nacos服务端的API鉴权Username
@@ -118,7 +118,7 @@ type options struct {
 	password string
 
 	// 日志存储路径
-	// 默认为./run/nacos/naming/log
+	// 默认为./run/nacos/config/log
 	logDir string
 
 	// 日志输出级别
