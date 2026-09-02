@@ -2,12 +2,12 @@ package log_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/log/console"
 )
