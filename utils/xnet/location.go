@@ -1,8 +1,8 @@
 package xnet
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 )
 
@@ -139,7 +140,12 @@ func fetchJSON(url string, out any) error {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(out)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(data, out)
 }
 
 // locateByIPAPI 通过 ip-api.com 查询
