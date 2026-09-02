@@ -1,6 +1,7 @@
 package xnet
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,7 +15,10 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-const locationQueryTimeout = 3 * time.Second
+const (
+	locationQueryTimeout    = 3 * time.Second // IP归属地查询的兜底超时时间
+	maxLocationResponseSize = 1 << 20         // 限制响应体最大读取字节数(1MB)
+)
 
 // Location IP归属地信息
 type Location struct {
@@ -29,7 +33,7 @@ type Location struct {
 type ipLocationProvider struct {
 	name  string
 	url   string
-	query func(url, ip string) (*Location, error)
+	query func(ctx context.Context, url, ip string) (*Location, error)
 }
 
 // 内置的IP归属地查询服务
@@ -39,29 +43,50 @@ var locationProviders = []ipLocationProvider{
 	{name: "ipapi.co", url: "https://ipapi.co", query: locateByIPAPICo},
 }
 
+// httpClient HTTP客户端，复用底层连接池
+// Timeout作为兜底超时：调用方ctx无截止时间时防止请求永久挂起；
+// 调用方ctx截止时间更早时，请求会经由请求上下文优先被取消
+var httpClient = &http.Client{Timeout: locationQueryTimeout}
+
 // LocateIP 查询IP地址的归属地
 // 并发请求多个第三方接口，返回最先返回且数据有效的结果，保证返回数据的一致性
+// @param ctx context.Context 上下文，用于超时控制
 // @param ip string 待查询的IP地址
 // @return @1 *Location IP归属地信息
 // @return @2 error 错误信息
-func LocateIP(ip string) (*Location, error) {
+func LocateIP(ctx context.Context, ip string) (*Location, error) {
 	if net.ParseIP(ip) == nil {
 		return nil, errors.ErrInvalidArgument
 	}
 
+	return locateIP(ctx, ip, locationProviders)
+}
+
+// locateIP 基于指定的归属地查询服务并发查询IP地址归属地
+// 并发请求多个第三方接口，返回最先返回且数据有效的结果，保证返回数据的一致性
+// @param ctx context.Context 上下文，用于超时控制
+// @param ip string 待查询的IP地址
+// @param providers []ipLocationProvider 归属地查询服务列表
+// @return @1 *Location IP归属地信息
+// @return @2 error 错误信息
+func locateIP(ctx context.Context, ip string, providers []ipLocationProvider) (*Location, error) {
+	// 派生可取消的上下文：任一查询返回结果后，立即取消其余在途请求，避免无用的并发开销
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var (
-		ch    = make(chan *Location, len(locationProviders))
+		ch    = make(chan *Location, len(providers))
 		done  = make(chan struct{})
 		state atomic.Bool
 		wg    sync.WaitGroup
 	)
 
-	for _, p := range locationProviders {
+	for _, p := range providers {
 		wg.Add(1)
 		go func(p ipLocationProvider) {
 			defer wg.Done()
 
-			loc, err := p.query(p.url, ip)
+			loc, err := p.query(ctx, p.url, ip)
 			if err != nil || !isConsistent(loc) {
 				return
 			}
@@ -86,10 +111,13 @@ func LocateIP(ip string) (*Location, error) {
 		case loc := <-ch:
 			return loc, nil
 		default:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return nil, errors.ErrNotFoundIPAddress
 		}
-	case <-time.After(locationQueryTimeout):
-		return nil, errors.ErrNotFoundIPAddress
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
@@ -124,36 +152,47 @@ func normalizeISP(isp string) string {
 }
 
 // fetchJSON 发起HTTP请求并解析JSON响应
+// @param ctx context.Context 上下文，用于超时控制
 // @param url string 请求地址
 // @param out any 解析目标
 // @return @1 error 错误信息
-func fetchJSON(url string, out any) error {
-	client := &http.Client{Timeout: locationQueryTimeout}
+func fetchJSON(ctx context.Context, url string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
 
-	resp, err := client.Get(url)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// 消费完响应体以便连接可被复用
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxLocationResponseSize+1))
 	if err != nil {
 		return err
+	}
+
+	if len(data) > maxLocationResponseSize {
+		return fmt.Errorf("response body too large: %d bytes", len(data))
 	}
 
 	return json.Unmarshal(data, out)
 }
 
 // locateByIPAPI 通过 ip-api.com 查询
+// @param ctx context.Context 上下文，用于超时控制
 // @param url string 接口地址
 // @param ip string 待查询的IP地址
 // @return @1 *Location IP归属地信息
 // @return @2 error 错误信息
-func locateByIPAPI(url, ip string) (*Location, error) {
+func locateByIPAPI(ctx context.Context, url, ip string) (*Location, error) {
 	var resp struct {
 		Status     string `json:"status"`
 		Message    string `json:"message"`
@@ -165,7 +204,7 @@ func locateByIPAPI(url, ip string) (*Location, error) {
 	}
 
 	requestURL := fmt.Sprintf("%s/json/%s?lang=zh-CN&fields=status,message,country,regionName,city,isp,query", url, ip)
-	if err := fetchJSON(requestURL, &resp); err != nil {
+	if err := fetchJSON(ctx, requestURL, &resp); err != nil {
 		return nil, err
 	}
 
@@ -186,11 +225,12 @@ func locateByIPAPI(url, ip string) (*Location, error) {
 }
 
 // locateByIPWhois 通过 ipwho.is 查询
+// @param ctx context.Context 上下文，用于超时控制
 // @param url string 接口地址
 // @param ip string 待查询的IP地址
 // @return @1 *Location IP归属地信息
 // @return @2 error 错误信息
-func locateByIPWhois(url, ip string) (*Location, error) {
+func locateByIPWhois(ctx context.Context, url, ip string) (*Location, error) {
 	var resp struct {
 		Success    bool   `json:"success"`
 		Message    string `json:"message"`
@@ -204,7 +244,7 @@ func locateByIPWhois(url, ip string) (*Location, error) {
 	}
 
 	requestURL := fmt.Sprintf("%s/%s?lang=zh-CN", url, ip)
-	if err := fetchJSON(requestURL, &resp); err != nil {
+	if err := fetchJSON(ctx, requestURL, &resp); err != nil {
 		return nil, err
 	}
 
@@ -225,11 +265,12 @@ func locateByIPWhois(url, ip string) (*Location, error) {
 }
 
 // locateByIPAPICo 通过 ipapi.co 查询
+// @param ctx context.Context 上下文，用于超时控制
 // @param url string 接口地址
 // @param ip string 待查询的IP地址
 // @return @1 *Location IP归属地信息
 // @return @2 error 错误信息
-func locateByIPAPICo(url, ip string) (*Location, error) {
+func locateByIPAPICo(ctx context.Context, url, ip string) (*Location, error) {
 	var resp struct {
 		IP      string `json:"ip"`
 		Country string `json:"country_name"`
@@ -241,7 +282,7 @@ func locateByIPAPICo(url, ip string) (*Location, error) {
 	}
 
 	requestURL := fmt.Sprintf("%s/%s/json/", url, ip)
-	if err := fetchJSON(requestURL, &resp); err != nil {
+	if err := fetchJSON(ctx, requestURL, &resp); err != nil {
 		return nil, err
 	}
 

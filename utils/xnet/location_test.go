@@ -1,6 +1,7 @@
 package xnet
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,12 +12,11 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// useLocationProviders 临时替换内置的归属地查询服务，测试结束后自动还原
-func useLocationProviders(t *testing.T, providers []ipLocationProvider) {
-	t.Helper()
-	original := locationProviders
-	locationProviders = providers
-	t.Cleanup(func() { locationProviders = original })
+// TestLocateIP_InvalidIP 验证LocateIP入口对非法IP参数的校验
+func TestLocateIP_InvalidIP(t *testing.T) {
+	if _, err := LocateIP(context.Background(), "invalid"); !errors.Is(err, errors.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
+	}
 }
 
 func TestLocateIP_FirstWins(t *testing.T) {
@@ -33,14 +33,12 @@ func TestLocateIP_FirstWins(t *testing.T) {
 	}))
 	defer slow.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
+	loc, err := locateIP(context.Background(), "8.8.8.8", []ipLocationProvider{
 		{name: "ip-api.com", url: fast.URL, query: locateByIPAPI},
 		{name: "ipwho.is", url: slow.URL, query: locateByIPWhois},
 	})
-
-	loc, err := LocateIP("8.8.8.8")
 	if err != nil {
-		t.Fatalf("LocateIP() unexpected error: %v", err)
+		t.Fatalf("locateIP() unexpected error: %v", err)
 	}
 	if loc.Country != "中国" {
 		t.Fatalf("expected country 中国, got %q", loc.Country)
@@ -59,14 +57,12 @@ func TestLocateIP_Fallback(t *testing.T) {
 	}))
 	defer s2.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
+	loc, err := locateIP(context.Background(), "8.8.8.8", []ipLocationProvider{
 		{name: "ip-api.com", url: s1.URL, query: locateByIPAPI},
 		{name: "ipwho.is", url: s2.URL, query: locateByIPWhois},
 	})
-
-	loc, err := LocateIP("8.8.8.8")
 	if err != nil {
-		t.Fatalf("LocateIP() unexpected error: %v", err)
+		t.Fatalf("locateIP() unexpected error: %v", err)
 	}
 	if loc.Country != "美国" {
 		t.Fatalf("expected country 美国, got %q", loc.Country)
@@ -88,14 +84,12 @@ func TestLocateIP_SkipInconsistent(t *testing.T) {
 	}))
 	defer slow.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
+	loc, err := locateIP(context.Background(), "8.8.8.8", []ipLocationProvider{
 		{name: "ip-api.com", url: fast.URL, query: locateByIPAPI},
 		{name: "ipwho.is", url: slow.URL, query: locateByIPWhois},
 	})
-
-	loc, err := LocateIP("8.8.8.8")
 	if err != nil {
-		t.Fatalf("LocateIP() unexpected error: %v", err)
+		t.Fatalf("locateIP() unexpected error: %v", err)
 	}
 	if loc.Country != "美国" {
 		t.Fatalf("expected country 美国, got %q", loc.Country)
@@ -113,19 +107,39 @@ func TestLocateIP_AllFailed(t *testing.T) {
 	s2 := httptest.NewServer(http.HandlerFunc(handler))
 	defer s2.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
+	if _, err := locateIP(context.Background(), "8.8.8.8", []ipLocationProvider{
 		{name: "ip-api.com", url: s1.URL, query: locateByIPAPI},
 		{name: "ipwho.is", url: s2.URL, query: locateByIPWhois},
-	})
-
-	if _, err := LocateIP("8.8.8.8"); !errors.Is(err, errors.ErrNotFoundIPAddress) {
+	}); !errors.Is(err, errors.ErrNotFoundIPAddress) {
 		t.Fatalf("expected ErrNotFoundIPAddress, got %v", err)
 	}
 }
 
-func TestLocateIP_InvalidIP(t *testing.T) {
-	if _, err := LocateIP("invalid"); !errors.Is(err, errors.ErrInvalidArgument) {
-		t.Fatalf("expected ErrInvalidArgument, got %v", err)
+// TestLocateIP_ContextDeadline 验证调用方传入的context可控制查询超时
+func TestLocateIP_ContextDeadline(t *testing.T) {
+	// 模拟长时间无响应的归属地查询服务：挂起请求直到客户端断开，其响应时间远超locationQueryTimeout
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := locateIP(ctx, "8.8.8.8", []ipLocationProvider{
+		{name: "ipwho.is", url: server.URL, query: locateByIPWhois},
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("locateIP() unexpected nil error, want context timeout error")
+	}
+	if elapsed >= 2*time.Second {
+		t.Fatalf("locateIP() should respect context deadline, took %v", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("locateIP() error = %v, want context.DeadlineExceeded", err)
 	}
 }
 
@@ -140,16 +154,14 @@ func TestLocateIP_39_182_14_197(t *testing.T) {
 	}))
 	defer server.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
+	loc, err := locateIP(context.Background(), ip, []ipLocationProvider{
 		{name: "ipwho.is", url: server.URL, query: locateByIPWhois},
 	})
-
-	loc, err := LocateIP(ip)
 	if err != nil {
-		t.Fatalf("LocateIP(%q) unexpected error: %v", ip, err)
+		t.Fatalf("locateIP(%q) unexpected error: %v", ip, err)
 	}
 
-	t.Logf("LocateIP(%q) = %v", ip, loc)
+	t.Logf("locateIP(%q) = %v", ip, loc)
 
 	if loc.IP != ip {
 		t.Errorf("IP = %q, want %q", loc.IP, ip)
@@ -197,19 +209,17 @@ func TestLocateIP_ChinaIPs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	useLocationProviders(t, []ipLocationProvider{
-		{name: "ipwho.is", url: server.URL, query: locateByIPWhois},
-	})
-
 	ips := buildChinaIPs()
 	if len(ips) < 100 {
 		t.Fatalf("test requires at least 100 ip addresses, got %d", len(ips))
 	}
 
 	for _, ip := range ips {
-		loc, err := LocateIP(ip)
+		loc, err := locateIP(context.Background(), ip, []ipLocationProvider{
+			{name: "ipwho.is", url: server.URL, query: locateByIPWhois},
+		})
 		if err != nil {
-			t.Fatalf("LocateIP(%q) unexpected error: %v", ip, err)
+			t.Fatalf("locateIP(%q) unexpected error: %v", ip, err)
 		}
 		if loc.IP != ip {
 			t.Errorf("IP = %q, want %q", loc.IP, ip)
