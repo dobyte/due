@@ -31,6 +31,7 @@ const (
 	defaultDeregisterCriticalServiceAfterKey = "etc.registry.consul.deregisterCriticalServiceAfter"
 )
 
+// Option 是服务注册发现组件的配置项函数。
 type Option func(o *options)
 
 type options struct {
@@ -75,6 +76,7 @@ type options struct {
 	deregisterCriticalServiceAfter int
 }
 
+// defaultOptions 返回带有默认值的配置项。
 func defaultOptions() *options {
 	return &options{
 		addr:                           etc.Get(defaultAddrKey, defaultAddr).String(),

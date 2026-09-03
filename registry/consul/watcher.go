@@ -13,25 +13,28 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
+// 监听器状态
 const (
-	stateInitial int32 = iota
-	stateRunning
-	stateStopped
+	stateInitial int32 = iota // 初始状态
+	stateRunning              // 运行中
+	stateStopped              // 已停止
 )
 
+// watcher 服务实例监听器，通过 Next 方法获取服务实例更新。
 type watcher struct {
-	idx     int64
-	wm      *watcherMgr
-	state   atomic.Int32
-	mu      sync.Mutex
-	chWatch chan []*registry.ServiceInstance
+	idx     int64                            // 监听器序号
+	wm      *watcherMgr                      // 所属监听管理器
+	state   atomic.Int32                     // 监听器状态
+	mu      sync.Mutex                       // 保护 chWatch 的关闭与发送
+	chWatch chan []*registry.ServiceInstance // 服务实例更新通道
 }
 
+// newWatcher 创建服务实例监听器。
 func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w := &watcher{}
 	w.wm = wm
 	w.idx = idx
-	w.chWatch = make(chan []*registry.ServiceInstance, 16)
+	w.chWatch = make(chan []*registry.ServiceInstance, 1)
 
 	return w
 }
@@ -50,12 +53,7 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 	}
 
 	w.flush()
-
-	select {
-	case w.chWatch <- services:
-	default:
-		// 监听端消费不及时，丢弃本次更新，保持最新数据语义
-	}
+	w.chWatch <- services
 }
 
 // 清空监听队列
@@ -127,21 +125,23 @@ func (w *watcher) Stop() error {
 	return nil
 }
 
+// watcherMgr 服务实例监听管理器，管理同一服务名下所有监听器，并维护服务实例快照。
 type watcherMgr struct {
-	registry         *Registry
-	ctx              context.Context
-	cancel           context.CancelFunc
-	serviceName      string
-	idx              atomic.Int64
-	rw               sync.RWMutex
-	watchers         map[int64]*watcher
-	wg               sync.WaitGroup
-	stopped          atomic.Bool
-	err              error
-	serviceInstances []*registry.ServiceInstance
-	serviceWaitIndex uint64
+	registry         *Registry                   // 所属注册发现组件
+	ctx              context.Context             // 监听协程上下文
+	cancel           context.CancelFunc          // 监听协程取消函数
+	serviceName      string                      // 服务名称
+	idx              atomic.Int64                // 监听器序号生成器
+	rw               sync.RWMutex                // 保护 watchers、serviceInstances 等字段
+	watchers         map[int64]*watcher          // 监听器注册表
+	wg               sync.WaitGroup              // 等待监听协程退出
+	stopped          atomic.Bool                 // 是否已停止
+	healthy          atomic.Bool                 // 监听连接是否健康
+	serviceInstances []*registry.ServiceInstance // 服务实例快照
+	serviceWaitIndex uint64                      // 服务实例查询索引
 }
 
+// newWatcherMgr 创建服务实例监听管理器。
 func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance, waitIndex uint64) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = r
@@ -150,7 +150,13 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 	wm.watchers = make(map[int64]*watcher)
 	wm.serviceInstances = services
 	wm.serviceWaitIndex = waitIndex
+	wm.healthy.Store(true)
 
+	return wm
+}
+
+// 初始化服务实例监听器
+func (wm *watcherMgr) init() {
 	wm.wg.Go(func() {
 		for {
 			wm.watchLoop()
@@ -161,11 +167,10 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 
 			if !wm.resyncWithRetry() {
 				wm.rw.Lock()
-				wm.err = errors.ErrWatcherStopped
 				watchers := wm.loadWatchers()
 
 				if wm.stopped.CompareAndSwap(false, true) {
-					wm.registry.watchers.Delete(wm.serviceName)
+					wm.removeFromRegistry()
 					wm.rw.Unlock()
 
 					for _, w := range watchers {
@@ -183,8 +188,6 @@ func newWatcherMgr(r *Registry, serviceName string, services []*registry.Service
 			}
 		}
 	})
-
-	return wm
 }
 
 // 创建新的服务实例监听器
@@ -216,11 +219,24 @@ func (wm *watcherMgr) recycle(idx int64) {
 		return
 	}
 
-	wm.registry.watchers.Delete(wm.serviceName)
+	wm.removeFromRegistry()
 	wm.rw.Unlock()
 
 	wm.cancel()
 	wm.wg.Wait()
+}
+
+// 从注册表中移除本管理器
+// 仅在注册表中仍指向本管理器时才移除，避免并发重建的新管理器被旧管理器的清理逻辑误删
+func (wm *watcherMgr) removeFromRegistry() {
+	reg := wm.registry
+
+	reg.mu1.Lock()
+	defer reg.mu1.Unlock()
+
+	if v, ok := reg.watchers.Load(wm.serviceName); ok && v == wm {
+		reg.watchers.Delete(wm.serviceName)
+	}
 }
 
 // 停止监听服务实例更新
@@ -231,7 +247,7 @@ func (wm *watcherMgr) stop() {
 		return
 	}
 
-	wm.registry.watchers.Delete(wm.serviceName)
+	wm.removeFromRegistry()
 	watchers := wm.loadWatchers()
 	wm.rw.Unlock()
 
@@ -252,25 +268,28 @@ func (wm *watcherMgr) watchLoop() {
 		default:
 		}
 
-		ctx, cancel := context.WithTimeout(wm.ctx, 120*time.Second)
-		services, index, err := wm.registry.services(ctx, wm.serviceName, wm.serviceWaitIndex, true)
-		cancel()
+		services, index, err := wm.registry.services(wm.ctx, wm.serviceName, wm.serviceWaitIndex, true, true)
 
 		if err != nil {
 			if wm.ctx.Err() != nil {
 				return
 			}
+			wm.healthy.Store(false)
 			log.Warnf("consul watch error: %v", err)
 			return
 		}
 
+		wm.healthy.Store(true)
+
+		wm.rw.Lock()
 		if index != wm.serviceWaitIndex {
-			wm.rw.Lock()
 			wm.serviceWaitIndex = index
 			wm.serviceInstances = services
 			wm.rw.Unlock()
 
 			wm.broadcast()
+		} else {
+			wm.rw.Unlock()
 		}
 	}
 }
@@ -283,7 +302,7 @@ func (wm *watcherMgr) resyncWithRetry() bool {
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, wm.registry.opts.timeout)
-		services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true)
+		services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true, false)
 		cancel()
 		if err != nil {
 			log.Warnf("consul watch resync failed, retry %d times, err: %v", attempt, err)
@@ -295,10 +314,11 @@ func (wm *watcherMgr) resyncWithRetry() bool {
 		wm.serviceWaitIndex = index
 		wm.rw.Unlock()
 
+		wm.healthy.Store(true)
 		wm.broadcast()
 
 		return false, nil
-	}, wm.registry.opts.retryTimes, 100*time.Millisecond, 3*time.Second)
+	}, max(1, wm.registry.opts.retryTimes), 100*time.Millisecond, 3*time.Second)
 
 	return err == nil
 }
@@ -363,10 +383,6 @@ func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 
 	if wm.stopped.Load() {
 		return nil, errors.ErrWatcherStopped
-	}
-
-	if wm.err != nil {
-		return nil, wm.err
 	}
 
 	return wm.loadServices(), nil

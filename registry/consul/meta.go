@@ -11,8 +11,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xconv"
 )
 
+// metaValueSize 是 Consul Meta 单条 value 的最大长度限制
 const metaValueSize = 512
 
+// 服务实例元数据字段名
 const (
 	metaFieldID           = "id"
 	metaFieldKind         = "kind"
@@ -26,6 +28,7 @@ const (
 	defaultMetadataPrefix = "_"
 )
 
+// 路由元数据标志位
 const (
 	metaRouteInternal = 1 << iota
 	metaRouteStateful
@@ -33,13 +36,25 @@ const (
 )
 
 // 编码元数据路由
+// 路由列表以逗号分隔的字符串分块存储，避免 Consul Meta 单条 value 超长
 func marshalMetaRoutes(routes []registry.Route) map[string]string {
+	metas := make(map[string]string)
+
 	var (
-		key   string
+		items []string
 		size  int
-		metas = make(map[string]string)
-		items string
 	)
+
+	flush := func() {
+		if len(items) == 0 {
+			return
+		}
+
+		metas[fmt.Sprintf("%s-%d", metaFieldRoutes, len(metas))] = strings.Join(items, ",")
+
+		items = nil
+		size = 0
+	}
 
 	for _, route := range routes {
 		var opts int
@@ -58,39 +73,20 @@ func marshalMetaRoutes(routes []registry.Route) map[string]string {
 
 		val := fmt.Sprintf("%d-%d", route.ID, opts)
 
-		if s := len(items); s == 0 {
+		if size > 0 && size+1+len(val) > metaValueSize {
+			flush()
+		}
+
+		items = append(items, val)
+
+		if size == 0 {
 			size = len(val)
 		} else {
-			size = s + 1 + len(val)
-		}
-
-		if size <= metaValueSize {
-			if len(items) == 0 {
-				items = val
-			} else {
-				items += "," + val
-			}
-		}
-
-		if size >= metaValueSize {
-			key = fmt.Sprintf("%s-%d", metaFieldRoutes, len(metas))
-			metas[key] = items
-		}
-
-		switch {
-		case size < metaValueSize:
-			// ignore
-		case size > metaValueSize:
-			items = val
-		default:
-			items = ""
+			size += 1 + len(val)
 		}
 	}
 
-	if len(items) > 0 {
-		key = fmt.Sprintf("%s-%d", metaFieldRoutes, len(metas))
-		metas[key] = items
-	}
+	flush()
 
 	return metas
 }
@@ -136,13 +132,9 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 	return routes
 }
 
-// 编码元数据列表
-// 由于 Consul Meta 单条 value 存在长度限制（metaValueSize），较大的列表需要分块存储。
-// 每块均为一个合法的 JSON 数组，meta key 形如 <field>-<index>
-// @param field string 字段名
-// @param list []T 待编码的列表
-// @return map[string]string 编码后的 meta 键值对
-// @return error 编码失败时返回错误
+// marshalMetaList 编码元数据列表。
+// 由于 Consul Meta 单条 value 存在长度限制（metaValueSize），较大的列表需要分块存储，
+// 每块均为一个合法的 JSON 数组，meta key 形如 <field>-<index>。
 func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 	metas := make(map[string]string)
 
@@ -197,12 +189,7 @@ func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 	return metas, nil
 }
 
-// 解码元数据列表
-// 兼容旧版本未分块、直接以字段名作为 key 的存储格式
-// @param field string 字段名
-// @param metas map[string]string Consul Meta
-// @return []T 解码后的列表
-// @return error 解码失败时返回错误
+// unmarshalMetaList 解码元数据列表，兼容旧版本未分块、直接以字段名作为 key 的存储格式。
 func unmarshalMetaList[T any](field string, metas map[string]string) ([]T, error) {
 	list := make([]T, 0)
 

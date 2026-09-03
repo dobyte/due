@@ -18,21 +18,24 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
+// 心跳检查相关常量
 const (
-	checkIDFormat     = "service:%s"
-	checkUpdateOutput = "passed"
+	checkIDFormat     = "service:%s" // 心跳检查 ID 格式
+	checkUpdateOutput = "passed"     // 心跳更新输出
 )
 
+// registrar 服务注册器，负责服务实例的注册、心跳保活与解注册。
 type registrar struct {
-	registry *Registry
-	ctx      context.Context
-	cancel   context.CancelFunc
-	insID    string
-	mu       sync.Mutex
-	stopped  atomic.Bool
-	wg       sync.WaitGroup
+	registry *Registry          // 所属注册发现组件
+	ctx      context.Context    // 心跳协程上下文
+	cancel   context.CancelFunc // 心跳协程取消函数
+	insID    string             // 实例唯一标识
+	mu       sync.Mutex         // 保护 ctx、cancel 字段
+	stopped  atomic.Bool        // 是否已停止
+	wg       sync.WaitGroup     // 等待心跳协程退出
 }
 
+// newRegistrar 创建服务注册器。
 func newRegistrar(registry *Registry, insID string) *registrar {
 	r := &registrar{}
 	r.registry = registry
@@ -41,6 +44,7 @@ func newRegistrar(registry *Registry, insID string) *registrar {
 	return r
 }
 
+// register 注册服务实例，并在需要时启动心跳保活协程。
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.stopped.Load() {
 		return errors.ErrIllegalOperation
@@ -57,7 +61,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	if r.stopped.Load() {
 		r.mu.Unlock()
-		r.deregisterService(insID)
+		r.deregisterService(context.Background(), insID)
 		return errors.ErrIllegalOperation
 	}
 
@@ -83,15 +87,11 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	return nil
 }
 
-func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
-	defer r.stop()
+// deregister 解注册服务实例，停止心跳并注销服务。
+func (r *registrar) deregister(ctx context.Context) error {
+	r.stop()
 
-	dctx, cancel := context.WithTimeout(ctx, r.registry.opts.timeout)
-	defer cancel()
-
-	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(makeInsID(ins), (&api.QueryOptions{}).WithContext(dctx)); err != nil {
-		return err
-	}
+	r.deregisterService(ctx, r.insID)
 
 	return nil
 }
@@ -111,9 +111,9 @@ func (r *registrar) stop() {
 // 关闭注册
 // 主动注销服务并停止心跳，等待协程退出
 func (r *registrar) close() {
-	r.deregisterService(r.insID)
-
 	r.stop()
+
+	r.deregisterService(context.Background(), r.insID)
 }
 
 // 清理注册资源
@@ -131,6 +131,7 @@ func (r *registrar) cleanup() {
 	r.registry.registrars.Delete(r.insID)
 }
 
+// put 将服务实例注册到 Consul，返回实例唯一标识。
 func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (string, error) {
 	raw, err := url.Parse(ins.Endpoint)
 	if err != nil {
@@ -220,18 +221,20 @@ func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (str
 	return insID, nil
 }
 
-func (r *registrar) deregisterService(insID string) {
-	dctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
-	defer cancel()
+// deregisterService 从 Consul 注销指定实例标识的服务。
+func (r *registrar) deregisterService(ctx context.Context, insID string) {
+	tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
+	defer tcancel()
 
-	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(insID, (&api.QueryOptions{}).WithContext(dctx)); err != nil {
+	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(insID, (&api.QueryOptions{}).WithContext(tctx)); err != nil {
 		log.Warnf("deregister service %s failed: %v", insID, err)
 	}
 }
 
 // 心跳保活
 // 心跳更新失败时，在退避重试中尝试重新注册实现自愈；连续失败时长超过
-// deregisterCriticalServiceAfter 阈值后，判定注册已丢失，停止维护并清理
+// deregisterCriticalServiceAfter 阈值后，判定注册已丢失，停止维护并清理。
+// 当 deregisterCriticalServiceAfter 小于等于 0（即 Consul 永不自动注销）时，持续重试而不放弃维护
 func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance) {
 	defer r.wg.Done()
 
@@ -252,6 +255,10 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 		ok = true
 	}
 
+	interval := time.Duration(r.registry.opts.heartbeatCheckInterval) * time.Second / 2
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
 	for {
 		if !ok {
 			if failureAt.IsZero() {
@@ -269,25 +276,26 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 				}
 
 				return false, nil
-			}, r.registry.opts.retryTimes, 100*time.Millisecond, time.Second)
+			}, max(1, r.registry.opts.retryTimes), 100*time.Millisecond, time.Second)
 
 			if err == nil {
 				// 重新注册成功，服务已自愈
 				failureAt = time.Time{}
 				ok = true
-			} else if critical <= 0 || time.Since(failureAt) >= critical {
+			} else if critical > 0 && time.Since(failureAt) >= critical {
 				// 连续失败已超过自动注销阈值，注册不可恢复，放弃维护
 				r.mu.Lock()
-				current := r.ctx == ctx
-				r.mu.Unlock()
-				if !current {
+				if r.ctx != ctx {
 					// 已被新的注册取代，直接退出，不影响新注册
+					r.mu.Unlock()
 					return
 				}
 
 				if !r.stopped.CompareAndSwap(false, true) {
+					r.mu.Unlock()
 					return
 				}
+				r.mu.Unlock()
 
 				r.cleanup()
 
@@ -298,7 +306,7 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 		}
 
 		select {
-		case <-time.After(time.Duration(r.registry.opts.heartbeatCheckInterval) * time.Second / 2):
+		case <-timer.C:
 			if ctx.Err() != nil {
 				return
 			}
@@ -314,6 +322,8 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 				failureAt = time.Time{}
 				ok = true
 			}
+
+			timer.Reset(interval)
 		case <-ctx.Done():
 			return
 		}

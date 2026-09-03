@@ -1,3 +1,5 @@
+// Package consul 提供基于 Consul 的服务注册发现组件，实现了 registry.Registry 接口，
+// 支持服务实例的注册、解注册、监听与查询，并支持健康检查与心跳保活。
 package consul
 
 import (
@@ -11,20 +13,22 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
+// name 是服务注册发现组件的名称
 const name = "consul"
 
 var _ registry.Registry = &Registry{}
 
+// Registry 是基于 Consul 的服务注册发现组件，实现了 registry.Registry 接口。
 type Registry struct {
-	err          error
-	opts         *options
-	builtin      bool
-	watchersMu   sync.Mutex
-	watchers     sync.Map
-	registrarsMu sync.Mutex
-	registrars   sync.Map
+	err        error      // 初始化错误（内建客户端创建失败时记录）
+	opts       *options   // 配置项
+	mu1        sync.Mutex // 保护 watchers 注册表
+	watchers   sync.Map   // 服务监听管理器注册表
+	mu2        sync.Mutex // 保护 registrars 注册表
+	registrars sync.Map   // 服务注册器注册表
 }
 
+// NewRegistry 创建基于 Consul 的服务注册发现组件实例。
 func NewRegistry(opts ...Option) *Registry {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -40,7 +44,6 @@ func NewRegistry(opts ...Option) *Registry {
 			config.Address = o.addr
 		}
 
-		r.builtin = true
 		o.client, r.err = api.NewClient(config)
 	}
 
@@ -67,8 +70,8 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 		return v.(*registrar)
 	}
 
-	r.registrarsMu.Lock()
-	defer r.registrarsMu.Unlock()
+	r.mu2.Lock()
+	defer r.mu2.Unlock()
 
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
@@ -88,7 +91,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	}
 
 	if v, ok := r.registrars.Load(makeInsID(ins)); ok {
-		return v.(*registrar).deregister(ctx, ins)
+		return v.(*registrar).deregister(ctx)
 	}
 
 	return nil
@@ -110,27 +113,38 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 
 // 构建服务监听器管理器
 func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
-	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr), nil
+	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
+		return mgr, nil
 	}
 
-	services, index, err := r.services(ctx, serviceName, 0, true)
+	services, index, err := r.services(ctx, serviceName, 0, true, false)
 	if err != nil {
 		return nil, err
 	}
 
-	r.watchersMu.Lock()
-	defer r.watchersMu.Unlock()
+	r.mu1.Lock()
+	defer r.mu1.Unlock()
 
+	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
+		return mgr, nil
+	} else {
+		mgr := newWatcherMgr(r, serviceName, services, index)
+		r.watchers.Store(serviceName, mgr)
+		mgr.init()
+
+		return mgr, nil
+	}
+}
+
+// loadWatcherMgr 加载服务监听管理器，不存在或已停止时返回 nil。
+func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr), nil
+		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
+			return mgr
+		}
 	}
 
-	mgr := newWatcherMgr(r, serviceName, services, index)
-
-	r.watchers.Store(serviceName, mgr)
-
-	return mgr, nil
+	return nil
 }
 
 // Close 关闭服务注册发现
@@ -159,19 +173,27 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		if services, err := v.(*watcherMgr).services(); err == nil {
-			return services, nil
+		mgr := v.(*watcherMgr)
+		if mgr.healthy.Load() {
+			if services, err := mgr.services(); err == nil {
+				return services, nil
+			}
 		}
 	}
 
-	services, _, err := r.services(ctx, serviceName, 0, true)
+	services, _, err := r.services(ctx, serviceName, 0, true, false)
 	return services, err
 }
 
-func (r *Registry) services(ctx context.Context, serviceName string, waitIndex uint64, passingOnly bool) ([]*registry.ServiceInstance, uint64, error) {
+// services 从 Consul 查询指定服务的健康实例列表，并返回最新索引。
+func (r *Registry) services(ctx context.Context, serviceName string, waitIndex uint64, passingOnly, blocking bool) ([]*registry.ServiceInstance, uint64, error) {
 	opts := &api.QueryOptions{
 		WaitIndex: waitIndex,
-		WaitTime:  60 * time.Second,
+	}
+
+	// 阻塞查询需要设置 WaitTime，非阻塞查询会立即返回
+	if blocking {
+		opts.WaitTime = 60 * time.Second
 	}
 
 	opts = opts.WithContext(ctx)
