@@ -20,7 +20,6 @@ const (
 	defaultNamespace   = "services"
 	defaultTimeout     = "3s"
 	defaultLeaseTTL    = "15s"
-	defaultRetryTimes  = 3
 )
 
 const (
@@ -31,14 +30,14 @@ const (
 	defaultUsernameKey    = "etc.registry.etcd.username"
 	defaultPasswordKey    = "etc.registry.etcd.password"
 	defaultLeaseTTLKey    = "etc.registry.etcd.leaseTTL"
-	defaultRetryTimesKey  = "etc.registry.etcd.retryTimes"
 )
 
+// Option 服务注册发现配置项
 type Option func(o *options)
 
 type options struct {
 	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"localhost:2379"}
+	// 内建客户端配置，默认为[]string{"127.0.0.1:2379"}
 	addrs []string
 
 	// 客户端拨号超时时间
@@ -66,10 +65,6 @@ type options struct {
 	// Lease存活时间
 	// 默认为15秒
 	leaseTTL time.Duration
-
-	// 心跳重试次数
-	// 默认为3次
-	retryTimes int
 }
 
 func defaultOptions() *options {
@@ -81,7 +76,6 @@ func defaultOptions() *options {
 		username:    etc.Get(defaultUsernameKey).String(),
 		password:    etc.Get(defaultPasswordKey).String(),
 		leaseTTL:    etc.Get(defaultLeaseTTLKey, defaultLeaseTTL).Duration(),
-		retryTimes:  etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 	}
 }
 
@@ -91,6 +85,8 @@ func WithAddrs(addrs ...string) Option {
 }
 
 // WithDialTimeout 设置客户端拨号超时时间
+// @param dialTimeout time.Duration 客户端拨号超时时间
+// @return @1 Option 服务注册发现配置项
 func WithDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) { o.dialTimeout = dialTimeout }
 }
@@ -116,16 +112,15 @@ func WithUsername(username string) Option {
 }
 
 // WithPassword 设置密码
+// @param password string 密码
+// @return @1 Option 服务注册发现配置项
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
 // WithLeaseTTL 设置Lease存活时间
+// @param leaseTTL time.Duration Lease存活时间
+// @return @1 Option 服务注册发现配置项
 func WithLeaseTTL(leaseTTL time.Duration) Option {
 	return func(o *options) { o.leaseTTL = leaseTTL }
-}
-
-// WithRetryTimes 设置心跳重试次数
-func WithRetryTimes(retryTimes int) Option {
-	return func(o *options) { o.retryTimes = retryTimes }
 }
