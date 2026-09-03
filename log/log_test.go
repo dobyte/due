@@ -12,7 +12,7 @@ import (
 	"github.com/dobyte/due/v2/log/console"
 )
 
-func TestLog(t *testing.T) {
+func TestConsoleLog(t *testing.T) {
 	logger := log.NewLogger(log.WithSyncers(console.NewSyncer(console.WithFormat(console.FormatJson))))
 
 	logger.Debug("welcome to due-framework")
