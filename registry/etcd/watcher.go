@@ -215,10 +215,12 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 		clientv3.WithRev(res.Header.Revision+1),
 	)
 
-	r.watchers.Store(serviceName, wm)
+	return wm
+}
 
+// 初始化 初始化 watch 流事件协程
+func (wm *watcherMgr) init() {
 	wm.wg.Go(func() {
-
 		var (
 			ok bool
 
@@ -254,8 +256,6 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 			wm.health.Store(true)
 		}
 	})
-
-	return wm
 }
 
 // 创建新监听器
