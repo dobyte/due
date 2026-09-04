@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 )
 
+// Bytes 字节缓冲
 type Bytes struct {
 	buf      []byte
 	off      int
@@ -62,6 +63,10 @@ func (b *Bytes) Bytes() []byte {
 
 // Release 释放
 func (b *Bytes) Release() {
+	if !b.released.CompareAndSwap(false, true) {
+		return
+	}
+
 	b.off = 0
 
 	if b.pool != nil {

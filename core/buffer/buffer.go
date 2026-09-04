@@ -1,10 +1,13 @@
 package buffer
 
+// Whence 指定节点挂载位置
 type Whence int
 
 const (
-	Head Whence = iota // 头部
-	Tail               // 尾部
+	// Head 头部
+	Head Whence = iota
+	// Tail 尾部
+	Tail
 )
 
 const (

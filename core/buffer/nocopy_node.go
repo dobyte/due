@@ -1,5 +1,6 @@
 package buffer
 
+// NocopyNode 零拷贝缓冲区节点
 type NocopyNode struct {
 	prev  any
 	next  any

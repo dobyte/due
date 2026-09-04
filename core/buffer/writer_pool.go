@@ -12,6 +12,7 @@ func MallocWriter(cap int) *Writer {
 	return defaultWriterPool.Get(cap)
 }
 
+// WriterPool 写入器池
 type WriterPool struct {
 	pools []*sync.Pool
 }
@@ -33,7 +34,7 @@ func NewWriterPool(grade int) *WriterPool {
 
 // NewWriterPoolWithCapacity 以指定容量创建写入器池
 func NewWriterPoolWithCapacity(cap int) *WriterPool {
-	return NewWriterPool(int(math.Ceil(math.Log2(float64(cap)))))
+	return NewWriterPool(int(math.Ceil(math.Log2(float64(max(1, cap))))))
 }
 
 // Get 获取
@@ -44,23 +45,23 @@ func (p *WriterPool) Get(cap int) *Writer {
 		return nil
 	}
 
-	return pool.Get().(*Writer)
+	w := pool.Get().(*Writer)
+	w.released.Store(false)
+
+	return w
 }
 
-// Put 放回
-func (p *WriterPool) Put(w *Writer) {
-	pool := p.getPool(w.Cap())
-
-	if pool == nil {
-		return
+// getPool 获取对象池
+func (p *WriterPool) getPool(cap int) *sync.Pool {
+	if cap <= 0 {
+		return nil
 	}
 
-	pool.Put(w)
-}
-
-// 获取对象池
-func (p *WriterPool) getPool(cap int) *sync.Pool {
 	if len(p.pools) == 0 {
+		return nil
+	}
+
+	if cap > 1<<(len(p.pools)-1) {
 		return nil
 	}
 

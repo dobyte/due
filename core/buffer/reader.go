@@ -2,16 +2,19 @@ package buffer
 
 import (
 	"encoding/binary"
-	"github.com/dobyte/due/v2/errors"
 	"io"
 	"math"
+
+	"github.com/dobyte/due/v2/errors"
 )
 
+// Reader 字节读取器
 type Reader struct {
 	buf []byte
 	off int
 }
 
+// NewReader 以指定数据创建读取器
 func NewReader(data []byte) *Reader {
 	return &Reader{buf: data}
 }
@@ -378,6 +381,10 @@ func (r *Reader) ReadBytes(n int) ([]byte, error) {
 
 // ReadString 读取string值
 func (r *Reader) ReadString(len int) (string, error) {
+	if len <= 0 {
+		return "", nil
+	}
+
 	buf, err := r.slice(len)
 	if err != nil {
 		return "", err

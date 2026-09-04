@@ -48,7 +48,7 @@ func BenchmarkBuffer1(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buff := &bytes.Buffer{}
 		buff.Grow(1024)
 		binary.Write(buff, binary.BigEndian, data)
@@ -61,7 +61,7 @@ func BenchmarkBuffer2(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		writer.WriteInt64s(binary.BigEndian, 2)
 		writer.Release()
 	}
@@ -72,7 +72,7 @@ func BenchmarkNocopyBuffer_Malloc(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf := buffer.NewNocopyBuffer()
 		buf.Mount(data)
 		buf.Release()

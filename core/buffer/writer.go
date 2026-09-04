@@ -4,19 +4,22 @@ import (
 	"encoding/binary"
 	"math"
 	"sync"
+	"sync/atomic"
 )
 
+// Writer 字节写入器
 type Writer struct {
-	buf  []byte
-	off  int
-	pool *sync.Pool
+	buf      []byte
+	off      int
+	pool     *sync.Pool
+	released atomic.Bool
 }
 
 var _ Buffer = (*Writer)(nil)
 
 // NewWriter 以指定buf创建写入器
 func NewWriter(buf []byte) *Writer {
-	return &Writer{buf: buf}
+	return &Writer{buf: buf[:cap(buf)]}
 }
 
 // NewWriterWithCapacity 以指定容量创建写入器
@@ -55,6 +58,10 @@ func (w *Writer) Grow(n int) {
 
 // Release 释放
 func (w *Writer) Release() {
+	if !w.released.CompareAndSwap(false, true) {
+		return
+	}
+
 	w.off = 0
 
 	if w.pool != nil {
@@ -62,7 +69,7 @@ func (w *Writer) Release() {
 	}
 }
 
-// 写数据，实现io.Writer
+// Write 写数据，实现io.Writer接口
 func (w *Writer) Write(p []byte) (n int, err error) {
 	w.grow(len(p))
 	n = copy(w.buf[w.off:], p)
@@ -192,7 +199,7 @@ func (w *Writer) WriteBytes(values ...byte) {
 
 // 执行扩容操作
 func (w *Writer) grow(n int) {
-	if w.off+n < cap(w.buf) {
+	if w.off+n <= cap(w.buf) {
 		return
 	}
 

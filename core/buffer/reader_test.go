@@ -66,7 +66,7 @@ func BenchmarkReader(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader.ReadBool()
 		reader.ReadInt8()
 		reader.ReadUint8()
@@ -123,7 +123,7 @@ func BenchmarkBinaryRead(b *testing.B) {
 		v14 = make([]byte, 11)
 	)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		binary.Read(reader, binary.BigEndian, &v1)
 		binary.Read(reader, binary.BigEndian, &v2)
 		binary.Read(reader, binary.BigEndian, &v3)

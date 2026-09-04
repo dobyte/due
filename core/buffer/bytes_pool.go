@@ -12,6 +12,7 @@ func MallocBytes(cap int) *Bytes {
 	return defaultBytesPool.Get(cap)
 }
 
+// BytesPool 字节缓冲池
 type BytesPool struct {
 	pools []*sync.Pool
 }
@@ -33,7 +34,7 @@ func NewBytesPool(grade int) *BytesPool {
 
 // NewBytesPoolWithCapacity 以指定容量创建字节池
 func NewBytesPoolWithCapacity(cap int) *BytesPool {
-	return NewBytesPool(int(math.Ceil(math.Log2(float64(cap)))))
+	return NewBytesPool(int(math.Ceil(math.Log2(float64(max(1, cap))))))
 }
 
 // Get 获取
@@ -51,20 +52,17 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	return b
 }
 
-// Put 放回
-func (p *BytesPool) Put(b *Bytes) {
-	pool := p.getPool(b.Cap())
-
-	if pool == nil {
-		return
+// getPool 获取对象池
+func (p *BytesPool) getPool(cap int) *sync.Pool {
+	if cap <= 0 {
+		return nil
 	}
 
-	pool.Put(b)
-}
-
-// 获取对象池
-func (p *BytesPool) getPool(cap int) *sync.Pool {
 	if len(p.pools) == 0 {
+		return nil
+	}
+
+	if cap > 1<<(len(p.pools)-1) {
 		return nil
 	}
 

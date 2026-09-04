@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 )
 
+// NocopyBuffer 零拷贝缓冲区
 type NocopyBuffer struct {
 	len      int          // 字节数
 	num      int          // 节点数
@@ -17,6 +18,7 @@ type NocopyBuffer struct {
 
 var _ Buffer = &NocopyBuffer{}
 
+// NewNocopyBuffer 创建零拷贝缓冲区
 func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
 	buf := &NocopyBuffer{len: -1}
 
@@ -87,7 +89,9 @@ func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 func (b *NocopyBuffer) MallocBytes(cap int, whence ...Whence) *Bytes {
 	block := MallocBytes(cap)
 
-	b.Mount(block)
+	if block != nil {
+		b.Mount(block, whence...)
+	}
 
 	return block
 }
@@ -96,7 +100,9 @@ func (b *NocopyBuffer) MallocBytes(cap int, whence ...Whence) *Bytes {
 func (b *NocopyBuffer) MallocWriter(cap int, whence ...Whence) *Writer {
 	block := MallocWriter(cap)
 
-	b.Mount(block)
+	if block != nil {
+		b.Mount(block, whence...)
+	}
 
 	return block
 }
@@ -247,6 +253,8 @@ func (b *NocopyBuffer) addToHead(node any) {
 
 		b.len = -1
 		b.num += n.num
+	default:
+		// ignore
 	}
 }
 
@@ -295,5 +303,7 @@ func (b *NocopyBuffer) addToTail(node any) {
 
 		b.len = -1
 		b.num += n.num
+	default:
+		// ignore
 	}
 }
