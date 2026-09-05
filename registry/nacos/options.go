@@ -45,6 +45,7 @@ const (
 	defaultLogLevelKey    = "etc.registry.nacos.logLevel"
 )
 
+// Option 定义配置选项函数
 type Option func(o *options)
 
 type options struct {

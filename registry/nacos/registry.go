@@ -5,6 +5,7 @@ import (
 	stdnet "net"
 	"net/url"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/encoding/json"
@@ -15,8 +16,10 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
+	"golang.org/x/sync/singleflight"
 )
 
+// name 注册中心组件名称
 const name = "nacos"
 
 const (
@@ -39,8 +42,9 @@ type Registry struct {
 	err      error
 	opts     *options
 	builtin  bool
-	mu       sync.Mutex
 	watchers sync.Map
+	group    singleflight.Group
+	closed   atomic.Bool
 }
 
 func NewRegistry(opts ...Option) *Registry {
@@ -113,9 +117,17 @@ func (r *Registry) Name() string {
 }
 
 // Register 注册服务实例
-func (r *Registry) Register(_ context.Context, ins *registry.ServiceInstance) error {
+func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
+	}
+
+	if r.closed.Load() {
+		return errors.ErrRegistryClosed
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	host, port, err := net.ParseHostPort(ins.Endpoint)
@@ -186,9 +198,17 @@ func (r *Registry) Register(_ context.Context, ins *registry.ServiceInstance) er
 }
 
 // Deregister 解注册服务实例
-func (r *Registry) Deregister(_ context.Context, ins *registry.ServiceInstance) error {
+func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
+	}
+
+	if r.closed.Load() {
+		return errors.ErrRegistryClosed
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	host, port, err := net.ParseHostPort(ins.Endpoint)
@@ -221,6 +241,14 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 		return nil, r.err
 	}
 
+	if r.closed.Load() {
+		return nil, errors.ErrRegistryClosed
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
 	if err != nil {
 		return nil, err
@@ -230,31 +258,53 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 }
 
 // 构建服务实例监听器
-func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
-	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr), nil
+func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*watcherMgr, error) {
+	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
+		return mgr, nil
 	}
 
-	services, err := r.services(ctx, serviceName)
+	v, err, _ := r.group.Do(serviceName, func() (any, error) {
+		if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
+			return mgr, nil
+		}
+
+		services, err := r.services(context.Background(), serviceName)
+		if err != nil {
+			return nil, err
+		}
+
+		mgr := newWatcherMgr(r, serviceName, services)
+		if err = mgr.init(); err != nil {
+			return nil, err
+		}
+
+		r.watchers.Store(serviceName, mgr)
+
+		// 防止 Close 与 Watch 并发时，Store 进一个已经关闭的监听管理器
+		if r.closed.Load() {
+			mgr.stop()
+			return nil, errors.ErrRegistryClosed
+		}
+
+		return mgr, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	return v.(*watcherMgr), nil
+}
 
+// 加载服务监听管理器
+// 仅返回未停止的管理器，避免返回已停止但尚未从注册表移除的管理器
+func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
-		return v.(*watcherMgr), nil
+		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
+			return mgr
+		}
 	}
 
-	mgr, err := newWatcherMgr(r, serviceName, services)
-	if err != nil {
-		return nil, err
-	}
-
-	r.watchers.Store(serviceName, mgr)
-
-	return mgr, nil
+	return nil
 }
 
 // Services 获取服务实例列表
@@ -263,8 +313,12 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 		return nil, r.err
 	}
 
-	if v, ok := r.watchers.Load(serviceName); ok {
-		if services, err := v.(*watcherMgr).services(); err != nil {
+	if r.closed.Load() {
+		return nil, errors.ErrRegistryClosed
+	}
+
+	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
+		if services, err := mgr.services(); err != nil {
 			log.Warnf("load %s services failed: %v", serviceName, err)
 		} else {
 			return services, nil
@@ -280,12 +334,14 @@ func (r *Registry) Close() error {
 		return r.err
 	}
 
-	r.mu.Lock()
+	if !r.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	r.watchers.Range(func(key, value any) bool {
 		value.(*watcherMgr).stop()
 		return true
 	})
-	r.mu.Unlock()
 
 	if r.builtin {
 		r.opts.client.CloseClient()
@@ -294,7 +350,7 @@ func (r *Registry) Close() error {
 	return nil
 }
 
-// 获取服务实例列表
+// services 获取服务实例列表
 func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	instances, err := r.opts.client.SelectInstances(vo.SelectInstancesParam{
 		ServiceName: serviceName,

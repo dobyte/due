@@ -7,7 +7,7 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
 
-// 解析服务实例列表
+// parseInstances 解析服务实例列表
 func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, error) {
 	services := make([]*registry.ServiceInstance, 0, len(instances))
 	for _, instance := range instances {
