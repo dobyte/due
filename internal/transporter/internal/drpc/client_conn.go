@@ -19,27 +19,27 @@ import (
 )
 
 type ClientConn struct {
-	cli           *Client                // 客户端
-	rw            sync.RWMutex           // 读写锁
-	conn          net.Conn               // 连接
-	state         atomic.Int32           // 连接状态
-	total         atomic.Int32           // 总消息数
-	queue         *queue.Queue[*message] // 消息队列
-	pending       *pending               // 等待队列
-	failure       chan struct{}          // 重试失败通道
-	success       chan struct{}          // 重试成功通道
-	wg1           *sync.WaitGroup        // 读等待组
-	wg2           *sync.WaitGroup        // 写等待组
-	ctx           context.Context        // 上下文
-	cancel        context.CancelFunc     // 取消函数
-	lastFaultTime atomic.Int64           // 上次故障时间
+	cli           *Client                            // 客户端
+	rw            sync.RWMutex                       // 读写锁
+	conn          net.Conn                           // 连接
+	state         atomic.Int32                       // 连接状态
+	total         atomic.Int32                       // 总消息数
+	queue         *queue.Queue[*buffer.NocopyBuffer] // 消息队列
+	pending       *pending                           // 等待队列
+	failure       chan struct{}                      // 重试失败通道
+	success       chan struct{}                      // 重试成功通道
+	wg1           *sync.WaitGroup                    // 读等待组
+	wg2           *sync.WaitGroup                    // 写等待组
+	ctx           context.Context                    // 上下文
+	cancel        context.CancelFunc                 // 取消函数
+	lastFaultTime atomic.Int64                       // 上次故障时间
 }
 
 func newClientConn(cli *Client) *ClientConn {
 	c := &ClientConn{}
 	c.cli = cli
 	c.state.Store(def.ConnClosed)
-	c.queue = queue.NewQueue[*message](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
+	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
 	c.pending = newPending()
 	c.failure = make(chan struct{})
 	c.success = make(chan struct{})
@@ -163,7 +163,7 @@ func (c *ClientConn) handshake(conn net.Conn) error {
 }
 
 // 发送消息
-func (c *ClientConn) send(msg *message) error {
+func (c *ClientConn) send(buf *buffer.NocopyBuffer) error {
 	switch c.state.Load() {
 	case def.ConnClosed:
 		if mode.IsReleaseMode() || mode.IsPreReleaseMode() {
@@ -184,7 +184,7 @@ func (c *ClientConn) send(msg *message) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	return c.queue.Write(msg)
+	return c.queue.Write(buf)
 }
 
 // 读取数据
@@ -233,7 +233,7 @@ func (c *ClientConn) write(conn net.Conn) {
 				c.retry(conn)
 				return
 			}
-		case msg, ok := <-c.queue.Read(): // 有序队列
+		case buf, ok := <-c.queue.Read(): // 有序队列
 			if !ok {
 				return
 			}
@@ -242,7 +242,7 @@ func (c *ClientConn) write(conn net.Conn) {
 				c.total.Add(-1)
 			}
 
-			if ok = c.doWrite(conn, msg); !ok {
+			if ok = c.doWrite(conn, buf); !ok {
 				return
 			}
 		}
@@ -250,17 +250,8 @@ func (c *ClientConn) write(conn net.Conn) {
 }
 
 // 执行写入数据
-func (c *ClientConn) doWrite(conn net.Conn, msg *message) bool {
-	if msg.seq != 0 {
-		if !msg.state.CompareAndSwap(statePending, stateSent) {
-			c.cli.release(msg, true)
-			return false
-		}
-
-		c.pending.store(msg.seq, msg.call)
-	}
-
-	ok := msg.buf.Visit(func(node *buffer.NocopyNode) bool {
+func (c *ClientConn) doWrite(conn net.Conn, buf *buffer.NocopyBuffer) bool {
+	ok := buf.Visit(func(node *buffer.NocopyNode) bool {
 		if _, err := conn.Write(node.Bytes()); err != nil {
 			return false
 		} else {
@@ -268,7 +259,7 @@ func (c *ClientConn) doWrite(conn net.Conn, msg *message) bool {
 		}
 	})
 
-	c.cli.release(msg)
+	buf.Release()
 
 	if !ok {
 		c.retry(conn)
@@ -329,11 +320,4 @@ func (c *ClientConn) wait() error {
 	}
 
 	return errors.ErrConnectionClosed
-}
-
-// 删除发送消息
-func (c *ClientConn) delete(msg *message) {
-	if !msg.state.CompareAndSwap(statePending, stateCanceled) {
-		c.pending.delete(msg.seq)
-	}
 }

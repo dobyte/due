@@ -15,7 +15,6 @@ import (
 type Client struct {
 	opts  *ClientOptions
 	addr  *net.TCPAddr
-	pool  sync.Pool
 	idx   atomic.Uint64
 	conns []*ClientConn
 }
@@ -29,7 +28,6 @@ func NewClient(opts *ClientOptions) (*Client, error) {
 	c := &Client{}
 	c.addr = addr
 	c.opts = opts
-	c.pool = sync.Pool{New: func() any { return &message{call: make(chan buffer.Buffer, 1)} }}
 	c.conns = make([]*ClientConn, 0, c.opts.ConnNum)
 
 	return c, nil
@@ -91,6 +89,11 @@ func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
+	if err := ctx.Err(); err != nil {
+		buf.Release()
+		return nil, err
+	}
+
 	conn := c.load(idx...)
 
 	if conn == nil {
@@ -98,13 +101,12 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, errors.ErrClientClosed
 	}
 
-	msg := c.pool.Get().(*message)
-	msg.seq = seq
-	msg.buf = buf
-	msg.state.Store(statePending)
+	call := make(chan buffer.Buffer, 1)
+	conn.pending.store(seq, call)
 
-	if err := conn.send(msg); err != nil {
-		c.release(msg, true)
+	if err := conn.send(buf); err != nil {
+		buf.Release()
+		conn.pending.delete(seq)
 		return nil, err
 	}
 
@@ -114,12 +116,12 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 		select {
 		case <-ctx.Done():
-			conn.delete(msg)
+			conn.pending.delete(seq)
 			return nil, ctx.Err()
 		case <-tctx.Done():
-			conn.delete(msg)
+			conn.pending.delete(seq)
 			return nil, tctx.Err()
-		case res, ok := <-msg.call:
+		case res, ok := <-call:
 			if !ok {
 				return nil, errors.ErrConnectionHanged
 			}
@@ -129,9 +131,9 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	} else {
 		select {
 		case <-ctx.Done():
-			conn.delete(msg)
+			conn.pending.delete(seq)
 			return nil, ctx.Err()
-		case res, ok := <-msg.call:
+		case res, ok := <-call:
 			if !ok {
 				return nil, errors.ErrConnectionHanged
 			}
@@ -143,22 +145,26 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
-	conn := c.load(idx...)
+	err := c.send(ctx, buf, idx...)
 
-	if conn == nil {
+	if err != nil {
 		buf.Release()
-		return errors.ErrClientClosed
 	}
 
-	msg := c.pool.Get().(*message)
-	msg.buf = buf
+	return err
+}
 
-	if err := conn.send(msg); err != nil {
-		c.release(msg)
+// 发送
+func (c *Client) send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	return nil
+	if conn := c.load(idx...); conn == nil {
+		return errors.ErrClientClosed
+	} else {
+		return conn.send(buf)
+	}
 }
 
 // 获取连接
@@ -172,25 +178,4 @@ func (c *Client) load(idx ...int64) *ClientConn {
 	}
 
 	return nil
-}
-
-// 释放
-func (c *Client) release(msg *message, isNeedClose ...bool) {
-	msg.seq = 0
-
-	if msg.buf != nil {
-		msg.buf.Release()
-		msg.buf = nil
-	}
-
-	if len(isNeedClose) > 0 && isNeedClose[0] {
-		// 排空 channel 以便复用（超时/取消场景下读 goroutine 可能已写入）
-		select {
-		case buf := <-msg.call:
-			buf.Release()
-		default:
-		}
-	}
-
-	c.pool.Put(msg)
 }

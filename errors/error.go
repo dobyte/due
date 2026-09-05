@@ -63,6 +63,7 @@ var (
 	ErrMissingResolver         = New("missing resolver")
 	ErrServiceRegisterFailed   = New("service register failed")
 	ErrServiceDeregisterFailed = New("service deregister failed")
+	ErrRegistryClosed          = New("registry is closed")
 	ErrInvalidPublicKey        = New("invalid public key")
 	ErrInvalidPrivateKey       = New("invalid private key")
 	ErrInvalidSignature        = New("invalid signature")

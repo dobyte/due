@@ -252,13 +252,11 @@ func (n *Node) startLinkerServer() {
 		log.Fatalf("linker server create failed: %v", err)
 	}
 
-	n.linker = linker
+	if err = linker.Start(); err != nil {
+		log.Fatalf("linker server start failed: %v", err)
+	}
 
-	go func() {
-		if err = n.linker.Start(); err != nil {
-			log.Fatalf("linker server start failed: %v", err)
-		}
-	}()
+	n.linker = linker
 }
 
 // 停止连接服务器

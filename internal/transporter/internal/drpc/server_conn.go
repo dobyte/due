@@ -233,11 +233,12 @@ func (c *ServerConn) write(conn net.Conn) {
 				return
 			}
 
-			c.queue.Done(buf == nil)
-
 			if buf == nil {
-				continue
+				c.queue.Done(true)
+				return
 			}
+
+			c.queue.Done(false)
 
 			ok = buf.Visit(func(node *buffer.NocopyNode) bool {
 				if _, err := c.conn.Write(node.Bytes()); err != nil {

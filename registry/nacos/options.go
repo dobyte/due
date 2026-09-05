@@ -45,9 +45,9 @@ const (
 	defaultLogLevelKey    = "etc.registry.nacos.logLevel"
 )
 
-// Option 定义配置选项函数
 type Option func(o *options)
 
+// options Nacos注册中心配置项
 type options struct {
 	// 服务器地址 [scheme://]ip:port[/nacos]
 	// 默认为[]string{http://127.0.0.1:8848/nacos}

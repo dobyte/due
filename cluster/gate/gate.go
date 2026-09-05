@@ -210,13 +210,11 @@ func (g *Gate) startLinkerServer() {
 		log.Fatalf("linker server create failed: %v", err)
 	}
 
-	g.linker = linker
+	if err = linker.Start(); err != nil {
+		log.Fatalf("linker server start failed: %v", err)
+	}
 
-	go func() {
-		if err = g.linker.Start(); err != nil {
-			log.Fatalf("linker server start failed: %v", err)
-		}
-	}()
+	g.linker = linker
 }
 
 // 停止传输服务器
