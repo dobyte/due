@@ -9,7 +9,6 @@ import (
 	"unsafe"
 
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/network"
 	taskpool "github.com/dobyte/due/v2/task"
 )
 
@@ -155,7 +154,7 @@ func (p *partition) delete(c net.Conn) (*serverConn, bool) {
 // @return @1 error 任一连接关闭失败时返回的错误
 func (p *partition) close() error {
 	p.rw.RLock()
-	conns := make([]network.Conn, 0, len(p.connections))
+	conns := make([]*serverConn, 0, len(p.connections))
 	for _, conn := range p.connections {
 		conns = append(conns, conn)
 	}
