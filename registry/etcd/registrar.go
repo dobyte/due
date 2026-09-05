@@ -46,8 +46,6 @@ func newRegistrar(registry *Registry, insID string) *registrar {
 	r.lease = clientv3.NewLease(registry.opts.client)
 	r.registry = registry
 
-	registry.registrars.Store(insID, r)
-
 	return r
 }
 

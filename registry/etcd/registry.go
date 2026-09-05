@@ -87,9 +87,13 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
-	} else {
-		return newRegistrar(r, insID)
 	}
+
+	reg := newRegistrar(r, insID)
+
+	r.registrars.Store(insID, reg)
+
+	return reg
 }
 
 // Deregister 解注册服务实例
