@@ -3,11 +3,11 @@ package node
 import (
 	"sync"
 
-	"github.com/dobyte/due/v2/internal/transporter/internal/client"
+	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"golang.org/x/sync/singleflight"
 )
 
-type ClientOptions = client.Options
+type ClientOptions = drpc.ClientOptions
 
 type Builder struct {
 	sfg     singleflight.Group
@@ -32,9 +32,12 @@ func (b *Builder) Build(addr string) (*Client, error) {
 			return cli.(*Client), nil
 		}
 
-		c := client.NewClient(addr, b.opts)
+		c, err := drpc.NewClient(addr, b.opts)
+		if err != nil {
+			return nil, err
+		}
 
-		if err := c.Establish(); err != nil {
+		if err = c.Establish(); err != nil {
 			return nil, err
 		}
 

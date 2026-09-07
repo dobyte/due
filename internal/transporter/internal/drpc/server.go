@@ -1,7 +1,9 @@
 package drpc
 
 import (
+	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,7 +14,7 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xcall"
+	taskpool "github.com/dobyte/due/v2/task"
 )
 
 const scheme = "drpc"
@@ -20,14 +22,14 @@ const scheme = "drpc"
 type RouteHandler func(conn *ServerConn, data []byte) error
 
 type Server struct {
-	opts       *ServerOptions     // 配置
-	listenAddr string             // 监听地址
-	exposeAddr string             // 暴露地址
-	endpoint   *endpoint.Endpoint // 暴露端点
-	started    atomic.Bool        // 是否已启动
-	listener   net.Listener       // 监听器
-	connMgr    *serverConnMgr     // 连接管理器
-	handlers   [256]RouteHandler  // 路由处理器
+	opts        *ServerOptions     // 配置
+	listenAddr  string             // 监听地址
+	exposeAddr  string             // 暴露地址
+	endpoint    *endpoint.Endpoint // 暴露端点
+	started     atomic.Bool        // 是否已启动
+	listener    atomic.Value       // 监听器
+	handlers    [256]RouteHandler  // 路由处理器
+	connections sync.Map           // 连接映射
 }
 
 // NewServer 创建一个服务器
@@ -45,7 +47,6 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.handlers[route.Handshake] = s.handshake
-	s.connMgr = newServerConnMgr(s)
 
 	return s, nil
 }
@@ -73,11 +74,30 @@ func (s *Server) Endpoint() *endpoint.Endpoint {
 // Start 启动服务器
 // @return @1 error 错误信息
 func (s *Server) Start() error {
-	if err := s.init(); err != nil {
+	if s.started.Swap(true) {
+		return errors.ErrIllegalOperation
+	}
+
+	var listener net.Listener
+
+	defer func() {
+		if listener == nil {
+			s.started.Store(false)
+		}
+	}()
+
+	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
+	if err != nil {
 		return err
 	}
 
-	xcall.Go(s.serve)
+	if listener, err = net.ListenTCP(addr.Network(), addr); err != nil {
+		return err
+	}
+
+	s.listener.Store(listener)
+
+	go s.serve(listener)
 
 	return nil
 }
@@ -89,92 +109,54 @@ func (s *Server) Stop() error {
 		return errors.ErrIllegalOperation
 	}
 
-	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			return err
+	if listener, ok := s.listener.Swap((*net.TCPListener)(nil)).(*net.TCPListener); ok && listener != nil {
+		if err := listener.Close(); err != nil {
+			log.Warnf("tcp listener close error: %v", err)
 		}
-		s.listener = nil
 	}
 
-	s.connMgr.close()
-
-	return nil
-}
-
-// init 初始化TCP服务器
-// 解析TCP地址，按配置创建TLS或原生TCP监听器；若任一环节失败则回滚启动状态
-// @return @1 error 已启动、证书加载失败或监听地址不合法时返回的错误
-func (s *Server) init() error {
-	if s.started.Swap(true) {
-		return errors.ErrIllegalOperation
-	}
-
-	defer func() {
-		if s.listener == nil {
-			s.started.Store(false)
-		}
-	}()
-
-	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
-	if err != nil {
-		return err
-	}
-
-	ln, err := net.ListenTCP(addr.Network(), addr)
-	if err != nil {
-		return err
-	}
-
-	s.listener = ln
+	s.closeAllConns()
 
 	return nil
 }
 
 // serve 等待连接
 // 循环接受TCP连接并分配到独立协程处理；对瞬时错误采用指数退避重试，服务器关闭时结束
-func (s *Server) serve() {
-	var (
-		listener  = s.listener
-		tempDelay time.Duration
-	)
+func (s *Server) serve(listener net.Listener) {
+	var delay time.Duration
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
-				} else {
-					tempDelay *= 2
-				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
-				}
-
-				log.Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
-				time.Sleep(tempDelay)
-				continue
+			if errors.Is(err, net.ErrClosed) {
+				break
 			}
 
-			log.Warnf("tcp accept error: %v", err)
-			break
+			if delay == 0 {
+				delay = 5 * time.Millisecond
+			} else {
+				delay *= 2
+			}
+			if max := 1 * time.Second; delay > max {
+				delay = max
+			}
+
+			log.Warnf("tcp accept error: %v; retrying in %v", err, delay)
+			time.Sleep(delay)
+			continue
 		}
 
-		tempDelay = 0
+		delay = 0
 
-		conn.(*net.TCPConn).SetNoDelay(true)
+		cc := conn.(*net.TCPConn)
+		cc.SetNoDelay(true)
 
-		if err = s.connMgr.allocateConn(conn); err != nil {
-			log.Errorf("connection allocate error: %v", err)
-			_ = conn.Close()
-		}
+		s.allocateConn(cc)
 	}
 
-	s.listener = nil
+	s.listener.Store((*net.TCPListener)(nil))
 
-	if s.started.CompareAndSwap(true, false) {
-		s.connMgr.close()
-	}
+	s.closeAllConns()
 }
 
 // RegisterHandler 注册处理器
@@ -194,4 +176,29 @@ func (s *Server) handshake(conn *ServerConn, data []byte) error {
 	}
 
 	return conn.Send(protocol.EncodeHandshakeRes(seq, codes.OK))
+}
+
+// 分配连接
+func (s *Server) allocateConn(conn *net.TCPConn) {
+	s.connections.Store(conn, newServerConn(s, conn))
+}
+
+// 删除连接
+func (s *Server) deleteConn(conn *net.TCPConn) {
+	s.connections.Delete(conn)
+}
+
+// 关闭所有连接
+func (s *Server) closeAllConns() error {
+	wg, _ := taskpool.WithContext(context.Background())
+
+	s.connections.Range(func(_, conn any) bool {
+		wg.Go(func() error {
+			return conn.(*ServerConn).Close()
+		})
+
+		return true
+	})
+
+	return wg.Wait()
 }

@@ -13,45 +13,54 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 type ServerConn struct {
-	id                int64                              // 连接ID
 	state             atomic.Int32                       // 连接状态
-	connMgr           *serverConnMgr                     // 连接管理
+	svr               *Server                            // 服务器
 	rw                sync.RWMutex                       // 锁
 	wg1               *sync.WaitGroup                    // 读等待组
 	wg2               *sync.WaitGroup                    // 写等待组
-	conn              net.Conn                           // TCP源连接
+	conn              *net.TCPConn                       // TCP源连接
 	queue             *queue.Queue[*buffer.NocopyBuffer] // 高优先级队列
 	lastHeartbeatTime atomic.Int64                       // 上次心跳时间
-	insKind           cluster.Kind                       // 集群类型
 	insID             string                             // 集群ID
+	insKind           cluster.Kind                       // 集群类型
+}
+
+func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
+	c := &ServerConn{}
+	c.svr = svr
+	c.conn = conn
+	c.state.Store(connOpened)
+	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
+	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+	c.wg1 = &sync.WaitGroup{}
+	c.wg1.Go(func() { c.read(conn) })
+	c.wg2 = &sync.WaitGroup{}
+	c.wg2.Go(func() { c.write(conn) })
+
+	return c
 }
 
 // Send 发送消息
-func (c *ServerConn) Send(buf *buffer.NocopyBuffer) (err error) {
-	defer func() {
-		if err != nil {
-			buf.Release()
-		}
-	}()
-
+func (c *ServerConn) Send(buf *buffer.NocopyBuffer) error {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
-	if err = c.checkState(); err != nil {
-		return
+	if err := c.checkState(); err != nil {
+		buf.Release()
+		return err
 	}
 
-	if err = c.queue.Write(buf); err != nil {
-		return
+	if err := c.queue.Write(buf); err != nil {
+		buf.Release()
+		return err
 	}
 
-	return
+	return nil
 }
 
 // Close 关闭连接
@@ -59,38 +68,10 @@ func (c *ServerConn) Send(buf *buffer.NocopyBuffer) (err error) {
 // @return @1 error 错误信息
 func (c *ServerConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
-		return c.forceClose(true)
+		return c.forceClose()
 	} else {
-		return c.graceClose(true)
+		return c.graceClose()
 	}
-}
-
-// init 初始化连接
-// 复用对象池中的连接对象，重置各项状态、创建读写协程并执行授权检查与连接钩子
-// @param conn net.Conn TCP连接
-func (c *ServerConn) init(conn net.Conn) {
-	c.id = c.connMgr.id.Add(1)
-	c.state.Store(int32(network.ConnOpened))
-	c.conn = conn
-	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, c.connMgr.server.opts.WriteQueueSize)), c.connMgr.server.opts.WriteTimeout)
-	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-	c.wg1 = &sync.WaitGroup{}
-	c.wg1.Go(func() { c.read(conn) })
-	c.wg2 = &sync.WaitGroup{}
-	c.wg2.Go(func() { c.write(conn) })
-
-	c.connMgr.storeConn(conn, c)
-}
-
-// reset 重置连接
-// 清空连接对象内的引用与状态，以便归还对象池后安全复用
-func (c *ServerConn) reset() {
-	c.wg1 = nil
-	c.wg2 = nil
-	c.conn = nil
-	c.queue = nil
-	c.insID = ""
-	c.insKind = 0
 }
 
 // checkState 检测连接状态
@@ -109,10 +90,9 @@ func (c *ServerConn) checkState() error {
 
 // graceClose 优雅关闭
 // 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
 // @return @1 error 连接非打开态或关闭过程中出错时返回的错误
-func (c *ServerConn) graceClose(isNeedRecycle bool) error {
-	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
+func (c *ServerConn) graceClose() error {
+	if !c.state.CompareAndSwap(connOpened, connHanged) {
 		return errors.ErrConnectionNotOpened
 	}
 
@@ -128,30 +108,28 @@ func (c *ServerConn) graceClose(isNeedRecycle bool) error {
 		c.queue.Wait()
 	}
 
-	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+	if c.state.Swap(connClosed) == connClosed {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doClose(isNeedRecycle)
+	return c.doClose()
 }
 
 // forceClose 强制关闭
 // 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
 // @return @1 error 连接已处于关闭态时返回的错误
-func (c *ServerConn) forceClose(isNeedRecycle bool) error {
-	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+func (c *ServerConn) forceClose() error {
+	if c.state.Swap(connClosed) == connClosed {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doClose(isNeedRecycle)
+	return c.doClose()
 }
 
 // doClose 执行关闭操作
 // 关闭写队列，等待读写协程退出后关闭TCP连接，触发断开hook，并按需归还连接对象
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
 // @return @1 error 关闭TCP连接时的错误
-func (c *ServerConn) doClose(isNeedRecycle bool) error {
+func (c *ServerConn) doClose() error {
 	c.rw.Lock()
 	if c.conn == nil {
 		c.rw.Unlock()
@@ -169,9 +147,7 @@ func (c *ServerConn) doClose(isNeedRecycle bool) error {
 
 	c.wg1.Wait()
 
-	if isNeedRecycle {
-		c.connMgr.recycleConn(conn)
-	}
+	c.svr.deleteConn(conn)
 
 	return err
 }
@@ -189,7 +165,7 @@ func (c *ServerConn) read(conn net.Conn) {
 		isHeartbeat, route, _, data, err := protocol.ReadMessage(reader, &header)
 		if err != nil {
 			xcall.Go(func() {
-				_ = c.forceClose(true)
+				_ = c.forceClose()
 			})
 			return
 		}
@@ -211,7 +187,7 @@ func (c *ServerConn) read(conn net.Conn) {
 			continue
 		}
 
-		if handler := c.connMgr.server.handlers[route]; handler != nil {
+		if handler := c.svr.handlers[route]; handler != nil {
 			if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 				log.Warnf("process route %d message failed: %v", route, err)
 			}
@@ -240,25 +216,32 @@ func (c *ServerConn) write(conn net.Conn) {
 
 			c.queue.Done(false)
 
-			ok = buf.Visit(func(node *buffer.NocopyNode) bool {
-				if _, err := c.conn.Write(node.Bytes()); err != nil {
-					log.Warnf("write buffer message error: %v", err)
-					return false
-				}
+			var bs net.Buffers
+
+			buf.Visit(func(node *buffer.NocopyNode) bool {
+				bs = append(bs, node.Bytes())
 				return true
 			})
 
-			buf.Release()
+			if _, err := bs.WriteTo(conn); err != nil {
+				log.Warnf("write buffer message error: %v", err)
 
-			if !ok {
+				xcall.Go(func() {
+					_ = c.forceClose()
+				})
+
+				buf.Release()
+
 				return
+			} else {
+				buf.Release()
 			}
 		case t, ok := <-ticker.C:
 			if !ok {
 				return
 			}
 
-			if !c.doHandleHeartbeat(conn, t) {
+			if !c.doHandleHeartbeat(t) {
 				return
 			}
 		}
@@ -266,18 +249,17 @@ func (c *ServerConn) write(conn net.Conn) {
 }
 
 // doHandleHeartbeat 处理心跳
-// 检测上次收到消息的时间是否超时，超时则触发强制关闭；主动定时心跳模式下额外下发心跳包
-// @param conn net.Conn TCP连接
+// 检测上次收到消息的时间是否超时，超时则触发强制关闭
 // @param t time.Time 当前心跳触发的时间点
 // @return @1 bool 是否继续写入协程循环，心跳超时时返回false
-func (c *ServerConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
+func (c *ServerConn) doHandleHeartbeat(t time.Time) bool {
 	deadline := t.Add(-2 * defaultHeartbeatInterval).UnixNano()
 
 	if c.lastHeartbeatTime.Load() < deadline {
-		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
+		log.Debugf("connection heartbeat timeout")
 
 		xcall.Go(func() {
-			_ = c.forceClose(true)
+			_ = c.forceClose()
 		})
 
 		return false
@@ -290,9 +272,6 @@ func (c *ServerConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 // @param insID string 集群ID
 // @param insKind cluster.Kind 集群类型
 func (c *ServerConn) doSaveHandshakeInstance(insID string, insKind cluster.Kind) error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
-
 	if err := c.checkState(); err != nil {
 		return err
 	}
@@ -301,4 +280,14 @@ func (c *ServerConn) doSaveHandshakeInstance(insID string, insKind cluster.Kind)
 	c.insKind = insKind
 
 	return nil
+}
+
+// HandshakeInsID 获取握手实例ID
+func (c *ServerConn) HandshakeInsID() string {
+	return c.insID
+}
+
+// HandshakeInsKind 获取握手实例类型
+func (c *ServerConn) HandshakeInsKind() cluster.Kind {
+	return c.insKind
 }

@@ -4,20 +4,20 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/internal/transporter/internal/server"
 )
 
 type Server struct {
-	*server.Server
+	*drpc.Server
 	provider Provider
 }
 
-type ServerOptions = server.Options
+type ServerOptions = drpc.ServerOptions
 
 func NewServer(provider Provider, opts *ServerOptions) (*Server, error) {
-	serv, err := server.NewServer(opts)
+	serv, err := drpc.NewServer(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -46,15 +46,13 @@ func (s *Server) init() {
 }
 
 // 绑定用户
-func (s *Server) bind(conn *server.Conn, data []byte) error {
+func (s *Server) bind(conn *drpc.ServerConn, data []byte) error {
 	seq, cid, uid, err := protocol.DecodeBindReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Bind(context.Background(), cid, uid)
-
-	if seq == 0 {
+	if err = s.provider.Bind(context.Background(), cid, uid); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeBindRes(seq, codes.ErrorToCode(err)))
@@ -62,15 +60,13 @@ func (s *Server) bind(conn *server.Conn, data []byte) error {
 }
 
 // 解绑用户
-func (s *Server) unbind(conn *server.Conn, data []byte) error {
+func (s *Server) unbind(conn *drpc.ServerConn, data []byte) error {
 	seq, uid, err := protocol.DecodeUnbindReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Unbind(context.Background(), uid)
-
-	if seq == 0 {
+	if err = s.provider.Unbind(context.Background(), uid); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeUnbindRes(seq, codes.ErrorToCode(err)))
@@ -78,15 +74,13 @@ func (s *Server) unbind(conn *server.Conn, data []byte) error {
 }
 
 // 获取IP地址
-func (s *Server) getIP(conn *server.Conn, data []byte) error {
+func (s *Server) getIP(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, target, err := protocol.DecodeGetIPReq(data)
 	if err != nil {
 		return err
 	}
 
-	ip, err := s.provider.GetIP(context.Background(), kind, target)
-
-	if seq == 0 {
+	if ip, err := s.provider.GetIP(context.Background(), kind, target); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
@@ -94,15 +88,13 @@ func (s *Server) getIP(conn *server.Conn, data []byte) error {
 }
 
 // 统计在线人数
-func (s *Server) stat(conn *server.Conn, data []byte) error {
+func (s *Server) stat(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, err := protocol.DecodeStatReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Stat(context.Background(), kind)
-
-	if seq == 0 {
+	if total, err := s.provider.Stat(context.Background(), kind); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeStatRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -110,15 +102,13 @@ func (s *Server) stat(conn *server.Conn, data []byte) error {
 }
 
 // 检测用户是否在线
-func (s *Server) isOnline(conn *server.Conn, data []byte) error {
+func (s *Server) isOnline(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, target, err := protocol.DecodeIsOnlineReq(data)
 	if err != nil {
 		return err
 	}
 
-	isOnline, err := s.provider.IsOnline(context.Background(), kind, target)
-
-	if seq == 0 {
+	if isOnline, err := s.provider.IsOnline(context.Background(), kind, target); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeIsOnlineRes(seq, codes.ErrorToCode(err), isOnline))
@@ -126,15 +116,13 @@ func (s *Server) isOnline(conn *server.Conn, data []byte) error {
 }
 
 // 断开连接
-func (s *Server) disconnect(conn *server.Conn, data []byte) error {
+func (s *Server) disconnect(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, target, force, err := protocol.DecodeDisconnectReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Disconnect(context.Background(), kind, target, force)
-
-	if seq == 0 {
+	if err = s.provider.Disconnect(context.Background(), kind, target, force); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeDisconnectRes(seq, codes.ErrorToCode(err)))
@@ -142,15 +130,13 @@ func (s *Server) disconnect(conn *server.Conn, data []byte) error {
 }
 
 // 推送单个消息
-func (s *Server) push(conn *server.Conn, data []byte) error {
+func (s *Server) push(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, target, disconnect, message, err := protocol.DecodePushReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Push(context.Background(), kind, target, disconnect, message)
-
-	if seq == 0 {
+	if err = s.provider.Push(context.Background(), kind, target, disconnect, message); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodePushRes(seq, codes.ErrorToCode(err)))
@@ -158,15 +144,13 @@ func (s *Server) push(conn *server.Conn, data []byte) error {
 }
 
 // 推送组播消息
-func (s *Server) multicast(conn *server.Conn, data []byte) error {
+func (s *Server) multicast(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, targets, disconnect, message, err := protocol.DecodeMulticastReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Multicast(context.Background(), kind, targets, disconnect, message)
-
-	if seq == 0 {
+	if total, err := s.provider.Multicast(context.Background(), kind, targets, disconnect, message); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeMulticastRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -174,15 +158,13 @@ func (s *Server) multicast(conn *server.Conn, data []byte) error {
 }
 
 // 推送广播消息
-func (s *Server) broadcast(conn *server.Conn, data []byte) error {
+func (s *Server) broadcast(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, disconnect, message, err := protocol.DecodeBroadcastReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Broadcast(context.Background(), kind, disconnect, message)
-
-	if seq == 0 {
+	if total, err := s.provider.Broadcast(context.Background(), kind, disconnect, message); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeBroadcastRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -190,15 +172,13 @@ func (s *Server) broadcast(conn *server.Conn, data []byte) error {
 }
 
 // 发布频道消息
-func (s *Server) publish(conn *server.Conn, data []byte) error {
+func (s *Server) publish(conn *drpc.ServerConn, data []byte) error {
 	seq, channel, disconnect, message, err := protocol.DecodePublishReq(data)
 	if err != nil {
 		return err
 	}
 
-	total, err := s.provider.Publish(context.Background(), channel, disconnect, message)
-
-	if seq == 0 {
+	if total, err := s.provider.Publish(context.Background(), channel, disconnect, message); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodePublishRes(seq, codes.ErrorToCode(err), uint64(total)))
@@ -206,15 +186,13 @@ func (s *Server) publish(conn *server.Conn, data []byte) error {
 }
 
 // 订阅频道
-func (s *Server) subscribe(conn *server.Conn, data []byte) error {
+func (s *Server) subscribe(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, targets, channel, err := protocol.DecodeSubscribeReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Subscribe(context.Background(), kind, targets, channel)
-
-	if seq == 0 {
+	if err = s.provider.Subscribe(context.Background(), kind, targets, channel); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeSubscribeRes(seq, codes.ErrorToCode(err)))
@@ -222,15 +200,13 @@ func (s *Server) subscribe(conn *server.Conn, data []byte) error {
 }
 
 // 取消订阅频道
-func (s *Server) unsubscribe(conn *server.Conn, data []byte) error {
+func (s *Server) unsubscribe(conn *drpc.ServerConn, data []byte) error {
 	seq, kind, targets, channel, err := protocol.DecodeUnsubscribeReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.Unsubscribe(context.Background(), kind, targets, channel)
-
-	if seq == 0 {
+	if err = s.provider.Unsubscribe(context.Background(), kind, targets, channel); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeUnsubscribeRes(seq, codes.ErrorToCode(err)))
@@ -238,15 +214,13 @@ func (s *Server) unsubscribe(conn *server.Conn, data []byte) error {
 }
 
 // 获取状态
-func (s *Server) getState(conn *server.Conn, data []byte) error {
+func (s *Server) getState(conn *drpc.ServerConn, data []byte) error {
 	seq, err := protocol.DecodeGetStateReq(data)
 	if err != nil {
 		return err
 	}
 
-	state, err := s.provider.GetState()
-
-	if seq == 0 {
+	if state, err := s.provider.GetState(); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
@@ -254,15 +228,13 @@ func (s *Server) getState(conn *server.Conn, data []byte) error {
 }
 
 // 设置状态
-func (s *Server) setState(conn *server.Conn, data []byte) error {
+func (s *Server) setState(conn *drpc.ServerConn, data []byte) error {
 	seq, state, err := protocol.DecodeSetStateReq(data)
 	if err != nil {
 		return err
 	}
 
-	err = s.provider.SetState(state)
-
-	if seq == 0 {
+	if err = s.provider.SetState(state); seq == 0 {
 		return err
 	} else {
 		return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))

@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -19,14 +20,14 @@ type Client struct {
 	conns []*ClientConn
 }
 
-func NewClient(opts *ClientOptions) (*Client, error) {
-	addr, err := net.ResolveTCPAddr("tcp", opts.Addr)
+func NewClient(addr string, opts *ClientOptions) (*Client, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	c := &Client{}
-	c.addr = addr
+	c.addr = tcpAddr
 	c.opts = opts
 	c.conns = make([]*ClientConn, 0, c.opts.ConnNum)
 
@@ -34,26 +35,53 @@ func NewClient(opts *ClientOptions) (*Client, error) {
 }
 
 // Establish 新建连接
+// 循环尝试建立指定数量的连接；存在失败时采用指数退避重试，避免忙等
 func (c *Client) Establish() error {
-	num := c.opts.ConnNum
+	var (
+		num   = c.opts.ConnNum
+		delay time.Duration
+	)
 
-	for {
+	for num > 0 {
 		conns, err := c.doEstablish(num)
-		if err != nil {
-			log.Warnf("doEstablish failed: %v", err)
-			continue
+
+		if len(conns) > 0 {
+			delay = 0
+			c.conns = append(c.conns, conns...)
+			num -= len(conns)
 		}
-
-		c.conns = append(c.conns, conns...)
-
-		num -= len(conns)
 
 		if num <= 0 {
 			break
 		}
+
+		if err != nil {
+			log.Warnf("doEstablish failed: %v", err)
+		}
+
+		if delay == 0 {
+			delay = 5 * time.Millisecond
+		} else {
+			delay *= 2
+		}
+		if delay > time.Second {
+			delay = time.Second
+		}
+
+		time.Sleep(delay)
 	}
 
 	return nil
+}
+
+// Close 关闭客户端
+// 关闭所有连接并释放相关资源
+func (c *Client) Close() {
+	for _, conn := range c.conns {
+		conn.destroy()
+	}
+
+	c.conns = nil
 }
 
 // 新建连接
@@ -80,8 +108,8 @@ func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 		})
 	}
 
-	if err := eg.Wait(); err != nil && len(conns) == 0 {
-		return nil, err
+	if err := eg.Wait(); err != nil {
+		return conns, err
 	}
 
 	return conns, nil
@@ -101,76 +129,30 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 		return nil, errors.ErrClientClosed
 	}
 
-	call := make(chan buffer.Buffer, 1)
-	conn.pending.store(seq, call)
-
-	if err := conn.send(buf); err != nil {
-		buf.Release()
-		conn.pending.delete(seq)
-		return nil, err
-	}
-
-	if c.opts.CallTimeout > 0 {
-		tctx, tcancel := context.WithTimeout(ctx, c.opts.CallTimeout)
-		defer tcancel()
-
-		select {
-		case <-ctx.Done():
-			conn.pending.delete(seq)
-			return nil, ctx.Err()
-		case <-tctx.Done():
-			conn.pending.delete(seq)
-			return nil, tctx.Err()
-		case res, ok := <-call:
-			if !ok {
-				return nil, errors.ErrConnectionHanged
-			}
-
-			return res, nil
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			conn.pending.delete(seq)
-			return nil, ctx.Err()
-		case res, ok := <-call:
-			if !ok {
-				return nil, errors.ErrConnectionHanged
-			}
-
-			return res, nil
-		}
-	}
+	return conn.call(ctx, seq, buf)
 }
 
 // Send 发送
 func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
-	err := c.send(ctx, buf, idx...)
-
-	if err != nil {
-		buf.Release()
-	}
-
-	return err
-}
-
-// 发送
-func (c *Client) send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
 	if err := ctx.Err(); err != nil {
+		buf.Release()
 		return err
 	}
 
-	if conn := c.load(idx...); conn == nil {
+	conn := c.load(idx...)
+
+	if conn == nil {
+		buf.Release()
 		return errors.ErrClientClosed
-	} else {
-		return conn.send(buf)
 	}
+
+	return conn.send(buf)
 }
 
 // 获取连接
 func (c *Client) load(idx ...int64) *ClientConn {
 	if n := len(c.conns); n > 0 {
-		if len(idx) > 0 {
+		if len(idx) > 0 && idx[0] >= 0 {
 			return c.conns[idx[0]%int64(n)]
 		} else {
 			return c.conns[c.idx.Add(1)%uint64(n)]

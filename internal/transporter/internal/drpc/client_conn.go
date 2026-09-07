@@ -11,66 +11,78 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
+// session 表示一次连接的生命周期，读写协程通过它访问连接与上下文
+type session struct {
+	conn   net.Conn
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 type ClientConn struct {
 	cli           *Client                            // 客户端
-	rw            sync.RWMutex                       // 读写锁
-	conn          net.Conn                           // 连接
+	mu            sync.Mutex                         // 保护 dialing/状态转换
+	cond          *sync.Cond                         // 拨号完成条件变量
+	session       atomic.Pointer[session]            // 当前会话
 	state         atomic.Int32                       // 连接状态
-	total         atomic.Int32                       // 总消息数
 	queue         *queue.Queue[*buffer.NocopyBuffer] // 消息队列
 	pending       *pending                           // 等待队列
-	failure       chan struct{}                      // 重试失败通道
-	success       chan struct{}                      // 重试成功通道
-	wg1           *sync.WaitGroup                    // 读等待组
-	wg2           *sync.WaitGroup                    // 写等待组
-	ctx           context.Context                    // 上下文
-	cancel        context.CancelFunc                 // 取消函数
+	dialing       bool                               // 是否正在拨号
 	lastFaultTime atomic.Int64                       // 上次故障时间
 }
 
 func newClientConn(cli *Client) *ClientConn {
 	c := &ClientConn{}
 	c.cli = cli
-	c.state.Store(def.ConnClosed)
+	c.state.Store(connClosed)
 	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
 	c.pending = newPending()
-	c.failure = make(chan struct{})
-	c.success = make(chan struct{})
+	c.cond = sync.NewCond(&c.mu)
 	c.lastFaultTime.Store(xtime.Now().UnixNano())
 
 	return c
 }
 
-// 拨号
+// dial 建立连接；若已有拨号进行中，则等待其完成
 func (c *ClientConn) dial() error {
-	c.rw.Lock()
-	defer c.rw.Unlock()
+	c.mu.Lock()
 
-	if c.state.Load() == def.ConnOpened {
+	if c.state.Load() == connOpened {
+		c.mu.Unlock()
 		return nil
 	}
 
-	if err := c.doDial(); err != nil {
-		close(c.failure)
-		c.failure = make(chan struct{})
+	// 已有拨号在进行，等待其完成后再判定结果
+	for c.dialing {
+		c.cond.Wait()
+	}
 
-		return err
-	} else {
-		close(c.success)
-		c.success = make(chan struct{})
-
+	if c.state.Load() == connOpened {
+		c.mu.Unlock()
 		return nil
 	}
+
+	c.dialing = true
+	c.mu.Unlock()
+
+	// 在锁外执行阻塞的网络拨号，避免长时间持锁
+	err := c.doDial()
+
+	c.mu.Lock()
+	c.dialing = false
+	c.cond.Broadcast()
+	c.mu.Unlock()
+
+	return err
 }
 
-// 执行拨号
+// doDial 执行拨号
+// 拨号失败与握手失败统一按退避策略重试，避免握手失败后直接放弃
 func (c *ClientConn) doDial() error {
 	var (
 		retry int
@@ -79,93 +91,105 @@ func (c *ClientConn) doDial() error {
 
 	for {
 		conn, err := net.DialTimeout(c.cli.addr.Network(), c.cli.addr.String(), c.cli.opts.DialTimeout)
-		if err != nil {
+		if err == nil {
+			err = c.process(conn)
+		}
+
+		if err == nil {
+			return nil
+		}
+
+		if c.cli.opts.DialRetryTimes >= 0 {
 			retry++
 
-			if retry >= c.cli.opts.DialRetryTimes {
+			if retry > c.cli.opts.DialRetryTimes {
 				c.close()
 				return err
-			} else {
-				if delay == 0 {
-					delay = 5 * time.Millisecond
-				} else {
-					delay *= 2
-				}
-
-				if delay > time.Second {
-					delay = time.Second
-				}
-
-				time.Sleep(delay)
-				continue
 			}
 		}
 
-		return c.process(conn)
+		if delay == 0 {
+			delay = 5 * time.Millisecond
+		} else {
+			delay *= 2
+		}
+
+		if delay > time.Second {
+			delay = time.Second
+		}
+
+		time.Sleep(delay)
 	}
 }
 
-// 处理连接
+// process 处理连接
 func (c *ClientConn) process(conn net.Conn) error {
-	c.conn = conn
-	c.ctx, c.cancel = context.WithCancel(context.Background())
-	c.state.Store(def.ConnOpened)
-	c.conn.(*net.TCPConn).SetNoDelay(true)
-	c.wg1 = &sync.WaitGroup{}
-	c.wg1.Go(func() { c.read(conn) })
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &session{conn: conn, ctx: ctx, cancel: cancel}
 
-	err := c.handshake(conn)
-	if err != nil {
+	c.mu.Lock()
+	c.session.Store(s)
+	c.state.Store(connOpened)
+	c.mu.Unlock()
+
+	conn.(*net.TCPConn).SetNoDelay(true)
+
+	go c.read(s)
+
+	if err := c.handshake(s); err != nil {
 		c.close()
-	} else {
-		c.wg2 = &sync.WaitGroup{}
-		c.wg2.Go(func() { c.write(conn) })
+		return err
 	}
 
-	return err
+	go c.write(s)
+
+	return nil
 }
 
-// 握手
-func (c *ClientConn) handshake(conn net.Conn) error {
+// handshake 握手
+func (c *ClientConn) handshake(s *session) error {
 	var (
 		seq  = uint64(1)
 		buf  = protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID)
-		call = make(chan buffer.Buffer)
+		call = make(chan buffer.Buffer, 1)
 	)
 
 	c.pending.store(seq, call)
 
-	if _, err := conn.Write(buf.Bytes()); err != nil {
+	if _, err := s.conn.Write(buf.Bytes()); err != nil {
 		buf.Release()
-
-		close(call)
-
-		c.pending.delete(seq)
-
+		c.discard(seq, call)
 		return err
-	} else {
-		buf.Release()
 	}
+	buf.Release()
 
-	ctx, cancel := context.WithTimeout(c.ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
 	defer cancel()
 
 	select {
 	case <-ctx.Done():
-		c.pending.delete(seq)
-
+		c.discard(seq, call)
 		return ctx.Err()
 	case buf := <-call:
 		buf.Release()
-
 		return nil
 	}
 }
 
-// 发送消息
+// send 发送消息
 func (c *ClientConn) send(buf *buffer.NocopyBuffer) error {
+	if err := c.doSend(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
+}
+
+// doSend 执行发送
+func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
 	switch c.state.Load() {
-	case def.ConnClosed:
+	case connClosed:
 		if mode.IsReleaseMode() || mode.IsPreReleaseMode() {
 			if xtime.Now().UnixNano()-c.lastFaultTime.Load() < c.cli.opts.FaultRecoveryTime.Nanoseconds() {
 				return errors.ErrConnectionClosed
@@ -175,149 +199,237 @@ func (c *ClientConn) send(buf *buffer.NocopyBuffer) error {
 		if err := c.dial(); err != nil {
 			return err
 		}
-	case def.ConnHanged:
+	case connHanged:
 		if err := c.wait(); err != nil {
 			return err
 		}
 	}
 
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
 	return c.queue.Write(buf)
 }
 
-// 读取数据
-func (c *ClientConn) read(conn net.Conn) {
+// call 调用
+func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer) (buffer.Buffer, error) {
+	call := make(chan buffer.Buffer, 1)
+	c.pending.store(seq, call)
+
+	if err := c.send(buf); err != nil {
+		c.pending.delete(seq)
+		return nil, err
+	}
+
+	s := c.session.Load()
+
+	if s == nil {
+		c.pending.delete(seq)
+		return nil, errors.ErrConnectionClosed
+	}
+
+	if c.cli.opts.CallTimeout > 0 {
+		tctx, tcancel := context.WithTimeout(s.ctx, c.cli.opts.CallTimeout)
+		defer tcancel()
+
+		select {
+		case <-ctx.Done():
+			c.discard(seq, call)
+			return nil, ctx.Err()
+		case <-tctx.Done():
+			c.discard(seq, call)
+			return nil, tctx.Err()
+		case res, ok := <-call:
+			if !ok {
+				return nil, errors.ErrConnectionHanged
+			}
+			close(call)
+			return res, nil
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			c.discard(seq, call)
+			return nil, ctx.Err()
+		case res, ok := <-call:
+			if !ok {
+				return nil, errors.ErrConnectionHanged
+			}
+			close(call)
+			return res, nil
+		}
+	}
+}
+
+// read 读取数据
+func (c *ClientConn) read(s *session) {
 	var (
-		reader = bufio.NewReaderSize(conn, 4096)
+		reader = bufio.NewReaderSize(s.conn, 4096)
 		header [4]byte
 	)
 
 	for {
-		select {
-		case <-c.ctx.Done():
+		if s.ctx.Err() != nil {
 			return
-		default:
-			buf, err := protocol.ReaderBuffer(reader, &header)
-			if err != nil {
-				c.retry(conn)
-				return
-			}
+		}
 
-			if isHeartbeat, _, seq := protocol.ParseBuffer(buf.Bytes()); isHeartbeat {
+		buf, err := protocol.ReaderBuffer(reader, &header)
+		if err != nil {
+			c.retry(s)
+			return
+		}
+
+		if isHeartbeat, _, seq := protocol.ParseBuffer(buf.Bytes()); isHeartbeat {
+			buf.Release()
+		} else {
+			if ok := c.pending.reply(seq, buf); !ok {
 				buf.Release()
-			} else {
-				if call, ok := c.pending.extract(seq); ok {
-					call <- buf
-				} else {
-					buf.Release()
-				}
 			}
 		}
 	}
 }
 
-// 写入数据
-func (c *ClientConn) write(conn net.Conn) {
-	ticker := time.NewTicker(def.HeartbeatInterval)
+// write 写入数据
+func (c *ClientConn) write(s *session) {
+	ticker := time.NewTicker(defaultHeartbeatInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			if _, err := conn.Write(protocol.Heartbeat()); err != nil {
+			if _, err := s.conn.Write(protocol.Heartbeat()); err != nil {
 				log.Warnf("write heartbeat message error: %v", err)
-				c.retry(conn)
+				c.retry(s)
 				return
 			}
-		case buf, ok := <-c.queue.Read(): // 有序队列
+		case buf, ok := <-c.queue.Read():
 			if !ok {
 				return
 			}
 
-			if c.cli.opts.WriteTimeout > 0 {
-				c.total.Add(-1)
-			}
+			c.queue.Done(false)
 
-			if ok = c.doWrite(conn, buf); !ok {
+			if ok = c.doWrite(s, buf); !ok {
 				return
 			}
 		}
 	}
 }
 
-// 执行写入数据
-func (c *ClientConn) doWrite(conn net.Conn, buf *buffer.NocopyBuffer) bool {
-	ok := buf.Visit(func(node *buffer.NocopyNode) bool {
-		if _, err := conn.Write(node.Bytes()); err != nil {
-			return false
-		} else {
-			return true
-		}
+// doWrite 执行写入数据
+func (c *ClientConn) doWrite(s *session, buf *buffer.NocopyBuffer) bool {
+	var bs net.Buffers
+
+	buf.Visit(func(node *buffer.NocopyNode) bool {
+		bs = append(bs, node.Bytes())
+		return true
 	})
+
+	_, err := bs.WriteTo(s.conn)
 
 	buf.Release()
 
-	if !ok {
-		c.retry(conn)
+	if err != nil {
+		c.retry(s)
+		return false
 	}
 
-	return ok
+	return true
 }
 
-// 重试拨号
-func (c *ClientConn) retry(conn net.Conn) {
-	if !c.state.CompareAndSwap(def.ConnOpened, def.ConnHanged) {
+// retry 重试拨号
+// 仅当传入的会话仍是当前会话时才触发重连，避免旧读写协程误伤新连接
+func (c *ClientConn) retry(s *session) {
+	c.mu.Lock()
+	if c.session.Load() != s || c.state.Load() != connOpened {
+		c.mu.Unlock()
 		return
 	}
+	c.state.Store(connHanged)
+	c.mu.Unlock()
 
-	_ = conn.Close()
-
-	if c.cancel != nil {
-		c.cancel()
-	}
+	_ = s.conn.Close()
+	s.cancel()
 
 	if err := c.dial(); err != nil {
 		log.Warnf("retry dial failed: %v", err)
 	}
 }
 
-// 关闭连接
+// close 关闭连接
 func (c *ClientConn) close() {
-	if c.state.Swap(def.ConnClosed) == def.ConnClosed {
+	c.mu.Lock()
+	if c.state.Load() == connClosed {
+		c.mu.Unlock()
 		return
 	}
+	c.state.Store(connClosed)
+	s := c.session.Load()
+	c.session.Store(nil)
+	c.cond.Broadcast()
+	c.mu.Unlock()
 
 	c.lastFaultTime.Store(xtime.Now().UnixNano())
 
-	if c.conn != nil {
-		_ = c.conn.Close()
-	}
-
-	if c.cancel != nil {
-		c.cancel()
+	if s != nil {
+		if s.conn != nil {
+			_ = s.conn.Close()
+		}
+		s.cancel()
 	}
 }
 
-// 等待重连
-func (c *ClientConn) wait() error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
+// destroy 销毁连接
+// 关闭会话、关闭消息队列并释放积压的消息，彻底回收连接资源
+func (c *ClientConn) destroy() {
+	c.mu.Lock()
+	s := c.session.Load()
+	c.session.Store(nil)
+	c.state.Store(connClosed)
+	c.cond.Broadcast()
+	c.mu.Unlock()
 
-	switch c.state.Load() {
-	case def.ConnOpened:
-		return nil
-	case def.ConnHanged:
-		select {
-		case <-c.failure:
-			return errors.ErrConnectionClosed
-		case <-c.success:
-			return nil
+	c.lastFaultTime.Store(xtime.Now().UnixNano())
+
+	if s != nil {
+		if s.conn != nil {
+			_ = s.conn.Close()
 		}
+		s.cancel()
+	}
+
+	c.queue.Close()
+
+	for buf := range c.queue.Read() {
+		if buf != nil {
+			buf.Release()
+		}
+	}
+}
+
+// wait 等待重连
+func (c *ClientConn) wait() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for c.state.Load() == connHanged {
+		c.cond.Wait()
+	}
+
+	if c.state.Load() == connOpened {
+		return nil
 	}
 
 	return errors.ErrConnectionClosed
+}
+
+func (c *ClientConn) discard(seq uint64, call chan buffer.Buffer) {
+	c.pending.delete(seq)
+
+	select {
+	case buf, ok := <-call:
+		if ok && buf != nil {
+			buf.Release()
+		}
+	default:
+	}
 }

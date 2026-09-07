@@ -6,17 +6,17 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 )
 
 type Client struct {
-	seq uint64
-	cli *client.Client
+	seq atomic.Uint64
+	cli *drpc.Client
 }
 
-func NewClient(cli *client.Client) *Client {
+func NewClient(cli *drpc.Client) *Client {
 	return &Client{
 		cli: cli,
 	}
@@ -72,8 +72,8 @@ func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 
 // 生成序列号，规避生成序列号为0的编号
 func (c *Client) doGenSequence() uint64 {
-	if seq := atomic.AddUint64(&c.seq, 1); seq == 0 {
-		return atomic.AddUint64(&c.seq, 1)
+	if seq := c.seq.Add(1); seq == 0 {
+		return c.seq.Add(1)
 	} else {
 		return seq
 	}

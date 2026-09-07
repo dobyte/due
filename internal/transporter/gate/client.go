@@ -7,18 +7,18 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/internal/transporter/internal/client"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/session"
 )
 
 type Client struct {
 	seq uint64
-	cli *client.Client
+	cli *drpc.Client
 }
 
-func NewClient(cli *client.Client) *Client {
+func NewClient(cli *drpc.Client) *Client {
 	return &Client{
 		cli: cli,
 	}

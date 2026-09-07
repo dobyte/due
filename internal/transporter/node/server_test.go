@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/transporter/internal/server"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
 )
 
 func TestServer(t *testing.T) {
-	server, err := node.NewServer(&provider{}, &server.Options{
+	server, err := node.NewServer(&provider{}, &node.ServerOptions{
 		Addr: ":49898",
 	})
 	if err != nil {
