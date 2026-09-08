@@ -38,8 +38,8 @@ func (s *Server) init() {
 }
 
 // 触发事件
-func (s *Server) trigger(conn *drpc.ServerConn, data []byte) error {
-	seq, event, cid, uid, err := protocol.DecodeTriggerReq(data)
+func (s *Server) trigger(conn *drpc.ServerConn, seq uint64, data []byte) error {
+	_, event, cid, uid, err := protocol.DecodeTriggerReq(data)
 	if err != nil {
 		return err
 	}
@@ -55,13 +55,13 @@ func (s *Server) trigger(conn *drpc.ServerConn, data []byte) error {
 			return err
 		}
 	} else {
-		return conn.Send(protocol.EncodeTriggerRes(seq, codes.ErrorToCode(err)))
+		return conn.Reply(seq, protocol.EncodeTriggerRes(seq, codes.ErrorToCode(err)))
 	}
 }
 
 // 投递消息
-func (s *Server) deliver(conn *drpc.ServerConn, data []byte) error {
-	seq, cid, uid, message, err := protocol.DecodeDeliverReq(data)
+func (s *Server) deliver(conn *drpc.ServerConn, seq uint64, data []byte) error {
+	_, cid, uid, message, err := protocol.DecodeDeliverReq(data)
 	if err != nil {
 		return err
 	}
@@ -83,30 +83,29 @@ func (s *Server) deliver(conn *drpc.ServerConn, data []byte) error {
 	if err = s.provider.Deliver(context.Background(), gid, nid, cid, uid, message); seq == 0 {
 		return err
 	} else {
-		return conn.Send(protocol.EncodeDeliverRes(seq, codes.ErrorToCode(err)))
+		return conn.Reply(seq, protocol.EncodeDeliverRes(seq, codes.ErrorToCode(err)))
 	}
 }
 
 // 获取状态
-func (s *Server) getState(conn *drpc.ServerConn, data []byte) error {
-	seq, err := protocol.DecodeGetStateReq(data)
-	if err != nil {
+func (s *Server) getState(conn *drpc.ServerConn, seq uint64, data []byte) error {
+	if _, err := protocol.DecodeGetStateReq(data); err != nil {
 		return err
 	}
 
 	state, err := s.provider.GetState()
 
-	return conn.Send(protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
+	return conn.Reply(seq, protocol.EncodeGetStateRes(seq, codes.ErrorToCode(err), state))
 }
 
 // 设置状态
-func (s *Server) setState(conn *drpc.ServerConn, data []byte) error {
-	seq, state, err := protocol.DecodeSetStateReq(data)
+func (s *Server) setState(conn *drpc.ServerConn, seq uint64, data []byte) error {
+	_, state, err := protocol.DecodeSetStateReq(data)
 	if err != nil {
 		return err
 	}
 
 	err = s.provider.SetState(state)
 
-	return conn.Send(protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
+	return conn.Reply(seq, protocol.EncodeSetStateRes(seq, codes.ErrorToCode(err)))
 }

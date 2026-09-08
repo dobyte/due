@@ -6,23 +6,24 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 )
 
 const (
-	subscribeReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8 + b16
-	subscribeResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
+	subscribeReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B16
+	subscribeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
 // EncodeSubscribeReq 编码订阅频道请求（单次最多订阅65535个对象）
 // 协议：size + header + route + seq + session kind + count + targets + channel
 func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
-	size := subscribeReqBytes + len(targets)*8 + len([]byte(channel))
+	size := subscribeReqBytes + len(targets)*def.B64 + len([]byte(channel))
 
 	writer := buffer.MallocWriter(size)
-	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(size-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Subscribe)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -38,7 +39,7 @@ func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel 
 func DecodeSubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []int64, channel string, err error) {
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -62,7 +63,7 @@ func DecodeSubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []i
 		return
 	}
 
-	channel = string(data[subscribeReqBytes+8*count:])
+	channel = string(data[subscribeReqBytes+8*int(count):])
 
 	return
 }
@@ -71,8 +72,8 @@ func DecodeSubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []i
 // 协议：size + header + route + seq + code
 func EncodeSubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(subscribeResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(subscribeResBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(subscribeResBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Subscribe)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -90,7 +91,7 @@ func DecodeSubscribeRes(data []byte) (code uint16, err error) {
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
 		return
 	}
 

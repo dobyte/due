@@ -14,7 +14,7 @@ import (
 )
 
 type Client struct {
-	seq uint64
+	seq atomic.Uint64
 	cli *drpc.Client
 }
 
@@ -321,8 +321,8 @@ func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 
 // 生成序列号，规避生成序列号为0的编号
 func (c *Client) doGenSequence() (seq uint64) {
-	if seq := atomic.AddUint64(&c.seq, 1); seq == 0 {
-		return atomic.AddUint64(&c.seq, 1)
+	if seq := c.seq.Add(1); seq == 0 {
+		return c.seq.Add(1)
 	} else {
 		return seq
 	}

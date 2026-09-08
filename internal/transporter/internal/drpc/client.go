@@ -10,12 +10,14 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/errgroup"
 )
 
 type Client struct {
 	opts  *ClientOptions
 	addr  *net.TCPAddr
+	epoch uint64 // 启动代次，实例级固定，供服务端按 (insID, epoch, seq) 对重连重发做幂等去重
 	idx   atomic.Uint64
 	conns []*ClientConn
 }
@@ -29,20 +31,30 @@ func NewClient(addr string, opts *ClientOptions) (*Client, error) {
 	c := &Client{}
 	c.addr = tcpAddr
 	c.opts = opts
+	c.epoch = uint64(xtime.Now().UnixNano())
 	c.conns = make([]*ClientConn, 0, c.opts.ConnNum)
 
 	return c, nil
 }
 
 // Establish 新建连接
-// 循环尝试建立指定数量的连接；存在失败时采用指数退避重试，避免忙等
-func (c *Client) Establish() error {
+// 循环尝试建立指定数量的连接；存在失败时采用指数退避重试，避免忙等；支持通过 ctx 取消等待
+func (c *Client) Establish(ctxs ...context.Context) error {
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
+
 	var (
 		num   = c.opts.ConnNum
 		delay time.Duration
 	)
 
 	for num > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		conns, err := c.doEstablish(num)
 
 		if len(conns) > 0 {
@@ -68,9 +80,26 @@ func (c *Client) Establish() error {
 			delay = time.Second
 		}
 
-		time.Sleep(delay)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
 	}
 
+	return nil
+}
+
+// Close 关闭客户端所有连接并唤醒全部等待者
+// 连接切片在 Establish 完成后不再变更，此处保留切片内容（仅逐连接置关闭标记），
+// 使并发的 Call/Send 经由 load 取连接时始终安全；已关闭连接会通过 closed 标记拒绝新的发送
+func (c *Client) Close() error {
+	for _, conn := range c.conns {
+		if conn != nil {
+			conn.closed.Store(true)
+			conn.destroy()
+		}
+	}
 	return nil
 }
 

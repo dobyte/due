@@ -29,13 +29,16 @@ type ServerConn struct {
 	lastHeartbeatTime atomic.Int64                       // 上次心跳时间
 	insID             string                             // 集群ID
 	insKind           cluster.Kind                       // 集群类型
-	recordSeq         uint64                             // 当前处理请求的 seq，用于缓存响应去重
+	insEpoch          uint64                             // 实例启动代次
+	handshaked        atomic.Bool                        // 是否已完成握手
+	closeCh           chan struct{}                      // 连接关闭信号，doClose 执行时关闭
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c := &ServerConn{}
 	c.svr = svr
 	c.conn = conn
+	c.closeCh = make(chan struct{})
 	c.state.Store(connOpened)
 	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
@@ -49,11 +52,6 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 
 // Send 发送消息
 func (c *ServerConn) Send(buf *buffer.NocopyBuffer) error {
-	// 记录响应，用于重连后按 seq 幂等去重
-	if seq := c.recordSeq; seq != 0 {
-		c.svr.replies.store(c.insID, seq, append([]byte(nil), buf.Bytes()...))
-	}
-
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -68,6 +66,16 @@ func (c *ServerConn) Send(buf *buffer.NocopyBuffer) error {
 	}
 
 	return nil
+}
+
+// Reply 回复请求
+// 按 seq 将响应写入消息队列，并同步缓存到去重状态机，支持异步回包
+func (c *ServerConn) Reply(seq uint64, buf *buffer.NocopyBuffer) error {
+	if seq != 0 {
+		c.svr.replies.finish(c.insID, c.insEpoch, seq, append([]byte(nil), buf.Bytes()...))
+	}
+
+	return c.Send(buf)
 }
 
 // Close 关闭连接
@@ -146,6 +154,7 @@ func (c *ServerConn) doClose() error {
 	c.queue.Close()
 	conn := c.conn
 	c.conn = nil
+	close(c.closeCh)
 	c.rw.Unlock()
 
 	c.wg2.Wait()
@@ -194,26 +203,59 @@ func (c *ServerConn) read(conn net.Conn) {
 			continue
 		}
 
+		// 未完成握手前拒绝业务帧
+		if rt != route.Handshake && !c.handshaked.Load() {
+			xcall.Go(func() {
+				_ = c.forceClose()
+			})
+			return
+		}
+
 		handler := c.svr.handlers[rt]
 		if handler == nil {
 			continue
 		}
 
-		// 幂等去重：已处理过的请求直接重发缓存的响应，避免重连后重复执行
+		// 幂等去重：已处理或正在处理的请求直接重发/等待缓存的响应，避免重连后重复执行
 		if rt != route.Handshake && seq > 0 {
-			if reply, ok := c.svr.replies.get(c.insID, seq); ok {
-				_ = c.Send(buffer.NewNocopyBuffer(reply))
+			done, cached, executing := c.svr.replies.begin(c.insID, c.insEpoch, seq)
+
+			if !executing {
+				if cached != nil {
+					_ = c.Send(buffer.NewNocopyBuffer(cached))
+					continue
+				}
+
+				// 正在执行：等待执行完成后重发响应；连接关闭、条目被回收或超时退出
+				go func() {
+					select {
+					case <-done:
+						if cached, ok := c.svr.replies.get(c.insID, c.insEpoch, seq); ok {
+							_ = c.Send(buffer.NewNocopyBuffer(cached))
+						}
+					case <-c.closeCh:
+					case <-time.After(replyWaitTimeout):
+					}
+				}()
 				continue
 			}
 
-			c.recordSeq = seq
+			err := handler(c, seq, data)
+
+			if err != nil {
+				// 执行失败：使占位失效，后续重试可重新执行
+				c.svr.replies.finish(c.insID, c.insEpoch, seq, nil)
+
+				if !errors.Is(err, errors.ErrNotFoundUserLocation) {
+					log.Warnf("process route %d message failed: %v", rt, err)
+				}
+			}
+			continue
 		}
 
-		if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+		if err := handler(c, seq, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
 			log.Warnf("process route %d message failed: %v", rt, err)
 		}
-
-		c.recordSeq = 0
 	}
 }
 
@@ -244,6 +286,10 @@ func (c *ServerConn) write(conn net.Conn) {
 				bs = append(bs, node.Bytes())
 				return true
 			})
+
+			if c.svr.opts.WriteTimeout > 0 {
+				_ = conn.SetWriteDeadline(time.Now().Add(c.svr.opts.WriteTimeout))
+			}
 
 			if _, err := bs.WriteTo(conn); err != nil {
 				log.Warnf("write buffer message error: %v", err)
@@ -293,13 +339,16 @@ func (c *ServerConn) doHandleHeartbeat(t time.Time) bool {
 // doSaveHandshakeInstance 保存握手实例
 // @param insID string 集群ID
 // @param insKind cluster.Kind 集群类型
-func (c *ServerConn) doSaveHandshakeInstance(insID string, insKind cluster.Kind) error {
+// @param epoch uint64 实例启动代次
+func (c *ServerConn) doSaveHandshakeInstance(insID string, insKind cluster.Kind, epoch uint64) error {
 	if err := c.checkState(); err != nil {
 		return err
 	}
 
 	c.insID = insID
 	c.insKind = insKind
+	c.insEpoch = epoch
+	c.handshaked.Store(true)
 
 	return nil
 }

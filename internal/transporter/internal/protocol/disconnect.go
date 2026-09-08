@@ -6,21 +6,22 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 )
 
 const (
-	disconnectReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8 + b64 + b8
-	disconnectResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
+	disconnectReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64 + def.B8
+	disconnectResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
 // EncodeDisconnectReq 编码断连请求
 // 协议：size + header + route + seq + session kind + target + force
 func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Disconnect)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -40,7 +41,7 @@ func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -70,8 +71,8 @@ func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int
 // 协议：size + header + route + seq + code
 func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Disconnect)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -82,14 +83,14 @@ func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 // DecodeDisconnectRes 解码断连响应
 // 协议：size + header + route + seq + code
 func DecodeDisconnectRes(data []byte) (code uint16, err error) {
-	if len(data) != bindResBytes {
+	if len(data) != disconnectResBytes {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
 		return
 	}
 

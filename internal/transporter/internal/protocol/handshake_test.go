@@ -9,20 +9,21 @@ import (
 )
 
 func TestEncodeHandshakeReq(t *testing.T) {
-	buffer := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID())
+	buffer := protocol.EncodeHandshakeReq(1, 100, cluster.Gate, xuuid.UUID())
 
 	t.Log(buffer.Bytes())
 }
 
 func TestDecodeHandshakeReq(t *testing.T) {
-	buffer := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID())
+	buffer := protocol.EncodeHandshakeReq(1, 100, cluster.Gate, xuuid.UUID())
 
-	seq, insKind, insID, err := protocol.DecodeHandshakeReq(buffer.Bytes())
+	seq, epoch, insKind, insID, err := protocol.DecodeHandshakeReq(buffer.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("seq: %v", seq)
+	t.Logf("epoch: %v", epoch)
 	t.Logf("kind: %v", insKind)
 	t.Logf("id: %v", insID)
 }

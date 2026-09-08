@@ -6,13 +6,14 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 )
 
 const (
-	unsubscribeReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8 + b16
-	unsubscribeResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
+	unsubscribeReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B16
+	unsubscribeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
 // EncodeUnsubscribeReq 编码取消订阅频道请求（单次最多取消订阅65535个对象）
@@ -21,8 +22,8 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
 	writer := buffer.MallocWriter(size)
-	writer.WriteUint32s(binary.BigEndian, uint32(size-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(size-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Unsubscribe)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -38,7 +39,7 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []int64, channel string, err error) {
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -62,7 +63,7 @@ func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets [
 		return
 	}
 
-	channel = string(data[unsubscribeReqBytes+8*count:])
+	channel = string(data[unsubscribeReqBytes+8*int(count):])
 
 	return
 }
@@ -71,8 +72,8 @@ func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets [
 // 协议：size + header + route + seq + code
 func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unsubscribeResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Unsubscribe)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -90,7 +91,7 @@ func DecodeUnsubscribeRes(data []byte) (code uint16, err error) {
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
 		return
 	}
 

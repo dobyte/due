@@ -46,6 +46,13 @@ func (p *pending) snapshot() []*call {
 	return out
 }
 
+// closeAll 关闭所有等待中的调用，唤醒全部等待者并释放资源
+func (p *pending) closeAll() {
+	for _, c := range p.calls {
+		c.closeAll()
+	}
+}
+
 // call 一次未完成的调用
 type call struct {
 	ch   chan buffer.Buffer // 响应通道
@@ -111,4 +118,15 @@ func (p *calls) snapshot() []*call {
 	}
 
 	return out
+}
+
+// closeAll 关闭所有等待中的调用
+func (p *calls) closeAll() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for seq, c := range p.calls {
+		close(c.ch)
+		delete(p.calls, seq)
+	}
 }

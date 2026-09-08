@@ -7,22 +7,23 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 )
 
 const (
-	getStateReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes
-	getStateResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + b8
-	setStateReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8
-	setStateResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes
+	getStateReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes
+	getStateResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B8
+	setStateReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8
+	setStateResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
 // EncodeGetStateReq 编码获取状态请求
 // 协议：size + header + route + seq
 func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(getStateReqBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(getStateReqBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.GetState)
 	writer.WriteUint64s(binary.BigEndian, seq)
 
@@ -39,7 +40,7 @@ func DecodeGetStateReq(data []byte) (seq uint64, err error) {
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -54,8 +55,8 @@ func DecodeGetStateReq(data []byte) (seq uint64, err error) {
 // 协议：size + header + route + seq + code + cluster state
 func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(getStateResBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(getStateResBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.GetState)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -74,7 +75,7 @@ func DecodeGetStateRes(data []byte) (code uint16, state cluster.State, err error
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+defaultSeqBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -95,8 +96,8 @@ func DecodeGetStateRes(data []byte) (code uint16, state cluster.State, err error
 // 协议：size + header + route + seq + cluster state
 func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(setStateReqBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(setStateReqBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.SetState)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(state))
@@ -114,7 +115,7 @@ func DecodeSetStateReq(data []byte) (seq uint64, state cluster.State, err error)
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -135,8 +136,8 @@ func DecodeSetStateReq(data []byte) (seq uint64, state cluster.State, err error)
 // 协议：size + header + route + seq + code
 func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateResBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(setStateResBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(setStateResBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.SetState)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -154,7 +155,7 @@ func DecodeSetStateRes(data []byte) (code uint16, err error) {
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(-defaultCodeBytes, io.SeekEnd); err != nil {
+	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
 		return
 	}
 

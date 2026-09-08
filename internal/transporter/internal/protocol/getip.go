@@ -7,22 +7,23 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/utils/xnet"
 )
 
 const (
-	getIPReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8 + b64
-	getIPResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + b32
+	getIPReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64
+	getIPResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B32
 )
 
 // EncodeGetIPReq 编码获取IP请求
 // 协议：size + header + route + seq + session kind + target
 func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getIPReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.GetIP)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -41,7 +42,7 @@ func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, e
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -66,14 +67,14 @@ func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, e
 // EncodeGetIPRes 编码获取IP响应
 // 协议：size + header + route + seq + code + [ip]
 func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer {
-	size := getIPResBytes - defaultSizeBytes
+	size := getIPResBytes - def.SizeBytes
 	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
-		size -= 4
+		size -= def.B32
 	}
 
 	writer := buffer.MallocWriter(getIPResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(size))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.GetIP)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -88,14 +89,14 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 // DecodeGetIPRes 解码获取IP响应
 // 协议：size + header + route + seq + code + [ip]
 func DecodeGetIPRes(data []byte) (code uint16, ip string, err error) {
-	if len(data) != getIPResBytes && len(data) != getIPResBytes-4 {
+	if len(data) != getIPResBytes && len(data) != getIPResBytes-def.B32 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+defaultSeqBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
 		return
 	}
 

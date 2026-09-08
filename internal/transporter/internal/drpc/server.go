@@ -19,7 +19,7 @@ import (
 
 const scheme = "drpc"
 
-type RouteHandler func(conn *ServerConn, data []byte) error
+type RouteHandler func(conn *ServerConn, seq uint64, data []byte) error
 
 type Server struct {
 	opts        *ServerOptions     // 配置
@@ -167,17 +167,17 @@ func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 }
 
 // 处理握手
-func (s *Server) handshake(conn *ServerConn, data []byte) error {
-	seq, insKind, insID, err := protocol.DecodeHandshakeReq(data)
+func (s *Server) handshake(conn *ServerConn, seq uint64, data []byte) error {
+	_, epoch, insKind, insID, err := protocol.DecodeHandshakeReq(data)
 	if err != nil {
 		return err
 	}
 
-	if err = conn.doSaveHandshakeInstance(insID, insKind); err != nil {
+	if err = conn.doSaveHandshakeInstance(insID, insKind, epoch); err != nil {
 		return err
 	}
 
-	return conn.Send(protocol.EncodeHandshakeRes(seq, codes.OK))
+	return conn.Reply(seq, protocol.EncodeHandshakeRes(seq, codes.OK))
 }
 
 // 分配连接
@@ -208,16 +208,27 @@ func (s *Server) closeAllConns() error {
 // replyKey 响应缓存的键
 type replyKey struct {
 	insID string
+	epoch uint64
 	seq   uint64
 }
 
+// replyState 响应缓存条目状态
+type replyState int
+
+const (
+	replyExecuting replyState = iota + 1 // 正在执行
+	replyDone                            // 已完成
+)
+
 // replyEntry 响应缓存条目
 type replyEntry struct {
+	state  replyState
+	done   chan struct{} // 执行完成信号
 	data   []byte
 	expire time.Time
 }
 
-// replyCache 响应缓存，用于重连后按 (insID, seq) 幂等去重
+// replyCache 响应缓存，用于重连后按 (insID, epoch, seq) 幂等去重
 type replyCache struct {
 	mu        sync.Mutex
 	entries   map[replyKey]*replyEntry
@@ -230,42 +241,89 @@ func newReplyCache(ttl time.Duration) *replyCache {
 	return &replyCache{entries: make(map[replyKey]*replyEntry), ttl: ttl}
 }
 
-// get 获取缓存的响应，过期或不存在返回 false
-func (c *replyCache) get(insID string, seq uint64) ([]byte, bool) {
+// begin 尝试标记请求为执行中；若已有相同请求在执行则返回其完成信号，若已完成则返回缓存响应
+// 过期条目（含执行中条目）会被回收并重新授予执行权，避免异步回包缺失导致占位永久泄漏
+func (c *replyCache) begin(insID string, epoch, seq uint64) (done chan struct{}, data []byte, executing bool) {
+	c.mu.Lock()
+
+	key := replyKey{insID: insID, epoch: epoch, seq: seq}
+
+	if entry, ok := c.entries[key]; ok {
+		if time.Now().Before(entry.expire) {
+			switch entry.state {
+			case replyExecuting:
+				c.mu.Unlock()
+				return entry.done, nil, false
+			case replyDone:
+				c.mu.Unlock()
+				return nil, entry.data, false
+			}
+		}
+
+		// 过期条目：若是执行中，唤醒旧等待者后回收
+		if entry.state == replyExecuting {
+			close(entry.done)
+		}
+		delete(c.entries, key)
+	}
+
+	entry := &replyEntry{state: replyExecuting, done: make(chan struct{}), expire: time.Now().Add(c.ttl)}
+	c.entries[key] = entry
+	c.mu.Unlock()
+
+	return entry.done, nil, true
+}
+
+// get 获取已完成的缓存响应
+func (c *replyCache) get(insID string, epoch, seq uint64) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := replyKey{insID: insID, seq: seq}
-
-	entry, ok := c.entries[key]
-	if !ok {
+	entry, ok := c.entries[replyKey{insID: insID, epoch: epoch, seq: seq}]
+	if !ok || entry.state != replyDone {
 		return nil, false
 	}
 
 	if time.Now().After(entry.expire) {
-		delete(c.entries, key)
 		return nil, false
 	}
 
 	return entry.data, true
 }
 
-// store 缓存响应，并周期性地惰性清理过期条目
-func (c *replyCache) store(insID string, seq uint64, data []byte) {
+// finish 缓存响应并唤醒等待者；data 为空表示执行失败，缓存立即失效
+// 重复调用安全：仅 executing 状态的条目会被转换并唤醒等待者
+func (c *replyCache) finish(insID string, epoch, seq uint64, data []byte) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+
+	key := replyKey{insID: insID, epoch: epoch, seq: seq}
+
+	entry, ok := c.entries[key]
+	if !ok || entry.state != replyExecuting {
+		c.mu.Unlock()
+		return
+	}
 
 	now := time.Now()
 
+	// 惰性清理过期条目
 	if now.After(c.nextSweep) {
 		c.nextSweep = now.Add(c.ttl / 2)
-
-		for key, entry := range c.entries {
-			if now.After(entry.expire) {
-				delete(c.entries, key)
+		for k, e := range c.entries {
+			if now.After(e.expire) {
+				delete(c.entries, k)
 			}
 		}
 	}
 
-	c.entries[replyKey{insID: insID, seq: seq}] = &replyEntry{data: data, expire: now.Add(c.ttl)}
+	if len(data) == 0 {
+		delete(c.entries, key)
+	} else {
+		entry.state = replyDone
+		entry.data = data
+		entry.expire = now.Add(c.ttl)
+	}
+
+	close(entry.done)
+	c.mu.Unlock()
 }

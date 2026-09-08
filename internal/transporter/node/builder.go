@@ -38,6 +38,8 @@ func (b *Builder) Build(addr string) (*Client, error) {
 		}
 
 		if err = c.Establish(); err != nil {
+			_ = c.Close()
+
 			return nil, err
 		}
 

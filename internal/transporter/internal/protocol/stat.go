@@ -7,21 +7,22 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/session"
 )
 
 const (
-	statReqBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + b8
-	statResBytes = defaultSizeBytes + defaultHeaderBytes + defaultRouteBytes + defaultSeqBytes + defaultCodeBytes + b64
+	statReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8
+	statResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B64
 )
 
 // EncodeStatReq 编码统计在线人数请求
 // 协议：size + header + route + seq + session kind
 func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(statReqBytes)
-	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-defaultSizeBytes))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-def.SizeBytes))
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Stat)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
@@ -39,7 +40,7 @@ func DecodeStatReq(data []byte) (seq uint64, kind session.Kind, err error) {
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
 		return
 	}
 
@@ -59,14 +60,14 @@ func DecodeStatReq(data []byte) (seq uint64, kind session.Kind, err error) {
 // EncodeStatRes 编码统计在线人数响应
 // 协议：size + header + route + seq + code + [total]
 func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
-	size := statResBytes - defaultSizeBytes
+	size := statResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
-		size -= b64
+		size -= def.B64
 	}
 
 	writer := buffer.MallocWriter(statResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(size))
-	writer.WriteUint8s(dataBit)
+	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Stat)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
@@ -81,18 +82,22 @@ func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffe
 // DecodeStatRes 解码统计在线人数响应
 // 协议：size + header + route + seq + code + [total]
 func DecodeStatRes(data []byte) (code uint16, total uint64, err error) {
-	if len(data) != statResBytes && len(data) != statResBytes-8 {
+	if len(data) != statResBytes && len(data) != statResBytes-def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	reader := buffer.NewReader(data)
 
-	if _, err = reader.Seek(defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+defaultSeqBytes, io.SeekStart); err != nil {
+	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
 		return
 	}
 
-	if len(data) == statResBytes {
+	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
+		return
+	}
+
+	if code == codes.OK && len(data) == statResBytes {
 		total, err = reader.ReadUint64(binary.BigEndian)
 	}
 

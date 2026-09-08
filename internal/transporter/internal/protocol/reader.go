@@ -7,7 +7,22 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 )
+
+// validateSize 校验帧长度合法性
+// size 表示 size 字段之后的字节数；心跳帧为 1（仅header），数据帧至少为 header+route+seq
+func validateSize(size uint32) bool {
+	if size == def.HeaderBytes {
+		return true
+	}
+
+	if size < def.MinFrameSize-def.SizeBytes {
+		return false
+	}
+
+	return uint64(size)+def.SizeBytes <= def.MaxFrameSize
+}
 
 // ReadMessage 读取消息
 func ReadMessage(reader *bufio.Reader, header *[4]byte) (bool, uint8, uint64, []byte, error) {
@@ -16,14 +31,14 @@ func ReadMessage(reader *bufio.Reader, header *[4]byte) (bool, uint8, uint64, []
 	}
 
 	size := binary.BigEndian.Uint32(header[:])
-	if size == 0 {
+	if !validateSize(size) {
 		return false, 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	data := make([]byte, defaultSizeBytes+size)
-	copy(data[:defaultSizeBytes], header[:])
+	data := make([]byte, def.SizeBytes+size)
+	copy(data[:def.SizeBytes], header[:])
 
-	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+	if _, err := io.ReadFull(reader, data[def.SizeBytes:]); err != nil {
 		return false, 0, 0, nil, err
 	}
 
@@ -39,16 +54,16 @@ func ReaderBuffer(reader *bufio.Reader, header *[4]byte) (buffer.Buffer, error) 
 	}
 
 	size := binary.BigEndian.Uint32(header[:])
-	if size == 0 {
+	if !validateSize(size) {
 		return nil, errors.ErrInvalidMessage
 	}
 
-	buf := buffer.MallocBytes(int(defaultSizeBytes + size))
+	buf := buffer.MallocBytes(int(def.SizeBytes + size))
 	data := buf.Bytes()
 
-	copy(data[:defaultSizeBytes], header[:])
+	copy(data[:def.SizeBytes], header[:])
 
-	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+	if _, err := io.ReadFull(reader, data[def.SizeBytes:]); err != nil {
 		buf.Release()
 		return nil, err
 	}
@@ -58,12 +73,12 @@ func ReaderBuffer(reader *bufio.Reader, header *[4]byte) (buffer.Buffer, error) 
 
 // ParseBuffer 解析buffer
 func ParseBuffer(data []byte) (bool, uint8, uint64) {
-	if header := data[defaultSizeBytes : defaultSizeBytes+defaultHeaderBytes][0]; header&heartbeatBit == heartbeatBit {
+	if header := data[def.SizeBytes : def.SizeBytes+def.HeaderBytes][0]; header&def.HeartbeatBit == def.HeartbeatBit {
 		return true, 0, 0
 	} else {
 		var (
-			route = data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes][0]
-			seq   = binary.BigEndian.Uint64(data[defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes : defaultSizeBytes+defaultHeaderBytes+defaultRouteBytes+8])
+			route = data[def.SizeBytes+def.HeaderBytes : def.SizeBytes+def.HeaderBytes+def.RouteBytes][0]
+			seq   = binary.BigEndian.Uint64(data[def.SizeBytes+def.HeaderBytes+def.RouteBytes : def.SizeBytes+def.HeaderBytes+def.RouteBytes+8])
 		)
 
 		return false, route, seq
