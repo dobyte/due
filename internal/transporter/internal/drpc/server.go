@@ -30,6 +30,7 @@ type Server struct {
 	listener    atomic.Value       // 监听器
 	handlers    [256]RouteHandler  // 路由处理器
 	connections sync.Map           // 连接映射
+	replies     *replyCache        // 响应缓存，用于重连后按 seq 幂等去重
 }
 
 // NewServer 创建一个服务器
@@ -47,6 +48,7 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
 	s.handlers[route.Handshake] = s.handshake
+	s.replies = newReplyCache(replyCacheTTL)
 
 	return s, nil
 }
@@ -201,4 +203,69 @@ func (s *Server) closeAllConns() error {
 	})
 
 	return wg.Wait()
+}
+
+// replyKey 响应缓存的键
+type replyKey struct {
+	insID string
+	seq   uint64
+}
+
+// replyEntry 响应缓存条目
+type replyEntry struct {
+	data   []byte
+	expire time.Time
+}
+
+// replyCache 响应缓存，用于重连后按 (insID, seq) 幂等去重
+type replyCache struct {
+	mu        sync.Mutex
+	entries   map[replyKey]*replyEntry
+	ttl       time.Duration
+	nextSweep time.Time
+}
+
+// newReplyCache 创建响应缓存
+func newReplyCache(ttl time.Duration) *replyCache {
+	return &replyCache{entries: make(map[replyKey]*replyEntry), ttl: ttl}
+}
+
+// get 获取缓存的响应，过期或不存在返回 false
+func (c *replyCache) get(insID string, seq uint64) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	key := replyKey{insID: insID, seq: seq}
+
+	entry, ok := c.entries[key]
+	if !ok {
+		return nil, false
+	}
+
+	if time.Now().After(entry.expire) {
+		delete(c.entries, key)
+		return nil, false
+	}
+
+	return entry.data, true
+}
+
+// store 缓存响应，并周期性地惰性清理过期条目
+func (c *replyCache) store(insID string, seq uint64, data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+
+	if now.After(c.nextSweep) {
+		c.nextSweep = now.Add(c.ttl / 2)
+
+		for key, entry := range c.entries {
+			if now.After(entry.expire) {
+				delete(c.entries, key)
+			}
+		}
+	}
+
+	c.entries[replyKey{insID: insID, seq: seq}] = &replyEntry{data: data, expire: now.Add(c.ttl)}
 }

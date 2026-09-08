@@ -10,4 +10,5 @@ const (
 
 const (
 	defaultHeartbeatInterval = 10 * time.Second // 心跳间隔时间
+	replyCacheTTL            = time.Minute      // 响应缓存过期时间
 )

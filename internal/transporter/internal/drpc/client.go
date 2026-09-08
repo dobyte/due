@@ -74,16 +74,6 @@ func (c *Client) Establish() error {
 	return nil
 }
 
-// Close 关闭客户端
-// 关闭所有连接并释放相关资源
-func (c *Client) Close() {
-	for _, conn := range c.conns {
-		conn.destroy()
-	}
-
-	c.conns = nil
-}
-
 // 新建连接
 func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 	var (
@@ -155,7 +145,7 @@ func (c *Client) load(idx ...int64) *ClientConn {
 		if len(idx) > 0 && idx[0] >= 0 {
 			return c.conns[idx[0]%int64(n)]
 		} else {
-			return c.conns[c.idx.Add(1)%uint64(n)]
+			return c.conns[(c.idx.Add(1)-1)%uint64(n)]
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
+	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xtime"
@@ -24,10 +25,11 @@ type ServerConn struct {
 	wg1               *sync.WaitGroup                    // 读等待组
 	wg2               *sync.WaitGroup                    // 写等待组
 	conn              *net.TCPConn                       // TCP源连接
-	queue             *queue.Queue[*buffer.NocopyBuffer] // 高优先级队列
+	queue             *queue.Queue[*buffer.NocopyBuffer] // 消息队列
 	lastHeartbeatTime atomic.Int64                       // 上次心跳时间
 	insID             string                             // 集群ID
 	insKind           cluster.Kind                       // 集群类型
+	recordSeq         uint64                             // 当前处理请求的 seq，用于缓存响应去重
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
@@ -47,6 +49,11 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 
 // Send 发送消息
 func (c *ServerConn) Send(buf *buffer.NocopyBuffer) error {
+	// 记录响应，用于重连后按 seq 幂等去重
+	if seq := c.recordSeq; seq != 0 {
+		c.svr.replies.store(c.insID, seq, append([]byte(nil), buf.Bytes()...))
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -162,7 +169,7 @@ func (c *ServerConn) read(conn net.Conn) {
 	)
 
 	for {
-		isHeartbeat, route, _, data, err := protocol.ReadMessage(reader, &header)
+		isHeartbeat, rt, seq, data, err := protocol.ReadMessage(reader, &header)
 		if err != nil {
 			xcall.Go(func() {
 				_ = c.forceClose()
@@ -187,16 +194,31 @@ func (c *ServerConn) read(conn net.Conn) {
 			continue
 		}
 
-		if handler := c.svr.handlers[route]; handler != nil {
-			if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
-				log.Warnf("process route %d message failed: %v", route, err)
-			}
+		handler := c.svr.handlers[rt]
+		if handler == nil {
+			continue
 		}
+
+		// 幂等去重：已处理过的请求直接重发缓存的响应，避免重连后重复执行
+		if rt != route.Handshake && seq > 0 {
+			if reply, ok := c.svr.replies.get(c.insID, seq); ok {
+				_ = c.Send(buffer.NewNocopyBuffer(reply))
+				continue
+			}
+
+			c.recordSeq = seq
+		}
+
+		if err := handler(c, data); err != nil && !errors.Is(err, errors.ErrNotFoundUserLocation) {
+			log.Warnf("process route %d message failed: %v", rt, err)
+		}
+
+		c.recordSeq = 0
 	}
 }
 
 // write 写入消息
-// 为保证心跳能够优先下发到客户端，采用高/低优先级双队列：外层先取高优先级，空闲时在内层再取低优先级或处理心跳
+// 从消息队列取出消息写入连接；同时按固定间隔检测心跳超时，超时则触发强制关闭
 // @param conn net.Conn TCP连接
 func (c *ServerConn) write(conn net.Conn) {
 	ticker := time.NewTicker(defaultHeartbeatInterval)

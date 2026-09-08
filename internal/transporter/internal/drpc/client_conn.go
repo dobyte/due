@@ -19,21 +19,22 @@ import (
 
 // session 表示一次连接的生命周期，读写协程通过它访问连接与上下文
 type session struct {
-	conn   net.Conn
+	conn   *net.TCPConn
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
 type ClientConn struct {
-	cli           *Client                            // 客户端
-	mu            sync.Mutex                         // 保护 dialing/状态转换
-	cond          *sync.Cond                         // 拨号完成条件变量
-	session       atomic.Pointer[session]            // 当前会话
-	state         atomic.Int32                       // 连接状态
-	queue         *queue.Queue[*buffer.NocopyBuffer] // 消息队列
-	pending       *pending                           // 等待队列
-	dialing       bool                               // 是否正在拨号
-	lastFaultTime atomic.Int64                       // 上次故障时间
+	cli           *Client                             // 客户端
+	mu            sync.Mutex                          // 保护 dialing/状态转换
+	cond          *sync.Cond                          // 拨号完成条件变量
+	session       atomic.Pointer[session]             // 当前会话
+	state         atomic.Int32                        // 连接状态
+	queue         *queue.Queue[*buffer.NocopyBuffer]  // 消息队列
+	retryBuf      atomic.Pointer[buffer.NocopyBuffer] // 写失败待重发的缓冲区
+	pending       *pending                            // 等待队列
+	dialing       bool                                // 是否正在拨号
+	lastFaultTime atomic.Int64                        // 上次故障时间
 }
 
 func newClientConn(cli *Client) *ClientConn {
@@ -92,7 +93,7 @@ func (c *ClientConn) doDial() error {
 	for {
 		conn, err := net.DialTimeout(c.cli.addr.Network(), c.cli.addr.String(), c.cli.opts.DialTimeout)
 		if err == nil {
-			err = c.process(conn)
+			err = c.process(conn.(*net.TCPConn))
 		}
 
 		if err == nil {
@@ -123,16 +124,16 @@ func (c *ClientConn) doDial() error {
 }
 
 // process 处理连接
-func (c *ClientConn) process(conn net.Conn) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	s := &session{conn: conn, ctx: ctx, cancel: cancel}
+func (c *ClientConn) process(conn *net.TCPConn) error {
+	s := &session{}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.conn = conn
+	s.conn.SetNoDelay(true)
 
 	c.mu.Lock()
 	c.session.Store(s)
 	c.state.Store(connOpened)
 	c.mu.Unlock()
-
-	conn.(*net.TCPConn).SetNoDelay(true)
 
 	go c.read(s)
 
@@ -154,7 +155,7 @@ func (c *ClientConn) handshake(s *session) error {
 		call = make(chan buffer.Buffer, 1)
 	)
 
-	c.pending.store(seq, call)
+	c.pending.store(seq, call, nil)
 
 	if _, err := s.conn.Write(buf.Bytes()); err != nil {
 		buf.Release()
@@ -163,7 +164,7 @@ func (c *ClientConn) handshake(s *session) error {
 	}
 	buf.Release()
 
-	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, c.cli.opts.DialTimeout)
 	defer cancel()
 
 	select {
@@ -211,22 +212,19 @@ func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
 // call 调用
 func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer) (buffer.Buffer, error) {
 	call := make(chan buffer.Buffer, 1)
-	c.pending.store(seq, call)
+
+	// 复制请求数据，用于连接中断重连后重发，避免消息丢失
+	data := append([]byte(nil), buf.Bytes()...)
+
+	c.pending.store(seq, call, data)
 
 	if err := c.send(buf); err != nil {
 		c.pending.delete(seq)
 		return nil, err
 	}
 
-	s := c.session.Load()
-
-	if s == nil {
-		c.pending.delete(seq)
-		return nil, errors.ErrConnectionClosed
-	}
-
 	if c.cli.opts.CallTimeout > 0 {
-		tctx, tcancel := context.WithTimeout(s.ctx, c.cli.opts.CallTimeout)
+		tctx, tcancel := context.WithTimeout(context.Background(), c.cli.opts.CallTimeout)
 		defer tcancel()
 
 		select {
@@ -288,6 +286,18 @@ func (c *ClientConn) read(s *session) {
 
 // write 写入数据
 func (c *ClientConn) write(s *session) {
+	// 优先重发上次写失败的 Send 消息
+	if buf := c.retryBuf.Load(); buf != nil {
+		if c.doWrite(s, buf) {
+			c.retryBuf.Store(nil)
+		} else {
+			return
+		}
+	}
+
+	// 重连成功后优先重发所有未完成请求，保证请求不丢失
+	c.resend(s)
+
 	ticker := time.NewTicker(defaultHeartbeatInterval)
 	defer ticker.Stop()
 
@@ -315,7 +325,25 @@ func (c *ClientConn) write(s *session) {
 	}
 }
 
+// resend 重发所有未完成（未收到响应）的请求
+// 在重连后由写协程优先调用；写失败则继续触发重连
+func (c *ClientConn) resend(s *session) {
+	for _, entry := range c.pending.snapshot() {
+		if entry == nil || len(entry.data) == 0 {
+			continue
+		}
+
+		bs := net.Buffers{entry.data}
+
+		if _, err := bs.WriteTo(s.conn); err != nil {
+			c.retry(s)
+			return
+		}
+	}
+}
+
 // doWrite 执行写入数据
+// 写失败时：Send 消息（seq==0）保留到 retryBuf 待重连后重发；Call（seq>0）由 pending 重发兜底
 func (c *ClientConn) doWrite(s *session, buf *buffer.NocopyBuffer) bool {
 	var bs net.Buffers
 
@@ -326,12 +354,18 @@ func (c *ClientConn) doWrite(s *session, buf *buffer.NocopyBuffer) bool {
 
 	_, err := bs.WriteTo(s.conn)
 
-	buf.Release()
-
 	if err != nil {
+		if _, _, seq := protocol.ParseBuffer(buf.Bytes()); seq == 0 {
+			c.retryBuf.Store(buf)
+		} else {
+			buf.Release()
+		}
+
 		c.retry(s)
 		return false
 	}
+
+	buf.Release()
 
 	return true
 }
@@ -403,6 +437,10 @@ func (c *ClientConn) destroy() {
 		if buf != nil {
 			buf.Release()
 		}
+	}
+
+	if buf := c.retryBuf.Swap(nil); buf != nil {
+		buf.Release()
 	}
 }
 
