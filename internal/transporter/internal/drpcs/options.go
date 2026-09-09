@@ -11,6 +11,7 @@ type ServerOptions struct {
 	Expose         bool          // 是否暴露公网IP
 	WriteTimeout   time.Duration // 写超时时间
 	WriteQueueSize int32         // 写队列大小
+	WorkerNum      int32         // 工作协程数
 }
 
 type ClientOptions struct {

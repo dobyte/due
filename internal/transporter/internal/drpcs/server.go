@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 )
@@ -28,6 +29,8 @@ type Server struct {
 	listener   *net.TCPListener   // 监听器
 	handlers   [256]RouteHandler  // 路由处理器
 	conns      sync.Map           // 连接映射
+	ticker     *time.Ticker       // 心跳定时器
+	workers    []*ServerWorker    // 工作协程
 }
 
 // NewServer 创建一个服务器
@@ -44,6 +47,7 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
+	s.ticker = time.NewTicker(defaultHeartbeatInterval)
 
 	return s, nil
 }
@@ -74,6 +78,10 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.started {
+		return errors.ErrServerStarted
+	}
+
 	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
 	if err != nil {
 		return err
@@ -88,6 +96,7 @@ func (s *Server) Start() error {
 	s.listener = listener
 
 	go s.serve(listener)
+	go s.check()
 
 	return nil
 }
@@ -99,7 +108,7 @@ func (s *Server) Stop() error {
 	defer s.mu.Unlock()
 
 	if !s.started {
-		return errors.ErrIllegalOperation
+		return errors.ErrServerClosed
 	}
 
 	if err := s.listener.Close(); err != nil {
@@ -108,7 +117,7 @@ func (s *Server) Stop() error {
 
 	s.started = false
 	s.listener = nil
-
+	s.ticker.Stop()
 	s.closeAllConns()
 
 	return nil
@@ -148,6 +157,28 @@ func (s *Server) serve(listener net.Listener) {
 	_ = s.Stop()
 }
 
+// check 检查连接是否超时
+func (s *Server) check() {
+	for t := range s.ticker.C {
+		s.conns.Range(func(_, cc any) bool {
+			conn := cc.(*ServerConn)
+
+			task.Add(func() {
+				if !conn.checkHeartbeat(&t) {
+					conn.graceClose()
+				}
+			})
+
+			return true
+		})
+	}
+}
+
+// 删除连接
+func (s *Server) deleteConn(conn *net.TCPConn) {
+	s.conns.Delete(conn)
+}
+
 // 分配连接
 func (s *Server) allocateConn(conn *net.TCPConn) {
 	s.conns.Store(conn, newServerConn(s, conn))
@@ -157,13 +188,20 @@ func (s *Server) allocateConn(conn *net.TCPConn) {
 func (s *Server) closeAllConns() error {
 	wg, _ := task.WithContext(context.Background())
 
-	s.conns.Range(func(_, conn any) bool {
-		wg.Go(func() error {
-			return conn.(*ServerConn).Close()
-		})
-
+	s.conns.Range(func(_, cc any) bool {
+		wg.Go(cc.(*ServerConn).forceClose)
 		return true
 	})
 
 	return wg.Wait()
+}
+
+func (s *Server) handshakeHandler(conn *ServerConn, seq uint64, buf buffer.Buffer) error {
+	protocol.DecodeHandshakeReq()
+
+	return nil
+}
+
+func (s *Server) messageHandler(conn *ServerConn, route uint8, seq uint64, buf buffer.Buffer) error {
+	return nil
 }

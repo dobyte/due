@@ -92,6 +92,11 @@ func NewPacker(opts ...Option) *defaultPacker {
 // @return @2 error 读取失败或数据不完整时返回的错误
 func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	buf1 := buffer.MallocBytes(defaultSizeBytes)
+
+	if buf1 == nil {
+		return nil, errors.ErrMessageTooLarge
+	}
+
 	defer buf1.Release()
 
 	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
@@ -105,6 +110,11 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	}
 
 	buf2 := buffer.MallocBytes(int(defaultSizeBytes + size))
+
+	if buf2 == nil {
+		return nil, errors.ErrMessageTooLarge
+	}
+
 	data := buf2.Bytes()
 
 	copy(data[:defaultSizeBytes], buf1.Bytes())

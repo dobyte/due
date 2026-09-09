@@ -11,43 +11,56 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 )
 
-type Reader struct {
+type reader struct {
 	reader *bufio.Reader
-	header [def.SizeBytes]byte
+	header [def.SizeBytes + def.HeaderBytes]byte
 }
 
-func NewReader(conn *net.TCPConn) *Reader {
-	return &Reader{reader: bufio.NewReaderSize(conn, 1<<16)}
+func newReader(conn *net.TCPConn) *reader {
+	return &reader{reader: bufio.NewReaderSize(conn, 1<<16)}
 }
 
-// ReadBuffer 以buffer的形式读取消息
-func (r *Reader) ReadBuffer() (buffer.Buffer, error) {
+// readBuffer 以buffer的形式读取消息
+func (r *reader) readBuffer() (bool, uint8, uint64, buffer.Buffer, error) {
 	if _, err := io.ReadFull(r.reader, r.header[:]); err != nil {
-		return nil, err
+		return false, 0, 0, nil, err
 	}
 
-	size := binary.BigEndian.Uint32(r.header[:])
+	size := binary.BigEndian.Uint32(r.header[:def.SizeBytes])
 
 	if !r.validateSize(size) {
-		return nil, errors.ErrInvalidMessage
+		return false, 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	buf := buffer.MallocBytes(def.SizeBytes + int(size))
-	data := buf.Bytes()
+	if header := r.header[def.SizeBytes:][0]; header&def.HeartbeatBit == def.HeartbeatBit {
+		return true, 0, 0, nil, nil
+	}
 
-	copy(data[:def.SizeBytes], r.header[:])
+	buf := buffer.MallocBytes(int(size) - def.HeaderBytes)
 
-	if _, err := io.ReadFull(r.reader, data[def.SizeBytes:]); err != nil {
+	if buf == nil {
+		return false, 0, 0, nil, errors.ErrMessageTooLarge
+	}
+
+	if _, err := io.ReadFull(r.reader, buf.Bytes()); err != nil {
 		buf.Release()
-		return nil, err
+		return false, 0, 0, nil, err
 	}
 
-	return buf, nil
+	var (
+		data  = buf.Bytes()
+		route = data[:def.RouteBytes][0]
+		seq   = binary.BigEndian.Uint64(data[def.RouteBytes : def.RouteBytes+def.SeqBytes])
+	)
+
+	buf.MoveTo(def.RouteBytes + def.SeqBytes)
+
+	return false, route, seq, buf, nil
 }
 
 // validateSize 校验帧长度合法性
 // size 表示 size 字段之后的字节数；心跳帧为 1（仅header），数据帧至少为 header+route+seq
-func (r *Reader) validateSize(size uint32) bool {
+func (r *reader) validateSize(size uint32) bool {
 	if size == def.HeaderBytes {
 		return true
 	}
