@@ -107,6 +107,11 @@ func (b *NocopyBuffer) MallocWriter(cap int, whence ...Whence) *Writer {
 	return block
 }
 
+// Nodes 获取节点数
+func (b *NocopyBuffer) Nodes() int {
+	return b.num
+}
+
 // Visit 迭代
 func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) bool {
 	for node := b.head; node != nil; {
@@ -198,8 +203,12 @@ func (b *NocopyBuffer) Release() {
 			next := n.next
 			n.Release()
 			node = next
+		default:
+			goto OVER
 		}
 	}
+
+OVER:
 	b.len = -1
 	b.num = 0
 	b.head = nil

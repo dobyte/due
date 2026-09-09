@@ -1,7 +1,7 @@
 package buffer
 
 import (
-	"math"
+	"math/bits"
 	"sync"
 )
 
@@ -25,7 +25,7 @@ func NewBytesPool(grade int) *BytesPool {
 	for i := range grade + 1 {
 		cap := 1 << i
 		pool := &sync.Pool{}
-		pool.New = func() any { return &Bytes{buf: make([]byte, cap), off: cap, pool: pool} }
+		pool.New = func() any { return &Bytes{buf: make([]byte, cap), upper: cap, pool: pool} }
 		p.pools[i] = pool
 	}
 
@@ -34,7 +34,7 @@ func NewBytesPool(grade int) *BytesPool {
 
 // NewBytesPoolWithCapacity 以指定容量创建字节池
 func NewBytesPoolWithCapacity(cap int) *BytesPool {
-	return NewBytesPool(int(math.Ceil(math.Log2(float64(max(1, cap))))))
+	return NewBytesPool(bits.Len(uint(max(1, cap) - 1)))
 }
 
 // Get 获取
@@ -46,7 +46,8 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	}
 
 	b := pool.Get().(*Bytes)
-	b.off = cap
+	b.lower = 0
+	b.upper = cap
 	b.released.Store(false)
 
 	return b
@@ -66,7 +67,5 @@ func (p *BytesPool) getPool(cap int) *sync.Pool {
 		return nil
 	}
 
-	i := min(int(math.Ceil(math.Log2(float64(cap)))), len(p.pools)-1)
-
-	return p.pools[i]
+	return p.pools[bits.Len(uint(cap-1))]
 }

@@ -8,7 +8,8 @@ import (
 // Bytes 字节缓冲
 type Bytes struct {
 	buf      []byte
-	off      int
+	lower    int
+	upper    int
 	pool     *sync.Pool
 	released atomic.Bool
 }
@@ -17,12 +18,12 @@ var _ Buffer = (*Bytes)(nil)
 
 // NewBytes 以指定buf创建字节
 func NewBytes(buf []byte) *Bytes {
-	return &Bytes{buf: buf, off: len(buf)}
+	return &Bytes{buf: buf, upper: len(buf)}
 }
 
 // NewBytesWithCapacity 以指定容量创建字节
 func NewBytesWithCapacity(cap int) *Bytes {
-	return &Bytes{buf: make([]byte, cap), off: cap}
+	return &Bytes{buf: make([]byte, cap), upper: cap}
 }
 
 // Len 返回数据长度
@@ -30,7 +31,7 @@ func (b *Bytes) Len() int {
 	if b == nil {
 		return 0
 	} else {
-		return b.off
+		return b.upper - b.lower
 	}
 }
 
@@ -48,7 +49,14 @@ func (b *Bytes) Available() int {
 	if b == nil {
 		return 0
 	} else {
-		return cap(b.buf) - b.off
+		return b.Cap() - b.upper
+	}
+}
+
+// MoveTo 移动lower索引
+func (b *Bytes) MoveTo(lower int) {
+	if b != nil && lower >= 0 && lower <= b.upper {
+		b.lower = lower
 	}
 }
 
@@ -57,7 +65,7 @@ func (b *Bytes) Bytes() []byte {
 	if b == nil {
 		return nil
 	} else {
-		return b.buf[:b.off]
+		return b.buf[b.lower:b.upper]
 	}
 }
 
@@ -67,7 +75,8 @@ func (b *Bytes) Release() {
 		return
 	}
 
-	b.off = 0
+	b.lower = 0
+	b.upper = 0
 
 	if b.pool != nil {
 		b.pool.Put(b)

@@ -1,7 +1,7 @@
 package buffer
 
 import (
-	"math"
+	"math/bits"
 	"sync"
 )
 
@@ -34,7 +34,7 @@ func NewWriterPool(grade int) *WriterPool {
 
 // NewWriterPoolWithCapacity 以指定容量创建写入器池
 func NewWriterPoolWithCapacity(cap int) *WriterPool {
-	return NewWriterPool(int(math.Ceil(math.Log2(float64(max(1, cap))))))
+	return NewWriterPool(bits.Len(uint(max(1, cap) - 1)))
 }
 
 // Get 获取
@@ -65,7 +65,5 @@ func (p *WriterPool) getPool(cap int) *sync.Pool {
 		return nil
 	}
 
-	i := min(int(math.Ceil(math.Log2(float64(cap)))), len(p.pools)-1)
-
-	return p.pools[i]
+	return p.pools[bits.Len(uint(cap-1))]
 }
