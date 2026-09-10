@@ -21,7 +21,7 @@ func newReader(conn *net.TCPConn) *reader {
 }
 
 // readBuffer 以buffer的形式读取消息
-func (r *reader) readBuffer() (bool, uint8, uint64, buffer.Buffer, error) {
+func (r *reader) readBuffer() (bool, uint8, uint64, *buffer.Bytes, error) {
 	if _, err := io.ReadFull(r.reader, r.header[:]); err != nil {
 		return false, 0, 0, nil, err
 	}

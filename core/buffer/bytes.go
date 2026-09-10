@@ -28,45 +28,29 @@ func NewBytesWithCapacity(cap int) *Bytes {
 
 // Len 返回数据长度
 func (b *Bytes) Len() int {
-	if b == nil {
-		return 0
-	} else {
-		return b.upper - b.lower
-	}
+	return b.upper - b.lower
 }
 
 // Cap 返回容量
 func (b *Bytes) Cap() int {
-	if b == nil {
-		return 0
-	} else {
-		return cap(b.buf)
-	}
+	return cap(b.buf)
 }
 
 // Available 返回可用空间
 func (b *Bytes) Available() int {
-	if b == nil {
-		return 0
-	} else {
-		return b.Cap() - b.upper
-	}
+	return b.Cap() - b.upper
 }
 
 // MoveTo 移动lower索引
 func (b *Bytes) MoveTo(lower int) {
-	if b != nil && lower >= 0 && lower <= b.upper {
+	if lower >= 0 && lower <= b.upper {
 		b.lower = lower
 	}
 }
 
 // Bytes 获取字节数据
 func (b *Bytes) Bytes() []byte {
-	if b == nil {
-		return nil
-	} else {
-		return b.buf[b.lower:b.upper]
-	}
+	return b.buf[b.lower:b.upper]
 }
 
 // Release 释放

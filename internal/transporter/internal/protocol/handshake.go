@@ -12,54 +12,48 @@ import (
 )
 
 const (
-	handshakeReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B64 + def.B8
+	handshakeReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64
 	handshakeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
 // EncodeHandshakeReq 编码握手请求
-// 协议：size + header + route + seq + epoch + ins kind + ins id
-func EncodeHandshakeReq(seq uint64, epoch uint64, insKind cluster.Kind, insID string) *buffer.NocopyBuffer {
-	size := handshakeReqBytes + len(insID)
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{ins kind + ins id + conn epoch}
+func EncodeHandshakeReq(seq uint64, kind cluster.Kind, inst string, epoch uint64) *buffer.NocopyBuffer {
+	size := handshakeReqBytes + len(inst)
 
 	writer := buffer.MallocWriter(size)
 	writer.WriteUint32s(binary.BigEndian, uint32(size-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.Handshake)
 	writer.WriteUint64s(binary.BigEndian, seq)
+	writer.WriteUint8s(uint8(kind))
+	writer.WriteString(inst)
 	writer.WriteUint64s(binary.BigEndian, epoch)
-	writer.WriteUint8s(uint8(insKind))
-	writer.WriteString(insID)
 
 	return buffer.NewNocopyBuffer(writer)
 }
 
 // DecodeHandshakeReq 解码握手请求
-// 协议：size + header + route + seq + epoch + ins kind + ins id
-func DecodeHandshakeReq(data []byte) (seq uint64, epoch uint64, insKind cluster.Kind, insID string, err error) {
-	reader := buffer.NewReader(data)
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{ins kind + ins id + conn epoch}
+func DecodeHandshakeReq(buf *buffer.Bytes) (kind cluster.Kind, inst string, epoch uint64, err error) {
+	var (
+		k      uint8
+		reader = buffer.NewReader(buf.Bytes())
+	)
 
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	if epoch, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	var k uint8
 	if k, err = reader.ReadUint8(); err != nil {
 		return
 	} else {
-		insKind = cluster.Kind(k)
+		kind = cluster.Kind(k)
 	}
 
-	if insID, err = reader.ReadString(len(data) - handshakeReqBytes); err != nil {
+	if inst, err = reader.ReadString(buf.Len() - def.B8 - def.B64); err != nil {
 		return
 	}
+
+	epoch, err = reader.ReadUint64(binary.BigEndian)
 
 	return
 }

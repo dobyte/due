@@ -196,8 +196,16 @@ func (s *Server) closeAllConns() error {
 	return wg.Wait()
 }
 
-func (s *Server) handshakeHandler(conn *ServerConn, seq uint64, buf buffer.Buffer) error {
-	protocol.DecodeHandshakeReq()
+// 握手处理
+func (s *Server) handshakeHandler(conn *ServerConn, seq uint64, buf *buffer.Bytes) error {
+	kind, inst, epoch, err := protocol.DecodeHandshakeReq(buf)
+	if err != nil {
+		return err
+	}
+
+	conn.kind = kind
+	conn.inst = inst
+	conn.epoch = epoch
 
 	return nil
 }

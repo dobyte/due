@@ -43,7 +43,7 @@ func (w *Writer) Cap() int {
 
 // Available 返回可用空间
 func (w *Writer) Available() int {
-	return cap(w.buf) - w.off
+	return max(w.Cap()-w.off, 0)
 }
 
 // Bytes 获取字节数据

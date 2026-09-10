@@ -59,18 +59,30 @@ func (b *NocopyBuffer) Len() int {
 func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	switch v := block.(type) {
 	case []byte:
+		if len(v) == 0 {
+			return
+		}
+
 		if len(whence) > 0 && whence[0] == Head {
 			b.addToHead(&NocopyNode{block: v})
 		} else {
 			b.addToTail(&NocopyNode{block: v})
 		}
 	case *Bytes:
+		if v == nil {
+			return
+		}
+
 		if len(whence) > 0 && whence[0] == Head {
 			b.addToHead(&NocopyNode{block: v})
 		} else {
 			b.addToTail(&NocopyNode{block: v})
 		}
 	case *Writer:
+		if v == nil {
+			return
+		}
+
 		if len(whence) > 0 && whence[0] == Head {
 			b.addToHead(&NocopyNode{block: v})
 		} else {
@@ -219,12 +231,12 @@ OVER:
 
 // 添加到头部
 func (b *NocopyBuffer) addToHead(node any) {
-	if node == nil {
-		return
-	}
-
 	switch n := node.(type) {
 	case *NocopyNode:
+		if n == nil {
+			return
+		}
+
 		if b.head == nil {
 			b.head = n
 			b.tail = n
@@ -244,6 +256,10 @@ func (b *NocopyBuffer) addToHead(node any) {
 		b.len = -1
 		b.num++
 	case *NocopyBuffer:
+		if n == nil {
+			return
+		}
+
 		if b.head == nil {
 			b.head = n
 			b.tail = n
@@ -269,12 +285,12 @@ func (b *NocopyBuffer) addToHead(node any) {
 
 // 添加到尾部
 func (b *NocopyBuffer) addToTail(node any) {
-	if node == nil {
-		return
-	}
-
 	switch n := node.(type) {
 	case *NocopyNode:
+		if n == nil {
+			return
+		}
+
 		if b.tail == nil {
 			b.head = n
 			b.tail = n
@@ -294,6 +310,10 @@ func (b *NocopyBuffer) addToTail(node any) {
 		b.len = -1
 		b.num++
 	case *NocopyBuffer:
+		if n == nil {
+			return
+		}
+
 		if b.tail == nil {
 			b.head = n
 			b.tail = n

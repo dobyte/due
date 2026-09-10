@@ -124,8 +124,8 @@ func (r *Reader) ReadUint8s(n int) ([]uint8, error) {
 	}
 
 	values := make([]uint8, 0, n)
-	for i := 0; i < len(buf); i++ {
-		values = append(values, buf[i])
+	for _, b := range buf {
+		values = append(values, b)
 	}
 
 	return values, nil
@@ -400,7 +400,7 @@ func (r *Reader) slice(b int) ([]byte, error) {
 func (r *Reader) slices(b int, n int) ([]byte, error) {
 	off := b * n
 
-	if r.off+off > len(r.buf) {
+	if off < 0 || off > len(r.buf)-r.off {
 		return nil, errors.ErrUnexpectedEOF
 	}
 
