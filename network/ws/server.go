@@ -17,6 +17,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
+	"github.com/pires/go-proxyproto"
 )
 
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
@@ -133,7 +134,7 @@ func (s *server) init() error {
 		return err
 	}
 
-	s.listener = ln
+	s.listener = &proxyproto.Listener{Listener: ln}
 
 	return nil
 }
@@ -146,8 +147,8 @@ func (s *server) serve() {
 		err      error
 		mux      = http.NewServeMux()
 		upgrader = websocket.Upgrader{
-			ReadBufferSize:    4096,
-			WriteBufferSize:   4096,
+			ReadBufferSize:    1 << 16,
+			WriteBufferSize:   1 << 16,
 			EnableCompression: s.opts.compression,
 			CheckOrigin:       s.opts.checkOrigin,
 		}

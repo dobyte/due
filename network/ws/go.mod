@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/dobyte/due/v2 v2.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/pires/go-proxyproto v0.15.0
 )
 
 require (
