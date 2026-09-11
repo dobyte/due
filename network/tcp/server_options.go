@@ -19,15 +19,16 @@ const (
 )
 
 const (
-	defaultServerAddrKey               = "etc.network.tcp.server.addr"
-	defaultServerCertFileKey           = "etc.network.tcp.server.certFile"
-	defaultServerKeyFileKey            = "etc.network.tcp.server.keyFile"
-	defaultServerMaxConnNumKey         = "etc.network.tcp.server.maxConnNum"
-	defaultServerWriteTimeoutKey       = "etc.network.tcp.server.writeTimeout"
-	defaultServerWriteQueueSizeKey     = "etc.network.tcp.server.writeQueueSize"
-	defaultServerHeartbeatIntervalKey  = "etc.network.tcp.server.heartbeatInterval"
-	defaultServerHeartbeatMechanismKey = "etc.network.tcp.server.heartbeatMechanism"
-	defaultServerAuthorizeTimeoutKey   = "etc.network.tcp.server.authorizeTimeout"
+	defaultServerAddrKey                = "etc.network.tcp.server.addr"
+	defaultServerCertFileKey            = "etc.network.tcp.server.certFile"
+	defaultServerKeyFileKey             = "etc.network.tcp.server.keyFile"
+	defaultServerMaxConnNumKey          = "etc.network.tcp.server.maxConnNum"
+	defaultServerWriteTimeoutKey        = "etc.network.tcp.server.writeTimeout"
+	defaultServerWriteQueueSizeKey      = "etc.network.tcp.server.writeQueueSize"
+	defaultServerHeartbeatIntervalKey   = "etc.network.tcp.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey  = "etc.network.tcp.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey    = "etc.network.tcp.server.authorizeTimeout"
+	defaultServerEnableProxyProtocolKey = "etc.network.tcp.server.enableProxyProtocol"
 )
 
 const (
@@ -40,15 +41,16 @@ type HeartbeatMechanism string
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
-	addr               string             // 监听地址，默认0.0.0.0:3553
-	certFile           string             // 证书文件
-	keyFile            string             // 秘钥文件
-	maxConnNum         int                // 最大连接数，默认5000
-	writeTimeout       time.Duration      // 写超时时间，默认无超时
-	writeQueueSize     int                // 写队列大小，默认1024
-	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
-	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
+	addr                string             // 监听地址，默认0.0.0.0:3553
+	certFile            string             // 证书文件
+	keyFile             string             // 秘钥文件
+	maxConnNum          int                // 最大连接数，默认5000
+	writeTimeout        time.Duration      // 写超时时间，默认无超时
+	writeQueueSize      int                // 写队列大小，默认1024
+	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
+	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
+	enableProxyProtocol bool               // 是否启用ProxyProtocol，默认false
 }
 
 // defaultServerOptions 构建默认服务器配置
@@ -58,6 +60,7 @@ func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
+	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
 
 	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
 		opts.addr = addr
@@ -202,4 +205,11 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
 		}
 	}
+}
+
+// WithServerEnableProxyProtocol 设置是否启用ProxyProtocol
+// @param enableProxyProtocol bool 是否启用ProxyProtocol
+// @return @1 ServerOption 服务器配置项
+func WithServerEnableProxyProtocol(enableProxyProtocol bool) ServerOption {
+	return func(o *serverOptions) { o.enableProxyProtocol = enableProxyProtocol }
 }

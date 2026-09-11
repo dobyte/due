@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"runtime"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/dobyte/due/v2/errors"
 	taskpool "github.com/dobyte/due/v2/task"
+	"github.com/pires/go-proxyproto"
 )
 
 type serverConnMgr struct {
@@ -92,7 +94,14 @@ func (cm *serverConnMgr) recycleConn(c net.Conn) {
 // @param c net.Conn TCP连接
 // @return @1 int 分片索引
 func (cm *serverConnMgr) connHash(c net.Conn) int {
-	return int(uintptr(unsafe.Pointer(c.(*net.TCPConn)))) % len(cm.partitions)
+	switch cc := c.(type) {
+	case *proxyproto.Conn:
+		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+	case *tls.Conn:
+		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+	default:
+		return int(uintptr(unsafe.Pointer(c.(*net.TCPConn)))) % len(cm.partitions)
+	}
 }
 
 // allocateTask 分配任务对象

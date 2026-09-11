@@ -3,18 +3,19 @@ package tcp
 import (
 	"crypto/tls"
 	"net"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"github.com/pires/go-proxyproto"
 )
 
 type server struct {
 	opts              *serverOptions            // 配置
-	started           atomic.Bool               // 是否已启动
+	mu                sync.Mutex                // 锁
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
@@ -51,11 +52,20 @@ func (s *server) Addr() string {
 // Start 启动服务器
 // @return @1 error 错误信息
 func (s *server) Start() error {
+	s.mu.Lock()
+
 	if err := s.init(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
-	xcall.Go(s.serve)
+	ln := s.listener
+
+	xcall.Go(func() {
+		s.serve(ln)
+	})
+
+	s.mu.Unlock()
 
 	if s.startHandler != nil {
 		s.startHandler()
@@ -67,16 +77,15 @@ func (s *server) Start() error {
 // Stop 关闭服务器
 // @return @1 error 错误信息
 func (s *server) Stop() error {
-	if !s.started.Swap(false) {
-		return errors.ErrIllegalOperation
-	}
-
+	s.mu.Lock()
 	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			return err
-		}
+		s.listener.Close()
 		s.listener = nil
+	} else {
+		s.mu.Unlock()
+		return errors.ErrServerClosed
 	}
+	s.mu.Unlock()
 
 	s.connMgr.close()
 
@@ -127,15 +136,9 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 // 解析TCP地址，按配置创建TLS或原生TCP监听器；若任一环节失败则回滚启动状态
 // @return @1 error 已启动、证书加载失败或监听地址不合法时返回的错误
 func (s *server) init() error {
-	if s.started.Swap(true) {
-		return errors.ErrIllegalOperation
+	if s.listener != nil {
+		return errors.ErrServerStarted
 	}
-
-	defer func() {
-		if s.listener == nil {
-			s.started.Store(false)
-		}
-	}()
 
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
@@ -159,32 +162,33 @@ func (s *server) init() error {
 		}
 	}
 
+	if s.opts.enableProxyProtocol {
+		s.listener = &proxyproto.Listener{Listener: s.listener}
+	}
+
 	return nil
 }
 
 // serve 等待连接
 // 循环接受TCP连接并分配到独立协程处理；对瞬时错误采用指数退避重试，服务器关闭时结束
-func (s *server) serve() {
-	var (
-		listener  = s.listener
-		tempDelay time.Duration
-	)
+func (s *server) serve(ln net.Listener) {
+	var delay time.Duration
 
 	for {
-		conn, err := listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && e.Timeout() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
+				if delay == 0 {
+					delay = 5 * time.Millisecond
 				} else {
-					tempDelay *= 2
+					delay *= 2
 				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
+				if max := 1 * time.Second; delay > max {
+					delay = max
 				}
 
-				log.Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
-				time.Sleep(tempDelay)
+				log.Warnf("tcp accept error: %v; retrying in %v", err, delay)
+				time.Sleep(delay)
 				continue
 			}
 
@@ -192,9 +196,27 @@ func (s *server) serve() {
 			break
 		}
 
-		tempDelay = 0
+		delay = 0
 
-		conn.(*net.TCPConn).SetNoDelay(true)
+		switch ccc := conn.(type) {
+		case *proxyproto.Conn:
+			switch cc := ccc.Raw().(type) {
+			case *net.TCPConn:
+				cc.SetNoDelay(true)
+			case *tls.Conn:
+				if c, ok := cc.NetConn().(*net.TCPConn); ok {
+					c.SetNoDelay(true)
+				}
+			}
+		case *tls.Conn:
+			if c, ok := ccc.NetConn().(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
+		default:
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
+		}
 
 		if err = s.connMgr.allocateConn(conn); err != nil {
 			log.Errorf("connection allocate error: %v", err)
@@ -202,13 +224,5 @@ func (s *server) serve() {
 		}
 	}
 
-	s.listener = nil
-
-	if s.started.CompareAndSwap(true, false) {
-		s.connMgr.close()
-
-		if s.stopHandler != nil {
-			s.stopHandler()
-		}
-	}
+	_ = s.Stop()
 }

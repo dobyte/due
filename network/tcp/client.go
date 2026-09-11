@@ -41,10 +41,7 @@ func NewClient(opts ...ClientOption) network.Client {
 // @return @1 network.Conn 连接对象
 // @return @2 error 错误信息
 func (c *client) Dial(addr ...string) (network.Conn, error) {
-	var (
-		conn    net.Conn
-		address string
-	)
+	var address string
 
 	if len(addr) > 0 && addr[0] != "" {
 		address = addr[0]
@@ -58,18 +55,24 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	}
 
 	if c.opts.tlsConfig != nil {
-		if conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.opts.dialTimeout}, tcpAddr.Network(), tcpAddr.String(), c.opts.tlsConfig); err != nil {
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: c.opts.dialTimeout}, tcpAddr.Network(), tcpAddr.String(), c.opts.tlsConfig)
+		if err != nil {
 			return nil, err
 		}
+
+		conn.NetConn().(*net.TCPConn).SetNoDelay(true)
+
+		return newClientConn(c.id.Add(1), conn, c), nil
 	} else {
-		if conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout); err != nil {
+		conn, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout)
+		if err != nil {
 			return nil, err
 		}
+
+		conn.(*net.TCPConn).SetNoDelay(true)
+
+		return newClientConn(c.id.Add(1), conn, c), nil
 	}
-
-	conn.(*net.TCPConn).SetNoDelay(true)
-
-	return newClientConn(c.id.Add(1), conn, c), nil
 }
 
 // Protocol 获取协议名称

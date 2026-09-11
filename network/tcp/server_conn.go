@@ -201,14 +201,13 @@ func (c *serverConn) init(conn net.Conn) {
 	c.highPriorityQueue = queue.NewQueue[*task](int32(max(128, c.connMgr.server.opts.writeQueueSize/2)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.connMgr.storeConn(conn, c)
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
 	c.checkAuthorize()
-
-	c.connMgr.storeConn(conn, c)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)

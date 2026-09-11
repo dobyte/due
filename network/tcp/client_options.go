@@ -37,7 +37,6 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写超时时间，默认无超时
 	writeQueueSize    int           // 写队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
-
 }
 
 // defaultClientOptions 创建默认客户端配置
