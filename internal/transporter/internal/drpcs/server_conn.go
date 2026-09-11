@@ -44,8 +44,6 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c.buffers = make(net.Buffers, 0, 128)
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
-	c.wg2 = &sync.WaitGroup{}
-	c.wg2.Go(func() { c.write(conn) })
 
 	return c
 }
@@ -145,6 +143,7 @@ func (c *ServerConn) write(conn *net.TCPConn) {
 		if err := c.doWrite(conn, buf); err != nil {
 			log.Warnf("write buffer message error: %v", err)
 			xcall.Go(c.forceClose)
+			return
 		}
 	}
 }
@@ -266,14 +265,54 @@ func (c *ServerConn) doClose() error {
 	return err
 }
 
+// doHandshake 处理握手请求
+// @param conn net.Conn TCP连接
+// @param seq uint64 序列号
+// @param buf *buffer.Bytes 手势请求缓冲区
+// @return @1 error 处理错误
 func (c *ServerConn) doHandshake(conn *net.TCPConn, seq uint64, buf *buffer.Bytes) error {
+	defer buf.Release()
+
 	kind, inst, epoch, err := protocol.DecodeHandshakeReq(buf)
 	if err != nil {
-		buf.Release()
 		return err
+	}
+
+	if !c.state.CompareAndSwap(connOpened, connAlived) {
+		switch c.state.Load() {
+		case connHanged:
+			return errors.ErrConnectionHanged
+		}
 	}
 
 	c.kind, c.inst, c.epoch = kind, inst, epoch
 
 	return c.doWrite(conn, protocol.EncodeHandshakeRes(seq, codes.OK))
+}
+
+func (c *ServerConn) serve(kind cluster.Kind, inst string, epoch uint64) error {
+	c.rw.Lock()
+	defer c.rw.Unlock()
+
+	if c.conn == nil {
+		return errors.ErrConnectionClosed
+	}
+
+	if !c.state.CompareAndSwap(connOpened, connAlived) {
+		switch c.state.Load() {
+		case connHanged:
+			return errors.ErrConnectionHanged
+		case connClosed:
+			return errors.ErrConnectionClosed
+		case connAlived:
+			return errors.ErrConnectionAlived
+		}
+	}
+
+	c.kind, c.inst, c.epoch = kind, inst, epoch
+
+	c.wg2 = &sync.WaitGroup{}
+	c.wg2.Go(func() { c.write(c.conn) })
+
+	return nil
 }

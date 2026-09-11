@@ -59,7 +59,8 @@ func DecodeHandshakeReq(buf *buffer.Bytes) (kind cluster.Kind, inst string, epoc
 }
 
 // EncodeHandshakeRes 编码握手响应
-// 协议：size + header + route + seq + code
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
 func EncodeHandshakeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(handshakeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(handshakeResBytes-def.SizeBytes))

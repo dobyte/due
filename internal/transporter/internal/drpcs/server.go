@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/core/endpoint"
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 )
@@ -194,20 +193,6 @@ func (s *Server) closeAllConns() error {
 	})
 
 	return wg.Wait()
-}
-
-// 握手处理
-func (s *Server) handshakeHandler(conn *ServerConn, seq uint64, buf *buffer.Bytes) error {
-	kind, inst, epoch, err := protocol.DecodeHandshakeReq(buf)
-	if err != nil {
-		return err
-	}
-
-	conn.kind = kind
-	conn.inst = inst
-	conn.epoch = epoch
-
-	return nil
 }
 
 func (s *Server) messageHandler(conn *ServerConn, route uint8, seq uint64, buf buffer.Buffer) error {
