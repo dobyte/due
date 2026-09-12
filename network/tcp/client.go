@@ -14,6 +14,7 @@ type client struct {
 	id                atomic.Int64              // 连接ID
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
 	taskPool          sync.Pool                 // 任务对象池
 }
@@ -91,6 +92,12 @@ func (c *client) OnConnect(handler network.ConnectHandler) {
 // @param handler network.DisconnectHandler 连接关闭处理函数
 func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
+}
+
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
+	c.heartbeatHandler = handler
 }
 
 // OnReceive 监听接收到消息

@@ -111,10 +111,10 @@ func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 	b.ResetTimer()
 	b.SetBytes(int64(len(data)))
 
-	for i := 0; i < b.N; i++ {
-		if buf, err := packer.ReadBuffer(reader); err != nil {
+	for b.Loop() {
+		if _, buf, err := packer.ReadBuffer(reader); err != nil {
 			b.Fatal(err)
-		} else {
+		} else if buf != nil {
 			buf.Release()
 		}
 

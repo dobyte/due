@@ -9,7 +9,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -22,6 +21,7 @@ type server struct {
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
 }
 
@@ -61,9 +61,7 @@ func (s *server) Start() error {
 
 	ln := s.listener
 
-	xcall.Go(func() {
-		s.serve(ln)
-	})
+	go s.serve(ln)
 
 	s.mu.Unlock()
 
@@ -124,6 +122,12 @@ func (s *server) OnConnect(handler network.ConnectHandler) {
 // @param handler network.DisconnectHandler 连接关闭处理函数
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
+}
+
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
+	s.heartbeatHandler = handler
 }
 
 // OnReceive 监听接收到消息

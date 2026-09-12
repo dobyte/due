@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	dataBit      = 0 << 7 // 数据标识
-	heartbeatBit = 1 << 7 // 心跳标识
+	dataBit          = 0 << 7 // 数据标识
+	heartbeatBit     = 1 << 7 // 心跳标识
+	heartbeatTimeBit = 1 << 6 // 心跳时间戳标识
 )
 
 // NocopyReader 无拷贝读取器接口
@@ -36,7 +37,7 @@ type NocopyReader interface {
 // 定义消息的编码与解码能力
 type Packer interface {
 	// ReadBuffer 以buffer的形式读取消息
-	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
+	ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error)
 	// PackBuffer 以buffer的形式打包消息
 	PackBuffer(message *Message) (*buffer.NocopyBuffer, error)
 	// ReadMessage 读取消息
@@ -90,41 +91,55 @@ func NewPacker(opts ...Option) *defaultPacker {
 // @param reader io.Reader 数据读取源
 // @return @1 buffer.Buffer 读取到的消息缓冲区；无消息时返回nil
 // @return @2 error 读取失败或数据不完整时返回的错误
-func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
-	buf1 := buffer.MallocBytes(defaultSizeBytes)
+func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error) {
+	buf1 := buffer.MallocBytes(defaultSizeBytes + defaultHeaderBytes)
 
 	if buf1 == nil {
-		return nil, errors.ErrMessageTooLarge
+		return false, nil, errors.ErrMessageTooLarge
 	}
 
 	defer buf1.Release()
 
-	if _, err := io.ReadFull(reader, buf1.Bytes()); err != nil {
-		return nil, err
+	data1 := buf1.Bytes()
+
+	if _, err := io.ReadFull(reader, data1); err != nil {
+		return false, nil, err
 	}
 
-	size := p.opts.byteOrder.Uint32(buf1.Bytes())
+	var (
+		header              = data1[defaultSizeBytes:][0]
+		isHeartbeat         = header&heartbeatBit == heartbeatBit
+		isWithHeartbeatTime = header&heartbeatTimeBit == heartbeatTimeBit
+	)
 
-	if size == 0 {
-		return nil, nil
+	if isHeartbeat && !isWithHeartbeatTime {
+		return true, nil, nil
 	}
 
-	buf2 := buffer.MallocBytes(int(defaultSizeBytes + size))
+	size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes])
+
+	if size <= 0 {
+		return false, nil, errors.ErrInvalidMessage
+	}
+
+	size -= defaultHeaderBytes
+
+	buf2 := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
 
 	if buf2 == nil {
-		return nil, errors.ErrMessageTooLarge
+		return false, nil, errors.ErrMessageTooLarge
 	}
 
-	data := buf2.Bytes()
+	data2 := buf2.Bytes()
 
-	copy(data[:defaultSizeBytes], buf1.Bytes())
+	copy(data2[:defaultSizeBytes+defaultHeaderBytes], data1)
 
-	if _, err := io.ReadFull(reader, data[defaultSizeBytes:]); err != nil {
+	if _, err := io.ReadFull(reader, data2[defaultSizeBytes+defaultHeaderBytes:]); err != nil {
 		buf2.Release()
-		return nil, err
+		return false, nil, err
 	}
 
-	return buf2, nil
+	return isHeartbeat, buf2, nil
 }
 
 // PackBuffer 以buffer的形式打包消息

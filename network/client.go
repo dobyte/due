@@ -20,6 +20,9 @@ type Client interface {
 	// OnConnect 监听连接打开
 	// @param handler ConnectHandler 连接打开处理函数
 	OnConnect(handler ConnectHandler)
+	// OnHeartbeat 监听心跳
+	// @param handler HeartbeatHandler 心跳处理函数
+	OnHeartbeat(handler HeartbeatHandler)
 	// OnReceive 监听接收消息
 	// @param handler ReceiveHandler 消息接收处理函数
 	OnReceive(handler ReceiveHandler)

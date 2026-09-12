@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"reflect"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -99,8 +100,10 @@ func (cm *serverConnMgr) connHash(c net.Conn) int {
 		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
 	case *tls.Conn:
 		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+	case *net.TCPConn:
+		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
 	default:
-		return int(uintptr(unsafe.Pointer(c.(*net.TCPConn)))) % len(cm.partitions)
+		return int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
 	}
 }
 

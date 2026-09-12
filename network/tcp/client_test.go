@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/network/tcp/v2"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -27,8 +28,10 @@ func TestClient_Simple(t *testing.T) {
 		log.Info("connection is closed")
 	})
 
-	client.OnReceive(func(conn network.Conn, data []byte) {
-		message, err := packet.UnpackMessage(data)
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
+		message, err := packet.UnpackMessage(buf.Bytes())
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
@@ -144,7 +147,9 @@ func doPressureTest(c int, n int, size int) {
 
 	client := tcp.NewClient(tcp.WithClientHeartbeatInterval(0))
 
-	client.OnReceive(func(conn network.Conn, data []byte) {
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		defer buf.Release()
+
 		atomic.AddInt64(&totalRecv, 1)
 
 		wg.Done()

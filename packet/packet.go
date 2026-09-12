@@ -30,7 +30,7 @@ func GetPacker() Packer {
 // @param reader io.Reader 数据读取源
 // @return @1 buffer.Buffer 读取到的消息缓冲区
 // @return @2 error 读取失败时返回的错误
-func ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
+func ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error) {
 	return globalPacker.ReadBuffer(reader)
 }
 

@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"bufio"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -11,7 +12,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/utils/xcall"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xnet"
 	"github.com/dobyte/due/v2/utils/xtime"
 )
@@ -362,38 +363,36 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 // 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
 // @param conn net.Conn TCP连接
 func (c *serverConn) read(conn net.Conn) {
+	var (
+		index  = 0
+		reader = bufio.NewReaderSize(conn, 4096)
+	)
+
 	for {
-		data, err := packet.ReadMessage(conn)
+		isHeartbeat, buf, err := packet.ReadBuffer(reader)
 		if err != nil {
-			xcall.Go(func() {
-				_ = c.forceClose(true)
-			})
+			taskpool.Add(func() { c.forceClose(true) })
 			return
 		}
 
-		if c.connMgr.server.opts.heartbeatInterval > 0 {
-			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-		}
+		state := c.State()
 
-		// stop read message
-		if c.checkState() != nil {
+		// ignore closed connection
+		if state == network.ConnClosed {
 			return
 		}
 
-		// ignore empty packet
-		if len(data) == 0 {
-			continue
+		// ignore hanged connection except heartbeat packet
+		if state == network.ConnHanged && !isHeartbeat {
+			return
 		}
 
-		// check heartbeat packet
-		isHeartbeat, err := packet.CheckHeartbeat(data)
-		if err != nil {
-			log.Errorf("check heartbeat message error: %v", err)
-			continue
-		}
-
-		// ignore heartbeat packet
 		if isHeartbeat {
+			// update heartbeat time
+			if c.connMgr.server.opts.heartbeatInterval > 0 {
+				c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+			}
+
 			// responsive heartbeat
 			if c.connMgr.server.opts.heartbeatMechanism == RespHeartbeat {
 				c.rw.RLock()
@@ -404,9 +403,28 @@ func (c *serverConn) read(conn net.Conn) {
 				}
 				c.rw.RUnlock()
 			}
+
+			// trigger heartbeat handler, nanoseconds is 0
+			if c.connMgr.server.heartbeatHandler != nil {
+				c.connMgr.server.heartbeatHandler(c, 0)
+			}
 		} else {
+			index++
+
+			// update heartbeat time
+			if index%20 == 0 {
+				if c.connMgr.server.opts.heartbeatInterval > 0 {
+					c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+				}
+			}
+
+			// ignore empty packet
+			if buf.Len() == 0 {
+				continue
+			}
+
 			if c.connMgr.server.receiveHandler != nil {
-				c.connMgr.server.receiveHandler(c, data)
+				c.connMgr.server.receiveHandler(c, buf)
 			}
 		}
 	}
@@ -509,9 +527,7 @@ func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < deadline {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		xcall.Go(func() {
-			_ = c.forceClose(true)
-		})
+		taskpool.Add(func() { c.forceClose(true) })
 
 		return false
 	} else {
