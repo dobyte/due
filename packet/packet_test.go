@@ -80,22 +80,6 @@ func TestDefaultPacker_PackMessage(t *testing.T) {
 	t.Logf("buffer: %s", string(message.Buffer))
 }
 
-func TestDefaultPacker_PackHeartbeat(t *testing.T) {
-	data, err := packer.PackHeartbeat()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(data)
-
-	isHeartbeat, err := packer.CheckHeartbeat(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log(isHeartbeat)
-}
-
 func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 	data, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
@@ -112,7 +96,7 @@ func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 
 	for b.Loop() {
-		if _, buf, err := packer.ReadBuffer(reader); err != nil {
+		if _, _, buf, err := packer.ReadBuffer(reader); err != nil {
 			b.Fatal(err)
 		} else if buf != nil {
 			buf.Release()

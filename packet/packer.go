@@ -37,7 +37,7 @@ type NocopyReader interface {
 // 定义消息的编码与解码能力
 type Packer interface {
 	// ReadBuffer 以buffer的形式读取消息
-	ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error)
+	ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error)
 	// PackBuffer 以buffer的形式打包消息
 	PackBuffer(message *Message) (*buffer.NocopyBuffer, error)
 	// ReadMessage 读取消息
@@ -48,8 +48,6 @@ type Packer interface {
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
 	PackHeartbeat() ([]byte, error)
-	// CheckHeartbeat 检测心跳包
-	CheckHeartbeat(data []byte) (bool, error)
 }
 
 // defaultPacker 默认打包器
@@ -91,11 +89,11 @@ func NewPacker(opts ...Option) *defaultPacker {
 // @param reader io.Reader 数据读取源
 // @return @1 buffer.Buffer 读取到的消息缓冲区；无消息时返回nil
 // @return @2 error 读取失败或数据不完整时返回的错误
-func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error) {
+func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 	buf1 := buffer.MallocBytes(defaultSizeBytes + defaultHeaderBytes)
 
 	if buf1 == nil {
-		return false, nil, errors.ErrMessageTooLarge
+		return false, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	defer buf1.Release()
@@ -103,7 +101,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error
 	data1 := buf1.Bytes()
 
 	if _, err := io.ReadFull(reader, data1); err != nil {
-		return false, nil, err
+		return false, 0, nil, err
 	}
 
 	var (
@@ -112,34 +110,66 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error
 		isWithHeartbeatTime = header&heartbeatTimeBit == heartbeatTimeBit
 	)
 
-	if isHeartbeat && !isWithHeartbeatTime {
-		return true, nil, nil
+	if isHeartbeat {
+		if isWithHeartbeatTime {
+			size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes])
+
+			if size <= 0 {
+				return false, 0, nil, errors.ErrInvalidMessage
+			}
+
+			size -= defaultHeaderBytes
+
+			if size != defaultHeartbeatTimeBytes {
+				return false, 0, nil, errors.ErrInvalidMessage
+			}
+
+			buf2 := buffer.MallocBytes(int(defaultHeartbeatTimeBytes))
+
+			if buf2 == nil {
+				return false, 0, nil, errors.ErrMessageTooLarge
+			}
+
+			defer buf2.Release()
+
+			data2 := buf2.Bytes()
+
+			if _, err := io.ReadFull(reader, data2); err != nil {
+				return false, 0, nil, err
+			}
+
+			heartbeatTime := int64(p.opts.byteOrder.Uint64(data2))
+
+			return true, heartbeatTime, nil, nil
+		} else {
+			return true, 0, nil, nil
+		}
+	} else {
+		size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes])
+
+		if size <= 0 {
+			return false, 0, nil, errors.ErrInvalidMessage
+		}
+
+		size -= defaultHeaderBytes
+
+		buf2 := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
+
+		if buf2 == nil {
+			return false, 0, nil, errors.ErrMessageTooLarge
+		}
+
+		data2 := buf2.Bytes()
+
+		copy(data2[:defaultSizeBytes+defaultHeaderBytes], data1)
+
+		if _, err := io.ReadFull(reader, data2[defaultSizeBytes+defaultHeaderBytes:]); err != nil {
+			buf2.Release()
+			return false, 0, nil, err
+		}
+
+		return false, 0, buf2, nil
 	}
-
-	size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes])
-
-	if size <= 0 {
-		return false, nil, errors.ErrInvalidMessage
-	}
-
-	size -= defaultHeaderBytes
-
-	buf2 := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
-
-	if buf2 == nil {
-		return false, nil, errors.ErrMessageTooLarge
-	}
-
-	data2 := buf2.Bytes()
-
-	copy(data2[:defaultSizeBytes+defaultHeaderBytes], data1)
-
-	if _, err := io.ReadFull(reader, data2[defaultSizeBytes+defaultHeaderBytes:]); err != nil {
-		buf2.Release()
-		return false, nil, err
-	}
-
-	return isHeartbeat, buf2, nil
 }
 
 // PackBuffer 以buffer的形式打包消息
@@ -434,7 +464,7 @@ func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
 			return nil, err
 		}
 
-		if err := binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit)); err != nil {
+		if err := binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit|heartbeatTimeBit)); err != nil {
 			return nil, err
 		}
 
@@ -446,37 +476,6 @@ func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
 	} else {
 		return p.heartbeat, nil
 	}
-}
-
-// CheckHeartbeat 检测心跳包
-// 校验消息长度与心跳标识，判断给定数据是否为心跳包
-// @param data []byte 待检测的消息字节
-// @return @1 bool 是否为心跳包
-// @return @2 error 消息非法或解析失败时返回的错误
-func (p *defaultPacker) CheckHeartbeat(data []byte) (bool, error) {
-	if len(data) < defaultSizeBytes+defaultHeaderBytes {
-		return false, errors.ErrInvalidMessage
-	}
-
-	var (
-		size   uint32
-		header uint8
-		reader = bytes.NewReader(data)
-	)
-
-	if err := binary.Read(reader, p.opts.byteOrder, &size); err != nil {
-		return false, err
-	}
-
-	if uint64(len(data))-defaultSizeBytes != uint64(size) {
-		return false, errors.ErrInvalidMessage
-	}
-
-	if err := binary.Read(reader, p.opts.byteOrder, &header); err != nil {
-		return false, err
-	}
-
-	return header&heartbeatBit == heartbeatBit, nil
 }
 
 // makeHeartbeat 构建心跳包

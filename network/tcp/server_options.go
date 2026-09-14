@@ -11,6 +11,7 @@ import (
 const (
 	defaultServerAddr               = ":3553"
 	defaultServerMaxConnNum         = 5000
+	defaultServerReadBufferSize     = 4096
 	defaultServerWriteTimeout       = "0s"
 	defaultServerWriteQueueSize     = 1024
 	defaultServerHeartbeatInterval  = "10s"
@@ -23,6 +24,7 @@ const (
 	defaultServerCertFileKey            = "etc.network.tcp.server.certFile"
 	defaultServerKeyFileKey             = "etc.network.tcp.server.keyFile"
 	defaultServerMaxConnNumKey          = "etc.network.tcp.server.maxConnNum"
+	defaultServerReadBufferSizeKey      = "etc.network.tcp.server.readBufferSize"
 	defaultServerWriteTimeoutKey        = "etc.network.tcp.server.writeTimeout"
 	defaultServerWriteQueueSizeKey      = "etc.network.tcp.server.writeQueueSize"
 	defaultServerHeartbeatIntervalKey   = "etc.network.tcp.server.heartbeatInterval"
@@ -45,6 +47,7 @@ type serverOptions struct {
 	certFile            string             // 证书文件
 	keyFile             string             // 秘钥文件
 	maxConnNum          int                // 最大连接数，默认5000
+	readBufferSize      int                // 读取缓冲区大小，默认4096
 	writeTimeout        time.Duration      // 写超时时间，默认无超时
 	writeQueueSize      int                // 写队列大小，默认1024
 	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
@@ -72,6 +75,12 @@ func defaultServerOptions() *serverOptions {
 		opts.maxConnNum = maxConnNum
 	} else {
 		opts.maxConnNum = defaultServerMaxConnNum
+	}
+
+	if readBufferSize := etc.Get(defaultServerReadBufferSizeKey, defaultServerReadBufferSize).Int(); readBufferSize > 0 {
+		opts.readBufferSize = readBufferSize
+	} else {
+		opts.readBufferSize = defaultServerReadBufferSize
 	}
 
 	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
@@ -144,6 +153,19 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 			o.maxConnNum = maxConnNum
 		} else {
 			log.Warnf("the specified maxConnNum is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerReadBufferSize 设置读取缓冲区大小
+// @param readBufferSize int 读取缓冲区大小
+// @return @1 ServerOption 服务器配置项
+func WithServerReadBufferSize(readBufferSize int) ServerOption {
+	return func(o *serverOptions) {
+		if readBufferSize > 0 {
+			o.readBufferSize = readBufferSize
+		} else {
+			log.Warnf("the specified readBufferSize is less than zero and will be ignored")
 		}
 	}
 }

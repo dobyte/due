@@ -305,11 +305,11 @@ func (c *clientConn) doClose() error {
 func (c *clientConn) read(conn net.Conn) {
 	var (
 		index  = 0
-		reader = bufio.NewReaderSize(conn, 4096)
+		reader = bufio.NewReaderSize(conn, c.client.opts.readBufferSize)
 	)
 
 	for {
-		isHeartbeat, buf, err := packet.ReadBuffer(reader)
+		isHeartbeat, heartbeatTime, buf, err := packet.ReadBuffer(reader)
 		if err != nil {
 			taskpool.Add(func() { c.forceClose() })
 			return
@@ -334,20 +334,21 @@ func (c *clientConn) read(conn net.Conn) {
 			}
 
 			if c.client.heartbeatHandler != nil {
-				if buf != nil && buf.Len() > 0 {
-					c.client.heartbeatHandler(c, 0)
-				} else {
-					c.client.heartbeatHandler(c, 0)
-				}
+				c.client.heartbeatHandler(c, heartbeatTime)
 			}
 		} else {
-			index++
-
 			// update heartbeat time
-			if index%20 == 0 {
-				if c.client.opts.heartbeatInterval > 0 {
+			if c.client.opts.heartbeatInterval > 0 {
+				index++
+
+				if index%10 == 0 {
 					c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 				}
+			}
+
+			// ignore empty packet
+			if buf.Len() == 0 {
+				continue
 			}
 
 			if c.client.receiveHandler != nil {

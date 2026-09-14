@@ -13,6 +13,7 @@ import (
 const (
 	defaultClientAddr              = "127.0.0.1:3553"
 	defaultClientDialTimeout       = "3s"
+	defaultClientReadBufferSize    = 4096
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
@@ -23,6 +24,7 @@ const (
 	defaultClientCAFileKey            = "etc.network.tcp.client.caFile"
 	defaultClientServerNameKey        = "etc.network.tcp.client.serverName"
 	defaultClientDialTimeoutKey       = "etc.network.tcp.client.dialTimeout"
+	defaultClientReadBufferSizeKey    = "etc.network.tcp.client.readBufferSize"
 	defaultClientWriteTimeoutKey      = "etc.network.tcp.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.tcp.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
@@ -34,6 +36,7 @@ type clientOptions struct {
 	addr              string        // 地址
 	tlsConfig         *tls.Config   // TLS配置
 	dialTimeout       time.Duration // 拨号超时时间，默认3s
+	readBufferSize    int           // 读取缓冲区大小，默认4096
 	writeTimeout      time.Duration // 写超时时间，默认无超时
 	writeQueueSize    int           // 写队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
@@ -54,6 +57,12 @@ func defaultClientOptions() *clientOptions {
 		opts.dialTimeout = dialTimeout
 	} else {
 		opts.dialTimeout = xconv.Duration(defaultClientDialTimeout)
+	}
+
+	if readBufferSize := etc.Get(defaultClientReadBufferSizeKey, defaultClientReadBufferSize).Int(); readBufferSize > 0 {
+		opts.readBufferSize = readBufferSize
+	} else {
+		opts.readBufferSize = defaultClientReadBufferSize
 	}
 
 	if writeTimeout := etc.Get(defaultClientWriteTimeoutKey, defaultClientWriteTimeout).Duration(); writeTimeout >= 0 {
@@ -137,6 +146,19 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 			o.dialTimeout = dialTimeout
 		} else {
 			log.Warnf("the specified dialTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientReadBufferSize 设置读取缓冲区大小
+// @param readBufferSize int 读取缓冲区大小
+// @return @1 ClientOption 客户端配置项
+func WithClientReadBufferSize(readBufferSize int) ClientOption {
+	return func(o *clientOptions) {
+		if readBufferSize > 0 {
+			o.readBufferSize = readBufferSize
+		} else {
+			log.Warnf("the specified readBufferSize is less than zero and will be ignored")
 		}
 	}
 }

@@ -30,7 +30,7 @@ func GetPacker() Packer {
 // @param reader io.Reader 数据读取源
 // @return @1 buffer.Buffer 读取到的消息缓冲区
 // @return @2 error 读取失败时返回的错误
-func ReadBuffer(reader io.Reader) (bool, buffer.Buffer, error) {
+func ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 	return globalPacker.ReadBuffer(reader)
 }
 
@@ -71,12 +71,4 @@ func UnpackMessage(data []byte) (*Message, error) {
 // @return @2 error 打包失败时返回的错误
 func PackHeartbeat() ([]byte, error) {
 	return globalPacker.PackHeartbeat()
-}
-
-// CheckHeartbeat 检测心跳包
-// @param data []byte 待检测的消息字节
-// @return @1 bool 是否为心跳包
-// @return @2 error 检测失败时返回的错误
-func CheckHeartbeat(data []byte) (bool, error) {
-	return globalPacker.CheckHeartbeat(data)
 }

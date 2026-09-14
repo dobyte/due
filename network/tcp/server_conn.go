@@ -365,11 +365,11 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 func (c *serverConn) read(conn net.Conn) {
 	var (
 		index  = 0
-		reader = bufio.NewReaderSize(conn, 4096)
+		reader = bufio.NewReaderSize(conn, c.connMgr.server.opts.readBufferSize)
 	)
 
 	for {
-		isHeartbeat, buf, err := packet.ReadBuffer(reader)
+		isHeartbeat, heartbeatTime, buf, err := packet.ReadBuffer(reader)
 		if err != nil {
 			taskpool.Add(func() { c.forceClose(true) })
 			return
@@ -404,16 +404,16 @@ func (c *serverConn) read(conn net.Conn) {
 				c.rw.RUnlock()
 			}
 
-			// trigger heartbeat handler, nanoseconds is 0
+			// trigger heartbeat handler, heartbeat time is not
 			if c.connMgr.server.heartbeatHandler != nil {
-				c.connMgr.server.heartbeatHandler(c, 0)
+				c.connMgr.server.heartbeatHandler(c, heartbeatTime)
 			}
 		} else {
-			index++
-
 			// update heartbeat time
-			if index%20 == 0 {
-				if c.connMgr.server.opts.heartbeatInterval > 0 {
+			if c.connMgr.server.opts.heartbeatInterval > 0 {
+				index++
+
+				if index%10 == 0 {
 					c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
 				}
 			}
