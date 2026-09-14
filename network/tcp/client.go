@@ -3,7 +3,6 @@ package tcp
 import (
 	"crypto/tls"
 	"net"
-	"sync"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/network"
@@ -16,7 +15,6 @@ type client struct {
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
-	taskPool          sync.Pool                 // 任务对象池
 }
 
 var _ network.Client = &client{}
@@ -32,7 +30,6 @@ func NewClient(opts ...ClientOption) network.Client {
 
 	c := &client{}
 	c.opts = o
-	c.taskPool = sync.Pool{New: func() any { return &task{} }}
 
 	return c
 }
@@ -55,25 +52,21 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
+	var conn net.Conn
+
 	if c.opts.tlsConfig != nil {
-		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: c.opts.dialTimeout}, tcpAddr.Network(), tcpAddr.String(), c.opts.tlsConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		conn.NetConn().(*net.TCPConn).SetNoDelay(true)
-
-		return newClientConn(c.id.Add(1), conn, c), nil
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.opts.dialTimeout}, tcpAddr.Network(), tcpAddr.String(), c.opts.tlsConfig)
 	} else {
-		conn, err := net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout)
-		if err != nil {
-			return nil, err
-		}
-
-		conn.(*net.TCPConn).SetNoDelay(true)
-
-		return newClientConn(c.id.Add(1), conn, c), nil
+		conn, err = net.DialTimeout(tcpAddr.Network(), tcpAddr.String(), c.opts.dialTimeout)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	setNoDelay(conn)
+
+	return newClientConn(c.id.Add(1), conn, c), nil
 }
 
 // Protocol 获取协议名称
@@ -104,27 +97,4 @@ func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 // @param handler network.ReceiveHandler 消息接收处理函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
-}
-
-// allocateTask 分配任务对象
-// 从任务对象池中获取并复用任务对象，避免频繁分配
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 *task 任务对象
-func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	return t
-}
-
-// recycleTask 回收任务到对象池
-// 清理任务数据后将对象归还池中以供复用
-// @param t *task 待回收的任务对象
-func (c *client) recycleTask(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
 }

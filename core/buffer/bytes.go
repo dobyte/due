@@ -10,6 +10,7 @@ type Bytes struct {
 	buf      []byte
 	lower    int
 	upper    int
+	static   bool
 	pool     *sync.Pool
 	released atomic.Bool
 }
@@ -17,8 +18,8 @@ type Bytes struct {
 var _ Buffer = (*Bytes)(nil)
 
 // NewBytes 以指定buf创建字节
-func NewBytes(buf []byte) *Bytes {
-	return &Bytes{buf: buf, upper: len(buf)}
+func NewBytes(buf []byte, static ...bool) *Bytes {
+	return &Bytes{buf: buf, upper: len(buf), static: len(static) > 0 && static[0]}
 }
 
 // NewBytesWithCapacity 以指定容量创建字节
@@ -55,6 +56,10 @@ func (b *Bytes) Bytes() []byte {
 
 // Release 释放
 func (b *Bytes) Release() {
+	if b.static {
+		return
+	}
+
 	if !b.released.CompareAndSwap(false, true) {
 		return
 	}

@@ -1,18 +1,38 @@
 package tcp
 
+import (
+	"crypto/tls"
+	"net"
+
+	"github.com/pires/go-proxyproto"
+)
+
 // protocol 协议标识
 const protocol = "tcp"
 
-// 任务类型
-const (
-	closeSig        int8 = iota // 关闭信号
-	dataPacket                  // 数据包
-	heartbeatPacket             // 心跳包
-)
+// maxBatchWriteNum 单次批量写入的最大任务数
+const maxBatchWriteNum = 64
 
-// task 写入队列的任务对象
-// 由对象池复用，typ 标识任务类型，msg 为待发送的消息字节
-type task struct {
-	typ int8
-	msg []byte
+// setNoDelay 设置Nagle算法
+// @param conn net.Conn TCP连接
+func setNoDelay(conn net.Conn) {
+	switch ccc := conn.(type) {
+	case *proxyproto.Conn:
+		switch cc := ccc.Raw().(type) {
+		case *net.TCPConn:
+			cc.SetNoDelay(true)
+		case *tls.Conn:
+			if c, ok := cc.NetConn().(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
+		}
+	case *tls.Conn:
+		if c, ok := ccc.NetConn().(*net.TCPConn); ok {
+			c.SetNoDelay(true)
+		}
+	default:
+		if c, ok := conn.(*net.TCPConn); ok {
+			c.SetNoDelay(true)
+		}
+	}
 }

@@ -202,25 +202,7 @@ func (s *server) serve(ln net.Listener) {
 
 		delay = 0
 
-		switch ccc := conn.(type) {
-		case *proxyproto.Conn:
-			switch cc := ccc.Raw().(type) {
-			case *net.TCPConn:
-				cc.SetNoDelay(true)
-			case *tls.Conn:
-				if c, ok := cc.NetConn().(*net.TCPConn); ok {
-					c.SetNoDelay(true)
-				}
-			}
-		case *tls.Conn:
-			if c, ok := ccc.NetConn().(*net.TCPConn); ok {
-				c.SetNoDelay(true)
-			}
-		default:
-			if c, ok := conn.(*net.TCPConn); ok {
-				c.SetNoDelay(true)
-			}
-		}
+		setNoDelay(conn)
 
 		if err = s.connMgr.allocateConn(conn); err != nil {
 			log.Errorf("connection allocate error: %v", err)

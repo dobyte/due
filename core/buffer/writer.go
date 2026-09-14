@@ -11,6 +11,7 @@ import (
 type Writer struct {
 	buf      []byte
 	off      int
+	static   bool
 	pool     *sync.Pool
 	released atomic.Bool
 }
@@ -18,8 +19,8 @@ type Writer struct {
 var _ Buffer = (*Writer)(nil)
 
 // NewWriter 以指定buf创建写入器
-func NewWriter(buf []byte) *Writer {
-	return &Writer{buf: buf[:cap(buf)]}
+func NewWriter(buf []byte, static ...bool) *Writer {
+	return &Writer{buf: buf[:cap(buf)], static: len(static) > 0 && static[0]}
 }
 
 // NewWriterWithCapacity 以指定容量创建写入器
@@ -58,6 +59,10 @@ func (w *Writer) Grow(n int) {
 
 // Release 释放
 func (w *Writer) Release() {
+	if w.static {
+		return
+	}
+
 	if !w.released.CompareAndSwap(false, true) {
 		return
 	}

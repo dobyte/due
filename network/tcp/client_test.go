@@ -59,7 +59,7 @@ func TestClient_Simple(t *testing.T) {
 
 		buffer := fmt.Appendf([]byte{}, "%s: hello server~~", t.Format(xtime.DateTime))
 
-		msg, err := packet.PackMessage(&packet.Message{
+		msg, err := packet.PackBuffer(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: buffer,
@@ -70,6 +70,7 @@ func TestClient_Simple(t *testing.T) {
 		}
 
 		if err = conn.Push(msg); err != nil {
+			msg.Release()
 			log.Errorf("push message failed: %v", err)
 			return
 		}
@@ -176,7 +177,7 @@ func doPressureTest(c int, n int, size int) {
 					return
 				}
 
-				msg, err := packet.PackMessage(&packet.Message{
+				msg, err := packet.PackBuffer(&packet.Message{
 					Seq:    1,
 					Route:  1,
 					Buffer: buffer,
@@ -187,6 +188,7 @@ func doPressureTest(c int, n int, size int) {
 				}
 
 				if err = conn.Push(msg); err != nil {
+					msg.Release()
 					log.Errorf("push message failed: %v", err)
 					return
 				}

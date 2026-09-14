@@ -9,6 +9,8 @@ package network
 
 import (
 	"net"
+
+	"github.com/dobyte/due/v2/core/buffer"
 )
 
 const (
@@ -39,14 +41,10 @@ type (
 		// Unbind 解绑用户ID
 		// @return @1 error 错误信息
 		Unbind() error
-		// Send 高优先级发送消息
-		// @param msg []byte 消息内容
-		// @return @1 error 错误信息
-		Send(msg []byte) error
 		// Push 低优先级发送消息
-		// @param msg []byte 消息内容
+		// @param buf buffer.Buffer 消息内容消息发送失败自行控制释放buffer
 		// @return @1 error 错误信息
-		Push(msg []byte) error
+		Push(buf buffer.Buffer) error
 		// State 获取连接状态
 		// @return @1 ConnState 连接状态
 		State() ConnState

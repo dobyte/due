@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/pires/go-proxyproto"
@@ -20,7 +21,6 @@ type serverConnMgr struct {
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	connPool   sync.Pool    // 连接池
-	taskPool   sync.Pool    // 任务池
 	partitions []*partition // 连接管理
 }
 
@@ -31,8 +31,14 @@ type serverConnMgr struct {
 func newServerConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
-	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
+	cm.connPool = sync.Pool{New: func() any {
+		return &serverConn{
+			attr:       &attr{},
+			connMgr:    cm,
+			dueBuffers: make([]buffer.Buffer, 0, maxBatchWriteNum),
+			netBuffers: make(net.Buffers, 0, maxBatchWriteNum),
+		}
+	}}
 	cm.partitions = make([]*partition, runtime.NumCPU()*2)
 
 	for i := 0; i < len(cm.partitions); i++ {
@@ -91,43 +97,34 @@ func (cm *serverConnMgr) recycleConn(c net.Conn) {
 }
 
 // connHash 通过连接指针计算哈希
-// 根据连接对象指针地址取模确定其所属分片索引
+// 对连接对象指针地址做位混合后取模，确定其所属分片索引，避免对象地址对齐导致分片分布不均
 // @param c net.Conn TCP连接
 // @return @1 int 分片索引
 func (cm *serverConnMgr) connHash(c net.Conn) int {
+	var p uintptr
+
 	switch cc := c.(type) {
 	case *proxyproto.Conn:
-		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+		p = uintptr(unsafe.Pointer(cc))
 	case *tls.Conn:
-		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+		p = uintptr(unsafe.Pointer(cc))
 	case *net.TCPConn:
-		return int(uintptr(unsafe.Pointer(cc))) % len(cm.partitions)
+		p = uintptr(unsafe.Pointer(cc))
 	default:
-		return int(reflect.ValueOf(c).Pointer()) % len(cm.partitions)
-	}
-}
-
-// allocateTask 分配任务对象
-// 从任务对象池中获取并复用任务对象，避免频繁分配
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 *task 任务对象
-func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
-	t := cm.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
+		p = reflect.ValueOf(c).Pointer()
 	}
 
-	return t
+	return int(cm.mixPointer(p) % uintptr(len(cm.partitions)))
 }
 
-// recycleTask 回收任务到对象池
-// 清理任务数据后将对象归还池中以供复用
-// @param t *task 待回收的任务对象
-func (cm *serverConnMgr) recycleTask(t *task) {
-	t.msg = nil
-	cm.taskPool.Put(t)
+// mixPointer 打散指针地址，避免对象地址低位对齐导致取模后分片分布不均
+func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
+	x := uint64(p)
+	x ^= x >> 33
+	x *= 0xff51afd7ed558ccd
+	x ^= x >> 33
+
+	return uintptr(x)
 }
 
 type partition struct {

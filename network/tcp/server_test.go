@@ -43,7 +43,7 @@ func TestServer_Simple(t *testing.T) {
 
 		log.Infof("receive message from client, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
 
-		msg, err := packet.PackMessage(&packet.Message{
+		msg, err := packet.PackBuffer(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: []byte("I'm fine~~"),
@@ -83,7 +83,7 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		msg, err := packet.PackMessage(&packet.Message{
+		msg, err := packet.PackBuffer(&packet.Message{
 			Seq:    message.Seq,
 			Route:  message.Route,
 			Buffer: message.Buffer,

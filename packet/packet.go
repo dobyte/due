@@ -38,7 +38,7 @@ func ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 // @param message *Message 待打包的消息
 // @return @1 *buffer.NocopyBuffer 打包后的无拷贝缓冲区
 // @return @2 error 打包失败时返回的错误
-func PackBuffer(message *Message) (*buffer.NocopyBuffer, error) {
+func PackBuffer(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackBuffer(message)
 }
 
@@ -69,6 +69,6 @@ func UnpackMessage(data []byte) (*Message, error) {
 // PackHeartbeat 打包心跳
 // @return @1 []byte 心跳包字节
 // @return @2 error 打包失败时返回的错误
-func PackHeartbeat() ([]byte, error) {
-	return globalPacker.PackHeartbeat()
+func PackHeartbeat(isServerSide ...bool) buffer.Buffer {
+	return globalPacker.PackHeartbeat(isServerSide...)
 }

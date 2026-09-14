@@ -9,7 +9,7 @@ import (
 )
 
 var packer = packet.NewPacker(
-	packet.WithHeartbeatTime(true),
+	packet.WithHeartbeatTime(false),
 )
 
 func TestDefaultPacker_ReadMessage(t *testing.T) {
@@ -80,6 +80,11 @@ func TestDefaultPacker_PackMessage(t *testing.T) {
 	t.Logf("buffer: %s", string(message.Buffer))
 }
 
+func TestDefaultPacker_PackHeartbeat(t *testing.T) {
+	buf := packer.PackHeartbeat()
+	t.Log(buf.Bytes())
+}
+
 func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 	data, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
@@ -121,7 +126,7 @@ func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
 	b.ResetTimer()
 	b.SetBytes(int64(len(data)))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err = packer.ReadMessage(reader); err != nil {
 			b.Fatal(err)
 		}
@@ -136,7 +141,7 @@ func BenchmarkDefaultPacker_PackBuffer(b *testing.B) {
 	b.ResetTimer()
 	b.SetBytes(int64(len(buffer)))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf, err := packer.PackBuffer(&packet.Message{
 			Seq:    1,
 			Route:  1,
@@ -156,7 +161,7 @@ func BenchmarkDefaultPacker_PackMessage(b *testing.B) {
 	b.ResetTimer()
 	b.SetBytes(int64(len(buffer)))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := packer.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
@@ -181,7 +186,7 @@ func BenchmarkDefaultPacker_UnpackMessage(b *testing.B) {
 	b.ResetTimer()
 	b.SetBytes(int64(len(buf)))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := packer.UnpackMessage(buf); err != nil {
 			b.Fatal(err)
 		}

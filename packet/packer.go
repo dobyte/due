@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 const (
@@ -39,7 +39,7 @@ type Packer interface {
 	// ReadBuffer 以buffer的形式读取消息
 	ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error)
 	// PackBuffer 以buffer的形式打包消息
-	PackBuffer(message *Message) (*buffer.NocopyBuffer, error)
+	PackBuffer(message *Message) (buffer.Buffer, error)
 	// ReadMessage 读取消息
 	ReadMessage(reader io.Reader) ([]byte, error)
 	// PackMessage 打包消息
@@ -47,13 +47,13 @@ type Packer interface {
 	// UnpackMessage 解包消息
 	UnpackMessage(data []byte) (*Message, error)
 	// PackHeartbeat 打包心跳
-	PackHeartbeat() ([]byte, error)
+	PackHeartbeat(isServerSide ...bool) buffer.Buffer
 }
 
 // defaultPacker 默认打包器
 type defaultPacker struct {
-	opts      *options // 打包配置
-	heartbeat []byte   // 预构建的心跳包
+	opts      *options      // 打包配置
+	heartbeat buffer.Buffer // 预构建的心跳包
 }
 
 // NewPacker 创建默认打包器
@@ -78,10 +78,11 @@ func NewPacker(opts ...Option) *defaultPacker {
 		log.Fatalf("the number of buffer bytes must be greater than or equal to 0, and give %d", o.bufferBytes)
 	}
 
-	return &defaultPacker{
-		opts:      o,
-		heartbeat: makeHeartbeat(o.byteOrder),
-	}
+	p := &defaultPacker{}
+	p.opts = o
+	p.init()
+
+	return p
 }
 
 // ReadBuffer 以buffer的形式读取消息
@@ -175,9 +176,9 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer
 // PackBuffer 以buffer的形式打包消息
 // 校验路由、序列号及消息长度后将消息编码为无拷贝缓冲区
 // @param message *Message 待打包的消息
-// @return @1 *buffer.NocopyBuffer 打包后的无拷贝缓冲区
+// @return @1 buffer.Buffer 打包后的无拷贝缓冲区
 // @return @2 error 路由/序列号溢出或消息过大时返回的错误
-func (p *defaultPacker) PackBuffer(message *Message) (*buffer.NocopyBuffer, error) {
+func (p *defaultPacker) PackBuffer(message *Message) (buffer.Buffer, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
 	}
@@ -449,45 +450,26 @@ func (p *defaultPacker) UnpackMessage(data []byte) (*Message, error) {
 
 // PackHeartbeat 打包心跳
 // 开启心跳时间时携带当前时间戳，否则返回预构建的心跳包
-// @return @1 []byte 心跳包字节
-// @return @2 error 编码失败时返回的错误
-func (p *defaultPacker) PackHeartbeat() ([]byte, error) {
-	if p.opts.heartbeatTime {
-		var (
-			buf  = &bytes.Buffer{}
-			size = defaultHeaderBytes + defaultHeartbeatTimeBytes
-		)
+// @return @1 buffer.Buffer 心跳包字节
+func (p *defaultPacker) PackHeartbeat(isServerSide ...bool) buffer.Buffer {
+	if p.opts.heartbeatTime && len(isServerSide) > 0 && isServerSide[0] {
+		writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
+		writer.WriteUint32s(p.opts.byteOrder, uint32(defaultHeaderBytes+defaultHeartbeatTimeBytes))
+		writer.WriteUint8s(uint8(heartbeatBit | heartbeatTimeBit))
+		writer.WriteUint64s(p.opts.byteOrder, uint64(xtime.Now().UnixNano()))
 
-		buf.Grow(defaultSizeBytes + size)
-
-		if err := binary.Write(buf, p.opts.byteOrder, uint32(size)); err != nil {
-			return nil, err
-		}
-
-		if err := binary.Write(buf, p.opts.byteOrder, uint8(heartbeatBit|heartbeatTimeBit)); err != nil {
-			return nil, err
-		}
-
-		if err := binary.Write(buf, p.opts.byteOrder, time.Now().UnixNano()); err != nil {
-			return nil, err
-		}
-
-		return buf.Bytes(), nil
+		return writer
 	} else {
-		return p.heartbeat, nil
+		return p.heartbeat
 	}
 }
 
-// makeHeartbeat 构建心跳包
+// init 初始化打包器
 // 按指定字节序生成不含时间戳的基础心跳包
-// @param byteOrder binary.ByteOrder 字节序
-// @return @1 []byte 心跳包字节
-func makeHeartbeat(byteOrder binary.ByteOrder) []byte {
-	buf := bytes.NewBuffer(nil)
-	buf.Grow(defaultSizeBytes + defaultHeaderBytes)
+func (p *defaultPacker) init() {
+	writer := buffer.NewWriter(make([]byte, defaultSizeBytes+defaultHeaderBytes), true)
+	writer.WriteUint32s(p.opts.byteOrder, uint32(defaultHeaderBytes))
+	writer.WriteUint8s(uint8(heartbeatBit))
 
-	_ = binary.Write(buf, byteOrder, uint32(defaultHeaderBytes))
-	_ = binary.Write(buf, byteOrder, uint8(heartbeatBit))
-
-	return buf.Bytes()
+	p.heartbeat = writer
 }
