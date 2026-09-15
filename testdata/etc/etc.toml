@@ -557,6 +557,20 @@ shutdownMaxWaitTime = "0s"
             authorizeTimeout = "0s"
             # 是否开启压缩，默认为false
             compression = false
+            # 代理头部
+            proxyHeader = ""
+            # 是否信任代理，默认为false
+            trustProxy = false
+            # 信任代理配置
+            [network.ws.server.trustProxyConfig]
+                # 代理是受信任代理 IP 地址或 CIDR 范围的列表
+                proxies = []
+                # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
+                linkLocal = false
+                # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
+                loopback = false
+                # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+                private = false
         # ws网络客户端
         [network.ws.client]
             # 拨号地址
