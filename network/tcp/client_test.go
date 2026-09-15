@@ -30,7 +30,7 @@ func TestClient_Simple(t *testing.T) {
 	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
 		defer buf.Release()
 
-		message, err := packet.UnpackMessage(buf.Bytes())
+		message, err := packet.UnpackMessage(buf)
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
@@ -58,7 +58,7 @@ func TestClient_Simple(t *testing.T) {
 
 		buffer := fmt.Appendf([]byte{}, "%s: hello server~~", t.Format(time.DateTime))
 
-		msg, err := packet.PackBuffer(&packet.Message{
+		msg, err := packet.PackMessage(&packet.Message{
 			Seq:    1,
 			Route:  1,
 			Buffer: buffer,
@@ -176,7 +176,7 @@ func doPressureTest(c int, n int, size int) {
 					return
 				}
 
-				msg, err := packet.PackBuffer(&packet.Message{
+				msg, err := packet.PackMessage(&packet.Message{
 					Seq:    1,
 					Route:  1,
 					Buffer: buffer,

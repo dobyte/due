@@ -295,7 +295,7 @@ func (c *clientConn) read(conn net.Conn) {
 	)
 
 	for {
-		isHeartbeat, heartbeatTime, buf, err := packet.ReadBuffer(reader)
+		isHeartbeat, heartbeatTime, buf, err := packet.Read(reader)
 		if err != nil {
 			taskpool.Add(func() { c.forceClose() })
 			return
