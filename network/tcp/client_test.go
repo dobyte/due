@@ -14,7 +14,6 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xrand"
-	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 func TestClient_Simple(t *testing.T) {
@@ -57,7 +56,7 @@ func TestClient_Simple(t *testing.T) {
 			return
 		}
 
-		buffer := fmt.Appendf([]byte{}, "%s: hello server~~", t.Format(xtime.DateTime))
+		buffer := fmt.Appendf([]byte{}, "%s: hello server~~", t.Format(time.DateTime))
 
 		msg, err := packet.PackBuffer(&packet.Message{
 			Seq:    1,

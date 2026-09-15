@@ -15,7 +15,6 @@ import (
 	"github.com/dobyte/due/v2/packet"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xnet"
-	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 type serverConn struct {
@@ -191,7 +190,7 @@ func (c *serverConn) init(conn net.Conn) {
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
-	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
 	c.connMgr.storeConn(conn, c)
 	c.wg1 = &sync.WaitGroup{}
@@ -377,7 +376,7 @@ func (c *serverConn) read(conn net.Conn) {
 		if isHeartbeat {
 			// update heartbeat time
 			if c.connMgr.server.opts.heartbeatInterval > 0 {
-				c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			}
 
 			// responsive heartbeat
@@ -403,7 +402,7 @@ func (c *serverConn) read(conn net.Conn) {
 				index++
 
 				if index%10 == 0 {
-					c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+					c.lastHeartbeatTime.Store(time.Now().UnixNano())
 				}
 			}
 
@@ -500,7 +499,7 @@ OVER:
 
 	if len(c.netBuffers) > 0 {
 		if c.connMgr.server.opts.writeTimeout > 0 {
-			_ = conn.SetWriteDeadline(xtime.Now().Add(c.connMgr.server.opts.writeTimeout))
+			_ = conn.SetWriteDeadline(time.Now().Add(c.connMgr.server.opts.writeTimeout))
 		}
 
 		if _, err := c.netBuffers.WriteTo(conn); err != nil {
@@ -537,7 +536,7 @@ func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	} else {
 		if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
 			if c.connMgr.server.opts.writeTimeout > 0 {
-				_ = conn.SetWriteDeadline(xtime.Now().Add(c.connMgr.server.opts.writeTimeout))
+				_ = conn.SetWriteDeadline(time.Now().Add(c.connMgr.server.opts.writeTimeout))
 			}
 
 			hb := packet.PackHeartbeat(true)
