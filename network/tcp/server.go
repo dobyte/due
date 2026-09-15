@@ -196,6 +196,10 @@ func (s *server) serve(ln net.Listener) {
 				continue
 			}
 
+			if errors.Is(err, net.ErrClosed) {
+				break
+			}
+
 			log.Warnf("tcp accept error: %v", err)
 			break
 		}

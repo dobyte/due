@@ -361,16 +361,17 @@ func (c *serverConn) read(conn net.Conn) {
 			return
 		}
 
-		state := c.State()
-
-		// ignore closed connection
-		if state == network.ConnClosed {
+		switch c.State() {
+		case network.ConnClosed:
+			if !isHeartbeat {
+				buf.Release()
+			}
 			return
-		}
-
-		// ignore hanged connection except heartbeat packet
-		if state == network.ConnHanged && !isHeartbeat {
-			return
+		case network.ConnHanged:
+			if !isHeartbeat {
+				buf.Release()
+				return
+			}
 		}
 
 		if isHeartbeat {
@@ -408,6 +409,7 @@ func (c *serverConn) read(conn net.Conn) {
 
 			// ignore empty packet
 			if buf.Len() == 0 {
+				buf.Release()
 				continue
 			}
 
@@ -460,6 +462,7 @@ func (c *serverConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 	c.queue.Done(closeSig)
 
 	if closeSig {
+		first.Release()
 		return
 	}
 
@@ -478,6 +481,7 @@ func (c *serverConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 			c.queue.Done(closeSig)
 
 			if closeSig {
+				buf.Release()
 				goto OVER
 			}
 
@@ -532,11 +536,11 @@ func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 		return false
 	} else {
 		if c.connMgr.server.opts.heartbeatMechanism == TickHeartbeat {
-			hb := packet.PackHeartbeat(true)
-
 			if c.connMgr.server.opts.writeTimeout > 0 {
 				_ = conn.SetWriteDeadline(xtime.Now().Add(c.connMgr.server.opts.writeTimeout))
 			}
+
+			hb := packet.PackHeartbeat(true)
 
 			if _, err := conn.Write(hb.Bytes()); err != nil {
 				log.Errorf("write heartbeat message error: %v", err)

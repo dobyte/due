@@ -213,7 +213,13 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // @param heartbeatMechanism HeartbeatMechanism 心跳机制
 // @return @1 ServerOption 服务器配置项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
-	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+	return func(o *serverOptions) {
+		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
+			o.heartbeatMechanism = heartbeatMechanism
+		} else {
+			log.Warnf("the specified heartbeatMechanism is %v and will be ignored", heartbeatMechanism)
+		}
+	}
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间

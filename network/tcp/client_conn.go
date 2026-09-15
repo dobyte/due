@@ -302,16 +302,17 @@ func (c *clientConn) read(conn net.Conn) {
 			return
 		}
 
-		state := c.State()
-
-		// ignore closed connection
-		if state == network.ConnClosed {
+		switch c.State() {
+		case network.ConnClosed:
+			if !isHeartbeat {
+				buf.Release()
+			}
 			return
-		}
-
-		// ignore hanged connection except heartbeat packet
-		if state == network.ConnHanged && !isHeartbeat {
-			return
+		case network.ConnHanged:
+			if !isHeartbeat {
+				buf.Release()
+				return
+			}
 		}
 
 		if isHeartbeat {
@@ -335,6 +336,7 @@ func (c *clientConn) read(conn net.Conn) {
 
 			// ignore empty packet
 			if buf.Len() == 0 {
+				buf.Release()
 				continue
 			}
 
@@ -387,6 +389,7 @@ func (c *clientConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 	c.queue.Done(closeSig)
 
 	if closeSig {
+		first.Release()
 		return
 	}
 
@@ -405,6 +408,7 @@ func (c *clientConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 			c.queue.Done(closeSig)
 
 			if closeSig {
+				buf.Release()
 				goto OVER
 			}
 
@@ -445,20 +449,18 @@ OVER:
 // @param t time.Time 当前心跳触发的时间点
 // @return @1 bool 是否继续写入协程循环，心跳超时时返回false
 func (c *clientConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
-	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
-
-	if c.lastHeartbeatTime.Load() < deadline {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		taskpool.Add(func() { c.forceClose() })
 
 		return false
 	} else {
-		hb := packet.PackHeartbeat(true)
-
 		if c.client.opts.writeTimeout > 0 {
 			_ = conn.SetWriteDeadline(xtime.Now().Add(c.client.opts.writeTimeout))
 		}
+
+		hb := packet.PackHeartbeat()
 
 		if _, err := conn.Write(hb.Bytes()); err != nil {
 			log.Errorf("write heartbeat message error: %v", err)
