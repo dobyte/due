@@ -14,7 +14,8 @@ const (
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
-	defaultClientCompression       = false
+	defaultClientEnableCompression = false
+	defaultClientCompressionLevel  = 1
 )
 
 const (
@@ -23,7 +24,8 @@ const (
 	defaultClientWriteTimeoutKey      = "etc.network.ws.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.ws.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.ws.client.heartbeatInterval"
-	defaultClientCompressionKey       = "etc.network.ws.client.compression"
+	defaultClientEnableCompressionKey = "etc.network.ws.client.enableCompression"
+	defaultClientCompressionLevelKey  = "etc.network.ws.client.compressionLevel"
 )
 
 type ClientOption func(o *clientOptions)
@@ -34,7 +36,8 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
-	compression       bool          // 是否开启压缩，默认false
+	enableCompression bool          // 是否开启压缩，默认false
+	compressionLevel  int           // 压缩等级，默认1
 }
 
 // defaultClientOptions 构建默认客户端配置
@@ -42,6 +45,7 @@ type clientOptions struct {
 // @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
+	opts.enableCompression = etc.Get(defaultClientEnableCompressionKey, defaultClientEnableCompression).Bool()
 
 	if url := etc.Get(defaultClientUrlKey, defaultClientUrl).String(); url != "" {
 		opts.url = url
@@ -73,7 +77,11 @@ func defaultClientOptions() *clientOptions {
 		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
 	}
 
-	opts.compression = etc.Get(defaultClientCompressionKey, defaultClientCompression).Bool()
+	if compressionLevel := etc.Get(defaultClientCompressionLevelKey, defaultClientCompressionLevel).Int(); compressionLevel >= 1 && compressionLevel <= 9 {
+		opts.compressionLevel = compressionLevel
+	} else {
+		opts.compressionLevel = defaultClientCompressionLevel
+	}
 
 	return opts
 }
@@ -144,8 +152,21 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 }
 
 // WithClientCompression 设置是否开启压缩
-// @param compression bool 是否开启压缩
+// @param enableCompression bool 是否开启压缩
 // @return @1 ClientOption 客户端配置项
-func WithClientCompression(compression bool) ClientOption {
-	return func(o *clientOptions) { o.compression = compression }
+func WithClientCompression(enableCompression bool) ClientOption {
+	return func(o *clientOptions) { o.enableCompression = enableCompression }
+}
+
+// WithClientCompressionLevel 设置压缩等级
+// @param compressionLevel int 压缩等级
+// @return @1 ClientOption 客户端配置项
+func WithClientCompressionLevel(compressionLevel int) ClientOption {
+	return func(o *clientOptions) {
+		if compressionLevel >= 1 && compressionLevel <= 9 {
+			o.compressionLevel = compressionLevel
+		} else {
+			log.Warnf("the specified compressionLevel is out of range and will be ignored")
+		}
+	}
 }

@@ -306,7 +306,7 @@ func (c *clientConn) read(conn *websocket.Conn) {
 			continue
 		}
 
-		isHeartbeat, heartbeatTime, buf, err := packet.ReadBuffer(r)
+		isHeartbeat, heartbeatTime, buf, err := packet.Read(r)
 		if err != nil {
 			taskpool.Add(func() { c.forceClose() })
 			return

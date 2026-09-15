@@ -153,7 +153,7 @@ func (s *server) serve(ln net.Listener) {
 		upgrader = websocket.Upgrader{
 			ReadBufferSize:    s.opts.readBufferSize,
 			WriteBufferSize:   s.opts.writeBufferSize,
-			EnableCompression: s.opts.compression,
+			EnableCompression: s.opts.enableCompression,
 			CheckOrigin:       s.opts.checkOrigin,
 		}
 	)
@@ -178,6 +178,11 @@ func (s *server) serve(ln net.Listener) {
 		if err != nil {
 			log.Errorf("websocket upgrade error: %v", err)
 			return
+		}
+
+		if s.opts.enableCompression {
+			conn.EnableWriteCompression(true)
+			conn.SetCompressionLevel(s.opts.compressionLevel)
 		}
 
 		if err = s.connMgr.allocateConn(conn); err != nil {

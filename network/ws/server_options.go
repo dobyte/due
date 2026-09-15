@@ -21,7 +21,8 @@ const (
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
-	defaultServerCompression        = false
+	defaultServerEnableCompression  = false
+	defaultServerCompressionLevel   = 1
 )
 
 const (
@@ -38,7 +39,8 @@ const (
 	defaultServerHeartbeatIntervalKey   = "etc.network.ws.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey  = "etc.network.ws.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey    = "etc.network.ws.server.authorizeTimeout"
-	defaultServerCompressionKey         = "etc.network.ws.server.compression"
+	defaultServerEnableCompressionKey   = "etc.network.ws.server.enableCompression"
+	defaultServerCompressionLevelKey    = "etc.network.ws.server.compressionLevel"
 	defaultServerEnableProxyProtocolKey = "etc.network.ws.server.enableProxyProtocol"
 )
 
@@ -67,7 +69,8 @@ type serverOptions struct {
 	heartbeatInterval   time.Duration      // 心跳间隔时间，默认10s
 	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
-	compression         bool               // 是否开启压缩，默认false
+	enableCompression   bool               // 是否开启压缩，默认false
+	compressionLevel    int                // 压缩等级，默认1
 	enableProxyProtocol bool               // 是否开启代理协议，默认false
 }
 
@@ -80,7 +83,7 @@ func defaultServerOptions() *serverOptions {
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
 	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
-	opts.compression = etc.Get(defaultServerCompressionKey, defaultServerCompression).Bool()
+	opts.enableCompression = etc.Get(defaultServerEnableCompressionKey, defaultServerEnableCompression).Bool()
 
 	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
 		opts.addr = addr
@@ -135,6 +138,12 @@ func defaultServerOptions() *serverOptions {
 		opts.authorizeTimeout = authorizeTimeout
 	} else {
 		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
+	}
+
+	if compressionLevel := etc.Get(defaultServerCompressionLevelKey, defaultServerCompressionLevel).Int(); compressionLevel >= 1 && compressionLevel <= 9 {
+		opts.compressionLevel = compressionLevel
+	} else {
+		opts.compressionLevel = defaultServerCompressionLevel
 	}
 
 	origins := etc.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
@@ -295,11 +304,24 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerCompression 设置是否开启压缩
-// @param compression bool 是否开启压缩
+// WithServerEnableCompression 设置是否开启压缩
+// @param enableCompression bool 是否开启压缩
 // @return @1 ServerOption 服务器配置项
-func WithServerCompression(compression bool) ServerOption {
-	return func(o *serverOptions) { o.compression = compression }
+func WithServerEnableCompression(enableCompression bool) ServerOption {
+	return func(o *serverOptions) { o.enableCompression = enableCompression }
+}
+
+// WithServerCompressionLevel 设置压缩等级
+// @param compressionLevel int 压缩等级
+// @return @1 ServerOption 服务器配置项
+func WithServerCompressionLevel(compressionLevel int) ServerOption {
+	return func(o *serverOptions) {
+		if compressionLevel >= 1 && compressionLevel <= 9 {
+			o.compressionLevel = compressionLevel
+		} else {
+			log.Warnf("the specified compressionLevel is out of range and will be ignored")
+		}
+	}
 }
 
 // WithServerEnableProxyProtocol 设置是否开启代理协议

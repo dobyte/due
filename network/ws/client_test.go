@@ -30,13 +30,13 @@ func TestClientServerEcho(t *testing.T) {
 		}
 	}()
 
-	received := make(chan []byte, 1)
+	received := make(chan buffer.Buffer, 1)
 	client := ws.NewClient(
 		ws.WithClientUrl("ws://"+addr),
 		ws.WithClientHeartbeatInterval(0),
 	)
 	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
-		received <- buf.Bytes()
+		received <- buf
 	})
 
 	conn, err := client.Dial()
@@ -45,7 +45,7 @@ func TestClientServerEcho(t *testing.T) {
 	}
 	defer conn.Close(true)
 
-	want, err := packet.PackMessage(&packet.Message{
+	buf, err := packet.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  2,
 		Buffer: []byte("hello websocket"),
@@ -54,7 +54,7 @@ func TestClientServerEcho(t *testing.T) {
 		t.Fatalf("pack message failed: %v", err)
 	}
 
-	if err = conn.Push(buffer.NewBytes(want)); err != nil {
+	if err = conn.Push(buf); err != nil {
 		t.Fatalf("push message failed: %v", err)
 	}
 

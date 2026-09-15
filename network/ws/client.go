@@ -32,7 +32,7 @@ func NewClient(opts ...ClientOption) network.Client {
 	c.opts = o
 	c.dialer = &websocket.Dialer{
 		HandshakeTimeout:  o.dialTimeout,
-		EnableCompression: o.compression,
+		EnableCompression: o.enableCompression,
 	}
 
 	return c
@@ -54,6 +54,11 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	conn, _, err := c.dialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.opts.enableCompression {
+		conn.EnableWriteCompression(true)
+		conn.SetCompressionLevel(c.opts.compressionLevel)
 	}
 
 	return newClientConn(c.id.Add(1), conn, c), nil
