@@ -26,49 +26,35 @@ func GetPacker() Packer {
 	return globalPacker
 }
 
-// ReadBuffer 以buffer的形式读取消息
+// Read 以buffer的形式读取消息
 // @param reader io.Reader 数据读取源
-// @return @1 buffer.Buffer 读取到的消息缓冲区
-// @return @2 error 读取失败时返回的错误
-func ReadBuffer(reader io.Reader) (bool, int64, buffer.Buffer, error) {
-	return globalPacker.ReadBuffer(reader)
+// @return @1 bool 是否为心跳消息
+// @return @2 int64 服务器侧时间戳（纳秒）
+// @return @3 buffer.Buffer 消息缓冲区
+// @return @4 error 读取失败时返回的错误
+func Read(reader io.Reader) (bool, int64, buffer.Buffer, error) {
+	return globalPacker.Read(reader)
 }
 
-// PackBuffer 以buffer的形式打包消息
-// @param message *Message 待打包的消息
-// @return @1 *buffer.NocopyBuffer 打包后的无拷贝缓冲区
+// PackMessage 以buffer的形式打包消息
+// @param message *Message 消息
+// @return @1 buffer.Buffer 打包后的消息缓冲区
 // @return @2 error 打包失败时返回的错误
-func PackBuffer(message *Message) (buffer.Buffer, error) {
-	return globalPacker.PackBuffer(message)
-}
-
-// ReadMessage 读取消息
-// @param reader io.Reader 数据读取源
-// @return @1 []byte 读取到的消息字节
-// @return @2 error 读取失败时返回的错误
-func ReadMessage(reader io.Reader) ([]byte, error) {
-	return globalPacker.ReadMessage(reader)
-}
-
-// PackMessage 打包消息
-// @param message *Message 待打包的消息
-// @return @1 []byte 打包后的消息字节
-// @return @2 error 打包失败时返回的错误
-func PackMessage(message *Message) ([]byte, error) {
+func PackMessage(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackMessage(message)
 }
 
 // UnpackMessage 解包消息
-// @param data []byte 待解包的原始消息字节
-// @return @1 *Message 解包后的消息对象
+// @param buf buffer.Buffer 消息缓冲区
+// @return @1 *Message 消息对象
 // @return @2 error 解包失败时返回的错误
-func UnpackMessage(data []byte) (*Message, error) {
-	return globalPacker.UnpackMessage(data)
+func UnpackMessage(buf buffer.Buffer) (*Message, error) {
+	return globalPacker.UnpackMessage(buf)
 }
 
 // PackHeartbeat 打包心跳
-// @return @1 []byte 心跳包字节
-// @return @2 error 打包失败时返回的错误
-func PackHeartbeat(isServerSide ...bool) buffer.Buffer {
-	return globalPacker.PackHeartbeat(isServerSide...)
+// @param server ...bool 是否为服务端心跳
+// @return @1 buffer.Buffer 心跳包缓冲区
+func PackHeartbeat(server ...bool) buffer.Buffer {
+	return globalPacker.PackHeartbeat(server...)
 }

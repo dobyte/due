@@ -12,8 +12,8 @@ var packer = packet.NewPacker(
 	packet.WithHeartbeatTime(false),
 )
 
-func TestDefaultPacker_ReadMessage(t *testing.T) {
-	data, err := packer.PackMessage(&packet.Message{
+func TestDefaultPacker_Read(t *testing.T) {
+	buf1, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte("hello world"),
@@ -22,37 +22,22 @@ func TestDefaultPacker_ReadMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(data)
+	defer buf1.Release()
 
-	reader := bytes.NewReader(data)
-
-	message, err := packer.ReadMessage(reader)
+	isHeartbeat, heartbeatTime, buf2, err := packer.Read(bytes.NewReader(buf1.Bytes()))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Log(message)
-}
+	defer buf2.Release()
 
-func TestDefaultPacker_PackBuffer(t *testing.T) {
-	buf, err := packer.PackBuffer(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte("hello world"),
-	})
+	message, err := packer.UnpackMessage(buf2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Log(buf.Bytes())
-
-	message, err := packer.UnpackMessage(buf.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	buf.Release()
-
+	t.Logf("isHeartbeat: %v", isHeartbeat)
+	t.Logf("heartbeatTime: %d", heartbeatTime)
 	t.Logf("seq: %d", message.Seq)
 	t.Logf("route: %d", message.Route)
 	t.Logf("buffer: %s", string(message.Buffer))
@@ -85,8 +70,8 @@ func TestDefaultPacker_PackHeartbeat(t *testing.T) {
 	t.Log(buf.Bytes())
 }
 
-func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
-	data, err := packer.PackMessage(&packet.Message{
+func BenchmarkDefaultPacker_Read(b *testing.B) {
+	msg, err := packer.PackMessage(&packet.Message{
 		Seq:    1,
 		Route:  1,
 		Buffer: []byte(xrand.Letters(2048)),
@@ -95,63 +80,21 @@ func BenchmarkDefaultPacker_ReadBuffer(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	reader := bytes.NewReader(data)
+	reader := bytes.NewReader(msg.Bytes())
+
+	defer msg.Release()
 
 	b.ResetTimer()
-	b.SetBytes(int64(len(data)))
+	b.SetBytes(int64(msg.Len()))
 
 	for b.Loop() {
-		if _, _, buf, err := packer.ReadBuffer(reader); err != nil {
+		if _, _, buf, err := packer.Read(reader); err != nil {
 			b.Fatal(err)
 		} else if buf != nil {
 			buf.Release()
 		}
 
-		reader.Reset(data)
-	}
-}
-
-func BenchmarkDefaultPacker_ReadMessage(b *testing.B) {
-	data, err := packer.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  1,
-		Buffer: []byte(xrand.Letters(2048)),
-	})
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	reader := bytes.NewReader(data)
-
-	b.ResetTimer()
-	b.SetBytes(int64(len(data)))
-
-	for b.Loop() {
-		if _, err = packer.ReadMessage(reader); err != nil {
-			b.Fatal(err)
-		}
-
-		reader.Reset(data)
-	}
-}
-
-func BenchmarkDefaultPacker_PackBuffer(b *testing.B) {
-	buffer := []byte(xrand.Letters(1024))
-
-	b.ResetTimer()
-	b.SetBytes(int64(len(buffer)))
-
-	for b.Loop() {
-		buf, err := packer.PackBuffer(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: buffer,
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		buf.Release()
+		reader.Reset(msg.Bytes())
 	}
 }
 
@@ -184,7 +127,7 @@ func BenchmarkDefaultPacker_UnpackMessage(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	b.SetBytes(int64(len(buf)))
+	b.SetBytes(int64(buf.Len()))
 
 	for b.Loop() {
 		if _, err := packer.UnpackMessage(buf); err != nil {
