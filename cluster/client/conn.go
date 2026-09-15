@@ -117,7 +117,7 @@ func (c *Conn) Push(message *cluster.Message) error {
 		}
 	}
 
-	msg, err := packet.PackMessage(&packet.Message{
+	buf, err := packet.PackMessage(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,
@@ -126,7 +126,12 @@ func (c *Conn) Push(message *cluster.Message) error {
 		return err
 	}
 
-	return c.conn.Push(msg)
+	if err = c.conn.Push(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
 }
 
 // Close 关闭连接

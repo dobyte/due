@@ -9,6 +9,7 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -172,13 +173,15 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 // 解包消息后分发给对应的路由处理器，未注册路由时走默认路由处理器
 // @param conn network.Conn 消息来源连接
 // @param data []byte 原始消息内容
-func (c *Client) handleReceive(conn network.Conn, data []byte) {
+func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
+	defer buf.Release()
+
 	val, ok := c.conns.Load(conn)
 	if !ok {
 		return
 	}
 
-	message, err := packet.UnpackMessage(data)
+	message, err := packet.UnpackMessage(buf)
 	if err != nil {
 		log.Errorf("unpack message failed: %v", err)
 		return
