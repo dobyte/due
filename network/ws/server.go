@@ -10,12 +10,11 @@ package ws
 import (
 	"net"
 	"net/http"
-	"sync/atomic"
+	"sync"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/gorilla/websocket"
 	"github.com/pires/go-proxyproto"
 )
@@ -30,13 +29,14 @@ type Server interface {
 
 type server struct {
 	opts              *serverOptions            // 配置
-	started           atomic.Bool               // 是否已启动
+	mu                sync.Mutex                // 锁
 	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
 	upgradeHandler    UpgradeHandler            // HTTP协议升级成WS协议hook函数
 }
@@ -74,11 +74,18 @@ func (s *server) Protocol() string {
 // Start 启动服务器
 // @return @1 error 错误信息
 func (s *server) Start() error {
+	s.mu.Lock()
+
 	if err := s.init(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
-	xcall.Go(s.serve)
+	ln := s.listener
+
+	go s.serve(ln)
+
+	s.mu.Unlock()
 
 	if s.startHandler != nil {
 		s.startHandler()
@@ -90,16 +97,15 @@ func (s *server) Start() error {
 // Stop 关闭服务器
 // @return @1 error 错误信息
 func (s *server) Stop() error {
-	if !s.started.Swap(false) {
-		return errors.ErrIllegalOperation
-	}
-
+	s.mu.Lock()
 	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			return err
-		}
+		s.listener.Close()
 		s.listener = nil
+	} else {
+		s.mu.Unlock()
+		return errors.ErrServerClosed
 	}
+	s.mu.Unlock()
 
 	s.connMgr.close()
 
@@ -114,15 +120,9 @@ func (s *server) Stop() error {
 // 解析TCP地址并创建TCP监听器；若任一环节失败则回滚启动状态
 // @return @1 error 已启动或监听地址不合法时返回的错误
 func (s *server) init() error {
-	if s.started.Swap(true) {
-		return errors.ErrIllegalOperation
+	if s.listener != nil {
+		return errors.ErrServerStarted
 	}
-
-	defer func() {
-		if s.listener == nil {
-			s.started.Store(false)
-		}
-	}()
 
 	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
@@ -134,7 +134,11 @@ func (s *server) init() error {
 		return err
 	}
 
-	s.listener = &proxyproto.Listener{Listener: ln}
+	if s.opts.enableProxyProtocol {
+		s.listener = &proxyproto.Listener{Listener: ln}
+	} else {
+		s.listener = ln
+	}
 
 	return nil
 }
@@ -142,13 +146,13 @@ func (s *server) init() error {
 // serve 启动服务器
 // 注册Websocket升级处理器，按配置以HTTP或HTTPS方式启动服务：
 // 升级请求校验方法/升级头/自定义升级钩子后，分配连接对象，失败则关闭连接
-func (s *server) serve() {
+func (s *server) serve(ln net.Listener) {
 	var (
 		err      error
 		mux      = http.NewServeMux()
 		upgrader = websocket.Upgrader{
-			ReadBufferSize:    1 << 16,
-			WriteBufferSize:   1 << 16,
+			ReadBufferSize:    s.opts.readBufferSize,
+			WriteBufferSize:   s.opts.writeBufferSize,
 			EnableCompression: s.opts.compression,
 			CheckOrigin:       s.opts.checkOrigin,
 		}
@@ -186,23 +190,15 @@ func (s *server) serve() {
 	})
 
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
-		err = http.ServeTLS(s.listener, mux, s.opts.certFile, s.opts.keyFile)
+		err = http.ServeTLS(ln, mux, s.opts.certFile, s.opts.keyFile)
 	} else {
-		err = http.Serve(s.listener, mux)
+		err = http.Serve(ln, mux)
 	}
 	if err != nil {
 		log.Errorf("websocket server shutdown, err: %v", err)
 	}
 
-	s.listener = nil
-
-	if s.started.CompareAndSwap(true, false) {
-		s.connMgr.close()
-
-		if s.stopHandler != nil {
-			s.stopHandler()
-		}
-	}
+	_ = s.Stop()
 }
 
 // OnStart 监听服务器启动
@@ -233,6 +229,12 @@ func (s *server) OnConnect(handler network.ConnectHandler) {
 // @param handler network.DisconnectHandler 连接关闭处理函数
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
+}
+
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
+	s.heartbeatHandler = handler
 }
 
 // OnReceive 监听接收到消息

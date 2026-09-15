@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -14,8 +15,8 @@ func TestClientServerEcho(t *testing.T) {
 	addr := reserveAddr(t)
 
 	server := ws.NewServer(ws.WithServerAddr(addr), ws.WithServerHeartbeatInterval(0))
-	server.OnReceive(func(conn network.Conn, data []byte) {
-		if err := conn.Push(data); err != nil {
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		if err := conn.Push(buf); err != nil {
 			t.Errorf("push echo message failed: %v", err)
 		}
 	})
@@ -34,8 +35,8 @@ func TestClientServerEcho(t *testing.T) {
 		ws.WithClientUrl("ws://"+addr),
 		ws.WithClientHeartbeatInterval(0),
 	)
-	client.OnReceive(func(conn network.Conn, data []byte) {
-		received <- data
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		received <- buf.Bytes()
 	})
 
 	conn, err := client.Dial()
@@ -53,7 +54,7 @@ func TestClientServerEcho(t *testing.T) {
 		t.Fatalf("pack message failed: %v", err)
 	}
 
-	if err = conn.Push(want); err != nil {
+	if err = conn.Push(buffer.NewBytes(want)); err != nil {
 		t.Fatalf("push message failed: %v", err)
 	}
 

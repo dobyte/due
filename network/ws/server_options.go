@@ -14,6 +14,8 @@ const (
 	defaultServerPath               = "/"
 	defaultServerMaxConnNum         = 5000
 	defaultServerCheckOrigin        = "*"
+	defaultServerReadBufferSize     = 4096
+	defaultServerWriteBufferSize    = 4096
 	defaultServerWriteTimeout       = "0s"
 	defaultServerWriteQueueSize     = 1024
 	defaultServerHeartbeatInterval  = "10s"
@@ -23,18 +25,21 @@ const (
 )
 
 const (
-	defaultServerAddrKey               = "etc.network.ws.server.addr"
-	defaultServerPathKey               = "etc.network.ws.server.path"
-	defaultServerCheckOriginsKey       = "etc.network.ws.server.origins"
-	defaultServerKeyFileKey            = "etc.network.ws.server.keyFile"
-	defaultServerCertFileKey           = "etc.network.ws.server.certFile"
-	defaultServerMaxConnNumKey         = "etc.network.ws.server.maxConnNum"
-	defaultServerWriteTimeoutKey       = "etc.network.ws.server.writeTimeout"
-	defaultServerWriteQueueSizeKey     = "etc.network.ws.server.writeQueueSize"
-	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
-	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
-	defaultServerAuthorizeTimeoutKey   = "etc.network.ws.server.authorizeTimeout"
-	defaultServerCompressionKey        = "etc.network.ws.server.compression"
+	defaultServerAddrKey                = "etc.network.ws.server.addr"
+	defaultServerPathKey                = "etc.network.ws.server.path"
+	defaultServerCheckOriginsKey        = "etc.network.ws.server.origins"
+	defaultServerKeyFileKey             = "etc.network.ws.server.keyFile"
+	defaultServerCertFileKey            = "etc.network.ws.server.certFile"
+	defaultServerMaxConnNumKey          = "etc.network.ws.server.maxConnNum"
+	defaultServerReadBufferSizeKey      = "etc.network.ws.server.readBufferSize"
+	defaultServerWriteBufferSizeKey     = "etc.network.ws.server.writeBufferSize"
+	defaultServerWriteTimeoutKey        = "etc.network.ws.server.writeTimeout"
+	defaultServerWriteQueueSizeKey      = "etc.network.ws.server.writeQueueSize"
+	defaultServerHeartbeatIntervalKey   = "etc.network.ws.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey  = "etc.network.ws.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey    = "etc.network.ws.server.authorizeTimeout"
+	defaultServerCompressionKey         = "etc.network.ws.server.compression"
+	defaultServerEnableProxyProtocolKey = "etc.network.ws.server.enableProxyProtocol"
 )
 
 const (
@@ -49,18 +54,21 @@ type ServerOption func(o *serverOptions)
 type CheckOriginFunc func(r *http.Request) bool
 
 type serverOptions struct {
-	addr               string             // 监听地址
-	maxConnNum         int                // 最大连接数
-	certFile           string             // 证书文件
-	keyFile            string             // 秘钥文件
-	path               string             // 路径，默认为"/"
-	checkOrigin        CheckOriginFunc    // 跨域检测
-	writeTimeout       time.Duration      // 写入超时时间，默认无超时
-	writeQueueSize     int                // 写入队列大小，默认1024
-	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
-	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
-	compression        bool               // 是否开启压缩，默认false
+	addr                string             // 监听地址
+	maxConnNum          int                // 最大连接数
+	certFile            string             // 证书文件
+	keyFile             string             // 秘钥文件
+	path                string             // 路径，默认为"/"
+	checkOrigin         CheckOriginFunc    // 跨域检测
+	readBufferSize      int                // 读缓冲区大小，默认4096
+	writeBufferSize     int                // 写缓冲区大小，默认4096
+	writeTimeout        time.Duration      // 写入超时时间，默认无超时
+	writeQueueSize      int                // 写入队列大小，默认1024
+	heartbeatInterval   time.Duration      // 心跳间隔时间，默认10s
+	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
+	compression         bool               // 是否开启压缩，默认false
+	enableProxyProtocol bool               // 是否开启代理协议，默认false
 }
 
 // defaultServerOptions 构建默认服务器配置
@@ -71,6 +79,8 @@ func defaultServerOptions() *serverOptions {
 	opts.path = etc.Get(defaultServerPathKey, defaultServerPath).String()
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
+	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
+	opts.compression = etc.Get(defaultServerCompressionKey, defaultServerCompression).Bool()
 
 	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
 		opts.addr = addr
@@ -82,6 +92,18 @@ func defaultServerOptions() *serverOptions {
 		opts.maxConnNum = maxConnNum
 	} else {
 		opts.maxConnNum = defaultServerMaxConnNum
+	}
+
+	if readBufferSize := etc.Get(defaultServerReadBufferSizeKey, defaultServerReadBufferSize).Int(); readBufferSize > 0 {
+		opts.readBufferSize = readBufferSize
+	} else {
+		opts.readBufferSize = defaultServerReadBufferSize
+	}
+
+	if writeBufferSize := etc.Get(defaultServerWriteBufferSizeKey, defaultServerWriteBufferSize).Int(); writeBufferSize > 0 {
+		opts.writeBufferSize = writeBufferSize
+	} else {
+		opts.writeBufferSize = defaultServerWriteBufferSize
 	}
 
 	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
@@ -114,8 +136,6 @@ func defaultServerOptions() *serverOptions {
 	} else {
 		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
 	}
-
-	opts.compression = etc.Get(defaultServerCompressionKey, defaultServerCompression).Bool()
 
 	origins := etc.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
 	opts.checkOrigin = func(r *http.Request) bool {
@@ -190,6 +210,32 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	}
 }
 
+// WithServerReadBufferSize 设置读取缓冲区大小
+// @param readBufferSize int 读取缓冲区大小
+// @return @1 ServerOption 服务器配置项
+func WithServerReadBufferSize(readBufferSize int) ServerOption {
+	return func(o *serverOptions) {
+		if readBufferSize > 0 {
+			o.readBufferSize = readBufferSize
+		} else {
+			log.Warnf("the specified readBufferSize is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerWriteBufferSize 设置写入缓冲区大小
+// @param writeBufferSize int 写入缓冲区大小
+// @return @1 ServerOption 服务器配置项
+func WithServerWriteBufferSize(writeBufferSize int) ServerOption {
+	return func(o *serverOptions) {
+		if writeBufferSize > 0 {
+			o.writeBufferSize = writeBufferSize
+		} else {
+			log.Warnf("the specified writeBufferSize is less than zero and will be ignored")
+		}
+	}
+}
+
 // WithServerWriteTimeout 设置写超时时间
 // @param writeTimeout time.Duration 写超时时间
 // @return @1 ServerOption 服务器配置项
@@ -254,4 +300,11 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 // @return @1 ServerOption 服务器配置项
 func WithServerCompression(compression bool) ServerOption {
 	return func(o *serverOptions) { o.compression = compression }
+}
+
+// WithServerEnableProxyProtocol 设置是否开启代理协议
+// @param enableProxyProtocol bool 是否开启代理协议
+// @return @1 ServerOption 服务器配置项
+func WithServerEnableProxyProtocol(enableProxyProtocol bool) ServerOption {
+	return func(o *serverOptions) { o.enableProxyProtocol = enableProxyProtocol }
 }

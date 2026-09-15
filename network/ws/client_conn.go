@@ -1,35 +1,35 @@
 package ws
 
 import (
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/utils/xcall"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xnet"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/gorilla/websocket"
 )
 
 type clientConn struct {
-	rw                sync.RWMutex        // 锁
-	id                int64               // 连接ID
-	uid               atomic.Int64        // 用户ID
-	attr              *attr               // 连接属性
-	conn              *websocket.Conn     // TCP源连接
-	state             atomic.Int32        // 连接状态
-	client            *client             // 客户端
-	wg1               *sync.WaitGroup     // 读等待组
-	wg2               *sync.WaitGroup     // 写等待组
-	lowPriorityQueue  *queue.Queue[*task] // 低优先级队列
-	highPriorityQueue *queue.Queue[*task] // 高优先级队列
-	lastHeartbeatTime atomic.Int64        // 上次心跳时间
+	rw                sync.RWMutex                // 锁
+	id                int64                       // 连接ID
+	uid               atomic.Int64                // 用户ID
+	attr              *attr                       // 连接属性
+	conn              *websocket.Conn             // TCP源连接
+	state             atomic.Int32                // 连接状态
+	client            *client                     // 客户端
+	wg1               *sync.WaitGroup             // 读等待组
+	wg2               *sync.WaitGroup             // 写等待组
+	queue             *queue.Queue[buffer.Buffer] // 消息队列
+	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 }
 
 var _ network.Conn = &clientConn{}
@@ -46,9 +46,8 @@ func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn 
 	c.conn = conn
 	c.client = client
 	c.state.Store(int32(network.ConnOpened))
-	c.lowPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
-	c.highPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize/2)), client.opts.writeTimeout)
-	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
@@ -110,24 +109,14 @@ func (c *clientConn) Unbind() error {
 	return nil
 }
 
-// Send 高优先级发送消息
-// @param msg []byte 消息内容
-// @return @1 error 错误信息
-func (c *clientConn) Send(msg []byte) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
-	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
-}
-
 // Push 低优先级发送消息
-// @param msg []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 error 错误信息
-func (c *clientConn) Push(msg []byte) error {
+func (c *clientConn) Push(buf buffer.Buffer) error {
+	if buf.Len() == 0 {
+		return errors.ErrInvalidMessage
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -135,7 +124,7 @@ func (c *clientConn) Push(msg []byte) error {
 		return err
 	}
 
-	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
+	return c.queue.Write(buf)
 }
 
 // State 获取连接状态
@@ -240,16 +229,11 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	err1 := c.doWriteToQueue(c.lowPriorityQueue, closeSig)
-	err2 := c.doWriteToQueue(c.highPriorityQueue, closeSig)
+	err := c.queue.Write(buffer.NewBytes(nil))
 	c.rw.RUnlock()
 
-	if err1 == nil {
-		c.lowPriorityQueue.Wait()
-	}
-
-	if err2 == nil {
-		c.highPriorityQueue.Wait()
+	if err == nil {
+		c.queue.Wait()
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -280,8 +264,7 @@ func (c *clientConn) doClose() error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.lowPriorityQueue.Close()
-	c.highPriorityQueue.Close()
+	c.queue.Close()
 	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
@@ -301,83 +284,99 @@ func (c *clientConn) doClose() error {
 
 // read 读取消息
 // 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
-// @param conn *websocket.Conn WS连接
+// @param conn net.Conn TCP连接
 func (c *clientConn) read(conn *websocket.Conn) {
+	var index int
+
 	for {
-		msgType, msgData, err := conn.ReadMessage()
+		mt, r, err := conn.NextReader()
 		if err != nil {
 			if !errors.Is(err, net.ErrClosed) {
 				if _, ok := err.(*websocket.CloseError); !ok {
-					log.Warnf("read message failed: %v", err)
+					log.Warnf("read message failed: %d %v", c.id, err)
 				}
 			}
 
-			xcall.Go(func() {
-				_ = c.forceClose()
-			})
-
+			taskpool.Add(func() { c.forceClose() })
 			return
 		}
 
-		if msgType != websocket.BinaryMessage {
+		if mt != websocket.BinaryMessage {
+			_, _ = io.Copy(io.Discard, r)
 			continue
 		}
 
-		if c.client.opts.heartbeatInterval > 0 {
-			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-		}
-
-		// stop read message
-		if c.checkState() != nil {
-			return
-		}
-
-		// ignore empty packet
-		if len(msgData) == 0 {
-			continue
-		}
-
-		// check heartbeat packet
-		isHeartbeat, err := packet.CheckHeartbeat(msgData)
+		isHeartbeat, heartbeatTime, buf, err := packet.ReadBuffer(r)
 		if err != nil {
-			log.Errorf("check heartbeat message error: %v", err)
-			continue
+			taskpool.Add(func() { c.forceClose() })
+			return
 		}
 
-		// ignore heartbeat packet
+		switch c.State() {
+		case network.ConnClosed:
+			if !isHeartbeat {
+				buf.Release()
+			}
+			return
+		case network.ConnHanged:
+			if !isHeartbeat {
+				buf.Release()
+				return
+			}
+		}
+
 		if isHeartbeat {
-			continue
-		}
+			// update heartbeat time
+			if c.client.opts.heartbeatInterval > 0 {
+				c.lastHeartbeatTime.Store(time.Now().UnixNano())
+			}
 
-		if c.client.receiveHandler != nil {
-			c.client.receiveHandler(c, msgData)
+			if c.client.heartbeatHandler != nil {
+				c.client.heartbeatHandler(c, heartbeatTime)
+			}
+		} else {
+			// update heartbeat time
+			if c.client.opts.heartbeatInterval > 0 {
+				index++
+
+				if index%10 == 0 {
+					c.lastHeartbeatTime.Store(time.Now().UnixNano())
+				}
+			}
+
+			// ignore empty packet
+			if buf.Len() == 0 {
+				buf.Release()
+				continue
+			}
+
+			if c.client.receiveHandler != nil {
+				c.client.receiveHandler(c, buf)
+			}
 		}
 	}
 }
 
 // write 写入消息
-// 由于gorilla/websocket库并发写入的限制，采用高/低优先级双队列：外层先取高优先级，空闲时在内层再取低优先级或处理心跳
 // @param conn *websocket.Conn WS连接
 func (c *clientConn) write(conn *websocket.Conn) {
-	var ticker *time.Ticker
+	var tickerC <-chan time.Time
 
 	if c.client.opts.heartbeatInterval > 0 {
-		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
+		ticker := time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
-	} else {
-		ticker = &time.Ticker{}
+		tickerC = ticker.C
 	}
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue.Read():
+		case buf, ok := <-c.queue.Read():
 			if !ok {
 				return
 			}
 
-			c.highPriorityQueue.Done(t.typ == closeSig)
-			c.doWrite(conn, t)
-		case t, ok := <-ticker.C:
+			c.doWrite(conn, buf)
+		case t, ok := <-tickerC:
 			if !ok {
 				return
 			}
@@ -385,62 +384,39 @@ func (c *clientConn) write(conn *websocket.Conn) {
 			if !c.doHandleHeartbeat(conn, t) {
 				return
 			}
-		default:
-			select {
-			case t, ok := <-c.highPriorityQueue.Read():
-				if !ok {
-					return
-				}
-
-				c.highPriorityQueue.Done(t.typ == closeSig)
-				c.doWrite(conn, t)
-			case t, ok := <-c.lowPriorityQueue.Read():
-				if !ok {
-					return
-				}
-
-				c.lowPriorityQueue.Done(t.typ == closeSig)
-				c.doWrite(conn, t)
-			case t, ok := <-ticker.C:
-				if !ok {
-					return
-				}
-
-				if !c.doHandleHeartbeat(conn, t) {
-					return
-				}
-			}
 		}
 	}
 }
 
 // doWrite 执行写入操作
-// 依据任务类型打包心跳或直接写入消息字节，并回收任务对象
+// 识别关闭信号后终止写协程，否则写入消息数据并释放缓冲区
 // @param conn *websocket.Conn WS连接
-// @param t *task 待写入的任务对象
-func (c *clientConn) doWrite(conn *websocket.Conn, t *task) {
-	defer c.client.recycleTask(t)
+// @param buf buffer.Buffer 待写入的消息缓冲区
+func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
+	closeSig := buf.Len() == 0
 
-	if t.typ == closeSig {
+	c.queue.Done(closeSig)
+
+	if closeSig {
+		buf.Release()
 		return
 	}
 
-	if t.typ == heartbeatPacket {
-		if msg, err := packet.PackHeartbeat(); err != nil {
-			log.Errorf("pack heartbeat message error: %v", err)
-			return
-		} else {
-			t.msg = msg
-		}
+	if c.client.opts.writeTimeout > 0 {
+		_ = conn.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
 	}
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, t.msg); err != nil {
-		if !errors.Is(err, net.ErrClosed) {
+	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
+		if errors.Is(err, net.ErrClosed) {
+			taskpool.Add(func() { c.forceClose() })
+		} else {
 			if _, ok := err.(*websocket.CloseError); !ok {
 				log.Errorf("write message error: %v", err)
 			}
 		}
 	}
+
+	buf.Release()
 }
 
 // doHandleHeartbeat 处理心跳
@@ -449,25 +425,24 @@ func (c *clientConn) doWrite(conn *websocket.Conn, t *task) {
 // @param t time.Time 当前心跳触发的时间点
 // @return @1 bool 是否继续写入协程循环，心跳超时时返回false
 func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
-	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
-
-	if c.lastHeartbeatTime.Load() < deadline {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		xcall.Go(func() {
-			_ = c.forceClose()
-		})
+		taskpool.Add(func() { c.forceClose() })
 
 		return false
 	} else {
-		if heartbeat, err := packet.PackHeartbeat(); err != nil {
-			log.Errorf("pack heartbeat message error: %v", err)
-		} else {
-			// send heartbeat packet
-			if err := conn.WriteMessage(websocket.BinaryMessage, heartbeat); err != nil {
-				log.Errorf("write heartbeat message error: %v", err)
-			}
+		if c.client.opts.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
 		}
+
+		hb := packet.PackHeartbeat()
+
+		if err := conn.WriteMessage(websocket.BinaryMessage, hb.Bytes()); err != nil {
+			log.Errorf("write heartbeat message error: %v", err)
+		}
+
+		hb.Release()
 
 		return true
 	}
@@ -477,21 +452,4 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 // @return @1 bool 连接状态是否为关闭
 func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
-}
-
-// doWriteToQueue 写入任务到队列
-// 从对象池分配任务写入指定队列，写入失败时回收任务并返回错误
-// @param q *queue.Queue[*task] 目标写队列
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 error 队列挂起/关闭或写入超时时返回的错误
-func (c *clientConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
-	t := c.client.allocateTask(typ, msg...)
-
-	if err := q.Write(t); err != nil {
-		c.client.recycleTask(t)
-		return err
-	}
-
-	return nil
 }

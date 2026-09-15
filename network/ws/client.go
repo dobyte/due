@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/network"
@@ -14,8 +13,8 @@ type client struct {
 	dialer            *websocket.Dialer         // 拨号器
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
-	taskPool          sync.Pool                 // 任务对象池
 }
 
 var _ network.Client = &client{}
@@ -35,7 +34,6 @@ func NewClient(opts ...ClientOption) network.Client {
 		HandshakeTimeout:  o.dialTimeout,
 		EnableCompression: o.compression,
 	}
-	c.taskPool = sync.Pool{New: func() any { return &task{} }}
 
 	return c
 }
@@ -79,31 +77,14 @@ func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
 }
 
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
+	c.heartbeatHandler = handler
+}
+
 // OnReceive 监听接收到消息
 // @param handler network.ReceiveHandler 消息接收处理函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
-}
-
-// allocateTask 分配任务对象
-// 从任务对象池中获取并复用任务对象，避免频繁分配
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 *task 任务对象
-func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	return t
-}
-
-// recycleTask 回收任务到对象池
-// 清理任务数据后将对象归还池中以供复用
-// @param t *task 待回收的任务对象
-func (c *client) recycleTask(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
 }

@@ -25,7 +25,6 @@ type serverConnMgr struct {
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	connPool   sync.Pool    // 连接池
-	taskPool   sync.Pool    // 任务池
 	partitions []*partition // 连接管理
 }
 
@@ -37,7 +36,6 @@ func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
 	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
-	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
 	cm.partitions = make([]*partition, runtime.NumCPU()*2)
 
 	for i := 0; i < len(cm.partitions); i++ {
@@ -101,29 +99,6 @@ func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 // @return @1 int 分片索引
 func (cm *serverConnMgr) connHash(c *websocket.Conn) int {
 	return int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
-}
-
-// allocateTask 分配任务对象
-// 从任务对象池中获取并复用任务对象，避免频繁分配
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 *task 任务对象
-func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
-	t := cm.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	return t
-}
-
-// recycleTask 回收任务到对象池
-// 清理任务数据后将对象归还池中以供复用
-// @param t *task 待回收的任务对象
-func (cm *serverConnMgr) recycleTask(t *task) {
-	t.msg = nil
-	cm.taskPool.Put(t)
 }
 
 type partition struct {
