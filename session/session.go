@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -261,30 +262,13 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 	return conn.Close(force...)
 }
 
-// Send 发送消息（同步）
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @param message []byte 消息内容
-// @return @1 error 错误信息
-func (s *Session) Send(kind Kind, target int64, message []byte) error {
-	s.rw.RLock()
-	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
-	if err != nil {
-		return err
-	}
-
-	return conn.Send(message)
-}
-
 // Push 推送消息（异步）
 // @param kind Kind 会话类型
 // @param target int64 会话目标（连接ID或用户ID）
 // @param disconnect bool 推送后是否断开连接
 // @param message []byte 消息内容
 // @return @1 error 错误信息
-func (s *Session) Push(kind Kind, target int64, disconnect bool, message []byte) error {
+func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buffer) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -293,15 +277,17 @@ func (s *Session) Push(kind Kind, target int64, disconnect bool, message []byte)
 		return err
 	}
 
-	if err = conn.Push(message); err != nil {
+	if err = conn.Push(buf); err != nil {
 		return err
 	}
 
 	if disconnect {
-		return conn.Close()
-	} else {
-		return nil
+		if err = conn.Close(); err != nil {
+			log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
+		}
 	}
+
+	return nil
 }
 
 // Multicast 推送组播消息（异步）

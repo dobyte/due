@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/session"
@@ -124,13 +125,17 @@ func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int
 // @param kind session.Kind 会话类型
 // @param target int64 会话目标
 // @param disconnect bool 是否在推送后断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 error 错误信息
-func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, message []byte) error {
+func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error {
 	if p.gate.isShut() {
+		buf.Release()
+
 		return errors.ErrGateShutdown
 	} else {
-		if err := p.gate.session.Push(kind, target, disconnect, message); err != nil {
+		if err := p.gate.session.Push(kind, target, disconnect, buf); err != nil {
+			buf.Release()
+
 			if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
 				task.Add(func() {
 					if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); e != nil {

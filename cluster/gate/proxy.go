@@ -4,10 +4,12 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
+	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
 
@@ -114,9 +116,10 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 // @param ctx context.Context 上下文
 // @param cid int64 连接ID
 // @param uid int64 用户ID
-// @param data []byte 原始消息内容
-func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
+// @param buf buffer.Buffer 消息内容
+func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffer) {
 	if p.gate.isShut() {
+		buf.Release()
 		return
 	}
 
@@ -126,12 +129,16 @@ func (p *proxy) deliver(ctx context.Context, cid, uid int64, data []byte) {
 		return
 	}
 
+	cid, uid := conn.ID(), conn.UID()
+
 	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		CID:    cid,
 		UID:    uid,
 		Route:  message.Route,
-		Buffer: data,
+		Buffer: buf,
 	}); err != nil {
+		buf.Release()
+
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
 			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)

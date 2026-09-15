@@ -16,6 +16,7 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/info"
 	"github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
@@ -195,8 +196,8 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 // 将客户端消息投递到对应业务节点
 // @param conn network.Conn 来源连接
 // @param data []byte 原始消息内容
-func (g *Gate) handleReceive(conn network.Conn, data []byte) {
-	g.proxy.deliver(g.ctx, conn.ID(), conn.UID(), data)
+func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
+	g.proxy.deliver(g.ctx, conn, buf)
 }
 
 // 启动传输服务器
