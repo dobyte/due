@@ -337,6 +337,10 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 
 	c.wg1.Wait()
 
+	for buf := range c.queue.Read() {
+		buf.Release()
+	}
+
 	if c.connMgr.server.disconnectHandler != nil {
 		c.connMgr.server.disconnectHandler(c)
 	}
