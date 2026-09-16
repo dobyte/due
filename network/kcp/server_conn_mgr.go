@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"context"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -18,20 +19,24 @@ type serverConnMgr struct {
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	connPool   sync.Pool    // 连接池
-	taskPool   sync.Pool    // 任务池
 	partitions []*partition // 连接管理
 }
 
 // newServerConnMgr 创建连接管理器
-// 初始化连接池、任务池和按CPU数分片的分片管理器
+// 初始化连接池和按CPU数分片的分片管理器
 // @param server *server 服务器实例
 // @return @1 *serverConnMgr 连接管理器
 func newServerConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
-	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
-	cm.taskPool = sync.Pool{New: func() any { return &task{} }}
 	cm.partitions = make([]*partition, runtime.NumCPU()*2)
+	cm.connPool = sync.Pool{New: func() any {
+		return &serverConn{
+			attr:       &attr{},
+			connMgr:    cm,
+			netBuffers: make(net.Buffers, 0),
+		}
+	}}
 
 	for i := 0; i < len(cm.partitions); i++ {
 		cm.partitions[i] = &partition{connections: make(map[*kcp.UDPSession]*serverConn)}
@@ -84,35 +89,11 @@ func (cm *serverConnMgr) storeConn(c *kcp.UDPSession, conn *serverConn) {
 // 从分片中删除连接、重置并归还连接池，同时递减总连接数
 // @param c *kcp.UDPSession KCP连接
 func (cm *serverConnMgr) recycleConn(c *kcp.UDPSession) {
-	index := cm.connHash(c)
-	if conn, ok := cm.partitions[index].delete(c); ok {
+	if conn, ok := cm.partitions[cm.connHash(c)].delete(c); ok {
 		conn.reset()
 		cm.connPool.Put(conn)
 		cm.total.Add(-1)
 	}
-}
-
-// allocateTask 分配任务对象
-// 从对象池中取出任务并填充类型与消息内容
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可选
-// @return @1 *task 分配到的任务对象
-func (cm *serverConnMgr) allocateTask(typ int8, msg ...[]byte) *task {
-	t := cm.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	return t
-}
-
-// recycleTask 回收任务到对象池
-// 清空消息内容后将任务归还对象池，以便复用
-// @param t *task 待回收的任务对象
-func (cm *serverConnMgr) recycleTask(t *task) {
-	t.msg = nil
-	cm.taskPool.Put(t)
 }
 
 // connHash 通过连接指针计算哈希

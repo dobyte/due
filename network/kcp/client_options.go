@@ -10,14 +10,17 @@ import (
 
 const (
 	defaultClientDialAddr          = "127.0.0.1:3553"
+	defaultClientDialTimeout       = "3s"
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
 	defaultClientMtu               = 1400
+	defaultClientWriteDelay        = true
 )
 
 var (
-	defaultClientNoDelay = []int{1, 10, 2, 1}
+	defaultClientNoDelay    = []int{1, 10, 2, 1}
+	defaultClientWindowSize = []int{1024, 1024}
 )
 
 const (
@@ -39,6 +42,7 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	addr              string        // 地址
+	dialTimeout       time.Duration // 拨号超时时间，默认3s
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
@@ -58,6 +62,12 @@ func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 	opts.addr = etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String()
 
+	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration(); dialTimeout > 0 {
+		opts.dialTimeout = dialTimeout
+	} else {
+		opts.dialTimeout = xconv.Duration(defaultClientDialTimeout)
+	}
+
 	if writeTimeout := etc.Get(defaultClientWriteTimeoutKey, defaultClientWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
 	} else {
@@ -74,8 +84,8 @@ func defaultClientOptions() *clientOptions {
 	opts.mtu = etc.Get(defaultClientMtuKey, defaultClientMtu).Int()
 	opts.noDelay = etc.Get(defaultClientNoDelayKey, defaultClientNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultClientAckNoDelayKey).Bool()
-	opts.writeDelay = etc.Get(defaultClientWriteDelayKey).Bool()
-	opts.windowSize = etc.Get(defaultClientWindowSizeKey).Ints()
+	opts.writeDelay = etc.Get(defaultClientWriteDelayKey, defaultClientWriteDelay).Bool()
+	opts.windowSize = etc.Get(defaultClientWindowSizeKey, defaultClientWindowSize).Ints()
 	opts.readBuffer = int(etc.Get(defaultClientReadBufferKey).B())
 	opts.writeBuffer = int(etc.Get(defaultClientWriteBufferKey).B())
 
@@ -87,6 +97,19 @@ func defaultClientOptions() *clientOptions {
 // @return @1 ClientOption 客户端配置选项
 func WithClientDialAddr(addr string) ClientOption {
 	return func(o *clientOptions) { o.addr = addr }
+}
+
+// WithClientDialTimeout 设置拨号超时时间
+// @param dialTimeout time.Duration 拨号超时时间，小于0时忽略
+// @return @1 ClientOption 客户端配置选项
+func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if dialTimeout >= 0 {
+			o.dialTimeout = dialTimeout
+		} else {
+			log.Warnf("the specified dialTimeout is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithClientHeartbeatInterval 设置心跳间隔时间

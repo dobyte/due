@@ -1,7 +1,7 @@
 package kcp
 
 import (
-	"sync"
+	"net"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/network"
@@ -13,8 +13,8 @@ type client struct {
 	id                atomic.Int64              // 连接ID
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
-	taskPool          sync.Pool                 // 任务对象池
 }
 
 var _ network.Client = &client{}
@@ -31,7 +31,6 @@ func NewClient(opts ...ClientOption) network.Client {
 
 	c := &client{}
 	c.opts = o
-	c.taskPool = sync.Pool{New: func() any { return &task{} }}
 
 	return c
 }
@@ -49,8 +48,14 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		address = c.opts.addr
 	}
 
-	conn, err := kcp.DialWithOptions(address, nil, 10, 3)
+	udpConn, err := (&net.Dialer{Timeout: c.opts.dialTimeout}).Dial("udp", address)
 	if err != nil {
+		return nil, err
+	}
+
+	conn, err := kcp.NewConn(address, nil, 0, 0, udpConn.(net.PacketConn))
+	if err != nil {
+		_ = udpConn.Close()
 		return nil, err
 	}
 
@@ -75,31 +80,14 @@ func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
 }
 
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
+	c.heartbeatHandler = handler
+}
+
 // OnReceive 监听接收到消息
 // @param handler network.ReceiveHandler 接收消息hook函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
-}
-
-// allocateTask 分配任务对象
-// 从对象池中取出任务并填充类型与消息内容
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可选
-// @return @1 *task 分配到的任务对象
-func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
-	}
-
-	return t
-}
-
-// recycleTask 回收任务到对象池
-// 清空消息内容后将任务归还对象池，以便复用
-// @param t *task 待回收的任务对象
-func (c *client) recycleTask(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
 }

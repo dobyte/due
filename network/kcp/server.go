@@ -1,23 +1,27 @@
 package kcp
 
 import (
-	"sync/atomic"
+	"net"
+	"sync"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/pires/go-proxyproto"
 	"github.com/xtaci/kcp-go/v5"
 )
 
 type server struct {
 	opts              *serverOptions            // 配置
-	started           atomic.Bool               // 是否已启动
-	listener          *kcp.Listener             // 监听器
+	mu                sync.Mutex                // 锁
+	listener          net.Listener              // 监听器
 	connMgr           *serverConnMgr            // 连接管理器
 	startHandler      network.StartHandler      // 服务器启动hook函数
 	stopHandler       network.CloseHandler      // 服务器关闭hook函数
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
+	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
 	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
 }
 
@@ -50,11 +54,18 @@ func (s *server) Addr() string {
 // 初始化监听器后以协程方式接入连接，并触发启动hook函数
 // @return @1 error 初始化失败时返回的错误
 func (s *server) Start() error {
+	s.mu.Lock()
+
 	if err := s.init(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
-	go s.serve()
+	ln := s.listener
+
+	go s.serve(ln)
+
+	s.mu.Unlock()
 
 	if s.startHandler != nil {
 		s.startHandler()
@@ -67,16 +78,15 @@ func (s *server) Start() error {
 // 关闭监听器与全部连接，并触发关闭hook函数
 // @return @1 error 服务器未运行或关闭监听器失败时返回的错误
 func (s *server) Stop() error {
-	if !s.started.Swap(false) {
-		return errors.ErrIllegalOperation
-	}
-
+	s.mu.Lock()
 	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			return err
-		}
+		s.listener.Close()
 		s.listener = nil
+	} else {
+		s.mu.Unlock()
+		return errors.ErrServerClosed
 	}
+	s.mu.Unlock()
 
 	s.connMgr.close()
 
@@ -117,6 +127,12 @@ func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
 }
 
+// OnHeartbeat 监听心跳
+// @param handler network.HeartbeatHandler 心跳处理函数
+func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
+	s.heartbeatHandler = handler
+}
+
 // OnReceive 监听接收到消息
 // @param handler network.ReceiveHandler 接收消息hook函数
 func (s *server) OnReceive(handler network.ReceiveHandler) {
@@ -127,51 +143,71 @@ func (s *server) OnReceive(handler network.ReceiveHandler) {
 // 创建KCP监听器并标记服务器为启动状态
 // @return @1 error 服务器已启动或监听失败时返回的错误
 func (s *server) init() error {
-	if s.started.Swap(true) {
-		return errors.ErrIllegalOperation
+	if s.listener != nil {
+		return errors.ErrServerStarted
 	}
 
-	defer func() {
-		if s.listener == nil {
-			s.started.Store(false)
-		}
-	}()
-
-	ln, err := kcp.ListenWithOptions(s.opts.addr, nil, 0, 0)
+	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
 	if err != nil {
 		return err
 	}
 
-	s.listener = ln
+	if s.listener, err = kcp.ListenWithOptions(addr.String(), nil, 0, 0); err != nil {
+		return err
+	}
+
+	if s.opts.enableProxyProtocol {
+		s.listener = &proxyproto.Listener{Listener: s.listener}
+	}
 
 	return nil
 }
 
 // serve 启动服务器
 // 循环接受KCP连接并分配到连接管理器，监听结束时关闭全部连接
-func (s *server) serve() {
-	listener := s.listener
+func (s *server) serve(ln net.Listener) {
+	var delay time.Duration
 
 	for {
-		conn, err := listener.AcceptKCP()
+		conn, err := ln.Accept()
 		if err != nil {
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				if delay == 0 {
+					delay = 5 * time.Millisecond
+				} else {
+					delay *= 2
+				}
+				if max := 1 * time.Second; delay > max {
+					delay = max
+				}
+
+				log.Warnf("kcp accept error: %v; retrying in %v", err, delay)
+				time.Sleep(delay)
+				continue
+			}
+
+			if errors.Is(err, net.ErrClosed) {
+				break
+			}
+
 			log.Warnf("kcp accept error: %v", err)
 			break
 		}
 
-		if err = s.connMgr.allocateConn(conn); err != nil {
+		delay = 0
+
+		var session *kcp.UDPSession
+		if pc, ok := conn.(*proxyproto.Conn); ok {
+			session = pc.Raw().(*kcp.UDPSession)
+		} else {
+			session = conn.(*kcp.UDPSession)
+		}
+
+		if err = s.connMgr.allocateConn(session); err != nil {
 			log.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
 		}
 	}
 
-	s.listener = nil
-
-	if s.started.CompareAndSwap(true, false) {
-		s.connMgr.close()
-
-		if s.stopHandler != nil {
-			s.stopHandler()
-		}
-	}
+	_ = s.Stop()
 }

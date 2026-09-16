@@ -6,36 +6,36 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/utils/xcall"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xnet"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/xtaci/kcp-go/v5"
 )
 
 type clientConn struct {
-	rw                sync.RWMutex        // 锁
-	id                int64               // 连接ID
-	uid               atomic.Int64        // 用户ID
-	attr              *attr               // 连接属性
-	conn              *kcp.UDPSession     // UDP源连接
-	state             atomic.Int32        // 连接状态
-	client            *client             // 客户端
-	wg1               *sync.WaitGroup     // 读等待组
-	wg2               *sync.WaitGroup     // 写等待组
-	lowPriorityQueue  *queue.Queue[*task] // 低优先级队列
-	highPriorityQueue *queue.Queue[*task] // 高优先级队列
-	lastHeartbeatTime atomic.Int64        // 上次心跳时间
+	rw                sync.RWMutex                // 锁
+	id                int64                       // 连接ID
+	uid               atomic.Int64                // 用户ID
+	attr              *attr                       // 连接属性
+	conn              *kcp.UDPSession             // UDP源连接
+	state             atomic.Int32                // 连接状态
+	client            *client                     // 客户端
+	wg1               *sync.WaitGroup             // 读等待组
+	wg2               *sync.WaitGroup             // 写等待组
+	queue             *queue.Queue[buffer.Buffer] // 消息队列
+	netBuffers        net.Buffers                 // 待写入的字节切片集合
+	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 }
 
 var _ network.Conn = &clientConn{}
 
 // newClientConn 创建客户端连接
-// 初始化连接状态、读写队列及两路读写协程，并应用客户端相关KCP参数
+// 初始化连接状态、写队列及两路读写协程，并应用客户端相关KCP参数
 // @param id int64 连接ID
 // @param conn *kcp.UDPSession KCP源连接
 // @param client *client 客户端实例
@@ -47,9 +47,8 @@ func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn 
 	c.conn = conn
 	c.client = client
 	c.state.Store(int32(network.ConnOpened))
-	c.lowPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
-	c.highPriorityQueue = queue.NewQueue[*task](int32(max(128, client.opts.writeQueueSize/2)), client.opts.writeTimeout)
-	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
@@ -139,11 +138,15 @@ func (c *clientConn) Unbind() error {
 	return nil
 }
 
-// Send 高优先级发送消息
-// 消息写入高优先级队列，保证心跳等关键消息优先下发
-// @param msg []byte 待发送的消息字节
+// Push 发送消息
+// 消息写入写队列，由写协程统一下发
+// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
 // @return @1 error 连接状态异常或队列写入失败时返回的错误
-func (c *clientConn) Send(msg []byte) (err error) {
+func (c *clientConn) Push(buf buffer.Buffer) error {
+	if buf.Len() == 0 {
+		return errors.ErrInvalidMessage
+	}
+
 	c.rw.RLock()
 	defer c.rw.RUnlock()
 
@@ -151,22 +154,7 @@ func (c *clientConn) Send(msg []byte) (err error) {
 		return err
 	}
 
-	return c.doWriteToQueue(c.highPriorityQueue, dataPacket, msg)
-}
-
-// Push 低优先级发送消息
-// 消息写入低优先级队列，在高优先级队列空闲时才会被下发
-// @param msg []byte 待发送的消息字节
-// @return @1 error 连接状态异常或队列写入失败时返回的错误
-func (c *clientConn) Push(msg []byte) error {
-	c.rw.RLock()
-	defer c.rw.RUnlock()
-
-	if err := c.checkState(); err != nil {
-		return err
-	}
-
-	return c.doWriteToQueue(c.lowPriorityQueue, dataPacket, msg)
+	return c.queue.Write(buf)
 }
 
 // State 获取连接状态
@@ -259,7 +247,7 @@ func (c *clientConn) checkState() error {
 }
 
 // graceClose 优雅关闭
-// 向两个写队列写入关闭信号，等待队列排空后关闭连接，便于尽量下发完已缓冲的消息
+// 向写队列写入关闭信号，等待队列排空后关闭连接，便于尽量下发完已缓冲的消息
 // @return @1 error 连接非打开态或关闭过程中出错时返回的错误
 func (c *clientConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
@@ -271,16 +259,11 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	err1 := c.doWriteToQueue(c.lowPriorityQueue, closeSig)
-	err2 := c.doWriteToQueue(c.highPriorityQueue, closeSig)
+	err := c.queue.Write(buffer.NewBytes(nil))
 	c.rw.RUnlock()
 
-	if err1 == nil {
-		c.lowPriorityQueue.Wait()
-	}
-
-	if err2 == nil {
-		c.highPriorityQueue.Wait()
+	if err == nil {
+		c.queue.Wait()
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -302,7 +285,7 @@ func (c *clientConn) forceClose() error {
 }
 
 // doClose 执行关闭操作
-// 关闭读写队列，等待写协程退出后关闭底层连接，并触发断开hook函数
+// 关闭写队列，等待写协程退出后关闭底层连接，并触发断开hook函数
 // @return @1 error 连接已关闭或关闭底层连接失败时返回的错误
 func (c *clientConn) doClose() error {
 	c.rw.Lock()
@@ -311,8 +294,7 @@ func (c *clientConn) doClose() error {
 		return errors.ErrConnectionClosed
 	}
 
-	c.lowPriorityQueue.Close()
-	c.highPriorityQueue.Close()
+	c.queue.Close()
 	conn := c.conn
 	c.conn = nil
 	c.rw.Unlock()
@@ -322,6 +304,10 @@ func (c *clientConn) doClose() error {
 	err := conn.Close()
 
 	c.wg1.Wait()
+
+	for buf := range c.queue.Read() {
+		buf.Release()
+	}
 
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
@@ -334,72 +320,82 @@ func (c *clientConn) doClose() error {
 // 循环读取KCP数据，校验连接状态与心跳包，并将有效消息交给接收hook函数处理
 // @param conn *kcp.UDPSession KCP连接
 func (c *clientConn) read(conn *kcp.UDPSession) {
+	var index = 0
+
 	for {
-		data, err := packet.ReadMessage(conn)
+		isHeartbeat, heartbeatTime, buf, err := packet.Read(conn)
 		if err != nil {
-			xcall.Go(func() {
-				_ = c.forceClose()
-			})
+			taskpool.Add(func() { c.forceClose() })
 			return
 		}
 
-		if c.client.opts.heartbeatInterval > 0 {
-			c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-		}
-
-		// stop read message
-		if c.checkState() != nil {
+		switch c.State() {
+		case network.ConnClosed:
+			if !isHeartbeat {
+				buf.Release()
+			}
 			return
+		case network.ConnHanged:
+			if !isHeartbeat {
+				buf.Release()
+				return
+			}
 		}
 
-		// ignore empty packet
-		if len(data) == 0 {
-			continue
-		}
-
-		// check heartbeat packet
-		isHeartbeat, err := packet.CheckHeartbeat(data)
-		if err != nil {
-			log.Errorf("check heartbeat message error: %v", err)
-			continue
-		}
-
-		// ignore heartbeat packet
 		if isHeartbeat {
-			continue
-		}
+			// update heartbeat time
+			if c.client.opts.heartbeatInterval > 0 {
+				c.lastHeartbeatTime.Store(time.Now().UnixNano())
+			}
 
-		if c.client.receiveHandler != nil {
-			c.client.receiveHandler(c, data)
+			// trigger heartbeat handler
+			if c.client.heartbeatHandler != nil {
+				c.client.heartbeatHandler(c, heartbeatTime)
+			}
+		} else {
+			// update heartbeat time
+			if c.client.opts.heartbeatInterval > 0 {
+				index++
+
+				if index%10 == 0 {
+					c.lastHeartbeatTime.Store(time.Now().UnixNano())
+				}
+			}
+
+			// ignore empty packet
+			if buf.Len() == 0 {
+				buf.Release()
+				continue
+			}
+
+			if c.client.receiveHandler != nil {
+				c.client.receiveHandler(c, buf)
+			}
 		}
 	}
 }
 
 // write 写入消息
-// 从高低优先级队列及心跳定时器中选择待写入数据，为了保证心跳能够优先下发到客户端，故而实现一个优先队列
+// 从写队列取出消息写入连接，并按心跳间隔触发心跳检测与下发
 // @param conn *kcp.UDPSession KCP连接
 func (c *clientConn) write(conn *kcp.UDPSession) {
-	var (
-		ticker *time.Ticker
-	)
+	var tickerC <-chan time.Time
 
 	if c.client.opts.heartbeatInterval > 0 {
-		ticker = time.NewTicker(c.client.opts.heartbeatInterval)
+		ticker := time.NewTicker(c.client.opts.heartbeatInterval)
 		defer ticker.Stop()
-	} else {
-		ticker = &time.Ticker{}
+		tickerC = ticker.C
 	}
 
 	for {
 		select {
-		case t, ok := <-c.highPriorityQueue.Read():
+		case buf, ok := <-c.queue.Read():
 			if !ok {
 				return
 			}
 
-			c.highPriorityQueue.Done(t.typ == closeSig)
-			c.doWrite(conn, t)
-		case t, ok := <-ticker.C:
+			c.doWrite(conn, buf)
+		case t, ok := <-tickerC:
 			if !ok {
 				return
 			}
@@ -407,58 +403,48 @@ func (c *clientConn) write(conn *kcp.UDPSession) {
 			if !c.doHandleHeartbeat(conn, t) {
 				return
 			}
-		default:
-			select {
-			case t, ok := <-c.highPriorityQueue.Read():
-				if !ok {
-					return
-				}
-
-				c.highPriorityQueue.Done(t.typ == closeSig)
-				c.doWrite(conn, t)
-			case t, ok := <-c.lowPriorityQueue.Read():
-				if !ok {
-					return
-				}
-
-				c.lowPriorityQueue.Done(t.typ == closeSig)
-				c.doWrite(conn, t)
-			case t, ok := <-ticker.C:
-				if !ok {
-					return
-				}
-
-				if !c.doHandleHeartbeat(conn, t) {
-					return
-				}
-			}
 		}
 	}
 }
 
 // doWrite 执行写入操作
-// 根据任务类型组装心跳包并写入底层连接，完成后回收任务对象
+// 判断是否为关闭信号，否则将消息字节写入底层连接并释放缓冲区
 // @param conn *kcp.UDPSession KCP连接
-// @param t *task 待写入的任务对象
-func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) {
-	defer c.client.recycleTask(t)
+// @param buf buffer.Buffer 待写入的消息缓冲
+func (c *clientConn) doWrite(conn *kcp.UDPSession, buf buffer.Buffer) {
+	closeSig := buf.Len() == 0
 
-	if t.typ == closeSig {
+	c.queue.Done(closeSig)
+
+	if closeSig {
+		buf.Release()
 		return
 	}
 
-	if t.typ == heartbeatPacket {
-		if msg, err := packet.PackHeartbeat(); err != nil {
-			log.Errorf("pack heartbeat message error: %v", err)
-			return
-		} else {
-			t.msg = msg
-		}
+	var err error
+
+	switch n := buf.Nodes(); n {
+	case 0:
+		// ignore
+	case 1:
+		_, err = conn.Write(buf.Bytes())
+	case 2:
+		buf.VisitBytes(func(b []byte) bool {
+			c.netBuffers = append(c.netBuffers, b)
+			return true
+		})
+
+		_, err = conn.WriteBuffers(c.netBuffers)
+
+		c.netBuffers = c.netBuffers[:0]
 	}
 
-	if _, err := conn.Write(t.msg); err != nil {
+	if err != nil && !errors.Is(err, net.ErrClosed) {
 		log.Errorf("write message error: %v", err)
+		taskpool.Add(func() { c.forceClose() })
 	}
+
+	buf.Release()
 }
 
 // doHandleHeartbeat 处理心跳
@@ -467,49 +453,27 @@ func (c *clientConn) doWrite(conn *kcp.UDPSession, t *task) {
 // @param t time.Time 当前心跳时刻
 // @return @1 bool 是否继续运行（心跳超时强制关闭返回false）
 func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
-	deadline := t.Add(-2 * c.client.opts.heartbeatInterval).UnixNano()
-
-	if c.lastHeartbeatTime.Load() < deadline {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		xcall.Go(func() {
-			_ = c.forceClose()
-		})
+		taskpool.Add(func() { c.forceClose() })
 
 		return false
 	} else {
-		if heartbeat, err := packet.PackHeartbeat(); err != nil {
-			log.Errorf("pack heartbeat message error: %v", err)
-		} else {
-			// send heartbeat packet
-			if _, err := conn.Write(heartbeat); err != nil {
-				log.Errorf("write heartbeat message error: %v", err)
-			}
-		}
-	}
+		hb := packet.PackHeartbeat()
 
-	return true
+		if _, err := conn.Write(hb.Bytes()); err != nil {
+			log.Errorf("write heartbeat message error: %v", err)
+		}
+
+		hb.Release()
+
+		return true
+	}
 }
 
 // isClosed 是否已关闭
 // @return @1 bool 连接状态是否为关闭
 func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
-}
-
-// doWriteToQueue 写入任务到队列
-// 从对象池分配任务并写入指定队列，写入失败时回收任务对象
-// @param q *queue.Queue[*task] 目标写入队列
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可选
-// @return @1 error 队列写入失败或已关闭时返回的错误
-func (c *clientConn) doWriteToQueue(q *queue.Queue[*task], typ int8, msg ...[]byte) error {
-	t := c.client.allocateTask(typ, msg...)
-
-	if err := q.Write(t); err != nil {
-		c.client.recycleTask(t)
-		return err
-	}
-
-	return nil
 }

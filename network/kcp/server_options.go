@@ -24,27 +24,30 @@ const (
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
 	defaultServerMtu                = 1400
+	defaultServerWriteDelay         = true
 )
 
 var (
-	defaultServerNoDelay = []int{1, 10, 2, 1}
+	defaultServerNoDelay    = []int{1, 10, 2, 1}
+	defaultServerWindowSize = []int{1024, 1024}
 )
 
 const (
-	defaultServerAddrKey               = "etc.network.kcp.server.addr"
-	defaultServerMaxConnNumKey         = "etc.network.kcp.server.maxConnNum"
-	defaultServerWriteTimeoutKey       = "etc.network.kcp.server.writeTimeout"
-	defaultServerWriteQueueSizeKey     = "etc.network.kcp.server.writeQueueSize"
-	defaultServerHeartbeatIntervalKey  = "etc.network.kcp.server.heartbeatInterval"
-	defaultServerHeartbeatMechanismKey = "etc.network.kcp.server.heartbeatMechanism"
-	defaultServerAuthorizeTimeoutKey   = "etc.network.kcp.server.authorizeTimeout"
-	defaultServerMtuKey                = "etc.network.kcp.server.mtu"
-	defaultServerNoDelayKey            = "etc.network.kcp.server.noDelay"
-	defaultServerAckNoDelayKey         = "etc.network.kcp.server.ackNoDelay"
-	defaultServerWriteDelayKey         = "etc.network.kcp.server.writeDelay"
-	defaultServerWindowSizeKey         = "etc.network.kcp.server.windowSize"
-	defaultServerReadBufferKey         = "etc.network.kcp.server.readBuffer"
-	defaultServerWriteBufferKey        = "etc.network.kcp.server.writeBuffer"
+	defaultServerAddrKey                = "etc.network.kcp.server.addr"
+	defaultServerMaxConnNumKey          = "etc.network.kcp.server.maxConnNum"
+	defaultServerWriteTimeoutKey        = "etc.network.kcp.server.writeTimeout"
+	defaultServerWriteQueueSizeKey      = "etc.network.kcp.server.writeQueueSize"
+	defaultServerHeartbeatIntervalKey   = "etc.network.kcp.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey  = "etc.network.kcp.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey    = "etc.network.kcp.server.authorizeTimeout"
+	defaultServerEnableProxyProtocolKey = "etc.network.kcp.server.enableProxyProtocol"
+	defaultServerMtuKey                 = "etc.network.kcp.server.mtu"
+	defaultServerNoDelayKey             = "etc.network.kcp.server.noDelay"
+	defaultServerAckNoDelayKey          = "etc.network.kcp.server.ackNoDelay"
+	defaultServerWriteDelayKey          = "etc.network.kcp.server.writeDelay"
+	defaultServerWindowSizeKey          = "etc.network.kcp.server.windowSize"
+	defaultServerReadBufferKey          = "etc.network.kcp.server.readBuffer"
+	defaultServerWriteBufferKey         = "etc.network.kcp.server.writeBuffer"
 )
 
 const (
@@ -57,20 +60,21 @@ type HeartbeatMechanism string
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
-	addr               string             // 监听地址
-	maxConnNum         int                // 最大连接数
-	writeTimeout       time.Duration      // 写入超时时间，默认无超时
-	writeQueueSize     int                // 写入队列大小，默认1024
-	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
-	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
-	mtu                int                // 最大传输单元，默认不设置
-	noDelay            []int              // 是否开启无延迟模式，默认不设置
-	ackNoDelay         bool               // 是否开启ACK延迟确认，默认不设置
-	writeDelay         bool               // 是否开启写延迟，默认不设置
-	windowSize         []int              // 窗口大小，默认不设置
-	readBuffer         int                // 读取缓冲区大小，默认不设置
-	writeBuffer        int                // 写入缓冲区大小，默认不设置
+	addr                string             // 监听地址
+	maxConnNum          int                // 最大连接数
+	writeTimeout        time.Duration      // 写入超时时间，默认无超时
+	writeQueueSize      int                // 写入队列大小，默认1024
+	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
+	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
+	mtu                 int                // 最大传输单元，默认不设置
+	noDelay             []int              // 是否开启无延迟模式，默认不设置
+	ackNoDelay          bool               // 是否开启ACK延迟确认，默认不设置
+	writeDelay          bool               // 是否开启写延迟，默认不设置
+	windowSize          []int              // 窗口大小，默认不设置
+	readBuffer          int                // 读取缓冲区大小，默认不设置
+	writeBuffer         int                // 写入缓冲区大小，默认不设置
+	enableProxyProtocol bool               // 是否启用ProxyProtocol，默认false
 }
 
 // defaultServerOptions 默认服务器配置
@@ -80,6 +84,7 @@ func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
 	opts.maxConnNum = etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int()
+	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
 
 	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
@@ -99,8 +104,8 @@ func defaultServerOptions() *serverOptions {
 	opts.mtu = etc.Get(defaultServerMtuKey, defaultServerMtu).Int()
 	opts.noDelay = etc.Get(defaultServerNoDelayKey, defaultServerNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultServerAckNoDelayKey).Bool()
-	opts.writeDelay = etc.Get(defaultServerWriteDelayKey).Bool()
-	opts.windowSize = etc.Get(defaultServerWindowSizeKey).Ints()
+	opts.writeDelay = etc.Get(defaultServerWriteDelayKey, defaultServerWriteDelay).Bool()
+	opts.windowSize = etc.Get(defaultServerWindowSizeKey, defaultServerWindowSize).Ints()
 	opts.readBuffer = int(etc.Get(defaultServerReadBufferKey).B())
 	opts.writeBuffer = int(etc.Get(defaultServerWriteBufferKey).B())
 
