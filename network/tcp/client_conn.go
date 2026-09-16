@@ -121,13 +121,17 @@ func (c *clientConn) Push(buf buffer.Buffer) error {
 	}
 
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if err := c.checkState(); err != nil {
+		c.rw.RUnlock()
 		return err
 	}
 
-	return c.queue.Write(buf)
+	err := c.queue.Write(buf)
+
+	c.rw.RUnlock()
+
+	return err
 }
 
 // State 获取连接状态
