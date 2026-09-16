@@ -91,7 +91,7 @@ func TestNewBuffer2(t *testing.T) {
 	t.Log(buff.Len())
 	t.Log(buff.Len())
 
-	buff.Visit(func(node *buffer.NocopyNode) bool {
+	buff.VisitNodes(func(node *buffer.NocopyNode) bool {
 		t.Log(node.Bytes())
 		return true
 	})

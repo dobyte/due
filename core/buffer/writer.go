@@ -12,6 +12,7 @@ type Writer struct {
 	buf      []byte
 	off      int
 	static   bool
+	delay    atomic.Int32
 	pool     *sync.Pool
 	released atomic.Bool
 }
@@ -47,14 +48,29 @@ func (w *Writer) Available() int {
 	return max(w.Cap()-w.off, 0)
 }
 
+// Nodes 获取节点数
+func (w *Writer) Nodes() int {
+	return 1
+}
+
 // Bytes 获取字节数据
 func (w *Writer) Bytes() []byte {
 	return w.buf[:w.off]
 }
 
+// VisitBytes 迭代所有字节
+func (w *Writer) VisitBytes(fn func(bytes []byte) bool) bool {
+	return fn(w.Bytes())
+}
+
 // Grow 增长空间
 func (w *Writer) Grow(n int) {
 	w.growSlice(n)
+}
+
+// Delay 设置延迟释放点
+func (w *Writer) Delay(delay int) {
+	w.delay.Store(int32(delay))
 }
 
 // Release 释放
@@ -63,11 +79,16 @@ func (w *Writer) Release() {
 		return
 	}
 
+	if w.delay.Add(-1) > 0 {
+		return
+	}
+
 	if !w.released.CompareAndSwap(false, true) {
 		return
 	}
 
 	w.off = 0
+	w.delay.Store(0)
 
 	if w.pool != nil {
 		w.pool.Put(w)

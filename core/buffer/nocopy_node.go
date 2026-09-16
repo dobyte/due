@@ -7,14 +7,8 @@ type NocopyNode struct {
 	block any
 }
 
-var _ Buffer = (*NocopyNode)(nil)
-
 // Len 获取字节长度
 func (n *NocopyNode) Len() int {
-	if n == nil {
-		return 0
-	}
-
 	switch b := n.block.(type) {
 	case []byte:
 		return len(b)
@@ -27,12 +21,13 @@ func (n *NocopyNode) Len() int {
 	}
 }
 
+// Nodes 获取节点数
+func (n *NocopyNode) Nodes() int {
+	return 1
+}
+
 // Bytes 获取该节点的字节数据
 func (n *NocopyNode) Bytes() []byte {
-	if n == nil {
-		return nil
-	}
-
 	switch b := n.block.(type) {
 	case []byte:
 		return b
@@ -47,10 +42,6 @@ func (n *NocopyNode) Bytes() []byte {
 
 // Release 释放
 func (n *NocopyNode) Release() {
-	if n == nil {
-		return
-	}
-
 	switch b := n.block.(type) {
 	case []byte:
 		// ignore

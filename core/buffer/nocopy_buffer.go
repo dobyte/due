@@ -124,8 +124,8 @@ func (b *NocopyBuffer) Nodes() int {
 	return b.num
 }
 
-// Visit 迭代
-func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) bool {
+// VisitNodes 迭代所有节点
+func (b *NocopyBuffer) VisitNodes(fn func(node *NocopyNode) bool) bool {
 	for node := b.head; node != nil; {
 		switch n := node.(type) {
 		case *NocopyNode:
@@ -139,7 +139,7 @@ func (b *NocopyBuffer) Visit(fn func(node *NocopyNode) bool) bool {
 		case *NocopyBuffer:
 			next := n.next
 
-			if !n.Visit(fn) {
+			if !n.VisitNodes(fn) {
 				return false
 			}
 
@@ -190,9 +190,37 @@ func (b *NocopyBuffer) Bytes() []byte {
 	}
 }
 
+// VisitBytes 迭代所有字节
+func (b *NocopyBuffer) VisitBytes(fn func(bytes []byte) bool) bool {
+	for node := b.head; node != nil; {
+		switch n := node.(type) {
+		case *NocopyNode:
+			next := n.next
+
+			if !fn(n.Bytes()) {
+				return false
+			}
+
+			node = next
+		case *NocopyBuffer:
+			next := n.next
+
+			if !n.VisitBytes(fn) {
+				return false
+			}
+
+			node = next
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
 // Delay 设置延迟释放点
-func (b *NocopyBuffer) Delay(delay int32) {
-	b.delay.Store(delay)
+func (b *NocopyBuffer) Delay(delay int) {
+	b.delay.Store(int32(delay))
 }
 
 // Release 释放

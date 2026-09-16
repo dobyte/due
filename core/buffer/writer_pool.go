@@ -46,6 +46,8 @@ func (p *WriterPool) Get(cap int) *Writer {
 	}
 
 	w := pool.Get().(*Writer)
+	w.off = 0
+	w.delay.Store(0)
 	w.released.Store(false)
 
 	return w

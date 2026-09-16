@@ -20,8 +20,14 @@ const (
 type Buffer interface {
 	// Len 获取字节长度
 	Len() int
+	// Nodes 获取节点数
+	Nodes() int
+	// Delay 设置延迟释放点
+	Delay(delay int)
 	// Bytes 获取所有字节（性能较低，不推荐使用）
 	Bytes() []byte
 	// Release 释放
 	Release()
+	// VisitBytes 迭代所有字节
+	VisitBytes(fn func(bytes []byte) bool) bool
 }

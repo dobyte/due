@@ -398,11 +398,11 @@ func (r *Reader) slice(b int) ([]byte, error) {
 }
 
 func (r *Reader) slices(b int, n int) ([]byte, error) {
-	off := b * n
-
-	if off < 0 || off > len(r.buf)-r.off {
+	if b <= 0 || n < 0 || n > (len(r.buf)-r.off)/b {
 		return nil, errors.ErrUnexpectedEOF
 	}
+
+	off := b * n
 
 	buf := r.buf[r.off : r.off+off]
 	r.off += off

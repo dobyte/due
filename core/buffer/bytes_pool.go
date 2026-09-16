@@ -48,6 +48,7 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	b := pool.Get().(*Bytes)
 	b.lower = 0
 	b.upper = cap
+	b.delay.Store(0)
 	b.released.Store(false)
 
 	return b

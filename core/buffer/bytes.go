@@ -11,6 +11,7 @@ type Bytes struct {
 	lower    int
 	upper    int
 	static   bool
+	delay    atomic.Int32
 	pool     *sync.Pool
 	released atomic.Bool
 }
@@ -49,14 +50,33 @@ func (b *Bytes) MoveTo(lower int) {
 	}
 }
 
+// Nodes 获取节点数
+func (b *Bytes) Nodes() int {
+	return 1
+}
+
 // Bytes 获取字节数据
 func (b *Bytes) Bytes() []byte {
 	return b.buf[b.lower:b.upper]
 }
 
+// VisitBytes 迭代所有字节
+func (b *Bytes) VisitBytes(fn func(bytes []byte) bool) bool {
+	return fn(b.Bytes())
+}
+
+// Delay 设置延迟释放点
+func (b *Bytes) Delay(delay int) {
+	b.delay.Store(int32(delay))
+}
+
 // Release 释放
 func (b *Bytes) Release() {
 	if b.static {
+		return
+	}
+
+	if b.delay.Add(-1) > 0 {
 		return
 	}
 
@@ -66,6 +86,7 @@ func (b *Bytes) Release() {
 
 	b.lower = 0
 	b.upper = 0
+	b.delay.Store(0)
 
 	if b.pool != nil {
 		b.pool.Put(b)
