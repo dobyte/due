@@ -278,6 +278,10 @@ func (c *clientConn) doClose() error {
 
 	c.wg1.Wait()
 
+	for buf := range c.queue.Read() {
+		buf.Release()
+	}
+
 	if c.client.disconnectHandler != nil {
 		c.client.disconnectHandler(c)
 	}
