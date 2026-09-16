@@ -421,7 +421,10 @@ OVER:
 	c.netBuffers = c.netBuffers[:0]
 
 	for _, buf := range c.dueBuffers {
-		c.netBuffers = append(c.netBuffers, buf.Bytes())
+		buf.VisitBytes(func(bytes []byte) bool {
+			c.netBuffers = append(c.netBuffers, bytes)
+			return true
+		})
 	}
 
 	if len(c.netBuffers) > 0 {
