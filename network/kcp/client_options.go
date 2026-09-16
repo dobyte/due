@@ -20,7 +20,7 @@ const (
 
 var (
 	defaultClientNoDelay    = []int{1, 10, 2, 1}
-	defaultClientWindowSize = []int{1024, 1024}
+	defaultClientWindowSize = []int{32, 32}
 )
 
 const (
