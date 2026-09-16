@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	ctls "github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -26,6 +25,7 @@ const (
 	defaultClientWriteTimeoutKey      = "etc.network.quic.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.quic.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.quic.client.heartbeatInterval"
+	defaultClientCloseTimeoutKey      = "etc.network.quic.client.closeTimeout"
 )
 
 // ClientOption 客户端配置项
@@ -33,7 +33,9 @@ const (
 type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
-	addr              string        // 地址
+	addr              string // 地址
+	tlsErr            error
+	closeTimeout      time.Duration
 	tlsConfig         *tls.Config   // TLS配置
 	dialTimeout       time.Duration // 拨号超时时间，默认5s
 	writeTimeout      time.Duration // 写超时时间，默认无超时
@@ -45,7 +47,7 @@ type clientOptions struct {
 // 优先读取环境配置（etc.network.quic.client.*），缺失时回退到内置默认值，并尝试加载CA证书构建TLS配置
 // @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
-	opts := &clientOptions{}
+	opts := &clientOptions{closeTimeout: defaultCloseTimeout}
 
 	if addr := etc.Get(defaultClientAddrKey, defaultClientAddr).String(); addr != "" {
 		opts.addr = addr
@@ -53,7 +55,7 @@ func defaultClientOptions() *clientOptions {
 		opts.addr = defaultClientAddr
 	}
 
-	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration(); dialTimeout > 0 {
+	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration(); dialTimeout >= 0 {
 		opts.dialTimeout = dialTimeout
 	} else {
 		opts.dialTimeout = xconv.Duration(defaultClientDialTimeout)
@@ -78,13 +80,17 @@ func defaultClientOptions() *clientOptions {
 	}
 
 	caFile := etc.Get(defaultClientCAFileKey).String()
+	if timeout := etc.Get(defaultClientCloseTimeoutKey, defaultCloseTimeout).Duration(); timeout > 0 {
+		opts.closeTimeout = timeout
+	}
 	serverName := etc.Get(defaultClientServerNameKey).String()
 
 	if caFile != "" || serverName != "" {
-		if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
-			log.Warnf("make tcp client tls config failed: %v", err)
+		if config, err := makeClientTLSConfig(caFile, serverName); err != nil {
+			opts.tlsErr = err
 		} else {
 			opts.tlsConfig = config
+			opts.tlsErr = nil
 		}
 	}
 
@@ -111,10 +117,11 @@ func WithClientAddr(addr string) ClientOption {
 func WithClientCredentials(caFile string, serverName string) ClientOption {
 	return func(o *clientOptions) {
 		if caFile != "" || serverName != "" {
-			if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
-				log.Warnf("make tcp client tls config failed: %v", err)
+			if config, err := makeClientTLSConfig(caFile, serverName); err != nil {
+				o.tlsErr = err
 			} else {
 				o.tlsConfig = config
+				o.tlsErr = nil
 			}
 		} else {
 			log.Warnf("the specified caFile or serverName is empty and will be ignored")
@@ -128,6 +135,7 @@ func WithClientCredentials(caFile string, serverName string) ClientOption {
 func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
 	return func(o *clientOptions) {
 		o.tlsConfig = tlsConfig
+		o.tlsErr = nil
 	}
 }
 
@@ -179,6 +187,16 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 			o.heartbeatInterval = heartbeatInterval
 		} else {
 			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientCloseTimeout sets the maximum graceful drain and retransmission period.
+// Values less than or equal to zero are ignored.
+func WithClientCloseTimeout(timeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if timeout > 0 {
+			o.closeTimeout = timeout
 		}
 	}
 }

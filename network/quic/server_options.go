@@ -30,6 +30,7 @@ const (
 	defaultServerHeartbeatMechanismKey = "etc.network.quic.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey   = "etc.network.quic.server.authorizeTimeout"
 	defaultServerHandshakeTimeoutKey   = "etc.network.quic.server.handshakeTimeout"
+	defaultServerCloseTimeoutKey       = "etc.network.quic.server.closeTimeout"
 )
 
 const (
@@ -47,6 +48,7 @@ type HeartbeatMechanism string
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
+	closeTimeout       time.Duration
 	addr               string             // 监听地址，默认0.0.0.0:3553
 	certFile           string             // 证书文件
 	keyFile            string             // 秘钥文件
@@ -63,7 +65,10 @@ type serverOptions struct {
 // 优先读取环境配置（etc.network.quic.server.*），缺失时回退到内置默认值
 // @return @1 *serverOptions 服务器配置
 func defaultServerOptions() *serverOptions {
-	opts := &serverOptions{}
+	opts := &serverOptions{closeTimeout: defaultCloseTimeout}
+	if timeout := etc.Get(defaultServerCloseTimeoutKey, defaultCloseTimeout).Duration(); timeout > 0 {
+		opts.closeTimeout = timeout
+	}
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
 
@@ -202,7 +207,11 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // @param heartbeatMechanism HeartbeatMechanism 心跳机制，取值RespHeartbeat或TickHeartbeat
 // @return @1 ServerOption 服务器配置项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
-	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+	return func(o *serverOptions) {
+		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
+			o.heartbeatMechanism = heartbeatMechanism
+		}
+	}
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间
@@ -227,6 +236,16 @@ func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
 			o.handshakeTimeout = handshakeTimeout
 		} else {
 			log.Warnf("the specified handshakeTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerCloseTimeout sets the maximum graceful drain and retransmission period.
+// Values less than or equal to zero are ignored.
+func WithServerCloseTimeout(timeout time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		if timeout > 0 {
+			o.closeTimeout = timeout
 		}
 	}
 }

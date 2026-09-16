@@ -2,126 +2,131 @@ package quic
 
 import (
 	"context"
-	"net"
-	"sync"
+	"crypto/tls"
+	"crypto/x509"
+	"os"
 	"sync/atomic"
+	"time"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/quic-go/quic-go"
 )
 
 type client struct {
-	opts              *clientOptions            // 配置
-	id                atomic.Int64              // 连接ID
-	connectHandler    network.ConnectHandler    // 连接打开hook函数
-	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
-	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
-	taskPool          sync.Pool                 // 任务对象池
+	opts              *clientOptions
+	id                atomic.Int64
+	connectHandler    network.ConnectHandler
+	disconnectHandler network.DisconnectHandler
+	receiveHandler    network.ReceiveHandler
+	heartbeatHandler  network.HeartbeatHandler
 }
 
-var _ network.Client = &client{}
+var _ network.Client = (*client)(nil)
 
-// NewClient 创建一个QUIC客户端
-// 基于 quic-go 实现，内部维护连接ID自增与任务对象池，TLS配置通过配置项或环境配置提供
-// @param opts ...ClientOption 客户端配置项，可缺省，缺省时使用默认配置
-// @return @1 network.Client 客户端实例
+// NewClient creates a QUIC client. Register handlers before dialing.
 func NewClient(opts ...ClientOption) network.Client {
 	o := defaultClientOptions()
 	for _, opt := range opts {
 		opt(o)
 	}
-
-	c := &client{}
-	c.opts = o
-	c.taskPool = sync.Pool{New: func() any { return &task{} }}
-
-	return c
+	if o.tlsConfig == nil {
+		o.tlsConfig = &tls.Config{}
+	} else {
+		o.tlsConfig = o.tlsConfig.Clone()
+	}
+	o.tlsConfig.NextProtos = []string{alpn}
+	return &client{opts: o}
 }
 
-// Dial 拨号连接
-// 建立QUIC连接并打开一条双向流，随后创建客户端连接对象（连接Open钩子会在此时触发成功/失败）
-// @param addr ...string 目标地址，格式如 host:ip；可缺省，缺省时使用配置中的连接地址
-// @return @1 network.Conn 客户端连接对象
-// @return @2 error 连接失败时返回的错误
+// Dial establishes one bidirectional stream. A zero dial timeout disables the
+// overall deadline; QUIC still applies its transport handshake timeout.
+// OnConnect is dispatched before OnReceive, independently of Dial returning.
 func (c *client) Dial(addr ...string) (network.Conn, error) {
-	var address string
+	if c.opts.tlsErr != nil {
+		return nil, c.opts.tlsErr
+	}
+	address := c.opts.addr
 	if len(addr) > 0 && addr[0] != "" {
 		address = addr[0]
-	} else {
-		address = c.opts.addr
 	}
-
-	udpAddr, err := net.ResolveUDPAddr("udp", address)
+	ctx := context.Background()
+	if c.opts.dialTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.opts.dialTimeout)
+		defer cancel()
+	}
+	config := transportConfig(c.opts.heartbeatInterval)
+	config.MaxIncomingStreams = -1
+	config.HandshakeIdleTimeout = c.opts.dialTimeout
+	// Keep the hostname so quic-go can derive the TLS ServerName.
+	qc, err := quic.DialAddr(ctx, address, c.opts.tlsConfig, config)
 	if err != nil {
 		return nil, err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.opts.dialTimeout)
-	defer cancel()
-
-	qc, err := quic.DialAddr(ctx, udpAddr.String(), c.opts.tlsConfig, &quic.Config{
-		MaxIdleTimeout:       c.opts.heartbeatInterval * 3,
-		KeepAlivePeriod:      c.opts.heartbeatInterval / 2,
-		HandshakeIdleTimeout: c.opts.dialTimeout,
-		EnableDatagrams:      false,
-		Allow0RTT:            false,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	stream, err := qc.OpenStreamSync(context.Background())
+	stream, err := qc.OpenStreamSync(ctx)
 	if err != nil {
 		_ = qc.CloseWithError(0, "open stream failed")
 		return nil, err
 	}
-
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = stream.SetWriteDeadline(deadline)
+	}
+	// Opening alone does not announce a QUIC stream. A normal heartbeat makes
+	// server-initiated messages possible even when periodic heartbeats are off.
+	hb := packet.PackHeartbeat()
+	err = writeBuffer(stream, hb)
+	hb.Release()
+	if err != nil {
+		_ = qc.CloseWithError(0, "initialize stream failed")
+		return nil, err
+	}
+	_ = stream.SetWriteDeadline(time.Time{})
 	return newClientConn(c.id.Add(1), qc, stream, c), nil
 }
 
-// Protocol 协议
-// @return @1 string QUIC协议标识
-func (c *client) Protocol() string {
-	return protocol
-}
+// Protocol returns the protocol name.
+func (c *client) Protocol() string { return protocol }
 
-// OnConnect 监听连接打开
-// @param handler network.ConnectHandler 连接打开hook函数
-func (c *client) OnConnect(handler network.ConnectHandler) {
-	c.connectHandler = handler
-}
+// OnConnect registers the connection handler.
+func (c *client) OnConnect(h network.ConnectHandler) { c.connectHandler = h }
 
-// OnDisconnect 监听连接关闭
-// @param handler network.DisconnectHandler 连接关闭hook函数
-func (c *client) OnDisconnect(handler network.DisconnectHandler) {
-	c.disconnectHandler = handler
-}
+// OnDisconnect registers the disconnection handler.
+func (c *client) OnDisconnect(h network.DisconnectHandler) { c.disconnectHandler = h }
 
-// OnReceive 监听接收到消息
-// @param handler network.ReceiveHandler 接收消息hook函数
-func (c *client) OnReceive(handler network.ReceiveHandler) {
-	c.receiveHandler = handler
-}
+// OnReceive registers the message handler, which owns each received buffer.
+func (c *client) OnReceive(h network.ReceiveHandler) { c.receiveHandler = h }
 
-// allocateTask 分配任务对象
-// 从任务对象池中获取并复用任务对象，避免频繁分配
-// @param typ int8 任务类型
-// @param msg ...[]byte 待发送的消息字节，可缺省
-// @return @1 *task 任务对象
-func (c *client) allocateTask(typ int8, msg ...[]byte) *task {
-	t := c.taskPool.Get().(*task)
-	t.typ = typ
-	if len(msg) > 0 {
-		t.msg = msg[0]
+// OnHeartbeat registers the heartbeat handler.
+func (c *client) OnHeartbeat(h network.HeartbeatHandler) { c.heartbeatHandler = h }
+
+func makeClientTLSConfig(caFile, serverName string) (*tls.Config, error) {
+	config := &tls.Config{ServerName: serverName}
+	if caFile == "" {
+		return config, nil
 	}
-
-	return t
+	certs, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, err
+	}
+	config.RootCAs = x509.NewCertPool()
+	if !config.RootCAs.AppendCertsFromPEM(certs) {
+		return nil, errors.ErrInvalidCertFile
+	}
+	return config, nil
 }
 
-// recycleTask 回收任务到对象池
-// 清理任务数据后将对象归还池中以供复用
-// @param t *task 待回收的任务对象
-func (c *client) recycleTask(t *task) {
-	t.msg = nil
-	c.taskPool.Put(t)
+func transportConfig(heartbeat time.Duration) *quic.Config {
+	config := &quic.Config{MaxIncomingStreams: 1, MaxIncomingUniStreams: -1}
+	if heartbeat > 0 {
+		config.MaxIdleTimeout = 3 * heartbeat
+		config.KeepAlivePeriod = heartbeat / 2
+	}
+	// With application heartbeats disabled, keep quic-go's default idle timeout
+	// and send transport keepalives so an otherwise healthy idle session survives.
+	if heartbeat == 0 {
+		config.KeepAlivePeriod = 10 * time.Second
+	}
+	return config
 }
