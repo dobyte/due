@@ -520,6 +520,9 @@ OVER:
 	for _, buf := range c.dueBuffers {
 		buf.Release()
 	}
+
+	c.netBuffers = c.netBuffers[:0]
+	c.dueBuffers = c.dueBuffers[:0]
 }
 
 // isClosed 是否已关闭

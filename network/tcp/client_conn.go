@@ -447,6 +447,9 @@ OVER:
 	for _, buf := range c.dueBuffers {
 		buf.Release()
 	}
+
+	c.dueBuffers = c.dueBuffers[:0]
+	c.netBuffers = c.netBuffers[:0]
 }
 
 // doHandleHeartbeat 处理心跳
