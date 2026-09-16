@@ -266,7 +266,7 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 // @param kind Kind 会话类型
 // @param target int64 会话目标（连接ID或用户ID）
 // @param disconnect bool 推送后是否断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 error 错误信息
 func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buffer) error {
 	s.rw.RLock()
@@ -274,10 +274,12 @@ func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buff
 	s.rw.RUnlock()
 
 	if err != nil {
+		buf.Release()
 		return err
 	}
 
 	if err = conn.Push(buf); err != nil {
+		buf.Release()
 		return err
 	}
 
@@ -294,11 +296,12 @@ func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buff
 // @param kind Kind 会话类型
 // @param targets []int64 会话目标列表（连接ID或用户ID）
 // @param disconnect bool 推送后是否断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 成功推送的数量
 // @return @2 error 错误信息
-func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, message []byte) (int64, error) {
+func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if len(targets) == 0 {
+		buf.Release()
 		return 0, nil
 	}
 
@@ -320,24 +323,26 @@ func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, message
 		}
 	default:
 		s.rw.RUnlock()
+		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
 	s.rw.RUnlock()
 
 	if len(conns) == 0 {
+		buf.Release()
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, message)
+	return s.doBatchPush(conns, disconnect, buf)
 }
 
 // Broadcast 推送广播消息（异步）
 // @param kind Kind 会话类型
 // @param disconnect bool 推送后是否断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 成功推送的数量
 // @return @2 error 错误信息
-func (s *Session) Broadcast(kind Kind, disconnect bool, message []byte) (int64, error) {
+func (s *Session) Broadcast(kind Kind, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
 	s.rw.RLock()
@@ -354,24 +359,26 @@ func (s *Session) Broadcast(kind Kind, disconnect bool, message []byte) (int64, 
 		}
 	default:
 		s.rw.RUnlock()
+		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
 	s.rw.RUnlock()
 
 	if len(conns) == 0 {
+		buf.Release()
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, message)
+	return s.doBatchPush(conns, disconnect, buf)
 }
 
 // Publish 发布频道消息（异步）
 // @param channel string 频道名称
 // @param disconnect bool 推送后是否断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 成功推送的数量
 // @return @2 error 错误信息
-func (s *Session) Publish(channel string, disconnect bool, message []byte) (int64, error) {
+func (s *Session) Publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
 	s.rw.RLock()
@@ -384,10 +391,11 @@ func (s *Session) Publish(channel string, disconnect bool, message []byte) (int6
 	s.rw.RUnlock()
 
 	if len(conns) == 0 {
+		buf.Release()
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, message)
+	return s.doBatchPush(conns, disconnect, buf)
 }
 
 // Subscribe 订阅频道
@@ -518,15 +526,17 @@ func (s *Session) Stat(kind Kind) (int64, error) {
 // doBatchPush 批量推送消息（异步）
 // @param conns []network.Conn 连接对象列表
 // @param disconnect bool 推送后是否断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 成功推送的数量
 // @return @2 error 错误信息
-func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []byte) (int64, error) {
-	switch len(conns) {
+func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
+	switch n := len(conns); n {
 	case 0:
+		buf.Release()
 		return 0, nil
 	case 1:
-		if err := conns[0].Push(message); err != nil {
+		if err := conns[0].Push(buf); err != nil {
+			buf.Release()
 			return 0, err
 		}
 
@@ -541,16 +551,21 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, message []b
 			eg, _ = task.WithContext(context.Background())
 		)
 
+		buf.Delay(n)
+
 		for _, conn := range conns {
 			eg.Go(func() error {
-				if err := conn.Push(message); err != nil {
+				if err := conn.Push(buf); err != nil {
+					buf.Release()
 					return err
 				}
 
 				total.Add(1)
 
 				if disconnect {
-					_ = conn.Close()
+					if err := conn.Close(); err != nil {
+						log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
+					}
 				}
 
 				return nil
