@@ -24,7 +24,6 @@ type Server struct {
 	exposeAddr string             // 暴露地址
 	endpoint   *endpoint.Endpoint // 暴露端点
 	mu         sync.Mutex         // 锁
-	started    bool               // 是否已启动
 	listener   *net.TCPListener   // 监听器
 	handlers   [256]RouteHandler  // 路由处理器
 	conns      sync.Map           // 连接映射
@@ -46,7 +45,7 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 	s.listenAddr = listenAddr
 	s.exposeAddr = exposeAddr
 	s.endpoint = endpoint.NewEndpoint(scheme, exposeAddr, false)
-	s.ticker = time.NewTicker(defaultHeartbeatInterval)
+	s.ticker = time.NewTicker(heartbeatInterval)
 
 	return s, nil
 }
@@ -77,24 +76,11 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.started {
-		return errors.ErrServerStarted
-	}
-
-	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
-	if err != nil {
+	if err := s.init(); err != nil {
 		return err
 	}
 
-	listener, err := net.ListenTCP(addr.Network(), addr)
-	if err != nil {
-		return err
-	}
-
-	s.started = true
-	s.listener = listener
-
-	go s.serve(listener)
+	go s.serve(s.listener)
 	go s.check()
 
 	return nil
@@ -106,7 +92,7 @@ func (s *Server) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if s.listener == nil {
 		return errors.ErrServerClosed
 	}
 
@@ -114,7 +100,6 @@ func (s *Server) Stop() error {
 		log.Warnf("tcp listener close error: %v", err)
 	}
 
-	s.started = false
 	s.listener = nil
 	s.ticker.Stop()
 	s.closeAllConns()
@@ -154,6 +139,24 @@ func (s *Server) serve(listener net.Listener) {
 	}
 
 	_ = s.Stop()
+}
+
+// init 初始化服务器
+func (s *Server) init() error {
+	if s.listener != nil {
+		return errors.ErrServerStarted
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", s.listenAddr)
+	if err != nil {
+		return err
+	}
+
+	if s.listener, err = net.ListenTCP(addr.Network(), addr); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // check 检查连接是否超时

@@ -10,5 +10,6 @@ const (
 )
 
 const (
-	defaultHeartbeatInterval = 10 * time.Second // 心跳间隔时间
+	heartbeatInterval = 10 * time.Second // 心跳间隔时间
+	maxBatchWriteNum  = 64               // 最大批量写入消息数量
 )

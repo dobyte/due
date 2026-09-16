@@ -427,7 +427,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 	}
 
 	if args.Ack {
-		message.Delay(int32(n * 2))
+		message.Delay(n * 2)
 
 		if n == 1 {
 			if err := l.doPush(ctx, args.Kind, args.Targets[0], args.Disconnect, message, args.Ack); err != nil {
@@ -442,7 +442,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 		if n == 1 {
 			return 0, l.doPush(ctx, args.Kind, args.Targets[0], args.Disconnect, message, args.Ack)
 		} else {
-			message.Delay(int32(n))
+			message.Delay(n)
 
 			if _, err := l.doMulticast(ctx, args.Kind, args.Targets, args.Disconnect, message, args.Ack); err != nil {
 				return 0, err
@@ -506,7 +506,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 			eg, ctx = errgroup.WithContext(ctx)
 		)
 
-		message.Delay(int32(n))
+		message.Delay(n)
 
 		for _, ep := range endpoints {
 			addr := ep.Address()
@@ -569,7 +569,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 			eg, ctx = errgroup.WithContext(ctx)
 		)
 
-		message.Delay(int32(n))
+		message.Delay(n)
 
 		for _, ep := range endpoints {
 			addr := ep.Address()
@@ -769,13 +769,13 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 }
 
 // PackMessage 打包消息
-func (l *GateLinker) PackMessage(message *Message, encrypt bool) (*buffer.NocopyBuffer, error) {
+func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
 	buf, err := l.PackBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
 
-	return packet.PackBuffer(&packet.Message{
+	return packet.PackMessage(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buf,

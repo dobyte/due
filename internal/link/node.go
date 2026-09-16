@@ -343,13 +343,13 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 }
 
 // 打包消息
-func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (*buffer.NocopyBuffer, error) {
-	buffer, err := l.PackBuffer(message.Data, encrypt)
+func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
+	buffer, err := l.doPackBuffer(message.Data, encrypt)
 	if err != nil {
 		return nil, err
 	}
 
-	return packet.PackBuffer(&packet.Message{
+	return packet.PackMessage(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
 		Buffer: buffer,
@@ -357,7 +357,7 @@ func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (*buffer.Nocopy
 }
 
 // 消息转buffer
-func (l *NodeLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
+func (l *NodeLinker) doPackBuffer(message any, encrypt bool) ([]byte, error) {
 	if message == nil {
 		return nil, nil
 	}

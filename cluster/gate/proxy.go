@@ -123,8 +123,9 @@ func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffe
 		return
 	}
 
-	message, err := packet.UnpackMessage(data)
+	route, seq, err := packet.UnpackRouteSeq(buf)
 	if err != nil {
+		buf.Release()
 		log.Errorf("unpack message failed: %v", err)
 		return
 	}
@@ -134,20 +135,18 @@ func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffe
 	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		CID:    cid,
 		UID:    uid,
-		Route:  message.Route,
+		Route:  route,
 		Buffer: buf,
 	}); err != nil {
-		buf.Release()
-
 		switch {
 		case errors.Is(err, errors.ErrNotFoundRoute), errors.Is(err, errors.ErrNotFoundEndpoint):
-			log.Warnf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
+			log.Warnf("deliver message failed, cid: %d uid: %d route: %d seq: %d err: %v", cid, uid, route, seq, err)
 		default:
-			log.Errorf("deliver message failed, cid: %d uid: %d seq: %d route: %d err: %v", cid, uid, message.Seq, message.Route, err)
+			log.Errorf("deliver message failed, cid: %d uid: %d route: %d seq: %d, err: %v", cid, uid, route, seq, err)
 		}
 	} else {
 		if mode.IsDebugMode() {
-			log.Debugf("deliver message success, cid: %d uid: %d seq: %d route: %d", cid, uid, message.Seq, message.Route)
+			log.Debugf("deliver message success, cid: %d uid: %d route: %d seq: %d", cid, uid, route, seq)
 		}
 	}
 }

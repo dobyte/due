@@ -134,8 +134,6 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, di
 		return errors.ErrGateShutdown
 	} else {
 		if err := p.gate.session.Push(kind, target, disconnect, buf); err != nil {
-			buf.Release()
-
 			if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
 				task.Add(func() {
 					if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); e != nil {
@@ -156,14 +154,15 @@ func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, di
 // @param kind session.Kind 会话类型
 // @param targets []int64 会话目标列表
 // @param disconnect bool 是否在推送后断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 推送成功的目标数
 // @return @2 error 错误信息
-func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message []byte) (int64, error) {
+func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if p.gate.isShut() {
+		buf.Release()
 		return 0, errors.ErrGateShutdown
 	} else {
-		return p.gate.session.Multicast(kind, targets, disconnect, message)
+		return p.gate.session.Multicast(kind, targets, disconnect, buf)
 	}
 }
 
@@ -171,14 +170,15 @@ func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []i
 // @param ctx context.Context 上下文
 // @param kind session.Kind 会话类型
 // @param disconnect bool 是否在推送后断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 推送成功的目标数
 // @return @2 error 错误信息
-func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, message []byte) (int64, error) {
+func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if p.gate.isShut() {
+		buf.Release()
 		return 0, errors.ErrGateShutdown
 	} else {
-		return p.gate.session.Broadcast(kind, disconnect, message)
+		return p.gate.session.Broadcast(kind, disconnect, buf)
 	}
 }
 
@@ -186,14 +186,15 @@ func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect 
 // @param ctx context.Context 上下文
 // @param channel string 频道名称
 // @param disconnect bool 是否在推送后断开连接
-// @param message []byte 消息内容
+// @param buf buffer.Buffer 消息内容
 // @return @1 int64 推送成功的目标数
 // @return @2 error 错误信息
-func (p *provider) Publish(ctx context.Context, channel string, disconnect bool, message []byte) (int64, error) {
+func (p *provider) Publish(ctx context.Context, channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if p.gate.isShut() {
+		buf.Release()
 		return 0, errors.ErrGateShutdown
 	} else {
-		return p.gate.session.Publish(channel, disconnect, message)
+		return p.gate.session.Publish(channel, disconnect, buf)
 	}
 }
 

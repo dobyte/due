@@ -16,7 +16,8 @@ const (
 )
 
 // EncodeBindReq 编码绑定请求
-// 协议：size + header + route + seq + cid + uid
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid}
 func EncodeBindReq(seq uint64, cid, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(bindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(bindReqBytes-def.SizeBytes))

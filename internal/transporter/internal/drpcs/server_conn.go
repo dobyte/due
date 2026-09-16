@@ -14,23 +14,23 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xcall"
-	"github.com/dobyte/due/v2/utils/xtime"
+	taskpool "github.com/dobyte/due/v2/task"
 )
 
 type ServerConn struct {
-	svr               *Server                            // 服务器
-	conn              *net.TCPConn                       // 连接实例
-	buffers           net.Buffers                        // 消息缓冲区
-	lastHeartbeatTime atomic.Int64                       // 上次心跳时间
-	rw                sync.RWMutex                       // 锁
-	wg1               *sync.WaitGroup                    // 读等待组
-	wg2               *sync.WaitGroup                    // 写等待组
-	queue             *queue.Queue[*buffer.NocopyBuffer] // 消息队列
-	state             atomic.Int32                       // 连接状态
-	kind              cluster.Kind                       // 实例类型
-	inst              string                             // 实例ID
-	epoch             uint64                             // 连接时间戳
+	svr               *Server                     // 服务器
+	rw                sync.RWMutex                // 锁
+	wg1               *sync.WaitGroup             // 读等待组
+	wg2               *sync.WaitGroup             // 写等待组
+	conn              *net.TCPConn                // 连接实例
+	state             atomic.Int32                // 连接状态
+	queue             *queue.Queue[buffer.Buffer] // 消息队列
+	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
+	netBuffers        net.Buffers                 // 待写入的字节切片集合
+	lastHeartbeatTime atomic.Int64                // 上次心跳时间
+	kind              cluster.Kind                // 实例类型
+	inst              string                      // 实例ID
+	epoch             uint64                      // 连接时间戳
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
@@ -39,17 +39,16 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c.conn = conn
 	c.conn.SetNoDelay(true)
 	c.state.Store(connOpened)
-	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
-	c.lastHeartbeatTime.Store(xtime.Now().UnixNano())
-	c.buffers = make(net.Buffers, 0, 128)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
+	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 
 	return c
 }
 
-// Send 发送消息
-func (c *ServerConn) Send(buf *buffer.NocopyBuffer) error {
+// Push 推送消息
+func (c *ServerConn) Push(buf *buffer.NocopyBuffer) error {
 	c.rw.RLock()
 
 	if err := c.checkState(); err != nil {
@@ -82,7 +81,7 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 	for {
 		isHeartbeat, rt, seq, buf, err := reader.readBuffer()
 		if err != nil {
-			xcall.Go(c.forceClose)
+			taskpool.Add(func() { c.forceClose() })
 			return
 		}
 
@@ -108,7 +107,7 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 
 			if err := c.doHandshake(conn, seq, buf); err != nil {
 				log.Warnf("handle handshake error: %v", err)
-				xcall.Go(c.forceClose)
+				taskpool.Add(func() { c.forceClose() })
 				return
 			}
 		} else {
@@ -133,52 +132,85 @@ func (c *ServerConn) write(conn *net.TCPConn) {
 			return
 		}
 
-		if buf == nil {
-			c.queue.Done(true)
-			return
-		}
-
-		c.queue.Done(false)
-
-		if err := c.doWrite(conn, buf); err != nil {
-			log.Warnf("write buffer message error: %v", err)
-			xcall.Go(c.forceClose)
-			return
-		}
+		c.doBatchWrite(conn, buf)
 	}
 }
 
-// doWrite 写入消息
+// doBatchWrite 批量写入消息
+// 从写队列批量取出任务，收集字节后通过net.Buffers一次性下发，减少系统调用次数
 // @param conn net.Conn TCP连接
-// @param buf *buffer.NocopyBuffer 消息缓冲区
-// @return @1 bool 是否写入失败
-func (c *ServerConn) doWrite(conn *net.TCPConn, buf *buffer.NocopyBuffer) (err error) {
-	switch num := buf.Nodes(); num {
-	case 0:
-		// ignore
-	case 1:
-		_, err = conn.Write(buf.Bytes())
-	default:
-		c.buffers = c.buffers[:0]
+// @param first buffer.Buffer 首个已取出的任务
+func (c *ServerConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
+	closeSig := first.Len() == 0
 
-		buf.Visit(func(node *buffer.NocopyNode) bool {
-			c.buffers = append(c.buffers, node.Bytes())
-			return true
-		})
+	c.queue.Done(closeSig)
 
-		_, err = c.buffers.WriteTo(conn)
+	if closeSig {
+		first.Release()
+		return
 	}
 
-	buf.Release()
+	c.dueBuffers = c.dueBuffers[:0]
+	c.dueBuffers = append(c.dueBuffers, first)
 
-	return
+	for len(c.dueBuffers) < maxBatchWriteNum {
+		select {
+		case buf, ok := <-c.queue.Read():
+			if !ok {
+				goto OVER
+			}
+
+			closeSig = buf.Len() == 0
+
+			c.queue.Done(closeSig)
+
+			if closeSig {
+				buf.Release()
+				goto OVER
+			}
+
+			c.dueBuffers = append(c.dueBuffers, buf)
+		default:
+			goto OVER
+		}
+	}
+
+OVER:
+	c.netBuffers = c.netBuffers[:0]
+
+	for _, buf := range c.dueBuffers {
+		buf.VisitBytes(func(bytes []byte) bool {
+			c.netBuffers = append(c.netBuffers, bytes)
+			return true
+		})
+	}
+
+	if len(c.netBuffers) > 0 {
+		if c.svr.opts.WriteTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(c.svr.opts.WriteTimeout))
+		}
+
+		if _, err := c.netBuffers.WriteTo(conn); err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				log.Errorf("write message error: %v", err)
+				taskpool.Add(func() { c.forceClose() })
+			}
+		}
+	}
+
+	for _, buf := range c.dueBuffers {
+		buf.Release()
+	}
+
+	c.netBuffers = c.netBuffers[:0]
+	c.dueBuffers = c.dueBuffers[:0]
 }
 
 // checkHeartbeat 检查心跳是否超时
 // @param t *time.Time 当前心跳触发的时间点
 // @return @1 bool 是否心跳超时
 func (c *ServerConn) checkHeartbeat(t *time.Time) bool {
-	return c.lastHeartbeatTime.Load() >= t.Add(-2*defaultHeartbeatInterval).UnixNano()
+	return c.lastHeartbeatTime.Load() >= t.Add(-2*heartbeatInterval).UnixNano()
 }
 
 // checkState 检测连接状态
@@ -260,6 +292,10 @@ func (c *ServerConn) doClose() error {
 
 	c.wg1.Wait()
 
+	for buf := range c.queue.Read() {
+		buf.Release()
+	}
+
 	c.svr.deleteConn(conn)
 
 	return err
@@ -278,18 +314,21 @@ func (c *ServerConn) doHandshake(conn *net.TCPConn, seq uint64, buf *buffer.Byte
 		return err
 	}
 
-	if !c.state.CompareAndSwap(connOpened, connAlived) {
-		switch c.state.Load() {
-		case connHanged:
-			return errors.ErrConnectionHanged
-		}
+	if err = c.serve(kind, inst, epoch); err != nil {
+		return err
 	}
 
-	c.kind, c.inst, c.epoch = kind, inst, epoch
+	res := protocol.EncodeHandshakeRes(seq, codes.OK)
+	defer res.Release()
 
-	return c.doWrite(conn, protocol.EncodeHandshakeRes(seq, codes.OK))
+	if _, err = conn.Write(res.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
 }
 
+// serve 服务连接
 func (c *ServerConn) serve(kind cluster.Kind, inst string, epoch uint64) error {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -310,7 +349,6 @@ func (c *ServerConn) serve(kind cluster.Kind, inst string, epoch uint64) error {
 	}
 
 	c.kind, c.inst, c.epoch = kind, inst, epoch
-
 	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(c.conn) })
 
