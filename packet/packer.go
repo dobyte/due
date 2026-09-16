@@ -15,22 +15,6 @@ const (
 	heartbeatTimeBit = 1 << 6 // 心跳时间戳标识
 )
 
-// NocopyReader 无拷贝读取器接口
-// 用于在读取消息时避免不必要的内存拷贝
-type NocopyReader interface {
-	// Next returns a slice containing the next n bytes from the buffer,
-	// advancing the buffer as if the bytes had been returned by Read.
-	Next(n int) (p []byte, err error)
-
-	// Peek returns the next n bytes without advancing the reader.
-	Peek(n int) (buf []byte, err error)
-
-	// Release the memory space occupied by all read slices.
-	Release() (err error)
-
-	Slice(n int) (r NocopyReader, err error)
-}
-
 // Packer 打包器接口
 // 定义消息的编码与解码能力
 type Packer interface {
@@ -51,6 +35,12 @@ type Packer interface {
 	// @return @1 *Message 消息对象
 	// @return @2 error 解包失败时返回的错误
 	UnpackMessage(buf buffer.Buffer) (*Message, error)
+	// UnpackRouteSeq 解包路由与序列号
+	// @param buf buffer.Buffer 消息缓冲区
+	// @return @1 int32 路由
+	// @return @2 int32 序列号
+	// @return @3 error 解包失败时返回的错误
+	UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	// PackHeartbeat 打包心跳
 	// @param server ...bool 是否为服务端心跳
 	// @return @1 buffer.Buffer 心跳包缓冲区
@@ -156,10 +146,14 @@ func (p *defaultPacker) Read(reader io.Reader) (bool, int64, buffer.Buffer, erro
 			return true, 0, nil, nil
 		}
 	} else {
-		size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes])
+		size := int64(p.opts.byteOrder.Uint32(data1[:defaultSizeBytes]))
 
 		if size <= 0 {
 			return false, 0, nil, errors.ErrInvalidMessage
+		}
+
+		if size > int64(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+p.opts.bufferBytes) {
+			return false, 0, nil, errors.ErrMessageTooLarge
 		}
 
 		size -= defaultHeaderBytes
@@ -219,6 +213,8 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	}
 
 	switch p.opts.seqBytes {
+	case 0:
+		// ignore seq
 	case 1:
 		writer.WriteInt8s(int8(message.Seq))
 	case 2:
@@ -239,89 +235,114 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 // @return @1 *Message 解包后的消息对象
 // @return @2 error 消息非法或解析失败时返回的错误
 func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (*Message, error) {
+	route, seq, buffer, err := p.unpackMessage(buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	return &Message{Route: route, Seq: seq, Buffer: buffer}, nil
+}
+
+// UnpackRouteSeq 解包路由与序列号
+// @param buf buffer.Buffer 消息缓冲区
+// @return @1 int32 路由
+// @return @2 int32 序列号
+// @return @3 error 解包失败时返回的错误
+func (p *defaultPacker) UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error) {
+	route, seq, _, err := p.unpackMessage(buf.Bytes())
+	return route, seq, err
+}
+
+// unpackMessage 解包消息
+// @param data []byte 待解包的原始消息缓冲区
+// @return @1 int32 路由
+// @return @2 int32 序列号
+// @return @3 []byte 消息内容
+// @return @4 error 解包失败时返回的错误
+func (p *defaultPacker) unpackMessage(data []byte) (int32, int32, []byte, error) {
 	var (
 		ln     = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
-		data   = buf.Bytes()
 		reader = buffer.NewReader(data)
+		route  int32
+		seq    int32
 	)
 
 	if len(data)-ln < 0 {
-		return nil, errors.ErrInvalidMessage
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
 	size, err := reader.ReadUint32(p.opts.byteOrder)
 	if err != nil {
-		return nil, err
+		return 0, 0, nil, err
 	}
 
 	if uint64(len(data))-defaultSizeBytes != uint64(size) {
-		return nil, errors.ErrInvalidMessage
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
 	header, err := reader.ReadUint8()
 	if err != nil {
-		return nil, err
+		return 0, 0, nil, err
 	}
 
-	if header&dataBit != dataBit {
-		return nil, errors.ErrInvalidMessage
+	if header&heartbeatBit == heartbeatBit {
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
-
-	message := &Message{}
 
 	switch p.opts.routeBytes {
 	case 1:
-		if route, err := reader.ReadInt8(); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt8(); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Route = int32(route)
+			route = int32(r)
 		}
 	case 2:
-		if route, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Route = int32(route)
+			route = int32(r)
 		}
 	case 4:
-		if route, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Route = route
+			route = r
 		}
 	default:
-		return nil, errors.ErrInvalidMessage
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
 	switch p.opts.seqBytes {
+	case 0:
+		// ignore seq
 	case 1:
-		if seq, err := reader.ReadInt8(); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt8(); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Seq = int32(seq)
+			seq = int32(r)
 		}
 	case 2:
-		if seq, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Seq = int32(seq)
+			seq = int32(r)
 		}
 	case 4:
-		if seq, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
-			return nil, err
+		if r, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
+			return 0, 0, nil, err
 		} else {
-			message.Seq = seq
+			seq = r
 		}
 	default:
-		return nil, errors.ErrInvalidMessage
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	message.Buffer = data[ln:]
-
-	return message, nil
+	return route, seq, data[ln:], nil
 }
 
 // PackHeartbeat 打包心跳
 // 开启心跳时间时携带当前时间戳，否则返回预构建的心跳包
+// 注意：无心跳时间时返回的为共享预构建缓冲区，调用方不可修改或释放
 // @return @1 buffer.Buffer 心跳包字节
 func (p *defaultPacker) PackHeartbeat(server ...bool) buffer.Buffer {
 	if p.opts.heartbeatTime && len(server) > 0 && server[0] {

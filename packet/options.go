@@ -42,7 +42,7 @@ const (
 
 type options struct {
 	// 字节序
-	// 默认为binary.LittleEndian
+	// 默认为binary.BigEndian
 	byteOrder binary.ByteOrder
 
 	// 路由字节数

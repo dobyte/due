@@ -52,7 +52,17 @@ func UnpackMessage(buf buffer.Buffer) (*Message, error) {
 	return globalPacker.UnpackMessage(buf)
 }
 
+// UnpackRouteSeq 解包路由与序列号
+// @param buf buffer.Buffer 消息缓冲区
+// @return @1 int32 路由
+// @return @2 int32 序列号
+// @return @3 error 解包失败时返回的错误
+func UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error) {
+	return globalPacker.UnpackRouteSeq(buf)
+}
+
 // PackHeartbeat 打包心跳
+// 返回的心跳包缓冲区不可修改或释放
 // @param server ...bool 是否为服务端心跳
 // @return @1 buffer.Buffer 心跳包缓冲区
 func PackHeartbeat(server ...bool) buffer.Buffer {
