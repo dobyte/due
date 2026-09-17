@@ -10,14 +10,13 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"golang.org/x/sync/errgroup"
 )
 
 type Client struct {
+	id    atomic.Uint64
 	opts  *ClientOptions
 	addr  *net.TCPAddr
-	epoch uint64 // 启动代次，实例级固定，供服务端按 (insID, epoch, seq) 对重连重发做幂等去重
 	idx   atomic.Uint64
 	conns []*ClientConn
 }
@@ -31,7 +30,6 @@ func NewClient(addr string, opts *ClientOptions) (*Client, error) {
 	c := &Client{}
 	c.addr = tcpAddr
 	c.opts = opts
-	c.epoch = uint64(xtime.Now().UnixNano())
 	c.conns = make([]*ClientConn, 0, c.opts.ConnNum)
 
 	return c, nil
@@ -39,10 +37,10 @@ func NewClient(addr string, opts *ClientOptions) (*Client, error) {
 
 // Establish 新建连接
 // 循环尝试建立指定数量的连接；存在失败时采用指数退避重试，避免忙等；支持通过 ctx 取消等待
-func (c *Client) Establish(ctxs ...context.Context) error {
-	ctx := context.Background()
-	if len(ctxs) > 0 && ctxs[0] != nil {
-		ctx = ctxs[0]
+func (c *Client) Establish(ctx ...context.Context) error {
+	ct := context.Background()
+	if len(ctx) > 0 && ctx[0] != nil {
+		ct = ctx[0]
 	}
 
 	var (
@@ -51,7 +49,7 @@ func (c *Client) Establish(ctxs ...context.Context) error {
 	)
 
 	for num > 0 {
-		if err := ctx.Err(); err != nil {
+		if err := ct.Err(); err != nil {
 			return err
 		}
 
@@ -81,25 +79,12 @@ func (c *Client) Establish(ctxs ...context.Context) error {
 		}
 
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-ct.Done():
+			return ct.Err()
 		case <-time.After(delay):
 		}
 	}
 
-	return nil
-}
-
-// Close 关闭客户端所有连接并唤醒全部等待者
-// 连接切片在 Establish 完成后不再变更，此处保留切片内容（仅逐连接置关闭标记），
-// 使并发的 Call/Send 经由 load 取连接时始终安全；已关闭连接会通过 closed 标记拒绝新的发送
-func (c *Client) Close() error {
-	for _, conn := range c.conns {
-		if conn != nil {
-			conn.closed.Store(true)
-			conn.destroy()
-		}
-	}
 	return nil
 }
 
@@ -134,6 +119,19 @@ func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 	return conns, nil
 }
 
+// Close 关闭客户端所有连接并唤醒全部等待者
+// 连接切片在 Establish 完成后不再变更，此处保留切片内容（仅逐连接置关闭标记），
+// 使并发的 Call/Send 经由 load 取连接时始终安全；已关闭连接会通过 closed 标记拒绝新的发送
+func (c *Client) Close() error {
+	for _, conn := range c.conns {
+		if conn != nil {
+			conn.closed.Store(true)
+			conn.destroy()
+		}
+	}
+	return nil
+}
+
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
 	if err := ctx.Err(); err != nil {
@@ -151,8 +149,8 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	return conn.call(ctx, seq, buf)
 }
 
-// Send 发送
-func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
+// Push 发送消息
+func (c *Client) Push(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
 	if err := ctx.Err(); err != nil {
 		buf.Release()
 		return err
@@ -165,7 +163,7 @@ func (c *Client) Send(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int6
 		return errors.ErrClientClosed
 	}
 
-	return conn.send(buf)
+	return conn.push(buf)
 }
 
 // 获取连接

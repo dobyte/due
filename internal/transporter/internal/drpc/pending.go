@@ -14,36 +14,25 @@ func newPending() *pending {
 	p := &pending{calls: make([]*calls, 64)}
 
 	for i := 0; i < len(p.calls); i++ {
-		p.calls[i] = &calls{calls: make(map[uint64]*call)}
+		p.calls[i] = &calls{calls: make(map[uint64]chan *buffer.Bytes)}
 	}
 
 	return p
 }
 
 // 回复
-func (p *pending) reply(seq uint64, buf buffer.Buffer) bool {
+func (p *pending) reply(seq uint64, buf *buffer.Bytes) bool {
 	return p.calls[int(seq%uint64(len(p.calls)))].reply(seq, buf)
 }
 
 // 存储
-func (p *pending) store(seq uint64, ch chan buffer.Buffer, data []byte) {
-	p.calls[int(seq%uint64(len(p.calls)))].store(seq, ch, data)
+func (p *pending) store(seq uint64, ch chan *buffer.Bytes) {
+	p.calls[int(seq%uint64(len(p.calls)))].store(seq, ch)
 }
 
 // 删除
 func (p *pending) delete(seq uint64) bool {
 	return p.calls[int(seq%uint64(len(p.calls)))].delete(seq)
-}
-
-// snapshot 获取所有未完成调用的快照，用于重连后重发
-func (p *pending) snapshot() []*call {
-	var out []*call
-
-	for _, c := range p.calls {
-		out = append(out, c.snapshot()...)
-	}
-
-	return out
 }
 
 // closeAll 关闭所有等待中的调用，唤醒全部等待者并释放资源
@@ -53,27 +42,21 @@ func (p *pending) closeAll() {
 	}
 }
 
-// call 一次未完成的调用
-type call struct {
-	ch   chan buffer.Buffer // 响应通道
-	data []byte             // 请求数据副本，用于重连后重发
-}
-
 type calls struct {
-	mu    sync.Mutex       // 锁
-	calls map[uint64]*call // 同步通道
+	mu    sync.Mutex                    // 锁
+	calls map[uint64]chan *buffer.Bytes // 同步通道
 }
 
 // 提取
-func (p *calls) reply(seq uint64, buf buffer.Buffer) bool {
+func (p *calls) reply(seq uint64, buf *buffer.Bytes) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if c, ok := p.calls[seq]; ok {
+	if ch, ok := p.calls[seq]; ok {
 		delete(p.calls, seq)
 
 		select {
-		case c.ch <- buf:
+		case ch <- buf:
 			return true
 		default:
 			return false
@@ -84,9 +67,9 @@ func (p *calls) reply(seq uint64, buf buffer.Buffer) bool {
 }
 
 // 存储
-func (p *calls) store(seq uint64, ch chan buffer.Buffer, data []byte) {
+func (p *calls) store(seq uint64, ch chan *buffer.Bytes) {
 	p.mu.Lock()
-	p.calls[seq] = &call{ch: ch, data: data}
+	p.calls[seq] = ch
 	p.mu.Unlock()
 }
 
@@ -95,8 +78,8 @@ func (p *calls) delete(seq uint64) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if c, ok := p.calls[seq]; ok {
-		close(c.ch)
+	if ch, ok := p.calls[seq]; ok {
+		close(ch)
 
 		delete(p.calls, seq)
 
@@ -106,27 +89,13 @@ func (p *calls) delete(seq uint64) bool {
 	}
 }
 
-// snapshot 获取未完成调用快照
-func (p *calls) snapshot() []*call {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	out := make([]*call, 0, len(p.calls))
-
-	for _, c := range p.calls {
-		out = append(out, c)
-	}
-
-	return out
-}
-
 // closeAll 关闭所有等待中的调用
 func (p *calls) closeAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for seq, c := range p.calls {
-		close(c.ch)
+	for seq, ch := range p.calls {
+		close(ch)
 		delete(p.calls, seq)
 	}
 }

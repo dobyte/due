@@ -1,16 +1,29 @@
 package drpc
 
-import "time"
+import (
+	"time"
+
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/core/queue"
+)
 
 const (
 	connClosed int32 = iota // 连接关闭
 	connOpened              // 连接打开
+	connAlived              // 连接存活
 	connHanged              // 连接挂起
 )
 
 const (
-	defaultHeartbeatInterval = 10 * time.Second // 心跳间隔时间
-	defaultDialTimeout       = 3 * time.Second  // 默认拨号/握手超时时间
-	replyCacheTTL            = time.Minute      // 响应缓存过期时间
-	replyWaitTimeout         = time.Minute      // 等待执行中请求完成的最长时间，防止等待协程泄漏
+	heartbeatInterval = 10 * time.Second // 心跳间隔时间
+	maxBatchWriteNum  = 64               // 最大批量写入消息数量
+	maxRetentionTime  = 1 * time.Second  // 最大保留时间
 )
+
+// closedQueue 已关闭队列
+type closedQueue struct {
+	time  time.Time                   // 关闭时间
+	queue *queue.Queue[buffer.Buffer] // 消息队列
+}
+
+type RouteHandler func(conn *ServerConn, seq uint64, buf buffer.Buffer) error

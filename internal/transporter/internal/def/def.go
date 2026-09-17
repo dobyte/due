@@ -19,7 +19,7 @@ const (
 const MaxFrameSize = 16 << 20 // 16MB
 
 // MinFrameSize 非心跳帧的最小长度（size字段 + header + route + seq）
-const MinFrameSize = RouteBytes + SeqBytes
+const MinFrameSize = SizeBytes + HeaderBytes + RouteBytes + SeqBytes
 
 const (
 	DataBit       uint8 = 0 << 7 // 数据标识位

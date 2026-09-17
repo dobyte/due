@@ -1,7 +1,6 @@
 package drpc
 
 import (
-	"bufio"
 	"context"
 	"net"
 	"sync"
@@ -16,39 +15,42 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
-	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 // session 表示一次连接的生命周期，读写协程通过它访问连接与上下文
 type session struct {
-	conn   *net.TCPConn
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx        context.Context
+	cancel     context.CancelFunc
+	conn       *net.TCPConn
+	reader     *reader
+	dueBuffers []*buffer.NocopyBuffer // 待写入的消息缓冲对象集合（写协程独享）
+	netBuffers net.Buffers            // 待写入的字节切片集合（写协程独享）
 }
 
 type ClientConn struct {
-	cli           *Client                             // 客户端
-	mu            sync.Mutex                          // 保护 dialing/状态转换
-	cond          *sync.Cond                          // 拨号完成条件变量
-	rw            sync.RWMutex                        // 配对保护队列写入与关闭，避免向已关闭队列写入panic
-	session       atomic.Pointer[session]             // 当前会话
-	state         atomic.Int32                        // 连接状态
-	queue         *queue.Queue[*buffer.NocopyBuffer]  // 消息队列
-	retryBuf      atomic.Pointer[buffer.NocopyBuffer] // 写失败待重发的缓冲区
-	pending       *pending                            // 等待队列
-	dialing       bool                                // 是否正在拨号
-	closed        atomic.Bool                         // 客户端是否已关闭
-	lastFaultTime atomic.Int64                        // 上次故障时间
+	id            uint64                             // 连接ID
+	cli           *Client                            // 客户端
+	mu            sync.Mutex                         // 保护 dialing/状态转换
+	cond          *sync.Cond                         // 拨号完成条件变量
+	rw            sync.RWMutex                       // 配对保护队列写入与关闭，避免向已关闭队列写入panic
+	session       atomic.Pointer[session]            // 当前会话
+	state         atomic.Int32                       // 连接状态
+	queue         *queue.Queue[*buffer.NocopyBuffer] // 消息队列
+	pending       *pending                           // 等待队列
+	dialing       bool                               // 是否正在拨号
+	closed        atomic.Bool                        // 客户端是否已关闭
+	lastFaultTime atomic.Int64                       // 上次故障时间
 }
 
 func newClientConn(cli *Client) *ClientConn {
 	c := &ClientConn{}
+	c.id = cli.idx.Add(1)
 	c.cli = cli
 	c.state.Store(connClosed)
 	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
 	c.pending = newPending()
 	c.cond = sync.NewCond(&c.mu)
-	c.lastFaultTime.Store(xtime.Now().UnixNano())
+	c.lastFaultTime.Store(time.Now().UnixNano())
 
 	return c
 }
@@ -90,6 +92,8 @@ func (c *ClientConn) dial() error {
 // 拨号失败与握手失败统一按退避策略重试，避免握手失败后直接放弃
 func (c *ClientConn) doDial() error {
 	var (
+		err   error
+		conn  net.Conn
 		retry int
 		delay time.Duration
 	)
@@ -99,13 +103,10 @@ func (c *ClientConn) doDial() error {
 			return errors.ErrClientClosed
 		}
 
-		conn, err := net.DialTimeout(c.cli.addr.Network(), c.cli.addr.String(), c.cli.opts.DialTimeout)
-		if err == nil {
-			err = c.process(conn.(*net.TCPConn))
-		}
-
-		if err == nil {
-			return nil
+		if conn, err = net.DialTimeout(c.cli.addr.Network(), c.cli.addr.String(), c.cli.opts.DialTimeout); err == nil {
+			if err = c.process(conn.(*net.TCPConn)); err == nil {
+				return nil
+			}
 		}
 
 		if c.cli.opts.DialRetryTimes >= 0 {
@@ -137,6 +138,7 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.conn = conn
 	s.conn.SetNoDelay(true)
+	s.reader = newReader(s.conn)
 
 	// 同步握手：握手完成前不启动写协程、不进入业务 pending，隔离 seq=1 特殊序列号
 	if err := c.handshake(s); err != nil {
@@ -145,14 +147,16 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 		return err
 	}
 
+	c.mu.Lock()
+
 	// 关闭期间到达的拨号结果直接废弃，避免已销毁连接被重新置为可用而产生僵尸会话
 	if c.closed.Load() {
+		c.mu.Unlock()
 		_ = conn.Close()
 		s.cancel()
 		return errors.ErrClientClosed
 	}
 
-	c.mu.Lock()
 	c.session.Store(s)
 	c.state.Store(connOpened)
 	c.mu.Unlock()
@@ -169,39 +173,36 @@ func (c *ClientConn) handshake(s *session) error {
 	const seq = uint64(1)
 
 	// 上报客户端实例级启动代次，重连重发时服务端可按 (insID, epoch, seq) 幂等去重
-	buf := protocol.EncodeHandshakeReq(seq, c.cli.epoch, c.cli.opts.Kind, c.cli.opts.ID)
+	req := protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID, c.id)
 
 	// 覆盖握手写与读的整次 deadline；DialTimeout 未配置时使用兜底值，防止无响应的对端使握手永久阻塞
-	timeout := c.cli.opts.DialTimeout
-	if timeout <= 0 {
-		timeout = defaultDialTimeout
-	}
-	_ = s.conn.SetDeadline(time.Now().Add(timeout))
+	_ = s.conn.SetDeadline(time.Now().Add(c.cli.opts.DialTimeout))
 
-	if _, err := s.conn.Write(buf.Bytes()); err != nil {
-		buf.Release()
+	if _, err := s.conn.Write(req.Bytes()); err != nil {
+		req.Release()
 		return err
 	}
-	buf.Release()
 
-	var (
-		reader = bufio.NewReader(s.conn)
-		header [4]byte
-	)
+	req.Release()
 
-	isHeartbeat, rt, rseq, data, err := protocol.ReadMessage(reader, &header)
+	isHeartbeat, rt, rseq, res, err := s.reader.read()
 	if err != nil {
 		return err
 	}
 
-	// 清除读 deadline，交由正常读写循环管理
-	_ = s.conn.SetDeadline(time.Time{})
-
-	if isHeartbeat || rt != route.Handshake || rseq != seq {
+	if isHeartbeat {
 		return errors.ErrInvalidMessage
 	}
 
-	code, err := protocol.DecodeHandshakeRes(data)
+	defer res.Release()
+
+	if rt != route.Handshake || rseq != seq {
+		return errors.ErrInvalidMessage
+	}
+
+	_ = s.conn.SetDeadline(time.Time{})
+
+	code, err := protocol.DecodeHandshakeRes(res)
 	if err != nil {
 		return err
 	}
@@ -213,18 +214,7 @@ func (c *ClientConn) handshake(s *session) error {
 	return nil
 }
 
-// send 发送消息
-func (c *ClientConn) send(buf *buffer.NocopyBuffer) error {
-	if err := c.doSend(buf); err != nil {
-		buf.Release()
-		return err
-	}
-
-	return nil
-}
-
-// doSend 执行发送
-func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
+func (c *ClientConn) doPush(buf *buffer.NocopyBuffer) error {
 	if c.closed.Load() {
 		return errors.ErrClientClosed
 	}
@@ -232,7 +222,7 @@ func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
 	switch c.state.Load() {
 	case connClosed:
 		if mode.IsReleaseMode() || mode.IsPreReleaseMode() {
-			if xtime.Now().UnixNano()-c.lastFaultTime.Load() < c.cli.opts.FaultRecoveryTime.Nanoseconds() {
+			if time.Now().UnixNano()-c.lastFaultTime.Load() < c.cli.opts.FaultRecoveryTime.Nanoseconds() {
 				return errors.ErrConnectionClosed
 			}
 		}
@@ -246,7 +236,6 @@ func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
 		}
 	}
 
-	// 与 destroy 中的 queue.Close 互斥，防止向已关闭的队列写入而 panic
 	c.rw.RLock()
 	err := c.queue.Write(buf)
 	c.rw.RUnlock()
@@ -254,16 +243,23 @@ func (c *ClientConn) doSend(buf *buffer.NocopyBuffer) error {
 	return err
 }
 
+// push 发送消息
+func (c *ClientConn) push(buf *buffer.NocopyBuffer) error {
+	if err := c.doPush(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
+}
+
 // call 调用
 func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer) (buffer.Buffer, error) {
-	call := make(chan buffer.Buffer, 1)
+	call := make(chan *buffer.Bytes, 1)
 
-	// 复制请求数据，用于连接中断重连后重发，避免消息丢失
-	data := append([]byte(nil), buf.Bytes()...)
+	c.pending.store(seq, call)
 
-	c.pending.store(seq, call, data)
-
-	if err := c.send(buf); err != nil {
+	if err := c.push(buf); err != nil {
 		c.pending.delete(seq)
 		return nil, err
 	}
@@ -303,47 +299,30 @@ func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuf
 
 // read 读取数据
 func (c *ClientConn) read(s *session) {
-	var (
-		reader = bufio.NewReaderSize(s.conn, 4096)
-		header [4]byte
-	)
-
 	for {
 		if s.ctx.Err() != nil {
 			return
 		}
 
-		buf, err := protocol.ReaderBuffer(reader, &header)
+		isHeartbeat, _, seq, buf, err := s.reader.read()
 		if err != nil {
 			c.retry(s)
 			return
 		}
 
-		if isHeartbeat, _, seq := protocol.ParseBuffer(buf.Bytes()); isHeartbeat {
+		if isHeartbeat {
+			continue
+		}
+
+		if !c.pending.reply(seq, buf) {
 			buf.Release()
-		} else {
-			if ok := c.pending.reply(seq, buf); !ok {
-				buf.Release()
-			}
 		}
 	}
 }
 
 // write 写入数据
 func (c *ClientConn) write(s *session) {
-	// 优先重发上次写失败的 Send 消息
-	if buf := c.retryBuf.Load(); buf != nil {
-		if c.doWrite(s, buf) {
-			c.retryBuf.Store(nil)
-		} else {
-			return
-		}
-	}
-
-	// 重连成功后优先重发所有未完成请求，保证请求不丢失
-	c.resend(s)
-
-	ticker := time.NewTicker(defaultHeartbeatInterval)
+	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
 	for {
@@ -354,6 +333,7 @@ func (c *ClientConn) write(s *session) {
 			if c.cli.opts.WriteTimeout > 0 {
 				_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
 			}
+
 			if _, err := s.conn.Write(protocol.Heartbeat()); err != nil {
 				log.Warnf("write heartbeat message error: %v", err)
 				c.retry(s)
@@ -364,62 +344,83 @@ func (c *ClientConn) write(s *session) {
 				return
 			}
 
-			c.queue.Done(false)
-
-			if ok = c.doWrite(s, buf); !ok {
+			if err := c.doBatchWrite(s, buf); err != nil {
+				c.retry(s)
 				return
 			}
 		}
 	}
 }
 
-// resend 重发所有未完成（未收到响应）的请求
-// 在重连后由写协程优先调用；写失败则继续触发重连
-func (c *ClientConn) resend(s *session) {
-	for _, entry := range c.pending.snapshot() {
-		if entry == nil || len(entry.data) == 0 {
-			continue
-		}
+// doBatchWrite 批量写入消息
+// 从写队列批量取出任务，收集字节后通过net.Buffers一次性下发，减少系统调用次数
+// @param conn net.Conn TCP连接
+// @param first buffer.Buffer 首个已取出的任务
+func (c *ClientConn) doBatchWrite(s *session, first *buffer.NocopyBuffer) (err error) {
+	closeSig := first.Len() == 0
 
-		bs := net.Buffers{entry.data}
+	c.queue.Done(closeSig)
 
-		if _, err := bs.WriteTo(s.conn); err != nil {
-			c.retry(s)
-			return
-		}
-	}
-}
-
-// doWrite 执行写入数据
-// 写失败时：Send 消息（seq==0）保留到 retryBuf 待重连后重发；Call（seq>0）由 pending 重发兜底
-func (c *ClientConn) doWrite(s *session, buf *buffer.NocopyBuffer) bool {
-	var bs net.Buffers
-
-	buf.Visit(func(node *buffer.NocopyNode) bool {
-		bs = append(bs, node.Bytes())
-		return true
-	})
-
-	if c.cli.opts.WriteTimeout > 0 {
-		_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+	if closeSig {
+		first.Release()
+		return
 	}
 
-	_, err := bs.WriteTo(s.conn)
+	s.dueBuffers = s.dueBuffers[:0]
+	s.dueBuffers = append(s.dueBuffers, first)
 
-	if err != nil {
-		if _, _, seq := protocol.ParseBuffer(buf.Bytes()); seq == 0 {
-			c.retryBuf.Store(buf)
-		} else {
-			buf.Release()
+	for len(s.dueBuffers) < maxBatchWriteNum {
+		select {
+		case buf, ok := <-c.queue.Read():
+			if !ok {
+				goto OVER
+			}
+
+			closeSig = buf.Len() == 0
+
+			c.queue.Done(closeSig)
+
+			if closeSig {
+				buf.Release()
+				goto OVER
+			}
+
+			s.dueBuffers = append(s.dueBuffers, buf)
+		default:
+			goto OVER
 		}
-
-		c.retry(s)
-		return false
 	}
 
-	buf.Release()
+OVER:
+	s.netBuffers = s.netBuffers[:0]
 
-	return true
+	for _, buf := range s.dueBuffers {
+		buf.VisitBytes(func(bytes []byte) bool {
+			s.netBuffers = append(s.netBuffers, bytes)
+			return true
+		})
+	}
+
+	if len(s.netBuffers) > 0 {
+		if c.cli.opts.WriteTimeout > 0 {
+			_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+		}
+
+		_, err = s.netBuffers.WriteTo(s.conn)
+	}
+
+	for _, buf := range s.dueBuffers {
+		buf.Release()
+	}
+
+	s.netBuffers = s.netBuffers[:0]
+	s.dueBuffers = s.dueBuffers[:0]
+
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		log.Errorf("write message error: %v", err)
+	}
+
+	return
 }
 
 // retry 重试拨号
@@ -458,7 +459,7 @@ func (c *ClientConn) close() {
 	c.cond.Broadcast()
 	c.mu.Unlock()
 
-	c.lastFaultTime.Store(xtime.Now().UnixNano())
+	c.lastFaultTime.Store(time.Now().UnixNano())
 
 	if s != nil {
 		if s.conn != nil {
@@ -478,7 +479,7 @@ func (c *ClientConn) destroy() {
 	c.cond.Broadcast()
 	c.mu.Unlock()
 
-	c.lastFaultTime.Store(xtime.Now().UnixNano())
+	c.lastFaultTime.Store(time.Now().UnixNano())
 
 	if s != nil {
 		if s.conn != nil {
@@ -499,10 +500,6 @@ func (c *ClientConn) destroy() {
 	}
 
 	c.pending.closeAll()
-
-	if buf := c.retryBuf.Swap(nil); buf != nil {
-		buf.Release()
-	}
 }
 
 // wait 等待重连
@@ -521,7 +518,7 @@ func (c *ClientConn) wait() error {
 	return errors.ErrConnectionClosed
 }
 
-func (c *ClientConn) discard(seq uint64, call chan buffer.Buffer) {
+func (c *ClientConn) discard(seq uint64, call chan *buffer.Bytes) {
 	c.pending.delete(seq)
 
 	select {

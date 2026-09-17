@@ -2,13 +2,13 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
+	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
@@ -36,25 +36,17 @@ func EncodeHandshakeReq(seq uint64, kind cluster.Kind, inst string, epoch uint64
 // DecodeHandshakeReq 解码握手请求
 // 注意：buf 仅包含私有段
 // 协议：公共段：{size + header + route + seq} + 私有段：{ins kind + ins id + conn epoch}
-func DecodeHandshakeReq(buf buffer.Buffer) (kind cluster.Kind, inst string, epoch uint64, err error) {
-	var (
-		k      uint8
-		reader = buffer.NewReader(buf.Bytes())
-	)
-
-	if k, err = reader.ReadUint8(); err != nil {
-		return
-	} else {
-		kind = cluster.Kind(k)
+func DecodeHandshakeReq(buf buffer.Buffer) (cluster.Kind, string, uint64, error) {
+	if buf.Len() < def.B8+def.B64+1 {
+		return 0, "", 0, errors.ErrInvalidMessage
 	}
 
-	if inst, err = reader.ReadString(buf.Len() - def.B8 - def.B64); err != nil {
-		return
-	}
+	data := buf.Bytes()
+	kind := cluster.Kind(data[0])
+	inst := xconv.String(data[def.B8 : len(data)-def.B64])
+	epoch := binary.BigEndian.Uint64(data[len(data)-def.B64:])
 
-	epoch, err = reader.ReadUint64(binary.BigEndian)
-
-	return
+	return kind, inst, epoch, nil
 }
 
 // EncodeHandshakeRes 编码握手响应
@@ -72,22 +64,12 @@ func EncodeHandshakeRes(seq uint64, code uint16) buffer.Buffer {
 }
 
 // DecodeHandshakeRes 解码握手响应
-// 协议：size + header + route + seq + code
-func DecodeHandshakeRes(data []byte) (code uint16, err error) {
-	if len(data) != handshakeResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeHandshakeRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }

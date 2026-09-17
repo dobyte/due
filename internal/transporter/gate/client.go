@@ -157,7 +157,7 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disc
 
 		return codes.CodeToError(code)
 	} else {
-		return c.cli.Send(ctx, protocol.EncodePushReq(0, kind, target, disconnect, message), target)
+		return c.cli.Push(ctx, protocol.EncodePushReq(0, kind, target, disconnect, message), target)
 	}
 }
 
@@ -180,7 +180,7 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 
 		return int64(total), codes.CodeToError(code)
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodeMulticastReq(0, kind, targets, disconnect, message))
+		return 0, c.cli.Push(ctx, protocol.EncodeMulticastReq(0, kind, targets, disconnect, message))
 	}
 }
 
@@ -203,7 +203,7 @@ func (c *Client) Broadcast(ctx context.Context, kind session.Kind, disconnect bo
 
 		return int64(total), codes.CodeToError(code)
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodeBroadcastReq(0, kind, disconnect, message))
+		return 0, c.cli.Push(ctx, protocol.EncodeBroadcastReq(0, kind, disconnect, message))
 	}
 }
 
@@ -231,7 +231,7 @@ func (c *Client) Publish(ctx context.Context, channel string, disconnect bool, m
 
 		return int64(total), codes.CodeToError(code)
 	} else {
-		return 0, c.cli.Send(ctx, protocol.EncodePublishReq(0, channel, disconnect, message))
+		return 0, c.cli.Push(ctx, protocol.EncodePublishReq(0, channel, disconnect, message))
 	}
 }
 

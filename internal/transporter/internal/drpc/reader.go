@@ -1,4 +1,4 @@
-package drpcs
+package drpc
 
 import (
 	"bufio"
@@ -17,30 +17,34 @@ type reader struct {
 }
 
 func newReader(conn *net.TCPConn) *reader {
-	return &reader{reader: bufio.NewReaderSize(conn, 1<<16)}
+	return &reader{reader: bufio.NewReaderSize(conn, 1<<13)}
 }
 
-// readBuffer 以buffer的形式读取消息
-func (r *reader) readBuffer() (bool, uint8, uint64, *buffer.Bytes, error) {
+// read 以buffer的形式读取消息
+func (r *reader) read() (bool, uint8, uint64, *buffer.Bytes, error) {
 	if _, err := io.ReadFull(r.reader, r.header[:]); err != nil {
 		return false, 0, 0, nil, err
 	}
 
 	size := binary.BigEndian.Uint32(r.header[:def.SizeBytes])
+	header := r.header[def.SizeBytes:][0]
 
-	if !r.validateSize(size) {
-		return false, 0, 0, nil, errors.ErrInvalidMessage
-	}
-
-	if header := r.header[def.SizeBytes:][0]; header&def.HeartbeatBit == def.HeartbeatBit {
+	if header&def.HeartbeatBit == def.HeartbeatBit {
+		if size != def.HeaderBytes {
+			return false, 0, 0, nil, errors.ErrInvalidMessage
+		}
 		return true, 0, 0, nil, nil
 	}
 
-	buf := buffer.MallocBytes(int(size) - def.HeaderBytes)
+	if size < def.MinFrameSize-def.SizeBytes {
+		return false, 0, 0, nil, errors.ErrInvalidMessage
+	}
 
-	if buf == nil {
+	if uint64(size)+def.SizeBytes > def.MaxFrameSize {
 		return false, 0, 0, nil, errors.ErrMessageTooLarge
 	}
+
+	buf := buffer.MallocBytes(int(size) - def.HeaderBytes)
 
 	if _, err := io.ReadFull(r.reader, buf.Bytes()); err != nil {
 		buf.Release()
@@ -56,18 +60,4 @@ func (r *reader) readBuffer() (bool, uint8, uint64, *buffer.Bytes, error) {
 	buf.MoveTo(def.RouteBytes + def.SeqBytes)
 
 	return false, route, seq, buf, nil
-}
-
-// validateSize 校验帧长度合法性
-// size 表示 size 字段之后的字节数；心跳帧为 1（仅header），数据帧至少为 header+route+seq
-func (r *reader) validateSize(size uint32) bool {
-	if size == def.HeaderBytes {
-		return true
-	}
-
-	if size < def.MinFrameSize-def.SizeBytes {
-		return false
-	}
-
-	return uint64(size)+def.SizeBytes <= def.MaxFrameSize
 }

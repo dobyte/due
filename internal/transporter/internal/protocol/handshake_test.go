@@ -1,7 +1,6 @@
 package protocol_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -20,13 +19,11 @@ func TestEncodeHandshakeReq(t *testing.T) {
 }
 
 func TestDecodeHandshakeReq(t *testing.T) {
-	buf1 := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(xtime.Now().UnixNano()))
-	buf2 := buffer.NewBytes(buf1.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	req := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(xtime.Now().UnixNano()))
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	fmt.Println(buf1.Bytes())
-	fmt.Println(buf2.Bytes())
-
-	kind, iid, epoch, err := protocol.DecodeHandshakeReq(buf2)
+	kind, iid, epoch, err := protocol.DecodeHandshakeReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,9 +40,11 @@ func TestEncodeHandshakeRes(t *testing.T) {
 }
 
 func TestDecodeHandshakeRes(t *testing.T) {
-	buffer := protocol.EncodeHandshakeRes(1, codes.OK)
+	req := protocol.EncodeHandshakeRes(1, codes.OK)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, err := protocol.DecodeHandshakeRes(buffer.Bytes())
+	code, err := protocol.DecodeHandshakeRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

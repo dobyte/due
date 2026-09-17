@@ -27,6 +27,7 @@ var (
 	ErrConnectionHanged        = New("connection is hanged")
 	ErrConnectionClosed        = New("connection is closed")
 	ErrConnectionAlived        = New("connection is alived")
+	ErrConnectionNotAlived     = New("connection is not alived")
 	ErrConnectionNotOpened     = New("connection is not opened")
 	ErrConnectionNotHanged     = New("connection is not hanged")
 	ErrTooManyConnection       = New("too many connection")

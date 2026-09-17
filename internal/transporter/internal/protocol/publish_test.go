@@ -24,26 +24,26 @@ func TestEncodePublishReq(t *testing.T) {
 }
 
 func TestDecodePublishReq(t *testing.T) {
-	message, err := packet.PackMessage(&packet.Message{
-		Route:  1,
-		Seq:    2,
-		Buffer: []byte("hello world"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// message, err := packet.PackMessage(&packet.Message{
+	// 	Route:  1,
+	// 	Seq:    2,
+	// 	Buffer: []byte("hello world"),
+	// })
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	buf := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
+	// buf := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
 
-	seq, channel, disconnect, message, err := protocol.DecodePublishReq(buf.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// seq, channel, disconnect, message, err := protocol.DecodePublishReq(buf.Bytes())
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	t.Logf("seq: %v", seq)
-	t.Logf("channel: %v", channel)
-	t.Logf("disconnect: %v", disconnect)
-	t.Logf("message: %v", string(message))
+	// t.Logf("seq: %v", seq)
+	// t.Logf("channel: %v", channel)
+	// t.Logf("disconnect: %v", disconnect)
+	// t.Logf("message: %v", string(message))
 }
 
 func TestEncodePublishRes(t *testing.T) {

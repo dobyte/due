@@ -24,12 +24,12 @@ func NewClient(cli *drpc.Client) *Client {
 
 // Trigger 触发事件
 func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int64) error {
-	return c.cli.Send(ctx, protocol.EncodeTriggerReq(0, event, cid, uid), cid)
+	return c.cli.Push(ctx, protocol.EncodeTriggerReq(0, event, cid, uid), cid)
 }
 
 // Deliver 投递消息
 func (c *Client) Deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) error {
-	return c.cli.Send(ctx, protocol.EncodeDeliverReq(0, cid, uid, buf), cid)
+	return c.cli.Push(ctx, protocol.EncodeDeliverReq(0, cid, uid, buf), cid)
 }
 
 // GetState 获取状态
