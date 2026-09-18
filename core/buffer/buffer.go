@@ -28,6 +28,8 @@ type Buffer interface {
 	Bytes() []byte
 	// Release 释放
 	Release()
+	// MoveTo 移动游标到指定位置
+	MoveTo(pos int) bool
 	// VisitBytes 迭代所有字节
 	VisitBytes(fn func(bytes []byte) bool) bool
 }

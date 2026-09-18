@@ -257,6 +257,11 @@ OVER:
 	b.next = nil
 }
 
+// MoveTo 移动游标到指定位置
+func (b *NocopyBuffer) MoveTo(pos int) bool {
+	return false
+}
+
 // 添加到头部
 func (b *NocopyBuffer) addToHead(node any) {
 	switch n := node.(type) {

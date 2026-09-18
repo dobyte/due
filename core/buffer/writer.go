@@ -10,7 +10,8 @@ import (
 // Writer 字节写入器
 type Writer struct {
 	buf      []byte
-	off      int
+	lower    int
+	upper    int
 	static   bool
 	delay    atomic.Int32
 	pool     *sync.Pool
@@ -35,7 +36,7 @@ func NewWriterWithCapacity(cap ...int) *Writer {
 
 // Len 返回数据长度
 func (w *Writer) Len() int {
-	return w.off
+	return w.upper - w.lower
 }
 
 // Cap 返回容量
@@ -45,7 +46,7 @@ func (w *Writer) Cap() int {
 
 // Available 返回可用空间
 func (w *Writer) Available() int {
-	return max(w.Cap()-w.off, 0)
+	return max(w.Cap()-w.upper, 0)
 }
 
 // Nodes 获取节点数
@@ -55,7 +56,7 @@ func (w *Writer) Nodes() int {
 
 // Bytes 获取字节数据
 func (w *Writer) Bytes() []byte {
-	return w.buf[:w.off]
+	return w.buf[w.lower:w.upper]
 }
 
 // VisitBytes 迭代所有字节
@@ -87,7 +88,8 @@ func (w *Writer) Release() {
 		return
 	}
 
-	w.off = 0
+	w.lower = 0
+	w.upper = 0
 	w.delay.Store(0)
 
 	if w.pool != nil {
@@ -95,11 +97,21 @@ func (w *Writer) Release() {
 	}
 }
 
+// MoveTo 移动游标到指定位置
+func (w *Writer) MoveTo(pos int) bool {
+	if pos >= 0 && pos <= w.upper && pos >= w.lower {
+		w.lower = pos
+		return true
+	}
+
+	return false
+}
+
 // Write 写数据，实现io.Writer接口
 func (w *Writer) Write(p []byte) (n int, err error) {
 	w.grow(len(p))
-	n = copy(w.buf[w.off:], p)
-	w.off += n
+	n = copy(w.buf[w.upper:], p)
+	w.upper += n
 	return
 }
 
@@ -108,11 +120,11 @@ func (w *Writer) WriteBools(values ...bool) {
 	w.grow(len(values))
 	for _, v := range values {
 		if v {
-			w.buf[w.off] = 1
+			w.buf[w.upper] = 1
 		} else {
-			w.buf[w.off] = 0
+			w.buf[w.upper] = 0
 		}
-		w.off++
+		w.upper++
 	}
 }
 
@@ -120,8 +132,8 @@ func (w *Writer) WriteBools(values ...bool) {
 func (w *Writer) WriteInt8s(values ...int8) {
 	w.grow(len(values))
 	for _, v := range values {
-		w.buf[w.off] = uint8(v)
-		w.off++
+		w.buf[w.upper] = uint8(v)
+		w.upper++
 	}
 }
 
@@ -129,8 +141,8 @@ func (w *Writer) WriteInt8s(values ...int8) {
 func (w *Writer) WriteUint8s(values ...uint8) {
 	w.grow(len(values))
 	for _, v := range values {
-		w.buf[w.off] = v
-		w.off++
+		w.buf[w.upper] = v
+		w.upper++
 	}
 }
 
@@ -138,8 +150,8 @@ func (w *Writer) WriteUint8s(values ...uint8) {
 func (w *Writer) WriteInt16s(order binary.ByteOrder, values ...int16) {
 	w.grow(b16 * len(values))
 	for _, v := range values {
-		order.PutUint16(w.buf[w.off:w.off+2], uint16(v))
-		w.off += b16
+		order.PutUint16(w.buf[w.upper:w.upper+2], uint16(v))
+		w.upper += b16
 	}
 }
 
@@ -147,8 +159,8 @@ func (w *Writer) WriteInt16s(order binary.ByteOrder, values ...int16) {
 func (w *Writer) WriteUint16s(order binary.ByteOrder, values ...uint16) {
 	w.grow(b16 * len(values))
 	for _, v := range values {
-		order.PutUint16(w.buf[w.off:w.off+b16], v)
-		w.off += b16
+		order.PutUint16(w.buf[w.upper:w.upper+b16], v)
+		w.upper += b16
 	}
 }
 
@@ -156,8 +168,8 @@ func (w *Writer) WriteUint16s(order binary.ByteOrder, values ...uint16) {
 func (w *Writer) WriteInt32s(order binary.ByteOrder, values ...int32) {
 	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+b32], uint32(v))
-		w.off += b32
+		order.PutUint32(w.buf[w.upper:w.upper+b32], uint32(v))
+		w.upper += b32
 	}
 }
 
@@ -165,8 +177,8 @@ func (w *Writer) WriteInt32s(order binary.ByteOrder, values ...int32) {
 func (w *Writer) WriteUint32s(order binary.ByteOrder, values ...uint32) {
 	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+b32], v)
-		w.off += b32
+		order.PutUint32(w.buf[w.upper:w.upper+b32], v)
+		w.upper += b32
 	}
 }
 
@@ -174,8 +186,8 @@ func (w *Writer) WriteUint32s(order binary.ByteOrder, values ...uint32) {
 func (w *Writer) WriteInt64s(order binary.ByteOrder, values ...int64) {
 	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+b64], uint64(v))
-		w.off += b64
+		order.PutUint64(w.buf[w.upper:w.upper+b64], uint64(v))
+		w.upper += b64
 	}
 }
 
@@ -183,8 +195,8 @@ func (w *Writer) WriteInt64s(order binary.ByteOrder, values ...int64) {
 func (w *Writer) WriteUint64s(order binary.ByteOrder, values ...uint64) {
 	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+b64], v)
-		w.off += b64
+		order.PutUint64(w.buf[w.upper:w.upper+b64], v)
+		w.upper += b64
 	}
 }
 
@@ -192,8 +204,8 @@ func (w *Writer) WriteUint64s(order binary.ByteOrder, values ...uint64) {
 func (w *Writer) WriteFloat32s(order binary.ByteOrder, values ...float32) {
 	w.grow(b32 * len(values))
 	for _, v := range values {
-		order.PutUint32(w.buf[w.off:w.off+b32], math.Float32bits(v))
-		w.off += b32
+		order.PutUint32(w.buf[w.upper:w.upper+b32], math.Float32bits(v))
+		w.upper += b32
 	}
 }
 
@@ -201,8 +213,8 @@ func (w *Writer) WriteFloat32s(order binary.ByteOrder, values ...float32) {
 func (w *Writer) WriteFloat64s(order binary.ByteOrder, values ...float64) {
 	w.grow(b64 * len(values))
 	for _, v := range values {
-		order.PutUint64(w.buf[w.off:w.off+b64], math.Float64bits(v))
-		w.off += b64
+		order.PutUint64(w.buf[w.upper:w.upper+b64], math.Float64bits(v))
+		w.upper += b64
 	}
 }
 
@@ -219,13 +231,13 @@ func (w *Writer) WriteString(str string) {
 // WriteBytes 写入字节序
 func (w *Writer) WriteBytes(values ...byte) {
 	w.grow(len(values))
-	copy(w.buf[w.off:], values)
-	w.off += len(values)
+	copy(w.buf[w.upper:], values)
+	w.upper += len(values)
 }
 
 // 执行扩容操作
 func (w *Writer) grow(n int) {
-	if w.off+n <= cap(w.buf) {
+	if w.upper+n <= cap(w.buf) {
 		return
 	}
 
@@ -240,6 +252,6 @@ func (w *Writer) growSlice(n int) {
 	}
 
 	buf := make([]byte, c)
-	copy(buf, w.buf[:w.off])
+	copy(buf, w.buf[:w.upper])
 	w.buf = buf
 }

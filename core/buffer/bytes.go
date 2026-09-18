@@ -44,10 +44,13 @@ func (b *Bytes) Available() int {
 }
 
 // MoveTo 移动lower索引
-func (b *Bytes) MoveTo(lower int) {
-	if lower >= 0 && lower <= b.upper {
-		b.lower = lower
+func (b *Bytes) MoveTo(pos int) bool {
+	if pos >= 0 && pos <= b.upper && pos >= b.lower {
+		b.lower = pos
+		return true
 	}
+
+	return false
 }
 
 // Nodes 获取节点数
