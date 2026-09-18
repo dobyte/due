@@ -1,8 +1,11 @@
 package protocol_test
 
 import (
-	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
+	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 )
 
 func TestEncodeUnbindReq(t *testing.T) {
@@ -12,14 +15,15 @@ func TestEncodeUnbindReq(t *testing.T) {
 }
 
 func TestDecodeUnbindReq(t *testing.T) {
-	buffer := protocol.EncodeUnbindReq(1, 2)
+	req := protocol.EncodeUnbindReq(1, 2)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, uid, err := protocol.DecodeUnbindReq(buffer.Bytes())
+	uid, err := protocol.DecodeUnbindReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("uid: %v", uid)
 }
 
@@ -30,9 +34,11 @@ func TestEncodeUnbindRes(t *testing.T) {
 }
 
 func TestDecodeUnbindRes(t *testing.T) {
-	buffer := protocol.EncodeUnbindRes(1, 2)
+	req := protocol.EncodeUnbindRes(1, 2)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, err := protocol.DecodeUnbindRes(buffer.Bytes())
+	code, err := protocol.DecodeUnbindRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -19,7 +18,8 @@ const (
 )
 
 // EncodeGetIPReq 编码获取IP请求
-// 协议：size + header + route + seq + session kind + target
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
 func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getIPReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-def.SizeBytes))
@@ -33,39 +33,24 @@ func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyB
 }
 
 // DecodeGetIPReq 解码获取IP请求
-// 协议：size + header + route + seq + session kind + target
-func DecodeGetIPReq(data []byte) (seq uint64, kind session.Kind, target int64, err error) {
-	if len(data) != getIPReqBytes {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
+func DecodeGetIPReq(buf buffer.Buffer) (kind session.Kind, target int64, err error) {
+	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	var k uint8
-	if k, err = reader.ReadUint8(); err != nil {
-		return
-	} else {
-		kind = session.Kind(k)
-	}
-
-	if target, err = reader.ReadInt64(binary.BigEndian); err != nil {
-		return
-	}
+	data := buf.Bytes()
+	kind = session.Kind(data[0])
+	target = int64(binary.BigEndian.Uint64(data[def.B8:]))
 
 	return
 }
 
 // EncodeGetIPRes 编码获取IP响应
-// 协议：size + header + route + seq + code + [ip]
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + [ip]}
 func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer {
 	size := getIPResBytes - def.SizeBytes
 	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
@@ -87,30 +72,19 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 }
 
 // DecodeGetIPRes 解码获取IP响应
-// 协议：size + header + route + seq + code + [ip]
-func DecodeGetIPRes(data []byte) (code uint16, ip string, err error) {
-	if len(data) != getIPResBytes && len(data) != getIPResBytes-def.B32 {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + [ip]}
+func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
+	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B32 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
+	data := buf.Bytes()
+	code = binary.BigEndian.Uint16(data[:def.CodeBytes])
 
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	if code == codes.OK && len(data) == getIPResBytes {
-		var v uint32
-		if v, err = reader.ReadUint32(binary.BigEndian); err != nil {
-			return
-		} else {
-			ip = xnet.Long2IP(v)
-		}
+	if code == codes.OK && buf.Len() == def.CodeBytes+def.B32 {
+		ip = xnet.Long2IP(binary.BigEndian.Uint32(data[def.CodeBytes:]))
 	}
 
 	return

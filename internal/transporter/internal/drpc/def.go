@@ -26,4 +26,4 @@ type closedQueue struct {
 	queue *queue.Queue[buffer.Buffer] // 消息队列
 }
 
-type RouteHandler func(conn *ServerConn, seq uint64, buf buffer.Buffer) error
+type RouteHandler func(conn *ServerConn, seq uint64, buf *buffer.Bytes) error

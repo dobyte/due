@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
 )
@@ -34,8 +35,8 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 }
 
 // Deliver 投递消息
-func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message []byte) error {
-	log.Infof("gid: %s, nid: %s, cid: %d, uid: %d message: %s", gid, nid, cid, uid, string(message))
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
+	log.Infof("gid: %s, nid: %s, cid: %d, uid: %d message: %s", gid, nid, cid, uid, string(buf.Bytes()))
 	return nil
 }
 

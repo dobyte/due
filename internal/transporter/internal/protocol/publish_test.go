@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -24,26 +26,27 @@ func TestEncodePublishReq(t *testing.T) {
 }
 
 func TestDecodePublishReq(t *testing.T) {
-	// message, err := packet.PackMessage(&packet.Message{
-	// 	Route:  1,
-	// 	Seq:    2,
-	// 	Buffer: []byte("hello world"),
-	// })
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
+	message, err := packet.PackMessage(&packet.Message{
+		Route:  1,
+		Seq:    2,
+		Buffer: []byte("hello world"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// buf := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
+	req := protocol.EncodePublishReq(1, "channel", true, buffer.NewNocopyBuffer(message))
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	// seq, channel, disconnect, message, err := protocol.DecodePublishReq(buf.Bytes())
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
+	channel, disconnect, data, err := protocol.DecodePublishReq(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// t.Logf("seq: %v", seq)
-	// t.Logf("channel: %v", channel)
-	// t.Logf("disconnect: %v", disconnect)
-	// t.Logf("message: %v", string(message))
+	t.Logf("channel: %v", channel)
+	t.Logf("disconnect: %v", disconnect)
+	t.Logf("message: %v", string(data.Bytes()))
 }
 
 func TestEncodePublishRes(t *testing.T) {
@@ -53,9 +56,11 @@ func TestEncodePublishRes(t *testing.T) {
 }
 
 func TestDecodePublishRes(t *testing.T) {
-	buf := protocol.EncodePublishRes(1, 1)
+	req := protocol.EncodePublishRes(1, codes.OK, 20)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, total, err := protocol.DecodePublishRes(buf.Bytes())
+	code, total, err := protocol.DecodePublishRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

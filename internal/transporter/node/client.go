@@ -35,39 +35,43 @@ func (c *Client) Deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer)
 // GetState 获取状态
 func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	seq := c.doGenSequence()
-	buf := protocol.EncodeGetStateReq(seq)
+	req := protocol.EncodeGetStateReq(seq)
 
-	res, err := c.cli.Call(ctx, seq, buf)
-	if err != nil {
-		return 0, err
-	}
-	defer res.Release()
-
-	code, state, err := protocol.DecodeGetStateRes(res.Bytes())
+	res, err := c.cli.Call(ctx, seq, req)
 	if err != nil {
 		return 0, err
 	}
 
-	return state, codes.CodeToError(code)
+	code, state, err := protocol.DecodeGetStateRes(res)
+
+	res.Release()
+
+	if err != nil {
+		return 0, err
+	} else {
+		return state, codes.CodeToError(code)
+	}
 }
 
 // SetState 设置状态
 func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	seq := c.doGenSequence()
-	buf := protocol.EncodeSetStateReq(seq, state)
+	req := protocol.EncodeSetStateReq(seq, state)
 
-	res, err := c.cli.Call(ctx, seq, buf)
-	if err != nil {
-		return err
-	}
-	defer res.Release()
-
-	code, err := protocol.DecodeSetStateRes(res.Bytes())
+	res, err := c.cli.Call(ctx, seq, req)
 	if err != nil {
 		return err
 	}
 
-	return codes.CodeToError(code)
+	code, err := protocol.DecodeSetStateRes(res)
+
+	res.Release()
+
+	if err != nil {
+		return err
+	} else {
+		return codes.CodeToError(code)
+	}
 }
 
 // 生成序列号，规避生成序列号为0的编号

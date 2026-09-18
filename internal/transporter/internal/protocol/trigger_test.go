@@ -1,10 +1,13 @@
 package protocol_test
 
 import (
-	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
-	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"testing"
+
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
+	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 )
 
 func TestEncodeTriggerReq(t *testing.T) {
@@ -14,14 +17,15 @@ func TestEncodeTriggerReq(t *testing.T) {
 }
 
 func TestDecodeTriggerReq(t *testing.T) {
-	buffer := protocol.EncodeTriggerReq(1, cluster.Disconnect, 1, 2)
+	req := protocol.EncodeTriggerReq(1, cluster.Disconnect, 1, 2)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, evt, cid, uid, err := protocol.DecodeTriggerReq(buffer.Bytes())
+	evt, cid, uid, err := protocol.DecodeTriggerReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("evt: %v", evt)
 	t.Logf("cid: %v", cid)
 	t.Logf("uid: %v", uid)
@@ -34,9 +38,11 @@ func TestEncodeTriggerRes(t *testing.T) {
 }
 
 func TestDecodeTriggerRes(t *testing.T) {
-	buffer := protocol.EncodeTriggerRes(1, codes.OK)
+	req := protocol.EncodeTriggerRes(1, codes.OK)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, err := protocol.DecodeTriggerRes(buffer.Bytes())
+	code, err := protocol.DecodeTriggerRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

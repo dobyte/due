@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -19,7 +18,8 @@ const (
 )
 
 // EncodeGetStateReq 编码获取状态请求
-// 协议：size + header + route + seq
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq}
 func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateReqBytes-def.SizeBytes))
@@ -31,28 +31,19 @@ func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 }
 
 // DecodeGetStateReq 解码获取状态请求
-// 协议：size + header + route + seq
-func DecodeGetStateReq(data []byte) (seq uint64, err error) {
-	if len(data) != getStateReqBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq}
+func DecodeGetStateReq(buf buffer.Buffer) error {
+	if buf.Len() != 0 {
+		return errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return nil
 }
 
 // EncodeGetStateRes 编码获取状态响应
-// 协议：size + header + route + seq + code + cluster state
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + cluster state}
 func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateResBytes-def.SizeBytes))
@@ -66,34 +57,24 @@ func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.Noc
 }
 
 // DecodeGetStateRes 解码获取状态响应
-// 协议：size + header + route + seq + code + cluster state
-func DecodeGetStateRes(data []byte) (code uint16, state cluster.State, err error) {
-	if len(data) != getStateResBytes {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + cluster state}
+func DecodeGetStateRes(buf buffer.Buffer) (code uint16, state cluster.State, err error) {
+	if buf.Len() != def.CodeBytes+def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	if status, e := reader.ReadUint8(); e != nil {
-		err = e
-	} else {
-		state = cluster.State(status)
-	}
+	data := buf.Bytes()
+	code = binary.BigEndian.Uint16(data[:def.CodeBytes])
+	state = cluster.State(data[def.CodeBytes])
 
 	return
 }
 
 // EncodeSetStateReq 编码设置状态请求
-// 协议：size + header + route + seq + cluster state
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{cluster state}
 func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateReqBytes-def.SizeBytes))
@@ -106,34 +87,22 @@ func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 }
 
 // DecodeSetStateReq 解码设置状态请求
-// 协议：size + header + route + seq + cluster state
-func DecodeSetStateReq(data []byte) (seq uint64, state cluster.State, err error) {
-	if len(data) != setStateReqBytes {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{cluster state}
+func DecodeSetStateReq(buf buffer.Buffer) (state cluster.State, err error) {
+	if buf.Len() != def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	if status, e := reader.ReadUint8(); e != nil {
-		err = e
-	} else {
-		state = cluster.State(status)
-	}
+	state = cluster.State(buf.Bytes()[0])
 
 	return
 }
 
 // EncodeSetStateRes 编码设置状态响应
-// 协议：size + header + route + seq + code
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
 func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateResBytes-def.SizeBytes))
@@ -145,23 +114,13 @@ func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeSetStateRes 解码绑定响应
-// 协议：size + header + route + seq + code
-func DecodeSetStateRes(data []byte) (code uint16, err error) {
-	if len(data) != setStateResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// DecodeSetStateRes 解码设置状态响应
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeSetStateRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }

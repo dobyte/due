@@ -1,27 +1,31 @@
 package protocol_test
 
 import (
-	"github.com/dobyte/due/v2/cluster"
-	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
-	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"testing"
+
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
+	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 )
 
 func TestDecodeGetStateReq(t *testing.T) {
-	buf := protocol.EncodeGetStateReq(1)
+	req := protocol.EncodeGetStateReq(1)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, err := protocol.DecodeGetStateReq(buf.Bytes())
-	if err != nil {
+	if err := protocol.DecodeGetStateReq(buf); err != nil {
 		t.Fatal(err)
 	}
-
-	t.Logf("seq: %v", seq)
 }
 
 func TestDecodeGetStateRes(t *testing.T) {
-	buf := protocol.EncodeGetStateRes(1, codes.OK, cluster.Work)
+	req := protocol.EncodeGetStateRes(1, codes.OK, cluster.Work)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, state, err := protocol.DecodeGetStateRes(buf.Bytes())
+	code, state, err := protocol.DecodeGetStateRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,21 +35,24 @@ func TestDecodeGetStateRes(t *testing.T) {
 }
 
 func TestDecodeSetStateReq(t *testing.T) {
-	buf := protocol.EncodeSetStateReq(1, cluster.Shut)
+	req := protocol.EncodeSetStateReq(1, cluster.Shut)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, state, err := protocol.DecodeSetStateReq(buf.Bytes())
+	state, err := protocol.DecodeSetStateReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("state: %v", state)
 }
 
 func TestDecodeSetStateRes(t *testing.T) {
-	buf := protocol.EncodeSetStateRes(1, codes.OK)
+	req := protocol.EncodeSetStateRes(1, codes.OK)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, err := protocol.DecodeSetStateRes(buf.Bytes())
+	code, err := protocol.DecodeSetStateRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

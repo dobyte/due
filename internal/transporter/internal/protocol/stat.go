@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -18,7 +17,8 @@ const (
 )
 
 // EncodeStatReq 编码统计在线人数请求
-// 协议：size + header + route + seq + session kind
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind}
 func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(statReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-def.SizeBytes))
@@ -31,34 +31,22 @@ func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 }
 
 // DecodeStatReq 解码统计在线人数请求
-// 协议：size + header + route + seq + session kind
-func DecodeStatReq(data []byte) (seq uint64, kind session.Kind, err error) {
-	if len(data) != statReqBytes {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind}
+func DecodeStatReq(buf buffer.Buffer) (kind session.Kind, err error) {
+	if buf.Len() != def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	var k uint8
-
-	if k, err = reader.ReadUint8(); err == nil {
-		kind = session.Kind(k)
-	}
+	kind = session.Kind(buf.Bytes()[0])
 
 	return
 }
 
 // EncodeStatRes 编码统计在线人数响应
-// 协议：size + header + route + seq + code + [total]
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
 func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := statResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
@@ -80,25 +68,19 @@ func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffe
 }
 
 // DecodeStatRes 解码统计在线人数响应
-// 协议：size + header + route + seq + code + [total]
-func DecodeStatRes(data []byte) (code uint16, total uint64, err error) {
-	if len(data) != statResBytes && len(data) != statResBytes-def.B64 {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+func DecodeStatRes(buf buffer.Buffer) (code uint16, total uint64, err error) {
+	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
+	data := buf.Bytes()
+	code = binary.BigEndian.Uint16(data[:def.CodeBytes])
 
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	if code == codes.OK && len(data) == statResBytes {
-		total, err = reader.ReadUint64(binary.BigEndian)
+	if code == codes.OK && buf.Len() == def.CodeBytes+def.B64 {
+		total = binary.BigEndian.Uint64(data[def.CodeBytes:])
 	}
 
 	return

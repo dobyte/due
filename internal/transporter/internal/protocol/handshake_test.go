@@ -2,24 +2,24 @@ package protocol_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/utils/xtime"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
 func TestEncodeHandshakeReq(t *testing.T) {
-	buffer := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(xtime.Now().UnixNano()))
+	buffer := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(time.Now().UnixNano()))
 
 	t.Log(buffer.Bytes())
 }
 
 func TestDecodeHandshakeReq(t *testing.T) {
-	req := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(xtime.Now().UnixNano()))
+	req := protocol.EncodeHandshakeReq(1, cluster.Gate, xuuid.UUID(), uint64(time.Now().UnixNano()))
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

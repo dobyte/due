@@ -36,6 +36,7 @@ type ServerConn struct {
 	kind              cluster.Kind                // 实例类型
 	inst              string                      // 实例ID
 	epoch             uint64                      // 连接时间戳
+	worker            *ServerWorker               // 工作协程
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
@@ -47,6 +48,7 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
+	c.worker = c.svr.allocateWorker()
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
@@ -80,11 +82,26 @@ func (c *ServerConn) Push(buf *buffer.NocopyBuffer) error {
 	return nil
 }
 
+// HandshakeInfo 获取握手信息
+// @return kind 实例类型
+// @return inst 实例ID
+func (s *ServerConn) HandshakeInfo() (cluster.Kind, string) {
+	return s.kind, s.inst
+}
+
+// dispatch 分发消息到工作协程处理
+func (c *ServerConn) dispatch(route uint8, seq uint64, buf *buffer.Bytes) {
+	c.worker.tasks <- &serverTask{conn: c, route: route, seq: seq, buf: buf}
+}
+
 // read 读取消息
 // 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
 // @param conn net.Conn TCP连接
 func (c *ServerConn) read(conn *net.TCPConn) {
-	reader := newReader(conn)
+	var (
+		index  = 0
+		reader = newReader(conn)
+	)
 
 	for {
 		isHeartbeat, rt, seq, buf, err := reader.read()
@@ -111,6 +128,12 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 			if isHeartbeat {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			} else {
+				index++
+
+				if index%10 == 0 {
+					c.lastHeartbeatTime.Store(time.Now().UnixNano())
+				}
+
 				// ignore empty packet
 				if buf.Len() == 0 {
 					buf.Release()
@@ -134,9 +157,7 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 						continue
 					}
 
-					if err := c.svr.messageHandler(c, rt, seq, buf); err != nil {
-						log.Warnf("handle message error: %v", err)
-					}
+					c.dispatch(rt, seq, buf)
 				}
 			}
 		}

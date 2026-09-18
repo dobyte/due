@@ -28,8 +28,8 @@ type session struct {
 }
 
 type ClientConn struct {
-	id            uint64                             // 连接ID
 	cli           *Client                            // 客户端
+	epoch         uint64                             // 连接时间戳
 	mu            sync.Mutex                         // 保护 dialing/状态转换
 	cond          *sync.Cond                         // 拨号完成条件变量
 	rw            sync.RWMutex                       // 配对保护队列写入与关闭，避免向已关闭队列写入panic
@@ -44,8 +44,8 @@ type ClientConn struct {
 
 func newClientConn(cli *Client) *ClientConn {
 	c := &ClientConn{}
-	c.id = cli.idx.Add(1)
 	c.cli = cli
+	c.epoch = cli.doGenEpoch()
 	c.state.Store(connClosed)
 	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
 	c.pending = newPending()
@@ -172,18 +172,16 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 func (c *ClientConn) handshake(s *session) error {
 	const seq = uint64(1)
 
-	// 上报客户端实例级启动代次，重连重发时服务端可按 (insID, epoch, seq) 幂等去重
-	req := protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID, c.id)
+	req := protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID, c.epoch)
+	defer req.Release()
 
-	// 覆盖握手写与读的整次 deadline；DialTimeout 未配置时使用兜底值，防止无响应的对端使握手永久阻塞
-	_ = s.conn.SetDeadline(time.Now().Add(c.cli.opts.DialTimeout))
-
-	if _, err := s.conn.Write(req.Bytes()); err != nil {
-		req.Release()
-		return err
+	if c.cli.opts.DialTimeout > 0 {
+		_ = s.conn.SetDeadline(time.Now().Add(c.cli.opts.DialTimeout))
 	}
 
-	req.Release()
+	if _, err := s.conn.Write(req.Bytes()); err != nil {
+		return err
+	}
 
 	isHeartbeat, rt, rseq, res, err := s.reader.read()
 	if err != nil {
@@ -265,7 +263,7 @@ func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuf
 	}
 
 	if c.cli.opts.CallTimeout > 0 {
-		tctx, tcancel := context.WithTimeout(context.Background(), c.cli.opts.CallTimeout)
+		tctx, tcancel := context.WithTimeout(ctx, c.cli.opts.CallTimeout)
 		defer tcancel()
 
 		select {
@@ -447,6 +445,8 @@ func (c *ClientConn) retry(s *session) {
 }
 
 // close 关闭连接
+// 拨号重试耗尽时调用，将连接置为关闭态。队列保持打开以支持后续重连补发消息，
+// 但需主动唤醒所有等待中的调用，避免其阻塞至调用超时
 func (c *ClientConn) close() {
 	c.mu.Lock()
 	if c.state.Load() == connClosed {
@@ -467,6 +467,8 @@ func (c *ClientConn) close() {
 		}
 		s.cancel()
 	}
+
+	c.pending.closeAll()
 }
 
 // destroy 销毁连接

@@ -1,29 +1,35 @@
 package protocol_test
 
 import (
+	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/session"
-	"testing"
 )
 
 func TestDecodeIsOnlineReq(t *testing.T) {
-	buffer := protocol.EncodeIsOnlineReq(1, session.User, 1)
+	req := protocol.EncodeIsOnlineReq(1, session.User, 1)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, kind, target, err := protocol.DecodeIsOnlineReq(buffer.Bytes())
+	kind, target, err := protocol.DecodeIsOnlineReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
 	t.Logf("target: %v", target)
 }
 
 func TestDecodeIsOnlineRes(t *testing.T) {
-	buffer := protocol.EncodeIsOnlineRes(1, codes.NotFoundSession, false)
+	req := protocol.EncodeIsOnlineRes(1, codes.NotFoundSession, false)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, isOnline, err := protocol.DecodeIsOnlineRes(buffer.Bytes())
+	code, isOnline, err := protocol.DecodeIsOnlineRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

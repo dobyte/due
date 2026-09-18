@@ -1,27 +1,33 @@
 package protocol_test
 
 import (
+	"testing"
+
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/session"
-	"testing"
 )
 
 func TestDecodeStatReq(t *testing.T) {
-	buffer := protocol.EncodeStatReq(1, session.User)
+	req := protocol.EncodeStatReq(1, session.User)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, kind, err := protocol.DecodeStatReq(buffer.Bytes())
+	kind, err := protocol.DecodeStatReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("kind: %v", kind)
 }
 
 func TestDecodeStatRes(t *testing.T) {
-	buffer := protocol.EncodeStatRes(1, 2000)
+	req := protocol.EncodeStatRes(1, 2000)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, total, err := protocol.DecodeStatRes(buffer.Bytes())
+	code, total, err := protocol.DecodeStatRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

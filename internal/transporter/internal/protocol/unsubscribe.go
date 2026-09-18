@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -17,7 +16,8 @@ const (
 )
 
 // EncodeUnsubscribeReq 编码取消订阅频道请求（单次最多取消订阅65535个对象）
-// 协议：size + header + route + seq + session kind + count + targets + channel
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
 func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
@@ -35,41 +35,39 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 }
 
 // DecodeUnsubscribeReq 解码取消订阅频道请求
-// 协议：size + header + route + seq + session kind + count + targets + channel
-func DecodeUnsubscribeReq(data []byte) (seq uint64, kind session.Kind, targets []int64, channel string, err error) {
-	reader := buffer.NewReader(data)
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
+func DecodeUnsubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64, channel string, err error) {
+	data := buf.Bytes()
 
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
+	if len(data) < def.B8+def.B16 {
+		err = errors.ErrInvalidMessage
 		return
 	}
 
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
+	kind = session.Kind(data[0])
+	count := int(binary.BigEndian.Uint16(data[def.B8 : def.B8+def.B16]))
+
+	offset := def.B8 + def.B16 + count*def.B64
+	if len(data) < offset {
+		err = errors.ErrInvalidMessage
 		return
 	}
 
-	var k uint8
-	if k, err = reader.ReadUint8(); err != nil {
-		return
-	} else {
-		kind = session.Kind(k)
+	targets = make([]int64, count)
+	for i := range count {
+		start := def.B8 + def.B16 + i*def.B64
+		targets[i] = int64(binary.BigEndian.Uint64(data[start : start+def.B64]))
 	}
 
-	count, err := reader.ReadUint16(binary.BigEndian)
-	if err != nil {
-		return
-	}
-
-	if targets, err = reader.ReadInt64s(binary.BigEndian, int(count)); err != nil {
-		return
-	}
-
-	channel = string(data[unsubscribeReqBytes+8*int(count):])
+	channel = string(data[offset:])
 
 	return
 }
 
 // EncodeUnsubscribeRes 编码取消订阅频道响应
-// 协议：size + header + route + seq + code
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
 func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unsubscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-def.SizeBytes))
@@ -82,22 +80,12 @@ func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 }
 
 // DecodeUnsubscribeRes 解码取消订阅频道响应
-// 协议：size + header + route + seq + code
-func DecodeUnsubscribeRes(data []byte) (code uint16, err error) {
-	if len(data) != unsubscribeResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeUnsubscribeRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }

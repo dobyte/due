@@ -14,7 +14,7 @@ import (
 )
 
 type Client struct {
-	id    atomic.Uint64
+	epoch atomic.Uint64
 	opts  *ClientOptions
 	addr  *net.TCPAddr
 	idx   atomic.Uint64
@@ -101,6 +101,7 @@ func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 			conn := newClientConn(c)
 
 			if err := conn.dial(); err != nil {
+				conn.destroy()
 				return err
 			}
 
@@ -134,47 +135,46 @@ func (c *Client) Close() error {
 
 // Call 调用
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
-	if err := ctx.Err(); err != nil {
+	if conn, err := c.doLoadConn(ctx, idx...); err != nil {
 		buf.Release()
 		return nil, err
+	} else {
+		return conn.call(ctx, seq, buf)
 	}
-
-	conn := c.load(idx...)
-
-	if conn == nil {
-		buf.Release()
-		return nil, errors.ErrClientClosed
-	}
-
-	return conn.call(ctx, seq, buf)
 }
 
 // Push 发送消息
 func (c *Client) Push(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
-	if err := ctx.Err(); err != nil {
+	if conn, err := c.doLoadConn(ctx, idx...); err != nil {
 		buf.Release()
 		return err
+	} else {
+		return conn.push(buf)
 	}
-
-	conn := c.load(idx...)
-
-	if conn == nil {
-		buf.Release()
-		return errors.ErrClientClosed
-	}
-
-	return conn.push(buf)
 }
 
 // 获取连接
-func (c *Client) load(idx ...int64) *ClientConn {
+func (c *Client) doLoadConn(ctx context.Context, idx ...int64) (*ClientConn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	if n := len(c.conns); n > 0 {
 		if len(idx) > 0 && idx[0] >= 0 {
-			return c.conns[idx[0]%int64(n)]
+			return c.conns[idx[0]%int64(n)], nil
 		} else {
-			return c.conns[(c.idx.Add(1)-1)%uint64(n)]
+			return c.conns[(c.idx.Add(1)-1)%uint64(n)], nil
 		}
 	}
 
-	return nil
+	return nil, errors.ErrClientClosed
+}
+
+// 生成连接时间戳
+func (c *Client) doGenEpoch() uint64 {
+	if epoch := c.epoch.Add(1); epoch == 0 {
+		return c.epoch.Add(1)
+	} else {
+		return epoch
+	}
 }

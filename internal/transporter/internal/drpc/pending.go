@@ -48,22 +48,17 @@ type calls struct {
 }
 
 // 提取
-func (p *calls) reply(seq uint64, buf *buffer.Bytes) bool {
+func (p *calls) reply(seq uint64, buf *buffer.Bytes) (ok bool) {
+	var ch chan *buffer.Bytes
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if ch, ok := p.calls[seq]; ok {
+	if ch, ok = p.calls[seq]; ok {
 		delete(p.calls, seq)
-
-		select {
-		case ch <- buf:
-			return true
-		default:
-			return false
-		}
-	} else {
-		return false
+		ch <- buf
 	}
+	p.mu.Unlock()
+
+	return
 }
 
 // 存储
@@ -74,28 +69,25 @@ func (p *calls) store(seq uint64, ch chan *buffer.Bytes) {
 }
 
 // 删除
-func (p *calls) delete(seq uint64) bool {
+func (p *calls) delete(seq uint64) (ok bool) {
+	var ch chan *buffer.Bytes
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if ch, ok := p.calls[seq]; ok {
+	if ch, ok = p.calls[seq]; ok {
 		close(ch)
-
 		delete(p.calls, seq)
-
-		return true
-	} else {
-		return false
 	}
+	p.mu.Unlock()
+
+	return
 }
 
 // closeAll 关闭所有等待中的调用
 func (p *calls) closeAll() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	for seq, ch := range p.calls {
 		close(ch)
 		delete(p.calls, seq)
 	}
+	p.mu.Unlock()
 }

@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -16,7 +15,8 @@ const (
 )
 
 // EncodeDeliverReq 编码投递消息请求
-// 协议：size + header + route + seq + cid + uid + <message packet>
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid + <message packet>}
 func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(deliverReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(deliverReqBytes-def.SizeBytes+buf.Len()))
@@ -29,28 +29,20 @@ func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buff
 }
 
 // DecodeDeliverReq 解码投递消息请求
-func DecodeDeliverReq(data []byte) (seq uint64, cid int64, uid int64, message []byte, err error) {
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid + <message packet>}
+func DecodeDeliverReq(req *buffer.Bytes) (int64, int64, *buffer.Bytes, error) {
+	if req.Len() < def.B64*2 {
+		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
+	data := req.Bytes()
+	cid := int64(binary.BigEndian.Uint64(data[:def.B64]))
+	uid := int64(binary.BigEndian.Uint64(data[def.B64 : def.B64*2]))
 
-	if cid, err = reader.ReadInt64(binary.BigEndian); err != nil {
-		return
-	}
+	req.MoveTo(def.B64 * 2)
 
-	if uid, err = reader.ReadInt64(binary.BigEndian); err != nil {
-		return
-	}
-
-	message = data[deliverReqBytes:]
-
-	return
+	return cid, uid, req, nil
 }
 
 // EncodeDeliverRes 编码投递消息响应
@@ -67,22 +59,12 @@ func EncodeDeliverRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 }
 
 // DecodeDeliverRes 解码投递消息响应
-// 协议：size + header + route + seq + code
-func DecodeDeliverRes(data []byte) (code uint16, err error) {
-	if len(data) != deliverResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeDeliverRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }

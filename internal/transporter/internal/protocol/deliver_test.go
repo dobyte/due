@@ -5,6 +5,7 @@ import (
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
+	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 )
 
@@ -15,17 +16,18 @@ func TestEncodeDeliverReq(t *testing.T) {
 }
 
 func TestDecodeDeliverReq(t *testing.T) {
-	buffer := protocol.EncodeDeliverReq(1, 2, 3, buffer.NewNocopyBuffer([]byte("hello world")))
+	req := protocol.EncodeDeliverReq(1, 2, 3, buffer.NewNocopyBuffer([]byte("hello world")))
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	seq, cid, uid, message, err := protocol.DecodeDeliverReq(buffer.Bytes())
+	cid, uid, data, err := protocol.DecodeDeliverReq(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("seq: %v", seq)
 	t.Logf("cid: %v", cid)
 	t.Logf("uid: %v", uid)
-	t.Logf("message: %v", string(message))
+	t.Logf("message: %v", string(data.Bytes()))
 }
 
 func TestEncodeDeliverRes(t *testing.T) {
@@ -35,9 +37,11 @@ func TestEncodeDeliverRes(t *testing.T) {
 }
 
 func TestDecodeDeliverRes(t *testing.T) {
-	buffer := protocol.EncodePushRes(1, codes.OK)
+	req := protocol.EncodeDeliverRes(1, codes.OK)
+	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
+	defer req.Release()
 
-	code, err := protocol.DecodeDeliverRes(buffer.Bytes())
+	code, err := protocol.DecodeDeliverRes(buf)
 	if err != nil {
 		t.Fatal(err)
 	}

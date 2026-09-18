@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -16,7 +15,8 @@ const (
 )
 
 // EncodeUnbindReq 编码解绑请求
-// 协议：size + header + route + seq + uid
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{uid}
 func EncodeUnbindReq(seq uint64, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindReqBytes-def.SizeBytes))
@@ -29,32 +29,22 @@ func EncodeUnbindReq(seq uint64, uid int64) *buffer.NocopyBuffer {
 }
 
 // DecodeUnbindReq 解码解绑请求
-// 协议：size + header + route + seq + uid
-func DecodeUnbindReq(data []byte) (seq uint64, uid int64, err error) {
-	if len(data) != unbindReqBytes {
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{uid}
+func DecodeUnbindReq(buf buffer.Buffer) (uid int64, err error) {
+	if buf.Len() != def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	if uid, err = reader.ReadInt64(binary.BigEndian); err != nil {
-		return
-	}
+	uid = int64(binary.BigEndian.Uint64(buf.Bytes()))
 
 	return
 }
 
 // EncodeUnbindRes 编码解绑响应
-// 协议：size + header + route + seq + code
+// 注意：buf 包含全段协议
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
 func EncodeUnbindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindResBytes-def.SizeBytes))
@@ -67,22 +57,12 @@ func EncodeUnbindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 }
 
 // DecodeUnbindRes 解码解绑响应
-// 协议：size + header + route + seq + code
-func DecodeUnbindRes(data []byte) (code uint16, err error) {
-	if len(data) != unbindResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeUnbindRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -34,15 +35,19 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 // @param nid string 节点ID
 // @param cid int64 连接ID
 // @param uid int64 用户ID
-// @param message []byte 消息字节
+// @param buf buffer.Buffer 消息缓冲区
 // @return @1 error 投递失败时返回的错误
-func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, message []byte) error {
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
 	if p.node.isShut() {
+		buf.Release()
 		return errors.ErrNodeShutdown
 	}
 
-	msg, err := packet.UnpackMessage(message)
+	// TODO：buf 未进行释放，存在内存泄露的问题
+
+	msg, err := packet.UnpackMessage(buf)
 	if err != nil {
+		buf.Release()
 		return err
 	}
 

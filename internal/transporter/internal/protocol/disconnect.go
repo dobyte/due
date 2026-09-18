@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
@@ -17,7 +16,8 @@ const (
 )
 
 // EncodeDisconnectReq 编码断连请求
-// 协议：size + header + route + seq + session kind + target + force
+// 注意：buf 包含全段协议
+// 协议：{size + header + route + seq} + 私有段：{session kind + target + force}
 func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-def.SizeBytes))
@@ -31,44 +31,26 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeDisconnectReq 解码端连请求
-// 协议：size + header + route + seq + session kind + target + force
-func DecodeDisconnectReq(data []byte) (seq uint64, kind session.Kind, target int64, force bool, err error) {
-	if len(data) != disconnectReqBytes {
+// DecodeDisconnectReq 解码断连请求
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target + force}
+func DecodeDisconnectReq(buf buffer.Buffer) (kind session.Kind, target int64, force bool, err error) {
+	if buf.Len() != def.B8+def.B64+def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(def.SizeBytes+def.HeaderBytes+def.RouteBytes, io.SeekStart); err != nil {
-		return
-	}
-
-	if seq, err = reader.ReadUint64(binary.BigEndian); err != nil {
-		return
-	}
-
-	var k uint8
-	if k, err = reader.ReadUint8(); err != nil {
-		return
-	} else {
-		kind = session.Kind(k)
-	}
-
-	if target, err = reader.ReadInt64(binary.BigEndian); err != nil {
-		return
-	}
-
-	if force, err = reader.ReadBool(); err != nil {
-		return
-	}
+	data := buf.Bytes()
+	kind = session.Kind(data[0])
+	target = int64(binary.BigEndian.Uint64(data[def.B8 : def.B8+def.B64]))
+	force = data[def.B8+def.B64] == 1
 
 	return
 }
 
 // EncodeDisconnectRes 编码断连响应
-// 协议：size + header + route + seq + code
+// 注意：buf 包含全段协议
+// 协议：{size + header + route + seq} + 私有段：{code}
 func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-def.SizeBytes))
@@ -81,22 +63,12 @@ func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 }
 
 // DecodeDisconnectRes 解码断连响应
-// 协议：size + header + route + seq + code
-func DecodeDisconnectRes(data []byte) (code uint16, err error) {
-	if len(data) != disconnectResBytes {
-		err = errors.ErrInvalidMessage
-		return
+// 注意：buf 仅包含私有段
+// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+func DecodeDisconnectRes(buf buffer.Buffer) (uint16, error) {
+	if buf.Len() != def.CodeBytes {
+		return 0, errors.ErrInvalidMessage
 	}
 
-	reader := buffer.NewReader(data)
-
-	if _, err = reader.Seek(-def.CodeBytes, io.SeekEnd); err != nil {
-		return
-	}
-
-	if code, err = reader.ReadUint16(binary.BigEndian); err != nil {
-		return
-	}
-
-	return
+	return binary.BigEndian.Uint16(buf.Bytes()), nil
 }
