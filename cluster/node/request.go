@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
@@ -24,17 +25,21 @@ import (
 
 // 请求上下文
 type request struct {
-	node    *Node
-	ctx     context.Context  // 上下文
-	gid     string           // 来源网关ID
-	nid     string           // 来源节点ID
-	pid     string           // 来源Actor ID
-	cid     int64            // 连接ID
-	uid     int64            // 用户ID
-	message *cluster.Message // 请求消息
-	version atomic.Int32     // 版本号
-	chain   *chains.Chain    // 调用链
-	actor   atomic.Value     // 当前Actor
+	node  *Node
+	ctx   context.Context // 上下文
+	gid   string          // 来源网关ID
+	nid   string          // 来源节点ID
+	pid   string          // 来源Actor ID
+	cid   int64           // 连接ID
+	uid   int64           // 用户ID
+	seq   int32           // 消息序列号
+	route int32           // 消息路由号
+	data  any             // 消息数据
+
+	// message *cluster.Message // 请求消息
+	version atomic.Int32  // 版本号
+	chain   *chains.Chain // 调用链
+	actor   atomic.Value  // 当前Actor
 }
 
 // GID 获取网关ID
@@ -59,12 +64,12 @@ func (r *request) UID() int64 {
 
 // Seq 获取消息序列号
 func (r *request) Seq() int32 {
-	return r.message.Seq
+	return r.seq
 }
 
 // Route 获取消息路由号
 func (r *request) Route() int32 {
-	return r.message.Route
+	return r.route
 }
 
 // Event 获取事件类型
@@ -137,15 +142,16 @@ func (r *request) compareVersionExecDefer(version int32) {
 // Clone 克隆Context
 func (r *request) Clone() Context {
 	c := r.node.reqPool.Get().(*request)
+	c.ctx = context.Background()
 	c.gid = r.gid
 	c.nid = r.nid
 	c.cid = r.cid
 	c.uid = r.uid
 	c.pid = r.pid
-	c.ctx = context.Background()
-	c.message.Seq = r.message.Seq
-	c.message.Route = r.message.Route
-	c.message.Data = r.message.Data
+	c.seq = r.seq
+	// TODO: 克隆数据，存在问题
+	c.data = r.data
+	c.route = r.route
 	c.actor.Store(r.actor.Load())
 
 	return c
@@ -409,8 +415,8 @@ func (r *request) Reply(message *cluster.Message) error {
 // Response 响应消息
 func (r *request) Response(message any) error {
 	return r.Reply(&cluster.Message{
-		Route: r.message.Route,
-		Seq:   r.message.Seq,
+		Route: r.route,
+		Seq:   r.seq,
 		Data:  message,
 	})
 }
@@ -496,11 +502,18 @@ func (r *request) release() {
 	r.uid = 0
 	r.pid = ""
 	r.nid = ""
-	r.message.Seq = 0
-	r.message.Route = 0
-	r.message.Data = nil
+	r.seq = 0
+	r.route = 0
 	r.version.Store(0)
 	r.actor.Store((*Actor)(nil))
+
+	switch d := r.data.(type) {
+	case buffer.Buffer:
+		d.Release()
+		r.data = nil
+	case []byte:
+		r.data = nil
+	}
 
 	if r.chain != nil {
 		r.chain.Release()

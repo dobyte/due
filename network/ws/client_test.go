@@ -60,12 +60,12 @@ func TestClientServerEcho(t *testing.T) {
 
 	select {
 	case got := <-received:
-		message, err := packet.UnpackMessage(got)
+		route, seq, buf, err := packet.UnpackMessage(got)
 		if err != nil {
 			t.Fatalf("unpack echo message failed: %v", err)
 		}
-		if message.Seq != 1 || message.Route != 2 || string(message.Buffer) != "hello websocket" {
-			t.Fatalf("unexpected echo message: seq=%d route=%d body=%q", message.Seq, message.Route, string(message.Buffer))
+		if seq != 1 || route != 2 || string(buf.Bytes()) != "hello websocket" {
+			t.Fatalf("unexpected echo message: seq=%d route=%d body=%q", seq, route, string(buf.Bytes()))
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout waiting for echo message")

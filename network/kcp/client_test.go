@@ -31,13 +31,13 @@ func TestClient_Simple(t *testing.T) {
 	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
 		defer buf.Release()
 
-		message, err := packet.UnpackMessage(buf)
+		route, seq, data, err := packet.UnpackMessage(buf)
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
 		}
 
-		log.Infof("receive msg from server, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+		log.Infof("receive msg from server, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), seq, route, string(data.Bytes()))
 	})
 
 	conn, err := client.Dial()

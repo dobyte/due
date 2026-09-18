@@ -48,17 +48,8 @@ func PackMessage(message *Message) (buffer.Buffer, error) {
 // @param buf buffer.Buffer 消息缓冲区
 // @return @1 *Message 消息对象
 // @return @2 error 解包失败时返回的错误
-func UnpackMessage(buf buffer.Buffer) (*Message, error) {
+func UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	return globalPacker.UnpackMessage(buf)
-}
-
-// UnpackRouteSeq 解包路由与序列号
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 int32 路由
-// @return @2 int32 序列号
-// @return @3 error 解包失败时返回的错误
-func UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error) {
-	return globalPacker.UnpackRouteSeq(buf)
 }
 
 // PackHeartbeat 打包心跳

@@ -34,13 +34,7 @@ type Packer interface {
 	// @param buf buffer.Buffer 消息缓冲区
 	// @return @1 *Message 消息对象
 	// @return @2 error 解包失败时返回的错误
-	UnpackMessage(buf buffer.Buffer) (*Message, error)
-	// UnpackRouteSeq 解包路由与序列号
-	// @param buf buffer.Buffer 消息缓冲区
-	// @return @1 int32 路由
-	// @return @2 int32 序列号
-	// @return @3 error 解包失败时返回的错误
-	UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error)
+	UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error)
 	// PackHeartbeat 打包心跳
 	// @param server ...bool 是否为服务端心跳
 	// @return @1 buffer.Buffer 心跳包缓冲区
@@ -230,114 +224,64 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 }
 
 // UnpackMessage 解包消息
-// 校验消息长度与数据标识后解析原始缓冲区内容为消息对象
-// @param buf buffer.Buffer 待解包的原始消息缓冲区
-// @return @1 *Message 解包后的消息对象
-// @return @2 error 消息非法或解析失败时返回的错误
-func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (*Message, error) {
-	route, seq, buffer, err := p.unpackMessage(buf.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	return &Message{Route: route, Seq: seq, Buffer: buffer}, nil
-}
-
-// UnpackRouteSeq 解包路由与序列号
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 int32 路由
-// @return @2 int32 序列号
-// @return @3 error 解包失败时返回的错误
-func (p *defaultPacker) UnpackRouteSeq(buf buffer.Buffer) (int32, int32, error) {
-	route, seq, _, err := p.unpackMessage(buf.Bytes())
-	return route, seq, err
-}
-
-// unpackMessage 解包消息
 // @param data []byte 待解包的原始消息缓冲区
 // @return @1 int32 路由
 // @return @2 int32 序列号
-// @return @3 []byte 消息内容
+// @return @3 *buffer.Bytes 消息内容
 // @return @4 error 解包失败时返回的错误
-func (p *defaultPacker) unpackMessage(data []byte) (int32, int32, []byte, error) {
+func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	var (
-		ln     = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
-		reader = buffer.NewReader(data)
-		route  int32
-		seq    int32
+		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
+		data = buf.Bytes()
 	)
 
-	if len(data)-ln < 0 {
+	if len(data) < ln {
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	size, err := reader.ReadUint32(p.opts.byteOrder)
-	if err != nil {
-		return 0, 0, nil, err
-	}
+	size := p.opts.byteOrder.Uint32(data[:defaultSizeBytes])
 
 	if uint64(len(data))-defaultSizeBytes != uint64(size) {
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	header, err := reader.ReadUint8()
-	if err != nil {
-		return 0, 0, nil, err
-	}
+	header := data[defaultSizeBytes]
 
 	if header&heartbeatBit == heartbeatBit {
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
+	var route int32
+
 	switch p.opts.routeBytes {
 	case 1:
-		if r, err := reader.ReadInt8(); err != nil {
-			return 0, 0, nil, err
-		} else {
-			route = int32(r)
-		}
+		route = int32(data[defaultSizeBytes+defaultHeaderBytes])
 	case 2:
-		if r, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
-			return 0, 0, nil, err
-		} else {
-			route = int32(r)
-		}
+		route = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	case 4:
-		if r, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
-			return 0, 0, nil, err
-		} else {
-			route = r
-		}
+		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	default:
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
+
+	var seq int32
 
 	switch p.opts.seqBytes {
 	case 0:
 		// ignore seq
 	case 1:
-		if r, err := reader.ReadInt8(); err != nil {
-			return 0, 0, nil, err
-		} else {
-			seq = int32(r)
-		}
+		seq = int32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])
 	case 2:
-		if r, err := reader.ReadInt16(p.opts.byteOrder); err != nil {
-			return 0, 0, nil, err
-		} else {
-			seq = int32(r)
-		}
+		seq = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
 	case 4:
-		if r, err := reader.ReadInt32(p.opts.byteOrder); err != nil {
-			return 0, 0, nil, err
-		} else {
-			seq = r
-		}
+		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
 	default:
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	return route, seq, data[ln:], nil
+	buf.MoveTo(ln)
+
+	return route, seq, buf, nil
 }
 
 // PackHeartbeat 打包心跳

@@ -37,7 +37,7 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 // @param uid int64 用户ID
 // @param buf buffer.Buffer 消息缓冲区
 // @return @1 error 投递失败时返回的错误
-func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf *buffer.Bytes) error {
 	if p.node.isShut() {
 		buf.Release()
 		return errors.ErrNodeShutdown

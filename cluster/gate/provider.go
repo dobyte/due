@@ -130,23 +130,22 @@ func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int
 func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error {
 	if p.gate.isShut() {
 		buf.Release()
-
 		return errors.ErrGateShutdown
-	} else {
-		if err := p.gate.session.Push(kind, target, disconnect, buf); err != nil {
-			if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
-				task.Add(func() {
-					if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); e != nil {
-						log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, e)
-					}
-				})
-			}
+	}
 
-			return err
+	if err := p.gate.session.Push(kind, target, disconnect, buf); err != nil {
+		if kind == session.User && errors.Is(err, errors.ErrNotFoundSession) {
+			task.Add(func() {
+				if e := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id); e != nil {
+					log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, e)
+				}
+			})
 		}
 
-		return nil
+		return err
 	}
+
+	return nil
 }
 
 // Multicast 推送组播消息

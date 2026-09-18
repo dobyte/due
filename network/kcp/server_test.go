@@ -34,13 +34,13 @@ func TestServer_Simple(t *testing.T) {
 	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
 		defer buf.Release()
 
-		message, err := packet.UnpackMessage(buf)
+		route, seq, data, err := packet.UnpackMessage(buf)
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
 		}
 
-		log.Infof("receive message from client, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), message.Seq, message.Route, string(message.Buffer))
+		log.Infof("receive message from client, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), seq, route, string(data.Bytes()))
 
 		msg, err := packet.PackMessage(&packet.Message{
 			Seq:    1,
@@ -76,16 +76,16 @@ func TestServer_Benchmark(t *testing.T) {
 	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
 		defer buf.Release()
 
-		message, err := packet.UnpackMessage(buf)
+		route, seq, data, err := packet.UnpackMessage(buf)
 		if err != nil {
 			log.Errorf("unpack message failed: %v", err)
 			return
 		}
 
 		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    message.Seq,
-			Route:  message.Route,
-			Buffer: message.Buffer,
+			Seq:    seq,
+			Route:  route,
+			Buffer: data.Bytes(),
 		})
 		if err != nil {
 			log.Errorf("pack message failed: %v", err)

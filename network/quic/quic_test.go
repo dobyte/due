@@ -126,12 +126,12 @@ func TestWelcomeWithoutPeriodicHeartbeat(t *testing.T) {
 		if order.Load() != 1 {
 			t.Error("receive preceded connect")
 		}
-		msg, err := packet.UnpackMessage(buf)
+		_, _, data, err := packet.UnpackMessage(buf)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		received <- string(msg.Buffer)
+		received <- string(data.Bytes())
 		_ = c.Close(true)
 	})
 	disconnected := make(chan struct{}, 1)
@@ -153,12 +153,12 @@ func TestGracefulCloseDeliversAcceptedMessages(t *testing.T) {
 	received := make(chan []byte, count)
 	s.OnReceive(func(_ network.Conn, buf buffer.Buffer) {
 		defer buf.Release()
-		msg, err := packet.UnpackMessage(buf)
+		_, _, data, err := packet.UnpackMessage(buf)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		received <- bytes.Clone(msg.Buffer)
+		received <- bytes.Clone(data.Bytes())
 	})
 	startServer(t, s)
 	c := dialClient(t, s, cert, WithClientCloseTimeout(time.Second))
@@ -274,6 +274,7 @@ func (b *trackedBuffer) Bytes() []byte                        { return b.data }
 func (b *trackedBuffer) VisitBytes(fn func([]byte) bool) bool { return fn(b.data) }
 func (b *trackedBuffer) Delay(int)                            {}
 func (b *trackedBuffer) Release()                             { b.releases.Add(1) }
+func (b *trackedBuffer) MoveTo(int) bool                      { return false }
 
 func TestFullQueueCloseAndOwnership(t *testing.T) {
 	s, cert := testServer(t)

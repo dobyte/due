@@ -174,40 +174,46 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 // @param conn network.Conn 消息来源连接
 // @param data []byte 原始消息内容
 func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
-	defer buf.Release()
-
 	val, ok := c.conns.Load(conn)
 	if !ok {
+		buf.Release()
 		return
 	}
 
-	message, err := packet.UnpackMessage(buf)
+	route, seq, data, err := packet.UnpackMessage(buf)
 	if err != nil {
+		buf.Release()
 		log.Errorf("unpack message failed: %v", err)
 		return
 	}
 
-	if handlers, ok := c.routes.Load().(map[int32][]RouteHandler)[message.Route]; ok {
+	if handlers, ok := c.routes.Load().(map[int32][]RouteHandler)[route]; ok {
 		for _, handler := range handlers {
 			xcall.Call(func() {
 				handler(&Context{
-					ctx:     context.Background(),
-					conn:    val.(*Conn),
-					message: message,
+					ctx:   context.Background(),
+					conn:  val.(*Conn),
+					route: route,
+					seq:   seq,
+					buf:   data,
 				})
 			})
 		}
 	} else if handler := c.defaultRouteHandler.Load().(RouteHandler); handler != nil {
 		xcall.Call(func() {
 			handler(&Context{
-				ctx:     context.Background(),
-				conn:    val.(*Conn),
-				message: message,
+				ctx:   context.Background(),
+				conn:  val.(*Conn),
+				route: route,
+				seq:   seq,
+				buf:   data,
 			})
 		})
 	} else {
-		log.Debugf("route handler is not registered, route: %v", message.Route)
+		log.Debugf("route handler is not registered, route: %v", route)
 	}
+
+	buf.Release()
 }
 
 // 拨号
