@@ -1,8 +1,8 @@
 package limiter
 
 import (
-	"github.com/dobyte/due/v2/utils/xtime"
 	"sync"
+	"time"
 )
 
 // Limiter 令牌桶限流器实现
@@ -11,7 +11,7 @@ type Limiter struct {
 	cap          float64
 	num          float64
 	rate         float64
-	lastFillTime xtime.Time
+	lastFillTime time.Time
 }
 
 func NewLimiter(cap, rate float64) *Limiter {
@@ -19,7 +19,7 @@ func NewLimiter(cap, rate float64) *Limiter {
 		cap:          cap,
 		num:          cap,
 		rate:         rate,
-		lastFillTime: xtime.Now(),
+		lastFillTime: time.Now(),
 	}
 }
 
@@ -35,7 +35,7 @@ func (l *Limiter) doAllow(n int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := xtime.Now()
+	now := time.Now()
 	num := now.Sub(l.lastFillTime).Seconds() * l.rate
 
 	if num > 0 {
