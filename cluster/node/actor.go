@@ -284,9 +284,9 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	req.nid = a.scheduler.node.opts.id
 	req.uid = uid
 	req.ctx = context.Background()
-	req.message.Seq = message.Seq
-	req.message.Route = message.Route
-	req.message.Data = buf
+	req.seq = message.Seq
+	req.route = message.Route
+	req.message = buf
 
 	return a.Next(req)
 }
@@ -323,9 +323,24 @@ func (a *Actor) destroy() bool {
 		return false
 	}
 
+	if a.opts.dispatch {
+		a.scheduler.releaseKind(a.Kind())
+	}
+
 	a.scheduler.batchUnbindActor(func(relations map[int64]map[string]*Actor) {
-		a.binds.Range(func(uid, _ any) bool {
-			delete(relations[uid.(int64)], a.Kind())
+		a.binds.Range(func(k, _ any) bool {
+			uid := k.(int64)
+
+			if rels, ok := relations[uid]; ok {
+				delete(rels, a.Kind())
+
+				if len(rels) == 0 {
+					delete(relations, uid)
+				}
+			}
+
+			a.binds.Delete(k)
+
 			return true
 		})
 	})

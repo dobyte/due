@@ -44,6 +44,15 @@ func PackMessage(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackMessage(message)
 }
 
+// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
+// @param buf buffer.Buffer 消息缓冲区
+// @return @1 int32 路由
+// @return @2 int32 序列号
+// @return @3 error 解包失败时返回的错误
+func ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
+	return globalPacker.ExtractRouteSeq(buf)
+}
+
 // UnpackMessage 解包消息
 // @param buf buffer.Buffer 消息缓冲区
 // @return @1 *Message 消息对象

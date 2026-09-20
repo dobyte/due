@@ -181,12 +181,11 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 
 	switch b := args.Buffer.(type) {
 	case []byte:
-		buf = buffer.NewNocopyBuffer(b)
+		buf = buffer.NewBytes(b)
 	case buffer.Buffer:
 		buf = b
 	case *Message:
 		if buf, err = l.PackMessage(b, false); err != nil {
-			buf.Release()
 			return err
 		}
 	default:

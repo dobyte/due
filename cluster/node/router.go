@@ -164,18 +164,18 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 // @param uid int64 用户ID
 // @param seq int32 消息序列号
 // @param route int32 路由号
-// @param data any 消息内容
+// @param message any 消息内容
 // @return @1 error 消息入队失败时返回的错误
-func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, data any) error {
+func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, message any) error {
 	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
 	req.nid = nid
 	req.pid = pid
 	req.cid = cid
 	req.uid = uid
-	req.message.Seq = seq
-	req.message.Route = route
-	req.message.Data = data
+	req.seq = seq
+	req.route = route
+	req.message = message
 
 	if r.node.opts.ctxFunc != nil {
 		req.ctx = r.node.opts.ctxFunc()
@@ -234,10 +234,10 @@ func (r *Router) handle(req *request) {
 
 	version := req.incrVersion()
 
-	route, ok := r.routes[req.message.Route]
+	route, ok := r.routes[req.route]
 	if !ok && r.defaultRouteHandler == nil {
 		req.compareVersionRecycle(version)
-		log.Warnf("message routing does not register handler function, route: %v", req.message.Route)
+		log.Warnf("message routing does not register handler function, route: %v", req.route)
 		return
 	}
 

@@ -97,10 +97,10 @@ func (w *Writer) Release() {
 	}
 }
 
-// MoveTo 移动游标到指定位置
-func (w *Writer) MoveTo(pos int) bool {
-	if pos >= 0 && pos <= w.upper && pos >= w.lower {
-		w.lower = pos
+// Slide 滑动lower索引
+func (w *Writer) Slide(delta int) bool {
+	if delta >= 0 && delta+w.lower <= w.upper {
+		w.lower += delta
 		return true
 	}
 

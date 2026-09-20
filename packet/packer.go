@@ -30,6 +30,12 @@ type Packer interface {
 	// @return @1 buffer.Buffer 打包后的消息缓冲区
 	// @return @2 error 打包失败时返回的错误
 	PackMessage(message *Message) (buffer.Buffer, error)
+	// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
+	// @param buf buffer.Buffer 消息缓冲区
+	// @return @1 int32 路由
+	// @return @2 int32 序列号
+	// @return @3 error 解包失败时返回的错误
+	ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	// UnpackMessage 解包消息
 	// @param buf buffer.Buffer 消息缓冲区
 	// @return @1 *Message 消息对象
@@ -223,6 +229,64 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	return buffer.NewNocopyBuffer(writer, message.Buffer), nil
 }
 
+// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
+// @param buf buffer.Buffer 消息缓冲区
+// @return @1 int32 路由
+// @return @2 int32 序列号
+// @return @3 error 解包失败时返回的错误
+func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
+	var (
+		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
+		data = buf.Bytes()
+	)
+
+	if len(data) < ln {
+		return 0, 0, errors.ErrInvalidMessage
+	}
+
+	size := p.opts.byteOrder.Uint32(data[:defaultSizeBytes])
+
+	if uint64(len(data))-defaultSizeBytes != uint64(size) {
+		return 0, 0, errors.ErrInvalidMessage
+	}
+
+	header := data[defaultSizeBytes]
+
+	if header&heartbeatBit == heartbeatBit {
+		return 0, 0, errors.ErrInvalidMessage
+	}
+
+	var route int32
+
+	switch p.opts.routeBytes {
+	case 1:
+		route = int32(data[defaultSizeBytes+defaultHeaderBytes])
+	case 2:
+		route = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+	case 4:
+		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+	default:
+		return 0, 0, errors.ErrInvalidMessage
+	}
+
+	var seq int32
+
+	switch p.opts.seqBytes {
+	case 0:
+		// ignore seq
+	case 1:
+		seq = int32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])
+	case 2:
+		seq = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
+	case 4:
+		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
+	default:
+		return 0, 0, errors.ErrInvalidMessage
+	}
+
+	return route, seq, nil
+}
+
 // UnpackMessage 解包消息
 // @param data []byte 待解包的原始消息缓冲区
 // @return @1 int32 路由
@@ -279,7 +343,7 @@ func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.B
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
-	buf.MoveTo(ln)
+	buf.Slide(ln)
 
 	return route, seq, buf, nil
 }

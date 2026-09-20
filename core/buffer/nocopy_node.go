@@ -40,6 +40,24 @@ func (n *NocopyNode) Bytes() []byte {
 	}
 }
 
+// Slide 消费指定字节数
+func (n *NocopyNode) Slide(delta int) bool {
+	switch b := n.block.(type) {
+	case []byte:
+		if delta < 0 || delta > len(b) {
+			return false
+		}
+		n.block = b[delta:]
+		return true
+	case *Bytes:
+		return b.Slide(delta)
+	case *Writer:
+		return b.Slide(delta)
+	default:
+		return false
+	}
+}
+
 // Release 释放
 func (n *NocopyNode) Release() {
 	switch b := n.block.(type) {

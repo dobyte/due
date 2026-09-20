@@ -43,7 +43,7 @@ func DecodeBroadcastReq(req *buffer.Bytes) (session.Kind, bool, *buffer.Bytes, e
 	kind := session.Kind(data[0])
 	disconnect := data[def.B8] == 1
 
-	req.MoveTo(def.B8 + def.B8)
+	req.Slide(def.B8 + def.B8)
 
 	return kind, disconnect, req, nil
 }

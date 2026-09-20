@@ -40,7 +40,7 @@ func DecodeDeliverReq(req *buffer.Bytes) (int64, int64, *buffer.Bytes, error) {
 	cid := int64(binary.BigEndian.Uint64(data[:def.B64]))
 	uid := int64(binary.BigEndian.Uint64(data[def.B64 : def.B64*2]))
 
-	req.MoveTo(def.B64 * 2)
+	req.Slide(def.B64 * 2)
 
 	return cid, uid, req, nil
 }

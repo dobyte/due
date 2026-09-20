@@ -60,7 +60,7 @@ func DecodeMulticastReq(req *buffer.Bytes) (session.Kind, []int64, bool, *buffer
 
 	disconnect := data[offset] == 1
 
-	req.MoveTo(offset + def.B8)
+	req.Slide(offset + def.B8)
 
 	return kind, targets, disconnect, req, nil
 }

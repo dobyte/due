@@ -87,7 +87,6 @@ func NewNode(opts ...Option) *Node {
 	n.reqPool = &sync.Pool{New: func() any {
 		req := &request{}
 		req.node = n
-		req.message = &cluster.Message{}
 		req.actor.Store((*Actor)(nil))
 
 		return req

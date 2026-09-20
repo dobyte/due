@@ -21,25 +21,24 @@ import (
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
+	"github.com/mohae/deepcopy"
 )
 
 // 请求上下文
 type request struct {
-	node  *Node
-	ctx   context.Context // 上下文
-	gid   string          // 来源网关ID
-	nid   string          // 来源节点ID
-	pid   string          // 来源Actor ID
-	cid   int64           // 连接ID
-	uid   int64           // 用户ID
-	seq   int32           // 消息序列号
-	route int32           // 消息路由号
-	data  any             // 消息数据
-
-	// message *cluster.Message // 请求消息
-	version atomic.Int32  // 版本号
-	chain   *chains.Chain // 调用链
-	actor   atomic.Value  // 当前Actor
+	node    *Node
+	ctx     context.Context // 上下文
+	gid     string          // 来源网关ID
+	nid     string          // 来源节点ID
+	pid     string          // 来源Actor ID
+	cid     int64           // 连接ID
+	uid     int64           // 用户ID
+	seq     int32           // 消息序列号
+	route   int32           // 消息路由号
+	message any             // 消息数据
+	version atomic.Int32    // 版本号
+	chain   *chains.Chain   // 调用链
+	actor   atomic.Value    // 当前Actor
 }
 
 // GID 获取网关ID
@@ -84,9 +83,15 @@ func (r *request) Kind() Kind {
 
 // Parse 解析消息
 func (r *request) Parse(v any) error {
-	msg, ok := r.message.Data.([]byte)
-	if !ok {
-		return copier.CopyWithOption(v, r.message.Data, copier.Option{
+	var msg []byte
+
+	switch m := r.message.(type) {
+	case buffer.Buffer:
+		msg = m.Bytes()
+	case []byte:
+		msg = m
+	default:
+		return copier.CopyWithOption(v, m, copier.Option{
 			DeepCopy: true,
 		})
 	}
@@ -149,10 +154,24 @@ func (r *request) Clone() Context {
 	c.uid = r.uid
 	c.pid = r.pid
 	c.seq = r.seq
-	// TODO: 克隆数据，存在问题
-	c.data = r.data
 	c.route = r.route
 	c.actor.Store(r.actor.Load())
+
+	switch m := r.message.(type) {
+	case buffer.Buffer:
+		message := make([]byte, 0, m.Len())
+		m.VisitBytes(func(bytes []byte) bool {
+			message = append(message, bytes...)
+			return true
+		})
+		c.message = message
+	case []byte:
+		message := make([]byte, 0)
+		message = append(message, m...)
+		c.message = message
+	default:
+		c.message = deepcopy.Copy(m)
+	}
 
 	return c
 }
@@ -496,6 +515,10 @@ func (r *request) compareVersionRecycle(version int32) {
 
 // 释放请求对象
 func (r *request) release() {
+	if b, ok := r.message.(buffer.Buffer); ok {
+		b.Release()
+	}
+
 	r.ctx = context.Background()
 	r.gid = ""
 	r.cid = 0
@@ -504,16 +527,9 @@ func (r *request) release() {
 	r.nid = ""
 	r.seq = 0
 	r.route = 0
+	r.message = nil
 	r.version.Store(0)
 	r.actor.Store((*Actor)(nil))
-
-	switch d := r.data.(type) {
-	case buffer.Buffer:
-		d.Release()
-		r.data = nil
-	case []byte:
-		r.data = nil
-	}
 
 	if r.chain != nil {
 		r.chain.Release()

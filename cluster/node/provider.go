@@ -37,40 +37,42 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 // @param uid int64 用户ID
 // @param buf buffer.Buffer 消息缓冲区
 // @return @1 error 投递失败时返回的错误
-func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf *buffer.Bytes) error {
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
 	if p.node.isShut() {
 		buf.Release()
 		return errors.ErrNodeShutdown
 	}
 
-	// TODO：buf 未进行释放，存在内存泄露的问题
-
-	msg, err := packet.UnpackMessage(buf)
+	route, seq, message, err := packet.UnpackMessage(buf)
 	if err != nil {
 		buf.Release()
 		return err
 	}
 
-	stateful, ok := p.node.router.CheckRouteStateful(msg.Route)
+	stateful, ok := p.node.router.CheckRouteStateful(route)
 	if !ok && !p.node.router.HasDefaultRouteHandler() {
+		buf.Release()
 		return nil
 	}
 
 	if stateful {
 		if uid == 0 {
+			buf.Release()
 			return errors.ErrInvalidArgument
 		}
 
 		if _, ok, err = p.node.proxy.AskNode(ctx, uid, p.node.opts.name, p.node.opts.id); err != nil {
+			buf.Release()
 			return err
 		}
 
 		if !ok {
+			buf.Release()
 			return errors.ErrNotFoundSession
 		}
 	}
 
-	return p.node.router.deliver(gid, nid, "", cid, uid, msg.Seq, msg.Route, msg.Buffer)
+	return p.node.router.deliver(gid, nid, "", cid, uid, seq, route, message)
 }
 
 // GetState 获取状态

@@ -123,7 +123,7 @@ func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffe
 		return
 	}
 
-	route, seq, _, err := packet.UnpackMessage(buf)
+	route, seq, err := packet.ExtractRouteSeq(buf)
 	if err != nil {
 		buf.Release()
 		log.Errorf("unpack message failed: %v", err)

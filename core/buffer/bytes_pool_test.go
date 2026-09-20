@@ -17,7 +17,7 @@ func Test_BytesPool(t *testing.T) {
 	t.Logf("buffer len: %v", len(b.Bytes()))
 
 	t.Logf("-------------------------")
-	b.MoveTo(5)
+	b.Slide(5)
 
 	t.Logf("bytes cap: %v", b.Cap())
 	t.Logf("bytes len: %v", b.Len())

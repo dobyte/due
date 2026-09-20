@@ -53,7 +53,7 @@ func DecodePublishReq(req *buffer.Bytes) (string, bool, *buffer.Bytes, error) {
 	channel := string(data[def.B8 : def.B8+channelBytes])
 	disconnect := data[def.B8+channelBytes] == 1
 
-	req.MoveTo(offset)
+	req.Slide(offset)
 
 	return channel, disconnect, req, nil
 }

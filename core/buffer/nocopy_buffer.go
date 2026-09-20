@@ -257,9 +257,48 @@ OVER:
 	b.next = nil
 }
 
-// MoveTo 移动游标到指定位置
-func (b *NocopyBuffer) MoveTo(pos int) bool {
-	return false
+// Slide 滑动lower索引
+func (b *NocopyBuffer) Slide(delta int) bool {
+	if delta < 0 {
+		return false
+	}
+
+	if delta > b.Len() {
+		return false
+	}
+
+	remaining := delta
+
+	for remaining > 0 {
+		switch n := b.head.(type) {
+		case *NocopyNode:
+			size := n.Len()
+			if size <= remaining {
+				b.removeHead()
+				n.Release()
+				remaining -= size
+			} else {
+				n.Slide(remaining)
+				remaining = 0
+			}
+		case *NocopyBuffer:
+			size := n.Len()
+			if size <= remaining {
+				b.removeHead()
+				n.Release()
+				remaining -= size
+			} else {
+				n.Slide(remaining)
+				remaining = 0
+			}
+		default:
+			return false
+		}
+	}
+
+	b.len = -1
+
+	return true
 }
 
 // 添加到头部
@@ -368,4 +407,29 @@ func (b *NocopyBuffer) addToTail(node any) {
 	default:
 		// ignore
 	}
+}
+
+// removeHead 摘除头节点
+func (b *NocopyBuffer) removeHead() {
+	switch n := b.head.(type) {
+	case *NocopyNode:
+		b.head = n.next
+		b.num--
+	case *NocopyBuffer:
+		b.head = n.next
+		b.num -= n.num
+	}
+
+	if b.head == nil {
+		b.tail = nil
+	} else {
+		switch h := b.head.(type) {
+		case *NocopyNode:
+			h.prev = nil
+		case *NocopyBuffer:
+			h.prev = nil
+		}
+	}
+
+	b.len = -1
 }

@@ -35,7 +35,7 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 }
 
 // Deliver 投递消息
-func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf *buffer.Bytes) error {
+func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
 	log.Infof("gid: %s, nid: %s, cid: %d, uid: %d message: %s", gid, nid, cid, uid, string(buf.Bytes()))
 	return nil
 }

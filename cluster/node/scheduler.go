@@ -2,6 +2,7 @@ package node
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/queue"
@@ -85,12 +86,15 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	}
 
 	if act.opts.dispatch {
-		if _, ok := s.kinds.Load(act.Kind()); !ok {
-			s.kinds.Store(act.Kind(), struct{}{})
+		val, ok := s.kinds.Load(act.Kind())
+		if !ok {
+			val = &atomic.Int32{}
+			s.kinds.Store(act.Kind(), val)
 			for route := range act.routes {
 				s.routes.Store(route, act.Kind())
 			}
 		}
+		val.(*atomic.Int32).Add(1)
 	}
 
 	s.actors.Store(act.PID(), act)
@@ -115,7 +119,7 @@ func (s *Scheduler) kill(kind, id string) bool {
 }
 
 // 移除Actor
-// 从调度器中删除Actor并清理其相关绑定关系
+// 从调度器的Actor表中删除Actor，用户绑定关系由destroy负责清理
 // @param kind string Actor类型
 // @param id string Actor编号
 // @return @1 *Actor 被移除的Actor实例
@@ -130,12 +134,6 @@ func (s *Scheduler) remove(kind, id string) (*Actor, bool) {
 	}
 
 	s.actors.Delete(act.PID())
-
-	for _, relations := range s.relations {
-		if a, ok := relations[act.Kind()]; ok && a == act {
-			delete(relations, act.Kind())
-		}
-	}
 
 	return act, true
 }
@@ -165,21 +163,26 @@ func (s *Scheduler) doLoad(pid string) (*Actor, bool) {
 // @param uid int64 用户ID
 // @param kind string Actor类型
 // @param id string Actor编号
-// @return @1 error 用户ID非法或Actor不存在时返回的错误
+// @return @1 error 用户ID非法或Actor不存在/已销毁时返回的错误
 func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 	if uid == 0 {
 		return errors.ErrIllegalOperation
 	}
+
+	s.rw.Lock()
+	defer s.rw.Unlock()
 
 	act, ok := s.load(kind, id)
 	if !ok {
 		return errors.ErrNotFoundActor
 	}
 
-	act.bindUser(uid)
+	// 校验Actor是否仍处于启动状态，防止与kill/destroy并发时写入指向已销毁Actor的悬垂关系
+	if !act.started() {
+		return errors.ErrActorNotStarted
+	}
 
-	s.rw.Lock()
-	defer s.rw.Unlock()
+	act.bindUser(uid)
 
 	relations, ok := s.relations[uid]
 	if !ok {
@@ -212,6 +215,10 @@ func (s *Scheduler) unbindActor(uid int64, kind string) error {
 
 	if act.unbindUser(uid) {
 		delete(s.relations[uid], kind)
+
+		if len(s.relations[uid]) == 0 {
+			delete(s.relations, uid)
+		}
 	}
 
 	return nil
@@ -224,6 +231,33 @@ func (s *Scheduler) batchUnbindActor(fn func(relations map[int64]map[string]*Act
 	s.rw.Lock()
 	fn(s.relations)
 	s.rw.Unlock()
+}
+
+// 释放Kind引用
+// 当某个Kind的最后一个可调度Actor被销毁时，清理该Kind及其路由映射，避免条目累积残留
+// @param kind string Actor类型
+func (s *Scheduler) releaseKind(kind string) {
+	s.rw.Lock()
+	defer s.rw.Unlock()
+
+	val, ok := s.kinds.Load(kind)
+	if !ok {
+		return
+	}
+
+	if val.(*atomic.Int32).Add(-1) > 0 {
+		return
+	}
+
+	s.kinds.Delete(kind)
+
+	s.routes.Range(func(route, k any) bool {
+		if k == kind {
+			s.routes.Delete(route)
+		}
+
+		return true
+	})
 }
 
 // 获取用户绑定的Actor

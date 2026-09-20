@@ -17,7 +17,7 @@ type reader struct {
 }
 
 func newReader(conn *net.TCPConn) *reader {
-	return &reader{reader: bufio.NewReaderSize(conn, 1<<13)}
+	return &reader{reader: bufio.NewReaderSize(conn, 1<<16)}
 }
 
 // read 以buffer的形式读取消息
@@ -57,7 +57,7 @@ func (r *reader) read() (bool, uint8, uint64, *buffer.Bytes, error) {
 		seq   = binary.BigEndian.Uint64(data[def.RouteBytes : def.RouteBytes+def.SeqBytes])
 	)
 
-	buf.MoveTo(def.RouteBytes + def.SeqBytes)
+	buf.Slide(def.RouteBytes + def.SeqBytes)
 
 	return false, route, seq, buf, nil
 }

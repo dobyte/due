@@ -43,10 +43,10 @@ func (b *Bytes) Available() int {
 	return b.Cap() - b.upper
 }
 
-// MoveTo 移动lower索引
-func (b *Bytes) MoveTo(pos int) bool {
-	if pos >= 0 && pos <= b.upper && pos >= b.lower {
-		b.lower = pos
+// Slide 滑动lower索引
+func (b *Bytes) Slide(delta int) bool {
+	if delta >= 0 && delta+b.lower <= b.upper {
+		b.lower += delta
 		return true
 	}
 

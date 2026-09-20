@@ -44,7 +44,7 @@ func DecodePushReq(req *buffer.Bytes) (session.Kind, int64, bool, *buffer.Bytes,
 	target := int64(binary.BigEndian.Uint64(data[def.B8 : def.B8+def.B64]))
 	disconnect := data[def.B8+def.B64] == 1
 
-	req.MoveTo(def.B8 + def.B64 + def.B8)
+	req.Slide(def.B8 + def.B64 + def.B8)
 
 	return kind, target, disconnect, req, nil
 }
