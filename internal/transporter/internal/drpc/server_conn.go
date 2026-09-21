@@ -36,7 +36,6 @@ type ServerConn struct {
 	kind              cluster.Kind                // 实例类型
 	inst              string                      // 实例ID
 	epoch             uint64                      // 连接时间戳
-	worker            *ServerWorker               // 工作协程
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
@@ -48,7 +47,6 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
-	c.worker = c.svr.allocateWorker()
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
@@ -87,11 +85,6 @@ func (c *ServerConn) Push(buf *buffer.NocopyBuffer) error {
 // @return inst 实例ID
 func (s *ServerConn) HandshakeInfo() (cluster.Kind, string) {
 	return s.kind, s.inst
-}
-
-// dispatch 分发消息到工作协程处理
-func (c *ServerConn) dispatch(route uint8, seq uint64, buf *buffer.Bytes) {
-	c.worker.tasks <- &serverTask{conn: c, route: route, seq: seq, buf: buf}
 }
 
 // read 读取消息
@@ -157,7 +150,7 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 						continue
 					}
 
-					c.dispatch(rt, seq, buf)
+					c.svr.handleMessage(c, rt, seq, buf)
 				}
 			}
 		}

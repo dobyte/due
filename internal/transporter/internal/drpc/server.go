@@ -3,7 +3,6 @@ package drpc
 import (
 	"context"
 	"net"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,6 +12,7 @@ import (
 	xnet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/transporter/internal/route"
 	"github.com/dobyte/due/v2/log"
 	taskpool "github.com/dobyte/due/v2/task"
 )
@@ -32,7 +32,6 @@ type Server struct {
 	conns      sync.Map           // 连接映射
 	ticker     *time.Ticker       // 心跳定时器
 	queues     sync.Map           // 已关闭队列
-	workers    []*ServerWorker    // 工作协程
 	connSeq    atomic.Uint64      // 连接序号
 	workerWg   sync.WaitGroup     // 工作协程等待组
 }
@@ -110,7 +109,6 @@ func (s *Server) Stop() error {
 	s.ticker.Stop()
 	s.closeAllConns()
 	s.clearAllQueues()
-	s.closeWorkers()
 
 	return nil
 }
@@ -186,7 +184,6 @@ func (s *Server) init() error {
 
 	s.ticker = time.NewTicker(heartbeatInterval)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.initWorkers()
 
 	return nil
 }
@@ -234,46 +231,21 @@ func (s *Server) check() {
 // @param seq 序列号
 // @param buf 消息缓冲区
 // @return @1 error 错误信息
-func (s *Server) handleMessage(conn *ServerConn, route uint8, seq uint64, buf *buffer.Bytes) error {
-	if handler := s.handlers[route]; handler == nil {
+func (s *Server) handleMessage(conn *ServerConn, rt uint8, seq uint64, buf *buffer.Bytes) error {
+	if handler := s.handlers[rt]; handler == nil {
 		buf.Release()
 
 		return errors.ErrNotFoundRoute
 	} else {
-		return handler(conn, seq, buf)
+		switch rt {
+		case route.Push, route.Multicast, route.Broadcast, route.Publish:
+			return handler(conn, seq, buf)
+		default:
+			taskpool.Add(func() { handler(conn, seq, buf) })
+		}
+
+		return nil
 	}
-}
-
-// initWorkers 初始化工作协程
-func (s *Server) initWorkers() {
-	num := s.opts.WorkerNum
-	if num <= 0 {
-		num = int32(runtime.GOMAXPROCS(0))
-	}
-
-	size := max(128, int(s.opts.WriteQueueSize))
-
-	s.workers = make([]*ServerWorker, 0, int(num))
-	for i := 0; i < int(num); i++ {
-		w := &ServerWorker{svr: s, tasks: make(chan *serverTask, size)}
-		s.workers = append(s.workers, w)
-		s.workerWg.Add(1)
-		go w.run()
-	}
-}
-
-// allocateWorker 分配工作协程
-func (s *Server) allocateWorker() *ServerWorker {
-	return s.workers[(s.connSeq.Add(1)-1)%uint64(len(s.workers))]
-}
-
-// closeWorkers 关闭工作协程
-func (s *Server) closeWorkers() {
-	for _, w := range s.workers {
-		close(w.tasks)
-	}
-
-	s.workerWg.Wait()
 }
 
 // 删除连接
