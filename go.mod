@@ -5,10 +5,9 @@ go 1.27.0
 require (
 	dario.cat/mergo v1.0.2
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bytedance/sonic v1.15.3
+	github.com/bytedance/sonic v1.15.4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jinzhu/copier v0.4.0
-	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261
 	github.com/shamaton/msgpack/v2 v2.4.1

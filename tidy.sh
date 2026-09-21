@@ -10,6 +10,7 @@ readonly modules=(
     "./config/consul"
     "./config/etcd"
     "./config/nacos"
+    "./config/polaris"
     "./crypto/rsa"
     "./crypto/ecc"
     "./eventbus/kafka"
