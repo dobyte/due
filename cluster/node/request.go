@@ -15,13 +15,14 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/chains"
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
-	"github.com/mohae/deepcopy"
 )
 
 // 请求上下文
@@ -170,7 +171,11 @@ func (r *request) Clone() Context {
 		message = append(message, m...)
 		c.message = message
 	default:
-		c.message = deepcopy.Copy(m)
+		if msg, err := json.Marshal(m); err != nil {
+			log.Warnf("marshal request message failed: %v", err)
+		} else {
+			c.message = msg
+		}
 	}
 
 	return c
