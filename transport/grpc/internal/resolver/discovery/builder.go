@@ -94,7 +94,6 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		for _, service := range instance.Services {
 			addr := resolver.Address{
 				Addr:       ep.Address(),
-				ServerName: service,
 				Attributes: attributes.New(wrr.WeightAttrKey, uint32(max(1, instance.Weight))),
 			}
 

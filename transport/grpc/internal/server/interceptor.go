@@ -2,28 +2,33 @@ package server
 
 import (
 	"context"
+	"runtime"
+
 	"github.com/dobyte/due/v2/log"
 	"google.golang.org/grpc"
-	"runtime"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // recoverInterceptor 一元调用恢复拦截器
-// 捕获处理器执行期间产生的 panic，运行时错误直接抛出，其他错误记录日志
+// 捕获处理器执行期间产生的 panic，记录日志并向客户端返回内部错误
 // @param ctx context.Context 上下文
 // @param req any 请求参数
 // @param info *grpc.UnaryServerInfo 服务方法信息
 // @param handler grpc.UnaryHandler 处理方法
 // @return @1 any 响应参数
 // @return @2 error 错误信息
-func recoverInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+func recoverInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 	defer func() {
-		if err := recover(); err != nil {
-			switch err.(type) {
+		if r := recover(); r != nil {
+			switch r.(type) {
 			case runtime.Error:
-				log.Panic(err)
+				log.Error(r)
 			default:
-				log.Panicf("panic error: %v", err)
+				log.Errorf("panic error: %v", r)
 			}
+
+			err = status.Error(codes.Internal, "internal server error")
 		}
 	}()
 

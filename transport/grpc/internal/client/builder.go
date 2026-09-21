@@ -99,6 +99,7 @@ func NewBuilder(opts *Options) *Builder {
 	}
 
 	if err := b.init(); err != nil {
+		b.cancel()
 		return &Builder{err: err}
 	}
 

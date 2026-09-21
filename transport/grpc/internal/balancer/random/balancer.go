@@ -3,7 +3,6 @@ package random
 import (
 	"math/rand"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/connectivity"
@@ -97,10 +96,7 @@ func (b *Balancer) updatePicker() {
 		return
 	}
 
-	b.picker = &Picker{
-		subConns: readyConns,
-		rng:      rand.New(rand.NewSource(time.Now().UnixNano())),
-	}
+	b.picker = &Picker{subConns: readyConns}
 }
 
 // ResolverError 处理解析器错误
@@ -181,8 +177,6 @@ func (b *Balancer) ExitIdle() {
 // Picker 随机选择器，从子连接列表中随机选取一个
 type Picker struct {
 	subConns []balancer.SubConn
-	rng      *rand.Rand
-	mu       sync.Mutex
 	err      error
 }
 
@@ -206,9 +200,7 @@ func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 		return balancer.PickResult{SubConn: p.subConns[0]}, nil
 	}
 
-	p.mu.Lock()
-	idx := p.rng.Intn(len(p.subConns))
-	p.mu.Unlock()
+	idx := rand.Intn(len(p.subConns))
 
 	return balancer.PickResult{SubConn: p.subConns[idx]}, nil
 }
