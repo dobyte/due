@@ -109,36 +109,33 @@ func New(config ...Config) http.Handler {
 		// HA2 = MD5(method:uri)
 		ha2 := xhash.MD5(ctx.Method() + ":" + uri)
 
-		// 计算期望的response
-		var expected string
-		withQop := qop == "auth" || qop == "auth-int"
-
-		if withQop {
-			// 使用qop时必须携带nc与cnonce
-			if nc == "" || cnonce == "" {
-				return da.badRequest(ctx)
-			}
-
-			expected = xhash.MD5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
-		} else {
-			expected = xhash.MD5(ha1 + ":" + nonce + ":" + ha2)
+		// 服务器仅下发 qop="auth"，拒绝缺失 qop 或其它 qop 值的请求，
+		// 避免退化为无防重放能力的 legacy 摘要认证
+		if qop != "auth" {
+			return da.badRequest(ctx)
 		}
+
+		// 使用qop时必须携带nc与cnonce
+		if nc == "" || cnonce == "" {
+			return da.badRequest(ctx)
+		}
+
+		// 计算期望的response
+		expected := xhash.MD5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
 
 		if response != expected {
 			return da.unauthorized(ctx)
 		}
 
 		// 校验response通过后消费nonce计数，防止重放
-		if withQop {
-			// nc必须为8位十六进制计数（RFC 2617）
-			nonceCount, err := strconv.ParseUint(nc, 16, 64)
-			if err != nil {
-				return da.badRequest(ctx)
-			}
+		// nc必须为8位十六进制计数（RFC 2617）
+		nonceCount, err := strconv.ParseUint(nc, 16, 64)
+		if err != nil {
+			return da.badRequest(ctx)
+		}
 
-			if !da.consumeNonce(nonce, nonceCount) {
-				return da.unauthorized(ctx)
-			}
+		if !da.consumeNonce(nonce, nonceCount) {
+			return da.unauthorized(ctx)
 		}
 
 		// Store username in context
@@ -247,11 +244,21 @@ func (s *digestAuth) generateNonce() string {
 
 	// 按需清理过期nonce，避免常驻清理协程
 	if s.lastCleanup.IsZero() || now.Sub(s.lastCleanup) >= nonceCleanupEvery {
-		for n, entry := range s.nonces {
+		order := s.nonceOrder[:0]
+		for _, n := range s.nonceOrder {
+			entry, ok := s.nonces[n]
+			if !ok {
+				continue
+			}
+
 			if now.Sub(entry.createdAt) > s.config.NonceTTL {
 				delete(s.nonces, n)
+				continue
 			}
+
+			order = append(order, n)
 		}
+		s.nonceOrder = order
 		s.lastCleanup = now
 	}
 

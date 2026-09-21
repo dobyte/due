@@ -25,6 +25,7 @@ const (
 	defaultConsoleKey                      = "etc.http.console"
 	defaultCorsKey                         = "etc.http.cors"
 	defaultSwaggerKey                      = "etc.http.swagger"
+	defaultProxyKey                        = "etc.http.proxy"
 	defaultBodyLimitKey                    = "etc.http.bodyLimit"
 	defaultConcurrencyKey                  = "etc.http.concurrency"
 	defaultStrictRoutingKey                = "etc.http.strictRouting"
@@ -36,7 +37,6 @@ const (
 	defaultPassLocalsToViewsKey            = "etc.http.passLocalsToViews"
 	defaultReadBufferSizeKey               = "etc.http.readBufferSize"
 	defaultWriteBufferSizeKey              = "etc.http.writeBufferSize"
-	defaultProxyHeaderKey                  = "etc.http.proxyHeader"
 	defaultDisableKeepaliveKey             = "etc.http.disableKeepalive"
 	defaultDisableDefaultDateKey           = "etc.http.disableDefaultDate"
 	defaultDisableDefaultContentTypeKey    = "etc.http.disableDefaultContentType"
@@ -44,8 +44,6 @@ const (
 	defaultStreamRequestBodyKey            = "etc.http.streamRequestBody"
 	defaultDisablePreParseMultipartFormKey = "etc.http.disablePreParseMultipartForm"
 	defaultReduceMemoryUsageKey            = "etc.http.reduceMemoryUsage"
-	defaultTrustProxyKey                   = "etc.http.trustProxy"
-	defaultTrustProxyConfigKey             = "etc.http.trustProxyConfig"
 	defaultEnableIPValidationKey           = "etc.http.enableIPValidation"
 	defaultEnableSplittingOnParsersKey     = "etc.http.enableSplittingOnParsers"
 )
@@ -61,6 +59,7 @@ type options struct {
 	console                      bool                  // 是否启用控制台输出
 	corsOpts                     CorsOptions           // 跨域配置
 	swagOpts                     SwagOptions           // swagger配置
+	proxyOpts                    ProxyOptions          // 代理配置
 	middlewares                  []any                 // 中间件
 	registry                     registry.Registry     // 服务注册器
 	transporter                  transport.Transporter // 消息传输器
@@ -76,7 +75,6 @@ type options struct {
 	passLocalsToViews            bool                  // 是否将上下文 locals 传递给视图引擎
 	readBufferSize               int                   // 读取缓冲区大小，默认为4096
 	writeBufferSize              int                   // 写入缓冲区大小，默认为4096
-	proxyHeader                  string                // 代理头部
 	errorHandler                 fiber.ErrorHandler    // 错误处理函数
 	disableKeepalive             bool                  // 是否禁用keepalive，默认为false
 	disableDefaultDate           bool                  // 是否禁用默认日期，默认为false
@@ -85,10 +83,13 @@ type options struct {
 	streamRequestBody            bool                  // 是否流式请求体，默认为false
 	disablePreParseMultipartForm bool                  // 是否禁用预解析multipart/form-data，默认为false
 	reduceMemoryUsage            bool                  // 是否减少内存占用，默认为false
-	trustProxy                   bool                  // 是否信任代理，默认为false
-	trustProxyConfig             TrustProxyOptions     // 信任代理配置
 	enableIPValidation           bool                  // 是否启用IP验证，默认为false
 	enableSplittingOnParsers     bool                  // 是否启用在解析器上拆分请求体，默认为false
+}
+
+type ProxyOptions struct {
+	ProxyHeader string             `json:"proxyHeader"` // 代理头部，默认为X-Forwarded-For
+	TrustProxy  *TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
 }
 
 type CorsOptions struct {
@@ -113,6 +114,7 @@ type SwagOptions struct {
 }
 
 type TrustProxyOptions struct {
+	Enable    bool     `json:"enable"`    // 是否启用，默认为false
 	Proxies   []string `json:"proxies"`   // 代理是受信任代理 IP 地址或 CIDR 范围的列表
 	LinkLocal bool     `json:"linkLocal"` // 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
 	Loopback  bool     `json:"loopback"`  // 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
@@ -140,7 +142,6 @@ func defaultOptions() *options {
 		passLocalsToViews:            etc.Get(defaultPassLocalsToViewsKey).Bool(),
 		readBufferSize:               etc.Get(defaultReadBufferSizeKey, defaultReadBufferSize).Int(),
 		writeBufferSize:              etc.Get(defaultWriteBufferSizeKey, defaultWriteBufferSize).Int(),
-		proxyHeader:                  etc.Get(defaultProxyHeaderKey).String(),
 		disableKeepalive:             etc.Get(defaultDisableKeepaliveKey).Bool(),
 		disableDefaultDate:           etc.Get(defaultDisableDefaultDateKey).Bool(),
 		disableDefaultContentType:    etc.Get(defaultDisableDefaultContentTypeKey).Bool(),
@@ -148,13 +149,8 @@ func defaultOptions() *options {
 		streamRequestBody:            etc.Get(defaultStreamRequestBodyKey).Bool(),
 		disablePreParseMultipartForm: etc.Get(defaultDisablePreParseMultipartFormKey).Bool(),
 		reduceMemoryUsage:            etc.Get(defaultReduceMemoryUsageKey).Bool(),
-		trustProxy:                   etc.Get(defaultTrustProxyKey).Bool(),
 		enableIPValidation:           etc.Get(defaultEnableIPValidationKey).Bool(),
 		enableSplittingOnParsers:     etc.Get(defaultEnableSplittingOnParsersKey).Bool(),
-	}
-
-	if err := etc.Get(defaultTrustProxyConfigKey).Scan(&opts.trustProxyConfig); err != nil {
-		log.Warnf("scan trust proxy options failed: %v", err)
 	}
 
 	if err := etc.Get(defaultCorsKey).Scan(&opts.corsOpts); err != nil {
@@ -163,6 +159,10 @@ func defaultOptions() *options {
 
 	if err := etc.Get(defaultSwaggerKey).Scan(&opts.swagOpts); err != nil {
 		log.Warnf("scan swag options failed: %v", err)
+	}
+
+	if err := etc.Get(defaultProxyKey).Scan(&opts.proxyOpts); err != nil {
+		log.Warnf("scan proxy options failed: %v", err)
 	}
 
 	return opts
@@ -208,6 +208,11 @@ func WithCorsOptions(corsOpts CorsOptions) Option {
 // WithSwagOptions 设置swagger配置
 func WithSwagOptions(swagOpts SwagOptions) Option {
 	return func(o *options) { o.swagOpts = swagOpts }
+}
+
+// WithProxyOptions 设置代理配置
+func WithProxyOptions(proxyOpts ProxyOptions) Option {
+	return func(o *options) { o.proxyOpts = proxyOpts }
 }
 
 // WithMiddlewares 设置中间件
@@ -279,11 +284,6 @@ func WithWriteBufferSize(size int) Option {
 	return func(o *options) { o.writeBufferSize = size }
 }
 
-// WithProxyHeader 设置代理头部
-func WithProxyHeader(proxyHeader string) Option {
-	return func(o *options) { o.proxyHeader = proxyHeader }
-}
-
 // WithErrorHandler 设置错误处理函数
 func WithErrorHandler(errorHandler fiber.ErrorHandler) Option {
 	return func(o *options) { o.errorHandler = errorHandler }
@@ -326,17 +326,6 @@ func WithDisablePreParseMultipartForm(disable bool) Option {
 // @param enable bool 是否减少内存占用
 func WithReduceMemoryUsage(enable bool) Option {
 	return func(o *options) { o.reduceMemoryUsage = enable }
-}
-
-// WithTrustProxy 设置是否信任代理
-// @param enable bool 是否信任代理
-func WithTrustProxy(enable bool) Option {
-	return func(o *options) { o.trustProxy = enable }
-}
-
-// WithTrustProxyConfig 设置信任代理配置
-func WithTrustProxyConfig(trustProxyConfig TrustProxyOptions) Option {
-	return func(o *options) { o.trustProxyConfig = trustProxyConfig }
 }
 
 // WithEnableIPValidation 设置是否启用IP验证

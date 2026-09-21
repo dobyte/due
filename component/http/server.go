@@ -2,7 +2,6 @@ package http
 
 import (
 	stctx "context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
 	xnet "github.com/dobyte/due/v2/core/net"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/mode"
 	"github.com/gofiber/fiber/v3"
@@ -53,7 +53,6 @@ func NewServer(opts ...Option) *Server {
 		PassLocalsToViews:            o.passLocalsToViews,
 		ReadBufferSize:               o.readBufferSize,
 		WriteBufferSize:              o.writeBufferSize,
-		ProxyHeader:                  o.proxyHeader,
 		ErrorHandler:                 o.errorHandler,
 		DisableKeepalive:             o.disableKeepalive,
 		DisableDefaultDate:           o.disableDefaultDate,
@@ -64,12 +63,13 @@ func NewServer(opts ...Option) *Server {
 		ReduceMemoryUsage:            o.reduceMemoryUsage,
 		EnableIPValidation:           o.enableIPValidation,
 		EnableSplittingOnParsers:     o.enableSplittingOnParsers,
-		TrustProxy:                   o.trustProxy,
+		ProxyHeader:                  o.proxyOpts.ProxyHeader,
+		TrustProxy:                   o.proxyOpts.TrustProxy.Enable,
 		TrustProxyConfig: fiber.TrustProxyConfig{
-			Proxies:   o.trustProxyConfig.Proxies,
-			LinkLocal: o.trustProxyConfig.LinkLocal,
-			Loopback:  o.trustProxyConfig.Loopback,
-			Private:   o.trustProxyConfig.Private,
+			Proxies:   o.proxyOpts.TrustProxy.Proxies,
+			LinkLocal: o.proxyOpts.TrustProxy.LinkLocal,
+			Loopback:  o.proxyOpts.TrustProxy.Loopback,
+			Private:   o.proxyOpts.TrustProxy.Private,
 		},
 	})
 
