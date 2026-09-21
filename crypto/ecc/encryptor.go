@@ -2,7 +2,8 @@ package ecc
 
 import (
 	"crypto/rand"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
+
+	"github.com/dobyte/due/crypto/ecc/v2/ecies"
 )
 
 type Encryptor struct {

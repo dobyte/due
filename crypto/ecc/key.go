@@ -16,10 +16,10 @@ import (
 	"os"
 	"path"
 
+	"github.com/dobyte/due/crypto/ecc/v2/ecies"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xos"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
 )
 
 type Key struct {
