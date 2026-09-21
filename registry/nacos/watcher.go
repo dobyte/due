@@ -229,11 +229,9 @@ func (wm *watcherMgr) recycle(idx int64) {
 }
 
 // 从注册表中移除本管理器
-// 仅在注册表中仍指向本管理器时才移除，避免并发重建的新管理器被旧管理器的清理逻辑误删
+// 使用 CompareAndDelete 原子地校验并移除，避免并发重建的新管理器被旧管理器的清理逻辑误删
 func (wm *watcherMgr) removeFromRegistry() {
-	if v, ok := wm.registry.watchers.Load(wm.serviceName); ok && v == wm {
-		wm.registry.watchers.Delete(wm.serviceName)
-	}
+	wm.registry.watchers.CompareAndDelete(wm.serviceName, wm)
 }
 
 // stop 停止监听服务实例更新
