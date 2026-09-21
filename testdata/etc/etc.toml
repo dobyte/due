@@ -165,8 +165,6 @@ shutdownMaxWaitTime = "0s"
     readBufferSize = 4096
     # 写入缓冲区大小，默认为4096
     writeBufferSize = 4096
-    # 代理头部
-    proxyHeader = ""
     # 是否禁用keepalive，默认为false
     disableKeepalive = false
     # 是否禁用默认日期，默认为false
@@ -188,15 +186,21 @@ shutdownMaxWaitTime = "0s"
     # 是否启用在解析器上拆分请求体，默认为false
     enableSplittingOnParsers = false
     # 信任代理配置
-    [http.trustProxyConfig]
-        # 代理是受信任代理 IP 地址或 CIDR 范围的列表
-        proxies = []
-        # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
-        linkLocal = false
-        # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
-        loopback = false
-        # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
-        private = false
+    [http.proxy]
+        # 代理头部
+        proxyHeader = "X-Forwarded-For"
+        # 信任代理配置
+        [http.proxy.trustProxy]
+            # 是否信任代理，默认为false
+            enable = true
+            # 代理是受信任代理 IP 地址或 CIDR 范围的列表
+            proxies = []
+            # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
+            linkLocal = false
+            # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
+            loopback = false
+            # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+            private = false
     # 跨域配置
     [http.cors]
         # 是否启用跨域
@@ -556,21 +560,25 @@ shutdownMaxWaitTime = "0s"
             # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
             authorizeTimeout = "0s"
             # 是否开启压缩，默认为false
-            compression = false
-            # 代理头部
-            proxyHeader = ""
-            # 是否信任代理，默认为false
-            trustProxy = false
+            enableCompression = false
+            # 压缩等级，范围1~9，等级越高压缩率越高，CPU消耗越大，默认1
+            compressionLevel = 1
             # 信任代理配置
-            [network.ws.server.trustProxyConfig]
-                # 代理是受信任代理 IP 地址或 CIDR 范围的列表
-                proxies = []
-                # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
-                linkLocal = false
-                # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
-                loopback = false
-                # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
-                private = false
+            [network.ws.server.proxy]
+                # 代理头部
+                proxyHeader = "X-Forwarded-For"
+                # 信任代理配置
+                [network.ws.server.proxy.trustProxy]
+                    # 是否信任代理，默认为false
+                    enable = true
+                    # 代理是受信任代理 IP 地址或 CIDR 范围的列表
+                    proxies = []
+                    # 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
+                    linkLocal = false
+                    # 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
+                    loopback = false
+                    # 允许信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+                    private = false
         # ws网络客户端
         [network.ws.client]
             # 拨号地址
