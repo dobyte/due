@@ -9,6 +9,7 @@ package ws
 
 import (
 	"context"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,7 @@ import (
 )
 
 type serverConnMgr struct {
-	id         atomic.Int64 // 连接ID
+	cid        atomic.Int64 // 连接ID
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	connPool   sync.Pool    // 连接池
@@ -60,8 +61,9 @@ func (cm *serverConnMgr) close() {
 // allocateConn 分配连接
 // 自增总连接数并校验上限，从连接池取用连接对象存入分片后完成初始化
 // @param c *websocket.Conn WS连接
+// @param remoteAddr net.Addr 客户端真实地址，应用层代理模式下从代理头解析得到，可为nil
 // @return @1 error 连接数已达上限时返回errors.ErrTooManyConnection
-func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
+func (cm *serverConnMgr) allocateConn(c *websocket.Conn, remoteAddr net.Addr) error {
 	maxConnNum := int64(cm.server.opts.maxConnNum)
 	for {
 		if total := cm.total.Load(); total >= maxConnNum {
@@ -72,7 +74,7 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn) error {
 	}
 
 	conn := cm.connPool.Get().(*serverConn)
-	conn.init(c)
+	conn.init(c, remoteAddr)
 
 	return nil
 }
@@ -152,4 +154,14 @@ func (p *partition) close() error {
 	}
 
 	return wg.Wait()
+}
+
+// genConnID 生成连接ID
+// @return @1 int64 连接ID
+func (cm *serverConnMgr) genConnID() int64 {
+	if cid := cm.cid.Add(1); cid == 0 {
+		return cm.cid.Add(1)
+	} else {
+		return cid
+	}
 }

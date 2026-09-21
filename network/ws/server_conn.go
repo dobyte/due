@@ -35,6 +35,7 @@ type serverConn struct {
 	wg1               *sync.WaitGroup             // 读等待组
 	wg2               *sync.WaitGroup             // 写等待组
 	conn              *websocket.Conn             // WS源连接
+	remoteAddr        net.Addr                    // 客户端真实地址（应用层代理模式下从代理头解析）
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
 	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 	authorizeTimer    atomic.Value                // 授权定时器
@@ -185,7 +186,12 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	}
 
 	conn := c.conn
+	remoteAddr := c.remoteAddr
 	c.rw.RUnlock()
+
+	if remoteAddr != nil {
+		return remoteAddr, nil
+	}
 
 	return conn.RemoteAddr(), nil
 }
@@ -193,12 +199,14 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // init 初始化连接
 // 复用对象池中的连接对象，重置各项状态、创建读写协程并执行授权检查与连接钩子
 // @param conn *websocket.Conn WS连接
-func (c *serverConn) init(conn *websocket.Conn) {
-	c.id = c.connMgr.id.Add(1)
+// @param remoteAddr net.Addr 客户端真实地址，可为nil
+func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) {
+	c.id = c.connMgr.genConnID()
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
+	c.remoteAddr = remoteAddr
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.authorizeTimer.Store((*time.Timer)(nil))
@@ -221,6 +229,7 @@ func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
 	c.conn = nil
+	c.remoteAddr = nil
 	c.queue = nil
 	c.attr.values.Clear()
 	c.authorizeTimer.Store((*time.Timer)(nil))

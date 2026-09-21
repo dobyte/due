@@ -25,7 +25,7 @@ type clientConn struct {
 	attr              *attr                       // 连接属性
 	conn              *websocket.Conn             // TCP源连接
 	state             atomic.Int32                // 连接状态
-	client            *client                     // 客户端
+	cli               *client                     // 客户端
 	wg1               *sync.WaitGroup             // 读等待组
 	wg2               *sync.WaitGroup             // 写等待组
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
@@ -39,22 +39,22 @@ var _ network.Conn = &clientConn{}
 // @param conn *websocket.Conn WS连接
 // @param client *client 客户端
 // @return @1 network.Conn 连接对象
-func newClientConn(id int64, conn *websocket.Conn, client *client) network.Conn {
+func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c := &clientConn{}
-	c.id = id
+	c.id = cli.genConnID()
+	c.cli = cli
 	c.attr = &attr{}
 	c.conn = conn
-	c.client = client
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
-	if c.client.connectHandler != nil {
-		c.client.connectHandler(c)
+	if c.cli.connectHandler != nil {
+		c.cli.connectHandler(c)
 	}
 
 	return c
@@ -283,8 +283,8 @@ func (c *clientConn) doClose() error {
 		buf.Release()
 	}
 
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
+	if c.cli.disconnectHandler != nil {
+		c.cli.disconnectHandler(c)
 	}
 
 	return err
@@ -335,16 +335,16 @@ func (c *clientConn) read(conn *websocket.Conn) {
 
 		if isHeartbeat {
 			// update heartbeat time
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			}
 
-			if c.client.heartbeatHandler != nil {
-				c.client.heartbeatHandler(c, heartbeatTime)
+			if c.cli.heartbeatHandler != nil {
+				c.cli.heartbeatHandler(c, heartbeatTime)
 			}
 		} else {
 			// update heartbeat time
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				index++
 
 				if index%10 == 0 {
@@ -358,8 +358,8 @@ func (c *clientConn) read(conn *websocket.Conn) {
 				continue
 			}
 
-			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buf)
+			if c.cli.receiveHandler != nil {
+				c.cli.receiveHandler(c, buf)
 			}
 		}
 	}
@@ -370,8 +370,8 @@ func (c *clientConn) read(conn *websocket.Conn) {
 func (c *clientConn) write(conn *websocket.Conn) {
 	var tickerC <-chan time.Time
 
-	if c.client.opts.heartbeatInterval > 0 {
-		ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	if c.cli.opts.heartbeatInterval > 0 {
+		ticker := time.NewTicker(c.cli.opts.heartbeatInterval)
 		defer ticker.Stop()
 		tickerC = ticker.C
 	}
@@ -410,8 +410,8 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 		return
 	}
 
-	if c.client.opts.writeTimeout > 0 {
-		_ = conn.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
+	if c.cli.opts.writeTimeout > 0 {
+		_ = conn.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
 	}
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
@@ -433,15 +433,15 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 // @param t time.Time 当前心跳触发的时间点
 // @return @1 bool 是否继续写入协程循环，心跳超时时返回false
 func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
-	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.cli.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		taskpool.Add(func() { c.forceClose() })
 
 		return false
 	} else {
-		if c.client.opts.writeTimeout > 0 {
-			_ = conn.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
+		if c.cli.opts.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
 		}
 
 		hb := packet.PackHeartbeat()

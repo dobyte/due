@@ -10,6 +10,7 @@ package ws
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/dobyte/due/v2/errors"
@@ -134,7 +135,7 @@ func (s *server) init() error {
 		return err
 	}
 
-	if s.opts.enableProxyProtocol {
+	if s.opts.proxyMode == ProxyModeTransport {
 		s.listener = &proxyproto.Listener{Listener: ln}
 	} else {
 		s.listener = ln
@@ -185,7 +186,7 @@ func (s *server) serve(ln net.Listener) {
 			conn.SetCompressionLevel(s.opts.compressionLevel)
 		}
 
-		if err = s.connMgr.allocateConn(conn); err != nil {
+		if err = s.connMgr.allocateConn(conn, s.parseAddrFromHeader(r)); err != nil {
 			log.Errorf("connection allocate error: %v", err)
 
 			if err = conn.Close(); err != nil {
@@ -246,4 +247,91 @@ func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 // @param handler network.ReceiveHandler 消息接收处理函数
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
+}
+
+// parseAddrFromHeader 从代理头解析客户端真实地址
+// 仅在应用层代理模式下，且请求来自受信任代理时，从代理头中提取客户端真实IP及端口。
+// @param r *http.Request HTTP请求
+// @return @1 net.Addr 客户端真实地址，无法解析时返回nil
+func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
+	if s.opts.proxyMode != ProxyModeApplication {
+		return nil
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return nil
+	}
+
+	if ip := net.ParseIP(host); ip == nil || !s.isTrustedProxy(ip) {
+		return nil
+	}
+
+	if ipAddr := s.extractIPFromHeader(r); ipAddr != "" {
+		if ip := net.ParseIP(ipAddr); ip != nil {
+			return &net.TCPAddr{IP: ip}
+		}
+	}
+
+	return nil
+}
+
+// isTrustedProxy 是否受信任的代理
+func (s *server) isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+
+	if s.opts.proxyOpts == nil || s.opts.proxyOpts.TrustProxy == nil {
+		return false
+	}
+
+	if !s.opts.proxyOpts.TrustProxy.Enable {
+		return false
+	}
+
+	if (s.opts.proxyOpts.TrustProxy.Loopback && ip.IsLoopback()) ||
+		(s.opts.proxyOpts.TrustProxy.Private && ip.IsPrivate()) ||
+		(s.opts.proxyOpts.TrustProxy.LinkLocal && ip.IsLinkLocalUnicast()) {
+		return true
+	}
+
+	if len(s.opts.proxyOpts.TrustProxy.ips) > 0 {
+		if _, trusted := s.opts.proxyOpts.TrustProxy.ips[ip.String()]; trusted {
+			return true
+		}
+	}
+
+	for _, ipNet := range s.opts.proxyOpts.TrustProxy.ranges {
+		if ipNet.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// extractIPFromHeader 从代理头中提取客户端真实IP
+// 从右向左遍历代理头中的IP链（如X-Forwarded-For），剥离受信任代理IP：
+// 配置了受信任代理时返回最右侧的非受信任IP，否则返回最左侧的合法IP。
+// @param r *http.Request HTTP请求
+// @return @1 string 客户端真实IP，未提取到时返回空字符串
+func (s *server) extractIPFromHeader(r *http.Request) string {
+	proxyHeader := "X-Forwarded-For"
+	if s.opts.proxyOpts != nil && s.opts.proxyOpts.ProxyHeader != "" {
+		proxyHeader = s.opts.proxyOpts.ProxyHeader
+	}
+
+	headerValue := strings.TrimSpace(r.Header.Get(proxyHeader))
+	if headerValue == "" {
+		return ""
+	}
+
+	for _, part := range strings.Split(headerValue, ",") {
+		if ip := net.ParseIP(strings.TrimSpace(part)); ip != nil {
+			return ip.String()
+		}
+	}
+
+	return ""
 }

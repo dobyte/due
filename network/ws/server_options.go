@@ -1,7 +1,9 @@
 package ws
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dobyte/due/v2/etc"
@@ -23,25 +25,27 @@ const (
 	defaultServerAuthorizeTimeout   = "0s"
 	defaultServerEnableCompression  = false
 	defaultServerCompressionLevel   = 1
+	defaultServerProxyMode          = ProxyModeNone
 )
 
 const (
-	defaultServerAddrKey                = "etc.network.ws.server.addr"
-	defaultServerPathKey                = "etc.network.ws.server.path"
-	defaultServerCheckOriginsKey        = "etc.network.ws.server.origins"
-	defaultServerKeyFileKey             = "etc.network.ws.server.keyFile"
-	defaultServerCertFileKey            = "etc.network.ws.server.certFile"
-	defaultServerMaxConnNumKey          = "etc.network.ws.server.maxConnNum"
-	defaultServerReadBufferSizeKey      = "etc.network.ws.server.readBufferSize"
-	defaultServerWriteBufferSizeKey     = "etc.network.ws.server.writeBufferSize"
-	defaultServerWriteTimeoutKey        = "etc.network.ws.server.writeTimeout"
-	defaultServerWriteQueueSizeKey      = "etc.network.ws.server.writeQueueSize"
-	defaultServerHeartbeatIntervalKey   = "etc.network.ws.server.heartbeatInterval"
-	defaultServerHeartbeatMechanismKey  = "etc.network.ws.server.heartbeatMechanism"
-	defaultServerAuthorizeTimeoutKey    = "etc.network.ws.server.authorizeTimeout"
-	defaultServerEnableCompressionKey   = "etc.network.ws.server.enableCompression"
-	defaultServerCompressionLevelKey    = "etc.network.ws.server.compressionLevel"
-	defaultServerEnableProxyProtocolKey = "etc.network.ws.server.enableProxyProtocol"
+	defaultServerAddrKey               = "etc.network.ws.server.addr"
+	defaultServerPathKey               = "etc.network.ws.server.path"
+	defaultServerCheckOriginsKey       = "etc.network.ws.server.origins"
+	defaultServerKeyFileKey            = "etc.network.ws.server.keyFile"
+	defaultServerCertFileKey           = "etc.network.ws.server.certFile"
+	defaultServerMaxConnNumKey         = "etc.network.ws.server.maxConnNum"
+	defaultServerReadBufferSizeKey     = "etc.network.ws.server.readBufferSize"
+	defaultServerWriteBufferSizeKey    = "etc.network.ws.server.writeBufferSize"
+	defaultServerWriteTimeoutKey       = "etc.network.ws.server.writeTimeout"
+	defaultServerWriteQueueSizeKey     = "etc.network.ws.server.writeQueueSize"
+	defaultServerHeartbeatIntervalKey  = "etc.network.ws.server.heartbeatInterval"
+	defaultServerHeartbeatMechanismKey = "etc.network.ws.server.heartbeatMechanism"
+	defaultServerAuthorizeTimeoutKey   = "etc.network.ws.server.authorizeTimeout"
+	defaultServerEnableCompressionKey  = "etc.network.ws.server.enableCompression"
+	defaultServerCompressionLevelKey   = "etc.network.ws.server.compressionLevel"
+	defaultServerProxyModeKey          = "etc.network.ws.server.proxyMode"
+	defaultServerProxyOptionsKey       = "etc.network.ws.server.proxyOptions"
 )
 
 const (
@@ -51,27 +55,51 @@ const (
 
 type HeartbeatMechanism string
 
+const (
+	ProxyModeNone        ProxyMode = iota // 无代理模式
+	ProxyModeTransport                    // 传输模式（4层代理，服务器会开启proxy protocol）
+	ProxyModeApplication                  // 应用模式（7层代理）
+)
+
+type ProxyMode int
+
 type ServerOption func(o *serverOptions)
 
 type CheckOriginFunc func(r *http.Request) bool
 
+type ProxyOptions struct {
+	ProxyHeader string             `json:"proxyHeader"` // 客户端IP头，默认"X-Forwarded-For"
+	TrustProxy  *TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
+}
+
+type TrustProxyOptions struct {
+	Enable    bool                `json:"enable"`    // 是否信任代理，默认false
+	Proxies   []string            `json:"proxies"`   // 代理是受信任代理 IP 地址或 CIDR 范围的列表
+	LinkLocal bool                `json:"linkLocal"` // 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
+	Loopback  bool                `json:"loopback"`  // 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
+	Private   bool                `json:"private"`   // 支持信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+	ips       map[string]struct{} `json:"-"`         // 受信任代理 IP 地址映射
+	ranges    []*net.IPNet        `json:"-"`         // 受信任代理 IP 范围映射
+}
+
 type serverOptions struct {
-	addr                string             // 监听地址
-	maxConnNum          int                // 最大连接数
-	certFile            string             // 证书文件
-	keyFile             string             // 秘钥文件
-	path                string             // 路径，默认为"/"
-	checkOrigin         CheckOriginFunc    // 跨域检测
-	readBufferSize      int                // 读缓冲区大小，默认4096
-	writeBufferSize     int                // 写缓冲区大小，默认4096
-	writeTimeout        time.Duration      // 写入超时时间，默认无超时
-	writeQueueSize      int                // 写入队列大小，默认1024
-	heartbeatInterval   time.Duration      // 心跳间隔时间，默认10s
-	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
-	enableCompression   bool               // 是否开启压缩，默认false
-	compressionLevel    int                // 压缩等级，默认1
-	enableProxyProtocol bool               // 是否开启代理协议，默认false
+	addr               string             // 监听地址
+	maxConnNum         int                // 最大连接数
+	certFile           string             // 证书文件
+	keyFile            string             // 秘钥文件
+	path               string             // 路径，默认为"/"
+	checkOrigin        CheckOriginFunc    // 跨域检测
+	readBufferSize     int                // 读缓冲区大小，默认4096
+	writeBufferSize    int                // 写缓冲区大小，默认4096
+	writeTimeout       time.Duration      // 写入超时时间，默认无超时
+	writeQueueSize     int                // 写入队列大小，默认1024
+	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
+	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
+	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
+	enableCompression  bool               // 是否开启压缩，默认false
+	compressionLevel   int                // 压缩等级，默认1
+	proxyMode          ProxyMode          // 代理模式，默认ProxyModeNone
+	proxyOpts          *ProxyOptions      // 代理选项，默认nil，仅在proxyMode为ProxyModeApplication时生效
 }
 
 // defaultServerOptions 构建默认服务器配置
@@ -82,7 +110,6 @@ func defaultServerOptions() *serverOptions {
 	opts.path = etc.Get(defaultServerPathKey, defaultServerPath).String()
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
 	opts.keyFile = etc.Get(defaultServerKeyFileKey).String()
-	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
 	opts.enableCompression = etc.Get(defaultServerEnableCompressionKey, defaultServerEnableCompression).Bool()
 
 	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
@@ -144,6 +171,26 @@ func defaultServerOptions() *serverOptions {
 		opts.compressionLevel = compressionLevel
 	} else {
 		opts.compressionLevel = defaultServerCompressionLevel
+	}
+
+	switch proxyMode := ProxyMode(etc.Get(defaultServerProxyModeKey, defaultServerProxyMode).Int()); proxyMode {
+	case ProxyModeNone, ProxyModeTransport, ProxyModeApplication:
+		opts.proxyMode = proxyMode
+	default:
+		opts.proxyMode = defaultServerProxyMode
+	}
+
+	if opts.proxyMode != ProxyModeNone {
+		proxyOpts := &ProxyOptions{}
+
+		if err := etc.Get(defaultServerProxyOptionsKey).Scan(&proxyOpts); err != nil {
+			log.Warnf("scan proxy options failed: %v", err)
+		} else {
+			opts.proxyOpts = &ProxyOptions{
+				ProxyHeader: proxyOpts.ProxyHeader,
+				TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
+			}
+		}
 	}
 
 	origins := etc.Get(defaultServerCheckOriginsKey, []string{defaultServerCheckOrigin}).Strings()
@@ -324,9 +371,55 @@ func WithServerCompressionLevel(compressionLevel int) ServerOption {
 	}
 }
 
-// WithServerEnableProxyProtocol 设置是否开启代理协议
-// @param enableProxyProtocol bool 是否开启代理协议
+// WithServerProxyMode 设置代理模式
+// @param proxyMode ProxyMode 代理模式
 // @return @1 ServerOption 服务器配置项
-func WithServerEnableProxyProtocol(enableProxyProtocol bool) ServerOption {
-	return func(o *serverOptions) { o.enableProxyProtocol = enableProxyProtocol }
+func WithServerProxyMode(proxyMode ProxyMode) ServerOption {
+	return func(o *serverOptions) { o.proxyMode = proxyMode }
+}
+
+// WithServerProxyOptions 设置代理选项
+// @param proxyOpts *ProxyOptions 代理选项
+// @return @1 ServerOption 服务器配置项
+func WithServerProxyOptions(proxyOpts *ProxyOptions) ServerOption {
+	return func(o *serverOptions) {
+		if proxyOpts == nil {
+			return
+		}
+
+		o.proxyOpts = &ProxyOptions{
+			ProxyHeader: proxyOpts.ProxyHeader,
+			TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
+		}
+	}
+}
+
+// handleTrustedProxy 处理受信任的代理
+// @param opts TrustProxyOptions 受信任的代理配置
+// @return @1 *TrustProxyOptions 处理后的受信任的代理配置
+func handleTrustedProxy(opts *TrustProxyOptions) *TrustProxyOptions {
+	if opts == nil {
+		return nil
+	}
+
+	opts.ips = make(map[string]struct{}, len(opts.Proxies))
+	opts.ranges = make([]*net.IPNet, 0, len(opts.Proxies))
+
+	for _, proxy := range opts.Proxies {
+		if strings.IndexByte(proxy, '/') >= 0 {
+			if _, ipNet, err := net.ParseCIDR(proxy); err != nil {
+				log.Warnf("IP range %q could not be parsed: %v", proxy, err)
+			} else {
+				opts.ranges = append(opts.ranges, ipNet)
+			}
+		} else {
+			if ip := net.ParseIP(proxy); ip == nil {
+				log.Warnf("IP address %q could not be parsed", proxy)
+			} else {
+				opts.ips[proxy] = struct{}{}
+			}
+		}
+	}
+
+	return opts
 }
