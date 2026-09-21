@@ -1,16 +1,17 @@
 package ecc
 
 import (
+	"strings"
+
 	"github.com/dobyte/due/v2/core/hash"
 	"github.com/dobyte/due/v2/etc"
-	"strings"
 )
 
 const (
-	defaultSignerHashKey       = "etc.crypto.rsa.signer.hash"
-	defaultSignerDelimiterKey  = "etc.crypto.rsa.signer.delimiter"
-	defaultSignerPublicKeyKey  = "etc.crypto.rsa.signer.publicKey"
-	defaultSignerPrivateKeyKey = "etc.crypto.rsa.signer.privateKey"
+	defaultSignerHashKey       = "etc.crypto.ecc.signer.hash"
+	defaultSignerDelimiterKey  = "etc.crypto.ecc.signer.delimiter"
+	defaultSignerPublicKeyKey  = "etc.crypto.ecc.signer.publicKey"
+	defaultSignerPrivateKeyKey = "etc.crypto.ecc.signer.privateKey"
 )
 
 type SignerOption func(o *signerOptions)
@@ -39,7 +40,7 @@ func defaultSignerOptions() *signerOptions {
 	}
 }
 
-// WithSignerHash 设置加密hash算法
+// WithSignerHash 设置签名hash算法
 func WithSignerHash(hash hash.Hash) SignerOption {
 	return func(o *signerOptions) { o.hash = hash }
 }
@@ -54,7 +55,7 @@ func WithSignerPublicKey(publicKey string) SignerOption {
 	return func(o *signerOptions) { o.publicKey = publicKey }
 }
 
-// WithSignerPrivateKey 设置解密私钥
+// WithSignerPrivateKey 设置签名私钥
 func WithSignerPrivateKey(privateKey string) SignerOption {
 	return func(o *signerOptions) { o.privateKey = privateKey }
 }

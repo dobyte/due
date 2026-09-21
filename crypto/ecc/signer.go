@@ -68,6 +68,10 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 
 // Verify 验签
 func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+
 	delimiter := []byte(s.opts.delimiter)
 	segments := bytes.Split(signature, delimiter)
 
@@ -92,6 +96,11 @@ func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
 }
 
 func (s *Signer) init() {
+	if s.opts.delimiter == "" {
+		s.err = errors.New("signer: delimiter must not be empty")
+		return
+	}
+
 	s.publicKey, s.err = parseECDSAPublicKey(s.opts.publicKey)
 	if s.err != nil {
 		return

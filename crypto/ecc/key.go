@@ -2,7 +2,6 @@
  * @Author: fuxiao
  * @Email: 576101059@qq.com
  * @Date: 2022/11/1 12:50 上午
- * @Desc: TODO
  */
 
 package ecc
@@ -27,7 +26,7 @@ type Key struct {
 	prv *ecdsa.PrivateKey
 }
 
-// GenerateKey 生成秘钥
+// GenerateKey 生成密钥
 func GenerateKey(curve Curve) (*Key, error) {
 	prv, err := ecdsa.GenerateKey(curve.New(), rand.Reader)
 	if err != nil {
@@ -59,7 +58,7 @@ func (k *Key) MarshalPublicKey() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// 编码私钥
+// 编码公钥
 func (k *Key) marshalPublicKey(out io.Writer) error {
 	derText, err := x509.MarshalPKIXPublicKey(k.PublicKey())
 	if err != nil {
@@ -97,7 +96,7 @@ func (k *Key) marshalPrivateKey(out io.Writer) error {
 	})
 }
 
-// SaveKeyPair 保存秘钥对
+// SaveKeyPair 保存密钥对
 func (k *Key) SaveKeyPair(dir string, file string) (err error) {
 	if !xos.IsDir(dir) {
 		err = os.MkdirAll(dir, os.ModePerm)
@@ -106,15 +105,19 @@ func (k *Key) SaveKeyPair(dir string, file string) (err error) {
 		}
 	}
 
-	err = k.savePublicKey(dir, file)
-	if err != nil {
+	if err = k.savePublicKey(dir, file); err != nil {
 		return
 	}
 
-	return k.savePrivateKey(dir, file)
+	if err = k.savePrivateKey(dir, file); err != nil {
+		_ = os.Remove(publicKeyFilePath(dir, file))
+		return
+	}
+
+	return nil
 }
 
-// 保存公钥
+// 保存私钥
 func (k *Key) savePrivateKey(dir string, file string) (err error) {
 	filepath := path.Join(dir, file)
 	defer func() {
@@ -127,20 +130,14 @@ func (k *Key) savePrivateKey(dir string, file string) (err error) {
 	if err != nil {
 		return
 	}
+	defer f.Close()
 
 	return k.marshalPrivateKey(f)
 }
 
 // 保存公钥
 func (k *Key) savePublicKey(dir string, file string) (err error) {
-	base, _, name, ext := xos.Split(file)
-	if ext != "" {
-		file = name + ".pub." + ext
-	} else {
-		file = name + ".pub"
-	}
-
-	filepath := path.Join(dir, base, file)
+	filepath := publicKeyFilePath(dir, file)
 	defer func() {
 		if err != nil {
 			_ = os.Remove(filepath)
@@ -151,8 +148,21 @@ func (k *Key) savePublicKey(dir string, file string) (err error) {
 	if err != nil {
 		return
 	}
+	defer f.Close()
 
 	return k.marshalPublicKey(f)
+}
+
+// publicKeyFilePath 获取公钥文件路径
+func publicKeyFilePath(dir string, file string) string {
+	base, _, name, ext := xos.Split(file)
+	if ext != "" {
+		file = name + ".pub." + ext
+	} else {
+		file = name + ".pub"
+	}
+
+	return path.Join(dir, base, file)
 }
 
 func loadKey(key string) (*pem.Block, error) {
@@ -194,16 +204,16 @@ func parseECIESPrivateKey(privateKey string) (*ecies.PrivateKey, error) {
 }
 
 func parseECDSAPublicKey(publicKey string) (*ecdsa.PublicKey, error) {
-	black, err := loadKey(publicKey)
+	block, err := loadKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if black == nil {
+	if block == nil {
 		return nil, errors.ErrInvalidPublicKey
 	}
 
-	pub, err := x509.ParsePKIXPublicKey(black.Bytes)
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -217,14 +227,14 @@ func parseECDSAPublicKey(publicKey string) (*ecdsa.PublicKey, error) {
 }
 
 func parseECDSAPrivateKey(privateKey string) (*ecdsa.PrivateKey, error) {
-	black, err := loadKey(privateKey)
+	block, err := loadKey(privateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if black == nil {
+	if block == nil {
 		return nil, errors.ErrInvalidPrivateKey
 	}
 
-	return x509.ParseECPrivateKey(black.Bytes)
+	return x509.ParseECPrivateKey(block.Bytes)
 }
