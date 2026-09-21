@@ -2,11 +2,13 @@ package consul
 
 import (
 	"context"
-	"path/filepath"
+	"net/http"
+	"path"
 	"strings"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/hashicorp/consul/api"
 )
 
@@ -15,8 +17,10 @@ const Name = "consul"
 
 // Source 配置源
 type Source struct {
-	err  error    // 构建客户端错误信息
-	opts *options // 配置项
+	err       error           // 构建客户端错误信息
+	opts      *options        // 配置项
+	builtin   bool            // 是否为内建客户端
+	transport *http.Transport // 内建客户端的底层传输层
 }
 
 // NewSource 创建配置源
@@ -31,7 +35,15 @@ func NewSource(opts ...Option) config.Source {
 
 	s := &Source{}
 	s.opts = o
-	s.opts.path = strings.TrimSuffix(strings.TrimPrefix(s.opts.path, "/"), "/")
+
+	// 归一化路径，去除首尾斜杠；路径为空时告警并回退默认值，
+	// 避免空路径导致List/监听覆盖Consul全量键
+	path := strings.Trim(s.opts.path, "/")
+	if path == "" {
+		log.Warnf("invalid config path, use default path: %s", defaultPath)
+		path = strings.Trim(defaultPath, "/")
+	}
+	s.opts.path = path
 
 	if o.client == nil {
 		c := api.DefaultConfig()
@@ -39,6 +51,8 @@ func NewSource(opts ...Option) config.Source {
 			c.Address = o.addr
 		}
 
+		s.builtin = true
+		s.transport = c.Transport
 		s.opts.client, s.err = api.NewClient(c)
 	}
 
@@ -62,39 +76,31 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
-	var prefix string
+	// 传入file参数时按精确键查询，仅返回目标配置项
+	if len(file) > 0 && file[0] != "" {
+		key := s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
 
-	if s.opts.path != "" {
-		if len(file) > 0 && file[0] != "" {
-			prefix = s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
-		} else {
-			prefix = s.opts.path + "/"
+		kv, _, err := s.opts.client.KV().Get(key, (&api.QueryOptions{}).WithContext(ctx))
+		if err != nil {
+			return nil, err
 		}
+
+		if kv == nil {
+			return nil, nil
+		}
+
+		return []*config.Configuration{s.parseKV(kv.Key, kv.Value)}, nil
 	}
 
-	kvs, _, err := s.opts.client.KV().List(prefix, nil)
+	// 未传入file参数时，加载基础路径下所有配置项
+	kvs, _, err := s.opts.client.KV().List(s.opts.path+"/", (&api.QueryOptions{}).WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 
-	if len(kvs) == 0 {
-		return nil, nil
-	}
-
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		fullPath := kv.Key
-		path := strings.TrimPrefix(fullPath, s.opts.path)
-		file := filepath.Base(fullPath)
-		ext := filepath.Ext(file)
-		configs = append(configs, &config.Configuration{
-			Path:     path,
-			File:     file,
-			Name:     strings.TrimSuffix(file, ext),
-			Format:   strings.TrimPrefix(ext, "."),
-			Content:  kv.Value,
-			FullPath: fullPath,
-		})
+		configs = append(configs, s.parseKV(kv.Key, kv.Value))
 	}
 
 	return configs, nil
@@ -115,20 +121,35 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	var key string
-
-	if s.opts.path != "" {
-		key = s.opts.path + "/" + strings.TrimPrefix(file, "/")
-	} else {
-		key = strings.TrimPrefix(file, "/")
-	}
+	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
 
 	_, err := s.opts.client.KV().Put(&api.KVPair{
 		Key:   key,
 		Value: content,
-	}, nil)
+	}, (&api.WriteOptions{}).WithContext(ctx))
 
 	return err
+}
+
+// parseKV 解析Consul的键值对为统一的配置结构
+// @param key string 配置键名
+// @param value []byte 配置内容
+// @return @1 *config.Configuration 配置项
+func (s *Source) parseKV(key string, value []byte) *config.Configuration {
+	fullPath := key
+	relPath := strings.TrimPrefix(fullPath, s.opts.path)
+	relPath = strings.TrimPrefix(relPath, "/")
+	file := path.Base(fullPath)
+	ext := path.Ext(file)
+
+	return &config.Configuration{
+		Path:     relPath,
+		File:     file,
+		Name:     strings.TrimSuffix(file, ext),
+		Format:   strings.TrimPrefix(ext, "."),
+		Content:  value,
+		FullPath: fullPath,
+	}
 }
 
 // Watch 监听配置项
@@ -145,7 +166,16 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 }
 
 // Close 关闭配置源
+// 内建客户端时关闭其底层传输层的空闲连接，外部客户端由调用方负责关闭
 // @return @1 error 错误信息
 func (s *Source) Close() error {
+	if s.err != nil {
+		return s.err
+	}
+
+	if s.builtin && s.transport != nil {
+		s.transport.CloseIdleConnections()
+	}
+
 	return nil
 }

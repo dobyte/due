@@ -2,8 +2,8 @@ package consul
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/config"
@@ -14,12 +14,19 @@ import (
 	"github.com/hashicorp/consul/api/watch"
 )
 
+const (
+	watchMinBackoff = time.Second      // 监听重连最小退避时间
+	watchMaxBackoff = 30 * time.Second // 监听重连最大退避时间
+)
+
 // 监听器
 type watcher struct {
 	ctx     context.Context              // 上下文
 	cancel  context.CancelFunc           // 取消函数
 	source  *Source                      // 配置源
 	plan    *watch.Plan                  // 监听计划
+	mu      sync.Mutex                   // 发送锁
+	stopped atomic.Bool                  // 是否已停止
 	chWatch chan []*config.Configuration // 配置变更通道
 }
 
@@ -45,14 +52,9 @@ func newWatcher(ctx context.Context, s *Source) (config.Watcher, error) {
 // 解析keyprefix监听计划并启动监听协程
 // @return @1 error 错误信息
 func (w *watcher) init() (err error) {
-	var prefix string
-	if w.source.opts.path != "" {
-		prefix = w.source.opts.path + "/"
-	}
-
 	w.plan, err = watch.Parse(map[string]any{
 		"type":   "keyprefix",
-		"prefix": prefix,
+		"prefix": w.source.opts.path + "/",
 	})
 	if err != nil {
 		return
@@ -61,6 +63,8 @@ func (w *watcher) init() (err error) {
 	w.plan.Handler = w.planHandler
 
 	xcall.Go(func() {
+		delay := watchMinBackoff
+
 		for {
 			if runErr := w.plan.RunWithClientAndHclog(w.source.opts.client, nil); runErr != nil {
 				if w.ctx.Err() != nil {
@@ -72,7 +76,15 @@ func (w *watcher) init() (err error) {
 				select {
 				case <-w.ctx.Done():
 					return
-				case <-time.After(time.Second):
+				case <-time.After(delay):
+				}
+
+				if delay < watchMaxBackoff {
+					if delay > watchMaxBackoff/2 {
+						delay = watchMaxBackoff
+					} else {
+						delay *= 2
+					}
 				}
 
 				continue
@@ -101,38 +113,24 @@ func (w *watcher) planHandler(idx uint64, raw any) {
 
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		configs = append(configs, w.parseKV(kv.Key, kv.Value))
+		configs = append(configs, w.source.parseKV(kv.Key, kv.Value))
 	}
 
 	w.notify(configs)
-}
-
-// 解析KV
-// 将Consul的KV转换为统一的配置结构
-// @param key string 配置键名
-// @param value []byte 配置内容
-// @return @1 *config.Configuration 配置项
-func (w *watcher) parseKV(key string, value []byte) *config.Configuration {
-	fullPath := key
-	path := strings.TrimPrefix(fullPath, w.source.opts.path)
-	file := filepath.Base(fullPath)
-	ext := filepath.Ext(file)
-
-	return &config.Configuration{
-		Path:     path,
-		File:     file,
-		Name:     strings.TrimSuffix(file, ext),
-		Format:   strings.TrimPrefix(ext, "."),
-		Content:  value,
-		FullPath: fullPath,
-	}
 }
 
 // 通知监听器配置列表已更新
 // 清空旧数据后非阻塞发送最新配置快照
 // @param configs []*config.Configuration 配置项列表
 func (w *watcher) notify(configs []*config.Configuration) {
-	if w.ctx.Err() != nil {
+	if w.stopped.Load() {
+		return
+	}
+
+	w.mu.Lock()
+
+	if w.stopped.Load() {
+		w.mu.Unlock()
 		return
 	}
 
@@ -142,6 +140,8 @@ func (w *watcher) notify(configs []*config.Configuration) {
 	case w.chWatch <- configs:
 	case <-w.ctx.Done():
 	}
+
+	w.mu.Unlock()
 }
 
 // 清空所有旧数据，仅保留最新配置快照
@@ -175,8 +175,16 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 // Stop 停止监听
 // @return @1 error 错误信息
 func (w *watcher) Stop() error {
+	if !w.stopped.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	w.cancel()
 	w.plan.Stop()
+
+	w.mu.Lock()
+	close(w.chWatch)
+	w.mu.Unlock()
 
 	return nil
 }
