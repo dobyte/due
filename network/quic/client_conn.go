@@ -25,7 +25,7 @@ type clientConn struct {
 	qc                *quic.Conn                  // QUIC连接
 	stream            *quic.Stream                // 双向流
 	state             atomic.Int32                // 连接状态
-	client            *client                     // 客户端
+	cli               *client                     // 客户端
 	wg1               *sync.WaitGroup             // 读等待组
 	wg2               *sync.WaitGroup             // 写等待组
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
@@ -36,15 +36,15 @@ type clientConn struct {
 var _ network.Conn = &clientConn{}
 
 // newClientConn creates a client connection.
-func newClientConn(id int64, qc *quic.Conn, stream *quic.Stream, client *client) *clientConn {
+func newClientConn(cli *client, qc *quic.Conn, stream *quic.Stream) network.Conn {
 	c := &clientConn{}
-	c.id = id
+	c.id = cli.genConnID()
 	c.attr = &attr{}
 	c.qc = qc
 	c.stream = stream
-	c.client = client
+	c.cli = cli
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.output = newBufferWriter(stream)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
@@ -53,8 +53,8 @@ func newClientConn(id int64, qc *quic.Conn, stream *quic.Stream, client *client)
 	c.wg2.Go(func() { c.write(stream) })
 	c.wg1.Go(func() {
 		// OnConnect runs before the read loop so it always precedes OnReceive.
-		if client.connectHandler != nil {
-			client.connectHandler(c)
+		if cli.connectHandler != nil {
+			cli.connectHandler(c)
 		}
 		c.read(stream)
 	})
@@ -261,7 +261,7 @@ func (c *clientConn) doClose(graceful bool) error {
 		// the FIN and retransmit, then tear it down.
 		select {
 		case <-qc.Context().Done():
-		case <-time.After(c.client.opts.closeTimeout):
+		case <-time.After(c.cli.opts.closeTimeout):
 		}
 	}
 
@@ -274,8 +274,8 @@ func (c *clientConn) doClose(graceful bool) error {
 		buf.Release()
 	}
 
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
+	if c.cli.disconnectHandler != nil {
+		c.cli.disconnectHandler(c)
 	}
 
 	return err
@@ -306,15 +306,15 @@ func (c *clientConn) read(stream *quic.Stream) {
 		}
 
 		if isHeartbeat {
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			}
 
-			if c.client.heartbeatHandler != nil {
-				c.client.heartbeatHandler(c, heartbeatTime)
+			if c.cli.heartbeatHandler != nil {
+				c.cli.heartbeatHandler(c, heartbeatTime)
 			}
 		} else {
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				index++
 				if index%10 == 0 {
 					c.lastHeartbeatTime.Store(time.Now().UnixNano())
@@ -326,8 +326,8 @@ func (c *clientConn) read(stream *quic.Stream) {
 				continue
 			}
 
-			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buf)
+			if c.cli.receiveHandler != nil {
+				c.cli.receiveHandler(c, buf)
 			} else {
 				buf.Release()
 			}
@@ -339,8 +339,8 @@ func (c *clientConn) read(stream *quic.Stream) {
 func (c *clientConn) write(stream *quic.Stream) {
 	var tickerC <-chan time.Time
 
-	if c.client.opts.heartbeatInterval > 0 {
-		ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	if c.cli.opts.heartbeatInterval > 0 {
+		ticker := time.NewTicker(c.cli.opts.heartbeatInterval)
 		defer ticker.Stop()
 		tickerC = ticker.C
 	}
@@ -376,8 +376,8 @@ func (c *clientConn) doWrite(stream *quic.Stream, buf buffer.Buffer) {
 		return
 	}
 
-	if c.client.opts.writeTimeout > 0 {
-		_ = stream.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
+	if c.cli.opts.writeTimeout > 0 {
+		_ = stream.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
 	}
 
 	if err := c.output.write(buf); err != nil && !errors.Is(err, net.ErrClosed) {
@@ -390,7 +390,7 @@ func (c *clientConn) doWrite(stream *quic.Stream, buf buffer.Buffer) {
 
 // doHandleHeartbeat checks the heartbeat timeout and sends a heartbeat.
 func (c *clientConn) doHandleHeartbeat(stream *quic.Stream, t time.Time) bool {
-	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.cli.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		taskpool.Add(func() { c.forceClose() })
@@ -398,8 +398,8 @@ func (c *clientConn) doHandleHeartbeat(stream *quic.Stream, t time.Time) bool {
 		return false
 	}
 
-	if c.client.opts.writeTimeout > 0 {
-		_ = stream.SetWriteDeadline(time.Now().Add(c.client.opts.writeTimeout))
+	if c.cli.opts.writeTimeout > 0 {
+		_ = stream.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
 	}
 
 	hb := packet.PackHeartbeat()

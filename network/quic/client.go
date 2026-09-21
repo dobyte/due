@@ -16,7 +16,7 @@ import (
 
 type client struct {
 	opts              *clientOptions
-	id                atomic.Int64
+	cid               atomic.Int64
 	connectHandler    network.ConnectHandler
 	disconnectHandler network.DisconnectHandler
 	receiveHandler    network.ReceiveHandler
@@ -83,7 +83,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 	_ = stream.SetWriteDeadline(time.Time{})
-	return newClientConn(c.id.Add(1), qc, stream, c), nil
+	return newClientConn(c, qc, stream), nil
 }
 
 // Protocol returns the protocol name.
@@ -129,4 +129,14 @@ func transportConfig(heartbeat time.Duration) *quic.Config {
 		config.KeepAlivePeriod = 10 * time.Second
 	}
 	return config
+}
+
+// genConnID 生成连接ID
+// @return @1 int64 连接ID
+func (c *client) genConnID() int64 {
+	if cid := c.cid.Add(1); cid == 0 {
+		return c.cid.Add(1)
+	} else {
+		return cid
+	}
 }

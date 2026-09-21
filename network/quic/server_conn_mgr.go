@@ -22,7 +22,7 @@ type partition struct {
 // connection objects through a sync.Pool.
 type serverConnMgr struct {
 	server     *server
-	id         atomic.Int64
+	cid        atomic.Int64
 	total      atomic.Int64
 	connPool   sync.Pool
 	partitions []partition
@@ -56,7 +56,7 @@ func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 		}
 	}
 
-	id := m.id.Add(1)
+	id := m.genConnID()
 	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -141,4 +141,14 @@ func (m *serverConnMgr) close() {
 		}
 		wg.Wait()
 	})
+}
+
+// genConnID 生成连接ID
+// @return @1 int64 连接ID
+func (cm *serverConnMgr) genConnID() int64 {
+	if cid := cm.cid.Add(1); cid == 0 {
+		return cm.cid.Add(1)
+	} else {
+		return cid
+	}
 }
