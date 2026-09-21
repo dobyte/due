@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/13 12:32 上午
- * @Desc: TODO
- */
-
 package etcd
 
 import (
@@ -32,7 +25,6 @@ const (
 	defaultUsernameKey    = "etc.config.etcd.username"
 	defaultPasswordKey    = "etc.config.etcd.password"
 	defaultTimeoutKey     = "etc.config.etcd.timeout"
-	defaultRetryTimesKey  = "etc.config.etcd.retryTimes"
 )
 
 // Option 配置选项函数
@@ -41,7 +33,7 @@ type Option func(o *options)
 // 配置项
 type options struct {
 	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"localhost:2379"}
+	// 内建客户端配置，默认为[]string{"127.0.0.1:2379"}
 	addrs []string
 
 	// 客户端拨号超时时间
@@ -69,10 +61,6 @@ type options struct {
 	// 上下文超时时间
 	// 默认为3秒
 	timeout time.Duration
-
-	// 重连重试次数
-	// 监听失效后重建监听的退避重试次数，默认为3次
-	retryTimes int
 }
 
 // 创建默认配置项
@@ -87,7 +75,6 @@ func defaultOptions() *options {
 		username:    etc.Get(defaultUsernameKey).String(),
 		password:    etc.Get(defaultPasswordKey).String(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
-		retryTimes:  etc.Get(defaultRetryTimesKey, defaultRetryTimes).Int(),
 	}
 }
 
@@ -141,11 +128,4 @@ func WithPassword(password string) Option {
 // @return @1 Option 配置选项函数
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
-}
-
-// WithRetryTimes 设置重连重试次数
-// @param retryTimes int 重连重试次数
-// @return @1 Option 配置选项函数
-func WithRetryTimes(retryTimes int) Option {
-	return func(o *options) { o.retryTimes = retryTimes }
 }

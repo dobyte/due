@@ -9,7 +9,6 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xconv"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -92,18 +91,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	configs := make([]*config.Configuration, 0, len(res.Kvs))
 	for _, kv := range res.Kvs {
-		fullPath := string(kv.Key)
-		path := strings.TrimPrefix(fullPath, s.opts.path)
-		file := filepath.Base(fullPath)
-		ext := filepath.Ext(file)
-		configs = append(configs, &config.Configuration{
-			Path:     path,
-			File:     file,
-			Name:     strings.TrimSuffix(file, ext),
-			Format:   strings.TrimPrefix(ext, "."),
-			Content:  kv.Value,
-			FullPath: fullPath,
-		})
+		configs = append(configs, s.parseKV(kv.Key, kv.Value))
 	}
 
 	return configs, nil
@@ -125,8 +113,28 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	}
 
 	key := s.opts.path + strings.TrimPrefix(file, "/")
-	_, err := s.opts.client.Put(ctx, key, xconv.String(content))
+	_, err := s.opts.client.Put(ctx, key, string(content))
 	return err
+}
+
+// parseKV 解析etcd的键值对为统一的配置结构
+// @param key []byte 配置键名
+// @param value []byte 配置内容
+// @return @1 *config.Configuration 配置项
+func (s *Source) parseKV(key, value []byte) *config.Configuration {
+	fullPath := string(key)
+	path := strings.TrimPrefix(fullPath, s.opts.path)
+	file := filepath.Base(fullPath)
+	ext := filepath.Ext(file)
+
+	return &config.Configuration{
+		Path:     path,
+		File:     file,
+		Name:     strings.TrimSuffix(file, ext),
+		Format:   strings.TrimPrefix(ext, "."),
+		Content:  value,
+		FullPath: fullPath,
+	}
 }
 
 // Watch 监听配置项
@@ -146,7 +154,7 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		res = nil
 	}
 
-	return newWatcher(ctx, s, res)
+	return newWatcher(ctx, s, res), nil
 }
 
 // Close 关闭资源

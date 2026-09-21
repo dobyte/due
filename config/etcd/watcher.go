@@ -2,8 +2,6 @@ package etcd
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,9 +34,8 @@ type watcher struct {
 // @param ctx context.Context 上下文
 // @param s *Source 配置源
 // @param res *clientv3.GetResponse 初始快照拉取结果
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
-func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) (config.Watcher, error) {
+// @return @1 *watcher 监听器
+func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watcher {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
 	w.source = s
@@ -49,7 +46,7 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) (conf
 	if res != nil {
 		// 以全量拉取结果作为初始快照
 		for _, kv := range res.Kvs {
-			c := w.parseKV(kv.Key, kv.Value)
+			c := w.source.parseKV(kv.Key, kv.Value)
 			w.configs[c.FullPath] = c
 		}
 
@@ -84,7 +81,7 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) (conf
 		}
 	})
 
-	return w, nil
+	return w
 }
 
 // Next 返回配置列表
@@ -101,27 +98,6 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 		}
 
 		return configs, nil
-	}
-}
-
-// 解析配置
-// 将etcd的键值对转换为统一的配置结构
-// @param key []byte 配置键名
-// @param value []byte 配置内容
-// @return @1 *config.Configuration 配置项
-func (w *watcher) parseKV(key []byte, value []byte) *config.Configuration {
-	fullPath := string(key)
-	path := strings.TrimPrefix(fullPath, w.source.opts.path)
-	file := filepath.Base(fullPath)
-	ext := filepath.Ext(file)
-
-	return &config.Configuration{
-		Path:     path,
-		File:     file,
-		Name:     strings.TrimSuffix(file, ext),
-		Format:   strings.TrimPrefix(ext, "."),
-		Content:  value,
-		FullPath: fullPath,
 	}
 }
 
@@ -146,7 +122,7 @@ func (w *watcher) watchLoop() {
 			for _, ev := range res.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
-					c := w.parseKV(ev.Kv.Key, ev.Kv.Value)
+					c := w.source.parseKV(ev.Kv.Key, ev.Kv.Value)
 					w.configs[c.FullPath] = c
 				case mvccpb.DELETE:
 					delete(w.configs, string(ev.Kv.Key))
@@ -163,8 +139,6 @@ func (w *watcher) watchLoop() {
 // watch失效后重新拉取全量配置并重建监听，直到成功或监听被停止
 // @return @1 bool 是否重建成功
 func (w *watcher) resync() bool {
-	retryTimes := max(1, w.source.opts.retryTimes)
-
 	for {
 		err := xcall.Backoff(w.ctx, func(ctx context.Context, attempt int) (bool, error) {
 			if w.stopped.Load() {
@@ -182,7 +156,7 @@ func (w *watcher) resync() bool {
 			w.rw.Lock()
 			w.configs = make(map[string]*config.Configuration)
 			for _, kv := range res.Kvs {
-				c := w.parseKV(kv.Key, kv.Value)
+				c := w.source.parseKV(kv.Key, kv.Value)
 				w.configs[c.FullPath] = c
 			}
 			w.rw.Unlock()
@@ -197,7 +171,7 @@ func (w *watcher) resync() bool {
 			)
 
 			return false, nil
-		}, retryTimes, 100*time.Millisecond, 3*time.Second)
+		}, defaultRetryTimes, 100*time.Millisecond, 3*time.Second)
 		if err == nil {
 			return true
 		}
@@ -227,9 +201,9 @@ func (w *watcher) notify(configs []*config.Configuration) {
 	}
 
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	if w.stopped.Load() {
+		w.mu.Unlock()
 		return
 	}
 
@@ -239,6 +213,8 @@ func (w *watcher) notify(configs []*config.Configuration) {
 	case w.chWatch <- configs:
 	case <-w.ctx.Done():
 	}
+
+	w.mu.Unlock()
 }
 
 // 清空所有旧数据，仅保留最新配置快照
@@ -270,18 +246,19 @@ func (w *watcher) Stop() error {
 
 	w.wg.Wait()
 
+	w.watcher.Close()
+
 	return nil
 }
 
 // 释放资源
-// 取消上下文、关闭etcd监听器并关闭配置变更通道
+// 取消上下文并关闭配置变更通道
 func (w *watcher) release() {
 	if !w.stopped.CompareAndSwap(false, true) {
 		return
 	}
 
 	w.cancel()
-	w.watcher.Close()
 
 	w.mu.Lock()
 	close(w.chWatch)
