@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"time"
 
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/core/net"
@@ -11,6 +12,8 @@ import (
 )
 
 const scheme = "rpcx"
+
+const defaultShutdownTimeout = 5 * time.Second
 
 // Server 微服务服务器，封装 rpcx 服务端并暴露通用启动、停止与注册能力
 type Server struct {
@@ -90,7 +93,10 @@ func (s *Server) Start() error {
 // Stop 停止服务器
 // @return @1 error 错误信息
 func (s *Server) Stop() error {
-	return s.server.Shutdown(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
+	defer cancel()
+
+	return s.server.Shutdown(ctx)
 }
 
 // RegisterService 注册服务

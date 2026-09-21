@@ -148,9 +148,12 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 			go func(ch chan []*cli.KVPair) {
 				defer func() { recover() }()
 
+				timer := time.NewTimer(time.Minute)
+				defer timer.Stop()
+
 				select {
 				case ch <- pairs:
-				case <-time.After(time.Minute):
+				case <-timer.C:
 					log.Warn("chan is full and new change has been dropped")
 				}
 			}(ch)

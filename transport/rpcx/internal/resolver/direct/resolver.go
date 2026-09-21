@@ -42,12 +42,17 @@ func (r *Resolver) GetServices() []*cli.KVPair {
 }
 
 // WatchService 监听服务地址变更
-// 返回带缓冲的变更通知通道
+// 返回带缓冲的变更通知通道，已关闭时立即返回已关闭的通道
 // @return @1 chan []*cli.KVPair 变更通知通道
 func (r *Resolver) WatchService() chan []*cli.KVPair {
 	ch := make(chan []*cli.KVPair, 10)
 
 	r.crw.Lock()
+	if r.closed {
+		r.crw.Unlock()
+		close(ch)
+		return ch
+	}
 	r.chans = append(r.chans, ch)
 	r.crw.Unlock()
 
@@ -143,9 +148,12 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 			go func(ch chan []*cli.KVPair) {
 				defer func() { recover() }()
 
+				timer := time.NewTimer(time.Minute)
+				defer timer.Stop()
+
 				select {
 				case ch <- pairs:
-				case <-time.After(time.Minute):
+				case <-timer.C:
 					log.Warn("chan is full and new change has been dropped")
 				}
 			}(ch)

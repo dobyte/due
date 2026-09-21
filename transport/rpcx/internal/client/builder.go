@@ -1,9 +1,11 @@
 package client
 
 import (
+	"context"
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver"
 	"github.com/dobyte/due/transport/rpcx/v2/internal/resolver/direct"
@@ -21,14 +23,19 @@ import (
 
 const defaultPoolSize = 10
 
+const defaultTimeout = 10 * time.Second
+
 // Builder 客户端连接池构建器，负责创建 rpcx 连接池并管理其生命周期
 type Builder struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
 	err      error
 	opts     *Options
 	dialOpts cli.Option
 	builders map[string]resolver.Builder
 	sfg      singleflight.Group
 	pools    sync.Map
+	watcher  registry.Watcher
 	closed   atomic.Bool
 }
 
@@ -52,15 +59,23 @@ func NewBuilder(opts *Options) *Builder {
 	b.builders = make(map[string]resolver.Builder)
 	b.dialOpts = cli.DefaultOption
 	b.dialOpts.CompressType = proto.Gzip
-	b.RegisterBuilder(direct.NewBuilder(opts.Discovery))
+	b.ctx, b.cancel = context.WithCancel(context.Background())
+	b.RegisterBuilder(direct.NewBuilder())
 	if opts.Discovery != nil {
-		b.RegisterBuilder(discovery.NewBuilder(opts.Discovery))
+		b.RegisterBuilder(discovery.NewBuilder())
 	}
 
 	if opts.CAFile != "" && opts.ServerName != "" {
 		b.dialOpts.TLSConfig, b.err = tls.MakeTCPClientTLSConfig(opts.CAFile, opts.ServerName)
 	} else if opts.CAFile != "" || opts.ServerName != "" {
-		log.Warn("grpc client use insecure credentials")
+		log.Warn("rpcx client use insecure credentials")
+	}
+
+	if b.err == nil {
+		if err := b.init(); err != nil {
+			b.cancel()
+			b.err = err
+		}
 	}
 
 	return b
@@ -70,6 +85,69 @@ func NewBuilder(opts *Options) *Builder {
 // @param builder resolver.Builder 解析器构建器
 func (b *Builder) RegisterBuilder(builder resolver.Builder) {
 	b.builders[builder.Scheme()] = builder
+}
+
+// init 初始化服务发现，加载初始实例并启动实例变更监听
+// @return @1 error 错误信息
+func (b *Builder) init() error {
+	if b.opts.Discovery == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(b.ctx, defaultTimeout)
+	watcher, err := b.opts.Discovery.Watch(ctx, cluster.Mesh.String())
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel = context.WithTimeout(b.ctx, defaultTimeout)
+	instances, err := b.opts.Discovery.Services(ctx, cluster.Mesh.String())
+	cancel()
+	if err != nil {
+		_ = watcher.Stop()
+
+		return err
+	}
+
+	b.watcher = watcher
+	b.updateInstances(instances)
+
+	go b.watch()
+
+	return nil
+}
+
+// watch 监听服务实例变更，并同步到各解析器构建器
+func (b *Builder) watch() {
+	for {
+		select {
+		case <-b.ctx.Done():
+			return
+		default:
+		}
+
+		instances, err := b.watcher.Next()
+		if err != nil {
+			if errors.Is(err, errors.ErrWatcherStopped) {
+				// watcher 已停止，退出循环，避免空转
+				return
+			}
+			// 其他异常，短暂退避后重试，避免忙循环
+			time.Sleep(time.Second)
+			continue
+		}
+
+		b.updateInstances(instances)
+	}
+}
+
+// updateInstances 更新服务实例状态并分发到各解析器构建器
+// @param instances []*registry.ServiceInstance 服务实例列表
+func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
+	for _, builder := range b.builders {
+		builder.UpdateStates(instances)
+	}
 }
 
 // Build 构建客户端
@@ -132,6 +210,13 @@ func (b *Builder) Build(target string) (*cli.OneClient, error) {
 
 		b.pools.Store(target, pool)
 
+		// 防止 Close 与 Build 并发时 Store 进已关闭的连接池
+		if b.closed.Load() {
+			pool.Close()
+			b.pools.Delete(target)
+			return nil, errors.ErrClientClosed
+		}
+
 		return pool, nil
 	})
 	if err != nil {
@@ -157,7 +242,19 @@ func (b *Builder) Close() error {
 	})
 	b.pools.Clear()
 
-	// 关闭解析器构建器，释放 watch 协程与监听资源
+	// 通知 watch 协程退出
+	if b.cancel != nil {
+		b.cancel()
+	}
+
+	// 停止服务发现监听，解除 Next() 阻塞
+	if b.watcher != nil {
+		if err := b.watcher.Stop(); err != nil {
+			firstErr = err
+		}
+	}
+
+	// 关闭解析器构建器，释放监听资源
 	for _, builder := range b.builders {
 		if err := builder.Close(); err != nil && firstErr == nil {
 			firstErr = err

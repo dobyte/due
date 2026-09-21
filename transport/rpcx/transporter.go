@@ -60,7 +60,7 @@ func (t *Transporter) NewServer() (transport.Server, error) {
 // NewClient 新建传输客户端
 // target参数可分为三种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
-// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+// 实例ID直连模式: direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
 // @param target string 目标服务地址
 // @return @1 transport.Client 微服务客户端
