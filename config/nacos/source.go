@@ -42,6 +42,7 @@ type Source struct {
 	chCancel chan string        // 取消监听指令通道
 	watchers sync.Map           // 监听器集合
 	once     sync.Once          // 保证关闭操作只执行一次
+	wg       sync.WaitGroup     // 协程退出等待组
 }
 
 // NewSource 创建配置源
@@ -67,8 +68,17 @@ func NewSource(opts ...Option) config.Source {
 		s.builtin = true
 	}
 
-	go s.listen()
-	go s.refresh()
+	s.wg.Add(2)
+
+	go func() {
+		defer s.wg.Done()
+		s.listen()
+	}()
+
+	go func() {
+		defer s.wg.Done()
+		s.refresh()
+	}()
 
 	return s
 }
@@ -91,7 +101,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
-		if configuration, err := s.load(file[0]); err != nil {
+		if configuration, err := s.load(ctx, file[0]); err != nil {
 			return nil, err
 		} else {
 			return []*config.Configuration{configuration}, nil
@@ -125,7 +135,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			case 0:
 				// ignore
 			case 1:
-				if configuration, err := s.load(result.PageItems[0].DataId); err != nil {
+				if configuration, err := s.load(ctx, result.PageItems[0].DataId); err != nil {
 					return nil, err
 				} else {
 					configurations = append(configurations, configuration)
@@ -135,7 +145,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 				for _, item := range result.PageItems {
 					wg.Go(func() error {
-						configuration, err := s.load(item.DataId)
+						configuration, err := s.load(ctx, item.DataId)
 						if err != nil {
 							return err
 						}
@@ -166,10 +176,15 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 // load 加载单个配置项
 // 通过dataId从Nacos服务端拉取配置内容，并转换为统一的配置结构
+// @param ctx context.Context 上下文
 // @param file string 配置文件(dataId)
 // @return @1 *config.Configuration 配置项
 // @return @2 error 错误信息
-func (s *Source) load(file string) (*config.Configuration, error) {
+func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	content, err := s.opts.client.GetConfig(vo.ConfigParam{
 		DataId: file,
 		Group:  s.opts.groupName,
@@ -196,6 +211,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	data := string(content)
@@ -246,6 +265,9 @@ func (s *Source) Close() error {
 	// 保证关闭操作只执行一次，避免重复关闭客户端导致panic
 	s.once.Do(func() {
 		s.cancel()
+
+		// 等待监听与刷新协程退出，避免并发关闭客户端
+		s.wg.Wait()
 
 		if s.builtin {
 			s.opts.client.CloseClient()
