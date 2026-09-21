@@ -188,7 +188,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // 复用对象池中的连接对象，重置各项状态、创建读写协程并执行授权检查与连接钩子
 // @param conn net.Conn TCP连接
 func (c *serverConn) init(conn net.Conn) {
-	c.id = c.connMgr.id.Add(1)
+	c.id = c.connMgr.genConnID()
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))

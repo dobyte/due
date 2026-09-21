@@ -17,7 +17,7 @@ import (
 )
 
 type serverConnMgr struct {
-	id         atomic.Int64 // 连接ID
+	cid        atomic.Int64 // 连接ID
 	total      atomic.Int64 // 总连接数
 	server     *server      // 服务器
 	connPool   sync.Pool    // 连接池
@@ -178,4 +178,14 @@ func (p *partition) close() error {
 	}
 
 	return wg.Wait()
+}
+
+// genConnID 生成连接ID
+// @return @1 int64 连接ID
+func (cm *serverConnMgr) genConnID() int64 {
+	if cid := cm.cid.Add(1); cid == 0 {
+		return cm.cid.Add(1)
+	} else {
+		return cid
+	}
 }
