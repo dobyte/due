@@ -33,6 +33,7 @@ type Source struct {
 	chCancel       chan string        // 取消监听指令通道
 	watchers       sync.Map           // 监听器集合
 	once           sync.Once          // 保证关闭操作只执行一次
+	wg             sync.WaitGroup     // 协程退出等待组
 	searchDisabled bool               // 分组搜索是否不可用
 	configClient   api.ConfigFileAPI  // 配置文件客户端
 	groupClient    api.ConfigGroupAPI // 配置分组客户端
@@ -67,8 +68,17 @@ func NewSource(opts ...Option) config.Source {
 		s.groupClient = api.NewConfigGroupAPIBySDKContext(o.client)
 	}
 
-	go s.listen()
-	go s.refresh()
+	s.wg.Add(2)
+
+	go func() {
+		defer s.wg.Done()
+		s.listen()
+	}()
+
+	go func() {
+		defer s.wg.Done()
+		s.refresh()
+	}()
 
 	return s
 }
@@ -90,8 +100,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
-	if len(file) > 0 {
-		if configuration, err := s.load(file[0]); err != nil {
+	if len(file) > 0 && file[0] != "" {
+		if configuration, err := s.load(ctx, file[0]); err != nil {
 			return nil, err
 		} else {
 			return []*config.Configuration{configuration}, nil
@@ -101,6 +111,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			mu             sync.Mutex
 			configurations = make([]*config.Configuration, 0)
 		)
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 
 		group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
 		if err != nil {
@@ -117,7 +131,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		for _, item := range files {
 			fileName := item.FileName
 			wg.Go(func() error {
-				configuration, err := s.load(fileName)
+				configuration, err := s.load(ctx, fileName)
 				if err != nil {
 					return err
 				}
@@ -141,10 +155,15 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 // load 加载单个配置项
 // 通过配置文件名称从Polaris服务端拉取配置内容，并转换为统一的配置结构；
 // 加载成功后同时订阅该配置文件的变更，保证旧版本服务端（不支持分组查询接口）也能收到变更通知
+// @param ctx context.Context 上下文
 // @param file string 配置文件名称
 // @return @1 *config.Configuration 配置项
 // @return @2 error 错误信息
-func (s *Source) load(file string) (*config.Configuration, error) {
+func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	configFile, err := s.configClient.GetConfigFile(s.opts.namespace, s.opts.group, file)
 	if err != nil {
 		return nil, err
@@ -176,6 +195,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content)); err == nil {
@@ -237,6 +260,9 @@ func (s *Source) Close() error {
 	// 保证关闭操作只执行一次，避免重复销毁SDK上下文导致panic
 	s.once.Do(func() {
 		s.cancel()
+
+		// 等待监听与刷新协程退出，避免并发销毁SDK上下文
+		s.wg.Wait()
 
 		if s.builtin {
 			s.opts.client.Destroy()
@@ -375,7 +401,11 @@ func (s *Source) search() {
 	}
 
 	for _, item := range files {
-		if _, ok := s.versions[item.FileName]; !ok {
+		_, found := s.versions[item.FileName]
+		_, subscribed := s.subscribed.Load(item.FileName)
+
+		// 新发现的文件或上次订阅失败的文件，均需（重新）发送监听指令
+		if !found || !subscribed {
 			select {
 			case s.chListen <- item.FileName:
 			case <-s.ctx.Done():
