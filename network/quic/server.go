@@ -141,14 +141,11 @@ func (s *server) handleConn(r *serverRun, id int64, qc *quic.Conn) {
 		r.manager.remove(id)
 		return
 	}
-	c := newServerConn(id, qc, stream, s)
-	c.onClosed = func() { r.manager.remove(id) }
-	if !r.manager.attach(id, c) {
+	if r.manager.allocateConn(id, qc, stream) == nil {
 		_ = qc.CloseWithError(0, "server stopped")
 		r.manager.remove(id)
 		return
 	}
-	c.start()
 }
 
 // Protocol returns the protocol name.

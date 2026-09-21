@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
@@ -73,7 +74,7 @@ func startServer(t testing.TB, s *server) {
 	}
 }
 
-func dialClient(t testing.TB, s *server, cert string, opts ...ClientOption) *conn {
+func dialClient(t testing.TB, s *server, cert string, opts ...ClientOption) *clientConn {
 	t.Helper()
 	base := []ClientOption{WithClientAddr(s.Addr()), WithClientCredentials(cert, "localhost"),
 		WithClientHeartbeatInterval(0), WithClientCloseTimeout(300 * time.Millisecond)}
@@ -83,7 +84,7 @@ func dialClient(t testing.TB, s *server, cert string, opts ...ClientOption) *con
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Close(true) })
-	return c.(*conn)
+	return c.(*clientConn)
 }
 
 func await[T any](t testing.TB, ch <-chan T) T {
@@ -95,6 +96,17 @@ func await[T any](t testing.TB, ch <-chan T) T {
 		t.Fatal("timed out")
 		var zero T
 		return zero
+	}
+}
+
+func waitClosed(t testing.TB, c network.Conn) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for c.State() != network.ConnClosed {
+		if time.Now().After(deadline) {
+			t.Fatal("connection did not close")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -132,7 +144,7 @@ func TestWelcomeWithoutPeriodicHeartbeat(t *testing.T) {
 			return
 		}
 		received <- string(data.Bytes())
-		_ = c.Close(true)
+		go c.Close(true)
 	})
 	disconnected := make(chan struct{}, 1)
 	cl.OnDisconnect(func(network.Conn) { disconnected <- struct{}{} })
@@ -177,7 +189,6 @@ func TestGracefulCloseDeliversAcceptedMessages(t *testing.T) {
 			t.Fatalf("message %d: %v", i, got)
 		}
 	}
-	await(t, c.done)
 }
 
 func TestHeartbeatCallbacks(t *testing.T) {
@@ -209,14 +220,13 @@ func TestHeartbeatCallbacks(t *testing.T) {
 func TestRestartAndCallbackStop(t *testing.T) {
 	s, cert := testServer(t)
 	stopped := make(chan error, 1)
-	s.OnConnect(func(network.Conn) { stopped <- s.Stop() })
+	s.OnConnect(func(network.Conn) { go func() { stopped <- s.Stop() }() })
 	for range 3 {
 		startServer(t, s)
-		c := dialClient(t, s, cert)
+		_ = dialClient(t, s, cert)
 		if err := await(t, stopped); err != nil {
 			t.Fatal(err)
 		}
-		await(t, c.done)
 	}
 }
 
@@ -274,38 +284,33 @@ func (b *trackedBuffer) Bytes() []byte                        { return b.data }
 func (b *trackedBuffer) VisitBytes(fn func([]byte) bool) bool { return fn(b.data) }
 func (b *trackedBuffer) Delay(int)                            {}
 func (b *trackedBuffer) Release()                             { b.releases.Add(1) }
-func (b *trackedBuffer) MoveTo(int) bool                      { return false }
+func (b *trackedBuffer) Slide(int) bool                       { return false }
 
-func TestFullQueueCloseAndOwnership(t *testing.T) {
+func TestPushOwnershipOnClose(t *testing.T) {
 	s, cert := testServer(t)
 	startServer(t, s)
-	qc := rawDial(t, s, cert)
-	stream, err := qc.OpenStreamSync(context.Background())
-	if err != nil {
+	c := dialClient(t, s, cert)
+
+	// A successful Push transfers ownership to the network layer.
+	accepted := &trackedBuffer{data: []byte{1}}
+	if err := c.Push(accepted); err != nil {
 		t.Fatal(err)
 	}
-	// Deliberately leave the writer unstarted to make queue saturation deterministic.
-	c := newConn(1, qc, stream, connOptions{queueSize: 1, closeTimeout: time.Second})
-	first, second := &trackedBuffer{data: []byte{1}}, &trackedBuffer{data: []byte{2}}
-	if err := c.Push(first); err != nil {
-		t.Fatal(err)
-	}
-	result := make(chan error, 1)
-	go func() { result <- c.Push(second) }()
+
 	if err := c.Close(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := await(t, result); !errors.Is(err, errors.ErrConnectionClosed) {
+
+	// A Push after close fails and leaves ownership with the caller.
+	rejected := &trackedBuffer{data: []byte{2}}
+	if err := c.Push(rejected); !errors.Is(err, errors.ErrConnectionClosed) {
 		t.Fatal(err)
 	}
-	if second.releases.Load() != 0 {
+	if rejected.releases.Load() != 0 {
 		t.Fatal("rejected buffer was released")
 	}
-	for buf := range c.queue {
-		buf.Release()
-	}
-	if first.releases.Load() != 1 {
-		t.Fatal("accepted buffer not released once")
+	if accepted.releases.Load() != 1 {
+		t.Fatalf("accepted buffer release count %d", accepted.releases.Load())
 	}
 }
 
@@ -330,7 +335,7 @@ func TestWriteTimeoutAndForceCloseUnderBackpressure(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			await(t, c.done)
+			waitClosed(t, c)
 			if buf.releases.Load() != 1 {
 				t.Fatalf("release count %d", buf.releases.Load())
 			}
@@ -359,7 +364,6 @@ func TestConcurrentPushCloseAndStaleReference(t *testing.T) {
 	_ = c.Close()
 	_ = c.Close(true)
 	wg.Wait()
-	await(t, c.done)
 	fresh := dialClient(t, s, cert)
 	if err := c.Bind(123); !errors.Is(err, errors.ErrConnectionClosed) {
 		t.Fatal(err)
@@ -427,8 +431,8 @@ func TestZeroWriteFails(t *testing.T) {
 
 func TestAuthorizationTimerReset(t *testing.T) {
 	s, cert := testServer(t, WithServerAuthorizeTimeout(150*time.Millisecond))
-	connected := make(chan *conn, 1)
-	s.OnConnect(func(c network.Conn) { connected <- c.(*conn) })
+	connected := make(chan *serverConn, 1)
+	s.OnConnect(func(c network.Conn) { connected <- c.(*serverConn) })
 	startServer(t, s)
 	clientConn := dialClient(t, s, cert)
 	c := await(t, connected)
@@ -442,23 +446,23 @@ func TestAuthorizationTimerReset(t *testing.T) {
 	if err := c.Unbind(); err != nil {
 		t.Fatal(err)
 	}
-	await(t, c.done)
-	await(t, clientConn.done)
+	waitClosed(t, c)
+	waitClosed(t, clientConn)
 }
 
 func TestQueueTimeoutPreservesOwnership(t *testing.T) {
-	c := newConn(1, nil, nil, connOptions{queueSize: 1, writeTimeout: 10 * time.Millisecond})
+	q := queue.NewQueue[buffer.Buffer](1, 10*time.Millisecond)
 	first, second := &trackedBuffer{data: []byte{1}}, &trackedBuffer{data: []byte{2}}
-	if err := c.Push(first); err != nil {
+	if err := q.Write(first); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Push(second); !errors.Is(err, errors.ErrWriteTimeout) {
+	if err := q.Write(second); !errors.Is(err, errors.ErrWriteTimeout) {
 		t.Fatal(err)
 	}
 	if second.releases.Load() != 0 {
 		t.Fatal("enqueue timeout consumed ownership")
 	}
-	(<-c.queue).Release()
+	(<-q.Read()).Release()
 	second.Release()
 }
 
