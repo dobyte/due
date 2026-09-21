@@ -10,7 +10,7 @@ import (
 
 type client struct {
 	opts              *clientOptions            // 配置
-	id                atomic.Int64              // 连接ID
+	cid               atomic.Int64              // 连接ID
 	connectHandler    network.ConnectHandler    // 连接打开hook函数
 	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
 	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
@@ -59,7 +59,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		return nil, err
 	}
 
-	return newClientConn(c.id.Add(1), conn, c), nil
+	return newClientConn(c, conn), nil
 }
 
 // Protocol 获取协议名称
@@ -90,4 +90,14 @@ func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 // @param handler network.ReceiveHandler 接收消息hook函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
+}
+
+// genConnID 生成连接ID
+// @return @1 int64 连接ID
+func (c *client) genConnID() int64 {
+	if cid := c.cid.Add(1); cid == 0 {
+		return c.cid.Add(1)
+	} else {
+		return cid
+	}
 }

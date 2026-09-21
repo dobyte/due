@@ -190,7 +190,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // 复用连接对象，重置状态、写队列与两路读写协程，并应用服务器相关KCP参数
 // @param conn *kcp.UDPSession KCP连接
 func (c *serverConn) init(conn *kcp.UDPSession) {
-	c.id = c.connMgr.id.Add(1)
+	c.id = c.connMgr.genConnID()
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))

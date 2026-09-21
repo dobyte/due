@@ -24,7 +24,7 @@ type clientConn struct {
 	attr              *attr                       // 连接属性
 	conn              *kcp.UDPSession             // UDP源连接
 	state             atomic.Int32                // 连接状态
-	client            *client                     // 客户端
+	cli               *client                     // 客户端
 	wg1               *sync.WaitGroup             // 读等待组
 	wg2               *sync.WaitGroup             // 写等待组
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
@@ -38,52 +38,52 @@ var _ network.Conn = &clientConn{}
 // 初始化连接状态、写队列及两路读写协程，并应用客户端相关KCP参数
 // @param id int64 连接ID
 // @param conn *kcp.UDPSession KCP源连接
-// @param client *client 客户端实例
+// @param cli *client 客户端实例
 // @return @1 network.Conn 客户端连接实例
-func newClientConn(id int64, conn *kcp.UDPSession, client *client) network.Conn {
+func newClientConn(cli *client, conn *kcp.UDPSession) network.Conn {
 	c := &clientConn{}
-	c.id = id
+	c.id = cli.genConnID()
 	c.attr = &attr{}
 	c.conn = conn
-	c.client = client
+	c.cli = cli
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, client.opts.writeQueueSize)), client.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
-	if c.client.opts.mtu > 0 {
-		conn.SetMtu(c.client.opts.mtu)
+	if c.cli.opts.mtu > 0 {
+		conn.SetMtu(c.cli.opts.mtu)
 	}
 
-	if len(c.client.opts.noDelay) == 4 {
-		conn.SetNoDelay(c.client.opts.noDelay[0], c.client.opts.noDelay[1], c.client.opts.noDelay[2], c.client.opts.noDelay[3])
+	if len(c.cli.opts.noDelay) == 4 {
+		conn.SetNoDelay(c.cli.opts.noDelay[0], c.cli.opts.noDelay[1], c.cli.opts.noDelay[2], c.cli.opts.noDelay[3])
 	}
 
-	if c.client.opts.ackNoDelay {
-		conn.SetACKNoDelay(c.client.opts.ackNoDelay)
+	if c.cli.opts.ackNoDelay {
+		conn.SetACKNoDelay(c.cli.opts.ackNoDelay)
 	}
 
-	if c.client.opts.writeDelay {
-		conn.SetWriteDelay(c.client.opts.writeDelay)
+	if c.cli.opts.writeDelay {
+		conn.SetWriteDelay(c.cli.opts.writeDelay)
 	}
 
-	if len(c.client.opts.windowSize) == 2 {
-		conn.SetWindowSize(c.client.opts.windowSize[0], c.client.opts.windowSize[1])
+	if len(c.cli.opts.windowSize) == 2 {
+		conn.SetWindowSize(c.cli.opts.windowSize[0], c.cli.opts.windowSize[1])
 	}
 
-	if c.client.opts.readBuffer > 0 {
-		conn.SetReadBuffer(c.client.opts.readBuffer)
+	if c.cli.opts.readBuffer > 0 {
+		conn.SetReadBuffer(c.cli.opts.readBuffer)
 	}
 
-	if c.client.opts.writeBuffer > 0 {
-		conn.SetWriteBuffer(c.client.opts.writeBuffer)
+	if c.cli.opts.writeBuffer > 0 {
+		conn.SetWriteBuffer(c.cli.opts.writeBuffer)
 	}
 
-	if c.client.connectHandler != nil {
-		c.client.connectHandler(c)
+	if c.cli.connectHandler != nil {
+		c.cli.connectHandler(c)
 	}
 
 	return c
@@ -313,8 +313,8 @@ func (c *clientConn) doClose() error {
 		buf.Release()
 	}
 
-	if c.client.disconnectHandler != nil {
-		c.client.disconnectHandler(c)
+	if c.cli.disconnectHandler != nil {
+		c.cli.disconnectHandler(c)
 	}
 
 	return err
@@ -348,17 +348,17 @@ func (c *clientConn) read(conn *kcp.UDPSession) {
 
 		if isHeartbeat {
 			// update heartbeat time
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			}
 
 			// trigger heartbeat handler
-			if c.client.heartbeatHandler != nil {
-				c.client.heartbeatHandler(c, heartbeatTime)
+			if c.cli.heartbeatHandler != nil {
+				c.cli.heartbeatHandler(c, heartbeatTime)
 			}
 		} else {
 			// update heartbeat time
-			if c.client.opts.heartbeatInterval > 0 {
+			if c.cli.opts.heartbeatInterval > 0 {
 				index++
 
 				if index%10 == 0 {
@@ -372,8 +372,8 @@ func (c *clientConn) read(conn *kcp.UDPSession) {
 				continue
 			}
 
-			if c.client.receiveHandler != nil {
-				c.client.receiveHandler(c, buf)
+			if c.cli.receiveHandler != nil {
+				c.cli.receiveHandler(c, buf)
 			}
 		}
 	}
@@ -385,8 +385,8 @@ func (c *clientConn) read(conn *kcp.UDPSession) {
 func (c *clientConn) write(conn *kcp.UDPSession) {
 	var tickerC <-chan time.Time
 
-	if c.client.opts.heartbeatInterval > 0 {
-		ticker := time.NewTicker(c.client.opts.heartbeatInterval)
+	if c.cli.opts.heartbeatInterval > 0 {
+		ticker := time.NewTicker(c.cli.opts.heartbeatInterval)
 		defer ticker.Stop()
 		tickerC = ticker.C
 	}
@@ -457,7 +457,7 @@ func (c *clientConn) doWrite(conn *kcp.UDPSession, buf buffer.Buffer) {
 // @param t time.Time 当前心跳时刻
 // @return @1 bool 是否继续运行（心跳超时强制关闭返回false）
 func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
-	if c.lastHeartbeatTime.Load() < t.Add(-2*c.client.opts.heartbeatInterval).UnixNano() {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*c.cli.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
 		taskpool.Add(func() { c.forceClose() })
