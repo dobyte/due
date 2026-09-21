@@ -63,9 +63,9 @@ func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
 
 	switch s.opts.padding {
 	case PKCS:
-		err = rsa.VerifyPKCS1v15(s.publicKey, hash, hashed[:], signature)
+		err = rsa.VerifyPKCS1v15(s.publicKey, hash, hashed, signature)
 	default:
-		err = rsa.VerifyPSS(s.publicKey, hash, hashed[:], signature, &rsa.PSSOptions{
+		err = rsa.VerifyPSS(s.publicKey, hash, hashed, signature, &rsa.PSSOptions{
 			SaltLength: rsa.PSSSaltLengthEqualsHash,
 			Hash:       hash,
 		})

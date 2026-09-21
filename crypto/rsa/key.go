@@ -26,7 +26,7 @@ type Key struct {
 	prv *rsa.PrivateKey
 }
 
-// GenerateKey 生成秘钥
+// GenerateKey 生成密钥
 func GenerateKey(bits int) (*Key, error) {
 	prv, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
@@ -60,21 +60,26 @@ func (k *Key) MarshalPublicKey(format Format) ([]byte, error) {
 
 // 编码公钥
 func (k *Key) marshalPublicKey(format Format, out io.Writer) (err error) {
-	var derText []byte
+	var (
+		derText   []byte
+		blockType string
+	)
 	switch format {
 	case PKCS1:
 		derText = x509.MarshalPKCS1PublicKey(k.PublicKey())
+		blockType = "RSA PUBLIC KEY"
 	case PKCS8:
 		derText, err = x509.MarshalPKIXPublicKey(k.PublicKey())
 		if err != nil {
 			return
 		}
+		blockType = "PUBLIC KEY"
 	default:
 		return errors.New("invalid key format")
 	}
 
 	err = pem.Encode(out, &pem.Block{
-		Type:  "RSA PUBLIC KEY",
+		Type:  blockType,
 		Bytes: derText,
 	})
 
@@ -95,28 +100,33 @@ func (k *Key) MarshalPrivateKey(format Format) ([]byte, error) {
 
 // 编码私钥
 func (k *Key) marshalPrivateKey(format Format, out io.Writer) (err error) {
-	var derText []byte
+	var (
+		derText   []byte
+		blockType string
+	)
 	switch format {
 	case PKCS1:
 		derText = x509.MarshalPKCS1PrivateKey(k.PrivateKey())
+		blockType = "RSA PRIVATE KEY"
 	case PKCS8:
 		derText, err = x509.MarshalPKCS8PrivateKey(k.PrivateKey())
 		if err != nil {
 			return
 		}
+		blockType = "PRIVATE KEY"
 	default:
 		return errors.New("invalid key format")
 	}
 
 	err = pem.Encode(out, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  blockType,
 		Bytes: derText,
 	})
 
 	return
 }
 
-// SaveKeyPair 保存秘钥对
+// SaveKeyPair 保存密钥对
 func (k *Key) SaveKeyPair(format Format, dir string, file string) (err error) {
 	err = k.savePublicKey(format, dir, file)
 	if err != nil {
@@ -126,7 +136,7 @@ func (k *Key) SaveKeyPair(format Format, dir string, file string) (err error) {
 	return k.savePrivateKey(format, dir, file)
 }
 
-// 保存公钥
+// 保存私钥
 func (k *Key) savePrivateKey(format Format, dir string, file string) (err error) {
 	filepath := path.Join(dir, file)
 	defer func() {
@@ -139,20 +149,21 @@ func (k *Key) savePrivateKey(format Format, dir string, file string) (err error)
 	if err != nil {
 		return
 	}
+	defer f.Close()
 
 	return k.marshalPrivateKey(format, f)
 }
 
 // 保存公钥
 func (k *Key) savePublicKey(format Format, dir string, file string) (err error) {
-	base, _, name, ext := xos.Split(file)
+	subdir, _, name, ext := xos.Split(file)
 	if ext != "" {
 		file = name + ".pub." + ext
 	} else {
 		file = name + ".pub"
 	}
 
-	filepath := path.Join(dir, base, file)
+	filepath := path.Join(dir, subdir, file)
 	defer func() {
 		if err != nil {
 			_ = os.Remove(filepath)
@@ -163,6 +174,7 @@ func (k *Key) savePublicKey(format Format, dir string, file string) (err error) 
 	if err != nil {
 		return
 	}
+	defer f.Close()
 
 	return k.marshalPublicKey(format, f)
 }
@@ -182,49 +194,59 @@ func loadKey(key string) (*pem.Block, error) {
 		buffer = xconv.StringToBytes(key)
 	}
 
-	block, _ := pem.Decode(buffer)
+	block, rest := pem.Decode(buffer)
+	if block != nil && len(bytes.TrimSpace(rest)) > 0 {
+		return nil, errors.ErrInvalidFormat
+	}
 
 	return block, nil
 }
 
 func parsePublicKey(publicKey string) (*rsa.PublicKey, error) {
-	black, err := loadKey(publicKey)
+	block, err := loadKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if black == nil {
+	if block == nil {
 		return nil, errors.ErrInvalidPublicKey
-
 	}
 
-	pkcs, err := x509.ParsePKCS1PublicKey(black.Bytes)
+	pkcs, err := x509.ParsePKCS1PublicKey(block.Bytes)
 	if err == nil {
 		return pkcs, nil
 	}
 
-	pub, err := x509.ParsePKIXPublicKey(black.Bytes)
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err == nil {
-		return pub.(*rsa.PublicKey), nil
+		if key, ok := pub.(*rsa.PublicKey); ok {
+			return key, nil
+		}
+
+		return nil, errors.ErrInvalidPublicKey
 	}
 
 	return nil, err
 }
 
 func parsePrivateKey(privateKey string) (*rsa.PrivateKey, error) {
-	black, err := loadKey(privateKey)
+	block, err := loadKey(privateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if black == nil {
+	if block == nil {
 		return nil, errors.ErrInvalidPrivateKey
 	}
 
-	priv, err := x509.ParsePKCS8PrivateKey(black.Bytes)
+	priv, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err == nil {
-		return priv.(*rsa.PrivateKey), nil
+		if key, ok := priv.(*rsa.PrivateKey); ok {
+			return key, nil
+		}
+
+		return nil, errors.ErrInvalidPrivateKey
 	}
 
-	return x509.ParsePKCS1PrivateKey(black.Bytes)
+	return x509.ParsePKCS1PrivateKey(block.Bytes)
 }

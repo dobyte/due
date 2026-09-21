@@ -1,10 +1,11 @@
 package rsa_test
 
 import (
+	"testing"
+
 	"github.com/dobyte/due/crypto/rsa/v2"
 	"github.com/dobyte/due/v2/core/hash"
 	"github.com/dobyte/due/v2/utils/xrand"
-	"testing"
 )
 
 var (
@@ -47,13 +48,15 @@ func Test_Encrypt_Decrypt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(string(data) == str)
+	if string(data) != str {
+		t.Fatal("decrypt result mismatch")
+	}
 }
 
 func Benchmark_Encrypt(b *testing.B) {
 	text := []byte(xrand.Letters(20000))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := encryptor.Encrypt(text)
 		if err != nil {
 			b.Fatal(err)
@@ -65,7 +68,7 @@ func Benchmark_Decrypt(b *testing.B) {
 	text := []byte(xrand.Letters(20000))
 	plaintext, _ := encryptor.Encrypt(text)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := encryptor.Decrypt(plaintext)
 		if err != nil {
 			b.Fatal(err)
@@ -87,13 +90,15 @@ func Test_Sign_Verify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(ok)
+	if !ok {
+		t.Fatal("signature verification failed")
+	}
 }
 
 func Benchmark_Sign(b *testing.B) {
 	bytes := []byte(xrand.Letters(20000))
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := signer.Sign(bytes)
 		if err != nil {
 			b.Fatal(err)
@@ -105,7 +110,7 @@ func Benchmark_Verify(b *testing.B) {
 	bytes := []byte(xrand.Letters(20000))
 	signature, _ := signer.Sign(bytes)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := signer.Verify(bytes, signature)
 		if err != nil {
 			b.Fatal(err)

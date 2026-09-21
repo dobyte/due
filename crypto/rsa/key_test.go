@@ -2,12 +2,13 @@ package rsa_test
 
 import (
 	"fmt"
-	"github.com/dobyte/due/crypto/rsa/v2"
 	"testing"
+
+	"github.com/dobyte/due/crypto/rsa/v2"
 )
 
 func TestGenerateKey(t *testing.T) {
-	key, err := rsa.GenerateKey(256)
+	key, err := rsa.GenerateKey(2048)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +22,7 @@ func TestGenerateKey(t *testing.T) {
 }
 
 func TestKey_SaveKeyPair(t *testing.T) {
-	key, err := rsa.GenerateKey(1024)
+	key, err := rsa.GenerateKey(2048)
 	if err != nil {
 		t.Fatal(err)
 	}
