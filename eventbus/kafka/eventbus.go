@@ -17,6 +17,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
+// Eventbus Kafka事件总线
 type Eventbus struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -32,6 +33,7 @@ type Eventbus struct {
 	closed       atomic.Bool
 }
 
+// NewEventbus 创建事件总线
 func NewEventbus(opts ...Option) *Eventbus {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -73,11 +75,18 @@ func NewEventbus(opts ...Option) *Eventbus {
 
 	eb.consumer, eb.err = sarama.NewConsumerFromClient(o.client)
 	if eb.err != nil {
+		if eb.builtin {
+			_ = o.client.Close()
+		}
 		return eb
 	}
 
 	eb.producer, eb.err = sarama.NewSyncProducerFromClient(o.client)
 	if eb.err != nil {
+		_ = eb.consumer.Close()
+		if eb.builtin {
+			_ = o.client.Close()
+		}
 		return eb
 	}
 
@@ -133,12 +142,11 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	channel := eb.doMakeChannel(topic)
 	lb := len(balance) > 0 && balance[0]
 
-	eb.rw.RLock()
-	c, ok := eb.consumers[channel]
-	eb.rw.RUnlock()
-
-	if ok {
+	// 快路径：消费者已存在时直接复用，加锁以避免与取消订阅、关闭并发产生竞态
+	eb.rw.Lock()
+	if c, ok := eb.consumers[channel]; ok {
 		if c.balance != lb {
+			eb.rw.Unlock()
 			return nil, errors.ErrInvalidArgument
 		}
 
@@ -146,13 +154,17 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		sub.eb = eb
 		sub.topic = channel
 
+		eb.rw.Unlock()
+
 		return sub, nil
 	}
+	eb.rw.Unlock()
 
+	// 慢路径：将网络 I/O 移出锁外，避免长时间持锁阻塞其他操作
 	if eb.opts.autoCreateTopic && eb.clusterAdmin != nil {
 		if err := eb.clusterAdmin.CreateTopic(channel, &sarama.TopicDetail{
-			NumPartitions:     1,
-			ReplicationFactor: 1,
+			NumPartitions:     eb.opts.partitions,
+			ReplicationFactor: eb.opts.replicationFactor,
 		}, true); err != nil {
 			if e, ok := err.(*sarama.TopicError); ok && e.Err == sarama.ErrTopicAlreadyExists {
 				// ignore
@@ -162,18 +174,24 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		}
 	}
 
-	c = newConsumer(eb, lb)
+	c := newConsumer(eb, lb)
 
+	var partitions []int32
 	if lb {
 		groupID := eb.doMakeGroupID(topic)
 		group, err := sarama.NewConsumerGroupFromClient(groupID, eb.opts.client)
 		if err != nil {
 			return nil, err
 		}
-		c.groupID = groupID
 		c.group = group
+	} else {
+		var err error
+		if partitions, err = eb.consumer.Partitions(channel); err != nil {
+			return nil, err
+		}
 	}
 
+	// 加锁完成登记与启动，避免并发重复创建消费者
 	eb.rw.Lock()
 
 	if eb.closed.Load() {
@@ -186,9 +204,9 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	}
 
 	if existing, ok := eb.consumers[channel]; ok {
-		eb.rw.Unlock()
-
 		if existing.balance != lb {
+			eb.rw.Unlock()
+
 			if c.group != nil {
 				_ = c.group.Close()
 			}
@@ -199,6 +217,8 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		sub.eb = eb
 		sub.topic = channel
 
+		eb.rw.Unlock()
+
 		if c.group != nil {
 			_ = c.group.Close()
 		}
@@ -206,27 +226,20 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		return sub, nil
 	}
 
+	// 先添加首个订阅再启动消费，避免启动后消息因无处理器而被丢弃
+	sub := c.addSubscription(handler)
+	sub.eb = eb
+	sub.topic = channel
+
 	eb.consumers[channel] = c
 
 	if lb {
 		c.startGroupConsumer(c.group, channel)
 	} else {
-		if err := c.startBroadcastConsumer(eb.consumer, channel); err != nil {
-			delete(eb.consumers, channel)
-			eb.rw.Unlock()
-
-			if c.group != nil {
-				_ = c.group.Close()
-			}
-			return nil, err
-		}
+		c.startBroadcastConsumer(eb.consumer, partitions, channel)
 	}
 
 	eb.rw.Unlock()
-
-	sub := c.addSubscription(handler)
-	sub.eb = eb
-	sub.topic = channel
 
 	return sub, nil
 }
@@ -314,21 +327,23 @@ func (eb *Eventbus) doMakeGroupID(topic string) string {
 
 func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	d := eb.pool.Get().(*data)
-	defer eb.pool.Put(d)
 
 	d.ID = xuuid.UUID()
 	d.Topic = topic
 	d.Payload = xconv.String(payload)
 	d.Timestamp = xtime.Now().UnixNano()
 
-	return json.Marshal(d)
+	buf, err := json.Marshal(d)
+	eb.pool.Put(d)
+
+	return buf, err
 }
 
 func (eb *Eventbus) deserialize(v []byte) (*eventbus.Event, error) {
 	d := eb.pool.Get().(*data)
-	defer eb.pool.Put(d)
 
 	if err := json.Unmarshal(v, d); err != nil {
+		eb.pool.Put(d)
 		return nil, err
 	}
 
@@ -343,6 +358,7 @@ func (eb *Eventbus) deserialize(v []byte) (*eventbus.Event, error) {
 	d.Topic = ""
 	d.Payload = ""
 	d.Timestamp = 0
+	eb.pool.Put(d)
 
 	return event, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
+// consumer 事件消费者
 type consumer struct {
 	eb            *Eventbus
 	ctx           context.Context
@@ -23,10 +24,10 @@ type consumer struct {
 	idx           uint64
 	consumer      sarama.Consumer
 	group         sarama.ConsumerGroup
-	groupID       string
 	wg            sync.WaitGroup
 }
 
+// newConsumer 创建事件消费者
 func newConsumer(eb *Eventbus, balance bool) *consumer {
 	c := &consumer{eb: eb, balance: balance, subscriptions: make([]*subscription, 0, 1)}
 	c.ctx, c.cancel = context.WithCancel(eb.ctx)
@@ -63,20 +64,13 @@ func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 }
 
 // startBroadcastConsumer 启动广播模式消费
-func (c *consumer) startBroadcastConsumer(consumer sarama.Consumer, topic string) error {
-	partitions, err := consumer.Partitions(topic)
-	if err != nil {
-		return err
-	}
-
+func (c *consumer) startBroadcastConsumer(consumer sarama.Consumer, partitions []int32, topic string) {
 	c.consumer = consumer
 
 	for _, partition := range partitions {
 		c.wg.Add(1)
 		go c.runPartitionConsumer(topic, partition)
 	}
-
-	return nil
 }
 
 // runPartitionConsumer 运行单个 partition 的消费循环（带重试）
@@ -109,19 +103,40 @@ func (c *consumer) runPartitionConsumer(topic string, partition int32) {
 				continue
 			}
 
-			backoff = time.Millisecond * 100
-
 		LOOP:
 			for {
 				select {
 				case <-c.ctx.Done():
 					pc.AsyncClose()
 					return
-				case msg := <-pc.Messages():
+				case msg, ok := <-pc.Messages():
+					if !ok {
+						pc.AsyncClose()
+						break LOOP
+					}
+
+					backoff = time.Millisecond * 100
 					c.dispatch(msg.Value)
-				case err := <-pc.Errors():
+				case err, ok := <-pc.Errors():
+					if !ok {
+						pc.AsyncClose()
+						break LOOP
+					}
+
 					log.Errorf("kafka partition consumer error, partition: %d, error: %v", partition, err)
 					pc.AsyncClose()
+
+					select {
+					case <-c.ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+
 					break LOOP
 				}
 			}
@@ -131,8 +146,6 @@ func (c *consumer) runPartitionConsumer(topic string, partition int32) {
 
 // startGroupConsumer 启动消费组模式消费
 func (c *consumer) startGroupConsumer(group sarama.ConsumerGroup, topic string) {
-	c.group = group
-
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -195,7 +208,7 @@ func (c *consumer) stop() {
 	c.wg.Wait()
 }
 
-// 分发数据
+// dispatch 分发数据
 func (c *consumer) dispatch(data []byte) {
 	event, err := c.eb.deserialize(data)
 	if err != nil {
@@ -215,7 +228,7 @@ func (c *consumer) dispatch(data []byte) {
 	}
 }
 
-// 加载订阅的事件处理函数
+// loadHandlers 加载订阅的事件处理函数
 func (c *consumer) loadHandlers() []eventbus.EventHandler {
 	c.rw.RLock()
 	defer c.rw.RUnlock()

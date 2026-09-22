@@ -9,22 +9,28 @@ import (
 )
 
 const (
-	defaultAddr            = "127.0.0.1:9092"
-	defaultPrefix          = "due:eventbus"
-	defaultAutoCreateTopic = true
-	defaultStaleDuration   = 10 * time.Second
+	defaultAddr              = "127.0.0.1:9092"
+	defaultPrefix            = "due:eventbus"
+	defaultAutoCreateTopic   = true
+	defaultPartitions        = 1
+	defaultReplicationFactor = 1
+	defaultStaleDuration     = 0
 )
 
 const (
-	defaultAddrsKey           = "etc.eventbus.kafka.addrs"
-	defaultPrefixKey          = "etc.eventbus.kafka.prefix"
-	defaultVersionKey         = "etc.eventbus.kafka.version"
-	defaultAutoCreateTopicKey = "etc.eventbus.kafka.autoCreateTopic"
-	defaultStaleDurationKey   = "etc.eventbus.kafka.staleDuration"
+	defaultAddrsKey             = "etc.eventbus.kafka.addrs"
+	defaultPrefixKey            = "etc.eventbus.kafka.prefix"
+	defaultVersionKey           = "etc.eventbus.kafka.version"
+	defaultAutoCreateTopicKey   = "etc.eventbus.kafka.autoCreateTopic"
+	defaultPartitionsKey        = "etc.eventbus.kafka.partitions"
+	defaultReplicationFactorKey = "etc.eventbus.kafka.replicationFactor"
+	defaultStaleDurationKey     = "etc.eventbus.kafka.staleDuration"
 )
 
+// Option 事件总线选项
 type Option func(o *options)
 
+// options 事件总线配置
 type options struct {
 	ctx context.Context
 
@@ -47,19 +53,30 @@ type options struct {
 	// 当为true时，若不存在该主题，会自动创建，默认为true
 	autoCreateTopic bool
 
+	// 分区数量
+	// 自动创建topic时使用的分区数量，默认为1
+	partitions int32
+
+	// 复制因子
+	// 自动创建topic时使用的复制因子，默认为1
+	replicationFactor int16
+
 	// 过期时间
-	// 超过此时间的消息将被丢弃，默认为10秒
+	// 超过此时间的消息将被丢弃，默认为0表示不丢弃过期消息
 	staleDuration time.Duration
 }
 
+// defaultOptions 获取默认配置
 func defaultOptions() *options {
 	return &options{
-		ctx:             context.Background(),
-		addrs:           etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		prefix:          etc.Get(defaultPrefixKey, defaultPrefix).String(),
-		version:         etc.Get(defaultVersionKey).String(),
-		autoCreateTopic: etc.Get(defaultAutoCreateTopicKey, defaultAutoCreateTopic).Bool(),
-		staleDuration:   etc.Get(defaultStaleDurationKey, defaultStaleDuration).Duration(),
+		ctx:               context.Background(),
+		addrs:             etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		prefix:            etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		version:           etc.Get(defaultVersionKey).String(),
+		autoCreateTopic:   etc.Get(defaultAutoCreateTopicKey, defaultAutoCreateTopic).Bool(),
+		partitions:        etc.Get(defaultPartitionsKey, defaultPartitions).Int32(),
+		replicationFactor: etc.Get(defaultReplicationFactorKey, defaultReplicationFactor).Int16(),
+		staleDuration:     etc.Get(defaultStaleDurationKey, defaultStaleDuration).Duration(),
 	}
 }
 
@@ -96,4 +113,14 @@ func WithAutoCreateTopic(autoCreateTopic bool) Option {
 // WithStaleDuration 设置消息过期时间
 func WithStaleDuration(staleDuration time.Duration) Option {
 	return func(o *options) { o.staleDuration = staleDuration }
+}
+
+// WithPartitions 设置自动创建topic时的分区数量
+func WithPartitions(partitions int32) Option {
+	return func(o *options) { o.partitions = partitions }
+}
+
+// WithReplicationFactor 设置自动创建topic时的复制因子
+func WithReplicationFactor(replicationFactor int16) Option {
+	return func(o *options) { o.replicationFactor = replicationFactor }
 }
