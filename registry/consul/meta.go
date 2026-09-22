@@ -112,16 +112,16 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 
 	for _, index := range indexes {
 		for _, item := range strings.Split(metas[fmt.Sprintf("%s-%d", metaFieldRoutes, index)], ",") {
-			val := strings.Split(item, "-")
-
-			if len(val) != 2 {
+			// 从最后一个 "-" 处切分，兼容负数路由 ID（opts 恒为非负数，不会产生歧义）
+			idx := strings.LastIndex(item, "-")
+			if idx <= 0 {
 				continue
 			}
 
-			opts := xconv.Int(val[1])
+			opts := xconv.Int(item[idx+1:])
 
 			routes = append(routes, registry.Route{
-				ID:         xconv.Int32(val[0]),
+				ID:         xconv.Int32(item[:idx]),
 				Internal:   opts&metaRouteInternal != 0,
 				Stateful:   opts&metaRouteStateful != 0,
 				Authorized: opts&metaRouteAuthorized != 0,

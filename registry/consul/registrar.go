@@ -61,7 +61,9 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 
 	if r.stopped.Load() {
 		r.mu.Unlock()
-		r.deregisterService(context.Background(), insID)
+		if err := r.deregisterService(context.Background(), insID); err != nil {
+			log.Warnf("deregister service %s failed: %v", insID, err)
+		}
 		return errors.ErrIllegalOperation
 	}
 
@@ -91,9 +93,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 func (r *registrar) deregister(ctx context.Context) error {
 	r.stop()
 
-	r.deregisterService(ctx, r.insID)
-
-	return nil
+	return r.deregisterService(ctx, r.insID)
 }
 
 // 停止注册
@@ -113,7 +113,9 @@ func (r *registrar) stop() {
 func (r *registrar) close() {
 	r.stop()
 
-	r.deregisterService(context.Background(), r.insID)
+	if err := r.deregisterService(context.Background(), r.insID); err != nil {
+		log.Warnf("deregister service %s failed: %v", r.insID, err)
+	}
 }
 
 // 清理注册资源
@@ -222,13 +224,15 @@ func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (str
 }
 
 // deregisterService 从 Consul 注销指定实例标识的服务。
-func (r *registrar) deregisterService(ctx context.Context, insID string) {
+func (r *registrar) deregisterService(ctx context.Context, insID string) error {
 	tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
 	defer tcancel()
 
 	if err := r.registry.opts.client.Agent().ServiceDeregisterOpts(insID, (&api.QueryOptions{}).WithContext(tctx)); err != nil {
-		log.Warnf("deregister service %s failed: %v", insID, err)
+		return err
 	}
+
+	return nil
 }
 
 // 心跳保活
