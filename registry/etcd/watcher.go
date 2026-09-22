@@ -386,8 +386,8 @@ func (wm *watcherMgr) watchLoop() bool {
 						log.Warnf("etcd watch put failed: %v", err)
 					}
 				case mvccpb.DELETE:
-					if parts := strings.Split(string(ev.Kv.Key), "/"); len(parts) == 4 {
-						deletes = append(deletes, parts[3])
+					if id, ok := strings.CutPrefix(string(ev.Kv.Key), wm.watchKey); ok {
+						deletes = append(deletes, id)
 					} else {
 						log.Warnf("etcd watch delete key %s failed", ev.Kv.Key)
 					}

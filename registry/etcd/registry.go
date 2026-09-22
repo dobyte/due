@@ -178,7 +178,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {
-		if mgr := v.(*watcherMgr); mgr.health.Load() {
+		if mgr, ok := v.(*watcherMgr); ok && mgr.health.Load() {
 			if services, err := mgr.services(); err == nil {
 				return services, nil
 			}

@@ -80,6 +80,8 @@ func defaultOptions() *options {
 }
 
 // WithAddrs 设置客户端连接地址
+// @param addrs ...string 客户端连接地址
+// @return @1 Option 服务注册发现配置项
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
@@ -92,21 +94,29 @@ func WithDialTimeout(dialTimeout time.Duration) Option {
 }
 
 // WithClient 设置外部客户端
+// @param client *clientv3.Client 外部客户端
+// @return @1 Option 服务注册发现配置项
 func WithClient(client *clientv3.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
 // WithNamespace 设置命名空间
+// @param namespace string 命名空间
+// @return @1 Option 服务注册发现配置项
 func WithNamespace(namespace string) Option {
 	return func(o *options) { o.namespace = namespace }
 }
 
 // WithTimeout 设置上下文超时时间
+// @param timeout time.Duration 上下文超时时间
+// @return @1 Option 服务注册发现配置项
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
 // WithUsername 设置用户名
+// @param username string 用户名
+// @return @1 Option 服务注册发现配置项
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }

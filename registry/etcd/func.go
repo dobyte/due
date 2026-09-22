@@ -8,11 +8,11 @@ import (
 )
 
 // 构建服务实例ID
-// 实例ID由服务类型、服务名称与服务实体ID拼接而成
+// 实例ID由服务名称与服务实体ID拼接而成
 // @param ins *registry.ServiceInstance 服务实例
 // @return @1 string 服务实例ID
 func makeInsID(ins *registry.ServiceInstance) string {
-	return fmt.Sprintf("%s-%s-%s", ins.Kind, ins.Name, ins.ID)
+	return fmt.Sprintf("%s-%s", ins.Name, ins.ID)
 }
 
 func marshal(ins *registry.ServiceInstance) (string, error) {
