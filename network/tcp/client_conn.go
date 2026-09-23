@@ -42,12 +42,12 @@ var _ network.Conn = &clientConn{}
 // @return @1 network.Conn 连接对象
 func newClientConn(cli *client, conn net.Conn) network.Conn {
 	c := &clientConn{}
-	c.id = cli.genConnID()
+	c.id = cli.cid.Add(1)
 	c.attr = &attr{}
 	c.conn = conn
 	c.cli = cli
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.dueBuffers = make([]buffer.Buffer, 0, maxBatchWriteNum)
 	c.netBuffers = make(net.Buffers, 0, maxBatchWriteNum)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
@@ -86,13 +86,15 @@ func (c *clientConn) Attr() network.Attr {
 // @return @1 error 错误信息
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -101,13 +103,15 @@ func (c *clientConn) Bind(uid int64) error {
 // @return @1 error 错误信息
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
+
+	c.rw.RUnlock()
 
 	return nil
 }

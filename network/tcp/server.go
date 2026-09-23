@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -174,28 +173,11 @@ func (s *server) init() error {
 }
 
 // serve 等待连接
-// 循环接受TCP连接并分配到独立协程处理；对瞬时错误采用指数退避重试，服务器关闭时结束
+// 循环接受TCP连接并分配到独立协程处理，服务器关闭时结束
 func (s *server) serve(ln net.Listener) {
-	var delay time.Duration
-
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				if delay == 0 {
-					delay = 5 * time.Millisecond
-				} else {
-					delay *= 2
-				}
-				if max := 1 * time.Second; delay > max {
-					delay = max
-				}
-
-				log.Warnf("tcp accept error: %v; retrying in %v", err, delay)
-				time.Sleep(delay)
-				continue
-			}
-
 			if errors.Is(err, net.ErrClosed) {
 				break
 			}
@@ -203,8 +185,6 @@ func (s *server) serve(ln net.Listener) {
 			log.Warnf("tcp accept error: %v", err)
 			break
 		}
-
-		delay = 0
 
 		setNoDelay(conn)
 

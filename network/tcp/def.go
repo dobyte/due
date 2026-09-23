@@ -13,6 +13,9 @@ const protocol = "tcp"
 // maxBatchWriteNum 单次批量写入的最大任务数
 const maxBatchWriteNum = 64
 
+// minWriteQueueSize 最小写入队列大小
+const minWriteQueueSize = 128
+
 // setNoDelay 设置Nagle算法
 // @param conn net.Conn TCP连接
 func setNoDelay(conn net.Conn) {
