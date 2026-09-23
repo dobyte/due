@@ -38,7 +38,7 @@ var _ network.Conn = &clientConn{}
 // newClientConn creates a client connection.
 func newClientConn(cli *client, qc *quic.Conn, stream *quic.Stream) network.Conn {
 	c := &clientConn{}
-	c.id = cli.genConnID()
+	c.id = cli.cid.Add(1)
 	c.attr = &attr{}
 	c.qc = qc
 	c.stream = stream
@@ -80,13 +80,15 @@ func (c *clientConn) Attr() network.Attr {
 // Bind binds a user ID.
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -94,13 +96,15 @@ func (c *clientConn) Bind(uid int64) error {
 // Unbind clears the bound user ID.
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
+
+	c.rw.RUnlock()
 
 	return nil
 }

@@ -56,7 +56,7 @@ func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 		}
 	}
 
-	id := m.genConnID()
+	id := m.cid.Add(1)
 	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -141,14 +141,4 @@ func (m *serverConnMgr) close() {
 		}
 		wg.Wait()
 	})
-}
-
-// genConnID 生成连接ID
-// @return @1 int64 连接ID
-func (cm *serverConnMgr) genConnID() int64 {
-	if cid := cm.cid.Add(1); cid == 0 {
-		return cm.cid.Add(1)
-	} else {
-		return cid
-	}
 }

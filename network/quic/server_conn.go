@@ -54,14 +54,16 @@ func (c *serverConn) Attr() network.Attr {
 // Bind binds a user ID and cancels the authorization timer.
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
 	c.uncheckAuthorize()
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -69,14 +71,16 @@ func (c *serverConn) Bind(uid int64) error {
 // Unbind clears the bound user ID and restarts the authorization timer.
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
 	c.checkAuthorize()
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -196,12 +200,10 @@ func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) {
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
-	c.qc = nil
-	c.stream = nil
 	c.queue = nil
 	c.output = nil
 	c.attr.values.Clear()
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.uncheckAuthorize()
 }
 
 // checkState returns an error matching the current connection state.
