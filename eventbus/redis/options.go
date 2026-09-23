@@ -2,28 +2,31 @@ package redis
 
 import (
 	"context"
+	"time"
 
 	"github.com/dobyte/due/v2/etc"
 	"github.com/redis/go-redis/v9"
 )
 
 const (
-	defaultAddr       = "127.0.0.1:6379"
-	defaultDB         = 0
-	defaultMaxRetries = 3
-	defaultPrefix     = "due:eventbus"
+	defaultAddr          = "127.0.0.1:6379"
+	defaultDB            = 0
+	defaultMaxRetries    = 3
+	defaultPrefix        = "due:eventbus"
+	defaultStaleDuration = 0
 )
 
 const (
-	defaultAddrsKey      = "etc.eventbus.redis.addrs"
-	defaultDBKey         = "etc.eventbus.redis.db"
-	defaultUsernameKey   = "etc.eventbus.redis.username"
-	defaultPasswordKey   = "etc.eventbus.redis.password"
-	defaultCertFileKey   = "etc.eventbus.redis.certFile"
-	defaultKeyFileKey    = "etc.eventbus.redis.keyFile"
-	defaultCAFileKey     = "etc.eventbus.redis.caFile"
-	defaultMaxRetriesKey = "etc.eventbus.redis.maxRetries"
-	defaultPrefixKey     = "etc.eventbus.redis.prefix"
+	defaultAddrsKey         = "etc.eventbus.redis.addrs"
+	defaultDBKey            = "etc.eventbus.redis.db"
+	defaultUsernameKey      = "etc.eventbus.redis.username"
+	defaultPasswordKey      = "etc.eventbus.redis.password"
+	defaultCertFileKey      = "etc.eventbus.redis.certFile"
+	defaultKeyFileKey       = "etc.eventbus.redis.keyFile"
+	defaultCAFileKey        = "etc.eventbus.redis.caFile"
+	defaultMaxRetriesKey    = "etc.eventbus.redis.maxRetries"
+	defaultPrefixKey        = "etc.eventbus.redis.prefix"
+	defaultStaleDurationKey = "etc.eventbus.redis.staleDuration"
 )
 
 type Option func(o *options)
@@ -67,20 +70,25 @@ type options struct {
 	// 前缀
 	// key前缀，默认为due:eventbus
 	prefix string
+
+	// 消息保留时长
+	// 超过此时长未被消费的消息将被自动丢弃，默认为0表示消息不保留，未被消费的消息将被立即丢弃
+	staleDuration time.Duration
 }
 
 func defaultOptions() *options {
 	return &options{
-		ctx:        context.Background(),
-		addrs:      etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
-		db:         etc.Get(defaultDBKey, defaultDB).Int(),
-		username:   etc.Get(defaultUsernameKey).String(),
-		password:   etc.Get(defaultPasswordKey).String(),
-		certFile:   etc.Get(defaultCertFileKey).String(),
-		keyFile:    etc.Get(defaultKeyFileKey).String(),
-		caFile:     etc.Get(defaultCAFileKey).String(),
-		maxRetries: etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
-		prefix:     etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		ctx:           context.Background(),
+		addrs:         etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
+		db:            etc.Get(defaultDBKey, defaultDB).Int(),
+		username:      etc.Get(defaultUsernameKey).String(),
+		password:      etc.Get(defaultPasswordKey).String(),
+		certFile:      etc.Get(defaultCertFileKey).String(),
+		keyFile:       etc.Get(defaultKeyFileKey).String(),
+		caFile:        etc.Get(defaultCAFileKey).String(),
+		maxRetries:    etc.Get(defaultMaxRetriesKey, defaultMaxRetries).Int(),
+		prefix:        etc.Get(defaultPrefixKey, defaultPrefix).String(),
+		staleDuration: etc.Get(defaultStaleDurationKey, defaultStaleDuration).Duration(),
 	}
 }
 
@@ -127,4 +135,9 @@ func WithClient(client redis.UniversalClient) Option {
 // WithPrefix 设置前缀
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
+}
+
+// WithStaleDuration 设置消息过期时间
+func WithStaleDuration(staleDuration time.Duration) Option {
+	return func(o *options) { o.staleDuration = staleDuration }
 }
