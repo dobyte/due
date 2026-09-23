@@ -18,12 +18,12 @@ type Config struct {
 	FilePath         string // 文档路径
 	BasePath         string // 访问路径
 	SwaggerBundleUrl string // swagger-ui-bundle.js地址
-	SwaggerPresetUrl string // swagger-ui-preset.js地址
+	SwaggerPresetUrl string // swagger-ui-standalone-preset.js地址
 	SwaggerStylesUrl string // swagger-ui.css地址
 }
 
 const (
-	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-bundle.js"             // swagger-ui-bundle.js默认地址
+	defaultSwaggerBundleUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-bundle.js"            // swagger-ui-bundle.js默认地址
 	defaultSwaggerPresetUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui-standalone-preset.js" // swagger-ui-standalone-preset.js默认地址
 	defaultSwaggerStylesUrl = "https://unpkg.com/swagger-ui@5.28.1/dist/swagger-ui.css"                  // swagger-ui.css默认地址
 )
@@ -47,7 +47,7 @@ func New(cfg Config) fiber.Handler {
 	}
 
 	// Generate URL path's for the middleware
-	specURL := path.Join(cfg.BasePath, strings.TrimPrefix(cfg.FilePath, "/"))
+	specURL := path.Join("/", cfg.BasePath, path.Base(cfg.FilePath))
 	swaggerUIPath := path.Join("/", cfg.BasePath)
 
 	// Serve the Swagger spec from memory

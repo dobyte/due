@@ -5,6 +5,7 @@ import (
 
 	"net/http"
 
+	"github.com/dobyte/due/v2/log"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -262,12 +263,12 @@ func adaptHandlers(handlers []any) []any {
 
 		if rk == reflect.Func {
 			if rv.IsNil() {
+				log.Warn("router: skip nil function handler")
 				continue
 			}
-		} else {
-			if _, ok := handler.(http.Handler); !ok {
-				continue
-			}
+		} else if _, ok := handler.(http.Handler); !ok {
+			log.Warn("router: skip non-http handler")
+			continue
 		}
 
 		if h, ok := handler.(Handler); ok {

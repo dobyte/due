@@ -96,7 +96,7 @@ func configDefault(config ...Config) Config {
 	}
 
 	if cfg.Users == nil {
-		cfg.Users = ConfigDefault.Users
+		cfg.Users = make(map[string]string)
 	}
 
 	if cfg.Realm == "" {

@@ -2,6 +2,7 @@ package digestauth
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"strconv"
@@ -120,20 +121,25 @@ func New(config ...Config) http.Handler {
 			return da.badRequest(ctx)
 		}
 
-		// 计算期望的response
-		expected := xhash.MD5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
-
-		if response != expected {
-			return da.unauthorized(ctx)
+		// nc必须为8位十六进制计数（RFC 2617）
+		if len(nc) != 8 {
+			return da.badRequest(ctx)
 		}
 
-		// 校验response通过后消费nonce计数，防止重放
-		// nc必须为8位十六进制计数（RFC 2617）
 		nonceCount, err := strconv.ParseUint(nc, 16, 64)
 		if err != nil {
 			return da.badRequest(ctx)
 		}
 
+		// 计算期望的response
+		expected := xhash.MD5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
+
+		// 恒时比较response，防止时序侧信道；hex值大小写等价，比较前统一转小写
+		if subtle.ConstantTimeCompare([]byte(strings.ToLower(response)), []byte(expected)) != 1 {
+			return da.unauthorized(ctx)
+		}
+
+		// 校验response通过后消费nonce计数，防止重放
 		if !da.consumeNonce(nonce, nonceCount) {
 			return da.unauthorized(ctx)
 		}
@@ -159,19 +165,48 @@ func containsInvalidHeaderChars(s string) bool {
 }
 
 // parseDigestParams 解析Digest认证参数字符串为map
+// 按RFC 2617语法解析，正确处理带引号且内部含逗号或转义引号的值
 func parseDigestParams(s string) map[string]string {
 	params := make(map[string]string)
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
+	for _, part := range splitDigestParams(s) {
 		kv := strings.SplitN(part, "=", 2)
 		if len(kv) != 2 {
 			continue
 		}
-		key := strings.TrimSpace(kv[0])
-		val := strings.Trim(kv[1], `"`)
+		key := strings.ToLower(strings.TrimSpace(kv[0]))
+		val := strings.TrimSpace(kv[1])
+		if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+			val = strings.ReplaceAll(val[1:len(val)-1], `\"`, `"`)
+		}
 		params[key] = val
 	}
 	return params
+}
+
+// splitDigestParams 按逗号分割Digest参数字符串，忽略引号内的逗号
+func splitDigestParams(s string) []string {
+	var (
+		parts   []string
+		start   int
+		inQuote bool
+		escaped bool
+	)
+
+	for i := 0; i < len(s); i++ {
+		switch {
+		case escaped:
+			escaped = false
+		case s[i] == '\\' && inQuote:
+			escaped = true
+		case s[i] == '"':
+			inQuote = !inQuote
+		case s[i] == ',' && !inQuote:
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+
+	return append(parts, s[start:])
 }
 
 // nonceEntry nonce缓存条目
@@ -203,13 +238,10 @@ func (da *digestAuth) unauthorized(ctx http.Context) error {
 	if da.config.Unauthorized != nil {
 		return da.config.Unauthorized(ctx)
 	} else {
-		var (
-			nonce  = da.generateNonce()
-			opaque = da.opaqueNonce()
-		)
+		nonce := da.generateNonce()
 
 		ctx.Set("WWW-Authenticate",
-			fmt.Sprintf(`Digest realm="%s", nonce="%s", opaque="%s", algorithm=MD5, qop="auth"`, da.config.Realm, nonce, opaque))
+			fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=MD5, qop="auth"`, da.config.Realm, nonce))
 
 		return ctx.Status(fiber.StatusUnauthorized).JSON(&http.Resp{
 			Code:    codes.Unauthorized.Code(),
@@ -238,7 +270,6 @@ func (s *digestAuth) generateNonce() string {
 	nonce := base64.RawStdEncoding.EncodeToString(b)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	now := time.Now()
 
@@ -270,14 +301,9 @@ func (s *digestAuth) generateNonce() string {
 
 	s.nonces[nonce] = &nonceEntry{createdAt: now}
 	s.nonceOrder = append(s.nonceOrder, nonce)
+	s.mu.Unlock()
 
 	return nonce
-}
-
-func (s *digestAuth) opaqueNonce() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return base64.RawStdEncoding.EncodeToString(b)
 }
 
 // 校验nonce是否存在且未过期
@@ -285,32 +311,37 @@ func (s *digestAuth) opaqueNonce() string {
 // @return @1 bool nonce有效返回true
 func (s *digestAuth) validateNonce(nonce string) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	entry, ok := s.nonces[nonce]
 	if !ok {
+		s.mu.Unlock()
 		return false
 	}
 
-	return time.Since(entry.createdAt) <= s.config.NonceTTL
+	valid := time.Since(entry.createdAt) <= s.config.NonceTTL
+	s.mu.Unlock()
+
+	return valid
 }
 
 // 消费nonce计数，要求nc单调递增，防止重放
 // @return @1 bool 计数有效并已更新返回true；nonce无效或计数未递增返回false
 func (s *digestAuth) consumeNonce(nonce string, nc uint64) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	entry, ok := s.nonces[nonce]
 	if !ok {
+		s.mu.Unlock()
 		return false
 	}
 
 	if nc <= entry.nc {
+		s.mu.Unlock()
 		return false
 	}
 
 	entry.nc = nc
+	s.mu.Unlock()
 
 	return true
 }

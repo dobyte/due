@@ -88,8 +88,8 @@ type options struct {
 }
 
 type ProxyOptions struct {
-	ProxyHeader string             `json:"proxyHeader"` // 代理头部，默认为X-Forwarded-For
-	TrustProxy  *TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
+	ProxyHeader string            `json:"proxyHeader"` // 代理头部，默认为X-Forwarded-For
+	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
 }
 
 type CorsOptions struct {
@@ -170,171 +170,225 @@ func defaultOptions() *options {
 
 // WithName 设置实例名称
 // @param name string 实例名称
+// @return @1 Option HTTP服务器配置函数
 func WithName(name string) Option {
 	return func(o *options) { o.name = name }
 }
 
 // WithAddr 设置监听地址
+// @param addr string 监听地址
+// @return @1 Option HTTP服务器配置函数
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
 }
 
 // WithCredentials 设置证书和秘钥
+// @param certFile string 证书文件
+// @param keyFile string 秘钥文件
+// @return @1 Option HTTP服务器配置函数
 func WithCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.keyFile, o.certFile = keyFile, certFile }
 }
 
 // WithConsole 设置是否启用控制台输出
+// @param enable bool 是否启用控制台输出
+// @return @1 Option HTTP服务器配置函数
 func WithConsole(enable bool) Option {
 	return func(o *options) { o.console = enable }
 }
 
 // WithRegistry 设置服务注册器
 // @param r registry.Registry 服务注册器
+// @return @1 Option HTTP服务器配置函数
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
 }
 
 // WithTransporter 设置消息传输器
+// @param transporter transport.Transporter 消息传输器
+// @return @1 Option HTTP服务器配置函数
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
 }
 
 // WithCorsOptions 设置跨域配置
+// @param corsOpts CorsOptions 跨域配置
+// @return @1 Option HTTP服务器配置函数
 func WithCorsOptions(corsOpts CorsOptions) Option {
 	return func(o *options) { o.corsOpts = corsOpts }
 }
 
 // WithSwagOptions 设置swagger配置
+// @param swagOpts SwagOptions swagger配置
+// @return @1 Option HTTP服务器配置函数
 func WithSwagOptions(swagOpts SwagOptions) Option {
 	return func(o *options) { o.swagOpts = swagOpts }
 }
 
 // WithProxyOptions 设置代理配置
+// @param proxyOpts ProxyOptions 代理配置
+// @return @1 Option HTTP服务器配置函数
 func WithProxyOptions(proxyOpts ProxyOptions) Option {
 	return func(o *options) { o.proxyOpts = proxyOpts }
 }
 
 // WithMiddlewares 设置中间件
+// @param middlewares ...any 中间件
+// @return @1 Option HTTP服务器配置函数
 func WithMiddlewares(middlewares ...any) Option {
 	return func(o *options) { o.middlewares = middlewares }
 }
 
 // WithStrictRouting 设置是否启用严格路由模式
 // @param enable bool 是否启用严格路由模式
+// @return @1 Option HTTP服务器配置函数
 func WithStrictRouting(enable bool) Option {
 	return func(o *options) { o.strictRouting = enable }
 }
 
 // WithCaseSensitive 设置是否区分路由大小写
+// @param enable bool 是否区分路由大小写
+// @return @1 Option HTTP服务器配置函数
 func WithCaseSensitive(enable bool) Option {
 	return func(o *options) { o.caseSensitive = enable }
 }
 
 // WithDisableHeadAutoRegister 设置是否禁用HEAD自动注册
+// @param disable bool 是否禁用HEAD自动注册
+// @return @1 Option HTTP服务器配置函数
 func WithDisableHeadAutoRegister(disable bool) Option {
 	return func(o *options) { o.disableHeadAutoRegister = disable }
 }
 
 // WithImmutable 设置是否启用不可变路由
+// @param enable bool 是否启用不可变路由
+// @return @1 Option HTTP服务器配置函数
 func WithImmutable(enable bool) Option {
 	return func(o *options) { o.immutable = enable }
 }
 
 // WithUnescapePath 设置是否unescape路径参数
+// @param enable bool 是否unescape路径参数
+// @return @1 Option HTTP服务器配置函数
 func WithUnescapePath(enable bool) Option {
 	return func(o *options) { o.unescapePath = enable }
 }
 
 // WithBodyLimit 设置body大小
 // @param bodyLimit int body大小
+// @return @1 Option HTTP服务器配置函数
 func WithBodyLimit(bodyLimit int) Option {
 	return func(o *options) { o.bodyLimit = bodyLimit }
 }
 
 // WithConcurrency 设置最大并发连接数
 // @param concurrency int 最大并发连接数
+// @return @1 Option HTTP服务器配置函数
 func WithConcurrency(concurrency int) Option {
 	return func(o *options) { o.concurrency = concurrency }
 }
 
 // WithViews 设置视图引擎
 // @param views fiber.Views 视图引擎
+// @return @1 Option HTTP服务器配置函数
 func WithViews(views fiber.Views) Option {
 	return func(o *options) { o.views = views }
 }
 
 // WithViewsLayout 设置视图布局
+// @param layout string 视图布局
+// @return @1 Option HTTP服务器配置函数
 func WithViewsLayout(layout string) Option {
 	return func(o *options) { o.viewsLayout = layout }
 }
 
 // WithPassLocalsToViews 设置是否将上下文 locals 传递给视图引擎
+// @param enable bool 是否将上下文 locals 传递给视图引擎
+// @return @1 Option HTTP服务器配置函数
 func WithPassLocalsToViews(enable bool) Option {
 	return func(o *options) { o.passLocalsToViews = enable }
 }
 
 // WithReadBufferSize 设置读取缓冲区大小
+// @param size int 读取缓冲区大小
+// @return @1 Option HTTP服务器配置函数
 func WithReadBufferSize(size int) Option {
 	return func(o *options) { o.readBufferSize = size }
 }
 
 // WithWriteBufferSize 设置写入缓冲区大小
+// @param size int 写入缓冲区大小
+// @return @1 Option HTTP服务器配置函数
 func WithWriteBufferSize(size int) Option {
 	return func(o *options) { o.writeBufferSize = size }
 }
 
 // WithErrorHandler 设置错误处理函数
+// @param errorHandler fiber.ErrorHandler 错误处理函数
+// @return @1 Option HTTP服务器配置函数
 func WithErrorHandler(errorHandler fiber.ErrorHandler) Option {
 	return func(o *options) { o.errorHandler = errorHandler }
 }
 
 // WithDisableKeepalive 设置是否禁用keepalive
+// @param disable bool 是否禁用keepalive
+// @return @1 Option HTTP服务器配置函数
 func WithDisableKeepalive(disable bool) Option {
 	return func(o *options) { o.disableKeepalive = disable }
 }
 
 // WithDisableDefaultDate 设置是否禁用默认日期
 // @param disable bool 是否禁用默认日期
+// @return @1 Option HTTP服务器配置函数
 func WithDisableDefaultDate(disable bool) Option {
 	return func(o *options) { o.disableDefaultDate = disable }
 }
 
 // WithDisableDefaultContentType 设置是否禁用默认Content-Type
+// @param disable bool 是否禁用默认Content-Type
+// @return @1 Option HTTP服务器配置函数
 func WithDisableDefaultContentType(disable bool) Option {
 	return func(o *options) { o.disableDefaultContentType = disable }
 }
 
 // WithDisableHeaderNormalizing 设置是否禁用默认头部归一化
 // @param disable bool 是否禁用默认头部归一化
+// @return @1 Option HTTP服务器配置函数
 func WithDisableHeaderNormalizing(disable bool) Option {
 	return func(o *options) { o.disableHeaderNormalizing = disable }
 }
 
 // WithStreamRequestBody 设置是否流式请求体
+// @param enable bool 是否流式请求体
+// @return @1 Option HTTP服务器配置函数
 func WithStreamRequestBody(enable bool) Option {
 	return func(o *options) { o.streamRequestBody = enable }
 }
 
 // WithDisablePreParseMultipartForm 设置是否禁用预解析multipart/form-data
 // @param disable bool 是否禁用预解析multipart/form-data
+// @return @1 Option HTTP服务器配置函数
 func WithDisablePreParseMultipartForm(disable bool) Option {
 	return func(o *options) { o.disablePreParseMultipartForm = disable }
 }
 
 // WithReduceMemoryUsage 设置是否减少内存占用
 // @param enable bool 是否减少内存占用
+// @return @1 Option HTTP服务器配置函数
 func WithReduceMemoryUsage(enable bool) Option {
 	return func(o *options) { o.reduceMemoryUsage = enable }
 }
 
 // WithEnableIPValidation 设置是否启用IP验证
+// @param enable bool 是否启用IP验证
+// @return @1 Option HTTP服务器配置函数
 func WithEnableIPValidation(enable bool) Option {
 	return func(o *options) { o.enableIPValidation = enable }
 }
 
 // WithEnableSplittingOnParsers 设置是否在解析器上拆分请求体
 // @param enable bool 是否在解析器上拆分请求体
+// @return @1 Option HTTP服务器配置函数
 func WithEnableSplittingOnParsers(enable bool) Option {
 	return func(o *options) { o.enableSplittingOnParsers = enable }
 }

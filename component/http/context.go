@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/dobyte/due/v2/codes"
 	"github.com/dobyte/due/v2/log"
@@ -41,9 +40,8 @@ type Context interface {
 // HTTP上下文
 type context struct {
 	*fiber.DefaultCtx
-	proxy          *Proxy
-	stdRequest     *http.Request
-	stdRequestOnce *sync.Once
+	proxy      *Proxy
+	stdRequest *http.Request
 }
 
 // 创建HTTP上下文
@@ -74,28 +72,29 @@ func (c *context) Proxy() *Proxy {
 func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
-		code := codes.Convert(v)
-		message := code.Message()
+		if code := codes.Convert(v); code != nil {
+			message := code.Message()
 
-		switch parts := strings.SplitN(message, ": ", 2); len(parts) {
-		case 2:
-			if mode.IsReleaseMode() {
-				return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
-			} else {
-				return c.JSON(&Resp{Code: code.Code(), Message: parts[0], Details: parts[1]})
+			switch parts := strings.SplitN(message, ": ", 2); len(parts) {
+			case 2:
+				if mode.IsReleaseMode() {
+					return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
+				} else {
+					return c.JSON(&Resp{Code: code.Code(), Message: parts[0], Details: parts[1]})
+				}
+			default:
+				return c.JSON(&Resp{Code: code.Code(), Message: message})
 			}
-		case 1:
-			return c.JSON(&Resp{Code: code.Code(), Message: parts[0]})
-		default:
-			return c.JSON(&Resp{Code: code.Code(), Message: message})
 		}
 	case codes.Code:
 		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
 	case *codes.Code:
-		return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
-	default:
-		return c.JSON(&Resp{Code: codes.Unknown.Code(), Message: codes.Unknown.Message()})
+		if v != nil {
+			return c.JSON(&Resp{Code: v.Code(), Message: v.Message()})
+		}
 	}
+
+	return c.JSON(&Resp{Code: codes.Unknown.Code(), Message: codes.Unknown.Message()})
 }
 
 // Success 成功响应
@@ -111,33 +110,31 @@ func (c *context) Success(data ...any) error {
 func (c *context) Reset(fctx *fasthttp.RequestCtx) {
 	c.DefaultCtx.Reset(fctx)
 	c.stdRequest = nil
-	c.stdRequestOnce = &sync.Once{}
 }
 
 // StdRequest 获取标准请求（net/http）
 // 注意：返回的请求体已拷贝为独立内存，可在处理器返回后安全使用
 // @return @1 *http.Request 标准请求
 func (c *context) StdRequest() *http.Request {
-	c.stdRequestOnce.Do(func() {
-		if c.stdRequest == nil {
-			c.stdRequest = &http.Request{}
-		}
+	if c.stdRequest != nil {
+		return c.stdRequest
+	}
 
-		if err := fasthttpadaptor.ConvertRequest(c.RequestCtx(), c.stdRequest, true); err != nil {
-			log.Errorf("convert request failed: %v", err)
-		}
+	c.stdRequest = &http.Request{}
 
-		// 拷贝请求体，避免引用fasthttp请求池内存（连接复用后会被覆盖）
-		if c.stdRequest.Body != nil {
-			body, err := io.ReadAll(c.stdRequest.Body)
-			if err != nil {
-				log.Errorf("copy request body failed: %v", err)
-			} else {
-				c.stdRequest.Body = io.NopCloser(bytes.NewReader(body))
-				c.stdRequest.ContentLength = int64(len(body))
-			}
+	if err := fasthttpadaptor.ConvertRequest(c.RequestCtx(), c.stdRequest, true); err != nil {
+		log.Errorf("convert request failed: %v", err)
+	}
+
+	// 拷贝请求体，避免引用fasthttp请求池内存（连接复用后会被覆盖）
+	if c.stdRequest.Body != nil {
+		if body, err := io.ReadAll(c.stdRequest.Body); err != nil {
+			log.Errorf("copy request body failed: %v", err)
+		} else {
+			c.stdRequest.Body = io.NopCloser(bytes.NewReader(body))
+			c.stdRequest.ContentLength = int64(len(body))
 		}
-	})
+	}
 
 	return c.stdRequest
 }
