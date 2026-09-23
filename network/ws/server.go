@@ -267,10 +267,8 @@ func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
 		return nil
 	}
 
-	if ipAddr := s.extractIPFromHeader(r); ipAddr != "" {
-		if ip := net.ParseIP(ipAddr); ip != nil {
-			return &net.TCPAddr{IP: ip}
-		}
+	if ip := s.extractIPFromHeader(r); ip != nil {
+		return &net.TCPAddr{IP: ip}
 	}
 
 	return nil
@@ -279,10 +277,6 @@ func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
 // isTrustedProxy 是否受信任的代理
 func (s *server) isTrustedProxy(ip net.IP) bool {
 	if ip == nil {
-		return false
-	}
-
-	if s.opts.proxyOpts == nil || s.opts.proxyOpts.TrustProxy == nil {
 		return false
 	}
 
@@ -312,26 +306,35 @@ func (s *server) isTrustedProxy(ip net.IP) bool {
 }
 
 // extractIPFromHeader 从代理头中提取客户端真实IP
-// 从右向左遍历代理头中的IP链（如X-Forwarded-For），剥离受信任代理IP：
-// 配置了受信任代理时返回最右侧的非受信任IP，否则返回最左侧的合法IP。
+// 从右向左遍历代理头中的 IP 链（如 X-Forwarded-For），跳过受信任代理 IP，
+// 返回第一个非受信任 IP；若整条链均为受信任代理或无法解析，则返回 nil。
 // @param r *http.Request HTTP请求
-// @return @1 string 客户端真实IP，未提取到时返回空字符串
-func (s *server) extractIPFromHeader(r *http.Request) string {
+// @return @1 net.IP 客户端真实IP，无法确定时返回 nil
+func (s *server) extractIPFromHeader(r *http.Request) net.IP {
 	proxyHeader := "X-Forwarded-For"
-	if s.opts.proxyOpts != nil && s.opts.proxyOpts.ProxyHeader != "" {
+	if s.opts.proxyOpts.ProxyHeader != "" {
 		proxyHeader = s.opts.proxyOpts.ProxyHeader
 	}
 
 	headerValue := strings.TrimSpace(r.Header.Get(proxyHeader))
 	if headerValue == "" {
-		return ""
+		return nil
 	}
 
-	for _, part := range strings.Split(headerValue, ",") {
-		if ip := net.ParseIP(strings.TrimSpace(part)); ip != nil {
-			return ip.String()
+	parts := strings.Split(headerValue, ",")
+
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(parts[i]))
+		if ip == nil {
+			continue
 		}
+
+		if s.isTrustedProxy(ip) {
+			continue
+		}
+
+		return ip
 	}
 
-	return ""
+	return nil
 }

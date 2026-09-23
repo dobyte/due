@@ -68,8 +68,8 @@ type ServerOption func(o *serverOptions)
 type CheckOriginFunc func(r *http.Request) bool
 
 type ProxyOptions struct {
-	ProxyHeader string             `json:"proxyHeader"` // 客户端IP头，默认"X-Forwarded-For"
-	TrustProxy  *TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
+	ProxyHeader string            `json:"proxyHeader"` // 客户端IP头，默认"X-Forwarded-For"
+	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
 }
 
 type TrustProxyOptions struct {
@@ -99,7 +99,7 @@ type serverOptions struct {
 	enableCompression  bool               // 是否开启压缩，默认false
 	compressionLevel   int                // 压缩等级，默认1
 	proxyMode          ProxyMode          // 代理模式，默认ProxyModeNone
-	proxyOpts          *ProxyOptions      // 代理选项，默认nil，仅在proxyMode为ProxyModeApplication时生效
+	proxyOpts          ProxyOptions       // 代理选项，仅在proxyMode为ProxyModeApplication时生效
 }
 
 // defaultServerOptions 构建默认服务器配置
@@ -186,7 +186,7 @@ func defaultServerOptions() *serverOptions {
 		if err := etc.Get(defaultServerProxyOptionsKey).Scan(&proxyOpts); err != nil {
 			log.Warnf("scan proxy options failed: %v", err)
 		} else {
-			opts.proxyOpts = &ProxyOptions{
+			opts.proxyOpts = ProxyOptions{
 				ProxyHeader: proxyOpts.ProxyHeader,
 				TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
 			}
@@ -335,7 +335,14 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 // @param heartbeatMechanism HeartbeatMechanism 心跳机制
 // @return @1 ServerOption 服务器配置项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
-	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+	return func(o *serverOptions) {
+		switch heartbeatMechanism {
+		case RespHeartbeat, TickHeartbeat:
+			o.heartbeatMechanism = heartbeatMechanism
+		default:
+			log.Warnf("the specified heartbeatMechanism is invalid and will be ignored")
+		}
+	}
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间
@@ -379,15 +386,11 @@ func WithServerProxyMode(proxyMode ProxyMode) ServerOption {
 }
 
 // WithServerProxyOptions 设置代理选项
-// @param proxyOpts *ProxyOptions 代理选项
+// @param proxyOpts ProxyOptions 代理选项
 // @return @1 ServerOption 服务器配置项
-func WithServerProxyOptions(proxyOpts *ProxyOptions) ServerOption {
+func WithServerProxyOptions(proxyOpts ProxyOptions) ServerOption {
 	return func(o *serverOptions) {
-		if proxyOpts == nil {
-			return
-		}
-
-		o.proxyOpts = &ProxyOptions{
+		o.proxyOpts = ProxyOptions{
 			ProxyHeader: proxyOpts.ProxyHeader,
 			TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
 		}
@@ -396,12 +399,8 @@ func WithServerProxyOptions(proxyOpts *ProxyOptions) ServerOption {
 
 // handleTrustedProxy 处理受信任的代理
 // @param opts TrustProxyOptions 受信任的代理配置
-// @return @1 *TrustProxyOptions 处理后的受信任的代理配置
-func handleTrustedProxy(opts *TrustProxyOptions) *TrustProxyOptions {
-	if opts == nil {
-		return nil
-	}
-
+// @return @1 TrustProxyOptions 处理后的受信任的代理配置
+func handleTrustedProxy(opts TrustProxyOptions) TrustProxyOptions {
 	opts.ips = make(map[string]struct{}, len(opts.Proxies))
 	opts.ranges = make([]*net.IPNet, 0, len(opts.Proxies))
 
@@ -416,7 +415,7 @@ func handleTrustedProxy(opts *TrustProxyOptions) *TrustProxyOptions {
 			if ip := net.ParseIP(proxy); ip == nil {
 				log.Warnf("IP address %q could not be parsed", proxy)
 			} else {
-				opts.ips[proxy] = struct{}{}
+				opts.ips[ip.String()] = struct{}{}
 			}
 		}
 	}

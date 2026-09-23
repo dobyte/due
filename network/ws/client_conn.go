@@ -35,9 +35,8 @@ type clientConn struct {
 var _ network.Conn = &clientConn{}
 
 // newClientConn 创建一个客户端连接
-// @param id int64 连接ID
+// @param cli *client 客户端
 // @param conn *websocket.Conn WS连接
-// @param client *client 客户端
 // @return @1 network.Conn 连接对象
 func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c := &clientConn{}
@@ -83,13 +82,15 @@ func (c *clientConn) Attr() network.Attr {
 // @return @1 error 错误信息
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -98,19 +99,21 @@ func (c *clientConn) Bind(uid int64) error {
 // @return @1 error 错误信息
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
 
+	c.rw.RUnlock()
+
 	return nil
 }
 
 // Push 低优先级发送消息
-// @param buf buffer.Buffer 消息内容
+// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
 // @return @1 error 错误信息
 func (c *clientConn) Push(buf buffer.Buffer) error {
 	if buf.Len() == 0 {

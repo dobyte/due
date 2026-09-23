@@ -38,7 +38,7 @@ type serverConn struct {
 	remoteAddr        net.Addr                    // 客户端真实地址（应用层代理模式下从代理头解析）
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
 	lastHeartbeatTime atomic.Int64                // 上次心跳时间
-	authorizeTimer    atomic.Value                // 授权定时器
+	authorizeTimer    atomic.Pointer[time.Timer]  // 授权定时器
 }
 
 var _ network.Conn = &serverConn{}
@@ -66,14 +66,16 @@ func (c *serverConn) Attr() network.Attr {
 // @return @1 error 错误信息
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
 	c.uncheckAuthorize()
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -82,14 +84,16 @@ func (c *serverConn) Bind(uid int64) error {
 // @return @1 error 错误信息
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
-	c.checkAuthorize()
+	c.checkAuthorize(c.conn)
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -209,14 +213,14 @@ func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) {
 	c.remoteAddr = remoteAddr
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.authorizeTimer.Store(nil)
 	c.connMgr.storeConn(conn, c)
 	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
-	c.checkAuthorize()
+	c.checkAuthorize(conn)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
@@ -224,7 +228,8 @@ func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) {
 }
 
 // reset 重置连接
-// 清空连接对象内的引用与状态，以便归还对象池后安全复用
+// 清空连接对象内的引用与状态，以便归还对象池后安全复用；
+// 并显式停止残留的授权定时器，避免其回调在连接复用后触发
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
@@ -232,7 +237,7 @@ func (c *serverConn) reset() {
 	c.remoteAddr = nil
 	c.queue = nil
 	c.attr.values.Clear()
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.uncheckAuthorize()
 }
 
 // checkState 检测连接状态
@@ -250,24 +255,19 @@ func (c *serverConn) checkState() error {
 }
 
 // checkAuthorize 授权检查
-// 开启授权超时定时器，超时且仍未绑定用户ID时强制关闭连接；重新创建前会停止旧定时器
-func (c *serverConn) checkAuthorize() {
+// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接指针，
+// 避免连接被回收复用后误关闭新连接
+// @param conn *websocket.Conn 当前WS连接
+func (c *serverConn) checkAuthorize(conn *websocket.Conn) {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
-		cid := c.ID()
-
-		timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
+		if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 			if c.UID() != 0 {
 				return
 			}
 
-			if c.ID() != cid {
-				return
-			}
-
-			c.forceClose(true)
-		}))
-		if t, ok := timer.(*time.Timer); ok && t != nil {
-			t.Stop()
+			c.recycleClose(conn)
+		})); timer != nil {
+			timer.Stop()
 		}
 	}
 }
@@ -276,10 +276,8 @@ func (c *serverConn) checkAuthorize() {
 // 停止授权超时定时器，用于绑定用户ID或关闭连接时解除授权检测
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
-		timer := c.authorizeTimer.Swap((*time.Timer)(nil))
-
-		if t, ok := timer.(*time.Timer); ok && t != nil {
-			t.Stop()
+		if timer := c.authorizeTimer.Swap(nil); timer != nil {
+			timer.Stop()
 		}
 	}
 }
@@ -365,6 +363,20 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	return err
 }
 
+// recycleClose 若当前连接仍为指定连接则强制关闭
+// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接可能已被回收复用，
+// 因此需比对 WS 连接指针，避免误关闭新连接
+// @param conn *websocket.Conn 触发关闭时的WS连接
+func (c *serverConn) recycleClose(conn *websocket.Conn) {
+	c.rw.RLock()
+	match := c.conn == conn
+	c.rw.RUnlock()
+
+	if match {
+		c.forceClose(true)
+	}
+}
+
 // read 读取消息
 // 持续读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
 // @param conn *websocket.Conn WS连接
@@ -380,7 +392,7 @@ func (c *serverConn) read(conn *websocket.Conn) {
 				}
 			}
 
-			taskpool.Add(func() { c.forceClose(true) })
+			taskpool.Add(func() { c.recycleClose(conn) })
 			return
 		}
 
@@ -391,7 +403,7 @@ func (c *serverConn) read(conn *websocket.Conn) {
 
 		isHeartbeat, heartbeatTime, buf, err := packet.Read(r)
 		if err != nil {
-			taskpool.Add(func() { c.forceClose(true) })
+			taskpool.Add(func() { c.recycleClose(conn) })
 			return
 		}
 
@@ -505,7 +517,7 @@ func (c *serverConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
 		if errors.Is(err, net.ErrClosed) {
-			taskpool.Add(func() { c.forceClose(true) })
+			taskpool.Add(func() { c.recycleClose(conn) })
 		} else {
 			if _, ok := err.(*websocket.CloseError); !ok {
 				log.Errorf("write message error: %v", err)
@@ -525,7 +537,7 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.connMgr.server.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		taskpool.Add(func() { c.forceClose(true) })
+		taskpool.Add(func() { c.recycleClose(conn) })
 
 		return false
 	} else {
