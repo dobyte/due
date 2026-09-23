@@ -42,7 +42,7 @@ var _ network.Conn = &clientConn{}
 // @return @1 network.Conn 客户端连接实例
 func newClientConn(cli *client, conn *kcp.UDPSession) network.Conn {
 	c := &clientConn{}
-	c.id = cli.genConnID()
+	c.id = cli.cid.Add(1)
 	c.attr = &attr{}
 	c.conn = conn
 	c.cli = cli
@@ -112,13 +112,15 @@ func (c *clientConn) Attr() network.Attr {
 // @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -127,13 +129,15 @@ func (c *clientConn) Bind(uid int64) error {
 // @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
+
+	c.rw.RUnlock()
 
 	return nil
 }

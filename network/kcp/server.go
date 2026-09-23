@@ -3,7 +3,6 @@ package kcp
 import (
 	"net"
 	"sync"
-	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -166,26 +165,9 @@ func (s *server) init() error {
 // serve 启动服务器
 // 循环接受KCP连接并分配到连接管理器，监听结束时关闭全部连接
 func (s *server) serve(ln net.Listener) {
-	var delay time.Duration
-
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				if delay == 0 {
-					delay = 5 * time.Millisecond
-				} else {
-					delay *= 2
-				}
-				if max := 1 * time.Second; delay > max {
-					delay = max
-				}
-
-				log.Warnf("kcp accept error: %v; retrying in %v", err, delay)
-				time.Sleep(delay)
-				continue
-			}
-
 			if errors.Is(err, net.ErrClosed) {
 				break
 			}
@@ -193,8 +175,6 @@ func (s *server) serve(ln net.Listener) {
 			log.Warnf("kcp accept error: %v", err)
 			break
 		}
-
-		delay = 0
 
 		var session *kcp.UDPSession
 		if pc, ok := conn.(*proxyproto.Conn); ok {

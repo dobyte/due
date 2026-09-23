@@ -59,14 +59,16 @@ func (c *serverConn) Attr() network.Attr {
 // @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(uid)
 	c.uncheckAuthorize()
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -76,14 +78,16 @@ func (c *serverConn) Bind(uid int64) error {
 // @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
 
 	if c.isClosed() {
+		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
 
 	c.uid.Store(0)
 	c.checkAuthorize()
+
+	c.rw.RUnlock()
 
 	return nil
 }
@@ -190,7 +194,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // 复用连接对象，重置状态、写队列与两路读写协程，并应用服务器相关KCP参数
 // @param conn *kcp.UDPSession KCP连接
 func (c *serverConn) init(conn *kcp.UDPSession) {
-	c.id = c.connMgr.genConnID()
+	c.id = c.connMgr.cid.Add(1)
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
@@ -244,10 +248,9 @@ func (c *serverConn) init(conn *kcp.UDPSession) {
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
-	c.conn = nil
 	c.queue = nil
 	c.attr.values.Clear()
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.uncheckAuthorize()
 }
 
 // checkState 检测连接状态
