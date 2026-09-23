@@ -205,7 +205,7 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // @param conn *websocket.Conn WS连接
 // @param remoteAddr net.Addr 客户端真实地址，可为nil
 func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) {
-	c.id = c.connMgr.genConnID()
+	c.id = c.connMgr.cid.Add(1)
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
@@ -233,7 +233,6 @@ func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) {
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
-	c.conn = nil
 	c.remoteAddr = nil
 	c.queue = nil
 	c.attr.values.Clear()
@@ -516,12 +515,12 @@ func (c *serverConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	}
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
-		if errors.Is(err, net.ErrClosed) {
-			taskpool.Add(func() { c.recycleClose(conn) })
-		} else {
-			if _, ok := err.(*websocket.CloseError); !ok {
+		if _, ok := err.(*websocket.CloseError); !ok {
+			if !errors.Is(err, net.ErrClosed) {
 				log.Errorf("write message error: %v", err)
 			}
+
+			taskpool.Add(func() { c.recycleClose(conn) })
 		}
 	}
 

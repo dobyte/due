@@ -69,6 +69,7 @@ type CheckOriginFunc func(r *http.Request) bool
 
 type ProxyOptions struct {
 	ProxyHeader string            `json:"proxyHeader"` // 客户端IP头，默认"X-Forwarded-For"
+	PortHeader  string            `json:"portHeader"`  // 客户端端口头，默认"X-Forwarded-Port"
 	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
 }
 
@@ -188,6 +189,7 @@ func defaultServerOptions() *serverOptions {
 		} else {
 			opts.proxyOpts = ProxyOptions{
 				ProxyHeader: proxyOpts.ProxyHeader,
+				PortHeader:  proxyOpts.PortHeader,
 				TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
 			}
 		}
@@ -392,6 +394,7 @@ func WithServerProxyOptions(proxyOpts ProxyOptions) ServerOption {
 	return func(o *serverOptions) {
 		o.proxyOpts = ProxyOptions{
 			ProxyHeader: proxyOpts.ProxyHeader,
+			PortHeader:  proxyOpts.PortHeader,
 			TrustProxy:  handleTrustedProxy(proxyOpts.TrustProxy),
 		}
 	}

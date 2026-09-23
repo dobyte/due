@@ -10,6 +10,7 @@ package ws
 import (
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -267,8 +268,8 @@ func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
 		return nil
 	}
 
-	if ip := s.extractIPFromHeader(r); ip != nil {
-		return &net.TCPAddr{IP: ip}
+	if addr := s.extractAddrFromHeader(r); addr != nil {
+		return addr
 	}
 
 	return nil
@@ -305,15 +306,21 @@ func (s *server) isTrustedProxy(ip net.IP) bool {
 	return false
 }
 
-// extractIPFromHeader 从代理头中提取客户端真实IP
+// extractAddrFromHeader 从代理头中提取客户端真实地址
 // 从右向左遍历代理头中的 IP 链（如 X-Forwarded-For），跳过受信任代理 IP，
-// 返回第一个非受信任 IP；若整条链均为受信任代理或无法解析，则返回 nil。
+// 返回第一个非受信任 IP，并从 X-Forwarded-Port 头解析客户端端口；
+// 若整条链均为受信任代理或无法解析，则返回 nil。
 // @param r *http.Request HTTP请求
-// @return @1 net.IP 客户端真实IP，无法确定时返回 nil
-func (s *server) extractIPFromHeader(r *http.Request) net.IP {
+// @return @1 *net.TCPAddr 客户端真实地址，无法确定时返回 nil
+func (s *server) extractAddrFromHeader(r *http.Request) *net.TCPAddr {
 	proxyHeader := "X-Forwarded-For"
 	if s.opts.proxyOpts.ProxyHeader != "" {
 		proxyHeader = s.opts.proxyOpts.ProxyHeader
+	}
+
+	portHeader := "X-Forwarded-Port"
+	if s.opts.proxyOpts.PortHeader != "" {
+		portHeader = s.opts.proxyOpts.PortHeader
 	}
 
 	headerValue := strings.TrimSpace(r.Header.Get(proxyHeader))
@@ -322,6 +329,7 @@ func (s *server) extractIPFromHeader(r *http.Request) net.IP {
 	}
 
 	parts := strings.Split(headerValue, ",")
+	ports := strings.Split(strings.TrimSpace(r.Header.Get(portHeader)), ",")
 
 	for i := len(parts) - 1; i >= 0; i-- {
 		ip := net.ParseIP(strings.TrimSpace(parts[i]))
@@ -333,7 +341,15 @@ func (s *server) extractIPFromHeader(r *http.Request) net.IP {
 			continue
 		}
 
-		return ip
+		var port int
+
+		if i < len(ports) {
+			if p, err := strconv.Atoi(strings.TrimSpace(ports[i])); err == nil && p >= 0 && p <= 65535 {
+				port = p
+			}
+		}
+
+		return &net.TCPAddr{IP: ip, Port: port}
 	}
 
 	return nil

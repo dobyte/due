@@ -96,11 +96,21 @@ func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 }
 
 // connHash 通过连接指针计算哈希
-// 根据连接对象指针地址取模确定其所属分片索引
+// 对连接对象指针地址做位混合后取模，确定其所属分片索引，避免对象地址对齐导致分片分布不均
 // @param c *websocket.Conn WS连接
 // @return @1 int 分片索引
 func (cm *serverConnMgr) connHash(c *websocket.Conn) int {
-	return int(uintptr(unsafe.Pointer(c))) % len(cm.partitions)
+	return int(cm.mixPointer(uintptr(unsafe.Pointer(c))) % uintptr(len(cm.partitions)))
+}
+
+// mixPointer 打散指针地址，避免对象地址低位对齐导致取模后分片分布不均
+func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
+	x := uint64(p)
+	x ^= x >> 33
+	x *= 0xff51afd7ed558ccd
+	x ^= x >> 33
+
+	return uintptr(x)
 }
 
 type partition struct {
@@ -154,14 +164,4 @@ func (p *partition) close() error {
 	}
 
 	return wg.Wait()
-}
-
-// genConnID 生成连接ID
-// @return @1 int64 连接ID
-func (cm *serverConnMgr) genConnID() int64 {
-	if cid := cm.cid.Add(1); cid == 0 {
-		return cm.cid.Add(1)
-	} else {
-		return cid
-	}
 }

@@ -40,7 +40,7 @@ var _ network.Conn = &clientConn{}
 // @return @1 network.Conn 连接对象
 func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c := &clientConn{}
-	c.id = cli.genConnID()
+	c.id = cli.cid.Add(1)
 	c.cli = cli
 	c.attr = &attr{}
 	c.conn = conn
@@ -418,12 +418,12 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	}
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
-		if errors.Is(err, net.ErrClosed) {
-			taskpool.Add(func() { c.forceClose() })
-		} else {
-			if _, ok := err.(*websocket.CloseError); !ok {
+		if _, ok := err.(*websocket.CloseError); !ok {
+			if !errors.Is(err, net.ErrClosed) {
 				log.Errorf("write message error: %v", err)
 			}
+
+			taskpool.Add(func() { c.forceClose() })
 		}
 	}
 

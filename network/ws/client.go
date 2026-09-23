@@ -93,13 +93,3 @@ func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
 }
-
-// genConnID 生成连接ID
-// @return @1 int64 连接ID
-func (c *client) genConnID() int64 {
-	if cid := c.cid.Add(1); cid == 0 {
-		return c.cid.Add(1)
-	} else {
-		return cid
-	}
-}
