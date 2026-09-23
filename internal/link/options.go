@@ -25,6 +25,6 @@ type Options struct {
 	FaultRecoveryTime   time.Duration     // 故障恢复时间
 	CommandQueueSize    int32             // 命令队列大小
 	CommandWriteTimeout time.Duration     // 命令写入超时时间
-	WaitHandler         func()            // 等待处理
-	DoneHandler         func()            // 完成处理
+	WaitHandler         func() bool       // 等待处理
+	DoneHandler         func() bool       // 完成处理
 }

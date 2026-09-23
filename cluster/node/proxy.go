@@ -147,7 +147,7 @@ func (p *Proxy) AddServiceProvider(name string, desc, provider any) {
 }
 
 // NewMeshClient 新建微服务客户端
-// target参数可分为三种种模式:
+// target参数可分为三种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
 // 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
@@ -560,9 +560,11 @@ func (p *Proxy) Invoke(f func(), wait ...bool) error {
 		if p.node.dispatchGoid.Load() == goid.Get() {
 			xcall.Call(f)
 		} else {
-			p.node.doAddWait()
+			if !p.node.doAddWait() {
+				return errors.ErrNodeShutdown
+			}
 
-			wg := &sync.WaitGroup{}
+			wg := p.node.wgPool.Get().(*sync.WaitGroup)
 			wg.Add(1)
 
 			if err := p.node.tasker.commit(func() {
@@ -570,14 +572,19 @@ func (p *Proxy) Invoke(f func(), wait ...bool) error {
 
 				f()
 			}); err != nil {
+				wg.Done() // 投递失败需手动平衡计数
+				p.node.wgPool.Put(wg)
 				p.node.doDoneWait()
 				return err
 			}
 
 			wg.Wait()
+			p.node.wgPool.Put(wg)
 		}
 	} else {
-		p.node.doAddWait()
+		if !p.node.doAddWait() {
+			return errors.ErrNodeShutdown
+		}
 
 		if err := p.node.tasker.commit(f); err != nil {
 			p.node.doDoneWait()
@@ -598,7 +605,9 @@ func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 		return nil, errors.ErrNodeShutdown
 	}
 
-	p.node.doAddWait()
+	if !p.node.doAddWait() {
+		return nil, errors.ErrNodeShutdown
+	}
 
 	timer := time.AfterFunc(d, func() {
 		defer p.node.doDoneWait()
@@ -624,7 +633,9 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 		return nil, errors.ErrNodeShutdown
 	}
 
-	p.node.doAddWait()
+	if !p.node.doAddWait() {
+		return nil, errors.ErrNodeShutdown
+	}
 
 	timer := time.AfterFunc(d, func() {
 		var err error

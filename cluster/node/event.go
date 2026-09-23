@@ -15,15 +15,15 @@ import (
 
 // 事件上下文
 type event struct {
-	node    *Node           // 代理API
-	ctx     context.Context // 上下文
-	gid     string          // 网关ID
-	cid     int64           // 连接ID
-	uid     int64           // 用户ID
-	event   cluster.Event   // 事件类型
-	version atomic.Int32    // 对象版本号
-	chain   *chains.Chain   // defer 调用链
-	actor   atomic.Value    // 当前Actor
+	node    *Node                 // 代理API
+	ctx     context.Context       // 上下文
+	gid     string                // 网关ID
+	cid     int64                 // 连接ID
+	uid     int64                 // 用户ID
+	event   cluster.Event         // 事件类型
+	version atomic.Int32          // 对象版本号
+	chain   *chains.Chain         // defer 调用链
+	actor   atomic.Pointer[Actor] // 当前Actor
 }
 
 // GID 获取网关ID
@@ -74,7 +74,7 @@ func (e *event) Parse(v any) error {
 // Defer 添加defer延迟调用栈
 // 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
 // 区别在于使用Defer方法可以对调用栈进行取消操作
-// 同时，在调用Task和Next方法是会自动取消调用栈
+// 同时，在调用Task和Next方法时会自动取消调用栈
 // 也可通过Cancel方法进行手动取消
 // bottom用于标识是否挂载到栈底部
 func (e *event) Defer(fn func(), bottom ...bool) {
@@ -91,9 +91,7 @@ func (e *event) Defer(fn func(), bottom ...bool) {
 
 // Cancel 取消Defer调用栈
 func (e *event) Cancel() {
-	if e.chain != nil {
-		e.chain.Release()
-	}
+	e.releaseDefer()
 }
 
 // 执行defer调用栈
@@ -119,11 +117,13 @@ func (e *event) Clone() Context {
 // Task 投递任务
 // 调用此方法会自动取消Defer调用栈的所有执行函数
 func (e *event) Task(fn func(ctx Context)) {
+	if !e.node.doAddWait() {
+		return
+	}
+
 	version := e.incrVersion()
 
-	e.Cancel()
-
-	e.node.doAddWait()
+	e.recoverDefer()
 
 	task.Add(func() {
 		defer func() {
@@ -292,7 +292,7 @@ func (e *event) Actor(kind, id string) (*Actor, bool) {
 // ctx在Actor的处理器中，调用的就是actor.Invoke
 // isBlock 表示是否阻塞调用，默认阻塞调用
 func (e *event) Invoke(fn func(), isBlock ...bool) error {
-	if actor := e.actor.Load().(*Actor); actor != nil {
+	if actor := e.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)
 	} else {
 		return e.node.proxy.Invoke(fn, isBlock...)
@@ -303,7 +303,7 @@ func (e *event) Invoke(fn func(), isBlock ...bool) error {
 // ctx在全局的处理器中，调用的就是proxy.AfterFunc
 // ctx在Actor的处理器中，调用的就是actor.AfterFunc
 func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
-	if actor := e.actor.Load().(*Actor); actor != nil {
+	if actor := e.actor.Load(); actor != nil {
 		return actor.AfterFunc(d, f)
 	} else {
 		return e.node.proxy.AfterFunc(d, f)
@@ -314,7 +314,7 @@ func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 // ctx在全局的处理器中，调用的就是proxy.AfterInvoke
 // ctx在Actor的处理器中，调用的就是actor.AfterInvoke
 func (e *event) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
-	if actor := e.actor.Load().(*Actor); actor != nil {
+	if actor := e.actor.Load(); actor != nil {
 		return actor.AfterInvoke(d, f)
 	} else {
 		return e.node.proxy.AfterInvoke(d, f)
@@ -374,7 +374,7 @@ func (e *event) Disconnect(force ...bool) error {
 }
 
 // NewMeshClient 新建微服务客户端
-// target参数可分为三种种模式:
+// target参数可分为三种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
 // 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
@@ -389,7 +389,7 @@ func (e *event) storeActor(actor *Actor) {
 
 // 删除当前Actor
 func (e *event) deleteActor() {
-	e.actor.Store((*Actor)(nil))
+	e.actor.Store(nil)
 }
 
 // 增长版本号
@@ -421,6 +421,13 @@ func (e *event) recoverDefer() {
 	}
 }
 
+// 释放Defer调用栈
+func (e *event) releaseDefer() {
+	if e.chain != nil {
+		e.chain.Release()
+	}
+}
+
 // 比对版本号后进行回收对象
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
@@ -436,7 +443,7 @@ func (e *event) release() {
 	e.uid = 0
 	e.event = 0
 	e.version.Store(0)
-	e.actor.Store((*Actor)(nil))
+	e.actor.Store(nil)
 
 	if e.chain != nil {
 		e.chain.Release()

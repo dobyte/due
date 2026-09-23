@@ -4,7 +4,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -52,8 +51,8 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 		return nil, errors.ErrActorExists
 	}
 
-	if o.wait {
-		s.node.doAddWait()
+	if o.wait && !s.node.doAddWait() {
+		return nil, errors.ErrNodeShutdown
 	}
 
 	act := &Actor{}
@@ -61,7 +60,6 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	act.scheduler = s
 	act.state.Store(started)
 	act.routes = make(map[int32]RouteHandler)
-	act.events = make(map[cluster.Event]EventHandler, 3)
 	act.taskQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
 	act.messageQueue = queue.NewQueue[Context](o.messageQueueSize, o.messageWriteTimeout)
 
@@ -95,6 +93,7 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 			}
 		}
 		val.(*atomic.Int32).Add(1)
+		act.registered.Store(true)
 	}
 
 	s.actors.Store(act.PID(), act)
@@ -321,11 +320,13 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 // @return @1 error 通常返回nil
 func (s *Scheduler) dispatchEvent(ctx Context) error {
 	s.actors.Range(func(_, actor any) bool {
-		if act := actor.(*Actor); act.opts.dispatch {
-			c := ctx.Clone()
+		if act, ok := actor.(*Actor); ok && act.opts.dispatch {
+			if _, ok = act.events.Load(ctx.Event()); ok {
+				c := ctx.Clone()
 
-			if err := act.Next(c); err != nil {
-				c.release()
+				if err := act.Next(c); err != nil {
+					c.release()
+				}
 			}
 		}
 

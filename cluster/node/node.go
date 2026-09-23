@@ -37,6 +37,7 @@ type Node struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	state        atomic.Int32
+	wgPool       *sync.Pool
 	evtPool      *sync.Pool
 	reqPool      *sync.Pool
 	tasker       *Tasker
@@ -48,7 +49,7 @@ type Node struct {
 	linker       *node.Server
 	scheduler    *Scheduler
 	transporter  transport.Server
-	wg           *sync.WaitGroup
+	wg           sync.WaitGroup
 	rw           sync.RWMutex
 	hooks        map[cluster.Hook][]HookHandler
 	dispatchGoid atomic.Int64
@@ -76,21 +77,9 @@ func NewNode(opts ...Option) *Node {
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
 	n.state.Store(int32(cluster.Shut))
-	n.wg = &sync.WaitGroup{}
-	n.evtPool = &sync.Pool{New: func() any {
-		evt := &event{}
-		evt.node = n
-		evt.actor.Store((*Actor)(nil))
-
-		return evt
-	}}
-	n.reqPool = &sync.Pool{New: func() any {
-		req := &request{}
-		req.node = n
-		req.actor.Store((*Actor)(nil))
-
-		return req
-	}}
+	n.wgPool = &sync.Pool{New: func() any { return &sync.WaitGroup{} }}
+	n.evtPool = &sync.Pool{New: func() any { return &event{node: n} }}
+	n.reqPool = &sync.Pool{New: func() any { return &request{node: n} }}
 
 	return n
 }
@@ -551,20 +540,24 @@ func (n *Node) printInfo() {
 
 // 完成一次等待计数
 // 节点已关闭时无操作，否则执行等待组Done，用于跟踪后台任务的执行状态
-func (n *Node) doDoneWait() {
+func (n *Node) doDoneWait() bool {
 	if n == nil || n.getState() == cluster.Shut {
-		return
+		return false
 	}
 
 	n.wg.Done()
+	return true
 }
 
 // 增加一次等待计数
-// 节点已关闭时无操作，否则执行等待组Add，用于跟踪后台任务的执行状态
-func (n *Node) doAddWait() {
+// 仅在Work或Busy状态下登记计数；Hang（关闭中）与Shut（已关闭）状态下拒绝登记，
+// 避免在关闭阶段与Close中的Wait发生WaitGroup并发误用
+// @return @1 bool 是否成功登记计数
+func (n *Node) doAddWait() bool {
 	if n == nil || n.getState() == cluster.Shut {
-		return
+		return false
 	}
 
 	n.wg.Add(1)
+	return true
 }

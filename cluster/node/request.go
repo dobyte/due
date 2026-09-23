@@ -28,18 +28,18 @@ import (
 // 请求上下文
 type request struct {
 	node    *Node
-	ctx     context.Context // 上下文
-	gid     string          // 来源网关ID
-	nid     string          // 来源节点ID
-	pid     string          // 来源Actor ID
-	cid     int64           // 连接ID
-	uid     int64           // 用户ID
-	seq     int32           // 消息序列号
-	route   int32           // 消息路由号
-	message any             // 消息数据
-	version atomic.Int32    // 版本号
-	chain   *chains.Chain   // 调用链
-	actor   atomic.Value    // 当前Actor
+	ctx     context.Context       // 上下文
+	gid     string                // 来源网关ID
+	nid     string                // 来源节点ID
+	pid     string                // 来源Actor ID
+	cid     int64                 // 连接ID
+	uid     int64                 // 用户ID
+	seq     int32                 // 消息序列号
+	route   int32                 // 消息路由号
+	message any                   // 消息数据
+	version atomic.Int32          // 版本号
+	chain   *chains.Chain         // 调用链
+	actor   atomic.Pointer[Actor] // 当前Actor
 }
 
 // GID 获取网关ID
@@ -116,7 +116,7 @@ func (r *request) Parse(v any) error {
 // Defer 添加defer延迟调用栈
 // 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
 // 区别在于使用Defer方法可以对调用栈进行取消操作
-// 同时，在调用Task和Next方法是会自动取消调用栈
+// 同时，在调用Task和Next方法时会自动取消调用栈
 // 也可通过Cancel方法进行手动取消
 // bottom用于标识是否挂载到栈底部
 func (r *request) Defer(fn func(), bottom ...bool) {
@@ -148,7 +148,7 @@ func (r *request) compareVersionExecDefer(version int32) {
 // Clone 克隆Context
 func (r *request) Clone() Context {
 	c := r.node.reqPool.Get().(*request)
-	c.ctx = context.Background()
+	c.ctx = r.ctx
 	c.gid = r.gid
 	c.nid = r.nid
 	c.cid = r.cid
@@ -185,11 +185,13 @@ func (r *request) Clone() Context {
 // 推荐使用此方法替代task.Add和go func
 // 调用此方法会自动取消Defer调用栈的所有执行函数
 func (r *request) Task(fn func(ctx Context)) {
+	if !r.node.doAddWait() {
+		return
+	}
+
 	version := r.incrVersion()
 
-	r.Cancel()
-
-	r.node.doAddWait()
+	r.recoverDefer()
 
 	task.Add(func() {
 		defer func() {
@@ -358,7 +360,7 @@ func (r *request) Actor(kind, id string) (*Actor, bool) {
 // ctx在Actor的处理器中，调用的就是actor.Invoke
 // isBlock 表示是否阻塞调用，默认阻塞调用
 func (r *request) Invoke(fn func(), isBlock ...bool) error {
-	if actor := r.actor.Load().(*Actor); actor != nil {
+	if actor := r.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)
 	} else {
 		return r.node.proxy.Invoke(fn, isBlock...)
@@ -369,7 +371,7 @@ func (r *request) Invoke(fn func(), isBlock ...bool) error {
 // ctx在全局的处理器中，调用的就是proxy.AfterFunc
 // ctx在Actor的处理器中，调用的就是actor.AfterFunc
 func (r *request) AfterFunc(d time.Duration, f func()) (*Timer, error) {
-	if actor := r.actor.Load().(*Actor); actor != nil {
+	if actor := r.actor.Load(); actor != nil {
 		return actor.AfterFunc(d, f)
 	} else {
 		return r.node.proxy.AfterFunc(d, f)
@@ -380,7 +382,7 @@ func (r *request) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 // ctx在全局的处理器中，调用的就是proxy.AfterInvoke
 // ctx在Actor的处理器中，调用的就是actor.AfterInvoke
 func (r *request) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
-	if actor := r.actor.Load().(*Actor); actor != nil {
+	if actor := r.actor.Load(); actor != nil {
 		return actor.AfterInvoke(d, f)
 	} else {
 		return r.node.proxy.AfterInvoke(d, f)
@@ -460,7 +462,7 @@ func (r *request) Disconnect(force ...bool) error {
 }
 
 // NewMeshClient 新建微服务客户端
-// target参数可分为三种种模式:
+// target参数可分为三种模式:
 // 服务直连模式: 	direct://127.0.0.1:8011
 // 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 // 服务发现模式: 	discovery://service_name
@@ -475,7 +477,7 @@ func (r *request) storeActor(actor *Actor) {
 
 // 删除当前Actor
 func (r *request) deleteActor() {
-	r.actor.Store((*Actor)(nil))
+	r.actor.Store(nil)
 }
 
 // 增长版本号
@@ -507,6 +509,13 @@ func (r *request) recoverDefer() {
 	}
 }
 
+// 释放Defer调用栈
+func (r *request) releaseDefer() {
+	if r.chain != nil {
+		r.chain.Release()
+	}
+}
+
 // 比对版本号后进行回收对象
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
@@ -534,7 +543,7 @@ func (r *request) release() {
 	r.route = 0
 	r.message = nil
 	r.version.Store(0)
-	r.actor.Store((*Actor)(nil))
+	r.actor.Store(nil)
 
 	if r.chain != nil {
 		r.chain.Release()

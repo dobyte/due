@@ -271,7 +271,7 @@ func WithWeight(weight int) Option {
 		if weight > 0 {
 			o.weight = weight
 		} else {
-			log.Warnf("the specified weight is less than zero and will be ignored")
+			log.Warnf("the specified weight is not positive and will be ignored")
 		}
 	}
 }

@@ -43,7 +43,7 @@ type Context interface {
 	// Defer 添加defer延迟调用栈
 	// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
 	// 区别在于使用Defer方法可以对调用栈进行取消操作
-	// 同时，在调用Task和Next方法是会自动取消调用栈
+	// 同时，在调用Task和Next方法时会自动取消调用栈
 	// 也可通过Cancel方法进行手动取消调用栈
 	// @param fn func() 待加入调用栈的函数
 	// @param bottom ...bool 是否挂载到栈底部，默认挂载到栈顶
@@ -181,7 +181,7 @@ type Context interface {
 	// @return @2 error 创建失败时返回的错误
 	AfterInvoke(d time.Duration, f func()) (*Timer, error)
 	// NewMeshClient 新建微服务客户端
-	// target参数可分为三种种模式:
+	// target参数可分为三种模式:
 	// 服务直连模式: 	direct://127.0.0.1:8011
 	// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
 	// 服务发现模式: 	discovery://service_name
@@ -215,6 +215,9 @@ type Context interface {
 	cancelDefer()
 	// 恢复Defer调用栈
 	recoverDefer()
+	// 释放Defer调用栈
+	// 清空字段并回收上下文对象到对象池
+	releaseDefer()
 	// 释放上下文
 	// 清空字段并回收上下文对象到对象池
 	release()

@@ -26,18 +26,19 @@ const (
 // Actor Actor模型
 // 拥有独立的消息队列与任务队列，保证其内部处理是线程安全的
 type Actor struct {
-	opts                *actorOptions                  // 配置项
-	scheduler           *Scheduler                     // 调度器
-	state               atomic.Int32                   // 状态
-	routes              map[int32]RouteHandler         // 路由处理器
-	events              map[cluster.Event]EventHandler // 事件处理器
-	defaultRouteHandler RouteHandler                   // 默认路由处理器
-	processor           Processor                      // 处理器
-	rw                  sync.RWMutex                   // 锁
-	taskQueue           *queue.Queue[func()]           // 任务队列
-	messageQueue        *queue.Queue[Context]          // 消息队列
-	binds               sync.Map                       // 绑定的用户
-	dispatchGoid        atomic.Int64                   // 分发器协程ID
+	opts                *actorOptions          // 配置项
+	scheduler           *Scheduler             // 调度器
+	state               atomic.Int32           // 状态
+	routes              map[int32]RouteHandler // 路由处理器
+	events              sync.Map               // 事件处理器
+	defaultRouteHandler RouteHandler           // 默认路由处理器
+	processor           Processor              // 处理器
+	rw                  sync.RWMutex           // 锁
+	taskQueue           *queue.Queue[func()]   // 任务队列
+	messageQueue        *queue.Queue[Context]  // 消息队列
+	binds               sync.Map               // 绑定的用户
+	registered          atomic.Bool            // 是否已登记到调度器的kind引用计数中
+	dispatchGoid        atomic.Int64           // 分发器协程ID
 }
 
 // ID 获取Actor的ID
@@ -88,7 +89,7 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 		if a.dispatchGoid.Load() == goid.Get() {
 			xcall.Call(f)
 		} else {
-			wg := sync.WaitGroup{}
+			wg := a.scheduler.node.wgPool.Get().(*sync.WaitGroup)
 			wg.Add(1)
 
 			a.rw.RLock()
@@ -102,10 +103,13 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 			a.rw.RUnlock()
 
 			if err != nil {
+				wg.Done() // 投递失败需手动平衡计数
+				a.scheduler.node.wgPool.Put(wg)
 				return err
 			}
 
 			wg.Wait()
+			a.scheduler.node.wgPool.Put(wg)
 		}
 	} else {
 		a.rw.RLock()
@@ -194,8 +198,6 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 				a.defaultRouteHandler = handler
 			}
 		})
-	default:
-		// ignore
 	}
 }
 
@@ -219,8 +221,6 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 				}
 			}
 		})
-	default:
-		// ignore
 	}
 }
 
@@ -233,15 +233,13 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 
 	switch a.state.Load() {
 	case unstart:
-		a.events[event] = handler
+		a.events.Store(event, handler)
 	case started:
 		a.taskQueue.Write(func() {
 			if a.started() {
-				a.events[event] = handler
+				a.events.Store(event, handler)
 			}
 		})
-	default:
-		// ignore
 	}
 }
 
@@ -282,13 +280,24 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 
 	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
+	req.pid = a.PID()
 	req.uid = uid
-	req.ctx = context.Background()
 	req.seq = message.Seq
 	req.route = message.Route
 	req.message = buf
 
-	return a.Next(req)
+	if a.scheduler.node.opts.ctxFunc != nil {
+		req.ctx = a.scheduler.node.opts.ctxFunc()
+	} else {
+		req.ctx = context.Background()
+	}
+
+	if err := a.Next(req); err != nil {
+		req.release()
+		return err
+	}
+
+	return nil
 }
 
 // Push 推送消息到本地Node队列上进行处理
@@ -323,7 +332,7 @@ func (a *Actor) destroy() bool {
 		return false
 	}
 
-	if a.opts.dispatch {
+	if a.opts.dispatch && a.registered.Load() {
 		a.scheduler.releaseKind(a.Kind())
 	}
 
@@ -401,11 +410,15 @@ func (a *Actor) dispatch() {
 
 			version := ctx.loadVersion()
 
-			if ctx.Kind() == Event {
-				if handler, ok := a.events[ctx.Event()]; ok {
-					xcall.Call(func() { handler(ctx) })
+			ctx.releaseDefer()
 
-					ctx.compareVersionExecDefer(version)
+			if ctx.Kind() == Event {
+				if v, ok := a.events.Load(ctx.Event()); ok {
+					if handler, ok := v.(EventHandler); ok {
+						xcall.Call(func() { handler(ctx) })
+
+						ctx.compareVersionExecDefer(version)
+					}
 				}
 			} else {
 				if handler, ok := a.routes[ctx.Route()]; ok {

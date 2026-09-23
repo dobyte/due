@@ -43,6 +43,7 @@ var (
 // 承载节点内的路由队列，负责路由消息的接收与处理
 type Router struct {
 	node                *Node
+	mwPool              sync.Pool
 	rw                  sync.RWMutex
 	queue               *queue.Queue[*request]
 	routes              map[int32]*routeEntity
@@ -66,6 +67,7 @@ func newRouter(node *Node) *Router {
 		node:   node,
 		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
 		routes: make(map[int32]*routeEntity),
+		mwPool: sync.Pool{New: func() any { return &Middleware{} }},
 	}
 }
 
@@ -247,8 +249,14 @@ func (r *Router) handle(req *request) {
 
 	if ok {
 		if len(route.options.Middlewares) > 0 {
-			middleware := &Middleware{index: -1, middlewares: route.options.Middlewares, routeHandler: route.handler}
+			middleware := r.mwPool.Get().(*Middleware)
+			middleware.index = -1
+			middleware.middlewares = route.options.Middlewares
+			middleware.routeHandler = route.handler
+
 			middleware.Next(req)
+
+			r.mwPool.Put(middleware)
 			return
 		} else {
 			xcall.Call(func() { route.handler(req) })

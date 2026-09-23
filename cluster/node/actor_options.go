@@ -52,7 +52,7 @@ func WithActorArgs(args ...any) ActorOption {
 	return func(o *actorOptions) { o.args = append(o.args, args...) }
 }
 
-// WithActorNonWait 设置Actor无需等待属性（Node组件关关闭时无需等待此Actor结束）
+// WithActorNonWait 设置Actor无需等待属性（Node组件关闭时无需等待此Actor结束）
 // @return @1 ActorOption Actor配置项
 func WithActorNonWait() ActorOption {
 	return func(o *actorOptions) { o.wait = false }

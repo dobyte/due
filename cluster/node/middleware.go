@@ -1,5 +1,7 @@
 package node
 
+import "github.com/dobyte/due/v2/utils/xcall"
+
 // MiddlewareHandler 中间件处理函数
 type MiddlewareHandler func(middleware *Middleware, ctx Context)
 
@@ -28,7 +30,7 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 
 	version := ctx.incrVersion()
 
-	ctx.Cancel()
+	ctx.recoverDefer()
 
 	defer func() {
 		ctx.compareVersionExecDefer(version)
@@ -38,9 +40,11 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 
 	m.index += skip
 
-	if m.index >= len(m.middlewares) {
-		m.routeHandler(ctx)
-	} else {
-		m.middlewares[m.index](m, ctx)
-	}
+	xcall.Call(func() {
+		if m.index >= len(m.middlewares) {
+			m.routeHandler(ctx)
+		} else {
+			m.middlewares[m.index](m, ctx)
+		}
+	})
 }

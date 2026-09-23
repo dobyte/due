@@ -61,6 +61,7 @@ func (c *Chain) FireHead() {
 
 	c.head = nil
 	c.tail = nil
+	c.canceled = false
 }
 
 // FireTail 从尾部开始执行
@@ -80,6 +81,7 @@ func (c *Chain) FireTail() {
 
 	c.head = nil
 	c.tail = nil
+	c.canceled = false
 }
 
 // Cancel 取消调用栈
@@ -94,7 +96,7 @@ func (c *Chain) Recover() {
 
 // Release 释放调用栈
 func (c *Chain) Release() {
-	c.canceled = true
 	c.head = nil
 	c.tail = nil
+	c.canceled = false
 }
