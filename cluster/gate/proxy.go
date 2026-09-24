@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
+	"github.com/dobyte/due/v2/task"
 )
 
 // proxy 网关代理
@@ -56,7 +57,9 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	p.trigger(ctx, cluster.Reconnect, cid, uid)
+	task.Add(func() {
+		p.trigger(ctx, cluster.Reconnect, cid, uid)
+	})
 
 	return nil
 }

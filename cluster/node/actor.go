@@ -361,11 +361,6 @@ func (a *Actor) destroy() bool {
 	a.messageQueue.Close()
 	a.rw.Unlock()
 
-	// 释放掉所有任务队列中的任务
-	for handle := range a.taskQueue.Read() {
-		xcall.Call(handle)
-	}
-
 	// 释放掉所有消息队列中的消息
 	for ctx := range a.messageQueue.Read() {
 		ctx.release()
