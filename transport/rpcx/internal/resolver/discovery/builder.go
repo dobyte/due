@@ -95,15 +95,29 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		}
 	}
 
-	switch {
-	case len(workPairs) > 0:
-		pairs = workPairs
-	case len(busyPairs) > 0:
-		pairs = busyPairs
-	case len(hangPairs) > 0:
-		pairs = hangPairs
-	default:
-		pairs = make(map[string][]*cli.KVPair)
+	// 汇总三个层级中出现过的全部业务服务名
+	services := make(map[string]struct{}, len(workPairs)+len(busyPairs)+len(hangPairs))
+	for service := range workPairs {
+		services[service] = struct{}{}
+	}
+	for service := range busyPairs {
+		services[service] = struct{}{}
+	}
+	for service := range hangPairs {
+		services[service] = struct{}{}
+	}
+
+	// 按服务维度独立选择优先级：Work > Busy > Hang
+	pairs = make(map[string][]*cli.KVPair, len(services))
+	for service := range services {
+		switch {
+		case workPairs[service] != nil:
+			pairs[service] = workPairs[service]
+		case busyPairs[service] != nil:
+			pairs[service] = busyPairs[service]
+		case hangPairs[service] != nil:
+			pairs[service] = hangPairs[service]
+		}
 	}
 
 	b.rw.Lock()
