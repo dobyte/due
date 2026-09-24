@@ -6,7 +6,7 @@ import (
 )
 
 type Event struct {
-	eps   map[string]*serviceEndpoint // 所有端点（包含work、busy、hang、shut状态的实例）
+	eps   map[string]*serviceEndpoint // 所有端点（包含work、busy、hang状态的实例）
 	event int                         // 事件ID
 }
 

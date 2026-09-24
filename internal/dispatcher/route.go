@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"math/rand/v2"
+	"sync"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -13,10 +14,11 @@ import (
 type Route struct {
 	eps1       []*serviceEndpoint          // 所有端点（包含work状态的实例）
 	eps2       []*serviceEndpoint          // 所有端点（包含busy状态的实例）
-	eps3       map[string]*serviceEndpoint // 所有端点（包含work、busy、hang、shut状态的实例）
+	eps3       map[string]*serviceEndpoint // 所有端点（包含work、busy、hang状态的实例）
 	route      registry.Route              // 路由信息
 	group      string                      // 路由所属组
 	counter    atomic.Uint64               // 轮询计数器
+	wrMu       sync.Mutex                  // 加权轮询互斥锁
 	dispatcher *Dispatcher                 // 分发器
 }
 
@@ -98,35 +100,43 @@ func (r *Route) roundRobinDispatch() (*endpoint.Endpoint, error) {
 	if eps := r.loadAvailableEndpoints(); len(eps) == 0 {
 		return nil, errors.ErrNotFoundEndpoint
 	} else {
-		return eps[r.counter.Add(1)%uint64(len(eps))].endpoint, nil
+		return eps[(r.counter.Add(1)-1)%uint64(len(eps))].endpoint, nil
 	}
 }
 
 // 加权轮询分配
 func (r *Route) weightedRoundRobinDispatch() (*endpoint.Endpoint, error) {
-	if eps := r.loadAvailableEndpoints(); len(eps) == 0 {
+	eps := r.loadAvailableEndpoints()
+	if len(eps) == 0 {
 		return nil, errors.ErrNotFoundEndpoint
-	} else {
-		var (
-			selected    *serviceEndpoint
-			totalWeight int
-		)
+	}
 
-		for i := range eps {
-			se := eps[i]
-			se.currWeight += se.weight
+	r.wrMu.Lock()
+	var (
+		selected    *serviceEndpoint
+		totalWeight int
+	)
 
-			totalWeight += se.weight
-
-			if selected == nil || se.currWeight > selected.currWeight {
-				selected = se
-			}
+	for i := range eps {
+		se := eps[i]
+		// 权重未设置（<=0）时兜底为默认权重1，避免全0退化或0权重实例永不选中
+		weight := se.weight
+		if weight <= 0 {
+			weight = 1
 		}
 
-		selected.currWeight -= totalWeight
+		se.currWeight += weight
+		totalWeight += weight
 
-		return selected.endpoint, nil
+		if selected == nil || se.currWeight > selected.currWeight {
+			selected = se
+		}
 	}
+
+	selected.currWeight -= totalWeight
+	r.wrMu.Unlock()
+
+	return selected.endpoint, nil
 }
 
 // 加载可用服务端点
