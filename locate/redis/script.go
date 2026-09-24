@@ -4,7 +4,7 @@ package redis
 const unbindGateScript = `
 	local val = redis.call('GET', KEYS[1])
 
-	if val == '' or val ~= ARGV[1] then
+	if val ~= ARGV[1] then
 		return {'NO'}
 	end
 
@@ -17,7 +17,7 @@ const unbindGateScript = `
 const unbindNodeScript = `
 	local val = redis.call('HGET', KEYS[1], ARGV[1])
 
-	if val == '' or val ~= ARGV[2] then
+	if val ~= ARGV[2] then
 		return {'NO'}
 	end
 

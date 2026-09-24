@@ -25,13 +25,13 @@ const (
 
 // 定位监听器
 type watcher struct {
-	idx        int64                // 监听器序号
-	ctx        context.Context      // 上下文
-	cancel     context.CancelFunc   // 取消函数
-	watcherMgr *watcherMgr          // 监听管理器
-	rw         sync.RWMutex         // 读写锁
-	state      state                // 监听状态
-	chEvent    chan []*locate.Event // 事件通道
+	idx        int64              // 监听器序号
+	ctx        context.Context    // 上下文
+	cancel     context.CancelFunc // 取消函数
+	watcherMgr *watcherMgr        // 监听管理器
+	rw         sync.RWMutex       // 读写锁
+	state      state              // 监听状态
+	chEvent    chan *locate.Event // 事件通道
 }
 
 // 创建定位监听器
@@ -43,15 +43,15 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w.idx = idx
 	w.watcherMgr = wm
 	w.ctx, w.cancel = context.WithCancel(wm.ctx)
-	w.chEvent = make(chan []*locate.Event, 1024)
+	w.chEvent = make(chan *locate.Event, 1024)
 
 	return w
 }
 
 // 通知监听器
 // 将变动事件发送给监听器，事件通道未满时直接发送，已满时丢弃最旧事件后发送最新事件，避免阻塞广播协程
-// @param events []*locate.Event 变动事件列表
-func (w *watcher) notify(events []*locate.Event) {
+// @param event *locate.Event 变动事件
+func (w *watcher) notify(event *locate.Event) {
 	w.rw.RLock()
 	defer w.rw.RUnlock()
 
@@ -61,7 +61,7 @@ func (w *watcher) notify(events []*locate.Event) {
 
 	// 通道未满时直接发送
 	select {
-	case w.chEvent <- events:
+	case w.chEvent <- event:
 		return
 	default:
 	}
@@ -74,7 +74,7 @@ func (w *watcher) notify(events []*locate.Event) {
 
 	// 发送最新事件
 	select {
-	case w.chEvent <- events:
+	case w.chEvent <- event:
 	default:
 	}
 }
@@ -92,12 +92,12 @@ func (w *watcher) Next() ([]*locate.Event, error) {
 	select {
 	case <-w.ctx.Done():
 		return nil, errors.ErrWatcherStopped
-	case events, ok := <-w.chEvent:
+	case event, ok := <-w.chEvent:
 		if !ok {
 			return nil, errors.ErrWatcherStopped
 		}
 
-		return events, nil
+		return []*locate.Event{event}, nil
 	}
 }
 
@@ -320,8 +320,8 @@ func (wm *watcherMgr) recycle(idx int64) {
 
 // 广播事件
 // 将变动事件广播给所有监听器
-// @param events ...*locate.Event 变动事件列表
-func (wm *watcherMgr) broadcast(events ...*locate.Event) {
+// @param event *locate.Event 变动事件
+func (wm *watcherMgr) broadcast(event *locate.Event) {
 	wm.rw.RLock()
 	watchers := make([]*watcher, 0, len(wm.watchers))
 	for _, w := range wm.watchers {
@@ -330,6 +330,6 @@ func (wm *watcherMgr) broadcast(events ...*locate.Event) {
 	wm.rw.RUnlock()
 
 	for _, w := range watchers {
-		w.notify(events)
+		w.notify(event)
 	}
 }
