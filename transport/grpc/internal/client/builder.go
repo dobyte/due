@@ -83,7 +83,6 @@ func NewBuilder(opts *Options) *Builder {
 	b.ctx, b.cancel = context.WithCancel(context.Background())
 	b.resolvers = resolvers
 	b.dialOpts = make([]grpc.DialOption, 0, len(opts.DialOpts)+2)
-	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
 	b.dialOpts = append(b.dialOpts, grpc.WithTransportCredentials(cred))
 	b.dialOpts = append(b.dialOpts, grpc.WithResolvers(resolvers...))
 
@@ -97,6 +96,8 @@ func NewBuilder(opts *Options) *Builder {
 	default:
 		b.dialOpts = append(b.dialOpts, grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`))
 	}
+
+	b.dialOpts = append(b.dialOpts, opts.DialOpts...)
 
 	if err := b.init(); err != nil {
 		b.cancel()

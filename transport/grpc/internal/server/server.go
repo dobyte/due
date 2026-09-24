@@ -42,8 +42,8 @@ func NewServer(opts *Options) (*Server, error) {
 
 	isSecure := false
 	serverOpts := make([]grpc.ServerOption, 0, len(opts.ServerOpts)+2)
+	serverOpts = append(serverOpts, grpc.ChainUnaryInterceptor(recoverInterceptor))
 	serverOpts = append(serverOpts, opts.ServerOpts...)
-	serverOpts = append(serverOpts, grpc.UnaryInterceptor(recoverInterceptor))
 	if opts.CertFile != "" && opts.KeyFile != "" {
 		cred, err := credentials.NewServerTLSFromFile(opts.CertFile, opts.KeyFile)
 		if err != nil {

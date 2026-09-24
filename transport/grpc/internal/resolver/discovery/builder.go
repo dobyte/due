@@ -105,15 +105,29 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 		}
 	}
 
-	switch {
-	case len(workStates) > 0:
-		states = workStates
-	case len(busyStates) > 0:
-		states = busyStates
-	case len(hangStates) > 0:
-		states = hangStates
-	default:
-		states = make(map[string]*resolver.State)
+	// 汇总三个层级中出现过的全部业务服务名
+	services := make(map[string]struct{}, len(workStates)+len(busyStates)+len(hangStates))
+	for service := range workStates {
+		services[service] = struct{}{}
+	}
+	for service := range busyStates {
+		services[service] = struct{}{}
+	}
+	for service := range hangStates {
+		services[service] = struct{}{}
+	}
+
+	// 按服务维度独立选择优先级：Work > Busy > Hang
+	states = make(map[string]*resolver.State, len(services))
+	for service := range services {
+		switch {
+		case workStates[service] != nil:
+			states[service] = workStates[service]
+		case busyStates[service] != nil:
+			states[service] = busyStates[service]
+		case hangStates[service] != nil:
+			states[service] = hangStates[service]
+		}
 	}
 
 	b.rw.Lock()
