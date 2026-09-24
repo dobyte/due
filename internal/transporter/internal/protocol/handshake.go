@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/utils/xconv"
 )
 
 const (
@@ -43,7 +42,7 @@ func DecodeHandshakeReq(buf buffer.Buffer) (cluster.Kind, string, uint64, error)
 
 	data := buf.Bytes()
 	kind := cluster.Kind(data[0])
-	inst := xconv.String(data[def.B8 : len(data)-def.B64])
+	inst := string(data[def.B8 : len(data)-def.B64])
 	epoch := binary.BigEndian.Uint64(data[len(data)-def.B64:])
 
 	return kind, inst, epoch, nil

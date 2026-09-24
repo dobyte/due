@@ -173,13 +173,9 @@ func (c *ClientConn) handshake(s *session) error {
 	const seq = uint64(1)
 
 	req := protocol.EncodeHandshakeReq(seq, c.cli.opts.Kind, c.cli.opts.ID, c.epoch)
-	defer req.Release()
-
-	if c.cli.opts.DialTimeout > 0 {
-		_ = s.conn.SetDeadline(time.Now().Add(c.cli.opts.DialTimeout))
-	}
-
-	if _, err := s.conn.Write(req.Bytes()); err != nil {
+	_, err := s.conn.Write(req.Bytes())
+	req.Release()
+	if err != nil {
 		return err
 	}
 
@@ -197,8 +193,6 @@ func (c *ClientConn) handshake(s *session) error {
 	if rt != route.Handshake || rseq != seq {
 		return errors.ErrInvalidMessage
 	}
-
-	_ = s.conn.SetDeadline(time.Time{})
 
 	code, err := protocol.DecodeHandshakeRes(res)
 	if err != nil {
@@ -263,35 +257,21 @@ func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuf
 	}
 
 	if c.cli.opts.CallTimeout > 0 {
-		tctx, tcancel := context.WithTimeout(ctx, c.cli.opts.CallTimeout)
-		defer tcancel()
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.cli.opts.CallTimeout)
+		defer cancel()
+	}
 
-		select {
-		case <-ctx.Done():
-			c.discard(seq, call)
-			return nil, ctx.Err()
-		case <-tctx.Done():
-			c.discard(seq, call)
-			return nil, tctx.Err()
-		case res, ok := <-call:
-			if !ok {
-				return nil, errors.ErrConnectionHanged
-			}
-			close(call)
-			return res, nil
+	select {
+	case <-ctx.Done():
+		c.discard(seq, call)
+		return nil, ctx.Err()
+	case res, ok := <-call:
+		if !ok {
+			return nil, errors.ErrConnectionHanged
 		}
-	} else {
-		select {
-		case <-ctx.Done():
-			c.discard(seq, call)
-			return nil, ctx.Err()
-		case res, ok := <-call:
-			if !ok {
-				return nil, errors.ErrConnectionHanged
-			}
-			close(call)
-			return res, nil
-		}
+		close(call)
+		return res, nil
 	}
 }
 
