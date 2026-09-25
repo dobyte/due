@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -556,39 +555,21 @@ func (p *Proxy) Invoke(f func(), wait ...bool) error {
 		return errors.ErrNodeShutdown
 	}
 
-	if len(wait) > 0 && wait[0] {
-		if p.node.dispatchGoid.Load() == goid.Get() {
-			xcall.Call(f)
-		} else {
-			if !p.node.doAddWait() {
-				return errors.ErrNodeShutdown
-			}
-
-			wg := p.node.wgPool.Get().(*sync.WaitGroup)
-			wg.Add(1)
-
-			if err := p.node.tasker.commit(func() {
-				defer wg.Done()
-
-				f()
-			}); err != nil {
-				wg.Done() // 投递失败需手动平衡计数
-				p.node.wgPool.Put(wg)
-				p.node.doDoneWait()
-				return err
-			}
-
-			wg.Wait()
-			p.node.wgPool.Put(wg)
-		}
+	if len(wait) > 0 && wait[0] && p.node.dispatchGoid.Load() == goid.Get() {
+		xcall.Call(f)
 	} else {
 		if !p.node.doAddWait() {
 			return errors.ErrNodeShutdown
 		}
 
-		if err := p.node.tasker.commit(f); err != nil {
+		wg, err := p.node.tasker.Commit(f, wait...)
+		if err != nil {
 			p.node.doDoneWait()
 			return err
+		}
+
+		if wg != nil {
+			wg.Wait()
 		}
 	}
 
@@ -643,7 +624,7 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 		if p.node.isShut() {
 			err = errors.ErrNodeShutdown
 		} else {
-			err = p.node.tasker.commit(f)
+			_, err = p.node.tasker.Commit(f)
 		}
 
 		if err != nil {

@@ -74,7 +74,7 @@ func (t *Trigger) receive() <-chan *event {
 // 写入空事件以通知分发器事件队列已结束
 // @return @1 error 写入失败时返回的错误
 func (t *Trigger) done() error {
-	return t.queue.Write(nil)
+	return t.queue.Write(nil, true)
 }
 
 // 等待所有事件完成

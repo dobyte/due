@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/info"
+	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/log"
@@ -37,10 +38,9 @@ type Node struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	state        atomic.Int32
-	wgPool       *sync.Pool
 	evtPool      *sync.Pool
 	reqPool      *sync.Pool
-	tasker       *Tasker
+	tasker       *queue.Tasker
 	router       *Router
 	trigger      *Trigger
 	proxy        *Proxy
@@ -49,8 +49,9 @@ type Node struct {
 	linker       *node.Server
 	scheduler    *Scheduler
 	transporter  transport.Server
+	rw1          sync.RWMutex
 	wg           sync.WaitGroup
-	rw           sync.RWMutex
+	rw2          sync.RWMutex
 	hooks        map[cluster.Hook][]HookHandler
 	dispatchGoid atomic.Int64
 }
@@ -69,7 +70,7 @@ func NewNode(opts ...Option) *Node {
 	n.opts = o
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 	n.proxy = newProxy(n)
-	n.tasker = newTasker(n)
+	n.tasker = queue.NewTasker(n.opts.taskQueueSize, n.opts.taskWriteTimeout)
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
 	n.scheduler = newScheduler(n)
@@ -77,7 +78,6 @@ func NewNode(opts ...Option) *Node {
 	n.services = make([]*serviceEntity, 0)
 	n.instances = make([]*registry.ServiceInstance, 0)
 	n.state.Store(int32(cluster.Shut))
-	n.wgPool = &sync.Pool{New: func() any { return &sync.WaitGroup{} }}
 	n.evtPool = &sync.Pool{New: func() any { return &event{node: n} }}
 	n.reqPool = &sync.Pool{New: func() any { return &request{node: n} }}
 
@@ -149,12 +149,12 @@ func (n *Node) Close() {
 
 	n.refreshServiceInstances(cluster.Hang)
 
-	err1 := n.tasker.done()
+	err1 := n.tasker.Done()
 	err2 := n.router.done()
 	err3 := n.trigger.done()
 
 	if err1 == nil {
-		n.tasker.wait()
+		n.tasker.Wait()
 	}
 
 	if err2 == nil {
@@ -165,7 +165,10 @@ func (n *Node) Close() {
 		n.trigger.wait()
 	}
 
+	// 持写锁执行最终等待，与doAddWait中的wg.Add互斥，消除WaitGroup并发误用
+	n.rw1.Lock()
 	n.wg.Wait()
+	n.rw1.Unlock()
 
 	n.runHookFunc(cluster.Close)
 }
@@ -183,7 +186,7 @@ func (n *Node) Destroy() {
 
 	n.stopTransportServer()
 
-	n.tasker.close()
+	n.tasker.Close()
 
 	n.router.close()
 
@@ -201,30 +204,40 @@ func (n *Node) Proxy() *Proxy {
 }
 
 // 分发处理消息
-// 循环监听任务器、路由器与事件触发器接收到的消息并逐一处理，队列关闭时退出
+// 循环监听任务器、路由器与事件触发器接收到的消息并逐一处理，全部队列关闭且排空后退出
 func (n *Node) dispatch() {
 	n.dispatchGoid.Store(goid.Get())
 
-	for {
+	var (
+		tasks    = n.tasker.Read()
+		events   = n.trigger.receive()
+		requests = n.router.receive()
+	)
+
+	for tasks != nil || requests != nil || events != nil {
 		select {
-		case handle, ok := <-n.tasker.receive():
-			if !ok {
-				return
-			}
+		case tk, ok := <-tasks:
+			if ok {
+				n.tasker.Handle(tk)
 
-			n.tasker.handle(handle)
-		case req, ok := <-n.router.receive():
-			if !ok {
-				return
+				if tk != nil {
+					n.doDoneWait()
+				}
+			} else {
+				tasks = nil
 			}
-
-			n.router.handle(req)
-		case evt, ok := <-n.trigger.receive():
-			if !ok {
-				return
+		case req, ok := <-requests:
+			if ok {
+				n.router.handle(req)
+			} else {
+				requests = nil
 			}
-
-			n.trigger.handle(evt)
+		case evt, ok := <-events:
+			if ok {
+				n.trigger.handle(evt)
+			} else {
+				events = nil
+			}
 		}
 	}
 }
@@ -454,7 +467,7 @@ func (n *Node) isShut() bool {
 // 触发指定钩子对应的全部监听器，并等待所有监听器执行完成
 // @param hook cluster.Hook 钩子类型
 func (n *Node) runHookFunc(hook cluster.Hook) {
-	n.rw.RLock()
+	n.rw2.RLock()
 
 	if handlers, ok := n.hooks[hook]; ok {
 		wg := &sync.WaitGroup{}
@@ -468,11 +481,11 @@ func (n *Node) runHookFunc(hook cluster.Hook) {
 			})
 		}
 
-		n.rw.RUnlock()
+		n.rw2.RUnlock()
 
 		wg.Wait()
 	} else {
-		n.rw.RUnlock()
+		n.rw2.RUnlock()
 	}
 }
 
@@ -482,14 +495,14 @@ func (n *Node) runHookFunc(hook cluster.Hook) {
 func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 	switch hook {
 	case cluster.Destroy:
-		n.rw.Lock()
+		n.rw2.Lock()
 		n.hooks[hook] = append(n.hooks[hook], handler)
-		n.rw.Unlock()
+		n.rw2.Unlock()
 	default:
 		if n.getState() == cluster.Shut {
-			n.rw.Lock()
+			n.rw2.Lock()
 			n.hooks[hook] = append(n.hooks[hook], handler)
-			n.rw.Unlock()
+			n.rw2.Unlock()
 		} else {
 			log.Warnf("server is working, can't add hook handler")
 		}
@@ -550,14 +563,22 @@ func (n *Node) doDoneWait() bool {
 }
 
 // 增加一次等待计数
-// 仅在Work或Busy状态下登记计数；Hang（关闭中）与Shut（已关闭）状态下拒绝登记，
-// 避免在关闭阶段与Close中的Wait发生WaitGroup并发误用
+// 仅在Shut（已关闭）状态下拒绝登记；Hang（关闭中）状态下仍允许登记，
+// 以保证Close等待队列排空期间，路由/事件处理器中投递的异步任务仍能被正常追踪
+// 通过wgMu读锁屏障保证wg.Add不与Close中的wg.Wait并发（WaitGroup误用）；
+// TryRLock在Close持写锁等待期间快速失败，避免登记方阻塞乃至与嵌套登记的任务形成死锁
 // @return @1 bool 是否成功登记计数
 func (n *Node) doAddWait() bool {
 	if n == nil || n.getState() == cluster.Shut {
 		return false
 	}
 
+	if !n.rw1.TryRLock() {
+		return false
+	}
+
 	n.wg.Add(1)
+	n.rw1.RUnlock()
+
 	return true
 }

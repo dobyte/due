@@ -21,6 +21,14 @@ type Scheduler struct {
 	relations map[int64]map[string]*Actor
 }
 
+// kindEntity Kind实体
+// 维护可调度Actor的引用计数与该Kind已注册的路由集合
+// 最后一个Actor释放时按路由集合精准清理调度路由，避免全量遍历路由表
+type kindEntity struct {
+	count  atomic.Int32 // 该Kind下可调度Actor的引用计数
+	routes sync.Map     // 该Kind已注册的路由集合（route int32 → struct{}）
+}
+
 // 创建调度器
 // @param node *Node 节点服务器
 // @return @1 *Scheduler 调度器
@@ -57,10 +65,12 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 
 	act := &Actor{}
 	act.opts = o
+	act.pid = o.kind + "/" + o.id
 	act.scheduler = s
 	act.state.Store(started)
 	act.routes = make(map[int32]RouteHandler)
-	act.taskQueue = queue.NewQueue[func()](o.taskQueueSize, o.taskWriteTimeout)
+	act.rw = &sync.RWMutex{}
+	act.taskQueue = queue.NewTasker(o.taskQueueSize, o.taskWriteTimeout)
 	act.messageQueue = queue.NewQueue[Context](o.messageQueueSize, o.messageWriteTimeout)
 
 	xcall.Call(func() {
@@ -86,13 +96,15 @@ func (s *Scheduler) spawn(creator Creator, opts ...ActorOption) (*Actor, error) 
 	if act.opts.dispatch {
 		val, ok := s.kinds.Load(act.Kind())
 		if !ok {
-			val = &atomic.Int32{}
-			s.kinds.Store(act.Kind(), val)
+			entity := &kindEntity{}
 			for route := range act.routes {
+				entity.routes.Store(route, struct{}{})
 				s.routes.Store(route, act.Kind())
 			}
+			s.kinds.Store(act.Kind(), entity)
+			val = entity
 		}
-		val.(*atomic.Int32).Add(1)
+		val.(*kindEntity).count.Add(1)
 		act.registered.Store(true)
 	}
 
@@ -244,16 +256,17 @@ func (s *Scheduler) releaseKind(kind string) {
 		return
 	}
 
-	if val.(*atomic.Int32).Add(-1) > 0 {
+	entity := val.(*kindEntity)
+
+	if entity.count.Add(-1) > 0 {
 		return
 	}
 
 	s.kinds.Delete(kind)
 
-	s.routes.Range(func(route, k any) bool {
-		if k == kind {
-			s.routes.Delete(route)
-		}
+	// 仅清理仍指向当前Kind的路由，避免误删被其他Kind覆盖的路由映射
+	entity.routes.Range(func(route, _ any) bool {
+		s.routes.CompareAndDelete(route, kind)
 
 		return true
 	})

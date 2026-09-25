@@ -206,7 +206,7 @@ func (r *Router) receive() <-chan *request {
 // 写入空请求以通知分发器路由队列已结束
 // @return @1 error 写入失败时返回的错误
 func (r *Router) done() error {
-	return r.queue.Write(nil)
+	return r.queue.Write(nil, true)
 }
 
 // 等待所有事件完成

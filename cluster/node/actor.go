@@ -27,14 +27,15 @@ const (
 // 拥有独立的消息队列与任务队列，保证其内部处理是线程安全的
 type Actor struct {
 	opts                *actorOptions          // 配置项
+	pid                 string                 // 唯一识别ID（Kind/ID），创建时缓存避免重复拼接
 	scheduler           *Scheduler             // 调度器
 	state               atomic.Int32           // 状态
 	routes              map[int32]RouteHandler // 路由处理器
 	events              sync.Map               // 事件处理器
 	defaultRouteHandler RouteHandler           // 默认路由处理器
 	processor           Processor              // 处理器
-	rw                  sync.RWMutex           // 锁
-	taskQueue           *queue.Queue[func()]   // 任务队列
+	rw                  *sync.RWMutex          // 锁
+	taskQueue           *queue.Tasker          // 任务队列
 	messageQueue        *queue.Queue[Context]  // 消息队列
 	binds               sync.Map               // 绑定的用户
 	registered          atomic.Bool            // 是否已登记到调度器的kind引用计数中
@@ -51,7 +52,7 @@ func (a *Actor) ID() string {
 // 由Kind与ID组合而成，用于全局唯一定位该Actor
 // @return @1 string Actor的唯一识别ID
 func (a *Actor) PID() string {
-	return a.Kind() + "/" + a.ID()
+	return a.pid
 }
 
 // Kind 获取Actor类型
@@ -85,35 +86,11 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 		return errors.ErrActorNotStarted
 	}
 
-	if len(wait) > 0 && wait[0] {
-		if a.dispatchGoid.Load() == goid.Get() {
-			xcall.Call(f)
-		} else {
-			wg := a.scheduler.node.wgPool.Get().(*sync.WaitGroup)
-			wg.Add(1)
-
-			a.rw.RLock()
-			err := a.taskQueue.Write(func() {
-				defer wg.Done()
-
-				if a.started() {
-					f()
-				}
-			})
-			a.rw.RUnlock()
-
-			if err != nil {
-				wg.Done() // 投递失败需手动平衡计数
-				a.scheduler.node.wgPool.Put(wg)
-				return err
-			}
-
-			wg.Wait()
-			a.scheduler.node.wgPool.Put(wg)
-		}
+	if len(wait) > 0 && wait[0] && a.dispatchGoid.Load() == goid.Get() {
+		xcall.Call(f)
 	} else {
 		a.rw.RLock()
-		err := a.taskQueue.Write(func() {
+		wg, err := a.taskQueue.Commit(func() {
 			if a.started() {
 				f()
 			}
@@ -122,6 +99,10 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 
 		if err != nil {
 			return err
+		}
+
+		if wg != nil {
+			wg.Wait()
 		}
 	}
 
@@ -165,7 +146,7 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 
 		a.rw.RLock()
 		if a.started() {
-			err = a.taskQueue.Write(func() {
+			_, err = a.taskQueue.Commit(func() {
 				if a.started() {
 					f()
 				}
@@ -193,11 +174,13 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	case unstart:
 		a.defaultRouteHandler = handler
 	case started:
-		a.taskQueue.Write(func() {
+		if _, err := a.taskQueue.Commit(func() {
 			if a.started() {
 				a.defaultRouteHandler = handler
 			}
-		})
+		}); err != nil {
+			log.Warnf("set default route handler failed, err: %v", err)
+		}
 	}
 }
 
@@ -212,15 +195,21 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	case unstart:
 		a.routes[route] = handler
 	case started:
-		a.taskQueue.Write(func() {
+		if _, err := a.taskQueue.Commit(func() {
 			if a.started() {
 				a.routes[route] = handler
 
 				if a.opts.dispatch {
 					a.scheduler.routes.Store(route, a.Kind())
+
+					if val, ok := a.scheduler.kinds.Load(a.Kind()); ok {
+						val.(*kindEntity).routes.Store(route, struct{}{})
+					}
 				}
 			}
-		})
+		}); err != nil {
+			log.Warnf("add route handler %d failed, err: %v", route, err)
+		}
 	}
 }
 
@@ -235,11 +224,13 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	case unstart:
 		a.events.Store(event, handler)
 	case started:
-		a.taskQueue.Write(func() {
+		if _, err := a.taskQueue.Commit(func() {
 			if a.started() {
 				a.events.Store(event, handler)
 			}
-		})
+		}); err != nil {
+			log.Warnf("add event handler %s failed, err: %v", event, err)
+		}
 	}
 }
 
@@ -361,10 +352,13 @@ func (a *Actor) destroy() bool {
 	a.messageQueue.Close()
 	a.rw.Unlock()
 
+	// 释放掉所有任务队列中的任务
+	a.taskQueue.Clean()
+
 	// 释放掉所有消息队列中的消息
-	for ctx := range a.messageQueue.Read() {
+	a.messageQueue.Clean(func(ctx Context) {
 		ctx.release()
-	}
+	})
 
 	if processor != nil {
 		xcall.Call(processor.Destroy)
@@ -428,12 +422,12 @@ func (a *Actor) dispatch() {
 			}
 
 			ctx.compareVersionRecycle(version)
-		case handle, ok := <-a.taskQueue.Read():
+		case task, ok := <-a.taskQueue.Read():
 			if !ok {
 				return
 			}
 
-			xcall.Call(handle)
+			a.taskQueue.Handle(task)
 		}
 	}
 }

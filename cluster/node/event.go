@@ -9,7 +9,7 @@ import (
 	"github.com/dobyte/due/v2/core/chains"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/session"
-	"github.com/dobyte/due/v2/task"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -125,7 +125,7 @@ func (e *event) Task(fn func(ctx Context)) {
 
 	e.recoverDefer()
 
-	task.Add(func() {
+	taskpool.Add(func() {
 		defer func() {
 			e.compareVersionExecDefer(version)
 

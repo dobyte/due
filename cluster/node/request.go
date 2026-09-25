@@ -19,7 +19,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/session"
-	"github.com/dobyte/due/v2/task"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
@@ -193,7 +193,7 @@ func (r *request) Task(fn func(ctx Context)) {
 
 	r.recoverDefer()
 
-	task.Add(func() {
+	taskpool.Add(func() {
 		defer func() {
 			r.compareVersionExecDefer(version)
 
