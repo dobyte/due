@@ -356,9 +356,7 @@ func (a *Actor) destroy() bool {
 	a.taskQueue.Clean()
 
 	// 释放掉所有消息队列中的消息
-	a.messageQueue.Clean(func(ctx Context) {
-		ctx.release()
-	})
+	a.messageQueue.Clean(func(ctx Context) { ctx.release() })
 
 	if processor != nil {
 		xcall.Call(processor.Destroy)
@@ -399,25 +397,27 @@ func (a *Actor) dispatch() {
 
 			version := ctx.loadVersion()
 
-			ctx.releaseDefer()
+			if a.started() {
+				ctx.releaseDefer()
 
-			if ctx.Kind() == Event {
-				if v, ok := a.events.Load(ctx.Event()); ok {
-					if handler, ok := v.(EventHandler); ok {
+				if ctx.Kind() == Event {
+					if v, ok := a.events.Load(ctx.Event()); ok {
+						if handler, ok := v.(EventHandler); ok {
+							xcall.Call(func() { handler(ctx) })
+
+							ctx.compareVersionExecDefer(version)
+						}
+					}
+				} else {
+					if handler, ok := a.routes[ctx.Route()]; ok {
 						xcall.Call(func() { handler(ctx) })
 
 						ctx.compareVersionExecDefer(version)
+					} else if a.defaultRouteHandler != nil {
+						xcall.Call(func() { a.defaultRouteHandler(ctx) })
+
+						ctx.compareVersionExecDefer(version)
 					}
-				}
-			} else {
-				if handler, ok := a.routes[ctx.Route()]; ok {
-					xcall.Call(func() { handler(ctx) })
-
-					ctx.compareVersionExecDefer(version)
-				} else if a.defaultRouteHandler != nil {
-					xcall.Call(func() { a.defaultRouteHandler(ctx) })
-
-					ctx.compareVersionExecDefer(version)
 				}
 			}
 
