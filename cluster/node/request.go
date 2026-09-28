@@ -37,6 +37,7 @@ type request struct {
 	seq     int32                 // 消息序列号
 	route   int32                 // 消息路由号
 	message any                   // 消息数据
+	cache   []byte                // 消息序列化缓存，克隆时避免重复序列化
 	version atomic.Int32          // 版本号
 	chain   *chains.Chain         // 调用链
 	actor   atomic.Pointer[Actor] // 当前Actor
@@ -160,21 +161,31 @@ func (r *request) Clone() Context {
 
 	switch m := r.message.(type) {
 	case buffer.Buffer:
-		message := make([]byte, 0, m.Len())
+		message := make([]byte, m.Len())
+		offset := 0
 		m.VisitBytes(func(bytes []byte) bool {
-			message = append(message, bytes...)
+			offset += copy(message[offset:], bytes)
 			return true
 		})
 		c.message = message
 	case []byte:
-		message := make([]byte, 0)
-		message = append(message, m...)
+		message := make([]byte, len(m))
+		copy(message, m)
 		c.message = message
 	default:
-		if msg, err := json.Marshal(m); err != nil {
-			log.Warnf("marshal request message failed: %v", err)
-		} else {
-			c.message = msg
+		// 序列化结果缓存到请求上，多次克隆（如消息转发到多个Actor）仅序列化一次
+		if r.cache == nil {
+			if msg, err := json.Marshal(m); err != nil {
+				log.Warnf("marshal request message failed: %v", err)
+			} else {
+				r.cache = msg
+			}
+		}
+
+		if r.cache != nil {
+			message := make([]byte, len(r.cache))
+			copy(message, r.cache)
+			c.message = message
 		}
 	}
 
@@ -542,6 +553,7 @@ func (r *request) release() {
 	r.seq = 0
 	r.route = 0
 	r.message = nil
+	r.cache = nil
 	r.version.Store(0)
 	r.actor.Store(nil)
 
