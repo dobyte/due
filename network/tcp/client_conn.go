@@ -446,7 +446,7 @@ OVER:
 
 		if _, err := c.netBuffers.WriteTo(conn); err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				log.Errorf("write message error: %v", err)
+				log.Warnf("write message error: %v", err)
 				taskpool.Add(func() { c.forceClose() })
 			}
 		}
@@ -480,7 +480,7 @@ func (c *clientConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 		hb := packet.PackHeartbeat()
 
 		if _, err := conn.Write(hb.Bytes()); err != nil {
-			log.Errorf("write heartbeat message error: %v", err)
+			log.Warnf("write heartbeat message error: %v", err)
 		}
 
 		hb.Release()
