@@ -23,17 +23,11 @@ func NewBuilder(opts *ClientOptions) *Builder {
 }
 
 // Build 构建客户端
-func (b *Builder) Build(addr string) (*Client, error) {
-	return b.BuildContext(context.Background(), addr)
-}
-
-// BuildContext 构建客户端
 // 拨号建立连接受限于上下文超时，避免对不可达端点无限重试
-// @param ctx context.Context 上下文
 // @param addr string 节点地址
 // @return @1 *Client 客户端实例
 // @return @2 error 错误信息
-func (b *Builder) BuildContext(ctx context.Context, addr string) (*Client, error) {
+func (b *Builder) Build(addr string) (*Client, error) {
 	if cli, ok := b.clients.Load(addr); ok {
 		return cli.(*Client), nil
 	}
@@ -47,6 +41,9 @@ func (b *Builder) BuildContext(ctx context.Context, addr string) (*Client, error
 		if err != nil {
 			return nil, err
 		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), b.opts.DialTimeout)
+		defer cancel()
 
 		if err = c.Establish(ctx); err != nil {
 			_ = c.Close()

@@ -182,7 +182,7 @@ func (s *Server) init() error {
 		return err
 	}
 
-	s.ticker = time.NewTicker(time.Duration(heartbeatInterval.Load()))
+	s.ticker = time.NewTicker(heartbeatInterval)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	return nil

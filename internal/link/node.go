@@ -255,26 +255,18 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 
 	event.VisitEndpoints(func(insID string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
-			// 拨号建立连接设置超时上限，避免对不可达节点无限重试导致协程与上下文泄漏
-			bctx, cancel := context.WithTimeout(ctx, l.doDialTimeoutBound())
-			defer cancel()
-
-			client, err := l.builder.BuildContext(bctx, ep.Address())
+			client, err := l.builder.Build(ep.Address())
 			if err != nil {
-				log.Errorf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v",
-					insID, ep.Address(), args.Event, args.CID, args.UID, err)
+				log.Errorf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v", insID, ep.Address(), args.Event, args.CID, args.UID, err)
 				return nil
 			}
 
 			if err = client.Trigger(ctx, args.Event, args.CID, args.UID); err != nil {
 				switch {
 				case errors.Is(err, errors.ErrConnectionClosed), errors.Is(err, errors.ErrConnectionHanged):
-					// 节点扩缩容/滚动更新期间的预期错误，降级为警告
-					log.Warnf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v",
-						insID, args.Event, args.CID, args.UID, err)
+					log.Warnf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v", insID, args.Event, args.CID, args.UID, err)
 				default:
-					log.Errorf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v",
-						insID, args.Event, args.CID, args.UID, err)
+					log.Errorf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v", insID, args.Event, args.CID, args.UID, err)
 				}
 			}
 
@@ -284,23 +276,7 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 		return true
 	})
 
-	// 后台等待全部触发完成：errgroup仅在Wait返回时才会取消派生的上下文
-	go func() {
-		_ = eg.Wait()
-	}()
-
-	return nil
-}
-
-// 计算拨号超时上限
-// 覆盖内部拨号重试与退避耗时，额外预留一次拨号时长；未配置时兜底10秒
-// @return @1 time.Duration 拨号超时上限
-func (l *NodeLinker) doDialTimeoutBound() time.Duration {
-	if timeout := l.opts.DialTimeout * time.Duration(l.opts.DialRetryTimes+2); timeout > 0 {
-		return timeout
-	}
-
-	return 10 * time.Second
+	return eg.Wait()
 }
 
 // GetState 获取节点状态

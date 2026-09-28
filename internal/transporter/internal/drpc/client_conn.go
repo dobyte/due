@@ -304,11 +304,10 @@ func (c *ClientConn) read(s *session) {
 // 数据帧本身即可维持对端活性判定，繁忙时不再发送心跳；
 // 首次心跳定时加入随机抖动，打散集群同时启动时的心跳同相尖峰
 func (c *ClientConn) write(s *session) {
-	interval := time.Duration(heartbeatInterval.Load())
-	timer := time.NewTimer(time.Duration(rand.Int64N(int64(interval))))
-	defer timer.Stop()
-
 	var lastWrite time.Time
+
+	timer := time.NewTimer(time.Duration(rand.Int64N(int64(heartbeatInterval))))
+	defer timer.Stop()
 
 	for {
 		select {
@@ -316,7 +315,7 @@ func (c *ClientConn) write(s *session) {
 			return
 		case <-timer.C:
 			// 空闲连接才发送心跳：数据帧本身即可维持对端活性判定
-			if time.Since(lastWrite) >= interval {
+			if time.Since(lastWrite) >= heartbeatInterval {
 				if c.cli.opts.WriteTimeout > 0 {
 					_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
 				}
@@ -330,7 +329,7 @@ func (c *ClientConn) write(s *session) {
 				lastWrite = time.Now()
 			}
 
-			timer.Reset(interval)
+			timer.Reset(heartbeatInterval)
 		case buf, ok := <-c.queue.Read():
 			if !ok {
 				return

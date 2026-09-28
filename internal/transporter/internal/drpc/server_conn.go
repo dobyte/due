@@ -248,7 +248,7 @@ OVER:
 // checkHeartbeat 检查心跳是否超时
 // @param t *time.Time 当前心跳触发的时间点
 func (c *ServerConn) checkHeartbeat(t *time.Time) {
-	if c.lastHeartbeatTime.Load() < t.Add(-2*time.Duration(heartbeatInterval.Load())).UnixNano() {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*heartbeatInterval).UnixNano() {
 		taskpool.Add(func() { c.forceClose() })
 	}
 }
