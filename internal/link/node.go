@@ -242,6 +242,9 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 }
 
 // Trigger 触发事件
+// 逐节点并行触发，避免单一节点拨号/写队列阻塞拖慢其余节点的投递；
+// 后台等待全部节点触发完成并释放errgroup派生的上下文，防止上下文泄漏；
+// 各节点的触发失败按错误级别输出日志，无需等待全部节点完成
 func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 	event, err := l.dispatcher.FindEvent(int(args.Event))
 	if err != nil {
@@ -250,15 +253,29 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	event.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
+	event.VisitEndpoints(func(insID string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
-			client, err := l.builder.Build(ep.Address())
+			// 拨号建立连接设置超时上限，避免对不可达节点无限重试导致协程与上下文泄漏
+			bctx, cancel := context.WithTimeout(ctx, l.doDialTimeoutBound())
+			defer cancel()
+
+			client, err := l.builder.BuildContext(bctx, ep.Address())
 			if err != nil {
-				return err
+				log.Errorf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v",
+					insID, ep.Address(), args.Event, args.CID, args.UID, err)
+				return nil
 			}
 
 			if err = client.Trigger(ctx, args.Event, args.CID, args.UID); err != nil {
-				return err
+				switch {
+				case errors.Is(err, errors.ErrConnectionClosed), errors.Is(err, errors.ErrConnectionHanged):
+					// 节点扩缩容/滚动更新期间的预期错误，降级为警告
+					log.Warnf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v",
+						insID, args.Event, args.CID, args.UID, err)
+				default:
+					log.Errorf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v",
+						insID, args.Event, args.CID, args.UID, err)
+				}
 			}
 
 			return nil
@@ -267,7 +284,23 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 		return true
 	})
 
+	// 后台等待全部触发完成：errgroup仅在Wait返回时才会取消派生的上下文
+	go func() {
+		_ = eg.Wait()
+	}()
+
 	return nil
+}
+
+// 计算拨号超时上限
+// 覆盖内部拨号重试与退避耗时，额外预留一次拨号时长；未配置时兜底10秒
+// @return @1 time.Duration 拨号超时上限
+func (l *NodeLinker) doDialTimeoutBound() time.Duration {
+	if timeout := l.opts.DialTimeout * time.Duration(l.opts.DialRetryTimes+2); timeout > 0 {
+		return timeout
+	}
+
+	return 10 * time.Second
 }
 
 // GetState 获取节点状态
