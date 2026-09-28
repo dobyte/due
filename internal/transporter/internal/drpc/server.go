@@ -182,7 +182,7 @@ func (s *Server) init() error {
 		return err
 	}
 
-	s.ticker = time.NewTicker(heartbeatInterval)
+	s.ticker = time.NewTicker(time.Duration(heartbeatInterval.Load()))
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	return nil
@@ -199,27 +199,24 @@ func (s *Server) check() {
 				return
 			}
 
-			taskpool.Add(func() {
-				s.conns.Range(func(_, cc any) bool {
-					cc.(*ServerConn).checkHeartbeat(&t)
-					return true
-				})
+			// 活性检查与过期队列清理均为周期性的轻量遍历，直接在check协程内联执行，免除任务池调度开销
+			s.conns.Range(func(_, cc any) bool {
+				cc.(*ServerConn).checkHeartbeat(&t)
+				return true
 			})
 
-			taskpool.Add(func() {
-				s.queues.Range(func(k, v any) bool {
-					q := v.(*closedQueue)
+			s.queues.Range(func(k, v any) bool {
+				q := v.(*closedQueue)
 
-					if q.time.Add(maxRetentionTime).Before(time.Now()) {
-						if s.queues.CompareAndDelete(k, v) {
-							for buf := range q.queue.Read() {
-								buf.Release()
-							}
+				if q.time.Add(maxRetentionTime).Before(time.Now()) {
+					if s.queues.CompareAndDelete(k, v) {
+						for buf := range q.queue.Read() {
+							buf.Release()
 						}
 					}
+				}
 
-					return true
-				})
+				return true
 			})
 		}
 	}

@@ -1,6 +1,7 @@
 package drpc
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
@@ -15,10 +16,16 @@ const (
 )
 
 const (
-	heartbeatInterval = 10 * time.Second // 心跳间隔时间
-	maxBatchWriteNum  = 64               // 最大批量写入消息数量
-	maxRetentionTime  = 1 * time.Second  // 最大保留时间
+	maxBatchWriteNum = 64              // 最大批量写入消息数量
+	maxRetentionTime = 1 * time.Second // 最大保留时间
 )
+
+// heartbeatInterval 心跳间隔（原子访问，单位：纳秒；便于测试注入小间隔验证心跳与超时行为）
+var heartbeatInterval atomic.Int64
+
+func init() {
+	heartbeatInterval.Store(int64(10 * time.Second))
+}
 
 // closedQueue 已关闭队列
 type closedQueue struct {

@@ -88,13 +88,10 @@ func (s *ServerConn) HandshakeInfo() (cluster.Kind, string) {
 }
 
 // read 读取消息
-// 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
+// 持续从流中读取消息，每条数据帧直接刷新活性时间（数据即心跳）、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
 // @param conn net.Conn TCP连接
 func (c *ServerConn) read(conn *net.TCPConn) {
-	var (
-		index  = 0
-		reader = newReader(conn)
-	)
+	reader := newReader(conn)
 
 	for {
 		isHeartbeat, rt, seq, buf, err := reader.read()
@@ -121,11 +118,8 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 			if isHeartbeat {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			} else {
-				index++
-
-				if index%10 == 0 {
-					c.lastHeartbeatTime.Store(time.Now().UnixNano())
-				}
+				// 每条数据帧直接刷新活性时间，客户端空闲抑制心跳后仍能保持准确的活性判定
+				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 
 				// ignore empty packet
 				if buf.Len() == 0 {
@@ -254,7 +248,7 @@ OVER:
 // checkHeartbeat 检查心跳是否超时
 // @param t *time.Time 当前心跳触发的时间点
 func (c *ServerConn) checkHeartbeat(t *time.Time) {
-	if c.lastHeartbeatTime.Load() < t.Add(-2*heartbeatInterval).UnixNano() {
+	if c.lastHeartbeatTime.Load() < t.Add(-2*time.Duration(heartbeatInterval.Load())).UnixNano() {
 		taskpool.Add(func() { c.forceClose() })
 	}
 }

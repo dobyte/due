@@ -2,6 +2,7 @@ package drpc
 
 import (
 	"context"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -299,24 +300,37 @@ func (c *ClientConn) read(s *session) {
 }
 
 // write 写入数据
+// 从消息队列批量取出消息写入连接；空闲连接按固定间隔发送心跳，
+// 数据帧本身即可维持对端活性判定，繁忙时不再发送心跳；
+// 首次心跳定时加入随机抖动，打散集群同时启动时的心跳同相尖峰
 func (c *ClientConn) write(s *session) {
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
+	interval := time.Duration(heartbeatInterval.Load())
+	timer := time.NewTimer(time.Duration(rand.Int64N(int64(interval))))
+	defer timer.Stop()
+
+	var lastWrite time.Time
 
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		case <-ticker.C:
-			if c.cli.opts.WriteTimeout > 0 {
-				_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+		case <-timer.C:
+			// 空闲连接才发送心跳：数据帧本身即可维持对端活性判定
+			if time.Since(lastWrite) >= interval {
+				if c.cli.opts.WriteTimeout > 0 {
+					_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+				}
+
+				if _, err := s.conn.Write(protocol.Heartbeat()); err != nil {
+					log.Warnf("write heartbeat message error: %v", err)
+					c.retry(s)
+					return
+				}
+
+				lastWrite = time.Now()
 			}
 
-			if _, err := s.conn.Write(protocol.Heartbeat()); err != nil {
-				log.Warnf("write heartbeat message error: %v", err)
-				c.retry(s)
-				return
-			}
+			timer.Reset(interval)
 		case buf, ok := <-c.queue.Read():
 			if !ok {
 				return
@@ -326,6 +340,8 @@ func (c *ClientConn) write(s *session) {
 				c.retry(s)
 				return
 			}
+
+			lastWrite = time.Now()
 		}
 	}
 }
