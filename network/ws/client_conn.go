@@ -420,7 +420,7 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
 		if _, ok := err.(*websocket.CloseError); !ok {
 			if !errors.Is(err, net.ErrClosed) {
-				log.Errorf("write message error: %v", err)
+				log.Warnf("write message error: %v", err)
 			}
 
 			taskpool.Add(func() { c.forceClose() })

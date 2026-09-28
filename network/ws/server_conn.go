@@ -517,7 +517,7 @@ func (c *serverConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
 		if _, ok := err.(*websocket.CloseError); !ok {
 			if !errors.Is(err, net.ErrClosed) {
-				log.Errorf("write message error: %v", err)
+				log.Warnf("write message error: %v", err)
 			}
 
 			taskpool.Add(func() { c.recycleClose(conn) })
@@ -548,7 +548,7 @@ func (c *serverConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 			hb := packet.PackHeartbeat(true)
 
 			if err := conn.WriteMessage(websocket.BinaryMessage, hb.Bytes()); err != nil {
-				log.Errorf("write heartbeat message error: %v", err)
+				log.Warnf("write heartbeat message error: %v", err)
 			}
 
 			hb.Release()
