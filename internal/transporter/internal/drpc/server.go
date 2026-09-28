@@ -240,6 +240,8 @@ func (s *Server) handleMessage(conn *ServerConn, rt uint8, seq uint64, buf *buff
 		switch rt {
 		case route.Push, route.Multicast, route.Broadcast, route.Publish:
 			return handler(conn, seq, buf)
+		case route.Deliver, route.Trigger:
+			return handler(conn, seq, buf)
 		default:
 			taskpool.Add(func() { handler(conn, seq, buf) })
 		}
