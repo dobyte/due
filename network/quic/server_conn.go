@@ -458,7 +458,7 @@ func (c *serverConn) doWrite(stream *quic.Stream, buf buffer.Buffer) {
 	}
 
 	if err := c.output.write(buf); err != nil && !errors.Is(err, net.ErrClosed) {
-		log.Errorf("write message error: %v", err)
+		log.Warnf("write message error: %v", err)
 		taskpool.Add(func() { c.forceClose(true) })
 	}
 
@@ -484,7 +484,7 @@ func (c *serverConn) doHandleHeartbeat(stream *quic.Stream, t time.Time) bool {
 		hb := packet.PackHeartbeat(true)
 
 		if err := c.output.write(hb); err != nil {
-			log.Errorf("write heartbeat message error: %v", err)
+			log.Warnf("write heartbeat message error: %v", err)
 		}
 
 		hb.Release()
