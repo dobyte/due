@@ -11,11 +11,10 @@ import (
 )
 
 type serviceEndpoint struct {
-	insID      string
-	state      string
-	endpoint   *endpoint.Endpoint
-	weight     int
-	currWeight int
+	insID    string
+	state    string
+	endpoint *endpoint.Endpoint
+	weight   int
 }
 
 type Dispatcher struct {
