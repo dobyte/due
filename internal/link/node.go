@@ -18,20 +18,29 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// sourceShardNum 用户来源节点缓存分片数量（2的幂，便于位运算取片）
+const sourceShardNum = 256
+
+// sourceShard 用户来源节点缓存分片
+// 按UID低位散列分片以稀释读写锁竞争；填充至64字节缓存行以消除相邻分片间的伪共享（false sharing）
+type sourceShard struct {
+	rw      sync.RWMutex
+	sources map[int64]map[string]string
+	_       [32]byte
+}
+
 type NodeLinker struct {
 	ctx        context.Context             // 上下文
 	opts       *Options                    // 参数项
 	builder    *node.Builder               // 构建器
 	dispatcher *dispatcher.Dispatcher      // 分发器
-	rw         sync.RWMutex                // 锁
-	sources    map[int64]map[string]string // 用户来源节点
+	shards     [sourceShardNum]sourceShard // 用户来源节点缓存分片
 }
 
 func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
-	return &NodeLinker{
+	l := &NodeLinker{
 		ctx:        ctx,
 		opts:       opts,
-		sources:    make(map[int64]map[string]string),
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		builder: node.NewBuilder(&node.ClientOptions{
 			ID:                opts.ID,
@@ -45,6 +54,19 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 			FaultRecoveryTime: opts.FaultRecoveryTime,
 		}),
 	}
+
+	for i := range l.shards {
+		l.shards[i].sources = make(map[int64]map[string]string)
+	}
+
+	return l
+}
+
+// 按用户ID定位来源缓存分片
+// @param uid int64 用户ID
+// @return @1 *sourceShard 来源缓存分片
+func (l *NodeLinker) shard(uid int64) *sourceShard {
+	return &l.shards[uint64(uid)&(sourceShardNum-1)]
 }
 
 // HasNode 检测是否存在某个节点
@@ -379,11 +401,13 @@ func (l *NodeLinker) doPackBuffer(message any, encrypt bool) ([]byte, error) {
 
 // 存储用户节点来源
 func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
-	wait, done := func() (bool, bool) {
-		l.rw.Lock()
-		defer l.rw.Unlock()
+	sh := l.shard(uid)
 
-		if sources, ok := l.sources[uid]; ok {
+	wait, done := func() (bool, bool) {
+		sh.rw.Lock()
+		defer sh.rw.Unlock()
+
+		if sources, ok := sh.sources[uid]; ok {
 			if oldNID, ok := sources[name]; ok {
 				if oldNID == nid {
 					return false, false
@@ -405,7 +429,7 @@ func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
 				return l.opts.ID == nid, false
 			}
 		} else {
-			l.sources[uid] = map[string]string{name: nid}
+			sh.sources[uid] = map[string]string{name: nid}
 
 			return l.opts.ID == nid, false
 		}
@@ -422,11 +446,13 @@ func (l *NodeLinker) doStoreSource(uid int64, name, nid string) {
 
 // 删除用户节点来源
 func (l *NodeLinker) doDeleteSource(uid int64, name, nid string) {
-	done := func() bool {
-		l.rw.Lock()
-		defer l.rw.Unlock()
+	sh := l.shard(uid)
 
-		sources, ok := l.sources[uid]
+	done := func() bool {
+		sh.rw.Lock()
+		defer sh.rw.Unlock()
+
+		sources, ok := sh.sources[uid]
 		if !ok {
 			return false
 		}
@@ -442,7 +468,7 @@ func (l *NodeLinker) doDeleteSource(uid int64, name, nid string) {
 		}
 
 		if len(sources) == 1 {
-			delete(l.sources, uid)
+			delete(sh.sources, uid)
 		} else {
 			delete(sources, name)
 		}
@@ -456,15 +482,19 @@ func (l *NodeLinker) doDeleteSource(uid int64, name, nid string) {
 }
 
 // 加载用户节点来源
+// 每条有状态消息投递均会调用，按UID分片加读锁，避免全局锁在高并发投递下产生缓存行竞争
 func (l *NodeLinker) doLoadSource(uid int64, name string) (string, bool) {
-	l.rw.RLock()
-	defer l.rw.RUnlock()
+	sh := l.shard(uid)
 
-	if sources, ok := l.sources[uid]; ok {
+	sh.rw.RLock()
+	sources, ok := sh.sources[uid]
+	if ok {
 		if nid, ok := sources[name]; ok {
-			return nid, ok
+			sh.rw.RUnlock()
+			return nid, true
 		}
 	}
+	sh.rw.RUnlock()
 
 	return "", false
 }

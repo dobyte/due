@@ -327,23 +327,7 @@ func (a *Actor) destroy() bool {
 		a.scheduler.releaseKind(a.Kind())
 	}
 
-	a.scheduler.batchUnbindActor(func(relations map[int64]map[string]*Actor) {
-		a.binds.Range(func(k, _ any) bool {
-			uid := k.(int64)
-
-			if rels, ok := relations[uid]; ok {
-				delete(rels, a.Kind())
-
-				if len(rels) == 0 {
-					delete(relations, uid)
-				}
-			}
-
-			a.binds.Delete(k)
-
-			return true
-		})
-	})
+	a.scheduler.unbindAllActor(a)
 
 	a.rw.Lock()
 	processor := a.processor

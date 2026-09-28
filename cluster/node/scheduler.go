@@ -10,15 +10,26 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
+// relationShardNum 用户绑定关系分片数量（2的幂，便于位运算取片）
+const relationShardNum = 256
+
+// relationShard 用户绑定关系分片
+// 按UID低位散列分片以稀释读写锁竞争；填充至64字节缓存行以消除相邻分片间的伪共享（false sharing）
+type relationShard struct {
+	rw        sync.RWMutex
+	relations map[int64]map[string]*Actor
+	_         [32]byte
+}
+
 // Scheduler 调度器
 // 负责Actor的创建、销毁以及用户与Actor关系的维护和消息分发
 type Scheduler struct {
-	node      *Node
-	rw        sync.RWMutex
-	actors    sync.Map
-	routes    sync.Map
-	kinds     sync.Map
-	relations map[int64]map[string]*Actor
+	node   *Node
+	rw     sync.RWMutex // 保护actors/kinds/routes生命周期一致性
+	actors sync.Map
+	routes sync.Map
+	kinds  sync.Map
+	shards [relationShardNum]relationShard // 用户与Actor绑定关系分片
 }
 
 // kindEntity Kind实体
@@ -33,10 +44,18 @@ type kindEntity struct {
 // @param node *Node 节点服务器
 // @return @1 *Scheduler 调度器
 func newScheduler(node *Node) *Scheduler {
-	return &Scheduler{
-		node:      node,
-		relations: make(map[int64]map[string]*Actor),
+	s := &Scheduler{node: node}
+	for i := range s.shards {
+		s.shards[i].relations = make(map[int64]map[string]*Actor)
 	}
+	return s
+}
+
+// 按用户ID定位绑定关系分片
+// @param uid int64 用户ID
+// @return @1 *relationShard 绑定关系分片
+func (s *Scheduler) shard(uid int64) *relationShard {
+	return &s.shards[uint64(uid)&(relationShardNum-1)]
 }
 
 // 衍生出一个Actor
@@ -171,6 +190,7 @@ func (s *Scheduler) doLoad(pid string) (*Actor, bool) {
 }
 
 // 为用户与Actor建立绑定关系
+// 绑定关系按UID散列到独立分片写入，避免全局锁阻塞其他用户的消息分发
 // @param uid int64 用户ID
 // @param kind string Actor类型
 // @param id string Actor编号
@@ -179,9 +199,6 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 	if uid == 0 {
 		return errors.ErrIllegalOperation
 	}
-
-	s.rw.Lock()
-	defer s.rw.Unlock()
 
 	act, ok := s.load(kind, id)
 	if !ok {
@@ -193,15 +210,26 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 		return errors.ErrActorNotStarted
 	}
 
+	// 先登记到Actor绑定表再写入调度关系，保证并发destroy遍历binds时能够清理本次绑定
 	act.bindUser(uid)
 
-	relations, ok := s.relations[uid]
+	sh := s.shard(uid)
+
+	sh.rw.Lock()
+	relations, ok := sh.relations[uid]
 	if !ok {
 		relations = make(map[string]*Actor)
-		s.relations[uid] = relations
+		sh.relations[uid] = relations
 	}
-
 	relations[act.Kind()] = act
+	sh.rw.Unlock()
+
+	// 二次校验Actor状态：与kill/destroy并发时回收已写入的绑定，避免悬垂关系
+	if !act.started() {
+		act.unbindUser(uid)
+		s.doUnbindActor(uid, act.Kind(), act)
+		return errors.ErrActorNotStarted
+	}
 
 	return nil
 }
@@ -211,37 +239,71 @@ func (s *Scheduler) bindActor(uid int64, kind, id string) error {
 // @param kind string Actor类型
 // @return @1 error 用户或Actor关系不存在时返回的错误
 func (s *Scheduler) unbindActor(uid int64, kind string) error {
-	s.rw.Lock()
-	defer s.rw.Unlock()
+	sh := s.shard(uid)
 
-	relations, ok := s.relations[uid]
+	sh.rw.RLock()
+	relations, ok := sh.relations[uid]
 	if !ok {
+		sh.rw.RUnlock()
 		return errors.ErrNotFoundActor
 	}
-
 	act, ok := relations[kind]
+	sh.rw.RUnlock()
+
 	if !ok {
 		return errors.ErrNotFoundActor
 	}
 
 	if act.unbindUser(uid) {
-		delete(s.relations[uid], kind)
-
-		if len(s.relations[uid]) == 0 {
-			delete(s.relations, uid)
-		}
+		s.doUnbindActor(uid, kind, act)
 	}
 
 	return nil
 }
 
-// 批量解绑Actor
-// 在持锁状态下传入全部用户Actor映射，由回调对映射进行批量清理
-// @param fn func(relations map[int64]map[string]*Actor) 批量解绑处理函数
-func (s *Scheduler) batchUnbindActor(fn func(relations map[int64]map[string]*Actor)) {
-	s.rw.Lock()
-	fn(s.relations)
-	s.rw.Unlock()
+// 解绑Actor的全部用户绑定关系
+// 逐用户定位分片加锁清理，避免持全局锁遍历绑定表而阻塞整个节点的消息分发
+// @param act *Actor 待解绑的Actor
+func (s *Scheduler) unbindAllActor(act *Actor) {
+	act.binds.Range(func(k, _ any) bool {
+		s.doUnbindActor(k.(int64), act.Kind(), act)
+
+		act.binds.Delete(k)
+
+		return true
+	})
+}
+
+// 执行解绑用户与Actor关系
+// 仅当当前绑定仍指向act时才删除，防止误删用户重新绑定到同Kind新Actor的关系
+// @param uid int64 用户ID
+// @param kind string Actor类型
+// @param act *Actor 期望解绑的Actor
+// @return @1 bool 是否成功解绑
+func (s *Scheduler) doUnbindActor(uid int64, kind string, act *Actor) bool {
+	sh := s.shard(uid)
+
+	sh.rw.Lock()
+	relations, ok := sh.relations[uid]
+	if !ok {
+		sh.rw.Unlock()
+		return false
+	}
+
+	current, ok := relations[kind]
+	if !ok || current != act {
+		sh.rw.Unlock()
+		return false
+	}
+
+	delete(relations, kind)
+
+	if len(relations) == 0 {
+		delete(sh.relations, uid)
+	}
+	sh.rw.Unlock()
+
+	return true
 }
 
 // 释放Kind引用
@@ -273,19 +335,23 @@ func (s *Scheduler) releaseKind(kind string) {
 }
 
 // 获取用户绑定的Actor
+// 每条下放消息均会调用，按UID分片加读锁，避免全局锁在高并发分发下产生缓存行竞争
 // @param uid int64 用户ID
 // @param kind string Actor类型
 // @return @1 *Actor 用户绑定的Actor实例
 // @return @2 bool 是否存在对应的绑定关系
 func (s *Scheduler) loadActor(uid int64, kind string) (*Actor, bool) {
-	s.rw.RLock()
-	defer s.rw.RUnlock()
+	sh := s.shard(uid)
 
-	if relations, ok := s.relations[uid]; ok {
+	sh.rw.RLock()
+	relations, ok := sh.relations[uid]
+	if ok {
 		if act, ok := relations[kind]; ok {
+			sh.rw.RUnlock()
 			return act, true
 		}
 	}
+	sh.rw.RUnlock()
 
 	return nil, false
 }
