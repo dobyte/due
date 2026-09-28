@@ -94,7 +94,7 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 			if a.started() {
 				f()
 			}
-		})
+		}, wait...)
 		a.rw.RUnlock()
 
 		if err != nil {
