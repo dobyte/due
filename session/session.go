@@ -59,12 +59,19 @@ func (s *Session) AddConn(conn network.Conn) {
 }
 
 // RemConn 移除连接
+// 在同一把写锁内完成存在性检查与移除，调用方无需先Has再RemConn两次查找；
+// 并发重复移除时仅首个调用返回true，可防止重复移除导致的计数失衡
 // @param conn network.Conn 连接对象
-func (s *Session) RemConn(conn network.Conn) {
+// @return @1 bool 连接是否已登记并被移除
+func (s *Session) RemConn(conn network.Conn) bool {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
 	cid, uid := conn.ID(), conn.UID()
+
+	if _, ok := s.conns[cid]; !ok {
+		return false
+	}
 
 	delete(s.conns, cid)
 
@@ -75,6 +82,8 @@ func (s *Session) RemConn(conn network.Conn) {
 	}
 
 	s.doClearConnAttrs(conn)
+
+	return true
 }
 
 // Has 判断会话是否存在

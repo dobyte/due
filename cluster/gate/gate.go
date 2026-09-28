@@ -171,13 +171,12 @@ func (g *Gate) handleConnect(conn network.Conn) {
 
 // 处理断开连接
 // 对已登记会话的连接执行解绑用户、触发Disconnect事件并完成WaitGroup计数；未登记（关闭阶段被拒绝接入）的连接直接忽略
+// RemConn原子完成存在性检查与移除，并发重复断连时仅首个调用生效，保证wg的Add/Done平衡
 // @param conn network.Conn 断开的连接
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	cid := conn.ID()
 
-	if ok, _ := g.session.Has(session.Conn, cid); ok {
-		g.session.RemConn(conn)
-
+	if g.session.RemConn(conn) {
 		uid := conn.UID()
 
 		if uid != 0 {
