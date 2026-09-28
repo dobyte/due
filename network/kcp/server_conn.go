@@ -520,7 +520,7 @@ func (c *serverConn) doWrite(conn *kcp.UDPSession, buf buffer.Buffer) {
 	}
 
 	if err != nil && !errors.Is(err, net.ErrClosed) {
-		log.Errorf("write message error: %v", err)
+		log.Warnf("write message error: %v", err)
 		taskpool.Add(func() { c.forceClose(true) })
 	}
 
@@ -544,7 +544,7 @@ func (c *serverConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 			hb := packet.PackHeartbeat(true)
 
 			if _, err := conn.Write(hb.Bytes()); err != nil {
-				log.Errorf("write heartbeat message error: %v", err)
+				log.Warnf("write heartbeat message error: %v", err)
 			}
 
 			hb.Release()
