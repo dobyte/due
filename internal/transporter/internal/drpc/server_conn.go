@@ -31,6 +31,7 @@ type ServerConn struct {
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
 	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
 	netBuffers        net.Buffers                 // 待写入的字节切片集合
+	writeDeadline     time.Time                   // 写截止时间（写协程独享）
 	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 	key               string                      // 连接键值
 	kind              cluster.Kind                // 实例类型
@@ -225,8 +226,13 @@ OVER:
 	}
 
 	if len(c.netBuffers) > 0 {
-		if c.svr.opts.WriteTimeout > 0 {
-			_ = conn.SetWriteDeadline(time.Now().Add(c.svr.opts.WriteTimeout))
+		if timeout := c.svr.opts.WriteTimeout; timeout > 0 {
+			now := time.Now()
+			// 仅在剩余时间不足一半时续期，避免每批次写入都产生 netpoller 系统调用
+			if now.Add(timeout / 2).After(c.writeDeadline) {
+				c.writeDeadline = now.Add(timeout)
+				_ = conn.SetWriteDeadline(c.writeDeadline)
+			}
 		}
 
 		if _, err := c.netBuffers.WriteTo(conn); err != nil {

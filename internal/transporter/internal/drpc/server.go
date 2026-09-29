@@ -159,9 +159,7 @@ func (s *Server) serve(listener net.Listener) {
 
 		delay = 0
 
-		cc := conn.(*net.TCPConn)
-		cc.SetNoDelay(true)
-		s.allocateConn(cc)
+		s.allocateConn(conn.(*net.TCPConn))
 	}
 
 	_ = s.Stop()
@@ -235,9 +233,7 @@ func (s *Server) handleMessage(conn *ServerConn, rt uint8, seq uint64, buf *buff
 		return errors.ErrNotFoundRoute
 	} else {
 		switch rt {
-		case route.Push, route.Multicast, route.Broadcast, route.Publish:
-			return handler(conn, seq, buf)
-		case route.Deliver, route.Trigger:
+		case route.Push, route.Multicast, route.Broadcast, route.Publish, route.Deliver, route.Trigger:
 			return handler(conn, seq, buf)
 		default:
 			taskpool.Add(func() { handler(conn, seq, buf) })

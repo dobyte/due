@@ -13,7 +13,6 @@ import (
 
 type reader struct {
 	reader *bufio.Reader
-	header [def.SizeBytes + def.HeaderBytes]byte
 }
 
 func newReader(conn *net.TCPConn) *reader {
@@ -22,17 +21,21 @@ func newReader(conn *net.TCPConn) *reader {
 
 // read 以buffer的形式读取消息
 func (r *reader) read() (bool, uint8, uint64, *buffer.Bytes, error) {
-	if _, err := io.ReadFull(r.reader, r.header[:]); err != nil {
+	// 通过Peek零拷贝解析头部，避免每帧两次io.ReadFull调用
+	header, err := r.reader.Peek(def.SizeBytes + def.HeaderBytes)
+	if err != nil {
 		return false, 0, 0, nil, err
 	}
 
-	size := binary.BigEndian.Uint32(r.header[:def.SizeBytes])
-	header := r.header[def.SizeBytes:][0]
+	size := binary.BigEndian.Uint32(header[:def.SizeBytes])
 
-	if header&def.HeartbeatBit == def.HeartbeatBit {
+	if header[def.SizeBytes]&def.HeartbeatBit == def.HeartbeatBit {
 		if size != def.HeaderBytes {
 			return false, 0, 0, nil, errors.ErrInvalidMessage
 		}
+
+		_, _ = r.reader.Discard(def.SizeBytes + def.HeaderBytes)
+
 		return true, 0, 0, nil, nil
 	}
 
@@ -45,6 +48,8 @@ func (r *reader) read() (bool, uint8, uint64, *buffer.Bytes, error) {
 	}
 
 	buf := buffer.MallocBytes(int(size) - def.HeaderBytes)
+
+	_, _ = r.reader.Discard(def.SizeBytes + def.HeaderBytes)
 
 	if _, err := io.ReadFull(r.reader, buf.Bytes()); err != nil {
 		buf.Release()

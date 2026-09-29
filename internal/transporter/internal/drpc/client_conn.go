@@ -20,12 +20,13 @@ import (
 
 // session 表示一次连接的生命周期，读写协程通过它访问连接与上下文
 type session struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	conn       *net.TCPConn
-	reader     *reader
-	dueBuffers []*buffer.NocopyBuffer // 待写入的消息缓冲对象集合（写协程独享）
-	netBuffers net.Buffers            // 待写入的字节切片集合（写协程独享）
+	ctx           context.Context
+	cancel        context.CancelFunc
+	conn          *net.TCPConn
+	reader        *reader
+	dueBuffers    []*buffer.NocopyBuffer // 待写入的消息缓冲对象集合（写协程独享）
+	netBuffers    net.Buffers            // 待写入的字节切片集合（写协程独享）
+	writeDeadline time.Time              // 写截止时间（写协程独享）
 }
 
 type ClientConn struct {
@@ -271,7 +272,6 @@ func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuf
 		if !ok {
 			return nil, errors.ErrConnectionHanged
 		}
-		close(call)
 		return res, nil
 	}
 }
@@ -317,7 +317,8 @@ func (c *ClientConn) write(s *session) {
 			// 空闲连接才发送心跳：数据帧本身即可维持对端活性判定
 			if time.Since(lastWrite) >= heartbeatInterval {
 				if c.cli.opts.WriteTimeout > 0 {
-					_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+					s.writeDeadline = time.Now().Add(c.cli.opts.WriteTimeout)
+					_ = s.conn.SetWriteDeadline(s.writeDeadline)
 				}
 
 				if _, err := s.conn.Write(protocol.Heartbeat()); err != nil {
@@ -395,8 +396,13 @@ OVER:
 	}
 
 	if len(s.netBuffers) > 0 {
-		if c.cli.opts.WriteTimeout > 0 {
-			_ = s.conn.SetWriteDeadline(time.Now().Add(c.cli.opts.WriteTimeout))
+		if timeout := c.cli.opts.WriteTimeout; timeout > 0 {
+			now := time.Now()
+			// 仅在剩余时间不足一半时续期，避免每批次写入都产生 netpoller 系统调用
+			if now.Add(timeout / 2).After(s.writeDeadline) {
+				s.writeDeadline = now.Add(timeout)
+				_ = s.conn.SetWriteDeadline(s.writeDeadline)
+			}
 		}
 
 		_, err = s.netBuffers.WriteTo(s.conn)

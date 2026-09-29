@@ -45,6 +45,7 @@ func (p *pending) closeAll() {
 type calls struct {
 	mu    sync.Mutex                    // 锁
 	calls map[uint64]chan *buffer.Bytes // 同步通道
+	_     [48]byte                      // 缓存行填充至64字节，消除相邻分片间的false sharing
 }
 
 // 提取
