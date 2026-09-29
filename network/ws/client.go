@@ -32,6 +32,8 @@ func NewClient(opts ...ClientOption) network.Client {
 	c.opts = o
 	c.dialer = &websocket.Dialer{
 		HandshakeTimeout:  o.dialTimeout,
+		ReadBufferSize:    o.readBufferSize,
+		TLSClientConfig:   o.tlsConfig,
 		EnableCompression: o.enableCompression,
 	}
 

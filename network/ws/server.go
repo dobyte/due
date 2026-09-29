@@ -62,9 +62,21 @@ func NewServer(opts ...ServerOption) Server {
 }
 
 // Addr 获取监听地址
+// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
 // @return @1 string 监听地址
 func (s *server) Addr() string {
-	return s.opts.addr
+	s.mu.Lock()
+
+	if s.listener != nil {
+		addr := s.listener.Addr().String()
+		s.mu.Unlock()
+		return addr
+	}
+
+	addr := s.opts.addr
+	s.mu.Unlock()
+
+	return addr
 }
 
 // Protocol 获取协议名称
@@ -99,14 +111,24 @@ func (s *server) Start() error {
 // Stop 关闭服务器
 // @return @1 error 错误信息
 func (s *server) Stop() error {
+	return s.stop(nil)
+}
+
+// stop 关闭服务器
+// 关闭监听器并关闭所有连接；ln 非空时仅当其仍为当前监听器才执行关闭，
+// 避免旧的服务协程退出时误关重启后的新监听器
+// @param ln net.Listener 期望关闭的监听器，为nil时不做校验
+// @return @1 error 服务器已关闭或监听器不匹配时返回的错误
+func (s *server) stop(ln net.Listener) error {
 	s.mu.Lock()
-	if s.listener != nil {
-		s.listener.Close()
-		s.listener = nil
-	} else {
+
+	if s.listener == nil || (ln != nil && s.listener != ln) {
 		s.mu.Unlock()
 		return errors.ErrServerClosed
 	}
+
+	_ = s.listener.Close()
+	s.listener = nil
 	s.mu.Unlock()
 
 	s.connMgr.close()
@@ -141,6 +163,8 @@ func (s *server) init() error {
 	} else {
 		s.listener = ln
 	}
+
+	s.connMgr.open()
 
 	return nil
 }
@@ -188,7 +212,11 @@ func (s *server) serve(ln net.Listener) {
 		}
 
 		if err = s.connMgr.allocateConn(conn, s.parseAddrFromHeader(r)); err != nil {
-			log.Errorf("connection allocate error: %v", err)
+			if errors.Is(err, errors.ErrServerClosed) {
+				log.Debugf("connection allocate error: %v", err)
+			} else {
+				log.Errorf("connection allocate error: %v", err)
+			}
 
 			if err = conn.Close(); err != nil {
 				log.Errorf("connection close error: %v", err)
@@ -201,11 +229,11 @@ func (s *server) serve(ln net.Listener) {
 	} else {
 		err = http.Serve(ln, mux)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, net.ErrClosed) {
 		log.Errorf("websocket server shutdown, err: %v", err)
 	}
 
-	_ = s.Stop()
+	_ = s.stop(ln)
 }
 
 // OnStart 监听服务器启动

@@ -16,7 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/log"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/gorilla/websocket"
 )
@@ -55,33 +55,51 @@ func (cm *serverConnMgr) close() {
 		wg.Go(p.close)
 	}
 
-	wg.Wait()
+	if err := wg.Wait(); err != nil {
+		log.Warnf("close connections error: %v", err)
+	}
+}
+
+// open 开放连接接入
+// 清除所有分片的停止标志，服务器每次启动时调用以支持重启
+func (cm *serverConnMgr) open() {
+	for _, p := range cm.partitions {
+		p.rw.Lock()
+		p.stopped = false
+		p.rw.Unlock()
+	}
 }
 
 // allocateConn 分配连接
-// 自增总连接数并校验上限，从连接池取用连接对象存入分片后完成初始化
+// 自增总连接数并校验上限，超限则回退计数；从连接池取用连接对象初始化后存入分片
 // @param c *websocket.Conn WS连接
 // @param remoteAddr net.Addr 客户端真实地址，应用层代理模式下从代理头解析得到，可为nil
-// @return @1 error 连接数已达上限时返回errors.ErrTooManyConnection
+// @return @1 error 连接数已达上限或服务器已停止时返回的错误
 func (cm *serverConnMgr) allocateConn(c *websocket.Conn, remoteAddr net.Addr) error {
-	maxConnNum := int64(cm.server.opts.maxConnNum)
-	for {
-		if total := cm.total.Load(); total >= maxConnNum {
-			return errors.ErrTooManyConnection
-		} else if cm.total.CompareAndSwap(total, total+1) {
-			break
-		}
+	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
+		cm.total.Add(-1)
+		return errors.ErrTooManyConnection
 	}
 
 	conn := cm.connPool.Get().(*serverConn)
-	conn.init(c, remoteAddr)
+
+	if !conn.init(c, remoteAddr) {
+		// 服务器关闭过程中分片拒绝存储，回退计数后归还连接对象，底层连接由调用方关闭
+		cm.total.Add(-1)
+		cm.connPool.Put(conn)
+		return errors.ErrServerClosed
+	}
 
 	return nil
 }
 
-// 存储连接
-func (cm *serverConnMgr) storeConn(c *websocket.Conn, conn *serverConn) {
-	cm.partitions[cm.connHash(c)].store(c, conn)
+// storeConn 存储连接
+// 按连接指针哈希存入对应分片，分片已停止时拒绝存储
+// @param c *websocket.Conn WS连接
+// @param conn *serverConn 对应的连接对象
+// @return @1 bool 是否存储成功，服务器关闭过程中返回false
+func (cm *serverConnMgr) storeConn(c *websocket.Conn, conn *serverConn) bool {
+	return cm.partitions[cm.connHash(c)].store(c, conn)
 }
 
 // recycleConn 回收连接
@@ -116,16 +134,27 @@ func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
 type partition struct {
 	rw          sync.RWMutex
 	connections map[*websocket.Conn]*serverConn
+	stopped     bool     // 是否已停止接入新连接，关闭分片时置位，服务器重启时复位
+	_           [31]byte // 填充至64字节缓存行，避免相邻分片伪共享
 }
 
 // store 存储连接
-// 将连接映射写入分片
+// 将连接映射写入分片；分片已停止时拒绝写入，避免服务器关闭过程中的在途连接泄漏
 // @param c *websocket.Conn WS连接
 // @param conn *serverConn 对应的连接对象
-func (p *partition) store(c *websocket.Conn, conn *serverConn) {
+// @return @1 bool 是否存储成功，分片已停止时返回false
+func (p *partition) store(c *websocket.Conn, conn *serverConn) bool {
 	p.rw.Lock()
+
+	if p.stopped {
+		p.rw.Unlock()
+		return false
+	}
+
 	p.connections[c] = conn
 	p.rw.Unlock()
+
+	return true
 }
 
 // delete 删除连接
@@ -145,23 +174,30 @@ func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 }
 
 // close 关闭该分片内的所有连接
-// 并发关闭分片下所有连接并等待完成
-// @return @1 error 任一连接关闭失败时返回的错误
+// 先置位停止标志阻断新连接写入，再串行关闭分片下所有连接，分片之间由外层并行驱动，
+// 避免向任务池瞬时提交海量阻塞任务；连接被其他路径并发关闭属正常竞态，不视为错误
+// @return @1 error 任一连接关闭失败时返回的首个错误
 func (p *partition) close() error {
-	p.rw.RLock()
-	conns := make([]network.Conn, 0, len(p.connections))
+	p.rw.Lock()
+	p.stopped = true
+	conns := make([]*serverConn, 0, len(p.connections))
 	for _, conn := range p.connections {
 		conns = append(conns, conn)
 	}
-	p.rw.RUnlock()
+	p.rw.Unlock()
 
-	wg, _ := taskpool.WithContext(context.Background())
+	var firstErr error
 
 	for _, conn := range conns {
-		wg.Go(func() error {
-			return conn.Close()
-		})
+		err := conn.Close()
+		if err == nil || errors.Is(err, errors.ErrConnectionNotOpened) || errors.Is(err, errors.ErrConnectionClosed) {
+			continue
+		}
+
+		if firstErr == nil {
+			firstErr = err
+		}
 	}
 
-	return wg.Wait()
+	return firstErr
 }

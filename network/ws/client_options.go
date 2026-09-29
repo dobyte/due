@@ -1,8 +1,10 @@
 package ws
 
 import (
+	"crypto/tls"
 	"time"
 
+	ctls "github.com/dobyte/due/v2/core/tls"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -11,19 +13,25 @@ import (
 const (
 	defaultClientUrl               = "ws://127.0.0.1:3553"
 	defaultClientDialTimeout       = "3s"
+	defaultClientReadBufferSize    = 4096
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+	defaultClientCloseTimeout      = "0s"
 	defaultClientEnableCompression = false
 	defaultClientCompressionLevel  = 1
 )
 
 const (
 	defaultClientUrlKey               = "etc.network.ws.client.url"
+	defaultClientCAFileKey            = "etc.network.ws.client.caFile"
+	defaultClientServerNameKey        = "etc.network.ws.client.serverName"
 	defaultClientDialTimeoutKey       = "etc.network.ws.client.dialTimeout"
+	defaultClientReadBufferSizeKey    = "etc.network.ws.client.readBufferSize"
 	defaultClientWriteTimeoutKey      = "etc.network.ws.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.ws.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.ws.client.heartbeatInterval"
+	defaultClientCloseTimeoutKey      = "etc.network.ws.client.closeTimeout"
 	defaultClientEnableCompressionKey = "etc.network.ws.client.enableCompression"
 	defaultClientCompressionLevelKey  = "etc.network.ws.client.compressionLevel"
 )
@@ -32,10 +40,13 @@ type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
 	url               string        // 拨号地址
+	tlsConfig         *tls.Config   // TLS配置
 	dialTimeout       time.Duration // 拨号超时时间，默认3s
+	readBufferSize    int           // 读缓冲区大小，默认4096
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
 	enableCompression bool          // 是否开启压缩，默认false
 	compressionLevel  int           // 压缩等级，默认1
 }
@@ -59,6 +70,12 @@ func defaultClientOptions() *clientOptions {
 		opts.dialTimeout = xconv.Duration(defaultClientDialTimeout)
 	}
 
+	if readBufferSize := etc.Get(defaultClientReadBufferSizeKey, defaultClientReadBufferSize).Int(); readBufferSize > 0 {
+		opts.readBufferSize = readBufferSize
+	} else {
+		opts.readBufferSize = defaultClientReadBufferSize
+	}
+
 	if writeTimeout := etc.Get(defaultClientWriteTimeoutKey, defaultClientWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
 	} else {
@@ -77,10 +94,27 @@ func defaultClientOptions() *clientOptions {
 		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
 	}
 
+	if closeTimeout := etc.Get(defaultClientCloseTimeoutKey, defaultClientCloseTimeout).Duration(); closeTimeout >= 0 {
+		opts.closeTimeout = closeTimeout
+	} else {
+		opts.closeTimeout = xconv.Duration(defaultClientCloseTimeout)
+	}
+
 	if compressionLevel := etc.Get(defaultClientCompressionLevelKey, defaultClientCompressionLevel).Int(); compressionLevel >= 1 && compressionLevel <= 9 {
 		opts.compressionLevel = compressionLevel
 	} else {
 		opts.compressionLevel = defaultClientCompressionLevel
+	}
+
+	caFile := etc.Get(defaultClientCAFileKey).String()
+	serverName := etc.Get(defaultClientServerNameKey).String()
+
+	if caFile != "" || serverName != "" {
+		if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
+			log.Warnf("make ws client tls config failed: %v", err)
+		} else {
+			opts.tlsConfig = config
+		}
 	}
 
 	return opts
@@ -99,6 +133,33 @@ func WithClientUrl(url string) ClientOption {
 	}
 }
 
+// WithClientCredentials 设置CA证书和校验域名
+// @param caFile string CA证书文件
+// @param serverName string 服务器名称
+// @return @1 ClientOption 客户端配置项
+func WithClientCredentials(caFile string, serverName string) ClientOption {
+	return func(o *clientOptions) {
+		if caFile != "" || serverName != "" {
+			if config, err := ctls.MakeTCPClientTLSConfig(caFile, serverName); err != nil {
+				log.Warnf("make ws client tls config failed: %v", err)
+			} else {
+				o.tlsConfig = config
+			}
+		} else {
+			log.Warnf("the specified caFile or serverName is empty and will be ignored")
+		}
+	}
+}
+
+// WithClientTLSConfig 设置TLS配置
+// @param tlsConfig *tls.Config TLS配置
+// @return @1 ClientOption 客户端配置项
+func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
+	return func(o *clientOptions) {
+		o.tlsConfig = tlsConfig
+	}
+}
+
 // WithClientDialTimeout 设置拨号超时时间
 // @param dialTimeout time.Duration 拨号超时时间
 // @return @1 ClientOption 客户端配置项
@@ -108,6 +169,19 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 			o.dialTimeout = dialTimeout
 		} else {
 			log.Warnf("the specified dialTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientReadBufferSize 设置读缓冲区大小
+// @param readBufferSize int 读缓冲区大小
+// @return @1 ClientOption 客户端配置项
+func WithClientReadBufferSize(readBufferSize int) ClientOption {
+	return func(o *clientOptions) {
+		if readBufferSize > 0 {
+			o.readBufferSize = readBufferSize
+		} else {
+			log.Warnf("the specified readBufferSize is less than zero and will be ignored")
 		}
 	}
 }
@@ -147,6 +221,20 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 			o.heartbeatInterval = heartbeatInterval
 		} else {
 			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientCloseTimeout 设置优雅关闭超时时间
+// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
+// @param closeTimeout time.Duration 优雅关闭超时时间
+// @return @1 ClientOption 客户端配置项
+func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if closeTimeout >= 0 {
+			o.closeTimeout = closeTimeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }

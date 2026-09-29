@@ -26,8 +26,8 @@ type clientConn struct {
 	conn              *websocket.Conn             // TCP源连接
 	state             atomic.Int32                // 连接状态
 	cli               *client                     // 客户端
-	wg1               *sync.WaitGroup             // 读等待组
-	wg2               *sync.WaitGroup             // 写等待组
+	wg1               sync.WaitGroup              // 读等待组
+	wg2               sync.WaitGroup              // 写等待组
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
 	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 }
@@ -45,11 +45,9 @@ func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c.attr = &attr{}
 	c.conn = conn
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
-	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
 	if c.cli.connectHandler != nil {
@@ -224,7 +222,8 @@ func (c *clientConn) checkState() error {
 }
 
 // graceClose 优雅关闭
-// 向两个写队列写入关闭信号，等待队列排空后关闭连接，便于尽量下发完已缓冲的消息
+// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
+// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
 // @return @1 error 连接非打开态或关闭过程中出错时返回的错误
 func (c *clientConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
@@ -236,11 +235,20 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	err := c.queue.Write(buffer.NewBytes(nil))
+	conn := c.conn
+	q := c.queue
+	err := q.Write(buffer.NewBytes(nil))
 	c.rw.RUnlock()
 
 	if err == nil {
-		c.queue.Wait()
+		if closeTimeout := c.cli.opts.closeTimeout; closeTimeout > 0 {
+			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
+			q.Wait()
+			timer.Stop()
+		} else {
+			q.Wait()
+		}
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -258,13 +266,15 @@ func (c *clientConn) forceClose() error {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doClose()
+	return c.doClose(true)
 }
 
 // doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭WS连接，最后触发断开hook
+// 关闭写队列，等待读写协程退出后关闭WS连接，最后触发断开hook；
+// force 为 true 时先关闭WS连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
+// @param force ...bool 是否强制关闭
 // @return @1 error 关闭WS连接时的错误
-func (c *clientConn) doClose() error {
+func (c *clientConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
 		c.rw.Unlock()
@@ -276,9 +286,15 @@ func (c *clientConn) doClose() error {
 	c.conn = nil
 	c.rw.Unlock()
 
-	c.wg2.Wait()
+	var err error
 
-	err := conn.Close()
+	if len(force) > 0 && force[0] {
+		err = conn.Close()
+		c.wg2.Wait()
+	} else {
+		c.wg2.Wait()
+		err = conn.Close()
+	}
 
 	c.wg1.Wait()
 
@@ -363,6 +379,8 @@ func (c *clientConn) read(conn *websocket.Conn) {
 
 			if c.cli.receiveHandler != nil {
 				c.cli.receiveHandler(c, buf)
+			} else {
+				buf.Release()
 			}
 		}
 	}
@@ -421,9 +439,8 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 		if _, ok := err.(*websocket.CloseError); !ok {
 			if !errors.Is(err, net.ErrClosed) {
 				log.Warnf("write message error: %v", err)
+				taskpool.Add(func() { c.forceClose() })
 			}
-
-			taskpool.Add(func() { c.forceClose() })
 		}
 	}
 
@@ -450,7 +467,7 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 		hb := packet.PackHeartbeat()
 
 		if err := conn.WriteMessage(websocket.BinaryMessage, hb.Bytes()); err != nil {
-			log.Errorf("write heartbeat message error: %v", err)
+			log.Warnf("write heartbeat message error: %v", err)
 		}
 
 		hb.Release()
