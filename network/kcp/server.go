@@ -3,6 +3,7 @@ package kcp
 import (
 	"net"
 	"sync"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -44,9 +45,21 @@ func NewServer(opts ...ServerOption) network.Server {
 }
 
 // Addr 获取监听地址
+// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
 // @return @1 string 服务器的监听地址
 func (s *server) Addr() string {
-	return s.opts.addr
+	s.mu.Lock()
+
+	if s.listener != nil {
+		addr := s.listener.Addr().String()
+		s.mu.Unlock()
+		return addr
+	}
+
+	addr := s.opts.addr
+	s.mu.Unlock()
+
+	return addr
 }
 
 // Start 启动服务器
@@ -77,14 +90,24 @@ func (s *server) Start() error {
 // 关闭监听器与全部连接，并触发关闭hook函数
 // @return @1 error 服务器未运行或关闭监听器失败时返回的错误
 func (s *server) Stop() error {
+	return s.stop(nil)
+}
+
+// stop 关闭服务器
+// 关闭监听器并关闭所有连接；ln 非空时仅当其仍为当前监听器才执行关闭，
+// 避免旧的服务协程退出时误关重启后的新监听器
+// @param ln net.Listener 期望关闭的监听器，为nil时不做校验
+// @return @1 error 服务器已关闭或监听器不匹配时返回的错误
+func (s *server) stop(ln net.Listener) error {
 	s.mu.Lock()
-	if s.listener != nil {
-		s.listener.Close()
-		s.listener = nil
-	} else {
+
+	if s.listener == nil || (ln != nil && s.listener != ln) {
 		s.mu.Unlock()
 		return errors.ErrServerClosed
 	}
+
+	_ = s.listener.Close()
+	s.listener = nil
 	s.mu.Unlock()
 
 	s.connMgr.close()
@@ -159,12 +182,17 @@ func (s *server) init() error {
 		s.listener = &proxyproto.Listener{Listener: s.listener}
 	}
 
+	s.connMgr.open()
+
 	return nil
 }
 
 // serve 启动服务器
-// 循环接受KCP连接并分配到连接管理器，监听结束时关闭全部连接
+// 循环接受KCP连接并分配到连接管理器；临时性错误（如文件描述符耗尽）按指数退避重试，
+// 避免瞬时抖动导致服务器退出，监听结束时关闭全部连接
 func (s *server) serve(ln net.Listener) {
+	var tempDelay time.Duration
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -172,9 +200,30 @@ func (s *server) serve(ln net.Listener) {
 				break
 			}
 
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+
+				if maxDelay := time.Second; tempDelay > maxDelay {
+					tempDelay = maxDelay
+				}
+
+				log.Warnf("kcp accept temporary error: %v, retrying in %v", err, tempDelay)
+
+				time.Sleep(tempDelay)
+
+				continue
+			}
+
 			log.Warnf("kcp accept error: %v", err)
 			break
 		}
+
+		tempDelay = 0
 
 		var session *kcp.UDPSession
 		if pc, ok := conn.(*proxyproto.Conn); ok {
@@ -184,10 +233,14 @@ func (s *server) serve(ln net.Listener) {
 		}
 
 		if err = s.connMgr.allocateConn(session); err != nil {
-			log.Errorf("connection allocate error: %v", err)
+			if errors.Is(err, errors.ErrServerClosed) {
+				log.Debugf("connection allocate error: %v", err)
+			} else {
+				log.Errorf("connection allocate error: %v", err)
+			}
 			_ = conn.Close()
 		}
 	}
 
-	_ = s.Stop()
+	_ = s.stop(ln)
 }

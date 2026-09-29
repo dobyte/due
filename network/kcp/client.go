@@ -36,7 +36,9 @@ func NewClient(opts ...ClientOption) network.Client {
 }
 
 // Dial 拨号连接
-// 未指定地址时使用客户端配置中的连接地址建立KCP会话
+// 未指定地址时使用客户端配置中的连接地址建立KCP会话；
+// 底层使用未连接的UDP套接字（与kcp.DialWithOptions一致），
+// 已连接套接字会导致kcp-go内部WriteTo调用失败而无法发出任何数据
 // @param addr ...string 目标服务器地址；缺省时使用配置项addr
 // @return @1 network.Conn KCP连接
 // @return @2 error 拨号失败时返回的错误
@@ -48,12 +50,12 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		address = c.opts.addr
 	}
 
-	udpConn, err := (&net.Dialer{Timeout: c.opts.dialTimeout}).Dial("udp", address)
+	udpConn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := kcp.NewConn(address, nil, 0, 0, udpConn.(net.PacketConn))
+	conn, err := kcp.NewConn(address, nil, 0, 0, udpConn)
 	if err != nil {
 		_ = udpConn.Close()
 		return nil, err

@@ -23,6 +23,7 @@ const (
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
+	defaultServerCloseTimeout       = "0s"
 	defaultServerMtu                = 1400
 	defaultServerWriteDelay         = true
 )
@@ -40,6 +41,7 @@ const (
 	defaultServerHeartbeatIntervalKey   = "etc.network.kcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey  = "etc.network.kcp.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey    = "etc.network.kcp.server.authorizeTimeout"
+	defaultServerCloseTimeoutKey        = "etc.network.kcp.server.closeTimeout"
 	defaultServerEnableProxyProtocolKey = "etc.network.kcp.server.enableProxyProtocol"
 	defaultServerMtuKey                 = "etc.network.kcp.server.mtu"
 	defaultServerNoDelayKey             = "etc.network.kcp.server.noDelay"
@@ -67,6 +69,7 @@ type serverOptions struct {
 	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
+	closeTimeout        time.Duration      // 优雅关闭超时时间，默认0s，不限制
 	mtu                 int                // 最大传输单元，默认不设置
 	noDelay             []int              // 是否开启无延迟模式，默认不设置
 	ackNoDelay          bool               // 是否开启ACK延迟确认，默认不设置
@@ -82,9 +85,19 @@ type serverOptions struct {
 // @return @1 *serverOptions 服务器配置
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
-	opts.addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
-	opts.maxConnNum = etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int()
 	opts.enableProxyProtocol = etc.Get(defaultServerEnableProxyProtocolKey).Bool()
+
+	if addr := etc.Get(defaultServerAddrKey, defaultServerAddr).String(); addr != "" {
+		opts.addr = addr
+	} else {
+		opts.addr = defaultServerAddr
+	}
+
+	if maxConnNum := etc.Get(defaultServerMaxConnNumKey, defaultServerMaxConnNum).Int(); maxConnNum > 0 {
+		opts.maxConnNum = maxConnNum
+	} else {
+		opts.maxConnNum = defaultServerMaxConnNum
+	}
 
 	if writeTimeout := etc.Get(defaultServerWriteTimeoutKey, defaultServerWriteTimeout).Duration(); writeTimeout >= 0 {
 		opts.writeTimeout = writeTimeout
@@ -98,9 +111,31 @@ func defaultServerOptions() *serverOptions {
 		opts.writeQueueSize = defaultServerWriteQueueSize
 	}
 
-	opts.heartbeatInterval = etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration()
-	opts.heartbeatMechanism = HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String())
-	opts.authorizeTimeout = etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration()
+	if heartbeatInterval := etc.Get(defaultServerHeartbeatIntervalKey, defaultServerHeartbeatInterval).Duration(); heartbeatInterval >= 0 {
+		opts.heartbeatInterval = heartbeatInterval
+	} else {
+		opts.heartbeatInterval = xconv.Duration(defaultServerHeartbeatInterval)
+	}
+
+	switch heartbeatMechanism := HeartbeatMechanism(etc.Get(defaultServerHeartbeatMechanismKey, defaultServerHeartbeatMechanism).String()); heartbeatMechanism {
+	case RespHeartbeat, TickHeartbeat:
+		opts.heartbeatMechanism = heartbeatMechanism
+	default:
+		opts.heartbeatMechanism = defaultServerHeartbeatMechanism
+	}
+
+	if authorizeTimeout := etc.Get(defaultServerAuthorizeTimeoutKey, defaultServerAuthorizeTimeout).Duration(); authorizeTimeout >= 0 {
+		opts.authorizeTimeout = authorizeTimeout
+	} else {
+		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
+	}
+
+	if closeTimeout := etc.Get(defaultServerCloseTimeoutKey, defaultServerCloseTimeout).Duration(); closeTimeout >= 0 {
+		opts.closeTimeout = closeTimeout
+	} else {
+		opts.closeTimeout = xconv.Duration(defaultServerCloseTimeout)
+	}
+
 	opts.mtu = etc.Get(defaultServerMtuKey, defaultServerMtu).Int()
 	opts.noDelay = etc.Get(defaultServerNoDelayKey, defaultServerNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultServerAckNoDelayKey).Bool()
@@ -116,35 +151,79 @@ func defaultServerOptions() *serverOptions {
 // @param addr string 监听地址
 // @return @1 ServerOption 服务器配置选项
 func WithServerListenAddr(addr string) ServerOption {
-	return func(o *serverOptions) { o.addr = addr }
+	return func(o *serverOptions) {
+		if addr != "" {
+			o.addr = addr
+		} else {
+			log.Warnf("the specified addr is empty and will be ignored")
+		}
+	}
 }
 
 // WithServerMaxConnNum 设置连接的最大连接数
 // @param maxConnNum int 最大连接数
 // @return @1 ServerOption 服务器配置选项
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
-	return func(o *serverOptions) { o.maxConnNum = maxConnNum }
+	return func(o *serverOptions) {
+		if maxConnNum > 0 {
+			o.maxConnNum = maxConnNum
+		} else {
+			log.Warnf("the specified maxConnNum is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerHeartbeatInterval 设置心跳检测间隔时间
 // @param heartbeatInterval time.Duration 心跳检测间隔时间
 // @return @1 ServerOption 服务器配置选项
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
-	return func(o *serverOptions) { o.heartbeatInterval = heartbeatInterval }
+	return func(o *serverOptions) {
+		if heartbeatInterval >= 0 {
+			o.heartbeatInterval = heartbeatInterval
+		} else {
+			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerHeartbeatMechanism 设置心跳机制
 // @param heartbeatMechanism HeartbeatMechanism 心跳机制
 // @return @1 ServerOption 服务器配置选项
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
-	return func(o *serverOptions) { o.heartbeatMechanism = heartbeatMechanism }
+	return func(o *serverOptions) {
+		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
+			o.heartbeatMechanism = heartbeatMechanism
+		} else {
+			log.Warnf("the specified heartbeatMechanism is %v and will be ignored", heartbeatMechanism)
+		}
+	}
 }
 
 // WithServerAuthorizeTimeout 设置授权超时时间
 // @param authorizeTimeout time.Duration 授权超时时间
 // @return @1 ServerOption 服务器配置选项
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
-	return func(o *serverOptions) { o.authorizeTimeout = authorizeTimeout }
+	return func(o *serverOptions) {
+		if authorizeTimeout >= 0 {
+			o.authorizeTimeout = authorizeTimeout
+		} else {
+			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerCloseTimeout 设置优雅关闭超时时间
+// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
+// @param closeTimeout time.Duration 优雅关闭超时时间
+// @return @1 ServerOption 服务器配置选项
+func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		if closeTimeout >= 0 {
+			o.closeTimeout = closeTimeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithServerMtu 设置最大传输单元

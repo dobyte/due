@@ -25,9 +25,10 @@ type clientConn struct {
 	conn              *kcp.UDPSession             // UDP源连接
 	state             atomic.Int32                // 连接状态
 	cli               *client                     // 客户端
-	wg1               *sync.WaitGroup             // 读等待组
-	wg2               *sync.WaitGroup             // 写等待组
+	wg1               sync.WaitGroup              // 读等待组
+	wg2               sync.WaitGroup              // 写等待组
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
+	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
 	netBuffers        net.Buffers                 // 待写入的字节切片集合
 	lastHeartbeatTime atomic.Int64                // 上次心跳时间
 }
@@ -47,11 +48,11 @@ func newClientConn(cli *client, conn *kcp.UDPSession) network.Conn {
 	c.conn = conn
 	c.cli = cli
 	c.state.Store(int32(network.ConnOpened))
-	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
+	c.dueBuffers = make([]buffer.Buffer, 0, maxBatchWriteNum)
+	c.netBuffers = make(net.Buffers, 0, 2*maxBatchWriteNum)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.wg1 = &sync.WaitGroup{}
 	c.wg1.Go(func() { c.read(conn) })
-	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
 
 	if c.cli.opts.mtu > 0 {
@@ -255,7 +256,8 @@ func (c *clientConn) checkState() error {
 }
 
 // graceClose 优雅关闭
-// 向写队列写入关闭信号，等待队列排空后关闭连接，便于尽量下发完已缓冲的消息
+// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
+// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
 // @return @1 error 连接非打开态或关闭过程中出错时返回的错误
 func (c *clientConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
@@ -267,11 +269,20 @@ func (c *clientConn) graceClose() error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	err := c.queue.Write(buffer.NewBytes(nil))
+	conn := c.conn
+	q := c.queue
+	err := q.Write(buffer.NewBytes(nil))
 	c.rw.RUnlock()
 
 	if err == nil {
-		c.queue.Wait()
+		if closeTimeout := c.cli.opts.closeTimeout; closeTimeout > 0 {
+			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
+			q.Wait()
+			timer.Stop()
+		} else {
+			q.Wait()
+		}
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
@@ -282,20 +293,22 @@ func (c *clientConn) graceClose() error {
 }
 
 // forceClose 强制关闭
-// 直接切换连接状态为关闭并执行关闭操作，不等待队列排空
-// @return @1 error 连接已处于关闭态或关闭过程中出错时返回的错误
+// 立即切换状态为关闭并关闭连接，不等待写队列排空
+// @return @1 error 连接已处于关闭态时返回的错误
 func (c *clientConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doClose()
+	return c.doClose(true)
 }
 
 // doClose 执行关闭操作
-// 关闭写队列，等待写协程退出后关闭底层连接，并触发断开hook函数
-// @return @1 error 连接已关闭或关闭底层连接失败时返回的错误
-func (c *clientConn) doClose() error {
+// 关闭写队列，等待读写协程退出后关闭KCP连接，最后触发断开hook；
+// force 为 true 时先关闭KCP连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
+// @param force ...bool 是否强制关闭
+// @return @1 error 关闭KCP连接时的错误
+func (c *clientConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
 		c.rw.Unlock()
@@ -307,9 +320,15 @@ func (c *clientConn) doClose() error {
 	c.conn = nil
 	c.rw.Unlock()
 
-	c.wg2.Wait()
+	var err error
 
-	err := conn.Close()
+	if len(force) > 0 && force[0] {
+		err = conn.Close()
+		c.wg2.Wait()
+	} else {
+		c.wg2.Wait()
+		err = conn.Close()
+	}
 
 	c.wg1.Wait()
 
@@ -378,6 +397,8 @@ func (c *clientConn) read(conn *kcp.UDPSession) {
 
 			if c.cli.receiveHandler != nil {
 				c.cli.receiveHandler(c, buf)
+			} else {
+				buf.Release()
 			}
 		}
 	}
@@ -402,7 +423,7 @@ func (c *clientConn) write(conn *kcp.UDPSession) {
 				return
 			}
 
-			c.doWrite(conn, buf)
+			c.doBatchWrite(conn, buf)
 		case t, ok := <-tickerC:
 			if !ok {
 				return
@@ -415,44 +436,74 @@ func (c *clientConn) write(conn *kcp.UDPSession) {
 	}
 }
 
-// doWrite 执行写入操作
-// 判断是否为关闭信号，否则将消息字节写入底层连接并释放缓冲区
+// doBatchWrite 批量写入消息
+// 从写队列批量取出任务，收集字节切片后通过WriteBuffers一次性下发，减少系统调用次数
 // @param conn *kcp.UDPSession KCP连接
-// @param buf buffer.Buffer 待写入的消息缓冲
-func (c *clientConn) doWrite(conn *kcp.UDPSession, buf buffer.Buffer) {
-	closeSig := buf.Len() == 0
+// @param first buffer.Buffer 首个已取出的任务
+func (c *clientConn) doBatchWrite(conn *kcp.UDPSession, first buffer.Buffer) {
+	closeSig := first.Len() == 0
 
 	c.queue.Done(closeSig)
 
 	if closeSig {
-		buf.Release()
+		first.Release()
 		return
 	}
 
-	var err error
+	c.dueBuffers = c.dueBuffers[:0]
+	c.dueBuffers = append(c.dueBuffers, first)
 
-	switch n := buf.Nodes(); n {
-	case 0:
-		// ignore
-	case 1:
-		_, err = conn.Write(buf.Bytes())
-	case 2:
-		buf.VisitBytes(func(b []byte) bool {
-			c.netBuffers = append(c.netBuffers, b)
+	for len(c.dueBuffers) < maxBatchWriteNum {
+		select {
+		case buf, ok := <-c.queue.Read():
+			if !ok {
+				goto OVER
+			}
+
+			closeSig = buf.Len() == 0
+
+			c.queue.Done(closeSig)
+
+			if closeSig {
+				buf.Release()
+				goto OVER
+			}
+
+			c.dueBuffers = append(c.dueBuffers, buf)
+		default:
+			goto OVER
+		}
+	}
+
+OVER:
+	c.netBuffers = c.netBuffers[:0]
+
+	for _, buf := range c.dueBuffers {
+		buf.VisitBytes(func(bytes []byte) bool {
+			c.netBuffers = append(c.netBuffers, bytes)
 			return true
 		})
-
-		_, err = conn.WriteBuffers(c.netBuffers)
-
-		c.netBuffers = c.netBuffers[:0]
 	}
 
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		log.Warnf("write message error: %v", err)
-		taskpool.Add(func() { c.forceClose() })
+	if len(c.netBuffers) > 0 {
+		if c.cli.opts.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
+		}
+
+		if _, err := conn.WriteBuffers(c.netBuffers); err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				log.Warnf("write message error: %v", err)
+				taskpool.Add(func() { c.forceClose() })
+			}
+		}
 	}
 
-	buf.Release()
+	for _, buf := range c.dueBuffers {
+		buf.Release()
+	}
+
+	c.netBuffers = c.netBuffers[:0]
+	c.dueBuffers = c.dueBuffers[:0]
 }
 
 // doHandleHeartbeat 处理心跳
@@ -468,6 +519,10 @@ func (c *clientConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 
 		return false
 	} else {
+		if c.cli.opts.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(c.cli.opts.writeTimeout))
+		}
+
 		hb := packet.PackHeartbeat()
 
 		if _, err := conn.Write(hb.Bytes()); err != nil {

@@ -14,6 +14,7 @@ const (
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+	defaultClientCloseTimeout      = "0s"
 	defaultClientMtu               = 1400
 	defaultClientWriteDelay        = true
 )
@@ -25,10 +26,12 @@ var (
 
 const (
 	defaultClientDialAddrKey          = "etc.network.kcp.client.addr"
-	defaultClientDialTimeoutKey       = "etc.network.kcp.client.timeout"
+	defaultClientDialTimeoutKey       = "etc.network.kcp.client.dialTimeout"
+	defaultClientDialTimeoutLegacyKey = "etc.network.kcp.client.timeout"
 	defaultClientHeartbeatIntervalKey = "etc.network.kcp.client.heartbeatInterval"
 	defaultClientWriteTimeoutKey      = "etc.network.kcp.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.kcp.client.writeQueueSize"
+	defaultClientCloseTimeoutKey      = "etc.network.kcp.client.closeTimeout"
 	defaultClientMtuKey               = "etc.network.kcp.client.mtu"
 	defaultClientNoDelayKey           = "etc.network.kcp.client.noDelay"
 	defaultClientAckNoDelayKey        = "etc.network.kcp.client.ackNoDelay"
@@ -46,6 +49,7 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写入超时时间，默认无超时
 	writeQueueSize    int           // 写入队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
 	mtu               int           // 最大传输单元，默认不设置
 	noDelay           []int         // 是否开启无延迟模式，默认不设置
 	ackNoDelay        bool          // 是否开启ACK延迟确认，默认不设置
@@ -60,9 +64,15 @@ type clientOptions struct {
 // @return @1 *clientOptions 客户端配置
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
-	opts.addr = etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String()
 
-	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, defaultClientDialTimeout).Duration(); dialTimeout > 0 {
+	if addr := etc.Get(defaultClientDialAddrKey, defaultClientDialAddr).String(); addr != "" {
+		opts.addr = addr
+	} else {
+		opts.addr = defaultClientDialAddr
+	}
+
+	// 优先读取对齐TCP命名的新键dialTimeout，缺省时回退到历史键timeout以保持兼容
+	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, etc.Get(defaultClientDialTimeoutLegacyKey, defaultClientDialTimeout)).Duration(); dialTimeout > 0 {
 		opts.dialTimeout = dialTimeout
 	} else {
 		opts.dialTimeout = xconv.Duration(defaultClientDialTimeout)
@@ -80,7 +90,18 @@ func defaultClientOptions() *clientOptions {
 		opts.writeQueueSize = defaultClientWriteQueueSize
 	}
 
-	opts.heartbeatInterval = etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration()
+	if heartbeatInterval := etc.Get(defaultClientHeartbeatIntervalKey, defaultClientHeartbeatInterval).Duration(); heartbeatInterval >= 0 {
+		opts.heartbeatInterval = heartbeatInterval
+	} else {
+		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
+	}
+
+	if closeTimeout := etc.Get(defaultClientCloseTimeoutKey, defaultClientCloseTimeout).Duration(); closeTimeout >= 0 {
+		opts.closeTimeout = closeTimeout
+	} else {
+		opts.closeTimeout = xconv.Duration(defaultClientCloseTimeout)
+	}
+
 	opts.mtu = etc.Get(defaultClientMtuKey, defaultClientMtu).Int()
 	opts.noDelay = etc.Get(defaultClientNoDelayKey, defaultClientNoDelay).Ints()
 	opts.ackNoDelay = etc.Get(defaultClientAckNoDelayKey).Bool()
@@ -96,7 +117,13 @@ func defaultClientOptions() *clientOptions {
 // @param addr string 拨号地址
 // @return @1 ClientOption 客户端配置选项
 func WithClientDialAddr(addr string) ClientOption {
-	return func(o *clientOptions) { o.addr = addr }
+	return func(o *clientOptions) {
+		if addr != "" {
+			o.addr = addr
+		} else {
+			log.Warnf("the specified addr is empty and will be ignored")
+		}
+	}
 }
 
 // WithClientDialTimeout 设置拨号超时时间
@@ -116,7 +143,13 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 // @param heartbeatInterval time.Duration 心跳间隔时间
 // @return @1 ClientOption 客户端配置选项
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
-	return func(o *clientOptions) { o.heartbeatInterval = heartbeatInterval }
+	return func(o *clientOptions) {
+		if heartbeatInterval >= 0 {
+			o.heartbeatInterval = heartbeatInterval
+		} else {
+			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithClientMtu 设置最大传输单元
@@ -127,10 +160,16 @@ func WithClientMtu(mtu int) ClientOption {
 }
 
 // WithClientNoDelay 设置是否开启无延迟模式
-// @param noDelay int 是否开启无延迟模式的取值
+// @param noDelay []int 无延迟模式参数，须为4元组(nodelay, interval, resend, nc)
 // @return @1 ClientOption 客户端配置选项
-func WithClientNoDelay(noDelay int) ClientOption {
-	return func(o *clientOptions) { o.noDelay = append(o.noDelay, noDelay) }
+func WithClientNoDelay(noDelay []int) ClientOption {
+	return func(o *clientOptions) {
+		if len(noDelay) == 4 {
+			o.noDelay = noDelay
+		} else {
+			log.Warnf("the specified noDelay must be a 4-tuple and will be ignored")
+		}
+	}
 }
 
 // WithClientAckNoDelay 设置是否开启ACK延迟确认
@@ -148,10 +187,16 @@ func WithClientWriteDelay(writeDelay bool) ClientOption {
 }
 
 // WithClientWindowSize 设置窗口大小
-// @param windowSize int 窗口大小取值
+// @param windowSize []int 窗口大小取值，须为2元组(sndwnd, rcvwnd)
 // @return @1 ClientOption 客户端配置选项
-func WithClientWindowSize(windowSize int) ClientOption {
-	return func(o *clientOptions) { o.windowSize = append(o.windowSize, windowSize) }
+func WithClientWindowSize(windowSize []int) ClientOption {
+	return func(o *clientOptions) {
+		if len(windowSize) == 2 {
+			o.windowSize = windowSize
+		} else {
+			log.Warnf("the specified windowSize must be a 2-tuple and will be ignored")
+		}
+	}
 }
 
 // WithClientReadBuffer 设置读取缓冲区大小
@@ -190,6 +235,20 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 			o.writeQueueSize = writeQueueSize
 		} else {
 			log.Warnf("the specified writeQueueSize is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientCloseTimeout 设置优雅关闭超时时间
+// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
+// @param closeTimeout time.Duration 优雅关闭超时时间
+// @return @1 ClientOption 客户端配置选项
+func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if closeTimeout >= 0 {
+			o.closeTimeout = closeTimeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }
