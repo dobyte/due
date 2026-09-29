@@ -17,6 +17,7 @@ const (
 	defaultServerHeartbeatInterval  = "10s"
 	defaultServerHeartbeatMechanism = "resp"
 	defaultServerAuthorizeTimeout   = "0s"
+	defaultServerCloseTimeout       = "0s"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 	defaultServerHeartbeatIntervalKey   = "etc.network.tcp.server.heartbeatInterval"
 	defaultServerHeartbeatMechanismKey  = "etc.network.tcp.server.heartbeatMechanism"
 	defaultServerAuthorizeTimeoutKey    = "etc.network.tcp.server.authorizeTimeout"
+	defaultServerCloseTimeoutKey        = "etc.network.tcp.server.closeTimeout"
 	defaultServerEnableProxyProtocolKey = "etc.network.tcp.server.enableProxyProtocol"
 )
 
@@ -53,6 +55,7 @@ type serverOptions struct {
 	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
 	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
 	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
+	closeTimeout        time.Duration      // 优雅关闭超时时间，默认0s，不限制
 	enableProxyProtocol bool               // 是否启用ProxyProtocol，默认false
 }
 
@@ -112,6 +115,12 @@ func defaultServerOptions() *serverOptions {
 		opts.authorizeTimeout = authorizeTimeout
 	} else {
 		opts.authorizeTimeout = xconv.Duration(defaultServerAuthorizeTimeout)
+	}
+
+	if closeTimeout := etc.Get(defaultServerCloseTimeoutKey, defaultServerCloseTimeout).Duration(); closeTimeout >= 0 {
+		opts.closeTimeout = closeTimeout
+	} else {
+		opts.closeTimeout = xconv.Duration(defaultServerCloseTimeout)
 	}
 
 	return opts
@@ -231,6 +240,20 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 			o.authorizeTimeout = authorizeTimeout
 		} else {
 			log.Warnf("the specified authorizeTimeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithServerCloseTimeout 设置优雅关闭超时时间
+// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
+// @param closeTimeout time.Duration 优雅关闭超时时间
+// @return @1 ServerOption 服务器配置项
+func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		if closeTimeout >= 0 {
+			o.closeTimeout = closeTimeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }

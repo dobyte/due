@@ -76,24 +76,28 @@ func (c *client) Protocol() string {
 }
 
 // OnConnect 监听连接打开
+// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
 // @param handler network.ConnectHandler 连接打开处理函数
 func (c *client) OnConnect(handler network.ConnectHandler) {
 	c.connectHandler = handler
 }
 
 // OnDisconnect 监听连接关闭
+// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
 // @param handler network.DisconnectHandler 连接关闭处理函数
 func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
 }
 
 // OnHeartbeat 监听心跳
+// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
 // @param handler network.HeartbeatHandler 心跳处理函数
 func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 	c.heartbeatHandler = handler
 }
 
 // OnReceive 监听接收到消息
+// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
 // @param handler network.ReceiveHandler 消息接收处理函数
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler

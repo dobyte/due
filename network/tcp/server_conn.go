@@ -24,9 +24,10 @@ type serverConn struct {
 	state             atomic.Int32                // 连接状态
 	connMgr           *serverConnMgr              // 连接管理
 	rw                sync.RWMutex                // 锁
-	wg1               *sync.WaitGroup             // 读等待组
-	wg2               *sync.WaitGroup             // 写等待组
+	wg1               sync.WaitGroup              // 读等待组，随连接对象池复用
+	wg2               sync.WaitGroup              // 写等待组，随连接对象池复用
 	conn              net.Conn                    // TCP源连接
+	reader            *bufio.Reader               // 读取缓冲器，随连接对象池复用
 	queue             *queue.Queue[buffer.Buffer] // 消息队列
 	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
 	netBuffers        net.Buffers                 // 待写入的字节切片集合
@@ -120,13 +121,14 @@ func (c *serverConn) State() network.ConnState {
 }
 
 // Close 关闭连接
+// 连接关闭后连接对象将被回收复用，不应再使用其任何方法与属性（身份标识可能漂移）
 // @param force ...bool 是否强制关闭
 // @return @1 error 错误信息
 func (c *serverConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
-		return c.forceClose(true)
+		return c.forceClose()
 	} else {
-		return c.graceClose(true)
+		return c.graceClose()
 	}
 }
 
@@ -189,36 +191,56 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 }
 
 // init 初始化连接
-// 复用对象池中的连接对象，重置各项状态、创建读写协程并执行授权检查与连接钩子
+// 复用对象池中的连接对象，在写锁保护下完成状态重置、分片存储与读写协程启动，
+// 关闭路径与上一生命周期的延迟关闭任务均需获取锁，将被阻塞至初始化完成，
+// 避免连接对象在协程启动前被回收复用；服务器关闭过程中分片拒绝存储时初始化中止，
+// 由调用方归还连接对象并关闭底层连接
 // @param conn net.Conn TCP连接
-func (c *serverConn) init(conn net.Conn) {
+// @return @1 bool 是否初始化成功，服务器关闭过程中返回false
+func (c *serverConn) init(conn net.Conn) bool {
+	c.rw.Lock()
+
 	c.id = c.connMgr.cid.Add(1)
 	c.uid.Store(0)
-	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
 	c.conn = conn
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.authorizeTimer.Store(nil)
-	c.connMgr.storeConn(conn, c)
-	c.wg1 = &sync.WaitGroup{}
+
+	if !c.connMgr.storeConn(conn, c) {
+		// 分片已停止接入，复位状态并清理引用后中止初始化
+		c.state.Store(int32(network.ConnClosed))
+		c.conn = nil
+		c.queue = nil
+		c.rw.Unlock()
+		return false
+	}
+
 	c.wg1.Go(func() { c.read(conn) })
-	c.wg2 = &sync.WaitGroup{}
 	c.wg2.Go(func() { c.write(conn) })
+
+	c.rw.Unlock()
+
+	// 初始化完成前连接可能已被并发关闭，仅在连接仍处于打开状态时执行授权检查与连接钩子
+	if c.State() != network.ConnOpened {
+		return true
+	}
 
 	c.checkAuthorize(conn)
 
 	if c.connMgr.server.connectHandler != nil {
 		c.connMgr.server.connectHandler(c)
 	}
+
+	return true
 }
 
 // reset 重置连接
 // 清空连接对象内的引用与状态，以便归还对象池后安全复用
 func (c *serverConn) reset() {
-	c.wg1 = nil
-	c.wg2 = nil
 	c.queue = nil
+	c.reader.Reset(nil)
 	c.attr.values.Clear()
 	c.dueBuffers = c.dueBuffers[:0]
 	c.netBuffers = c.netBuffers[:0]
@@ -240,17 +262,19 @@ func (c *serverConn) checkState() error {
 }
 
 // checkAuthorize 授权检查
-// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接指针，
+// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接ID与连接指针，
 // 避免连接被回收复用后误关闭新连接
 // @param conn net.Conn 当前TCP连接
 func (c *serverConn) checkAuthorize(conn net.Conn) {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
+		id := c.id
+
 		if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 			if c.UID() != 0 {
 				return
 			}
 
-			c.recycleClose(conn)
+			c.recycleClose(conn, id)
 		})); timer != nil {
 			timer.Stop()
 		}
@@ -268,10 +292,10 @@ func (c *serverConn) uncheckAuthorize() {
 }
 
 // graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
+// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
+// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
 // @return @1 error 连接非打开态或关闭过程中出错时返回的错误
-func (c *serverConn) graceClose(isNeedRecycle bool) error {
+func (c *serverConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
 	}
@@ -283,53 +307,63 @@ func (c *serverConn) graceClose(isNeedRecycle bool) error {
 		c.rw.RUnlock()
 		return errors.ErrConnectionClosed
 	}
-	err := c.queue.Write(buffer.NewBytes(nil))
+	conn := c.conn
+	q := c.queue
+	err := q.Write(buffer.NewBytes(nil))
 	c.rw.RUnlock()
 
 	if err == nil {
-		c.queue.Wait()
+		if closeTimeout := c.connMgr.server.opts.closeTimeout; closeTimeout > 0 {
+			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
+			q.Wait()
+			timer.Stop()
+		} else {
+			q.Wait()
+		}
 	}
 
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
 	}
 
-	return c.doClose(isNeedRecycle)
+	return c.doClose()
 }
 
 // forceClose 强制关闭
 // 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
 // @return @1 error 连接已处于关闭态时返回的错误
-func (c *serverConn) forceClose(isNeedRecycle bool) error {
+func (c *serverConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
 	}
 
 	c.uncheckAuthorize()
 
-	return c.doClose(isNeedRecycle)
+	return c.doClose(true)
 }
 
 // recycleClose 若当前连接仍为指定连接则强制关闭
-// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接可能已被回收复用，
-// 因此需比对 TCP 连接指针，避免误关闭新连接
+// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接对象可能已被回收复用，
+// 且TCP连接对象地址可能被运行时复用，因此需同时比对连接ID与TCP连接指针，避免误关闭新连接
 // @param conn net.Conn 触发关闭时的TCP连接
-func (c *serverConn) recycleClose(conn net.Conn) {
+// @param id int64 触发关闭时的连接ID
+func (c *serverConn) recycleClose(conn net.Conn, id int64) {
 	c.rw.RLock()
-	match := c.conn == conn
+	match := c.id == id && c.conn == conn
 	c.rw.RUnlock()
 
 	if match {
-		c.forceClose(true)
+		c.forceClose()
 	}
 }
 
 // doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭TCP连接，触发断开hook，并按需归还连接对象
-// @param isNeedRecycle bool 是否在关闭后将连接对象归还连接池
+// 关闭写队列，等待读写协程退出后关闭TCP连接，触发断开hook，并将连接对象归还连接池；
+// force 为 true 时先关闭TCP连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
+// @param force ...bool 是否强制关闭
 // @return @1 error 关闭TCP连接时的错误
-func (c *serverConn) doClose(isNeedRecycle bool) error {
+func (c *serverConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
 		c.rw.Unlock()
@@ -341,9 +375,15 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 	c.conn = nil
 	c.rw.Unlock()
 
-	c.wg2.Wait()
+	var err error
 
-	err := conn.Close()
+	if len(force) > 0 && force[0] {
+		err = conn.Close()
+		c.wg2.Wait()
+	} else {
+		c.wg2.Wait()
+		err = conn.Close()
+	}
 
 	c.wg1.Wait()
 
@@ -355,9 +395,7 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 		c.connMgr.server.disconnectHandler(c)
 	}
 
-	if isNeedRecycle {
-		c.connMgr.recycleConn(conn)
-	}
+	c.connMgr.recycleConn(conn)
 
 	return err
 }
@@ -368,13 +406,16 @@ func (c *serverConn) doClose(isNeedRecycle bool) error {
 func (c *serverConn) read(conn net.Conn) {
 	var (
 		index  = 0
-		reader = bufio.NewReaderSize(conn, c.connMgr.server.opts.readBufferSize)
+		id     = c.id
+		reader = c.reader
 	)
+
+	reader.Reset(conn)
 
 	for {
 		isHeartbeat, heartbeatTime, buf, err := packet.Read(reader)
 		if err != nil {
-			taskpool.Add(func() { c.recycleClose(conn) })
+			taskpool.Add(func() { c.recycleClose(conn, id) })
 			return
 		}
 
@@ -432,6 +473,8 @@ func (c *serverConn) read(conn net.Conn) {
 
 			if c.connMgr.server.receiveHandler != nil {
 				c.connMgr.server.receiveHandler(c, buf)
+			} else {
+				buf.Release()
 			}
 		}
 	}
@@ -526,7 +569,10 @@ OVER:
 		if _, err := c.netBuffers.WriteTo(conn); err != nil {
 			if !errors.Is(err, net.ErrClosed) {
 				log.Warnf("write message error: %v", err)
-				taskpool.Add(func() { c.recycleClose(conn) })
+
+				id := c.id
+
+				taskpool.Add(func() { c.recycleClose(conn, id) })
 			}
 		}
 	}
@@ -554,7 +600,9 @@ func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.connMgr.server.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
 
-		taskpool.Add(func() { c.recycleClose(conn) })
+		id := c.id
+
+		taskpool.Add(func() { c.recycleClose(conn, id) })
 
 		return false
 	} else {

@@ -17,6 +17,7 @@ const (
 	defaultClientWriteTimeout      = "0s"
 	defaultClientWriteQueueSize    = 1024
 	defaultClientHeartbeatInterval = "10s"
+	defaultClientCloseTimeout      = "0s"
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 	defaultClientWriteTimeoutKey      = "etc.network.tcp.client.writeTimeout"
 	defaultClientWriteQueueSizeKey    = "etc.network.tcp.client.writeQueueSize"
 	defaultClientHeartbeatIntervalKey = "etc.network.tcp.client.heartbeatInterval"
+	defaultClientCloseTimeoutKey      = "etc.network.tcp.client.closeTimeout"
 )
 
 type ClientOption func(o *clientOptions)
@@ -40,6 +42,7 @@ type clientOptions struct {
 	writeTimeout      time.Duration // 写超时时间，默认无超时
 	writeQueueSize    int           // 写队列大小，默认1024
 	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
+	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
 }
 
 // defaultClientOptions 创建默认客户端配置
@@ -81,6 +84,12 @@ func defaultClientOptions() *clientOptions {
 		opts.heartbeatInterval = heartbeatInterval
 	} else {
 		opts.heartbeatInterval = xconv.Duration(defaultClientHeartbeatInterval)
+	}
+
+	if closeTimeout := etc.Get(defaultClientCloseTimeoutKey, defaultClientCloseTimeout).Duration(); closeTimeout >= 0 {
+		opts.closeTimeout = closeTimeout
+	} else {
+		opts.closeTimeout = xconv.Duration(defaultClientCloseTimeout)
 	}
 
 	caFile := etc.Get(defaultClientCAFileKey).String()
@@ -198,6 +207,20 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 			o.heartbeatInterval = heartbeatInterval
 		} else {
 			log.Warnf("the specified heartbeatInterval is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithClientCloseTimeout 设置优雅关闭超时时间
+// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
+// @param closeTimeout time.Duration 优雅关闭超时时间
+// @return @1 ClientOption 客户端配置项
+func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		if closeTimeout >= 0 {
+			o.closeTimeout = closeTimeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }

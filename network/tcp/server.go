@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -43,9 +44,21 @@ func NewServer(opts ...ServerOption) network.Server {
 }
 
 // Addr 获取监听地址
+// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
 // @return @1 string 监听地址
 func (s *server) Addr() string {
-	return s.opts.addr
+	s.mu.Lock()
+
+	if s.listener != nil {
+		addr := s.listener.Addr().String()
+		s.mu.Unlock()
+		return addr
+	}
+
+	addr := s.opts.addr
+	s.mu.Unlock()
+
+	return addr
 }
 
 // Start 启动服务器
@@ -74,14 +87,24 @@ func (s *server) Start() error {
 // Stop 关闭服务器
 // @return @1 error 错误信息
 func (s *server) Stop() error {
+	return s.stop(nil)
+}
+
+// stop 关闭服务器
+// 关闭监听器并关闭所有连接；ln 非空时仅当其仍为当前监听器才执行关闭，
+// 避免旧的服务协程退出时误关重启后的新监听器
+// @param ln net.Listener 期望关闭的监听器，为nil时不做校验
+// @return @1 error 服务器已关闭或监听器不匹配时返回的错误
+func (s *server) stop(ln net.Listener) error {
 	s.mu.Lock()
-	if s.listener != nil {
-		s.listener.Close()
-		s.listener = nil
-	} else {
+
+	if s.listener == nil || (ln != nil && s.listener != ln) {
 		s.mu.Unlock()
 		return errors.ErrServerClosed
 	}
+
+	_ = s.listener.Close()
+	s.listener = nil
 	s.mu.Unlock()
 
 	s.connMgr.close()
@@ -100,36 +123,42 @@ func (s *server) Protocol() string {
 }
 
 // OnStart 监听服务器启动
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.StartHandler 服务器启动处理函数
 func (s *server) OnStart(handler network.StartHandler) {
 	s.startHandler = handler
 }
 
 // OnStop 监听服务器关闭
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.CloseHandler 服务器关闭处理函数
 func (s *server) OnStop(handler network.CloseHandler) {
 	s.stopHandler = handler
 }
 
 // OnConnect 监听连接打开
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.ConnectHandler 连接打开处理函数
 func (s *server) OnConnect(handler network.ConnectHandler) {
 	s.connectHandler = handler
 }
 
 // OnDisconnect 监听连接关闭
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.DisconnectHandler 连接关闭处理函数
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
 }
 
 // OnHeartbeat 监听心跳
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.HeartbeatHandler 心跳处理函数
 func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 	s.heartbeatHandler = handler
 }
 
 // OnReceive 监听接收到消息
+// 须在 Start 之前注册，Start 之后注册存在数据竞争
 // @param handler network.ReceiveHandler 消息接收处理函数
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
@@ -169,12 +198,17 @@ func (s *server) init() error {
 		s.listener = &proxyproto.Listener{Listener: s.listener}
 	}
 
+	s.connMgr.open()
+
 	return nil
 }
 
 // serve 等待连接
-// 循环接受TCP连接并分配到独立协程处理，服务器关闭时结束
+// 循环接受TCP连接并分配到独立协程处理；临时性错误（如文件描述符耗尽）按指数退避重试，
+// 避免瞬时抖动导致服务器退出，服务器关闭或发生不可恢复错误时结束
 func (s *server) serve(ln net.Listener) {
+	var tempDelay time.Duration
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -182,17 +216,42 @@ func (s *server) serve(ln net.Listener) {
 				break
 			}
 
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+
+				if maxDelay := time.Second; tempDelay > maxDelay {
+					tempDelay = maxDelay
+				}
+
+				log.Warnf("tcp accept temporary error: %v, retrying in %v", err, tempDelay)
+
+				time.Sleep(tempDelay)
+
+				continue
+			}
+
 			log.Warnf("tcp accept error: %v", err)
 			break
 		}
 
+		tempDelay = 0
+
 		setNoDelay(conn)
 
 		if err = s.connMgr.allocateConn(conn); err != nil {
-			log.Errorf("connection allocate error: %v", err)
+			if errors.Is(err, errors.ErrServerClosed) {
+				log.Debugf("connection allocate error: %v", err)
+			} else {
+				log.Errorf("connection allocate error: %v", err)
+			}
 			_ = conn.Close()
 		}
 	}
 
-	_ = s.Stop()
+	_ = s.stop(ln)
 }
