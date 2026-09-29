@@ -76,6 +76,11 @@ func (a *Actor) Proxy() *Proxy {
 	return a.scheduler.node.proxy
 }
 
+// Processor 获取处理器
+func (a *Actor) Processor() Processor {
+	return a.processor
+}
+
 // Invoke 调用函数（Actor内线程安全）
 // 任务写入Actor的任务队列串行执行；阻塞模式下会等待函数执行完成
 // @param f func() 待调用的函数
