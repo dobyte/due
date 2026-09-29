@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/quic-go/quic-go"
 )
 
@@ -16,10 +17,11 @@ type managedConn struct {
 type partition struct {
 	mu          sync.Mutex
 	connections map[int64]managedConn
+	_           [48]byte // 填充至64字节缓存行，避免相邻分片伪共享
 }
 
-// serverConnMgr tracks pending streams and active connections, reusing server
-// connection objects through a sync.Pool.
+// serverConnMgr 服务器连接管理器
+// 跟踪挂起的流与活跃的连接，并通过 sync.Pool 复用服务器连接对象
 type serverConnMgr struct {
 	server     *server
 	cid        atomic.Int64
@@ -39,12 +41,20 @@ func newServerConnMgr(s *server) *serverConnMgr {
 		m.partitions[i].connections = make(map[int64]managedConn)
 	}
 	m.connPool = sync.Pool{New: func() any {
-		return &serverConn{attr: &attr{}, connMgr: m}
+		return &serverConn{
+			attr:       &attr{},
+			connMgr:    m,
+			dueBuffers: make([]buffer.Buffer, 0, maxBatchWriteNum),
+		}
 	}}
 	return m
 }
 
-// reserve allocates a connection ID and accounts for a pending stream.
+// reserve 预留连接
+// 分配连接ID并为挂起的流计数；管理器已关闭或达到最大连接数时预留失败
+// @param qc *quic.Conn QUIC连接
+// @return @1 int64 预留的连接ID
+// @return @2 bool 是否预留成功
 func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 	for {
 		total := m.total.Load()
@@ -68,26 +78,50 @@ func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 	return id, true
 }
 
-// allocateConn links a pooled connection to a reserved slot and initializes it.
+// allocateConn 分配连接
+// 将池化连接对象挂接到预留条目上并完成初始化。
+// 初始化中止（管理器已关闭或预留条目已被清理）时归还连接对象并返回nil，
+// 预留条目由 close/remove 路径负责清理与计数回退，底层连接由调用方关闭
+// @param id int64 预留的连接ID
+// @param qc *quic.Conn QUIC连接
+// @param stream *quic.Stream 双向流
+// @return @1 *serverConn 连接对象，分配失败时返回nil
 func (m *serverConnMgr) allocateConn(id int64, qc *quic.Conn, stream *quic.Stream) *serverConn {
-	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
-	p.mu.Lock()
-	entry, ok := p.connections[id]
-	if !ok || m.closed.Load() {
-		p.mu.Unlock()
+	c := m.connPool.Get().(*serverConn)
+
+	if !c.init(id, qc, stream) {
+		m.connPool.Put(c)
 		return nil
 	}
-	c := m.connPool.Get().(*serverConn)
-	entry.conn = c
-	p.connections[id] = entry
-	p.mu.Unlock()
-
-	c.init(id, qc, stream)
 
 	return c
 }
 
-// remove deletes a pending slot whose stream failed to be accepted.
+// linkConn 将池化连接对象挂接到预留条目上
+// 仅在条目存在且管理器未关闭时挂接成功；须由连接对象在持有自身写锁时调用，
+// 挂接成功后关闭路径即可感知该连接对象，与初始化严格串行
+// @param id int64 预留的连接ID
+// @param c *serverConn 池化连接对象
+// @return @1 bool 是否挂接成功
+func (m *serverConnMgr) linkConn(id int64, c *serverConn) bool {
+	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	entry, ok := p.connections[id]
+	if !ok || m.closed.Load() {
+		return false
+	}
+
+	entry.conn = c
+	p.connections[id] = entry
+
+	return true
+}
+
+// remove 移除预留条目
+// 删除流接入失败的预留条目并回退计数
+// @param id int64 预留的连接ID
 func (m *serverConnMgr) remove(id int64) {
 	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
 	p.mu.Lock()
@@ -98,7 +132,9 @@ func (m *serverConnMgr) remove(id int64) {
 	p.mu.Unlock()
 }
 
-// recycleConn removes an active connection and returns its object to the pool.
+// recycleConn 回收连接
+// 移除活跃连接并将连接对象归还对象池
+// @param c *serverConn 连接对象
 func (m *serverConnMgr) recycleConn(c *serverConn) {
 	p := &m.partitions[uint64(c.id)%uint64(len(m.partitions))]
 	p.mu.Lock()
@@ -112,7 +148,8 @@ func (m *serverConnMgr) recycleConn(c *serverConn) {
 	m.connPool.Put(c)
 }
 
-// close stops all pending streams and active connections.
+// close 关闭连接管理器
+// 停止所有挂起的流与活跃的连接
 func (m *serverConnMgr) close() {
 	m.closeOnce.Do(func() {
 		m.closed.Store(true)
@@ -132,7 +169,7 @@ func (m *serverConnMgr) close() {
 				p.mu.Unlock()
 				for _, entry := range entries {
 					if entry.conn != nil {
-						entry.conn.forceClose(false)
+						_ = entry.conn.forceClose()
 					} else {
 						_ = entry.qc.CloseWithError(0, "server stopped")
 					}

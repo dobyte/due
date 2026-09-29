@@ -210,6 +210,8 @@ func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerO
 	return func(o *serverOptions) {
 		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
 			o.heartbeatMechanism = heartbeatMechanism
+		} else {
+			log.Warnf("the specified heartbeatMechanism is %v and will be ignored", heartbeatMechanism)
 		}
 	}
 }
@@ -240,12 +242,16 @@ func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerCloseTimeout sets the maximum graceful drain and retransmission period.
-// Values less than or equal to zero are ignored.
+// WithServerCloseTimeout 设置优雅关闭超时时间
+// 同时用作优雅关闭的排空等待上限与关闭后的重传驻留时长，小于等于0时忽略
+// @param timeout time.Duration 优雅关闭超时时间
+// @return @1 ServerOption 服务器配置项
 func WithServerCloseTimeout(timeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if timeout > 0 {
 			o.closeTimeout = timeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }

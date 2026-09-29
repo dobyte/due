@@ -191,12 +191,16 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	}
 }
 
-// WithClientCloseTimeout sets the maximum graceful drain and retransmission period.
-// Values less than or equal to zero are ignored.
+// WithClientCloseTimeout 设置优雅关闭超时时间
+// 同时用作优雅关闭的排空等待上限与关闭后的重传驻留时长，小于等于0时忽略
+// @param timeout time.Duration 优雅关闭超时时间
+// @return @1 ClientOption 客户端配置项
 func WithClientCloseTimeout(timeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if timeout > 0 {
 			o.closeTimeout = timeout
+		} else {
+			log.Warnf("the specified closeTimeout is less than zero and will be ignored")
 		}
 	}
 }
