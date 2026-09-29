@@ -107,14 +107,16 @@ func (t *Tasker) Close() {
 // Handle 处理任务
 // 先确认队列信号（哨兵任务触发队列挂起），再安全执行任务函数并在执行完成后归还任务对象
 // @param tk *task 待处理的任务，为nil表示结束信号
-func (t *Tasker) Handle(tk *task) {
+func (t *Tasker) Handle(tk *task, isExecute bool) {
 	t.queue.Done(tk == nil)
 
 	if tk == nil {
 		return
 	}
 
-	xcall.Call(tk.fn)
+	if isExecute {
+		xcall.Call(tk.fn)
+	}
 
 	t.release(tk)
 }

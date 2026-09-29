@@ -90,11 +90,7 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 		xcall.Call(f)
 	} else {
 		a.rw.RLock()
-		wg, err := a.taskQueue.Commit(func() {
-			if a.started() {
-				f()
-			}
-		}, wait...)
+		wg, err := a.taskQueue.Commit(f, wait...)
 		a.rw.RUnlock()
 
 		if err != nil {
@@ -146,11 +142,7 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 
 		a.rw.RLock()
 		if a.started() {
-			_, err = a.taskQueue.Commit(func() {
-				if a.started() {
-					f()
-				}
-			})
+			_, err = a.taskQueue.Commit(f)
 		} else {
 			err = errors.ErrActorNotStarted
 		}
@@ -411,7 +403,7 @@ func (a *Actor) dispatch() {
 				return
 			}
 
-			a.taskQueue.Handle(task)
+			a.taskQueue.Handle(task, a.started())
 		}
 	}
 }

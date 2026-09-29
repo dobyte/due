@@ -202,7 +202,7 @@ func TestTasker_CommitAndHandle(t *testing.T) {
 		t.Fatal("the wait group is nil in the waiting mode")
 	}
 
-	tk.Handle(<-tk.Read())
+	tk.Handle(<-tk.Read(), true)
 
 	waitSignal(t, executed, "the task is not executed")
 
@@ -223,7 +223,7 @@ func TestTasker_CommitAndHandle(t *testing.T) {
 		t.Fatal("the wait group is not nil in the non-waiting mode")
 	}
 
-	tk.Handle(<-tk.Read())
+	tk.Handle(<-tk.Read(), true)
 
 	waitSignal(t, executed, "the task is not executed")
 
@@ -238,7 +238,7 @@ func TestTasker_Done(t *testing.T) {
 		t.Fatalf("done failed, err: %v", err)
 	}
 
-	tk.Handle(<-tk.Read())
+	tk.Handle(<-tk.Read(), true)
 
 	sig := make(chan struct{})
 	go func() {

@@ -218,7 +218,7 @@ func (n *Node) dispatch() {
 		select {
 		case tk, ok := <-tasks:
 			if ok {
-				n.tasker.Handle(tk)
+				n.tasker.Handle(tk, true)
 
 				if tk != nil {
 					n.doDoneWait()
