@@ -365,16 +365,16 @@ func (c *Client) runHookFunc(hook cluster.Hook) {
 // 打印组件信息
 // 输出客户端名称、编解码器、协议与加密器等基础信息
 func (c *Client) printInfo() {
-	infos := make([]string, 0)
-	infos = append(infos, fmt.Sprintf("Name: %s", c.Name()))
-	infos = append(infos, fmt.Sprintf("Codec: %s", c.opts.codec.Name()))
-	infos = append(infos, fmt.Sprintf("Protocol: %s", c.opts.client.Protocol()))
+	rows := make([]string, 0, 4)
+	rows = append(rows, fmt.Sprintf("Name: %s", c.Name()))
+	rows = append(rows, fmt.Sprintf("Codec: %s", c.opts.codec.Name()))
+	rows = append(rows, fmt.Sprintf("Protocol: %s", c.opts.client.Protocol()))
 
 	if c.opts.encryptor != nil {
-		infos = append(infos, fmt.Sprintf("Encryptor: %s", c.opts.encryptor.Name()))
+		rows = append(rows, fmt.Sprintf("Encryptor: %s", c.opts.encryptor.Name()))
 	} else {
-		infos = append(infos, "Encryptor: -")
+		rows = append(rows, "Encryptor: -")
 	}
 
-	info.PrintBoxInfo("Client", infos...)
+	info.Print("Client", rows...)
 }

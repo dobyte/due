@@ -346,26 +346,26 @@ func (m *Mesh) isShut() bool {
 // 打印组件信息
 // 输出微服务ID、名称、编解码器、定位器、注册器等基础信息
 func (m *Mesh) printInfo() {
-	infos := make([]string, 0, 7)
-	infos = append(infos, fmt.Sprintf("ID: %s", m.opts.id))
-	infos = append(infos, fmt.Sprintf("Name: %s", m.Name()))
-	infos = append(infos, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
+	rows := make([]string, 0, 7)
+	rows = append(rows, fmt.Sprintf("ID: %s", m.opts.id))
+	rows = append(rows, fmt.Sprintf("Name: %s", m.Name()))
+	rows = append(rows, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
 
 	if m.opts.locator != nil {
-		infos = append(infos, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
+		rows = append(rows, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
 	} else {
-		infos = append(infos, "Locator: -")
+		rows = append(rows, "Locator: -")
 	}
 
-	infos = append(infos, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
+	rows = append(rows, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
 
 	if m.opts.encryptor != nil {
-		infos = append(infos, fmt.Sprintf("Encryptor: %s", m.opts.encryptor.Name()))
+		rows = append(rows, fmt.Sprintf("Encryptor: %s", m.opts.encryptor.Name()))
 	} else {
-		infos = append(infos, "Encryptor: -")
+		rows = append(rows, "Encryptor: -")
 	}
 
-	infos = append(infos, fmt.Sprintf("Transporter: %s", m.opts.transporter.Name()))
+	rows = append(rows, fmt.Sprintf("Transporter: %s", m.opts.transporter.Name()))
 
-	info.PrintBoxInfo("Mesh", infos...)
+	info.Print("Mesh", rows...)
 }

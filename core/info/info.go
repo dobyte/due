@@ -2,22 +2,12 @@ package info
 
 import (
 	"fmt"
-	"runtime"
+	"io"
+	"os"
 	"strings"
-	"syscall"
-	"unicode/utf8"
 
-	"github.com/dobyte/due/v2/mode"
-	"github.com/dobyte/due/v2/utils/xtime"
+	"github.com/mattn/go-runewidth"
 )
-
-const logo = `
-                    ____  __  ________
-                   / __ \/ / / / ____/	
-                  / / / / / / / __/
-                 / /_/ / /_/ / /___
-                /_____/\____/_____/
-`
 
 const (
 	boxWidth          = 56
@@ -27,72 +17,82 @@ const (
 	rightTopBorder    = "┐"
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
-	website           = "https://github.com/dobyte/due"
-	version           = "v2.6.0"
-	global            = "Global"
+
+	// maxContentWidth 内容区域的最大显示宽度（列）
+	// 盒子总宽度减去左右边框各 1 列，再减去内容前预留的 1 个空格
+	maxContentWidth = boxWidth - 3
 )
 
-func PrintFrameworkInfo() {
-	fmt.Println(strings.TrimSuffix(strings.TrimPrefix(logo, "\n"), "\n"))
-	PrintBoxInfo("",
-		fmt.Sprintf("[Website] %s", website),
-		fmt.Sprintf("[Version] %s", version),
-	)
+// widthCondition 用于计算终端显示宽度
+// 显式关闭东亚宽度模式，使 box-drawing 等 Ambiguous 字符按 1 列计算，
+// 同时中文等 Wide/Fullwidth 字符仍按 2 列计算
+var widthCondition = &runewidth.Condition{
+	EastAsianWidth:     false,
+	StrictEmojiNeutral: true,
 }
 
-func PrintGlobalInfo() {
-	PrintBoxInfo(global,
-		fmt.Sprintf("Go: %s", "v"+strings.TrimPrefix(runtime.Version(), "go")),
-		fmt.Sprintf("PID: %d", syscall.Getpid()),
-		fmt.Sprintf("Mode: %s", mode.GetMode()),
-		fmt.Sprintf("Time: %s", xtime.Now()),
-	)
+// Print 打印分组信息到标准输出
+// @param name string 分组标题
+// @param rows ...string 分组内容
+func Print(name string, rows ...string) {
+	Fprint(os.Stdout, name, rows...)
 }
 
-func PrintBoxInfo(name string, infos ...string) {
-	fmt.Println(buildTopBorder(name))
-	for _, info := range infos {
-		fmt.Println(buildRowInfo(info))
+// Fprint 将分组信息写入指定 writer
+// @param w io.Writer 输出目标
+// @param name string 分组标题
+// @param rows ...string 分组内容
+func Fprint(w io.Writer, name string, rows ...string) {
+	builder := &strings.Builder{}
+	builder.WriteString(buildTopBorder(name))
+	builder.WriteString("\n")
+	for _, row := range rows {
+		builder.WriteString(buildRowInfo(row))
+		builder.WriteString("\n")
 	}
-	fmt.Println(buildBottomBorder())
+	builder.WriteString(buildBottomBorder())
+	builder.WriteString("\n")
+
+	fmt.Fprint(w, builder.String())
 }
 
-func MakeHorizontalLine() string {
-	return strings.Repeat(horizontalBorder, boxWidth-4)
+// HorizontalLine 返回一条用于填充行的水平分隔线
+func HorizontalLine() string {
+	return strings.Repeat(horizontalBorder, maxContentWidth)
 }
 
 func buildRowInfo(info string) string {
+	info = widthCondition.Truncate(info, maxContentWidth, "…")
+
 	str := fmt.Sprintf("%s %s", verticalBorder, info)
-	str += strings.Repeat(" ", boxWidth-utf8.RuneCountInString(str)-1)
+	padding := max(0, boxWidth-widthCondition.StringWidth(str)-1)
+	str += strings.Repeat(" ", padding)
 	str += verticalBorder
 	return str
 }
 
 func buildTopBorder(name ...string) string {
-	full := boxWidth - strLen(leftTopBorder) - strLen(rightTopBorder) - strLen(name...)
-	half := full / 2
-	str := leftTopBorder
-	str += strings.Repeat(horizontalBorder, half)
+	var nameStr string
 	if len(name) > 0 {
-		str += name[0]
+		nameStr = widthCondition.Truncate(name[0], maxContentWidth, "…")
 	}
-	str += strings.Repeat(horizontalBorder, full-half)
-	str += rightTopBorder
-	return str
+
+	full := max(0, boxWidth-2-widthCondition.StringWidth(nameStr))
+	half := full / 2
+
+	builder := &strings.Builder{}
+	builder.WriteString(leftTopBorder)
+	builder.WriteString(strings.Repeat(horizontalBorder, half))
+	builder.WriteString(nameStr)
+	builder.WriteString(strings.Repeat(horizontalBorder, full-half))
+	builder.WriteString(rightTopBorder)
+	return builder.String()
 }
 
 func buildBottomBorder() string {
-	full := boxWidth - strLen(leftBottomBorder) - strLen(rightBottomBorder)
-	str := leftBottomBorder
-	str += strings.Repeat(horizontalBorder, full)
-	str += rightBottomBorder
-	return str
-}
-
-func strLen(str ...string) int {
-	if len(str) > 0 {
-		return utf8.RuneCountInString(str[0])
-	} else {
-		return 0
-	}
+	builder := &strings.Builder{}
+	builder.WriteString(leftBottomBorder)
+	builder.WriteString(strings.Repeat(horizontalBorder, boxWidth-2))
+	builder.WriteString(rightBottomBorder)
+	return builder.String()
 }

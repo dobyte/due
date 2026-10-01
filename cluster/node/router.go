@@ -44,7 +44,6 @@ var (
 type Router struct {
 	node                *Node
 	mwPool              sync.Pool
-	rw                  sync.RWMutex
 	queue               *queue.Queue[*request]
 	routes              map[int32]*routeEntity
 	preRouteHandler     RouteHandler
@@ -65,7 +64,7 @@ type routeEntity struct {
 func newRouter(node *Node) *Router {
 	return &Router{
 		node:   node,
-		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout, &sync.RWMutex{}),
 		routes: make(map[int32]*routeEntity),
 		mwPool: sync.Pool{New: func() any { return &Middleware{} }},
 	}
@@ -185,10 +184,7 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 		req.ctx = context.Background()
 	}
 
-	r.rw.RLock()
-	err := r.queue.Write(req)
-	r.rw.RUnlock()
-	if err != nil {
+	if err := r.queue.Write(req); err != nil {
 		req.release()
 		return err
 	}
@@ -202,26 +198,14 @@ func (r *Router) receive() <-chan *request {
 	return r.queue.Read()
 }
 
-// 停止接收事件
-// 写入空请求以通知分发器路由队列已结束
-// @return @1 error 写入失败时返回的错误
-func (r *Router) done() error {
-	return r.queue.Write(nil, true)
-}
-
-// 等待所有事件完成
-func (r *Router) wait() {
-	r.queue.Wait()
-}
-
 // 关闭路由器
-// 关闭路由队列并清空已注册的路由处理器
 func (r *Router) close() {
-	r.rw.Lock()
 	r.queue.Close()
-	r.rw.Unlock()
+}
 
-	clear(r.routes)
+// 清理路由队列中的所有请求对象
+func (r *Router) clean() {
+	r.queue.Clean(func(req *request) { req.release() })
 }
 
 // 处理路由消息

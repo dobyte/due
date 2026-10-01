@@ -172,8 +172,8 @@ func (s *Server) Destroy() {
 // 打印服务启动信息
 // @param addr string 对外暴露的服务地址
 func (s *Server) printInfo(addr string) {
-	infos := make([]string, 0, 3)
-	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
+	rows := make([]string, 0, 5)
+	rows = append(rows, fmt.Sprintf("Name: %s", s.Name()))
 
 	var baseUrl string
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
@@ -182,23 +182,23 @@ func (s *Server) printInfo(addr string) {
 		baseUrl = fmt.Sprintf("http://%s", addr)
 	}
 
-	infos = append(infos, fmt.Sprintf("Url: %s", baseUrl))
+	rows = append(rows, fmt.Sprintf("Url: %s", baseUrl))
 
 	if s.opts.swagOpts.Enable {
-		infos = append(infos, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagOpts.BasePath, "/")))
+		rows = append(rows, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagOpts.BasePath, "/")))
 	}
 
 	if s.opts.registry != nil {
-		infos = append(infos, fmt.Sprintf("Registry: %s", s.opts.registry.Name()))
+		rows = append(rows, fmt.Sprintf("Registry: %s", s.opts.registry.Name()))
 	} else {
-		infos = append(infos, "Registry: -")
+		rows = append(rows, "Registry: -")
 	}
 
 	if s.opts.transporter != nil {
-		infos = append(infos, fmt.Sprintf("Transporter: %s", s.opts.transporter.Name()))
+		rows = append(rows, fmt.Sprintf("Transporter: %s", s.opts.transporter.Name()))
 	} else {
-		infos = append(infos, "Transporter: -")
+		rows = append(rows, "Transporter: -")
 	}
 
-	info.PrintBoxInfo("Http", infos...)
+	info.Print("Http", rows...)
 }

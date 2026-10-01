@@ -547,6 +547,9 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 }
 
 // Invoke 调用函数（线程安全）
+// 在节点分发协程内发起同步调用（wait=true）时将直接执行函数，避免等待自身所在的队列而死锁；
+// 注意不要在分发处理链路中跨队列同步等待（如节点任务执行中同步等待Actor任务完成，
+// 同时Actor任务又在同步等待节点任务），双方互等将形成跨队列循环等待死锁
 // @param f func() 待调用的函数
 // @param wait ...bool 是否等待调用完成，默认不等待
 // @return @1 error 节点关闭或任务入队失败时返回的错误

@@ -8,6 +8,7 @@ require (
 	github.com/bytedance/sonic v1.15.4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/jinzhu/copier v0.4.0
+	github.com/mattn/go-runewidth v0.0.30
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261
 	github.com/shamaton/msgpack/v2 v2.4.1
@@ -19,6 +20,7 @@ require (
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic/loader v0.5.2 // indirect
+	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/pretty v0.3.0 // indirect

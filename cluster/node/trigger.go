@@ -16,7 +16,6 @@ type EventHandler func(ctx Context)
 // Trigger 事件触发器
 type Trigger struct {
 	node   *Node
-	rw     sync.RWMutex
 	queue  *queue.Queue[*event]
 	events map[cluster.Event]EventHandler
 }
@@ -27,7 +26,7 @@ type Trigger struct {
 func newTrigger(node *Node) *Trigger {
 	return &Trigger{
 		node:   node,
-		queue:  queue.NewQueue[*event](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		queue:  queue.NewQueue[*event](node.opts.messageQueueSize, node.opts.messageWriteTimeout, &sync.RWMutex{}),
 		events: make(map[cluster.Event]EventHandler, 3),
 	}
 }
@@ -52,11 +51,7 @@ func (t *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error 
 		evt.ctx = context.Background()
 	}
 
-	t.rw.RLock()
-	err := t.queue.Write(evt)
-	t.rw.RUnlock()
-
-	if err != nil {
+	if err := t.queue.Write(evt); err != nil {
 		evt.release()
 		return err
 	}
@@ -70,26 +65,14 @@ func (t *Trigger) receive() <-chan *event {
 	return t.queue.Read()
 }
 
-// 停止接收事件
-// 写入空事件以通知分发器事件队列已结束
-// @return @1 error 写入失败时返回的错误
-func (t *Trigger) done() error {
-	return t.queue.Write(nil, true)
-}
-
-// 等待所有事件完成
-func (t *Trigger) wait() {
-	t.queue.Wait()
-}
-
 // 关闭事件触发器
-// 关闭事件队列并清空已注册的事件处理器
 func (t *Trigger) close() {
-	t.rw.Lock()
 	t.queue.Close()
-	t.rw.Unlock()
+}
 
-	clear(t.events)
+// 清理事件队列中的所有事件对象
+func (t *Trigger) clean() {
+	t.queue.Clean(func(evt *event) { evt.release() })
 }
 
 // 处理事件消息

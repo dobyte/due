@@ -2,10 +2,12 @@ package due
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,9 +19,11 @@ import (
 	"github.com/dobyte/due/v2/eventbus"
 	"github.com/dobyte/due/v2/lock"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/dobyte/due/v2/utils/xos"
+	"github.com/dobyte/due/v2/utils/xtime"
 )
 
 const (
@@ -47,44 +51,44 @@ func (c *Container) Add(components ...component.Component) {
 // 依次初始化并启动所有组件；在等待系统信号后，关闭并销毁组件，最终清理相关模块
 // @param isNonWaitSignal ...bool 是否不等待系统信号，true 时启动完成后直接进入关闭流程
 func (c *Container) Serve(isNonWaitSignal ...bool) {
-	c.doPrintFrameworkInfo()
+	c.printFrameworkInfo()
 
-	c.doInitComponents()
+	c.initAllComponents()
 
-	c.doStartComponents()
+	c.startAllComponents()
 
-	c.doSaveProcessID()
+	c.savePidToFile()
 
 	if len(isNonWaitSignal) == 0 || !isNonWaitSignal[0] {
-		c.doWaitSystemSignal()
+		c.waitSystemSignal()
 	}
 
-	c.doCloseComponents()
+	c.closeAllComponents()
 
-	c.doDestroyComponents()
+	c.destroyAllComponents()
 
-	c.doRemoveProcessID()
+	c.deletePidFile()
 
-	c.doClearModules()
+	c.clearAllModules()
 }
 
-// doInitComponents 初始化所有组件
-func (c *Container) doInitComponents() {
+// 初始化所有组件
+func (c *Container) initAllComponents() {
 	for _, comp := range c.components {
 		comp.Init()
 	}
 }
 
-// doStartComponents 启动所有组件
-func (c *Container) doStartComponents() {
+// 启动所有组件
+func (c *Container) startAllComponents() {
 	for _, comp := range c.components {
 		comp.Start()
 	}
 }
 
-// doCloseComponents 关闭所有组件
+// 关闭所有组件
 // 所有组件在独立协程中并发关闭，整体受 etc.shutdownMaxWaitTime 超时控制
-func (c *Container) doCloseComponents() {
+func (c *Container) closeAllComponents() {
 	g := xcall.NewGoroutines()
 
 	for _, comp := range c.components {
@@ -94,9 +98,9 @@ func (c *Container) doCloseComponents() {
 	g.Run(context.Background(), etc.Get(defaultShutdownMaxWaitTimeKey).Duration())
 }
 
-// doDestroyComponents 销毁所有组件
+// 销毁所有组件
 // 所有组件在独立协程中并发销毁，整体受 5 秒超时控制
-func (c *Container) doDestroyComponents() {
+func (c *Container) destroyAllComponents() {
 	g := xcall.NewGoroutines()
 
 	for _, comp := range c.components {
@@ -106,9 +110,9 @@ func (c *Container) doDestroyComponents() {
 	g.Run(context.Background(), 5*time.Second)
 }
 
-// doWaitSystemSignal 等待系统信号
+// 等待系统信号
 // 阻塞等待进程退出信号，收到后停止监听并记录日志
-func (c *Container) doWaitSystemSignal() {
+func (c *Container) waitSystemSignal() {
 	sig := make(chan os.Signal, 1)
 
 	switch runtime.GOOS {
@@ -125,8 +129,8 @@ func (c *Container) doWaitSystemSignal() {
 	log.Warnf("process got signal %v, container will close", s)
 }
 
-// doClearModules 清理所有模块
-func (c *Container) doClearModules() {
+// 清理所有模块
+func (c *Container) clearAllModules() {
 	if err := eventbus.Close(); err != nil {
 		log.Warnf("eventbus close failed: %v", err)
 	}
@@ -148,8 +152,8 @@ func (c *Container) doClearModules() {
 	log.Close()
 }
 
-// doSaveProcessID 保存进程号
-func (c *Container) doSaveProcessID() {
+// 保存进程号
+func (c *Container) savePidToFile() {
 	filename := etc.Get(defaultPIDKey).String()
 	if filename == "" {
 		return
@@ -160,8 +164,8 @@ func (c *Container) doSaveProcessID() {
 	}
 }
 
-// doRemoveProcessID 删除进程号文件
-func (c *Container) doRemoveProcessID() {
+// 删除进程号文件
+func (c *Container) deletePidFile() {
 	filename := etc.Get(defaultPIDKey).String()
 	if filename == "" {
 		return
@@ -172,9 +176,20 @@ func (c *Container) doRemoveProcessID() {
 	}
 }
 
-// doPrintFrameworkInfo 打印框架信息
-func (c *Container) doPrintFrameworkInfo() {
-	info.PrintFrameworkInfo()
+// 打印框架信息
+func (c *Container) printFrameworkInfo() {
+	fmt.Println(strings.TrimSuffix(strings.TrimPrefix(Logo, "\n"), "\n"))
 
-	info.PrintGlobalInfo()
+	info.Print("",
+		fmt.Sprintf("[Website] %s", Website),
+		fmt.Sprintf("[Version] %s", Version),
+	)
+
+	info.Print("",
+		fmt.Sprintf("OS: %s %s", runtime.GOOS, runtime.GOARCH),
+		fmt.Sprintf("Go: %s", "v"+strings.TrimPrefix(runtime.Version(), "go")),
+		fmt.Sprintf("PID: %d", os.Getpid()),
+		fmt.Sprintf("Mode: %s", mode.GetMode()),
+		fmt.Sprintf("Time: %s", xtime.Now()),
+	)
 }

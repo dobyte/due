@@ -329,13 +329,13 @@ func (g *Gate) isShut() bool {
 // 打印组件信息
 // 以信息框形式输出网关节点的各项配置
 func (g *Gate) printInfo() {
-	infos := make([]string, 0, 6)
-	infos = append(infos, fmt.Sprintf("ID: %s", g.opts.id))
-	infos = append(infos, fmt.Sprintf("Name: %s", g.Name()))
-	infos = append(infos, fmt.Sprintf("Link: %s", g.linker.ExposeAddr()))
-	infos = append(infos, fmt.Sprintf("Server: [%s] %s", g.opts.server.Protocol(), net.FulfillAddr(g.opts.server.Addr())))
-	infos = append(infos, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
-	infos = append(infos, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
+	rows := make([]string, 0, 6)
+	rows = append(rows, fmt.Sprintf("ID: %s", g.opts.id))
+	rows = append(rows, fmt.Sprintf("Name: %s", g.Name()))
+	rows = append(rows, fmt.Sprintf("Link: %s", g.linker.ExposeAddr()))
+	rows = append(rows, fmt.Sprintf("Server: [%s] %s", g.opts.server.Protocol(), net.FulfillAddr(g.opts.server.Addr())))
+	rows = append(rows, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
+	rows = append(rows, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
 
-	info.PrintBoxInfo("Gate", infos...)
+	info.Print("Gate", rows...)
 }

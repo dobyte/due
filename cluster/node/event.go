@@ -15,7 +15,7 @@ import (
 
 // 事件上下文
 type event struct {
-	node    *Node                 // 代理API
+	node    *Node                 // 节点服务器
 	ctx     context.Context       // 上下文
 	gid     string                // 网关ID
 	cid     int64                 // 连接ID

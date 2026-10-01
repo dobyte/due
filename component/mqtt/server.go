@@ -160,19 +160,19 @@ func (s *Server) Proxy() *Proxy {
 
 // 打印服务启动信息
 func (s *Server) printInfo() {
-	infos := make([]string, 0, 3)
-	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
+	rows := make([]string, 0, 3)
+	rows = append(rows, fmt.Sprintf("Name: %s", s.Name()))
 
 	if s.opts.auth != "" {
-		infos = append(infos, fmt.Sprintf("Auth: %s", s.opts.auth))
+		rows = append(rows, fmt.Sprintf("Auth: %s", s.opts.auth))
 	} else {
-		infos = append(infos, "Auth: allow")
+		rows = append(rows, "Auth: allow")
 	}
 
 	if s.opts.debug {
-		infos = append(infos, "Debug: true")
+		rows = append(rows, "Debug: true")
 	} else {
-		infos = append(infos, "Debug: false")
+		rows = append(rows, "Debug: false")
 	}
 
 	for _, opt := range s.opts.listensOpts {
@@ -181,23 +181,23 @@ func (s *Server) printInfo() {
 			continue
 		}
 
-		infos = append(infos, info.MakeHorizontalLine())
-		infos = append(infos, fmt.Sprintf("ID: %s", opt.ID))
-		infos = append(infos, fmt.Sprintf("Type: %s", opt.Type))
+		rows = append(rows, info.HorizontalLine())
+		rows = append(rows, fmt.Sprintf("ID: %s", opt.ID))
+		rows = append(rows, fmt.Sprintf("Type: %s", opt.Type))
 
 		switch opt.Type {
 		case listeners.TypeTCP:
-			infos = append(infos, fmt.Sprintf("Addr: %s", exposeAddr))
+			rows = append(rows, fmt.Sprintf("Addr: %s", exposeAddr))
 		case listeners.TypeWS:
 			if opt.CertFile != "" && opt.KeyFile != "" {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", exposeAddr)))
+				rows = append(rows, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", exposeAddr)))
 			} else {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", exposeAddr)))
+				rows = append(rows, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", exposeAddr)))
 			}
 		}
 	}
 
-	info.PrintBoxInfo("MQTT", infos...)
+	info.Print("MQTT", rows...)
 }
 
 // 添加Hook
