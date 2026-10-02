@@ -131,7 +131,7 @@ func (c *Client) Destroy() {
 	conns := make([]*Conn, 0)
 
 	c.rw2.Lock()
-	c.conns.Range(func(conn, _ any) bool {
+	c.conns.Range(func(_, conn any) bool {
 		conns = append(conns, conn.(*Conn))
 		return true
 	})
