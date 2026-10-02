@@ -140,7 +140,7 @@ func Benchmark_Std_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = stdSerialLogger.Write([]byte(debugText + "\n"))
 	}
 }
@@ -158,7 +158,7 @@ func Benchmark_Std_ParallelIO(b *testing.B) {
 func Benchmark_Zap_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		zapSerialLogger.Debug(debugText)
 	}
 	zapSerialLogger.Sync()
@@ -178,7 +178,7 @@ func Benchmark_Zap_ParallelIO(b *testing.B) {
 func Benchmark_Zap_Suger_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		zapSerialSugaredLogger.Debug(debugText)
 	}
 	zapSerialSugaredLogger.Sync()
@@ -198,7 +198,7 @@ func Benchmark_Zap_Suger_ParallelIO(b *testing.B) {
 func Benchmark_Due_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		dueSerialLogger.Debug(debugText)
 	}
 }
@@ -216,7 +216,7 @@ func Benchmark_Due_ParallelIO(b *testing.B) {
 func Benchmark_RollingWriter_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = rollingWriterSerialLogger.Write([]byte(debugText))
 	}
 }
@@ -234,7 +234,7 @@ func Benchmark_RollingWriter_ParallelIO(b *testing.B) {
 func Benchmark_GoLogger_SerialIO(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		goLoggerSerialLogger.Debug(debugText)
 	}
 }

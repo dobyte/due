@@ -38,11 +38,8 @@ func TestString(t *testing.T) {
 	t.Log(internal.String(v12) == fmt.Sprintf("%v", v12))
 	t.Log(internal.String(v13) == fmt.Sprintf("%v", v13))
 	t.Log(internal.String(v14) == fmt.Sprintf("%v", v14))
-
 	t.Log(internal.String(v13))
 	t.Log(internal.String(v14))
-	t.Log(fmt.Sprintf("%v", v13))
-	t.Log(fmt.Sprintf("%v", v14))
 }
 
 func BenchmarkString(b *testing.B) {
