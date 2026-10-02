@@ -6,11 +6,10 @@ import (
 
 // NocopyBuffer is a zero-copy buffer.
 type NocopyBuffer struct {
-	len      int          // Byte count
+	len      atomic.Int64 // Byte count
 	num      int          // Node count
 	head     any          // Head node
 	tail     any          // Tail node
-	prev     any          // Previous node
 	next     any          // Next node
 	delay    atomic.Int32 // Delayed release point
 	released atomic.Bool  // Released
@@ -20,7 +19,8 @@ var _ Buffer = &NocopyBuffer{}
 
 // NewNocopyBuffer creates a zero-copy buffer mounting the given blocks.
 func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
-	buf := &NocopyBuffer{len: -1}
+	buf := &NocopyBuffer{}
+	buf.len.Store(-1)
 
 	for _, block := range blocks {
 		buf.Mount(block)
@@ -31,8 +31,8 @@ func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
 
 // Len returns the byte length.
 func (b *NocopyBuffer) Len() int {
-	if b.len >= 0 {
-		return b.len
+	if cached := b.len.Load(); cached >= 0 {
+		return int(cached)
 	}
 
 	size := 0
@@ -50,7 +50,7 @@ func (b *NocopyBuffer) Len() int {
 		}
 	}
 
-	b.len = size
+	b.len.Store(int64(size))
 
 	return size
 }
@@ -249,11 +249,10 @@ func (b *NocopyBuffer) Release() {
 	}
 
 OVER:
-	b.len = -1
+	b.len.Store(-1)
 	b.num = 0
 	b.head = nil
 	b.tail = nil
-	b.prev = nil
 	b.next = nil
 }
 
@@ -296,7 +295,7 @@ func (b *NocopyBuffer) Slide(delta int) bool {
 		}
 	}
 
-	b.len = -1
+	b.len.Store(-1)
 
 	return true
 }
@@ -314,18 +313,10 @@ func (b *NocopyBuffer) addToHead(node any) {
 			b.tail = n
 		} else {
 			n.next = b.head
-
-			switch h := b.head.(type) {
-			case *NocopyNode:
-				h.prev = n
-				b.head = n
-			case *NocopyBuffer:
-				h.prev = n
-				b.head = n
-			}
+			b.head = n
 		}
 
-		b.len = -1
+		b.len.Store(-1)
 		b.num++
 	case *NocopyBuffer:
 		if n == nil {
@@ -337,18 +328,10 @@ func (b *NocopyBuffer) addToHead(node any) {
 			b.tail = n
 		} else {
 			n.next = b.head
-
-			switch h := b.head.(type) {
-			case *NocopyNode:
-				h.prev = n
-				b.head = n
-			case *NocopyBuffer:
-				h.prev = n
-				b.head = n
-			}
+			b.head = n
 		}
 
-		b.len = -1
+		b.len.Store(-1)
 		b.num += n.num
 	default:
 		// ignore
@@ -367,8 +350,6 @@ func (b *NocopyBuffer) addToTail(node any) {
 			b.head = n
 			b.tail = n
 		} else {
-			n.prev = b.tail
-
 			switch t := b.tail.(type) {
 			case *NocopyNode:
 				t.next = n
@@ -379,7 +360,7 @@ func (b *NocopyBuffer) addToTail(node any) {
 			}
 		}
 
-		b.len = -1
+		b.len.Store(-1)
 		b.num++
 	case *NocopyBuffer:
 		if n == nil {
@@ -390,8 +371,6 @@ func (b *NocopyBuffer) addToTail(node any) {
 			b.head = n
 			b.tail = n
 		} else {
-			n.prev = b.tail
-
 			switch t := b.tail.(type) {
 			case *NocopyNode:
 				t.next = n
@@ -402,7 +381,7 @@ func (b *NocopyBuffer) addToTail(node any) {
 			}
 		}
 
-		b.len = -1
+		b.len.Store(-1)
 		b.num += n.num
 	default:
 		// ignore
@@ -422,14 +401,7 @@ func (b *NocopyBuffer) removeHead() {
 
 	if b.head == nil {
 		b.tail = nil
-	} else {
-		switch h := b.head.(type) {
-		case *NocopyNode:
-			h.prev = nil
-		case *NocopyBuffer:
-			h.prev = nil
-		}
 	}
 
-	b.len = -1
+	b.len.Store(-1)
 }

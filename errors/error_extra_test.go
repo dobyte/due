@@ -4,6 +4,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/v2/codes"
 	"github.com/dobyte/due/v2/errors"
@@ -79,6 +80,14 @@ func TestErrorHelpers(t *testing.T) {
 		if got := errors.Cause(plain); got != plain {
 			t.Errorf("Cause(plain) = %v, want plain", got)
 		}
+
+		// A chain built only from *Error nodes used to make Cause loop forever, because the
+		// innermost node reports itself as its own cause.
+		deepest := errors.NewError("deepest")
+		nested := errors.NewError("outermost", errors.NewError("middle", deepest))
+		if got := causeWithin(t, nested); got != deepest {
+			t.Errorf("Cause(nested) = %v, want deepest", got)
+		}
 	})
 
 	t.Run("Stack", func(t *testing.T) {
@@ -100,7 +109,41 @@ func TestErrorHelpers(t *testing.T) {
 		if got := errors.Replace(plain, "text"); got != plain {
 			t.Errorf("Replace(plain) = %v, want plain", got)
 		}
+
+		// The helper must reach the *Error implementation. A former signature mismatch made the type
+		// assertion fail for every input, which turned Replace into a no-op.
+		target := errors.NewError(codes.NotFound, "original")
+		if got := errors.Replace(target, "updated"); got != target {
+			t.Errorf("Replace(target) = %v, want target", got)
+		}
+		if got, want := target.Error(), codes.NotFound.String()+": updated"; got != want {
+			t.Errorf("Replace() text = %q, want %q", got, want)
+		}
+
+		conditioned := errors.NewError(codes.NotFound, "original")
+		errors.Replace(conditioned, "updated", codes.InternalError)
+		if got, want := conditioned.Error(), codes.NotFound.String()+": original"; got != want {
+			t.Errorf("Replace() with mismatched condition = %q, want %q", got, want)
+		}
 	})
+}
+
+// causeWithin returns the root cause of err, failing the test when it does not return promptly. A
+// former Cause implementation looped forever on chains built only from *Error nodes.
+func causeWithin(t *testing.T, err error) error {
+	t.Helper()
+
+	done := make(chan error, 1)
+
+	go func() { done <- errors.Cause(err) }()
+
+	select {
+	case cause := <-done:
+		return cause
+	case <-time.After(3 * time.Second):
+		t.Fatal("Cause did not return within 3s")
+		return nil
+	}
 }
 
 // TestErrorMethods verifies the error methods, including nil-receiver safety.

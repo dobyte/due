@@ -2,7 +2,6 @@ package buffer
 
 // NocopyNode is a zero-copy buffer node.
 type NocopyNode struct {
-	prev  any
 	next  any
 	block any
 }
@@ -69,7 +68,6 @@ func (n *NocopyNode) Release() {
 		b.Release()
 	}
 
-	n.prev = nil
 	n.next = nil
 	n.block = nil
 }

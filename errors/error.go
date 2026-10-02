@@ -179,13 +179,13 @@ func Stack(err error) *stack.Stack {
 }
 
 // Replace replaces the text of err when it supports replacement and its code matches condition.
-func Replace(err error, text string, condition ...codes.Code) error {
+func Replace(err error, text string, condition ...*codes.Code) error {
 	if err == nil {
 		return nil
 	}
 
 	if e, ok := err.(interface {
-		Replace(text string, condition ...codes.Code) error
+		Replace(text string, condition ...*codes.Code) error
 	}); ok {
 		return e.Replace(text, condition...)
 	}
@@ -256,11 +256,17 @@ func (e *Error) Cause() error {
 
 	cause := e.err
 	for cause != nil {
-		if ce, ok := cause.(interface{ Cause() error }); ok {
-			cause = ce.Cause()
-		} else {
+		ce, ok := cause.(interface{ Cause() error })
+		if !ok {
 			break
 		}
+
+		next := ce.Cause()
+		if next == nil || next == cause {
+			break
+		}
+
+		cause = next
 	}
 
 	return cause

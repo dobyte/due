@@ -462,7 +462,7 @@ func (l *GateLinker) doMulticast(ctx context.Context, kind session.Kind, targets
 		target := targets[i]
 
 		eg.Go(func() error {
-			if err = l.doPush(ctx, kind, target, disconnect, message, ack); err != nil {
+			if err := l.doPush(ctx, kind, target, disconnect, message, ack); err != nil {
 				return err
 			}
 

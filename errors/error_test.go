@@ -1,10 +1,10 @@
 package errors_test
 
 import (
-	"fmt"
+	"testing"
+
 	"github.com/dobyte/due/v2/codes"
 	"github.com/dobyte/due/v2/errors"
-	"testing"
 )
 
 func TestNew(t *testing.T) {
@@ -24,5 +24,4 @@ func TestNew(t *testing.T) {
 	t.Log(err.Code())
 	t.Log(err.Next())
 	t.Log(err.Cause())
-	fmt.Println(fmt.Sprintf("%+v", err))
 }
