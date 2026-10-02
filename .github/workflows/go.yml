@@ -51,28 +51,6 @@ jobs:
       - name: Coverage Summary
         run: go tool cover -func coverage.out
 
-      - name: Go Coverage Badge
-        if: ${{ matrix.go == '1.27.x' }} # Runs this on only one of the ci builds.
-        uses: tj-actions/coverage-badge-go@v3
-        with:
-          green: 80
-          filename: coverage.out
-
-      - uses: stefanzweifel/git-auto-commit-action@v7
-        id: auto-commit-action
-        with:
-          commit_message: Apply Code Coverage Badge
-          skip_fetch: false
-          skip_checkout: true
-          file_pattern: ./README.md
-
-      - name: Push Changes
-        if: steps.auto-commit-action.outputs.changes_detected == 'true'
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
-
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
         with:
