@@ -1,5 +1,4 @@
 # due — A High-Performance Distributed Game Server Framework in Go
-![Coverage](https://img.shields.io/badge/Coverage-0-red)
 
 English | [简体中文](README-ZH.md)
 
