@@ -11,58 +11,47 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
-func TestBuilder(t *testing.T) {
-	builder := gate.NewBuilder(&gate.ClientOptions{
-		ID:                xuuid.UUID(),
+// newTestClientOptions returns client options that fail fast, keeping the tests short.
+func newTestClientOptions(id string) *gate.ClientOptions {
+	return &gate.ClientOptions{
+		ID:                id,
 		Kind:              cluster.Node,
 		ConnNum:           10,
 		DialTimeout:       3 * time.Second,
 		DialRetryTimes:    3,
-		WriteTimeout:      1 * time.Second,
+		WriteTimeout:      time.Second,
 		WriteQueueSize:    1024,
 		CallTimeout:       3 * time.Second,
 		FaultRecoveryTime: 3 * time.Second,
-	})
-
-	client, err := builder.Build("127.0.0.1:49899")
-	if err != nil {
-		t.Fatal(err)
 	}
-
-	ip, err := client.GetIP(context.Background(), session.User, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("ip: %v", ip)
-
-	ip, err = client.GetIP(context.Background(), session.User, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("ip: %v", ip)
 }
 
-func TestBuilder_Fault(t *testing.T) {
-	builder := gate.NewBuilder(&gate.ClientOptions{
-		ID:                xuuid.UUID(),
-		Kind:              cluster.Node,
-		ConnNum:           10,
-		DialTimeout:       3 * time.Second,
-		DialRetryTimes:    3,
-		WriteTimeout:      1 * time.Second,
-		WriteQueueSize:    1024,
-		CallTimeout:       3 * time.Second,
-		FaultRecoveryTime: 3 * time.Second,
-	})
+func TestBuilder(t *testing.T) {
+	server, _ := newTestServer(t)
 
-	for i := range 3 {
-		if _, err := builder.Build("127.0.0.1:49899"); err != nil {
-			t.Log(err)
-			time.Sleep(time.Duration(i+1) * time.Second)
-		} else {
-			t.Log("build success")
-		}
+	builder := gate.NewBuilder(newTestClientOptions(xuuid.UUID()))
+
+	client, err := builder.Build(server.ListenAddr())
+	if err != nil {
+		t.Fatalf("build client failed, err: %v", err)
+	}
+
+	ctx := context.Background()
+
+	ip, err := client.GetIP(ctx, session.User, 1)
+	if err != nil {
+		t.Fatalf("get ip failed, err: %v", err)
+	}
+	if ip != providerIP {
+		t.Fatalf("invalid ip, expect: %s, actual: %s", providerIP, ip)
+	}
+
+	// Building for the same address reuses the cached client.
+	again, err := builder.Build(server.ListenAddr())
+	if err != nil {
+		t.Fatalf("build client failed, err: %v", err)
+	}
+	if again != client {
+		t.Fatal("expect the cached client to be reused")
 	}
 }

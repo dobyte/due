@@ -17,10 +17,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-// HookHandler 微服务钩子处理函数
+// HookHandler is the hook handler of the mesh.
 type HookHandler func(proxy *Proxy)
 
-// Mesh 微服务服务器
+// Mesh is the mesh server.
 type Mesh struct {
 	component.Base
 	opts        *options
@@ -35,17 +35,16 @@ type Mesh struct {
 	hooks       map[cluster.Hook][]HookHandler
 }
 
-// 服务实体
+// serviceEntity is a service entity.
 type serviceEntity struct {
-	name     string // 服务名称;用于定位服务发现
-	desc     any    // 服务描述(grpc为desc描述对象; rpcx为服务路径)
-	provider any    // 服务提供者
+	name     string // service name, used for service discovery
+	desc     any    // service description (a desc object for grpc, a service path for rpcx)
+	provider any    // service provider
 }
 
-// NewMesh 创建微服务服务器
-// 创建后会初始化代理与内部组件，并处于关闭状态
-// @param opts ...Option 微服务配置项
-// @return @1 *Mesh 微服务服务器实例
+// NewMesh returns a new mesh server.
+//
+// It initializes the proxy and internal components and stays in the shut state.
 func NewMesh(opts ...Option) *Mesh {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -63,14 +62,15 @@ func NewMesh(opts ...Option) *Mesh {
 	return m
 }
 
-// Name 组件名称
-// @return @1 string 组件名称
+// Name returns the component name.
 func (m *Mesh) Name() string {
 	return m.opts.name
 }
 
-// Init 初始化微服务
-// 校验编解码器、注册器与传输器等必要配置，缺失时直接终止进程
+// Init initializes the mesh.
+//
+// It validates required configuration such as the codec, registry and transporter, terminating the
+// process when they are missing.
 func (m *Mesh) Init() {
 	if m.opts.codec == nil {
 		log.Fatal("codec component is not injected")
@@ -87,8 +87,10 @@ func (m *Mesh) Init() {
 	m.runHookFunc(cluster.Init)
 }
 
-// Start 启动微服务
-// 将状态置为工作中，随后启动传输服务器、注册服务实例并开启监听
+// Start starts the mesh.
+//
+// It marks the mesh as working, then starts the transport server, registers the service instance
+// and starts watching.
 func (m *Mesh) Start() {
 	if !m.state.CompareAndSwap(int32(cluster.Shut), int32(cluster.Work)) {
 		return
@@ -105,8 +107,9 @@ func (m *Mesh) Start() {
 	m.runHookFunc(cluster.Start)
 }
 
-// Close 关闭微服务
-// 将状态置为挂起，刷新服务实例状态到注册中心
+// Close closes the mesh.
+//
+// It marks the mesh as hang and refreshes the service instance state in the registry.
 func (m *Mesh) Close() {
 	if !m.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
 		if !m.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
@@ -119,8 +122,10 @@ func (m *Mesh) Close() {
 	m.runHookFunc(cluster.Close)
 }
 
-// Destroy 销毁微服务服务器
-// 将状态置为关闭，解注册服务实例、停止传输服务器并释放内部组件资源
+// Destroy destroys the mesh server.
+//
+// It marks the mesh as shut, deregisters the service instance, stops the transport server and
+// releases the internal component resources.
 func (m *Mesh) Destroy() {
 	if !m.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
 		return
@@ -135,14 +140,15 @@ func (m *Mesh) Destroy() {
 	m.runHookFunc(cluster.Destroy)
 }
 
-// Proxy 获取微服务代理
-// @return @1 *Proxy 微服务代理
+// Proxy returns the mesh proxy.
 func (m *Mesh) Proxy() *Proxy {
 	return m.proxy
 }
 
-// 启动传输服务器
-// 设置默认服务发现并注册服务提供者，无服务提供者时直接终止进程
+// startTransportServer starts the transport server.
+//
+// It sets the default service discovery and registers the service providers, terminating the
+// process when no service provider exists.
 func (m *Mesh) startTransportServer() {
 	if len(m.services) == 0 {
 		log.Fatal("no service registered")
@@ -170,7 +176,7 @@ func (m *Mesh) startTransportServer() {
 	}()
 }
 
-// 停止传输服务器
+// stopTransportServer stops the transport server.
 func (m *Mesh) stopTransportServer() {
 	if m.transporter == nil {
 		return
@@ -181,8 +187,9 @@ func (m *Mesh) stopTransportServer() {
 	}
 }
 
-// 注册服务实例
-// 生成微服务服务实例并注册到注册中心
+// registerServiceInstance registers the service instance.
+//
+// It builds the mesh service instance and registers it with the registry.
 func (m *Mesh) registerServiceInstance() {
 	m.instance = &registry.ServiceInstance{
 		ID:       m.opts.id,
@@ -205,15 +212,14 @@ func (m *Mesh) registerServiceInstance() {
 	}
 }
 
-// 刷新服务实例状态
-// 以当前状态重新刷新注册中心中的服务实例
+// refreshServiceInstance re-registers the service instance in the registry with the current state.
 func (m *Mesh) refreshServiceInstance() {
 	if err := m.doRefreshServiceInstance(m.getState()); err != nil {
 		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
-// 解注册服务实例
+// deregisterServiceInstance deregisters the service instance.
 func (m *Mesh) deregisterServiceInstance() {
 	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	err := m.opts.registry.Deregister(ctx, m.instance)
@@ -223,8 +229,8 @@ func (m *Mesh) deregisterServiceInstance() {
 	}
 }
 
-// 执行注册操作
-// @return @1 error 注册失败时返回的错误
+// doRegisterServiceInstance registers the service instance, returning an error when registration
+// fails.
 func (m *Mesh) doRegisterServiceInstance() error {
 	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	err := m.opts.registry.Register(ctx, m.instance)
@@ -233,9 +239,8 @@ func (m *Mesh) doRegisterServiceInstance() error {
 	return err
 }
 
-// 执行刷新实例状态操作
-// @param state ...cluster.State 待设置的服务实例状态；缺省时仅重新注册不更新状态
-// @return @1 error 注册失败时返回的错误
+// doRefreshServiceInstance refreshes the instance state, returning an error when registration
+// fails. When state is omitted, the instance is only re-registered without updating its state.
 func (m *Mesh) doRefreshServiceInstance(state ...cluster.State) error {
 	if len(state) > 0 {
 		m.instance.State = state[0].String()
@@ -244,9 +249,7 @@ func (m *Mesh) doRefreshServiceInstance(state ...cluster.State) error {
 	return m.doRegisterServiceInstance()
 }
 
-// 执行钩子函数
-// 触发指定钩子对应的全部监听器，并等待所有监听器执行完成
-// @param hook cluster.Hook 钩子类型
+// runHookFunc runs every listener of the given hook and waits for all of them to finish.
 func (m *Mesh) runHookFunc(hook cluster.Hook) {
 	m.rw.RLock()
 
@@ -270,9 +273,7 @@ func (m *Mesh) runHookFunc(hook cluster.Hook) {
 	}
 }
 
-// 添加钩子监听器
-// @param hook cluster.Hook 钩子类型
-// @param handler HookHandler 钩子处理函数
+// addHookListener adds a hook listener for the given hook.
 func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
 	switch hook {
 	case cluster.Destroy:
@@ -290,10 +291,8 @@ func (m *Mesh) addHookListener(hook cluster.Hook, handler HookHandler) {
 	}
 }
 
-// 添加服务提供者
-// @param name string 服务名称
-// @param desc any 服务描述对象
-// @param provider any 服务提供者
+// addServiceProvider adds a service provider. The name is the service name, desc is the service
+// description and provider is the service provider.
 func (m *Mesh) addServiceProvider(name string, desc, provider any) {
 	if m.getState() == cluster.Shut {
 		m.services = append(m.services, &serviceEntity{
@@ -306,16 +305,14 @@ func (m *Mesh) addServiceProvider(name string, desc, provider any) {
 	}
 }
 
-// 获取状态
-// @return @1 cluster.State 当前微服务状态
+// getState returns the current mesh state.
 func (m *Mesh) getState() cluster.State {
 	return cluster.State(m.state.Load())
 }
 
-// 更新状态（仅能在Work或Busy状态间切换）
-// 更新成功后会同步刷新服务实例状态到注册中心
-// @param state cluster.State 目标状态，仅支持Work或Busy
-// @return @1 error 状态非法、切换失败或刷新实例失败时返回的错误
+// setState updates the state, which may only switch between Work and Busy. On success it refreshes
+// the service instance state in the registry. Only Work and Busy are supported; an error is
+// returned when the state is illegal, the switch fails or the refresh fails.
 func (m *Mesh) setState(state cluster.State) error {
 	if state > cluster.Busy {
 		return errors.ErrIllegalOperation
@@ -337,35 +334,34 @@ func (m *Mesh) setState(state cluster.State) error {
 	}
 }
 
-// 是否已关闭
-// @return @1 bool 微服务是否处于关闭状态
+// isShut reports whether the mesh is in the shut state.
 func (m *Mesh) isShut() bool {
 	return m.getState() == cluster.Shut
 }
 
-// 打印组件信息
-// 输出微服务ID、名称、编解码器、定位器、注册器等基础信息
+// printInfo prints basic information such as the mesh ID, name, codec, locator, registry and
+// transporter.
 func (m *Mesh) printInfo() {
-	infos := make([]string, 0, 7)
-	infos = append(infos, fmt.Sprintf("ID: %s", m.opts.id))
-	infos = append(infos, fmt.Sprintf("Name: %s", m.Name()))
-	infos = append(infos, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
+	rows := make([]string, 0, 7)
+	rows = append(rows, fmt.Sprintf("ID: %s", m.opts.id))
+	rows = append(rows, fmt.Sprintf("Name: %s", m.Name()))
+	rows = append(rows, fmt.Sprintf("Codec: %s", m.opts.codec.Name()))
 
 	if m.opts.locator != nil {
-		infos = append(infos, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
+		rows = append(rows, fmt.Sprintf("Locator: %s", m.opts.locator.Name()))
 	} else {
-		infos = append(infos, "Locator: -")
+		rows = append(rows, "Locator: -")
 	}
 
-	infos = append(infos, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
+	rows = append(rows, fmt.Sprintf("Registry: %s", m.opts.registry.Name()))
 
 	if m.opts.encryptor != nil {
-		infos = append(infos, fmt.Sprintf("Encryptor: %s", m.opts.encryptor.Name()))
+		rows = append(rows, fmt.Sprintf("Encryptor: %s", m.opts.encryptor.Name()))
 	} else {
-		infos = append(infos, "Encryptor: -")
+		rows = append(rows, "Encryptor: -")
 	}
 
-	infos = append(infos, fmt.Sprintf("Transporter: %s", m.opts.transporter.Name()))
+	rows = append(rows, fmt.Sprintf("Transporter: %s", m.opts.transporter.Name()))
 
-	info.PrintBoxInfo("Mesh", infos...)
+	info.Print("Mesh", rows...)
 }

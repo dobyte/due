@@ -18,46 +18,43 @@ import (
 )
 
 type serverConn struct {
-	id                int64                       // 连接ID
-	uid               atomic.Int64                // 用户ID
-	attr              *attr                       // 连接属性
-	state             atomic.Int32                // 连接状态
-	connMgr           *serverConnMgr              // 连接管理
-	rw                sync.RWMutex                // 锁
-	wg1               sync.WaitGroup              // 读等待组，随连接对象池复用
-	wg2               sync.WaitGroup              // 写等待组，随连接对象池复用
-	conn              *kcp.UDPSession             // KCP源连接
-	queue             *queue.Queue[buffer.Buffer] // 消息队列
-	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
-	netBuffers        net.Buffers                 // 待写入的字节切片集合
-	lastHeartbeatTime atomic.Int64                // 上次心跳时间
-	authorizeTimer    atomic.Value                // 授权定时器
+	id                int64                       // Connection ID
+	uid               atomic.Int64                // User ID
+	attr              *attr                       // Connection attributes
+	state             atomic.Int32                // Connection state
+	connMgr           *serverConnMgr              // Connection manager
+	rw                sync.RWMutex                // Lock
+	wg1               sync.WaitGroup              // Read wait group, reused with the connection object pool
+	wg2               sync.WaitGroup              // Write wait group, reused with the connection object pool
+	conn              *kcp.UDPSession             // Source KCP connection
+	queue             *queue.Queue[buffer.Buffer] // Message queue
+	dueBuffers        []buffer.Buffer             // Buffers pending write
+	netBuffers        net.Buffers                 // Byte slices pending write
+	lastHeartbeatTime atomic.Int64                // Time of the last heartbeat
+	authorizeTimer    atomic.Value                // Authorize timer
 }
 
 var _ network.Conn = &serverConn{}
 
-// ID 获取连接ID
-// @return @1 int64 连接ID
+// ID returns the connection ID.
 func (c *serverConn) ID() int64 {
 	return c.id
 }
 
-// UID 获取用户ID
-// @return @1 int64 已绑定的用户ID，未绑定时为0
+// UID returns the bound user ID, or 0 when none is bound.
 func (c *serverConn) UID() int64 {
 	return c.uid.Load()
 }
 
-// Attr 获取属性接口
-// @return @1 network.Attr 连接属性接口，用于读写自定义属性
+// Attr returns the attribute interface used to read and write custom attributes.
 func (c *serverConn) Attr() network.Attr {
 	return c.attr
 }
 
-// Bind 绑定用户ID
-// 绑定成功后取消授权定时检测
-// @param uid int64 待绑定的用户ID
-// @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
+// Bind binds uid to the connection.
+//
+// A successful bind cancels the periodic authorize check. It reports
+// [errors.ErrConnectionClosed] when the connection has already been closed.
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
 
@@ -74,9 +71,10 @@ func (c *serverConn) Bind(uid int64) error {
 	return nil
 }
 
-// Unbind 解绑用户ID
-// 解绑后重新开启授权定时检测
-// @return @1 error 连接已关闭时返回errors.ErrConnectionClosed
+// Unbind removes the bound user ID.
+//
+// After unbinding, the periodic authorize check is restarted. It reports
+// [errors.ErrConnectionClosed] when the connection has already been closed.
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
 
@@ -93,10 +91,10 @@ func (c *serverConn) Unbind() error {
 	return nil
 }
 
-// Push 发送消息
-// 消息写入写队列，由写协程统一下发
-// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
-// @return @1 error 连接状态异常或队列写入失败时返回的错误
+// Push sends a message.
+//
+// The message is written to the write queue and dispatched by the write goroutine. When the send
+// fails, releasing the buffer is left to the caller.
 func (c *serverConn) Push(buf buffer.Buffer) error {
 	if buf.Len() == 0 {
 		return errors.ErrInvalidMessage
@@ -116,16 +114,16 @@ func (c *serverConn) Push(buf buffer.Buffer) error {
 	return err
 }
 
-// State 获取连接状态
-// @return @1 network.ConnState 当前连接状态
+// State returns the current connection state.
 func (c *serverConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
-// Close 关闭连接
-// 连接关闭后连接对象将被回收复用，不应再使用其任何方法与属性（身份标识可能漂移）
-// @param force ...bool 是否强制关闭；为true时立即关闭，缺省或为false时执行优雅关闭
-// @return @1 error 关闭失败或连接已处于关闭态时返回的错误
+// Close closes the connection.
+//
+// After the connection is closed its object is recycled and reused, so none of its methods or
+// attributes may be used afterwards; the identity it carries may drift. It closes immediately when
+// force is true; otherwise it performs a graceful close.
 func (c *serverConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
@@ -134,9 +132,7 @@ func (c *serverConn) Close(force ...bool) error {
 	}
 }
 
-// LocalIP 获取本地IP
-// @return @1 string 本地IP地址
-// @return @2 error 连接已关闭或地址解析失败时返回的错误
+// LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -146,9 +142,7 @@ func (c *serverConn) LocalIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// LocalAddr 获取本地地址
-// @return @1 net.Addr 本地网络地址
-// @return @2 error 连接已关闭时返回的错误
+// LocalAddr returns the local network address.
 func (c *serverConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -163,9 +157,7 @@ func (c *serverConn) LocalAddr() (net.Addr, error) {
 	return conn.LocalAddr(), nil
 }
 
-// RemoteIP 获取远端IP
-// @return @1 string 远端IP地址
-// @return @2 error 连接已关闭或地址解析失败时返回的错误
+// RemoteIP returns the remote IP address.
 func (c *serverConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -175,9 +167,7 @@ func (c *serverConn) RemoteIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// RemoteAddr 获取远端地址
-// @return @1 net.Addr 远端网络地址
-// @return @2 error 连接已关闭时返回的错误
+// RemoteAddr returns the remote network address.
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -192,13 +182,15 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
-// init 初始化连接
-// 复用对象池中的连接对象，在写锁保护下完成状态重置、分片存储与读写协程启动，
-// 关闭路径与上一生命周期的延迟关闭任务均需获取锁，将被阻塞至初始化完成，
-// 避免连接对象在协程启动前被回收复用；服务器关闭过程中分片拒绝存储时初始化中止，
-// 由调用方归还连接对象并关闭底层连接
-// @param conn *kcp.UDPSession KCP连接
-// @return @1 bool 是否初始化成功，服务器关闭过程中返回false
+// init initializes the connection.
+//
+// It reuses a connection object from the pool, resetting its state, storing it in a partition and
+// starting its read and write goroutines under the write lock. The close path and the delayed close
+// task of the previous lifecycle both take the same lock, so they are blocked until initialization
+// completes, preventing the connection object from being recycled before its goroutines start. If a
+// partition refuses storage while the server is shutting down, initialization is aborted and the
+// caller returns the connection object and closes the underlying connection. It reports whether
+// initialization succeeded, which is false while the server is shutting down.
 func (c *serverConn) init(conn *kcp.UDPSession) bool {
 	c.rw.Lock()
 
@@ -240,7 +232,8 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 	}
 
 	if !c.connMgr.storeConn(conn, c) {
-		// 分片已停止接入，复位状态并清理引用后中止初始化
+		// The partition has stopped accepting connections; reset the state, clear the references
+		// and abort initialization.
 		c.state.Store(int32(network.ConnClosed))
 		c.conn = nil
 		c.queue = nil
@@ -253,7 +246,8 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 
 	c.rw.Unlock()
 
-	// 初始化完成前连接可能已被并发关闭，仅在连接仍处于打开状态时执行授权检查与连接钩子
+	// The connection may already have been closed concurrently before initialization finished;
+	// run the authorize check and the connect hook only while the connection is still opened.
 	if c.State() != network.ConnOpened {
 		return true
 	}
@@ -267,8 +261,9 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 	return true
 }
 
-// reset 重置连接
-// 清空连接相关字段与属性，供连接对象复用
+// reset resets the connection.
+//
+// It clears the connection fields and attributes so that the object can be reused.
 func (c *serverConn) reset() {
 	c.queue = nil
 	c.attr.values.Clear()
@@ -277,9 +272,10 @@ func (c *serverConn) reset() {
 	c.uncheckAuthorize()
 }
 
-// checkState 检测连接状态
-// 依据挂起/关闭状态返回对应错误，正常时返回nil
-// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
+// checkState checks the connection state.
+//
+// It returns the error matching the hanged or closed state, and nil when the connection is normal:
+// [errors.ErrConnectionHanged] when hanged and [errors.ErrConnectionClosed] when closed.
 func (c *serverConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -291,10 +287,11 @@ func (c *serverConn) checkState() error {
 	}
 }
 
-// checkAuthorize 授权检查
-// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接ID与连接指针，
-// 避免连接被回收复用后误关闭新连接
-// @param conn *kcp.UDPSession 当前KCP连接
+// checkAuthorize checks authorization.
+//
+// It starts the authorize timeout timer, which closes the connection when it fires with no user ID
+// bound yet. The timer callback compares the connection ID and the connection pointer so that it
+// does not close a new connection by mistake after the connection object has been recycled.
 func (c *serverConn) checkAuthorize(conn *kcp.UDPSession) {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		id := c.id
@@ -312,8 +309,9 @@ func (c *serverConn) checkAuthorize(conn *kcp.UDPSession) {
 	}
 }
 
-// uncheckAuthorize 取消授权检查
-// 停止并清空授权定时器，解除强制关闭的约束
+// uncheckAuthorize cancels the authorization check.
+//
+// It stops and clears the authorize timer, lifting the constraint that forces a close.
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		timer := c.authorizeTimer.Swap((*time.Timer)(nil))
@@ -324,10 +322,12 @@ func (c *serverConn) uncheckAuthorize() {
 	}
 }
 
-// graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
-// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
-// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
+// graceClose closes the connection gracefully.
+//
+// It writes the close signal, waits for the write queue to drain and then closes the connection,
+// so that as many buffered messages as possible are delivered. When a graceful close timeout is
+// configured, a queue that has not drained in time disconnects the underlying connection directly
+// to end the wait forcibly.
 func (c *serverConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -347,7 +347,8 @@ func (c *serverConn) graceClose() error {
 
 	if err == nil {
 		if closeTimeout := c.connMgr.server.opts.closeTimeout; closeTimeout > 0 {
-			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			// A drain timeout disconnects the underlying connection, interrupting any write
+			// operation that may be blocking in the write goroutine.
 			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
 			q.Wait()
 			timer.Stop()
@@ -363,9 +364,10 @@ func (c *serverConn) graceClose() error {
 	return c.doClose()
 }
 
-// forceClose 强制关闭
-// 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @return @1 error 连接已处于关闭态时返回的错误
+// forceClose closes the connection forcibly.
+//
+// It switches the state to closed and closes the connection immediately without waiting for the
+// write queue to drain.
 func (c *serverConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -376,11 +378,12 @@ func (c *serverConn) forceClose() error {
 	return c.doClose(true)
 }
 
-// recycleClose 若当前连接仍为指定连接则强制关闭
-// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接对象可能已被回收复用，
-// 且KCP连接对象地址可能被运行时复用，因此需同时比对连接ID与KCP连接指针，避免误关闭新连接
-// @param conn *kcp.UDPSession 触发关闭时的KCP连接
-// @param id int64 触发关闭时的连接ID
+// recycleClose forcibly closes the connection if it is still the given one.
+//
+// The read and write goroutine error paths close the connection asynchronously through the task
+// pool. By the time the closure runs, the connection object may already have been recycled and the
+// KCP connection object address may have been reused by the runtime, so both the connection ID and
+// the KCP connection pointer are compared to avoid closing a new connection by mistake.
 func (c *serverConn) recycleClose(conn *kcp.UDPSession, id int64) {
 	c.rw.RLock()
 	match := c.id == id && c.conn == conn
@@ -391,11 +394,12 @@ func (c *serverConn) recycleClose(conn *kcp.UDPSession, id int64) {
 	}
 }
 
-// doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭KCP连接，触发断开hook，并将连接对象归还连接池；
-// force 为 true 时先关闭KCP连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
-// @param force ...bool 是否强制关闭
-// @return @1 error 关闭KCP连接时的错误
+// doClose performs the close operation.
+//
+// It closes the write queue, waits for the read and write goroutines to exit, closes the KCP
+// connection, triggers the disconnect hook and returns the connection object to the pool. When
+// force is true it closes the KCP connection first to interrupt any write operation that may be
+// blocking in the write goroutine, which guarantees forced-close semantics.
 func (c *serverConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
@@ -433,9 +437,10 @@ func (c *serverConn) doClose(force ...bool) error {
 	return err
 }
 
-// read 读取消息
-// 循环读取KCP数据，校验连接状态与心跳包，并按心跳机制响应或将有效消息交给接收hook函数处理
-// @param conn *kcp.UDPSession KCP连接
+// read reads messages.
+//
+// It reads KCP data in a loop, checks the connection state and heartbeat packets, and either
+// responds according to the heartbeat mechanism or hands valid messages to the receive hook.
 func (c *serverConn) read(conn *kcp.UDPSession) {
 	var (
 		index = 0
@@ -510,9 +515,10 @@ func (c *serverConn) read(conn *kcp.UDPSession) {
 	}
 }
 
-// write 写入消息
-// 从写队列取出消息写入连接，并按心跳间隔触发心跳检测与下发
-// @param conn *kcp.UDPSession KCP连接
+// write writes messages.
+//
+// It takes messages from the write queue and writes them to the connection, and triggers heartbeat
+// detection and dispatch at the heartbeat interval.
 func (c *serverConn) write(conn *kcp.UDPSession) {
 	var tickerC <-chan time.Time
 
@@ -542,10 +548,10 @@ func (c *serverConn) write(conn *kcp.UDPSession) {
 	}
 }
 
-// doBatchWrite 批量写入消息
-// 从写队列批量取出任务，收集字节切片后通过WriteBuffers一次性下发，减少系统调用次数
-// @param conn *kcp.UDPSession KCP连接
-// @param first buffer.Buffer 首个已取出的任务
+// doBatchWrite writes messages in a batch.
+//
+// It takes tasks from the write queue in a batch, collects their byte slices and dispatches them
+// with a single WriteBuffers call to reduce the number of system calls.
 func (c *serverConn) doBatchWrite(conn *kcp.UDPSession, first buffer.Buffer) {
 	closeSig := first.Len() == 0
 
@@ -615,11 +621,11 @@ OVER:
 	c.dueBuffers = c.dueBuffers[:0]
 }
 
-// doHandleHeartbeat 处理心跳
-// 超过心跳超时阈值则强制关闭连接，否则按心跳机制主动发送心跳包
-// @param conn *kcp.UDPSession KCP连接
-// @param t time.Time 当前心跳时刻
-// @return @1 bool 是否继续运行（心跳超时强制关闭返回false）
+// doHandleHeartbeat handles heartbeats.
+//
+// It forcibly closes the connection when the heartbeat timeout threshold is exceeded; otherwise it
+// actively sends a heartbeat packet according to the heartbeat mechanism. It returns whether to
+// keep running, which is false when the connection was forcibly closed for a heartbeat timeout.
 func (c *serverConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.connMgr.server.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
@@ -648,8 +654,7 @@ func (c *serverConn) doHandleHeartbeat(conn *kcp.UDPSession, t time.Time) bool {
 	return true
 }
 
-// isClosed 是否已关闭
-// @return @1 bool 连接状态是否为关闭
+// isClosed reports whether the connection state is closed.
 func (c *serverConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }

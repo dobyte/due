@@ -39,15 +39,15 @@ func NewServer(opts ...Option) *Server {
 	return s
 }
 
-// Name 组件名称
+// Name returns the component name.
 func (s *Server) Name() string {
 	return s.opts.name
 }
 
-// Init 初始化组件
+// Init initializes the component.
 func (s *Server) Init() {}
 
-// Start 启动组件
+// Start starts the component.
 func (s *Server) Start() {
 	if len(s.opts.listensOpts) == 0 {
 		log.Fatalf("mqtt server listens opts is empty")
@@ -142,7 +142,7 @@ func (s *Server) Start() {
 	}()
 }
 
-// Destroy 销毁组件
+// Destroy destroys the component.
 func (s *Server) Destroy() {
 	if s.server != nil {
 		if err := s.server.Close(); err != nil {
@@ -152,27 +152,26 @@ func (s *Server) Destroy() {
 	}
 }
 
-// Proxy 获取MQTT代理API
-// @return @1 *Proxy MQTT代理
+// Proxy returns the MQTT proxy API.
 func (s *Server) Proxy() *Proxy {
 	return s.proxy
 }
 
-// 打印服务启动信息
+// printInfo prints the server startup information.
 func (s *Server) printInfo() {
-	infos := make([]string, 0, 3)
-	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
+	rows := make([]string, 0, 3)
+	rows = append(rows, fmt.Sprintf("Name: %s", s.Name()))
 
 	if s.opts.auth != "" {
-		infos = append(infos, fmt.Sprintf("Auth: %s", s.opts.auth))
+		rows = append(rows, fmt.Sprintf("Auth: %s", s.opts.auth))
 	} else {
-		infos = append(infos, "Auth: allow")
+		rows = append(rows, "Auth: allow")
 	}
 
 	if s.opts.debug {
-		infos = append(infos, "Debug: true")
+		rows = append(rows, "Debug: true")
 	} else {
-		infos = append(infos, "Debug: false")
+		rows = append(rows, "Debug: false")
 	}
 
 	for _, opt := range s.opts.listensOpts {
@@ -181,30 +180,30 @@ func (s *Server) printInfo() {
 			continue
 		}
 
-		infos = append(infos, info.MakeHorizontalLine())
-		infos = append(infos, fmt.Sprintf("ID: %s", opt.ID))
-		infos = append(infos, fmt.Sprintf("Type: %s", opt.Type))
+		rows = append(rows, info.HorizontalLine())
+		rows = append(rows, fmt.Sprintf("ID: %s", opt.ID))
+		rows = append(rows, fmt.Sprintf("Type: %s", opt.Type))
 
 		switch opt.Type {
 		case listeners.TypeTCP:
-			infos = append(infos, fmt.Sprintf("Addr: %s", exposeAddr))
+			rows = append(rows, fmt.Sprintf("Addr: %s", exposeAddr))
 		case listeners.TypeWS:
 			if opt.CertFile != "" && opt.KeyFile != "" {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", exposeAddr)))
+				rows = append(rows, fmt.Sprintf("Addr: %s", fmt.Sprintf("wss://%s", exposeAddr)))
 			} else {
-				infos = append(infos, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", exposeAddr)))
+				rows = append(rows, fmt.Sprintf("Addr: %s", fmt.Sprintf("ws://%s", exposeAddr)))
 			}
 		}
 	}
 
-	info.PrintBoxInfo("MQTT", infos...)
+	info.Print("MQTT", rows...)
 }
 
-// 添加Hook
-// 服务启动前添加的Hook会在启动时加载，服务启动后添加返回错误
-// @param hook Hook 待添加的Hook
-// @param config ...any 可选，Hook配置
-// @return @1 error 服务已启动时返回的错误
+// addHook adds a hook.
+//
+// A hook added before the server starts is loaded at startup; adding a hook after the server has
+// started returns an error. hook is the hook to add and the optional config is the hook
+// configuration.
 func (s *Server) addHook(hook Hook, config ...any) error {
 	if s.server == nil {
 		if len(config) > 0 {
@@ -224,9 +223,9 @@ func (s *Server) addHook(hook Hook, config ...any) error {
 	}
 }
 
-// 检测已注册Hook提供的认证与ACL能力
-// @return @1 bool 是否存在提供认证能力（OnConnectAuthenticate）的Hook
-// @return @2 bool 是否存在提供ACL能力（OnACLCheck）的Hook
+// hookCapabilities reports the authentication and ACL capabilities provided by the registered
+// hooks. hasAuth reports whether a hook providing authentication ([mqtt.OnConnectAuthenticate])
+// exists, and hasACL reports whether a hook providing ACL ([mqtt.OnACLCheck]) exists.
 func (s *Server) hookCapabilities() (hasAuth, hasACL bool) {
 	for _, item := range s.hooks {
 		hasAuth = hasAuth || item.Hook.Provides(mqtt.OnConnectAuthenticate)

@@ -11,16 +11,16 @@ import (
 
 type Handler = func(ctx Context) error
 
-// Router支持以下路由注册方式：
+// Router accepts the following forms of route registration.
 //
-// 支持due风格路由处理器
+// due-style route handlers:
 //  1. due.Handler
 //
-// 支持fiber风格路由处理器
+// fiber-style route handlers:
 //  1. fiber.Handler
 //  2. func(fiber.Ctx)
 //
-// 支持express风格路由处理器
+// express-style route handlers:
 //  1. func(fiber.Req, fiber.Res) error
 //  2. func(fiber.Req, fiber.Res)
 //  3. func(fiber.Req, fiber.Res, func() error) error
@@ -32,117 +32,116 @@ type Handler = func(ctx Context) error
 //  9. func(fiber.Req, fiber.Res, func(error) error)
 //  10. func(fiber.Req, fiber.Res, func(error) error) error
 //
-// 支持net/http风格路由处理器
+// net/http-style route handlers:
 //  1. http.HandlerFunc
 //  2. http.Handler
 //  3. func(http.ResponseWriter, *http.Request)
 //
-// 支持fasthttp风格路由处理器
+// fasthttp-style route handlers:
 //  1. fasthttp.RequestHandler
 //  2. func(*fasthttp.RequestCtx) error
 type Router interface {
-	// Get 添加GET请求处理器
+	// Get registers a handler for GET requests.
 	Get(path string, handlers ...any) Router
-	// Post 添加POST请求处理器
+	// Post registers a handler for POST requests.
 	Post(path string, handlers ...any) Router
-	// Head 添加HEAD请求处理器
+	// Head registers a handler for HEAD requests.
 	Head(path string, handlers ...any) Router
-	// Put 添加PUT请求处理器
+	// Put registers a handler for PUT requests.
 	Put(path string, handlers ...any) Router
-	// Delete 添加DELETE请求处理器
+	// Delete registers a handler for DELETE requests.
 	Delete(path string, handlers ...any) Router
-	// Connect 添加CONNECT请求处理器
+	// Connect registers a handler for CONNECT requests.
 	Connect(path string, handlers ...any) Router
-	// Options 添加OPTIONS请求处理器
+	// Options registers a handler for OPTIONS requests.
 	Options(path string, handlers ...any) Router
-	// Trace 添加TRACE请求处理器
+	// Trace registers a handler for TRACE requests.
 	Trace(path string, handlers ...any) Router
-	// Patch 添加PATCH请求处理器
+	// Patch registers a handler for PATCH requests.
 	Patch(path string, handlers ...any) Router
-	// All 添加任意请求处理器
+	// All registers a handler for every method.
 	All(path string, handlers ...any) Router
-	// Add 添加路由处理器
+	// Add registers route handlers for the given methods.
 	Add(methods []string, path string, handlers ...any) Router
-	// Group 路由组
+	// Group returns a route group.
 	Group(prefix string, middlewares ...any) Router
 }
 
-// 路由器
+// router is the router implementation.
 type router struct {
 	app   *fiber.App
 	proxy *Proxy
 }
 
-// Get 添加GET请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Get registers a handler for GET requests.
+//
+// path is the route path and handlers are the route handlers. It returns the [Router] for
+// chaining.
 func (r *router) Get(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodGet}, path, handlers...)
 }
 
-// Post 添加POST请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Post registers a handler for POST requests.
+//
+// path is the route path and handlers are the route handlers. It returns the [Router] for
+// chaining.
 func (r *router) Post(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPost}, path, handlers...)
 }
 
-// Head 添加HEAD请求处理器
+// Head registers a handler for HEAD requests.
 func (r *router) Head(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodHead}, path, handlers...)
 }
 
-// Put 添加PUT请求处理器
+// Put registers a handler for PUT requests.
 func (r *router) Put(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPut}, path, handlers...)
 }
 
-// Delete 添加DELETE请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Delete registers a handler for DELETE requests.
+//
+// path is the route path and handlers are the route handlers. It returns the [Router] for
+// chaining.
 func (r *router) Delete(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodDelete}, path, handlers...)
 }
 
-// Connect 添加CONNECT请求处理器
+// Connect registers a handler for CONNECT requests.
 func (r *router) Connect(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodConnect}, path, handlers...)
 }
 
-// Options 添加OPTIONS请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Options registers a handler for OPTIONS requests.
+//
+// path is the route path and handlers are the route handlers. It returns the [Router] for
+// chaining.
 func (r *router) Options(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodOptions}, path, handlers...)
 }
 
-// Trace 添加TRACE请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Trace registers a handler for TRACE requests.
+//
+// path is the route path and handlers are the route handlers. It returns the [Router] for
+// chaining.
 func (r *router) Trace(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodTrace}, path, handlers...)
 }
 
-// Patch 添加PATCH请求处理器
+// Patch registers a handler for PATCH requests.
 func (r *router) Patch(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPatch}, path, handlers...)
 }
 
-// All 添加任意请求处理器
+// All registers a handler for every method.
 func (r *router) All(path string, handlers ...any) Router {
 	return r.Add(fiber.DefaultMethods, path, handlers...)
 }
 
-// Add 添加路由处理器
-// @param methods []string 请求方法列表
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由器（支持链式调用）
+// Add registers route handlers for the given methods.
+//
+// methods is the list of request methods, path is the route path and handlers are the route
+// handlers. It returns the [Router] for chaining.
 func (r *router) Add(methods []string, path string, handlers ...any) Router {
 	if len(handlers) > 0 {
 		if handlers = adaptHandlers(handlers); len(handlers) > 0 {
@@ -153,10 +152,10 @@ func (r *router) Add(methods []string, path string, handlers ...any) Router {
 	return r
 }
 
-// Group 路由组
-// @param prefix string 路由前缀
-// @param middlewares ...any 中间件
-// @return @1 Router 路由组（支持链式调用）
+// Group returns a route group.
+//
+// prefix is the route prefix and middlewares are the middlewares. It returns the route group for
+// chaining.
 func (r *router) Group(prefix string, middlewares ...any) Router {
 	return &routeGroup{proxy: r.proxy, router: r.app.Group(prefix, adaptHandlers(middlewares)...)}
 }
@@ -166,73 +165,72 @@ type routeGroup struct {
 	router fiber.Router
 }
 
-// Get 添加GET请求处理器
+// Get registers a handler for GET requests.
 func (r *routeGroup) Get(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodGet}, path, handlers...)
 }
 
-// Post 添加POST请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由组（支持链式调用）
+// Post registers a handler for POST requests.
+//
+// path is the route path and handlers are the route handlers. It returns the route group for
+// chaining.
 func (r *routeGroup) Post(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPost}, path, handlers...)
 }
 
-// Head 添加HEAD请求处理器
+// Head registers a handler for HEAD requests.
 func (r *routeGroup) Head(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodHead}, path, handlers...)
 }
 
-// Put 添加PUT请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由组（支持链式调用）
+// Put registers a handler for PUT requests.
+//
+// path is the route path and handlers are the route handlers. It returns the route group for
+// chaining.
 func (r *routeGroup) Put(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPut}, path, handlers...)
 }
 
-// Delete 添加DELETE请求处理器
+// Delete registers a handler for DELETE requests.
 func (r *routeGroup) Delete(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodDelete}, path, handlers...)
 }
 
-// Connect 添加CONNECT请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由组（支持链式调用）
+// Connect registers a handler for CONNECT requests.
+//
+// path is the route path and handlers are the route handlers. It returns the route group for
+// chaining.
 func (r *routeGroup) Connect(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodConnect}, path, handlers...)
 }
 
-// Options 添加OPTIONS请求处理器
+// Options registers a handler for OPTIONS requests.
 func (r *routeGroup) Options(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodOptions}, path, handlers...)
 }
 
-// Trace 添加TRACE请求处理器
+// Trace registers a handler for TRACE requests.
 func (r *routeGroup) Trace(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodTrace}, path, handlers...)
 }
 
-// Patch 添加PATCH请求处理器
+// Patch registers a handler for PATCH requests.
 func (r *routeGroup) Patch(path string, handlers ...any) Router {
 	return r.Add([]string{fiber.MethodPatch}, path, handlers...)
 }
 
-// All 添加任意请求处理器
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由组（支持链式调用）
+// All registers a handler for every method.
+//
+// path is the route path and handlers are the route handlers. It returns the route group for
+// chaining.
 func (r *routeGroup) All(path string, handlers ...any) Router {
 	return r.Add(fiber.DefaultMethods, path, handlers...)
 }
 
-// Add 添加路由处理器
-// @param methods []string 请求方法列表
-// @param path string 路由路径
-// @param handlers ...any 路由处理器
-// @return @1 Router 路由组（支持链式调用）
+// Add registers route handlers for the given methods.
+//
+// methods is the list of request methods, path is the route path and handlers are the route
+// handlers. It returns the route group for chaining.
 func (r *routeGroup) Add(methods []string, path string, handlers ...any) Router {
 	if len(handlers) > 0 {
 		if handlers = adaptHandlers(handlers); len(handlers) > 0 {
@@ -243,15 +241,12 @@ func (r *routeGroup) Add(methods []string, path string, handlers ...any) Router 
 	return r
 }
 
-// Group 路由组
+// Group returns a route group.
 func (r *routeGroup) Group(prefix string, middlewares ...any) Router {
 	return &routeGroup{router: r.router.Group(prefix, adaptHandlers(middlewares)...), proxy: r.proxy}
 }
 
-// 适配处理器
-// 将各种风格的处理器统一适配为fiber处理器
-// @param handlers []any 待适配的处理器
-// @return @1 []any 适配后的处理器
+// adaptHandlers converts handlers of every supported style into fiber handlers.
 func adaptHandlers(handlers []any) []any {
 	adaptedHandlers := make([]any, 0, len(handlers))
 

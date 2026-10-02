@@ -9,11 +9,8 @@ import (
 	"github.com/dobyte/due/v2/registry"
 )
 
-// newTestServiceEndpoint 创建测试服务端点
-// @param insID string 实例ID
-// @param addr string 端点地址
-// @param weight int 权重
-// @return @1 *serviceEndpoint 服务端点
+// newTestServiceEndpoint creates a test service endpoint with the given instance ID, address and
+// weight.
 func newTestServiceEndpoint(insID, addr string, weight int) *serviceEndpoint {
 	return &serviceEndpoint{
 		insID:    insID,
@@ -23,11 +20,8 @@ func newTestServiceEndpoint(insID, addr string, weight int) *serviceEndpoint {
 	}
 }
 
-// newWRRTestInstance 创建加权轮询测试服务实例
-// @param id string 实例ID
-// @param addr string 端点地址
-// @param weight int 权重
-// @return @1 *registry.ServiceInstance 服务实例
+// newWRRTestInstance creates a weighted round-robin test service instance with the given ID,
+// address and weight.
 func newWRRTestInstance(id, addr string, weight int) *registry.ServiceInstance {
 	return &registry.ServiceInstance{
 		ID:       id,
@@ -54,7 +48,8 @@ func TestBuildSmoothWRSequence(t *testing.T) {
 		t.Fatalf("expect sequence length 7, got %d", len(seq))
 	}
 
-	// 权重4:2:1的平滑序列必须精确为 a,b,a,c,a,b,a，禁止出现突发集中
+	// The smooth sequence for weights 4:2:1 must be exactly a,b,a,c,a,b,a with no bursty
+	// clustering.
 	want := []string{"xa", "xb", "xa", "xc", "xa", "xb", "xa"}
 	for i, se := range seq {
 		if se.insID != want[i] {
@@ -72,7 +67,7 @@ func TestBuildSmoothWRSequenceGCDReduction(t *testing.T) {
 
 	seq := buildSmoothWRSequence(eps)
 
-	// 100:100:50 经GCD归约为 2:2:1，序列长度控制在5
+	// 100:100:50 reduces by GCD to 2:2:1, bounding the sequence length to 5.
 	if len(seq) != 5 {
 		t.Fatalf("expect sequence length 5 after GCD reduction, got %d", len(seq))
 	}
@@ -94,7 +89,7 @@ func TestBuildSmoothWRSequenceZeroWeight(t *testing.T) {
 
 	seq := buildSmoothWRSequence(eps)
 
-	// 权重0兜底为默认权重1，分布为 1:3
+	// A zero weight falls back to the default weight 1, giving a 1:3 distribution.
 	if len(seq) != 4 {
 		t.Fatalf("expect sequence length 4, got %d", len(seq))
 	}
@@ -121,7 +116,8 @@ func TestWeightedRoundRobinDispatchConcurrent(t *testing.T) {
 		t.Fatalf("find route failed: %v", err)
 	}
 
-	// 原子游标保证每个序列位置恰好分配一次，总选择数为权重和倍数时分布必须精确
+	// The atomic cursor selects each sequence position exactly once, so the distribution must be
+	// exact when the total selection count is a multiple of the weight sum.
 	const total = 70000
 
 	var (

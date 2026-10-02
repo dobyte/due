@@ -13,7 +13,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
-// consumer 事件消费者
+// consumer is an event consumer.
 type consumer struct {
 	eb            *Eventbus
 	ctx           context.Context
@@ -27,14 +27,14 @@ type consumer struct {
 	wg            sync.WaitGroup
 }
 
-// newConsumer 创建事件消费者
+// newConsumer returns a new event consumer.
 func newConsumer(eb *Eventbus, balance bool) *consumer {
 	c := &consumer{eb: eb, balance: balance, subscriptions: make([]*subscription, 0, 1)}
 	c.ctx, c.cancel = context.WithCancel(eb.ctx)
 	return c
 }
 
-// addSubscription 添加订阅
+// addSubscription adds a subscription.
 func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription {
 	sub := &subscription{consumer: c, handler: handler}
 
@@ -45,7 +45,7 @@ func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription 
 	return sub
 }
 
-// delSubscription 移除订阅
+// delSubscription removes a subscription.
 func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -63,7 +63,7 @@ func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	return found, len(c.subscriptions) == 0
 }
 
-// startBroadcastConsumer 启动广播模式消费
+// startBroadcastConsumer starts consuming in broadcast mode.
 func (c *consumer) startBroadcastConsumer(consumer sarama.Consumer, partitions []int32, topic string) {
 	c.consumer = consumer
 
@@ -73,7 +73,7 @@ func (c *consumer) startBroadcastConsumer(consumer sarama.Consumer, partitions [
 	}
 }
 
-// runPartitionConsumer 运行单个 partition 的消费循环（带重试）
+// runPartitionConsumer runs the consume loop of a single partition with retries.
 func (c *consumer) runPartitionConsumer(topic string, partition int32) {
 	defer c.wg.Done()
 
@@ -144,7 +144,7 @@ func (c *consumer) runPartitionConsumer(topic string, partition int32) {
 	}
 }
 
-// startGroupConsumer 启动消费组模式消费
+// startGroupConsumer starts consuming in consumer group mode.
 func (c *consumer) startGroupConsumer(group sarama.ConsumerGroup, topic string) {
 	c.wg.Add(1)
 	go func() {
@@ -182,17 +182,17 @@ func (c *consumer) startGroupConsumer(group sarama.ConsumerGroup, topic string) 
 	}()
 }
 
-// Setup 实现 sarama.ConsumerGroupHandler
+// Setup implements sarama.ConsumerGroupHandler.
 func (c *consumer) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-// Cleanup 实现 sarama.ConsumerGroupHandler
+// Cleanup implements sarama.ConsumerGroupHandler.
 func (c *consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-// ConsumeClaim 实现 sarama.ConsumerGroupHandler
+// ConsumeClaim implements sarama.ConsumerGroupHandler.
 func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		c.dispatch(msg.Value)
@@ -202,13 +202,13 @@ func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	return nil
 }
 
-// stop 停止消费
+// stop stops consuming.
 func (c *consumer) stop() {
 	c.cancel()
 	c.wg.Wait()
 }
 
-// dispatch 分发数据
+// dispatch dispatches event data.
 func (c *consumer) dispatch(data []byte) {
 	event, err := c.eb.deserialize(data)
 	if err != nil {
@@ -228,7 +228,7 @@ func (c *consumer) dispatch(data []byte) {
 	}
 }
 
-// loadHandlers 加载订阅的事件处理函数
+// loadHandlers loads the event handlers of the subscriptions.
 func (c *consumer) loadHandlers() []eventbus.EventHandler {
 	c.rw.RLock()
 	defer c.rw.RUnlock()

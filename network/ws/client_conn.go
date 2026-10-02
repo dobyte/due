@@ -19,25 +19,22 @@ import (
 )
 
 type clientConn struct {
-	rw                sync.RWMutex                // 锁
-	id                int64                       // 连接ID
-	uid               atomic.Int64                // 用户ID
-	attr              *attr                       // 连接属性
-	conn              *websocket.Conn             // TCP源连接
-	state             atomic.Int32                // 连接状态
-	cli               *client                     // 客户端
-	wg1               sync.WaitGroup              // 读等待组
-	wg2               sync.WaitGroup              // 写等待组
-	queue             *queue.Queue[buffer.Buffer] // 消息队列
-	lastHeartbeatTime atomic.Int64                // 上次心跳时间
+	rw                sync.RWMutex                // Lock
+	id                int64                       // Connection ID
+	uid               atomic.Int64                // User ID
+	attr              *attr                       // Connection attributes
+	conn              *websocket.Conn             // Underlying WebSocket connection
+	state             atomic.Int32                // Connection state
+	cli               *client                     // Client
+	wg1               sync.WaitGroup              // Read wait group
+	wg2               sync.WaitGroup              // Write wait group
+	queue             *queue.Queue[buffer.Buffer] // Message queue
+	lastHeartbeatTime atomic.Int64                // Time of the last received heartbeat
 }
 
 var _ network.Conn = &clientConn{}
 
-// newClientConn 创建一个客户端连接
-// @param cli *client 客户端
-// @param conn *websocket.Conn WS连接
-// @return @1 network.Conn 连接对象
+// newClientConn returns a new client connection.
 func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c := &clientConn{}
 	c.id = cli.cid.Add(1)
@@ -57,27 +54,22 @@ func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	return c
 }
 
-// ID 获取连接ID
-// @return @1 int64 连接ID
+// ID returns the connection ID.
 func (c *clientConn) ID() int64 {
 	return c.id
 }
 
-// UID 获取用户ID
-// @return @1 int64 用户ID
+// UID returns the user ID.
 func (c *clientConn) UID() int64 {
 	return c.uid.Load()
 }
 
-// Attr 获取属性接口
-// @return @1 network.Attr 属性接口
+// Attr returns the attribute interface of the connection.
 func (c *clientConn) Attr() network.Attr {
 	return c.attr
 }
 
-// Bind 绑定用户ID
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// Bind binds the connection to the given user ID.
 func (c *clientConn) Bind(uid int64) error {
 	c.rw.RLock()
 
@@ -93,8 +85,7 @@ func (c *clientConn) Bind(uid int64) error {
 	return nil
 }
 
-// Unbind 解绑用户ID
-// @return @1 error 错误信息
+// Unbind unbinds the user ID from the connection.
 func (c *clientConn) Unbind() error {
 	c.rw.RLock()
 
@@ -110,9 +101,9 @@ func (c *clientConn) Unbind() error {
 	return nil
 }
 
-// Push 低优先级发送消息
-// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
-// @return @1 error 错误信息
+// Push sends a message with low priority.
+//
+// The caller controls when buf is released when the send fails.
 func (c *clientConn) Push(buf buffer.Buffer) error {
 	if buf.Len() == 0 {
 		return errors.ErrInvalidMessage
@@ -132,15 +123,14 @@ func (c *clientConn) Push(buf buffer.Buffer) error {
 	return err
 }
 
-// State 获取连接状态
-// @return @1 network.ConnState 连接状态
+// State returns the connection state.
 func (c *clientConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
-// Close 关闭连接（主动关闭）
-// @param force ...bool 是否强制关闭
-// @return @1 error 错误信息
+// Close closes the connection.
+//
+// It is an active close. When force is true the connection is closed forcibly.
 func (c *clientConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
@@ -149,9 +139,7 @@ func (c *clientConn) Close(force ...bool) error {
 	}
 }
 
-// LocalIP 获取本地IP
-// @return @1 string 本地IP地址
-// @return @2 error 错误信息
+// LocalIP returns the local IP address.
 func (c *clientConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -161,9 +149,7 @@ func (c *clientConn) LocalIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// LocalAddr 获取本地地址
-// @return @1 net.Addr 本地地址
-// @return @2 error 错误信息
+// LocalAddr returns the local address.
 func (c *clientConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -178,9 +164,7 @@ func (c *clientConn) LocalAddr() (net.Addr, error) {
 	return conn.LocalAddr(), nil
 }
 
-// RemoteIP 获取远端IP
-// @return @1 string 远端IP地址
-// @return @2 error 错误信息
+// RemoteIP returns the remote IP address.
 func (c *clientConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -190,9 +174,7 @@ func (c *clientConn) RemoteIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// RemoteAddr 获取远端地址
-// @return @1 net.Addr 远端地址
-// @return @2 error 错误信息
+// RemoteAddr returns the remote address.
 func (c *clientConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -207,9 +189,8 @@ func (c *clientConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
-// checkState 检测连接状态
-// 依据挂起/关闭状态返回对应错误，正常时返回nil
-// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
+// checkState checks the connection state. It returns the matching error for the hanged or closed
+// state, and nil when the connection is normal.
 func (c *clientConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -221,10 +202,12 @@ func (c *clientConn) checkState() error {
 	}
 }
 
-// graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
-// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
-// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
+// graceClose closes the connection gracefully.
+//
+// It writes a close signal and waits for the write queue to drain before closing the connection, so
+// that buffered messages can be delivered as far as possible. When a graceful close timeout is
+// configured, the underlying connection is closed once the timeout elapses before the queue drains,
+// which forces the wait to end.
 func (c *clientConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -242,7 +225,7 @@ func (c *clientConn) graceClose() error {
 
 	if err == nil {
 		if closeTimeout := c.cli.opts.closeTimeout; closeTimeout > 0 {
-			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			// Close the underlying connection once the drain times out to interrupt a possibly blocking write in the write goroutine.
 			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
 			q.Wait()
 			timer.Stop()
@@ -258,9 +241,10 @@ func (c *clientConn) graceClose() error {
 	return c.doClose()
 }
 
-// forceClose 强制关闭
-// 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @return @1 error 连接已处于关闭态时返回的错误
+// forceClose closes the connection forcibly.
+//
+// It immediately switches the state to closed and closes the connection without waiting for the
+// write queue to drain.
 func (c *clientConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -269,11 +253,12 @@ func (c *clientConn) forceClose() error {
 	return c.doClose(true)
 }
 
-// doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭WS连接，最后触发断开hook；
-// force 为 true 时先关闭WS连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
-// @param force ...bool 是否强制关闭
-// @return @1 error 关闭WS连接时的错误
+// doClose performs the close.
+//
+// It closes the write queue, waits for the read and write goroutines to exit, closes the WebSocket
+// connection and finally invokes the disconnect handler. When force is true it closes the WebSocket
+// connection first so that a possibly blocking write in the write goroutine is interrupted,
+// preserving the force-close semantics.
 func (c *clientConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
@@ -309,9 +294,11 @@ func (c *clientConn) doClose(force ...bool) error {
 	return err
 }
 
-// read 读取消息
-// 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
-// @param conn net.Conn TCP连接
+// read reads messages.
+//
+// It keeps reading messages from the stream, updates the heartbeat time, detects empty and
+// heartbeat packets and dispatches them to the receive handler. A read failure triggers a force
+// close.
 func (c *clientConn) read(conn *websocket.Conn) {
 	var index int
 
@@ -386,8 +373,7 @@ func (c *clientConn) read(conn *websocket.Conn) {
 	}
 }
 
-// write 写入消息
-// @param conn *websocket.Conn WS连接
+// write writes messages.
 func (c *clientConn) write(conn *websocket.Conn) {
 	var tickerC <-chan time.Time
 
@@ -417,10 +403,10 @@ func (c *clientConn) write(conn *websocket.Conn) {
 	}
 }
 
-// doWrite 执行写入操作
-// 识别关闭信号后终止写协程，否则写入消息数据并释放缓冲区
-// @param conn *websocket.Conn WS连接
-// @param buf buffer.Buffer 待写入的消息缓冲区
+// doWrite performs a write.
+//
+// It terminates the write goroutine after recognizing the close signal, and otherwise writes the
+// message data and releases the buffer.
 func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	closeSig := buf.Len() == 0
 
@@ -447,11 +433,11 @@ func (c *clientConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
-// doHandleHeartbeat 处理心跳
-// 检测上次收到消息的时间是否超时，超时则触发强制关闭；否则下发心跳包
-// @param conn *websocket.Conn WS连接
-// @param t time.Time 当前心跳触发的时间点
-// @return @1 bool 是否继续写入协程循环，心跳超时时返回false
+// doHandleHeartbeat handles heartbeats.
+//
+// It checks whether the time of the last received message has timed out and triggers a force close
+// if so; otherwise it sends a heartbeat packet. It returns false when the write goroutine should
+// stop because the heartbeat timed out.
 func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.cli.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
@@ -476,8 +462,7 @@ func (c *clientConn) doHandleHeartbeat(conn *websocket.Conn, t time.Time) bool {
 	}
 }
 
-// isClosed 是否已关闭
-// @return @1 bool 连接状态是否为关闭
+// isClosed reports whether the connection state is closed.
 func (c *clientConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }

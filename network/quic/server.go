@@ -36,10 +36,9 @@ type server struct {
 
 var _ network.Server = (*server)(nil)
 
-// NewServer 创建一个QUIC服务器
-// 须在启动前注册各类hook函数
-// @param opts ...ServerOption 服务器配置项
-// @return @1 network.Server 服务器实例
+// NewServer returns a new QUIC server.
+//
+// Every hook must be registered before starting.
 func NewServer(opts ...ServerOption) network.Server {
 	o := defaultServerOptions()
 	for _, opt := range opts {
@@ -48,9 +47,10 @@ func NewServer(opts ...ServerOption) network.Server {
 	return &server{opts: o}
 }
 
-// Addr 获取监听地址
-// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
-// @return @1 string 监听地址
+// Addr returns the listen address.
+//
+// Once the server has started it returns the actual address of the listener; before that it
+// returns the configured address.
 func (s *server) Addr() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -60,9 +60,10 @@ func (s *server) Addr() string {
 	return s.opts.addr
 }
 
-// Start 启动服务器
-// 每次调用开启全新的服务器生命周期，Stop 完成后可再次启动
-// @return @1 error 错误信息
+// Start starts the server.
+//
+// Each call opens a fresh server lifecycle, so the server can be started again after Stop has
+// completed.
 func (s *server) Start() error {
 	s.mu.Lock()
 	if s.run != nil {
@@ -92,10 +93,11 @@ func (s *server) Start() error {
 	return nil
 }
 
-// Stop 关闭服务器
-// 停止接受新连接并关闭挂起与活跃的传输连接；
-// 应用层回调可能在 Stop 返回后才执行完毕，因此回调中也可以调用 Stop
-// @return @1 error 错误信息
+// Stop stops the server.
+//
+// It stops accepting new connections and closes pending as well as active transport connections.
+// Application-level callbacks may still be running after Stop returns, so Stop may also be called
+// from within a callback.
 func (s *server) Stop() error {
 	s.mu.Lock()
 	r := s.run
@@ -167,36 +169,36 @@ func (s *server) handleConn(r *serverRun, id int64, qc *quic.Conn) {
 	}
 }
 
-// Protocol 获取协议名称
-// @return @1 string 协议名称
+// Protocol returns the protocol name.
 func (s *server) Protocol() string { return protocol }
 
-// OnStart 监听服务器启动
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param h network.StartHandler 服务器启动处理函数
+// OnStart registers h to be invoked when the server starts.
+//
+// It must be registered before Start; registering it afterwards races with Start.
 func (s *server) OnStart(h network.StartHandler) { s.startHandler = h }
 
-// OnStop 监听服务器关闭
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param h network.CloseHandler 服务器关闭处理函数
+// OnStop registers h to be invoked when the server stops.
+//
+// It must be registered before Start; registering it afterwards races with Start.
 func (s *server) OnStop(h network.CloseHandler) { s.stopHandler = h }
 
-// OnConnect 监听连接打开
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param h network.ConnectHandler 连接打开处理函数
+// OnConnect registers h to be invoked when a connection is opened.
+//
+// It must be registered before Start; registering it afterwards races with Start.
 func (s *server) OnConnect(h network.ConnectHandler) { s.connectHandler = h }
 
-// OnDisconnect 监听连接关闭
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param h network.DisconnectHandler 连接关闭处理函数
+// OnDisconnect registers h to be invoked when a connection is closed.
+//
+// It must be registered before Start; registering it afterwards races with Start.
 func (s *server) OnDisconnect(h network.DisconnectHandler) { s.disconnectHandler = h }
 
-// OnReceive 监听接收到消息
-// 须在 Start 之前注册，Start 之后注册存在数据竞争；处理函数拥有每个接收缓冲的所有权
-// @param h network.ReceiveHandler 消息接收处理函数
+// OnReceive registers h to be invoked when a message is received.
+//
+// It must be registered before Start; registering it afterwards races with Start. The handler owns
+// every received buffer.
 func (s *server) OnReceive(h network.ReceiveHandler) { s.receiveHandler = h }
 
-// OnHeartbeat 监听心跳
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param h network.HeartbeatHandler 心跳处理函数
+// OnHeartbeat registers h to be invoked on a connection heartbeat.
+//
+// It must be registered before Start; registering it afterwards races with Start.
 func (s *server) OnHeartbeat(h network.HeartbeatHandler) { s.heartbeatHandler = h }

@@ -2,22 +2,22 @@ package file
 
 import "github.com/dobyte/due/v2/log/internal"
 
-// 日志翻转规则
+// Rotate is a log rotation rule.
 type Rotate string
 
 const (
-	RotateNone  Rotate = "none"  // 不翻转
-	RotateYear  Rotate = "year"  // 按年翻转
-	RotateMonth Rotate = "month" // 按月翻转
-	RotateWeek  Rotate = "week"  // 按周翻转
-	RotateDay   Rotate = "day"   // 按天翻转
-	RotateHour  Rotate = "hour"  // 按时翻转
+	RotateNone  Rotate = "none"  // No rotation
+	RotateYear  Rotate = "year"  // Rotate by year
+	RotateMonth Rotate = "month" // Rotate by month
+	RotateWeek  Rotate = "week"  // Rotate by week
+	RotateDay   Rotate = "day"   // Rotate by day
+	RotateHour  Rotate = "hour"  // Rotate by hour
 )
 
-// Format 日志输出格式
+// Format is the log output format.
 type Format = internal.Format
 
 const (
-	FormatText = internal.FormatText // 文本格式
-	FormatJson = internal.FormatJson // JSON格式
+	FormatText = internal.FormatText // Text format
+	FormatJson = internal.FormatJson // JSON format
 )

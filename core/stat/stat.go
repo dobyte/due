@@ -6,21 +6,21 @@ import (
 )
 
 type FileInfo interface {
-	// Name 获取文件名称
+	// Name returns the file name.
 	Name() string
-	// Size 获取文件大小
+	// Size returns the file size.
 	Size() int64
-	// Mode 获取文件模式
+	// Mode returns the file mode.
 	Mode() os.FileMode
-	// IsDir 检测文件是否是目录
+	// IsDir reports whether the file is a directory.
 	IsDir() bool
-	// IsFile 检测文件是否是普通文件
+	// IsFile reports whether the file is a regular file.
 	IsFile() bool
-	// Sys 获取系统原始数据
+	// Sys returns the underlying system data.
 	Sys() any
-	// CreateTime 获取文件创建时间
+	// CreateTime returns the file creation time.
 	CreateTime() time.Time
-	// ModifyTime 获取文件修改时间
+	// ModifyTime returns the file modification time.
 	ModifyTime() time.Time
 }
 
@@ -37,37 +37,37 @@ func Stat(filePath string) (FileInfo, error) {
 	return &fileStat{fi: fi}, nil
 }
 
-// Name 获取文件名称
+// Name returns the file name.
 func (fs *fileStat) Name() string {
 	return fs.fi.Name()
 }
 
-// Size 获取文件大小
+// Size returns the file size.
 func (fs *fileStat) Size() int64 {
 	return fs.fi.Size()
 }
 
-// Mode 获取文件模式
+// Mode returns the file mode.
 func (fs *fileStat) Mode() os.FileMode {
 	return fs.fi.Mode()
 }
 
-// ModifyTime 获取文件修改时间
+// ModifyTime returns the file modification time.
 func (fs *fileStat) ModifyTime() time.Time {
 	return fs.fi.ModTime()
 }
 
-// IsDir 检测文件是否是目录
+// IsDir reports whether the file is a directory.
 func (fs *fileStat) IsDir() bool {
 	return fs.fi.IsDir()
 }
 
-// IsFile 检测文件是否是普通文件
+// IsFile reports whether the file is a regular file.
 func (fs *fileStat) IsFile() bool {
 	return !fs.IsDir()
 }
 
-// Sys 获取系统原始数据
+// Sys returns the underlying system data.
 func (fs *fileStat) Sys() any {
 	return fs.fi.Sys()
 }

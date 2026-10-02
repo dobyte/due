@@ -6,7 +6,7 @@ func init() {
 	SetLogger(NewLogger())
 }
 
-// SetLogger 设置日志记录器
+// SetLogger sets the global logger.
 func SetLogger(logger Logger) {
 	if logger == nil {
 		return
@@ -19,110 +19,110 @@ func SetLogger(logger Logger) {
 	globalLogger = logger
 }
 
-// GetLogger 获取日志记录器
+// GetLogger returns the global logger.
 func GetLogger() Logger {
 	return globalLogger
 }
 
-// Print 打印日志，不含堆栈信息
+// Print writes a log record without stack information.
 func Print(level Level, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Print(level, a...)
 	}
 }
 
-// Printf 打印模板日志，不含堆栈信息
+// Printf writes a formatted log record without stack information.
 func Printf(level Level, format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Printf(level, format, a...)
 	}
 }
 
-// Debug 打印调试日志
+// Debug writes a debug-level log record.
 func Debug(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Debug(a...)
 	}
 }
 
-// Debugf 打印调试模板日志
+// Debugf writes a formatted debug-level log record.
 func Debugf(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Debugf(format, a...)
 	}
 }
 
-// Info 打印信息日志
+// Info writes an info-level log record.
 func Info(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Info(a...)
 	}
 }
 
-// Infof 打印信息模板日志
+// Infof writes a formatted info-level log record.
 func Infof(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Infof(format, a...)
 	}
 }
 
-// Warn 打印警告日志
+// Warn writes a warn-level log record.
 func Warn(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Warn(a...)
 	}
 }
 
-// Warnf 打印警告模板日志
+// Warnf writes a formatted warn-level log record.
 func Warnf(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Warnf(format, a...)
 	}
 }
 
-// Error 打印错误日志
+// Error writes an error-level log record.
 func Error(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Error(a...)
 	}
 }
 
-// Errorf 打印错误模板日志
+// Errorf writes a formatted error-level log record.
 func Errorf(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Errorf(format, a...)
 	}
 }
 
-// Fatal 打印致命错误日志
+// Fatal writes a fatal-level log record.
 func Fatal(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Fatal(a...)
 	}
 }
 
-// Fatalf 打印致命错误模板日志
+// Fatalf writes a formatted fatal-level log record.
 func Fatalf(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Fatalf(format, a...)
 	}
 }
 
-// Panic 打印Panic日志
+// Panic writes a panic-level log record.
 func Panic(a ...any) {
 	if globalLogger != nil {
 		globalLogger.Panic(a...)
 	}
 }
 
-// Panicf 打印Panic模板日志
+// Panicf writes a formatted panic-level log record.
 func Panicf(format string, a ...any) {
 	if globalLogger != nil {
 		globalLogger.Panicf(format, a...)
 	}
 }
 
-// Close 关闭日志
+// Close closes the global logger.
 func Close() {
 	if globalLogger != nil {
 		_ = globalLogger.Close()

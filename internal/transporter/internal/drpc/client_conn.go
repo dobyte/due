@@ -18,30 +18,31 @@ import (
 	"github.com/dobyte/due/v2/mode"
 )
 
-// session 表示一次连接的生命周期，读写协程通过它访问连接与上下文
+// session represents the lifetime of one connection; the read and write goroutines use it to
+// access the connection and its context.
 type session struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	conn          *net.TCPConn
 	reader        *reader
-	dueBuffers    []*buffer.NocopyBuffer // 待写入的消息缓冲对象集合（写协程独享）
-	netBuffers    net.Buffers            // 待写入的字节切片集合（写协程独享）
-	writeDeadline time.Time              // 写截止时间（写协程独享）
+	dueBuffers    []*buffer.NocopyBuffer // Message buffers pending write (owned by the write goroutine)
+	netBuffers    net.Buffers            // Byte slices pending write (owned by the write goroutine)
+	writeDeadline time.Time              // Write deadline (owned by the write goroutine)
 }
 
 type ClientConn struct {
-	cli           *Client                            // 客户端
-	epoch         uint64                             // 连接时间戳
-	mu            sync.Mutex                         // 保护 dialing/状态转换
-	cond          *sync.Cond                         // 拨号完成条件变量
-	rw            sync.RWMutex                       // 配对保护队列写入与关闭，避免向已关闭队列写入panic
-	session       atomic.Pointer[session]            // 当前会话
-	state         atomic.Int32                       // 连接状态
-	queue         *queue.Queue[*buffer.NocopyBuffer] // 消息队列
-	pending       *pending                           // 等待队列
-	dialing       bool                               // 是否正在拨号
-	closed        atomic.Bool                        // 客户端是否已关闭
-	lastFaultTime atomic.Int64                       // 上次故障时间
+	cli           *Client                            // Client
+	epoch         uint64                             // Connection epoch
+	mu            sync.Mutex                         // Guards dialing and state transitions
+	cond          *sync.Cond                         // Condition variable for dial completion
+	rw            sync.RWMutex                       // Serializes queue writes against close, preventing a write to a closed queue from panicking
+	session       atomic.Pointer[session]            // Current session
+	state         atomic.Int32                       // Connection state
+	queue         *queue.Queue[*buffer.NocopyBuffer] // Message queue
+	pending       *pending                           // Pending calls
+	dialing       bool                               // Whether a dial is in progress
+	closed        atomic.Bool                        // Whether the client has been closed
+	lastFaultTime atomic.Int64                       // Time of the last fault
 }
 
 func newClientConn(cli *Client) *ClientConn {
@@ -57,7 +58,7 @@ func newClientConn(cli *Client) *ClientConn {
 	return c
 }
 
-// dial 建立连接；若已有拨号进行中，则等待其完成
+// dial establishes a connection, waiting for an in-flight dial to finish first.
 func (c *ClientConn) dial() error {
 	c.mu.Lock()
 
@@ -66,7 +67,7 @@ func (c *ClientConn) dial() error {
 		return nil
 	}
 
-	// 已有拨号在进行，等待其完成后再判定结果
+	// A dial is already in progress; wait for it to finish before checking the result.
 	for c.dialing {
 		c.cond.Wait()
 	}
@@ -79,7 +80,7 @@ func (c *ClientConn) dial() error {
 	c.dialing = true
 	c.mu.Unlock()
 
-	// 在锁外执行阻塞的网络拨号，避免长时间持锁
+	// Perform the blocking network dial outside the lock to avoid holding it for a long time.
 	err := c.doDial()
 
 	c.mu.Lock()
@@ -90,8 +91,10 @@ func (c *ClientConn) dial() error {
 	return err
 }
 
-// doDial 执行拨号
-// 拨号失败与握手失败统一按退避策略重试，避免握手失败后直接放弃
+// doDial performs the dialing loop.
+//
+// Both dial failures and handshake failures are retried with backoff, so that a handshake failure
+// does not give up immediately.
 func (c *ClientConn) doDial() error {
 	var (
 		err   error
@@ -134,7 +137,7 @@ func (c *ClientConn) doDial() error {
 	}
 }
 
-// process 处理连接
+// process processes a newly dialed connection.
 func (c *ClientConn) process(conn *net.TCPConn) error {
 	s := &session{}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -142,7 +145,8 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 	s.conn.SetNoDelay(true)
 	s.reader = newReader(s.conn)
 
-	// 同步握手：握手完成前不启动写协程、不进入业务 pending，隔离 seq=1 特殊序列号
+	// Synchronous handshake: the write goroutine is not started and no business call enters
+	// pending before the handshake completes, isolating the special sequence number seq=1.
 	if err := c.handshake(s); err != nil {
 		_ = conn.Close()
 		s.cancel()
@@ -151,7 +155,8 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 
 	c.mu.Lock()
 
-	// 关闭期间到达的拨号结果直接废弃，避免已销毁连接被重新置为可用而产生僵尸会话
+	// Discard dial results that arrive while closing, so a destroyed connection is never marked
+	// available again and no zombie session is left behind.
 	if c.closed.Load() {
 		c.mu.Unlock()
 		_ = conn.Close()
@@ -169,8 +174,9 @@ func (c *ClientConn) process(conn *net.TCPConn) error {
 	return nil
 }
 
-// handshake 握手
-// 同步完成握手交互与响应校验，不占用业务 pending 分片
+// handshake performs the handshake synchronously and validates the response.
+//
+// It does not use any business pending shard.
 func (c *ClientConn) handshake(s *session) error {
 	const seq = uint64(1)
 
@@ -237,7 +243,7 @@ func (c *ClientConn) doPush(buf *buffer.NocopyBuffer) error {
 	return err
 }
 
-// push 发送消息
+// push sends a message, releasing buf on failure.
 func (c *ClientConn) push(buf *buffer.NocopyBuffer) error {
 	if err := c.doPush(buf); err != nil {
 		buf.Release()
@@ -247,7 +253,7 @@ func (c *ClientConn) push(buf *buffer.NocopyBuffer) error {
 	return nil
 }
 
-// call 调用
+// call sends a request and waits for its response.
 func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer) (buffer.Buffer, error) {
 	call := make(chan *buffer.Bytes, 1)
 
@@ -276,7 +282,7 @@ func (c *ClientConn) call(ctx context.Context, seq uint64, buf *buffer.NocopyBuf
 	}
 }
 
-// read 读取数据
+// read reads and dispatches incoming messages until the session ends.
 func (c *ClientConn) read(s *session) {
 	for {
 		if s.ctx.Err() != nil {
@@ -299,10 +305,12 @@ func (c *ClientConn) read(s *session) {
 	}
 }
 
-// write 写入数据
-// 从消息队列批量取出消息写入连接；空闲连接按固定间隔发送心跳，
-// 数据帧本身即可维持对端活性判定，繁忙时不再发送心跳；
-// 首次心跳定时加入随机抖动，打散集群同时启动时的心跳同相尖峰
+// write writes queued messages to the connection.
+//
+// Messages are taken from the queue in batches. An idle connection sends a heartbeat at a fixed
+// interval; because a data frame itself proves liveness, no heartbeat is sent while busy. The
+// first heartbeat timer includes random jitter to spread out the heartbeat spikes produced when a
+// cluster starts all at once.
 func (c *ClientConn) write(s *session) {
 	var lastWrite time.Time
 
@@ -314,7 +322,7 @@ func (c *ClientConn) write(s *session) {
 		case <-s.ctx.Done():
 			return
 		case <-timer.C:
-			// 空闲连接才发送心跳：数据帧本身即可维持对端活性判定
+			// Send a heartbeat only when the connection is idle: a data frame itself proves liveness.
 			if time.Since(lastWrite) >= heartbeatInterval {
 				if c.cli.opts.WriteTimeout > 0 {
 					s.writeDeadline = time.Now().Add(c.cli.opts.WriteTimeout)
@@ -346,10 +354,10 @@ func (c *ClientConn) write(s *session) {
 	}
 }
 
-// doBatchWrite 批量写入消息
-// 从写队列批量取出任务，收集字节后通过net.Buffers一次性下发，减少系统调用次数
-// @param conn net.Conn TCP连接
-// @param first buffer.Buffer 首个已取出的任务
+// doBatchWrite writes messages in batches.
+//
+// It takes tasks from the write queue in batches and sends the collected bytes through a single
+// net.Buffers.WriteTo call to reduce the number of system calls.
 func (c *ClientConn) doBatchWrite(s *session, first *buffer.NocopyBuffer) (err error) {
 	closeSig := first.Len() == 0
 
@@ -398,7 +406,8 @@ OVER:
 	if len(s.netBuffers) > 0 {
 		if timeout := c.cli.opts.WriteTimeout; timeout > 0 {
 			now := time.Now()
-			// 仅在剩余时间不足一半时续期，避免每批次写入都产生 netpoller 系统调用
+			// Extend the deadline only when less than half of it remains, avoiding a netpoller
+			// syscall on every batch write.
 			if now.Add(timeout / 2).After(s.writeDeadline) {
 				s.writeDeadline = now.Add(timeout)
 				_ = s.conn.SetWriteDeadline(s.writeDeadline)
@@ -422,8 +431,10 @@ OVER:
 	return
 }
 
-// retry 重试拨号
-// 仅当传入的会话仍是当前会话时才触发重连，避免旧读写协程误伤新连接
+// retry retries the dial after a connection error.
+//
+// It reconnects only when s is still the current session, so that an old read or write goroutine
+// cannot disrupt a new connection.
 func (c *ClientConn) retry(s *session) {
 	if c.closed.Load() {
 		return
@@ -445,9 +456,11 @@ func (c *ClientConn) retry(s *session) {
 	}
 }
 
-// close 关闭连接
-// 拨号重试耗尽时调用，将连接置为关闭态。队列保持打开以支持后续重连补发消息，
-// 但需主动唤醒所有等待中的调用，避免其阻塞至调用超时
+// close closes the connection.
+//
+// It is called when dial retries are exhausted and moves the connection to the closed state. The
+// queue stays open so that a later reconnect can resend messages, but all pending calls are woken
+// up so that they do not block until their call timeout.
 func (c *ClientConn) close() {
 	c.mu.Lock()
 	if c.state.Load() == connClosed {
@@ -472,8 +485,10 @@ func (c *ClientConn) close() {
 	c.pending.closeAll()
 }
 
-// destroy 销毁连接
-// 关闭会话、关闭消息队列并释放积压的消息，彻底回收连接资源
+// destroy destroys the connection.
+//
+// It closes the session and the message queue, releases the backlog of messages and fully
+// reclaims the connection's resources.
 func (c *ClientConn) destroy() {
 	c.mu.Lock()
 	s := c.session.Load()
@@ -491,7 +506,8 @@ func (c *ClientConn) destroy() {
 		s.cancel()
 	}
 
-	// 与 doSend 中的 queue.Write 互斥，防止向已关闭的队列写入而 panic
+	// Mutual exclusion with queue.Write in doSend prevents a panic from writing to an already
+	// closed queue.
 	c.rw.Lock()
 	c.queue.Close()
 	c.rw.Unlock()
@@ -505,7 +521,7 @@ func (c *ClientConn) destroy() {
 	c.pending.closeAll()
 }
 
-// wait 等待重连
+// wait waits until the connection is reconnected or closed.
 func (c *ClientConn) wait() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

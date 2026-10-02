@@ -26,7 +26,7 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
-// Options 客户端配置项
+// Options holds the client options.
 type Options struct {
 	CAFile     string
 	ServerName string
@@ -35,7 +35,8 @@ type Options struct {
 	DialOpts   []grpc.DialOption
 }
 
-// Builder 客户端连接构建器，负责创建 gRPC 连接并管理其生命周期
+// Builder is the client connection builder that creates gRPC connections and manages their
+// lifecycle.
 type Builder struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -49,10 +50,10 @@ type Builder struct {
 	closed      atomic.Bool
 }
 
-// NewBuilder 新建客户端连接构建器
-// 根据配置初始化传输凭证、解析器与负载均衡策略
-// @param opts *Options 客户端配置项
-// @return @1 *Builder 构建器实例
+// NewBuilder returns a new client connection builder.
+//
+// It initializes the transport credentials, resolvers and load balancing strategy according to the
+// options.
 func NewBuilder(opts *Options) *Builder {
 	var (
 		err  error
@@ -107,8 +108,8 @@ func NewBuilder(opts *Options) *Builder {
 	return b
 }
 
-// init 初始化服务发现，加载初始实例并启动实例变更监听
-// @return @1 error 错误信息
+// init initializes service discovery by loading the initial instances and starting the instance
+// change watcher.
 func (b *Builder) init() error {
 	if b.opts.Discovery == nil {
 		return nil
@@ -157,18 +158,17 @@ func (b *Builder) watch() {
 	}
 }
 
-// updateInstances 更新服务实例
+// updateInstances updates the service instances.
 func (b *Builder) updateInstances(instances []*registry.ServiceInstance) {
 	for _, r := range b.resolvers {
 		r.(iresolver.Builder).UpdateStates(instances)
 	}
 }
 
-// Build 构建连接
-// 相同 target 的连接会被缓存复用，单飞避免并发重复建连
-// @param target string 目标服务地址
-// @return @1 *grpc.ClientConn 客户端连接
-// @return @2 error 错误信息
+// Build builds a connection.
+//
+// A connection for the same target is cached and reused, and singleflight prevents concurrent
+// duplicate connection attempts.
 func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -194,7 +194,7 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 
 		b.connections.Store(target, cc)
 
-		// 防止 Close 与 Build 并发时 Store 进已关闭的连接
+		// Prevent storing an already-closed connection when Close and Build run concurrently.
 		if b.closed.Load() {
 			_ = cc.Close()
 			b.connections.Delete(target)
@@ -210,23 +210,23 @@ func (b *Builder) Build(target string) (*grpc.ClientConn, error) {
 	return c.(*grpc.ClientConn), nil
 }
 
-// Close 关闭构建器，释放全部连接与资源（幂等）
+// Close closes the builder and releases all connections and resources. It is idempotent.
 func (b *Builder) Close() error {
 	if !b.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
-	// 通知 watch 协程退出
+	// Notify the watch goroutine to exit.
 	if b.cancel != nil {
 		b.cancel()
 	}
 
-	// 停止服务发现监听，触发 Next() 返回 ErrWatcherStopped
+	// Stop the service discovery watcher, making Next return ErrWatcherStopped.
 	if b.watcher != nil {
 		_ = b.watcher.Stop()
 	}
 
-	// 关闭全部连接并清空缓存
+	// Close all connections and clear the cache.
 	var firstErr error
 	b.connections.Range(func(key, value any) bool {
 		if err := value.(*grpc.ClientConn).Close(); err != nil && firstErr == nil {

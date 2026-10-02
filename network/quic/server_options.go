@@ -34,36 +34,38 @@ const (
 )
 
 const (
-	// RespHeartbeat 响应式心跳：仅在收到对端心跳时回复心跳包
+	// RespHeartbeat is responsive heartbeat: a heartbeat is sent back only when a heartbeat from
+	// the peer is received.
 	RespHeartbeat HeartbeatMechanism = "resp"
-	// TickHeartbeat 主动定时心跳：按心跳间隔主动下发心跳包
+	// TickHeartbeat is active periodic heartbeat: heartbeat packets are dispatched at the
+	// heartbeat interval.
 	TickHeartbeat HeartbeatMechanism = "tick"
 )
 
-// HeartbeatMechanism 心跳机制
+// HeartbeatMechanism is a heartbeat mechanism.
 type HeartbeatMechanism string
 
-// ServerOption 服务器配置项
-// @param o *serverOptions 服务器配置
+// ServerOption is a functional option for configuring a server.
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
-	closeTimeout       time.Duration
-	addr               string             // 监听地址，默认0.0.0.0:3553
-	certFile           string             // 证书文件
-	keyFile            string             // 秘钥文件
-	maxConnNum         int                // 最大连接数，默认5000
-	writeTimeout       time.Duration      // 写超时时间，默认无超时
-	writeQueueSize     int                // 写队列大小，默认1024
-	heartbeatInterval  time.Duration      // 心跳检测间隔时间，默认10s
-	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
-	handshakeTimeout   time.Duration      // 握手超时时间，默认5s
+	closeTimeout       time.Duration      // Graceful close timeout
+	addr               string             // Listen address, 0.0.0.0:3553 by default
+	certFile           string             // Certificate file
+	keyFile            string             // Private key file
+	maxConnNum         int                // Maximum number of connections, 5000 by default
+	writeTimeout       time.Duration      // Write timeout, no timeout by default
+	writeQueueSize     int                // Write queue size, 1024 by default
+	heartbeatInterval  time.Duration      // Heartbeat detection interval, 10s by default
+	heartbeatMechanism HeartbeatMechanism // Heartbeat mechanism, resp by default
+	authorizeTimeout   time.Duration      // Authorize timeout, 0s by default, meaning no check
+	handshakeTimeout   time.Duration      // Handshake timeout, 5s by default
 }
 
-// defaultServerOptions 构建默认服务器配置
-// 优先读取环境配置（etc.network.quic.server.*），缺失时回退到内置默认值
-// @return @1 *serverOptions 服务器配置
+// defaultServerOptions builds the default server options.
+//
+// It reads the environment configuration (etc.network.quic.server.*) first and falls back to the
+// built-in defaults when an entry is missing.
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{closeTimeout: defaultCloseTimeout}
 	if timeout := etc.Get(defaultServerCloseTimeoutKey, defaultCloseTimeout).Duration(); timeout > 0 {
@@ -124,9 +126,7 @@ func defaultServerOptions() *serverOptions {
 	return opts
 }
 
-// WithServerAddr 设置监听地址
-// @param addr string 监听地址，为空时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerAddr sets the listen address. An empty addr is ignored.
 func WithServerAddr(addr string) ServerOption {
 	return func(o *serverOptions) {
 		if addr != "" {
@@ -137,10 +137,7 @@ func WithServerAddr(addr string) ServerOption {
 	}
 }
 
-// WithServerCredentials 设置服务器证书和秘钥
-// @param certFile string 证书文件
-// @param keyFile string 私钥文件
-// @return @1 ServerOption 服务器配置项
+// WithServerCredentials sets the server certificate and private key.
 func WithServerCredentials(certFile, keyFile string) ServerOption {
 	return func(o *serverOptions) {
 		if certFile != "" && keyFile != "" {
@@ -151,9 +148,8 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 	}
 }
 
-// WithServerMaxConnNum 设置连接的最大连接数
-// @param maxConnNum int 最大连接数，小于等于0时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerMaxConnNum sets the maximum number of connections. A value less than or equal to 0 is
+// ignored.
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) {
 		if maxConnNum > 0 {
@@ -164,9 +160,7 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	}
 }
 
-// WithServerWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间，小于0时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteTimeout sets the write timeout. A negative writeTimeout is ignored.
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if writeTimeout >= 0 {
@@ -177,9 +171,7 @@ func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerWriteQueueSize 设置写入队列大小
-// @param writeQueueSize int 写队列大小，小于等于0时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteQueueSize sets the write queue size. A value less than or equal to 0 is ignored.
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeQueueSize > 0 {
@@ -190,9 +182,8 @@ func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	}
 }
 
-// WithServerHeartbeatInterval 设置心跳检测间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间，小于0时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatInterval sets the heartbeat detection interval. A negative heartbeatInterval
+// is ignored.
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatInterval >= 0 {
@@ -203,9 +194,8 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	}
 }
 
-// WithServerHeartbeatMechanism 设置心跳机制
-// @param heartbeatMechanism HeartbeatMechanism 心跳机制，取值RespHeartbeat或TickHeartbeat
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatMechanism sets the heartbeat mechanism. The value must be [RespHeartbeat] or
+// [TickHeartbeat].
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
@@ -216,9 +206,8 @@ func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerO
 	}
 }
 
-// WithServerAuthorizeTimeout 设置授权超时时间
-// @param authorizeTimeout time.Duration 授权超时时间，小于0时忽略，0表示不检测
-// @return @1 ServerOption 服务器配置项
+// WithServerAuthorizeTimeout sets the authorize timeout. A negative authorizeTimeout is ignored and
+// 0 means no check.
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if authorizeTimeout >= 0 {
@@ -229,9 +218,7 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerHandshakeTimeout 设置握手超时时间
-// @param handshakeTimeout time.Duration 握手超时时间，小于等于0时忽略
-// @return @1 ServerOption 服务器配置项
+// WithServerHandshakeTimeout sets the handshake timeout. A value less than or equal to 0 is ignored.
 func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if handshakeTimeout > 0 {
@@ -242,10 +229,10 @@ func WithServerHandshakeTimeout(handshakeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerCloseTimeout 设置优雅关闭超时时间
-// 同时用作优雅关闭的排空等待上限与关闭后的重传驻留时长，小于等于0时忽略
-// @param timeout time.Duration 优雅关闭超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerCloseTimeout sets the graceful close timeout.
+//
+// The timeout is used both as the drain wait limit for a graceful close and as the retransmission
+// dwell time after closing. A value less than or equal to 0 is ignored.
 func WithServerCloseTimeout(timeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if timeout > 0 {

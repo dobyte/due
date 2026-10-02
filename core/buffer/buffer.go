@@ -1,12 +1,12 @@
 package buffer
 
-// Whence 指定节点挂载位置
+// Whence specifies where a node is mounted.
 type Whence int
 
 const (
-	// Head 头部
+	// Head mounts the node at the head.
 	Head Whence = iota
-	// Tail 尾部
+	// Tail mounts the node at the tail.
 	Tail
 )
 
@@ -18,18 +18,18 @@ const (
 )
 
 type Buffer interface {
-	// Len 获取字节长度
+	// Len returns the byte length.
 	Len() int
-	// Nodes 获取节点数
+	// Nodes returns the number of nodes.
 	Nodes() int
-	// Delay 设置延迟释放点
+	// Delay sets the delayed release point.
 	Delay(delay int)
-	// Bytes 获取所有字节（性能较低，不推荐使用）
+	// Bytes returns all bytes. It is relatively slow and not recommended.
 	Bytes() []byte
-	// Release 释放
+	// Release releases the buffer.
 	Release()
-	// Slide 滑动lower索引
+	// Slide slides the lower index.
 	Slide(lower int) bool
-	// VisitBytes 迭代所有字节
+	// VisitBytes iterates over all bytes.
 	VisitBytes(fn func(bytes []byte) bool) bool
 }

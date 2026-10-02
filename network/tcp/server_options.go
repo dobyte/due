@@ -36,8 +36,8 @@ const (
 )
 
 const (
-	RespHeartbeat HeartbeatMechanism = "resp" // 响应式心跳
-	TickHeartbeat HeartbeatMechanism = "tick" // 主动定时心跳
+	RespHeartbeat HeartbeatMechanism = "resp" // Responsive heartbeat
+	TickHeartbeat HeartbeatMechanism = "tick" // Active tick heartbeat
 )
 
 type HeartbeatMechanism string
@@ -45,23 +45,24 @@ type HeartbeatMechanism string
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
-	addr                string             // 监听地址，默认0.0.0.0:3553
-	certFile            string             // 证书文件
-	keyFile             string             // 秘钥文件
-	maxConnNum          int                // 最大连接数，默认5000
-	readBufferSize      int                // 读取缓冲区大小，默认4096
-	writeTimeout        time.Duration      // 写超时时间，默认无超时
-	writeQueueSize      int                // 写队列大小，默认1024
-	heartbeatInterval   time.Duration      // 心跳检测间隔时间，默认10s
-	heartbeatMechanism  HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout    time.Duration      // 授权超时时间，默认0s，不检测
-	closeTimeout        time.Duration      // 优雅关闭超时时间，默认0s，不限制
-	enableProxyProtocol bool               // 是否启用ProxyProtocol，默认false
+	addr                string             // Listen address, defaults to 0.0.0.0:3553
+	certFile            string             // Certificate file
+	keyFile             string             // Key file
+	maxConnNum          int                // Maximum number of connections, defaults to 5000
+	readBufferSize      int                // Read buffer size, defaults to 4096
+	writeTimeout        time.Duration      // Write timeout, defaults to no timeout
+	writeQueueSize      int                // Write queue size, defaults to 1024
+	heartbeatInterval   time.Duration      // Heartbeat check interval, defaults to 10s
+	heartbeatMechanism  HeartbeatMechanism // Heartbeat mechanism, defaults to resp
+	authorizeTimeout    time.Duration      // Authorization timeout, defaults to 0s (no check)
+	closeTimeout        time.Duration      // Graceful close timeout, defaults to 0s (no limit)
+	enableProxyProtocol bool               // Whether to enable ProxyProtocol, defaults to false
 }
 
-// defaultServerOptions 构建默认服务器配置
-// 优先读取环境配置（etc.network.tcp.server.*），缺失时回退到内置默认值
-// @return @1 *serverOptions 服务器配置
+// defaultServerOptions builds the default server options.
+//
+// It reads the environment config (etc.network.tcp.server.*) first and falls back to the built-in
+// defaults when a value is missing.
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.certFile = etc.Get(defaultServerCertFileKey).String()
@@ -126,9 +127,7 @@ func defaultServerOptions() *serverOptions {
 	return opts
 }
 
-// WithServerAddr 设置监听地址
-// @param addr string 监听地址
-// @return @1 ServerOption 服务器配置项
+// WithServerAddr sets the listen address.
 func WithServerAddr(addr string) ServerOption {
 	return func(o *serverOptions) {
 		if addr != "" {
@@ -139,10 +138,7 @@ func WithServerAddr(addr string) ServerOption {
 	}
 }
 
-// WithServerCredentials 设置服务器证书和秘钥
-// @param certFile string 证书文件
-// @param keyFile string 秘钥文件
-// @return @1 ServerOption 服务器配置项
+// WithServerCredentials sets the server certificate and key.
 func WithServerCredentials(certFile, keyFile string) ServerOption {
 	return func(o *serverOptions) {
 		if certFile != "" && keyFile != "" {
@@ -153,9 +149,7 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 	}
 }
 
-// WithServerMaxConnNum 设置连接的最大连接数
-// @param maxConnNum int 最大连接数
-// @return @1 ServerOption 服务器配置项
+// WithServerMaxConnNum sets the maximum number of connections.
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) {
 		if maxConnNum > 0 {
@@ -166,9 +160,7 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	}
 }
 
-// WithServerReadBufferSize 设置读取缓冲区大小
-// @param readBufferSize int 读取缓冲区大小
-// @return @1 ServerOption 服务器配置项
+// WithServerReadBufferSize sets the read buffer size.
 func WithServerReadBufferSize(readBufferSize int) ServerOption {
 	return func(o *serverOptions) {
 		if readBufferSize > 0 {
@@ -179,9 +171,7 @@ func WithServerReadBufferSize(readBufferSize int) ServerOption {
 	}
 }
 
-// WithServerWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteTimeout sets the write timeout.
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if writeTimeout >= 0 {
@@ -192,9 +182,7 @@ func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerWriteQueueSize 设置写入队列大小
-// @param writeQueueSize int 写入队列大小
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteQueueSize sets the write queue size.
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeQueueSize > 0 {
@@ -205,9 +193,7 @@ func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	}
 }
 
-// WithServerHeartbeatInterval 设置心跳检测间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatInterval sets the heartbeat check interval.
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatInterval >= 0 {
@@ -218,9 +204,7 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	}
 }
 
-// WithServerHeartbeatMechanism 设置心跳机制
-// @param heartbeatMechanism HeartbeatMechanism 心跳机制
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatMechanism sets the heartbeat mechanism.
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatMechanism == RespHeartbeat || heartbeatMechanism == TickHeartbeat {
@@ -231,9 +215,7 @@ func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerO
 	}
 }
 
-// WithServerAuthorizeTimeout 设置授权超时时间
-// @param authorizeTimeout time.Duration 授权超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerAuthorizeTimeout sets the authorization timeout.
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if authorizeTimeout >= 0 {
@@ -244,10 +226,10 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerCloseTimeout 设置优雅关闭超时时间
-// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
-// @param closeTimeout time.Duration 优雅关闭超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerCloseTimeout sets the graceful close timeout.
+//
+// When the write queue has not drained before the timeout elapses, the wait is abandoned and the
+// connection is closed forcibly. The default value of 0 means no limit.
 func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if closeTimeout >= 0 {
@@ -258,9 +240,7 @@ func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerEnableProxyProtocol 设置是否启用ProxyProtocol
-// @param enableProxyProtocol bool 是否启用ProxyProtocol
-// @return @1 ServerOption 服务器配置项
+// WithServerEnableProxyProtocol sets whether to enable ProxyProtocol.
 func WithServerEnableProxyProtocol(enableProxyProtocol bool) ServerOption {
 	return func(o *serverOptions) { o.enableProxyProtocol = enableProxyProtocol }
 }

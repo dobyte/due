@@ -1,3 +1,8 @@
+// Package lock provides a distributed lock abstraction built on a [Maker]/[Locker] pair.
+//
+// A [Maker] creates [Locker] instances by name, and a [Locker] acquires and releases a lock. The
+// package holds a global maker so that lockers can be created through [Make] without passing the
+// maker around explicitly.
 package lock
 
 import (
@@ -9,28 +14,31 @@ import (
 
 var globalMaker Maker
 
+// Maker creates and closes lockers.
 type Maker interface {
-	// Make 制造一个Locker
+	// Make creates a locker with the given name.
 	Make(name string) Locker
-	// Close 关闭构建器
+	// Close closes the maker.
 	Close() error
 }
 
+// Option configures how a lock is acquired.
 type Option struct {
-	Once       bool          // 是否仅获取一次；默认阻塞地获取，直到获取成功
-	Expiration time.Duration //
+	Once       bool          // Once reports whether the lock is acquired only once; by default it is acquired in blocking mode until it succeeds.
+	Expiration time.Duration // Expiration is the lock expiration time.
 }
 
+// Locker is a distributed lock that can be acquired and released.
 type Locker interface {
-	// Acquire 获取锁
+	// Acquire acquires the lock.
 	Acquire(ctx context.Context) error
-	// TryAcquire 尝试获取锁
+	// TryAcquire tries to acquire the lock with an optional expiration.
 	TryAcquire(ctx context.Context, expiration ...time.Duration) error
-	// Release 释放锁
+	// Release releases the lock.
 	Release(ctx context.Context) error
 }
 
-// SetMaker 设置Locker制造商
+// SetMaker sets the global locker maker. It closes the previous maker, if any, before replacing it.
 func SetMaker(maker Maker) {
 	if maker == nil {
 		log.Warn("cannot set a nil lock-maker")
@@ -46,12 +54,13 @@ func SetMaker(maker Maker) {
 	globalMaker = maker
 }
 
-// GetMaker 获取Locker制造商
+// GetMaker returns the global locker maker.
 func GetMaker() Maker {
 	return globalMaker
 }
 
-// Make 制造一个Locker
+// Make creates a locker with the given name through the global maker. It returns nil when no maker
+// has been set.
 func Make(name string) Locker {
 	if globalMaker != nil {
 		return globalMaker.Make(name)
@@ -60,7 +69,7 @@ func Make(name string) Locker {
 	}
 }
 
-// Close 关闭构建器
+// Close closes the global maker. It does nothing when no maker has been set.
 func Close() error {
 	if globalMaker != nil {
 		return globalMaker.Close()

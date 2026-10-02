@@ -13,11 +13,11 @@ import (
 
 var durationRegexp = regexp.MustCompile(`(((-?\d+)(\.\d+)?)(d))`)
 
-// Duration 将任意值转换为时间间隔
-// 数值类型直接按纳秒换算；字符串支持 "ns"、"us"（或 "µs"）、"ms"、"s"、"m"、"h"、"d"（天）
-// 等时间单位，其中 "d" 天会被替换为对应的纳秒数后解析
-// @param val any 待转换的值
-// @return @1 time.Duration 转换后的时间间隔
+// Duration converts val to a time.Duration.
+//
+// Numeric values are converted directly as nanoseconds; strings accept time units such as "ns",
+// "us" (or "µs"), "ms", "s", "m", "h" and "d" (day), where "d" is replaced by the corresponding
+// number of nanoseconds before parsing.
 func Duration(val any) time.Duration {
 	if val == nil {
 		return 0
@@ -193,9 +193,7 @@ func Duration(val any) time.Duration {
 	}
 }
 
-// Durations 将任意值转换为时间间隔切片
-// @param val any 待转换的值
-// @return @1 []time.Duration 转换后的时间间隔切片
+// Durations converts val to a time.Duration slice.
 func Durations(val any) (slice []time.Duration) {
 	if val == nil {
 		return
@@ -450,17 +448,13 @@ func Durations(val any) (slice []time.Duration) {
 	return
 }
 
-// DurationPointer 将任意值转换为时间间隔指针
-// @param val any 待转换的值
-// @return @1 *time.Duration 转换后的时间间隔指针
+// DurationPointer converts val to a pointer to time.Duration.
 func DurationPointer(any any) *time.Duration {
 	v := Duration(any)
 	return &v
 }
 
-// DurationsPointer 将任意值转换为时间间隔切片指针
-// @param val any 待转换的值
-// @return @1 *[]time.Duration 转换后的时间间隔切片指针
+// DurationsPointer converts val to a pointer to a time.Duration slice.
 func DurationsPointer(any any) *[]time.Duration {
 	v := Durations(any)
 	return &v

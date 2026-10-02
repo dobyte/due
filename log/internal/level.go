@@ -11,7 +11,7 @@ const (
 	reset = "\x1b[0m"
 )
 
-// Level 日志级别
+// Level is a log level.
 type Level string
 
 const (
@@ -24,7 +24,7 @@ const (
 	LevelPanic Level = "panic" // PANIC
 )
 
-// Priority 获取日志级别优先级
+// Priority returns the priority of the log level.
 func (l Level) Priority() int {
 	switch l {
 	case LevelDebug:
@@ -44,7 +44,7 @@ func (l Level) Priority() int {
 	}
 }
 
-// Color 获取日志级别颜色
+// Color returns the color of the log level.
 func (l Level) Color() string {
 	switch l {
 	case LevelDebug:
@@ -58,6 +58,7 @@ func (l Level) Color() string {
 	}
 }
 
+// Label returns the four-letter label of the log level.
 func (l Level) Label() string {
 	switch l {
 	case LevelDebug:

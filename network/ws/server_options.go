@@ -51,16 +51,16 @@ const (
 )
 
 const (
-	RespHeartbeat HeartbeatMechanism = "resp" // 响应式心跳
-	TickHeartbeat HeartbeatMechanism = "tick" // 主动定时心跳
+	RespHeartbeat HeartbeatMechanism = "resp" // Responsive heartbeat
+	TickHeartbeat HeartbeatMechanism = "tick" // Active tick heartbeat
 )
 
 type HeartbeatMechanism string
 
 const (
-	ProxyModeNone        ProxyMode = iota // 无代理模式
-	ProxyModeTransport                    // 传输模式（4层代理，服务器会开启proxy protocol）
-	ProxyModeApplication                  // 应用模式（7层代理）
+	ProxyModeNone        ProxyMode = iota // No proxy mode
+	ProxyModeTransport                    // Transport mode (layer 4 proxy, the server enables the proxy protocol)
+	ProxyModeApplication                  // Application mode (layer 7 proxy)
 )
 
 type ProxyMode int
@@ -70,45 +70,46 @@ type ServerOption func(o *serverOptions)
 type CheckOriginFunc func(r *http.Request) bool
 
 type ProxyOptions struct {
-	ProxyHeader string            `json:"proxyHeader"` // 客户端IP头，默认"X-Forwarded-For"
-	PortHeader  string            `json:"portHeader"`  // 客户端端口头，默认"X-Forwarded-Port"
-	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
+	ProxyHeader string            `json:"proxyHeader"` // Client IP header, defaults to "X-Forwarded-For"
+	PortHeader  string            `json:"portHeader"`  // Client port header, defaults to "X-Forwarded-Port"
+	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // Trust proxy config
 }
 
 type TrustProxyOptions struct {
-	Enable    bool                `json:"enable"`    // 是否信任代理，默认false
-	Proxies   []string            `json:"proxies"`   // 代理是受信任代理 IP 地址或 CIDR 范围的列表
-	LinkLocal bool                `json:"linkLocal"` // 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
-	Loopback  bool                `json:"loopback"`  // 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
-	Private   bool                `json:"private"`   // 支持信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
-	ips       map[string]struct{} `json:"-"`         // 受信任代理 IP 地址映射
-	ranges    []*net.IPNet        `json:"-"`         // 受信任代理 IP 范围映射
+	Enable    bool                `json:"enable"`    // Whether to trust proxies, defaults to false
+	Proxies   []string            `json:"proxies"`   // List of trusted proxy IP addresses or CIDR ranges
+	LinkLocal bool                `json:"linkLocal"` // Whether to trust all link-local IP ranges (e.g. 169.254.0.0/16, fe80::/10)
+	Loopback  bool                `json:"loopback"`  // Whether to trust all loopback IP ranges (e.g. 127.0.0.0/8, ::1/128)
+	Private   bool                `json:"private"`   // Whether to trust all private IP ranges (e.g. 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7)
+	ips       map[string]struct{} `json:"-"`         // Trusted proxy IP address set
+	ranges    []*net.IPNet        `json:"-"`         // Trusted proxy IP range set
 }
 
 type serverOptions struct {
-	addr               string             // 监听地址
-	maxConnNum         int                // 最大连接数
-	certFile           string             // 证书文件
-	keyFile            string             // 秘钥文件
-	path               string             // 路径，默认为"/"
-	checkOrigin        CheckOriginFunc    // 跨域检测
-	readBufferSize     int                // 读缓冲区大小，默认4096
-	writeBufferSize    int                // 写缓冲区大小，默认4096
-	writeTimeout       time.Duration      // 写入超时时间，默认无超时
-	writeQueueSize     int                // 写入队列大小，默认1024
-	heartbeatInterval  time.Duration      // 心跳间隔时间，默认10s
-	heartbeatMechanism HeartbeatMechanism // 心跳机制，默认resp
-	authorizeTimeout   time.Duration      // 授权超时时间，默认0s，不检测
-	closeTimeout       time.Duration      // 优雅关闭超时时间，默认0s，不限制
-	enableCompression  bool               // 是否开启压缩，默认false
-	compressionLevel   int                // 压缩等级，默认1
-	proxyMode          ProxyMode          // 代理模式，默认ProxyModeNone
-	proxyOpts          ProxyOptions       // 代理选项，仅在proxyMode为ProxyModeApplication时生效
+	addr               string             // Listen address
+	maxConnNum         int                // Maximum number of connections
+	certFile           string             // Certificate file
+	keyFile            string             // Key file
+	path               string             // Path, defaults to "/"
+	checkOrigin        CheckOriginFunc    // Origin check
+	readBufferSize     int                // Read buffer size, defaults to 4096
+	writeBufferSize    int                // Write buffer size, defaults to 4096
+	writeTimeout       time.Duration      // Write timeout, defaults to no timeout
+	writeQueueSize     int                // Write queue size, defaults to 1024
+	heartbeatInterval  time.Duration      // Heartbeat interval, defaults to 10s
+	heartbeatMechanism HeartbeatMechanism // Heartbeat mechanism, defaults to resp
+	authorizeTimeout   time.Duration      // Authorization timeout, defaults to 0s (no check)
+	closeTimeout       time.Duration      // Graceful close timeout, defaults to 0s (no limit)
+	enableCompression  bool               // Whether to enable compression, defaults to false
+	compressionLevel   int                // Compression level, defaults to 1
+	proxyMode          ProxyMode          // Proxy mode, defaults to ProxyModeNone
+	proxyOpts          ProxyOptions       // Proxy options, only effective when proxyMode is ProxyModeApplication
 }
 
-// defaultServerOptions 构建默认服务器配置
-// 优先读取环境配置（etc.network.ws.server.*），缺失时回退到内置默认值
-// @return @1 *serverOptions 服务器配置
+// defaultServerOptions builds the default server options.
+//
+// It reads the environment config (etc.network.ws.server.*) first and falls back to the built-in
+// defaults when a value is missing.
 func defaultServerOptions() *serverOptions {
 	opts := &serverOptions{}
 	opts.path = etc.Get(defaultServerPathKey, defaultServerPath).String()
@@ -223,9 +224,7 @@ func defaultServerOptions() *serverOptions {
 	return opts
 }
 
-// WithServerAddr 设置监听地址
-// @param addr string 监听地址
-// @return @1 ServerOption 服务器配置项
+// WithServerAddr sets the listen address.
 func WithServerAddr(addr string) ServerOption {
 	return func(o *serverOptions) {
 		if addr != "" {
@@ -236,17 +235,12 @@ func WithServerAddr(addr string) ServerOption {
 	}
 }
 
-// WithServerPath 设置Websocket的连接路径
-// @param path string 连接路径
-// @return @1 ServerOption 服务器配置项
+// WithServerPath sets the WebSocket connection path.
 func WithServerPath(path string) ServerOption {
 	return func(o *serverOptions) { o.path = path }
 }
 
-// WithServerCredentials 设置服务器证书和秘钥
-// @param certFile string 证书文件
-// @param keyFile string 秘钥文件
-// @return @1 ServerOption 服务器配置项
+// WithServerCredentials sets the server certificate and key.
 func WithServerCredentials(certFile, keyFile string) ServerOption {
 	return func(o *serverOptions) {
 		if certFile != "" && keyFile != "" {
@@ -257,16 +251,12 @@ func WithServerCredentials(certFile, keyFile string) ServerOption {
 	}
 }
 
-// WithServerCheckOrigin 设置Websocket跨域检测函数
-// @param checkOrigin CheckOriginFunc 跨域检测函数
-// @return @1 ServerOption 服务器配置项
+// WithServerCheckOrigin sets the WebSocket origin check function.
 func WithServerCheckOrigin(checkOrigin CheckOriginFunc) ServerOption {
 	return func(o *serverOptions) { o.checkOrigin = checkOrigin }
 }
 
-// WithServerMaxConnNum 设置连接的最大连接数
-// @param maxConnNum int 最大连接数
-// @return @1 ServerOption 服务器配置项
+// WithServerMaxConnNum sets the maximum number of connections.
 func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	return func(o *serverOptions) {
 		if maxConnNum > 0 {
@@ -277,9 +267,7 @@ func WithServerMaxConnNum(maxConnNum int) ServerOption {
 	}
 }
 
-// WithServerReadBufferSize 设置读取缓冲区大小
-// @param readBufferSize int 读取缓冲区大小
-// @return @1 ServerOption 服务器配置项
+// WithServerReadBufferSize sets the read buffer size.
 func WithServerReadBufferSize(readBufferSize int) ServerOption {
 	return func(o *serverOptions) {
 		if readBufferSize > 0 {
@@ -290,9 +278,7 @@ func WithServerReadBufferSize(readBufferSize int) ServerOption {
 	}
 }
 
-// WithServerWriteBufferSize 设置写入缓冲区大小
-// @param writeBufferSize int 写入缓冲区大小
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteBufferSize sets the write buffer size.
 func WithServerWriteBufferSize(writeBufferSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeBufferSize > 0 {
@@ -303,9 +289,7 @@ func WithServerWriteBufferSize(writeBufferSize int) ServerOption {
 	}
 }
 
-// WithServerWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteTimeout sets the write timeout.
 func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if writeTimeout >= 0 {
@@ -316,9 +300,7 @@ func WithServerWriteTimeout(writeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerWriteQueueSize 设置写入队列大小
-// @param writeQueueSize int 写入队列大小
-// @return @1 ServerOption 服务器配置项
+// WithServerWriteQueueSize sets the write queue size.
 func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	return func(o *serverOptions) {
 		if writeQueueSize > 0 {
@@ -329,9 +311,7 @@ func WithServerWriteQueueSize(writeQueueSize int) ServerOption {
 	}
 }
 
-// WithServerHeartbeatInterval 设置心跳检测间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatInterval sets the heartbeat check interval.
 func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if heartbeatInterval >= 0 {
@@ -342,9 +322,7 @@ func WithServerHeartbeatInterval(heartbeatInterval time.Duration) ServerOption {
 	}
 }
 
-// WithServerHeartbeatMechanism 设置心跳机制
-// @param heartbeatMechanism HeartbeatMechanism 心跳机制
-// @return @1 ServerOption 服务器配置项
+// WithServerHeartbeatMechanism sets the heartbeat mechanism.
 func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerOption {
 	return func(o *serverOptions) {
 		switch heartbeatMechanism {
@@ -356,9 +334,7 @@ func WithServerHeartbeatMechanism(heartbeatMechanism HeartbeatMechanism) ServerO
 	}
 }
 
-// WithServerAuthorizeTimeout 设置授权超时时间
-// @param authorizeTimeout time.Duration 授权超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerAuthorizeTimeout sets the authorization timeout.
 func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if authorizeTimeout >= 0 {
@@ -369,10 +345,10 @@ func WithServerAuthorizeTimeout(authorizeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerCloseTimeout 设置优雅关闭超时时间
-// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
-// @param closeTimeout time.Duration 优雅关闭超时时间
-// @return @1 ServerOption 服务器配置项
+// WithServerCloseTimeout sets the graceful close timeout.
+//
+// When the write queue has not drained before the timeout elapses, the wait is abandoned and the
+// connection is closed forcibly. The default value of 0 means no limit.
 func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		if closeTimeout >= 0 {
@@ -383,16 +359,12 @@ func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
 	}
 }
 
-// WithServerEnableCompression 设置是否开启压缩
-// @param enableCompression bool 是否开启压缩
-// @return @1 ServerOption 服务器配置项
+// WithServerEnableCompression sets whether to enable compression.
 func WithServerEnableCompression(enableCompression bool) ServerOption {
 	return func(o *serverOptions) { o.enableCompression = enableCompression }
 }
 
-// WithServerCompressionLevel 设置压缩等级
-// @param compressionLevel int 压缩等级
-// @return @1 ServerOption 服务器配置项
+// WithServerCompressionLevel sets the compression level.
 func WithServerCompressionLevel(compressionLevel int) ServerOption {
 	return func(o *serverOptions) {
 		if compressionLevel >= 1 && compressionLevel <= 9 {
@@ -403,16 +375,12 @@ func WithServerCompressionLevel(compressionLevel int) ServerOption {
 	}
 }
 
-// WithServerProxyMode 设置代理模式
-// @param proxyMode ProxyMode 代理模式
-// @return @1 ServerOption 服务器配置项
+// WithServerProxyMode sets the proxy mode.
 func WithServerProxyMode(proxyMode ProxyMode) ServerOption {
 	return func(o *serverOptions) { o.proxyMode = proxyMode }
 }
 
-// WithServerProxyOptions 设置代理选项
-// @param proxyOpts ProxyOptions 代理选项
-// @return @1 ServerOption 服务器配置项
+// WithServerProxyOptions sets the proxy options.
 func WithServerProxyOptions(proxyOpts ProxyOptions) ServerOption {
 	return func(o *serverOptions) {
 		o.proxyOpts = ProxyOptions{
@@ -423,9 +391,7 @@ func WithServerProxyOptions(proxyOpts ProxyOptions) ServerOption {
 	}
 }
 
-// handleTrustedProxy 处理受信任的代理
-// @param opts TrustProxyOptions 受信任的代理配置
-// @return @1 TrustProxyOptions 处理后的受信任的代理配置
+// handleTrustedProxy processes the trusted proxies.
 func handleTrustedProxy(opts TrustProxyOptions) TrustProxyOptions {
 	opts.ips = make(map[string]struct{}, len(opts.Proxies))
 	opts.ranges = make([]*net.IPNet, 0, len(opts.Proxies))

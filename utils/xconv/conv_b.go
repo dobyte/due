@@ -9,14 +9,14 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// byteRegexp 匹配存储容量字符串，如 "10KB"、"5M"、"1.5GB" 等，数字部分支持小数
+// byteRegexp matches a storage-capacity string such as "10KB", "5M" or "1.5GB", where the numeric
+// part may be a decimal.
 var byteRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)(b|k|m|g|t|p|e|z|kb|mb|gb|tb|pb|eb|zb)?$`)
 
-// toB 将存储容量字符串解析为字节数
-// 支持 b/k/m/g/t/p/e/z 及带 b 后缀的单位（不区分大小写），数字部分支持小数（如 1.5GB），
-// 无法解析时返回 0
-// @param val string 存储容量字符串
-// @return @1 float64 解析后的字节数
+// toB parses a storage-capacity string as a number of bytes.
+//
+// It accepts the units b/k/m/g/t/p/e/z, with or without the trailing b (case-insensitive), and
+// the numeric part may be a decimal such as 1.5GB. It returns 0 when the string cannot be parsed.
 func toB(val string) float64 {
 	if rst := byteRegexp.FindStringSubmatch(val); len(rst) == 3 {
 		var unit float64
@@ -48,11 +48,10 @@ func toB(val string) float64 {
 	}
 }
 
-// B 将任意值转换为存储容量字节数（float64）
-// 数值类型直接返回；字符串支持 "10KB"、"5M" 等容量单位（不区分大小写）；
-// 无法转换时返回 0
-// @param val any 待转换的值
-// @return @1 float64 转换后的字节数
+// B converts val to a number of storage-capacity bytes as a float64.
+//
+// Numeric values are returned as is; strings accept capacity units such as "10KB" or "5M"
+// (case-insensitive); the conversion returns 0 when it fails.
 func B(val any) float64 {
 	switch v := val.(type) {
 	case int:
@@ -217,9 +216,7 @@ func B(val any) float64 {
 	}
 }
 
-// Bs 将任意值转换为存储容量字节数切片（float64 切片）
-// @param val any 待转换的值
-// @return @1 []float64 转换后的字节数切片
+// Bs converts val to a slice of storage-capacity bytes as float64.
 func Bs(val any) (slice []float64) {
 	if val == nil {
 		return

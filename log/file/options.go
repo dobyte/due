@@ -28,17 +28,18 @@ const (
 	defaultFlushIntervalKey = "etc.log.file.flushInterval"
 )
 
+// Option configures the syncer.
 type Option func(o *options)
 
 type options struct {
-	path          string        // 文件路径
-	format        Format        // 输出格式
-	maxAge        time.Duration // 文件最大留存时间
-	maxSize       int64         // 单个文件最大尺寸
-	bufferSize    int           // 缓冲区大小
-	rotate        Rotate        // 文件反转规则
-	compress      bool          // 是否对轮换的日志文件进行压缩
-	flushInterval time.Duration // 刷盘间隔，<=0 表示每条立即刷盘，>0 表示批量+定时刷盘
+	path          string        // File path
+	format        Format        // Output format
+	maxAge        time.Duration // Maximum retention time of a file
+	maxSize       int64         // Maximum size of a single file
+	bufferSize    int           // Buffer size
+	rotate        Rotate        // File rotation rule
+	compress      bool          // Whether to compress rotated log files
+	flushInterval time.Duration // Flush interval; <=0 flushes every record immediately, >0 batches and flushes periodically
 }
 
 func defaultOptions() *options {
@@ -54,42 +55,42 @@ func defaultOptions() *options {
 	}
 }
 
-// WithPath 设置文件路径
+// WithPath sets the file path.
 func WithPath(path string) Option {
 	return func(o *options) { o.path = path }
 }
 
-// WithFormat 设置输出格式
+// WithFormat sets the output format.
 func WithFormat(format Format) Option {
 	return func(o *options) { o.format = format }
 }
 
-// WithMaxAge 设置文件最大留存时间
+// WithMaxAge sets the maximum retention time of a file.
 func WithMaxAge(maxAge time.Duration) Option {
 	return func(o *options) { o.maxAge = maxAge }
 }
 
-// WithMaxSize 设置单个文件最大尺寸
+// WithMaxSize sets the maximum size of a single file.
 func WithMaxSize(maxSize int64) Option {
 	return func(o *options) { o.maxSize = maxSize }
 }
 
-// WithBufferSize 设置缓冲区大小
+// WithBufferSize sets the buffer size.
 func WithBufferSize(bufferSize int) Option {
 	return func(o *options) { o.bufferSize = bufferSize }
 }
 
-// WithRotate 设置文件反转规则
+// WithRotate sets the file rotation rule.
 func WithRotate(rotate Rotate) Option {
 	return func(o *options) { o.rotate = rotate }
 }
 
-// WithCompress 设置是否对轮换日志文件进行压缩
+// WithCompress sets whether to compress rotated log files.
 func WithCompress(compress bool) Option {
 	return func(o *options) { o.compress = compress }
 }
 
-// WithFlushInterval 设置刷盘策略：<=0 表示每条日志立即刷盘，>0 表示批量刷写并定时刷盘
+// WithFlushInterval sets the flush policy: <=0 flushes every log record immediately, >0 batches writes and flushes periodically.
 func WithFlushInterval(flushInterval time.Duration) Option {
 	return func(o *options) { o.flushInterval = flushInterval }
 }

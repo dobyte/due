@@ -26,7 +26,7 @@ type Code struct {
 	message string
 }
 
-// NewCode 新建一个错误码
+// NewCode returns a new Code with the given code and an optional message.
 func NewCode(code int, message ...string) *Code {
 	if len(message) > 0 {
 		return &Code{code: code, message: message[0]}
@@ -35,12 +35,12 @@ func NewCode(code int, message ...string) *Code {
 	}
 }
 
-// Code 返回错误码
+// Code returns the error code.
 func (c *Code) Code() int {
 	return c.code
 }
 
-// WithCode 替换新的错误码
+// WithCode returns a copy of c with the code replaced.
 func (c *Code) WithCode(code int) *Code {
 	return &Code{
 		code:    code,
@@ -48,12 +48,12 @@ func (c *Code) WithCode(code int) *Code {
 	}
 }
 
-// Message 返回错误码消息
+// Message returns the error code message.
 func (c *Code) Message() string {
 	return c.message
 }
 
-// WithMessage 替换新的错误码消息
+// WithMessage returns a copy of c with the message replaced.
 func (c *Code) WithMessage(message string) *Code {
 	return &Code{
 		code:    c.code,
@@ -61,19 +61,20 @@ func (c *Code) WithMessage(message string) *Code {
 	}
 }
 
-// WithMessagef 格式化替换新的错误码消息
+// WithMessagef returns a copy of c with the message formatted by format and a.
 func (c *Code) WithMessagef(format string, a ...any) *Code {
 	return c.WithMessage(fmt.Sprintf(format, a...))
 }
 
-// String 格式化错误码
+// String returns the formatted error code.
 func (c *Code) String() string {
 	return fmt.Sprintf("code error: code = %d desc = %s", c.code, c.message)
 }
 
-// Format 格式化输出
-// %s : 打印错误码和错误消息
-// %v : 打印错误码、错误消息、错误详情
+// Format implements [fmt.Formatter].
+//
+// The %s verb prints the error code and the error message, and %v prints the error code, the
+// error message and the error detail.
 func (c *Code) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 's':
@@ -87,7 +88,7 @@ func (c *Code) Format(s fmt.State, verb rune) {
 	}
 }
 
-// Err 转错误消息
+// Err converts the code to an error, or returns nil when c is [OK].
 func (c *Code) Err() error {
 	if c.code == OK.Code() {
 		return nil
@@ -100,12 +101,13 @@ type Error struct {
 	code *Code
 }
 
-// Error error interface implementation
+// Error implements the error interface.
 func (e *Error) Error() string {
 	return e.code.String()
 }
 
-// Convert 将错误信息转换为错误码
+// Convert converts err to a code. It returns [OK] when err is nil, the carried code when err
+// exposes one, and [Unknown] when err cannot be parsed.
 func Convert(err error) *Code {
 	if err == nil {
 		return OK

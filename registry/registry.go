@@ -5,66 +5,66 @@ import (
 )
 
 type Registry interface {
-	// Name 服务注册发现组件名
+	// Name returns the name of the service registry and discovery component.
 	Name() string
-	// Register 注册服务实例
+	// Register registers a service instance.
 	Register(ctx context.Context, ins *ServiceInstance) error
-	// Deregister 解注册服务实例
+	// Deregister deregisters a service instance.
 	Deregister(ctx context.Context, ins *ServiceInstance) error
-	// Watch 监听相同服务名的服务实例变化
+	// Watch watches for changes to the service instances with the same service name.
 	Watch(ctx context.Context, serviceName string) (Watcher, error)
-	// Services 获取服务实例列表
+	// Services returns the list of service instances.
 	Services(ctx context.Context, serviceName string) ([]*ServiceInstance, error)
-	// Close 关闭服务注册发现组件
+	// Close closes the service registry and discovery component.
 	Close() error
 }
 
 type Discovery interface {
-	// Watch 监听相同服务名的服务实例变化
+	// Watch watches for changes to the service instances with the same service name.
 	Watch(ctx context.Context, serviceName string) (Watcher, error)
-	// Services 获取服务实例列表
+	// Services returns the list of service instances.
 	Services(ctx context.Context, serviceName string) ([]*ServiceInstance, error)
 }
 
 type Watcher interface {
-	// Next 返回服务实例列表
+	// Next returns the list of service instances.
 	Next() ([]*ServiceInstance, error)
-	// Stop 停止监听
+	// Stop stops watching.
 	Stop() error
 }
 
 type ServiceInstance struct {
-	// 服务实体ID，每个服务实体ID唯一
+	// ID is the service entity ID, which is unique for each service entity.
 	ID string `json:"id,omitempty"`
-	// 服务实体名
+	// Name is the name of the service entity.
 	Name string `json:"name,omitempty"`
-	// 服务实体类型
+	// Kind is the type of the service entity.
 	Kind string `json:"kind,omitempty"`
-	// 服务实体别名
+	// Alias is the alias of the service entity.
 	Alias string `json:"alias,omitempty"`
-	// 服务实例状态
+	// State is the state of the service instance.
 	State string `json:"state,omitempty"`
-	// 服务事件集合
+	// Events is the set of service events.
 	Events []int `json:"events,omitempty"`
-	// 服务路由ID
+	// Routes is the service route IDs.
 	Routes []Route `json:"routes,omitempty"`
-	// 服务路由列表
+	// Services is the list of service routes.
 	Services []string `json:"services,omitempty"`
-	// 微服务实体暴露端口
+	// Endpoint is the exposed port of the microservice entity.
 	Endpoint string `json:"endpoint,omitempty"`
-	// 微服务路由加权轮询权重
+	// Weight is the weighted round-robin weight of the microservice route.
 	Weight int `json:"weight,omitempty"`
-	// 元数据
+	// Metadata is the metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type Route struct {
-	// 路由ID
+	// ID is the route ID.
 	ID int32 `json:"i,omitempty"`
-	// 是否内部路由
+	// Internal reports whether the route is internal.
 	Internal bool `json:"n,omitempty"`
-	// 是否有状态路由
+	// Stateful reports whether the route is stateful.
 	Stateful bool `json:"s,omitempty"`
-	// 是否授权路由
+	// Authorized reports whether the route is authorized.
 	Authorized bool `json:"a,omitempty"`
 }

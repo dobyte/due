@@ -50,7 +50,7 @@ func (p *PProf) Start() {
 		}
 	}()
 
-	info.PrintBoxInfo("PProf",
+	info.Print("PProf",
 		fmt.Sprintf("Url: http://%s/debug/pprof/", exposeAddr),
 	)
 }

@@ -8,19 +8,17 @@ import (
 	"github.com/dobyte/due/v2/log/internal"
 )
 
-// Name 同步器名称
+// Name is the syncer name.
 const Name = "console"
 
-// Syncer 控制台日志同步器
+// Syncer is a console log syncer.
 type Syncer struct {
-	opts      *options           // 配置项
-	writer    io.WriteCloser     // 输出写入器
-	formatter internal.Formatter // 日志格式化器
+	opts      *options           // Options
+	writer    io.WriteCloser     // Output writer
+	formatter internal.Formatter // Log formatter
 }
 
-// NewSyncer 创建一个控制台日志同步器实例
-// @param opts ...Option 可选配置项
-// @return @1 *Syncer 同步器实例
+// NewSyncer returns a new console log syncer. The optional opts configure the syncer.
 func NewSyncer(opts ...Option) *Syncer {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -34,7 +32,7 @@ func NewSyncer(opts ...Option) *Syncer {
 	return s
 }
 
-// init 初始化同步器
+// init initializes the syncer.
 func (s *Syncer) init() {
 	s.writer = os.Stdout
 
@@ -45,7 +43,7 @@ func (s *Syncer) init() {
 	}
 }
 
-// checkSupportColor 检测输出流是否支持彩色输出
+// checkSupportColor reports whether the output stream supports colored output.
 func (s *Syncer) checkSupportColor() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
@@ -65,15 +63,12 @@ func (s *Syncer) checkSupportColor() bool {
 	return strings.Contains(term, "color") || strings.HasPrefix(term, "xterm")
 }
 
-// Name 同步器名称
-// @return @1 string 同步器名称
+// Name returns the syncer name.
 func (s *Syncer) Name() string {
 	return Name
 }
 
-// Write 写入日志
-// @param entity *internal.Entity 日志实体
-// @return @1 error 写入过程中产生的错误
+// Write writes the given entity to the console. It returns any error encountered while writing.
 func (s *Syncer) Write(entity *internal.Entity) error {
 	buf := s.formatter.Format(entity)
 	defer buf.Release()
@@ -95,8 +90,7 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 	return nil
 }
 
-// Close 关闭同步器
-// @return @1 error 关闭过程中产生的错误
+// Close closes the syncer.
 func (s *Syncer) Close() error {
 	return nil
 }

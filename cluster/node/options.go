@@ -17,21 +17,21 @@ import (
 )
 
 const (
-	defaultName                      = "node"  // 默认节点名称
-	defaultCodec                     = "proto" // 默认编解码器名称
-	defaultWeight                    = 1       // 默认权重
-	defaultAddr                      = ":0"    // 连接器监听地址
-	defaultTaskQueueSize             = 4096    // 默认任务队列大小
-	defaultTaskWriteTimeout          = "0s"    // 默认任务超时时间
-	defaultMessageQueueSize          = 10240   // 默认消息队列大小
-	defaultMessageWriteTimeout       = "0s"    // 默认写入超时时间
-	defaultLinkerConnNum             = 5       // 默认连接数
-	defaultLinkerCallTimeout         = "3s"    // 默认调用超时时间
-	defaultLinkerDialTimeout         = "3s"    // 默认拨号超时时间
-	defaultLinkerDialRetryTimes      = 3       // 默认拨号重试次数
-	defaultLinkerFaultRecoveryTime   = "5s"    // 默认故障恢复时间
-	defaultLinkerCommandQueueSize    = 4096    // 默认消息队列大小
-	defaultLinkerCommandWriteTimeout = "0s"    // 默认写入超时时间
+	defaultName                      = "node"  // Default node name
+	defaultCodec                     = "proto" // Default codec name
+	defaultWeight                    = 1       // Default weight
+	defaultAddr                      = ":0"    // Linker listen address
+	defaultTaskQueueSize             = 4096    // Default task queue capacity
+	defaultTaskWriteTimeout          = "0s"    // Default task timeout
+	defaultMessageQueueSize          = 10240   // Default message queue capacity
+	defaultMessageWriteTimeout       = "0s"    // Default write timeout
+	defaultLinkerConnNum             = 5       // Default number of connections
+	defaultLinkerCallTimeout         = "3s"    // Default call timeout
+	defaultLinkerDialTimeout         = "3s"    // Default dial timeout
+	defaultLinkerDialRetryTimes      = 3       // Default dial retry times
+	defaultLinkerFaultRecoveryTime   = "5s"    // Default fault recovery time
+	defaultLinkerCommandQueueSize    = 4096    // Default message queue capacity
+	defaultLinkerCommandWriteTimeout = "0s"    // Default write timeout
 )
 
 const (
@@ -55,45 +55,46 @@ const (
 	defaultLinkerCommandWriteTimeoutKey = "etc.cluster.node.linker.commandWriteTimeout"
 )
 
-// Option 节点配置函数
+// Option is a configuration function of a [Node].
 type Option func(o *options)
 
-// 内部RPC选项
+// linkerOptions holds the internal RPC options.
 type linkerOptions struct {
-	connNum             int           // 内部RPC拨号连接数
-	callTimeout         time.Duration // 内部RPC调用超时时间
-	dialTimeout         time.Duration // 内部RPC拨号超时时间
-	dialRetryTimes      int           // 内部RPC拨号重试次数
-	faultRecoveryTime   time.Duration // 内部RPC故障恢复时间
-	commandQueueSize    int32         // 消息队列大小
-	commandWriteTimeout time.Duration // 消息写入超时时间
+	connNum             int           // Number of internal RPC dial connections
+	callTimeout         time.Duration // Internal RPC call timeout
+	dialTimeout         time.Duration // Internal RPC dial timeout
+	dialRetryTimes      int           // Internal RPC dial retry times
+	faultRecoveryTime   time.Duration // Internal RPC fault recovery time
+	commandQueueSize    int32         // Message queue capacity
+	commandWriteTimeout time.Duration // Message write timeout
 }
 
-// 节点配置项
+// options holds the node options.
 type options struct {
-	ctx                 context.Context        // 启动上下文
-	id                  string                 // 实例ID
-	name                string                 // 实例名称；相同实例名称的节点，用户只能绑定其中一个
-	codec               encoding.Codec         // 编解码器
-	weight              int                    // 服务器权重
-	locator             locate.Locator         // 用户定位器
-	registry            registry.Registry      // 服务注册器
-	encryptor           crypto.Encryptor       // 消息加密器
-	transporter         transport.Transporter  // 消息传输器
-	metadata            map[string]string      // 元数据
-	ctxFunc             func() context.Context // 自定义上下文生成器
-	addr                string                 // 内部RPC监听地址
-	expose              bool                   // 内部RPC是否暴露到公网
-	taskQueueSize       int32                  // 任务队列大小
-	taskWriteTimeout    time.Duration          // 任务写入超时时间
-	messageQueueSize    int32                  // 消息队列大小
-	messageWriteTimeout time.Duration          // 消息写入超时时间
-	linker              *linkerOptions         // 内部RPC选项
+	ctx                 context.Context        // Startup context
+	id                  string                 // Instance ID
+	name                string                 // Instance name; for nodes with the same instance name, a user can only bind to one of them
+	codec               encoding.Codec         // Codec
+	weight              int                    // Server weight
+	locator             locate.Locator         // User locator
+	registry            registry.Registry      // Service registry
+	encryptor           crypto.Encryptor       // Message encryptor
+	transporter         transport.Transporter  // Message transporter
+	metadata            map[string]string      // Metadata
+	ctxFunc             func() context.Context // Custom context generator
+	addr                string                 // Internal RPC listen address
+	expose              bool                   // Whether the internal RPC is exposed to the public network
+	taskQueueSize       int32                  // Task queue capacity
+	taskWriteTimeout    time.Duration          // Task write timeout
+	messageQueueSize    int32                  // Message queue capacity
+	messageWriteTimeout time.Duration          // Message write timeout
+	linker              *linkerOptions         // Internal RPC options
 }
 
-// 创建默认节点配置项
-// 从配置环境读取各参数并填充默认值，为未指定的参数生成默认实现
-// @return @1 *options 默认节点配置项
+// defaultOptions creates the default node options.
+//
+// It reads each parameter from the configuration environment and fills in the defaults, generating
+// default implementations for the unspecified parameters.
 func defaultOptions() *options {
 	opts := &options{}
 	opts.ctx = context.Background()
@@ -204,9 +205,7 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithID 设置实例ID
-// @param id string 实例ID
-// @return @1 Option 节点配置项
+// WithID sets the instance ID.
 func WithID(id string) Option {
 	return func(o *options) {
 		if id != "" {
@@ -217,9 +216,7 @@ func WithID(id string) Option {
 	}
 }
 
-// WithName 设置实例名称
-// @param name string 实例名称
-// @return @1 Option 节点配置项
+// WithName sets the instance name.
 func WithName(name string) Option {
 	return func(o *options) {
 		if name != "" {
@@ -230,9 +227,7 @@ func WithName(name string) Option {
 	}
 }
 
-// WithAddr 设置监听地址
-// @param addr string 监听地址
-// @return @1 Option 节点配置项
+// WithAddr sets the listen address.
 func WithAddr(addr string) Option {
 	return func(o *options) {
 		if addr != "" {
@@ -243,16 +238,12 @@ func WithAddr(addr string) Option {
 	}
 }
 
-// WithExpose 设置是否将内部通信地址暴露到公网
-// @param expose bool 是否暴露内部通信地址到公网
-// @return @1 Option 节点配置项
+// WithExpose sets whether the internal communication address is exposed to the public network.
 func WithExpose(expose bool) Option {
 	return func(o *options) { o.expose = expose }
 }
 
-// WithCodec 设置编解码器
-// @param codec encoding.Codec 编解码器
-// @return @1 Option 节点配置项
+// WithCodec sets the codec.
 func WithCodec(codec encoding.Codec) Option {
 	return func(o *options) {
 		if codec != nil {
@@ -263,9 +254,7 @@ func WithCodec(codec encoding.Codec) Option {
 	}
 }
 
-// WithWeight 设置权重
-// @param weight int 服务器权重
-// @return @1 Option 节点配置项
+// WithWeight sets the weight.
 func WithWeight(weight int) Option {
 	return func(o *options) {
 		if weight > 0 {
@@ -276,9 +265,7 @@ func WithWeight(weight int) Option {
 	}
 }
 
-// WithContext 设置启动上下文
-// @param ctx context.Context 启动上下文
-// @return @1 Option 节点配置项
+// WithContext sets the startup context.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) {
 		if ctx != nil {
@@ -289,9 +276,7 @@ func WithContext(ctx context.Context) Option {
 	}
 }
 
-// WithLocator 设置定位器
-// @param locator locate.Locator 用户定位器
-// @return @1 Option 节点配置项
+// WithLocator sets the user locator.
 func WithLocator(locator locate.Locator) Option {
 	return func(o *options) {
 		if locator != nil {
@@ -302,9 +287,7 @@ func WithLocator(locator locate.Locator) Option {
 	}
 }
 
-// WithRegistry 设置服务注册器
-// @param r registry.Registry 服务注册器
-// @return @1 Option 节点配置项
+// WithRegistry sets the service registry.
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) {
 		if r != nil {
@@ -315,9 +298,7 @@ func WithRegistry(r registry.Registry) Option {
 	}
 }
 
-// WithEncryptor 设置消息加密器
-// @param encryptor crypto.Encryptor 消息加密器
-// @return @1 Option 节点配置项
+// WithEncryptor sets the message encryptor.
 func WithEncryptor(encryptor crypto.Encryptor) Option {
 	return func(o *options) {
 		if encryptor != nil {
@@ -328,9 +309,7 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 	}
 }
 
-// WithTransporter 设置消息传输器
-// @param transporter transport.Transporter 消息传输器
-// @return @1 Option 节点配置项
+// WithTransporter sets the message transporter.
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) {
 		if transporter != nil {
@@ -341,9 +320,7 @@ func WithTransporter(transporter transport.Transporter) Option {
 	}
 }
 
-// WithContextFunc 设置自定义上下文生成器
-// @param ctxFunc func() context.Context 上下文生成器
-// @return @1 Option 节点配置项
+// WithContextFunc sets the custom context generator.
 func WithContextFunc(ctxFunc func() context.Context) Option {
 	return func(o *options) {
 		if ctxFunc != nil {
@@ -354,9 +331,7 @@ func WithContextFunc(ctxFunc func() context.Context) Option {
 	}
 }
 
-// WithMetadata 设置元数据
-// @param metadata map[string]string 元数据
-// @return @1 Option 节点配置项
+// WithMetadata sets the metadata.
 func WithMetadata(metadata map[string]string) Option {
 	return func(o *options) {
 		if len(metadata) != 0 {
@@ -371,9 +346,7 @@ func WithMetadata(metadata map[string]string) Option {
 	}
 }
 
-// WithTaskQueueSize 设置任务队列大小
-// @param taskQueueSize int32 任务队列大小
-// @return @1 Option 节点配置项
+// WithTaskQueueSize sets the task queue capacity.
 func WithTaskQueueSize(taskQueueSize int32) Option {
 	return func(o *options) {
 		if taskQueueSize > 0 {
@@ -384,9 +357,7 @@ func WithTaskQueueSize(taskQueueSize int32) Option {
 	}
 }
 
-// WithTaskWriteTimeout 设置任务超时时间
-// @param taskWriteTimeout time.Duration 任务写入超时时间
-// @return @1 Option 节点配置项
+// WithTaskWriteTimeout sets the task timeout.
 func WithTaskWriteTimeout(taskWriteTimeout time.Duration) Option {
 	return func(o *options) {
 		if taskWriteTimeout >= 0 {
@@ -397,9 +368,7 @@ func WithTaskWriteTimeout(taskWriteTimeout time.Duration) Option {
 	}
 }
 
-// WithMessageWriteTimeout 设置写入超时时间
-// @param messageWriteTimeout time.Duration 消息写入超时时间
-// @return @1 Option 节点配置项
+// WithMessageWriteTimeout sets the message write timeout.
 func WithMessageWriteTimeout(messageWriteTimeout time.Duration) Option {
 	return func(o *options) {
 		if messageWriteTimeout >= 0 {
@@ -410,9 +379,7 @@ func WithMessageWriteTimeout(messageWriteTimeout time.Duration) Option {
 	}
 }
 
-// WithMessageQueueSize 设置消息队列大小
-// @param messageQueueSize int32 消息队列大小
-// @return @1 Option 节点配置项
+// WithMessageQueueSize sets the message queue capacity.
 func WithMessageQueueSize(messageQueueSize int32) Option {
 	return func(o *options) {
 		if messageQueueSize > 0 {
@@ -423,9 +390,7 @@ func WithMessageQueueSize(messageQueueSize int32) Option {
 	}
 }
 
-// WithLinkerConnNum 设置连接数
-// @param connNum int 内部RPC拨号连接数
-// @return @1 Option 节点配置项
+// WithLinkerConnNum sets the number of connections.
 func WithLinkerConnNum(connNum int) Option {
 	return func(o *options) {
 		if connNum > 0 {
@@ -436,9 +401,7 @@ func WithLinkerConnNum(connNum int) Option {
 	}
 }
 
-// WithLinkerCallTimeout 设置RPC调用超时时间
-// @param callTimeout time.Duration 内部RPC调用超时时间
-// @return @1 Option 节点配置项
+// WithLinkerCallTimeout sets the RPC call timeout.
 func WithLinkerCallTimeout(callTimeout time.Duration) Option {
 	return func(o *options) {
 		if callTimeout >= 0 {
@@ -449,9 +412,7 @@ func WithLinkerCallTimeout(callTimeout time.Duration) Option {
 	}
 }
 
-// WithLinkerDialTimeout 设置内部RPC拨号超时时间
-// @param dialTimeout time.Duration 内部RPC拨号超时时间
-// @return @1 Option 节点配置项
+// WithLinkerDialTimeout sets the internal RPC dial timeout.
 func WithLinkerDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) {
 		if dialTimeout >= 0 {
@@ -462,9 +423,7 @@ func WithLinkerDialTimeout(dialTimeout time.Duration) Option {
 	}
 }
 
-// WithLinkerDialRetryTimes 设置内部RPC拨号重试次数
-// @param dialRetryTimes int 内部RPC拨号重试次数
-// @return @1 Option 节点配置项
+// WithLinkerDialRetryTimes sets the internal RPC dial retry times.
 func WithLinkerDialRetryTimes(dialRetryTimes int) Option {
 	return func(o *options) {
 		if dialRetryTimes >= 0 {
@@ -475,9 +434,7 @@ func WithLinkerDialRetryTimes(dialRetryTimes int) Option {
 	}
 }
 
-// WithLinkerFaultRecoveryTime 设置内部RPC故障恢复时间
-// @param faultRecoveryTime time.Duration 内部RPC故障恢复时间
-// @return @1 Option 节点配置项
+// WithLinkerFaultRecoveryTime sets the internal RPC fault recovery time.
 func WithLinkerFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 	return func(o *options) {
 		if faultRecoveryTime >= 0 {
@@ -488,9 +445,7 @@ func WithLinkerFaultRecoveryTime(faultRecoveryTime time.Duration) Option {
 	}
 }
 
-// WithLinkerCommandQueueSize 设置消息队列大小
-// @param commandQueueSize int32 消息队列大小
-// @return @1 Option 节点配置项
+// WithLinkerCommandQueueSize sets the message queue capacity.
 func WithLinkerCommandQueueSize(commandQueueSize int32) Option {
 	return func(o *options) {
 		if commandQueueSize > 0 {
@@ -501,9 +456,7 @@ func WithLinkerCommandQueueSize(commandQueueSize int32) Option {
 	}
 }
 
-// WithLinkerCommandWriteTimeout 设置写入超时时间
-// @param commandWriteTimeout time.Duration 消息写入超时时间
-// @return @1 Option 节点配置项
+// WithLinkerCommandWriteTimeout sets the write timeout.
 func WithLinkerCommandWriteTimeout(commandWriteTimeout time.Duration) Option {
 	return func(o *options) {
 		if commandWriteTimeout >= 0 {

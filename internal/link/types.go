@@ -18,15 +18,15 @@ type (
 )
 
 type DeliverArgs struct {
-	NID    string // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
-	CID    int64  // 连接ID
-	UID    int64  // 用户ID
-	Route  int32  // 消息路由
-	Buffer any    // 投递消息
+	NID    string // Receiving node. When set, the message is delivered directly to it; otherwise the system locates the user's node and delivers the message there.
+	CID    int64  // Connection ID
+	UID    int64  // User ID
+	Route  int32  // Message route
+	Buffer any    // Message to deliver
 }
 
 type TriggerArgs struct {
-	Event cluster.Event // 事件
-	CID   int64         // 连接ID
-	UID   int64         // 用户ID
+	Event cluster.Event // Event
+	CID   int64         // Connection ID
+	UID   int64         // User ID
 }

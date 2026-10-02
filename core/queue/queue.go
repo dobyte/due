@@ -1,10 +1,14 @@
-// Package queue 提供有界的泛型数据队列与任务队列
+// Package queue provides a bounded generic data queue and a task queue.
 //
-// 队列内部维护 Opened、Hanged、Closed 三种状态：消费到哨兵数据并调用 Done(true) 后进入 Hanged，
-// 表示不再接收新数据，仅允许消费存量数据；Close 会关闭数据通道并释放所有 Wait 等待者。
+// A queue moves through three states: [Opened], [Hanged] and [Closed]. Once the sentinel data has
+// been received and [Queue.Done] is called with true, the queue becomes [Hanged]: it stops accepting
+// new data and only the remaining data may be received. [Queue.Close] closes the data channel and
+// releases every caller blocked in [Queue.Wait].
 //
-// 注意：Write 与 Close 之间没有内部互斥，调用方必须自行保证二者串行执行（例如共用同一把读写锁），
-// 否则可能向已关闭的通道写入而 panic；构造时传入 rw 可复用调用方的读写锁实现该互斥。
+// Write and Close are not mutually exclusive internally, so callers must serialize them, for
+// example by sharing the same read-write lock; otherwise a write to an already closed channel
+// panics. Passing rw to [NewQueue] makes the queue reuse the caller's read-write lock to provide
+// that mutual exclusion.
 package queue
 
 import (
@@ -15,30 +19,33 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
+// The states of a [Queue].
 const (
-	Opened = iota // 打开状态，可正常读写
-	Hanged        // 挂起状态，已消费到结束信号，仅允许消费存量数据
-	Closed        // 关闭状态，数据通道已关闭
+	Opened = iota // Opened: both reads and writes are allowed
+	Hanged        // Hanged: the end signal has been received, only the remaining data may be received
+	Closed        // Closed: the data channel has been closed
 )
 
-// Queue 有界泛型队列
-// 通过状态机与结束等待组支持"写入结束信号后等待存量数据排空"的优雅关闭语义
+// Queue is a bounded generic queue.
+//
+// Queue uses a state machine and an end wait group to support the graceful shutdown semantics of
+// "write the end signal, then wait for the remaining data to drain".
 type Queue[T any] struct {
-	rw      *sync.RWMutex  // 调用方传入的读写锁，用于与 Close 互斥，可为空
-	ch      chan T         // 数据通道
-	wg      sync.WaitGroup // 队列结束等待组，Close 或结束信号被消费后释放
-	size    int32          // 队列容量
-	count   atomic.Int32   // 已写入但尚未完成处理的数据量，仅在 timeout > 0 时维护
-	state   atomic.Int32   // 队列状态（Opened/Hanged/Closed）
-	timeout time.Duration  // 写入超时时间，0 表示不做超时控制
+	rw      *sync.RWMutex  // Read-write lock supplied by the caller to serialize writes against Close, may be nil
+	ch      chan T         // Data channel
+	wg      sync.WaitGroup // End wait group, released by Close or after the end signal has been received
+	size    int32          // Queue capacity
+	count   atomic.Int32   // Amount of data written but not yet processed, maintained only when timeout > 0
+	state   atomic.Int32   // Current queue state, one of Opened, Hanged or Closed
+	timeout time.Duration  // Write timeout, 0 means no timeout control
 }
 
-// NewQueue 创建队列
-// 创建指定容量与写入超时时间的队列，初始状态为 Opened，结束等待组处于未释放状态
-// @param size int32 队列容量
-// @param timeout time.Duration 写入超时时间，0 表示不做超时控制（写入将阻塞直到写入成功）
-// @param rw ...*sync.RWMutex 可选，调用方传入的读写锁；传入后写入过程将持有其读锁，用于与 Close 互斥
-// @return @1 *Queue[T] 队列实例
+// NewQueue returns a new Queue with the given capacity and write timeout. The timeout bounds how
+// long a non-blocking [Queue.Write] waits when the queue is full; a timeout of 0 disables that
+// bound and makes writes block until they succeed.
+//
+// The optional rw is a read-write lock supplied by the caller. When it is provided, writes hold its
+// read lock so that they are serialized against [Queue.Close].
 func NewQueue[T any](size int32, timeout time.Duration, rw ...*sync.RWMutex) *Queue[T] {
 	q := &Queue[T]{}
 	q.ch = make(chan T, size)
@@ -53,13 +60,13 @@ func NewQueue[T any](size int32, timeout time.Duration, rw ...*sync.RWMutex) *Qu
 	return q
 }
 
-// Write 写入队列
-// 写入前校验队列状态：挂起返回 ErrQueueHanged，关闭返回 ErrQueueClosed；
-// 当 timeout > 0 且待处理数据量超过队列容量时，非阻塞写入将在 timeout 后返回 ErrWriteTimeout；
-// 阻塞写入（block 为 true）或未配置超时（timeout <= 0）时，写入将阻塞直到写入成功
-// @param t T 待写入的数据
-// @param block ...bool 可选，是否阻塞写入，默认非阻塞（仅在 timeout > 0 时生效）
-// @return @1 error 队列挂起、关闭或写入超时时返回的错误
+// Write writes t to the queue. It reports [errors.ErrQueueHanged] when the queue is hanged and
+// [errors.ErrQueueClosed] when it is closed.
+//
+// When the write timeout is greater than 0 and the amount of pending data exceeds the queue
+// capacity, a non-blocking write waits for at most the timeout and then reports
+// [errors.ErrWriteTimeout]. Pass block as true, or configure a timeout <= 0, to block until the
+// write succeeds.
 func (q *Queue[T]) Write(t T, block ...bool) (err error) {
 	if q.rw != nil {
 		q.rw.RLock()
@@ -72,11 +79,8 @@ func (q *Queue[T]) Write(t T, block ...bool) (err error) {
 	return
 }
 
-// write 写入队列
-// 执行实际写入逻辑，非阻塞写入且待处理数据量超过队列容量时按超时时间等待写入
-// @param t T 待写入的数据
-// @param block ...bool 可选，是否阻塞写入，默认非阻塞
-// @return @1 error 队列挂起、关闭或写入超时时返回的错误
+// write writes t to the queue. For a non-blocking write whose pending data exceeds the queue
+// capacity, it waits for the write timeout before giving up.
 func (q *Queue[T]) write(t T, block ...bool) error {
 	switch q.state.Load() {
 	case Hanged:
@@ -105,17 +109,16 @@ func (q *Queue[T]) write(t T, block ...bool) error {
 	return nil
 }
 
-// Read 读取队列
-// 返回队列的数据通道，消费方取出数据后需调用 Done 释放背压计数
-// @return @1 <-chan T 队列数据通道
+// Read returns the channel from which the queue's data is received. After receiving an item, the
+// consumer must call [Queue.Done] to release the backpressure counter.
 func (q *Queue[T]) Read() <-chan T {
 	return q.ch
 }
 
-// Done 完成一个数据的处理
-// 递减背压计数；isCloseSig 为 true 且队列处于打开状态时，将队列置为挂起并释放队列结束等待；
-// 队列已挂起或已关闭时不做任何处理
-// @param isCloseSig bool 是否为结束信号（消费到的数据为哨兵数据）
+// Done acknowledges that one item of the queue's data has been processed. It decrements the
+// backpressure counter and, when isCloseSig is true and the queue is in the [Opened] state, moves
+// the queue to [Hanged] and releases the end wait. Done does nothing when the queue is already
+// hanged or closed.
 func (q *Queue[T]) Done(isCloseSig bool) {
 	if q.state.Load() != Opened {
 		return
@@ -130,15 +133,14 @@ func (q *Queue[T]) Done(isCloseSig bool) {
 	}
 }
 
-// Wait 等待队列完成
-// 队列被关闭或结束信号被消费后返回
+// Wait blocks until the queue is closed or the end signal has been received.
 func (q *Queue[T]) Wait() {
 	q.wg.Wait()
 }
 
-// Close 关闭队列
-// 关闭数据通道并释放队列结束等待，重复调用不会重复关闭通道；
-// 调用方必须保证与 Write 串行执行，否则可能向已关闭的通道写入而 panic
+// Close closes the queue. It closes the data channel and releases the end wait; repeated calls do
+// not close the channel twice. The caller must serialize Close with [Queue.Write], otherwise a
+// write to the already closed channel panics.
 func (q *Queue[T]) Close() {
 	if q.rw != nil {
 		q.rw.Lock()
@@ -157,9 +159,8 @@ func (q *Queue[T]) Close() {
 	}
 }
 
-// Clean 清理已关闭队列中的所有数据，调用回调函数处理每个数据
-// 仅可在队列关闭后调用，否则将阻塞等待新数据
-// @param f func(T) 处理函数
+// Clean receives and discards every remaining item of a closed queue, invoking f for each item. It
+// must only be called after the queue has been closed; otherwise it blocks waiting for new data.
 func (q *Queue[T]) Clean(f func(T)) {
 	for t := range q.ch {
 		f(t)

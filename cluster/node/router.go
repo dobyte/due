@@ -9,42 +9,48 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-// RouteHandler 路由处理器
+// RouteHandler is a route handler function.
 type RouteHandler func(ctx Context)
 
-// RouteOptions 路由选项
+// RouteOptions are route options.
 type RouteOptions struct {
-	// 是否内部的路由，默认非内部
-	// 外部路由可在客户端、网关、节点间进行消息流转
-	// 内部路由仅限于在节点间进行消息流转
+	// Internal reports whether the route is internal, and it is not internal by default.
+	//
+	// External routes can carry messages across clients, gateways and nodes, while internal routes
+	// can only carry messages between nodes.
 	Internal bool
 
-	// 是否有状态路由，默认无状态
-	// 无状态路由消息会根据负载均衡策略分配到不同的节点服务器进行处理
-	// 有状态路由消息会在绑定节点服务器后，固定路由到绑定的节点服务器进行处理
+	// Stateful reports whether the route is stateful, and it is not stateful by default.
+	//
+	// Messages of a stateless route are dispatched to different node servers by the load balancing
+	// strategy, while messages of a stateful route are always routed to the node server the user is
+	// bound to.
 	Stateful bool
 
-	// 是否授权路由，默认非授权
-	// 授权路由在集群间流转时必需附带UID信息，否则无法进行路由投递
-	// 该参数可在网关层对未授权连接进行提前拦截，降低节点服对于攻击处理的压力
+	// Authorized reports whether the route is authorized, and it is not authorized by default.
+	//
+	// An authorized route must carry the UID when it flows across the cluster, otherwise it cannot
+	// be delivered. The gateway can use this option to intercept unauthorized connections early and
+	// reduce the attack handling pressure on node servers.
 	Authorized bool
 
-	// 路由中间件
+	// Middlewares are the route middlewares.
 	Middlewares []MiddlewareHandler
 }
 
 var (
-	InternalRoute   = RouteOptions{Internal: true}   // 内部路由，仅限节点间消息流转
-	StatefulRoute   = RouteOptions{Stateful: true}   // 有状态路由，固定路由到绑定节点处理
-	AuthorizedRoute = RouteOptions{Authorized: true} // 授权路由，流转时必需附带UID
+	InternalRoute   = RouteOptions{Internal: true}   // Internal route, messages flow between nodes only
+	StatefulRoute   = RouteOptions{Stateful: true}   // Stateful route, always routed to the bound node
+	AuthorizedRoute = RouteOptions{Authorized: true} // Authorized route, must carry the UID when flowing
 )
 
-// Router 路由器
-// 承载节点内的路由队列，负责路由消息的接收与处理
+// Router is a router.
+//
+// It carries the routing queue of a node and is responsible for receiving and handling routed
+// messages.
 type Router struct {
 	node                *Node
 	mwPool              sync.Pool
-	rw                  sync.RWMutex
 	queue               *queue.Queue[*request]
 	routes              map[int32]*routeEntity
 	preRouteHandler     RouteHandler
@@ -52,29 +58,24 @@ type Router struct {
 	defaultRouteHandler RouteHandler
 }
 
-// 路由实体
+// routeEntity is a route entity.
 type routeEntity struct {
-	route   int32        // 路由
-	handler RouteHandler // 路由处理器
-	options RouteOptions // 路由选项
+	route   int32        // Route number
+	handler RouteHandler // Route handler
+	options RouteOptions // Route options
 }
 
-// 创建路由器
-// @param node *Node 节点服务器
-// @return @1 *Router 路由器
+// newRouter creates a new router for the given node server.
 func newRouter(node *Node) *Router {
 	return &Router{
 		node:   node,
-		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		queue:  queue.NewQueue[*request](node.opts.messageQueueSize, node.opts.messageWriteTimeout, &sync.RWMutex{}),
 		routes: make(map[int32]*routeEntity),
 		mwPool: sync.Pool{New: func() any { return &Middleware{} }},
 	}
 }
 
-// AddRouteHandler 添加路由处理器
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
-// @param opts ...RouteOptions 路由选项
+// AddRouteHandler adds a route handler.
 func (r *Router) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
 	if r.node.isShut() {
 		if len(opts) > 0 {
@@ -94,8 +95,8 @@ func (r *Router) AddRouteHandler(route int32, handler RouteHandler, opts ...Rout
 	}
 }
 
-// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
-// @param handler RouteHandler 默认路由处理函数
+// SetDefaultRouteHandler sets the default route handler. Every unregistered route goes through the
+// default route handler.
 func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
 	if r.node.isShut() {
 		r.defaultRouteHandler = handler
@@ -104,14 +105,12 @@ func (r *Router) SetDefaultRouteHandler(handler RouteHandler) {
 	}
 }
 
-// HasDefaultRouteHandler 是否存在默认路由处理器
-// @return @1 bool 是否存在默认路由处理器
+// HasDefaultRouteHandler reports whether a default route handler exists.
 func (r *Router) HasDefaultRouteHandler() bool {
 	return r.defaultRouteHandler != nil
 }
 
-// SetPreRouteHandler 设置前置路由处理器
-// @param handler RouteHandler 前置路由处理函数
+// SetPreRouteHandler sets the pre-route handler.
 func (r *Router) SetPreRouteHandler(handler RouteHandler) {
 	if r.node.isShut() {
 		r.preRouteHandler = handler
@@ -120,8 +119,7 @@ func (r *Router) SetPreRouteHandler(handler RouteHandler) {
 	}
 }
 
-// SetPostRouteHandler 设置后置路由处理器
-// @param handler RouteHandler 后置路由处理函数
+// SetPostRouteHandler sets the post-route handler.
 func (r *Router) SetPostRouteHandler(handler RouteHandler) {
 	if r.node.isShut() {
 		r.postRouteHandler = handler
@@ -130,10 +128,7 @@ func (r *Router) SetPostRouteHandler(handler RouteHandler) {
 	}
 }
 
-// CheckRouteStateful 是否为有状态路由
-// @param route int32 路由号
-// @return @1 bool 是否是有状态路由
-// @return @2 bool 路由是否存在
+// CheckRouteStateful reports whether the route is stateful and whether the route exists.
 func (r *Router) CheckRouteStateful(route int32) (stateful bool, exist bool) {
 	if entity, ok := r.routes[route]; ok {
 		exist, stateful = ok, entity.options.Stateful
@@ -141,9 +136,7 @@ func (r *Router) CheckRouteStateful(route int32) (stateful bool, exist bool) {
 	return
 }
 
-// Group 路由组
-// @param groups ...func(group *RouterGroup) 路由组配置函数
-// @return @1 *RouterGroup 路由组
+// Group groups routes into a RouterGroup configured by the given functions.
 func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	group := &RouterGroup{
 		router:      r,
@@ -157,17 +150,9 @@ func (r *Router) Group(groups ...func(group *RouterGroup)) *RouterGroup {
 	return group
 }
 
-// 投递路由消息
-// 从对象池获取请求对象填充消息内容后写入路由队列等待异步处理
-// @param gid string 来源网关ID
-// @param nid string 来源节点ID
-// @param pid string 来源Actor ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @param seq int32 消息序列号
-// @param route int32 路由号
-// @param message any 消息内容
-// @return @1 error 消息入队失败时返回的错误
+// deliver routes a message. It fetches a request object from the pool, fills in the message content
+// and writes it to the routing queue for asynchronous handling. It returns the error reported when
+// the message fails to be enqueued.
 func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32, message any) error {
 	req := r.node.reqPool.Get().(*request)
 	req.gid = gid
@@ -185,10 +170,7 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 		req.ctx = context.Background()
 	}
 
-	r.rw.RLock()
-	err := r.queue.Write(req)
-	r.rw.RUnlock()
-	if err != nil {
+	if err := r.queue.Write(req); err != nil {
 		req.release()
 		return err
 	}
@@ -196,37 +178,24 @@ func (r *Router) deliver(gid, nid, pid string, cid, uid int64, seq, route int32,
 	return nil
 }
 
-// 接收路由消息
-// @return @1 <-chan *request 路由消息通道
+// receive returns the channel from which routed messages are received.
 func (r *Router) receive() <-chan *request {
 	return r.queue.Read()
 }
 
-// 停止接收事件
-// 写入空请求以通知分发器路由队列已结束
-// @return @1 error 写入失败时返回的错误
-func (r *Router) done() error {
-	return r.queue.Write(nil, true)
-}
-
-// 等待所有事件完成
-func (r *Router) wait() {
-	r.queue.Wait()
-}
-
-// 关闭路由器
-// 关闭路由队列并清空已注册的路由处理器
+// close closes the router.
 func (r *Router) close() {
-	r.rw.Lock()
 	r.queue.Close()
-	r.rw.Unlock()
-
-	clear(r.routes)
 }
 
-// 处理路由消息
-// 查找对应路由处理器，执行前置/后置路由处理器与中间件链，处理完成后回收请求对象
-// @param req *request 路由请求对象
+// clean releases every request object still in the routing queue.
+func (r *Router) clean() {
+	r.queue.Clean(func(req *request) { req.release() })
+}
+
+// handle handles a routed message. It looks up the matching route handler, runs the pre-route and
+// post-route handlers and the middleware chain, then recycles the request object once handling is
+// done.
 func (r *Router) handle(req *request) {
 	r.queue.Done(req == nil)
 
@@ -270,28 +239,23 @@ func (r *Router) handle(req *request) {
 	req.compareVersionRecycle(version)
 }
 
-// RouterGroup 路由组
-// 用于集中管理一组路由及其中间件
+// RouterGroup is a route group.
+//
+// It manages a set of routes and their middlewares together.
 type RouterGroup struct {
 	router      *Router
 	middlewares []MiddlewareHandler
 }
 
-// Middleware 添加中间件
-// @param middlewares ...MiddlewareHandler 中间件处理函数
-// @return @1 *RouterGroup 路由组（支持链式调用）
+// Middleware adds middlewares to the route group.
 func (g *RouterGroup) Middleware(middlewares ...MiddlewareHandler) *RouterGroup {
 	g.middlewares = append(g.middlewares, middlewares...)
 
 	return g
 }
 
-// AddRouteHandler 添加路由处理器
-// 会合并路由组中间件与指定路由自身的中间件
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
-// @param opts ...RouteOptions 路由选项
-// @return @1 *RouterGroup 路由组（支持链式调用）
+// AddRouteHandler adds a route handler. It merges the route group middlewares with the middlewares
+// of the route itself.
 func (g *RouterGroup) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) *RouterGroup {
 	var options RouteOptions
 

@@ -39,21 +39,22 @@ const (
 type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
-	url               string        // 拨号地址
-	tlsConfig         *tls.Config   // TLS配置
-	dialTimeout       time.Duration // 拨号超时时间，默认3s
-	readBufferSize    int           // 读缓冲区大小，默认4096
-	writeTimeout      time.Duration // 写入超时时间，默认无超时
-	writeQueueSize    int           // 写入队列大小，默认1024
-	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
-	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
-	enableCompression bool          // 是否开启压缩，默认false
-	compressionLevel  int           // 压缩等级，默认1
+	url               string        // Dial URL
+	tlsConfig         *tls.Config   // TLS config
+	dialTimeout       time.Duration // Dial timeout, defaults to 3s
+	readBufferSize    int           // Read buffer size, defaults to 4096
+	writeTimeout      time.Duration // Write timeout, defaults to no timeout
+	writeQueueSize    int           // Write queue size, defaults to 1024
+	heartbeatInterval time.Duration // Heartbeat interval, defaults to 10s
+	closeTimeout      time.Duration // Graceful close timeout, defaults to 0s (no limit)
+	enableCompression bool          // Whether to enable compression, defaults to false
+	compressionLevel  int           // Compression level, defaults to 1
 }
 
-// defaultClientOptions 构建默认客户端配置
-// 优先读取环境配置（etc.network.ws.client.*），缺失时回退到内置默认值
-// @return @1 *clientOptions 客户端配置
+// defaultClientOptions builds the default client options.
+//
+// It reads the environment config (etc.network.ws.client.*) first and falls back to the built-in
+// defaults when a value is missing.
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 	opts.enableCompression = etc.Get(defaultClientEnableCompressionKey, defaultClientEnableCompression).Bool()
@@ -120,9 +121,7 @@ func defaultClientOptions() *clientOptions {
 	return opts
 }
 
-// WithClientUrl 设置拨号链接
-// @param url string 拨号地址
-// @return @1 ClientOption 客户端配置项
+// WithClientUrl sets the dial URL.
 func WithClientUrl(url string) ClientOption {
 	return func(o *clientOptions) {
 		if url != "" {
@@ -133,10 +132,7 @@ func WithClientUrl(url string) ClientOption {
 	}
 }
 
-// WithClientCredentials 设置CA证书和校验域名
-// @param caFile string CA证书文件
-// @param serverName string 服务器名称
-// @return @1 ClientOption 客户端配置项
+// WithClientCredentials sets the CA certificate and the server name to verify.
 func WithClientCredentials(caFile string, serverName string) ClientOption {
 	return func(o *clientOptions) {
 		if caFile != "" || serverName != "" {
@@ -151,18 +147,14 @@ func WithClientCredentials(caFile string, serverName string) ClientOption {
 	}
 }
 
-// WithClientTLSConfig 设置TLS配置
-// @param tlsConfig *tls.Config TLS配置
-// @return @1 ClientOption 客户端配置项
+// WithClientTLSConfig sets the TLS config.
 func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
 	return func(o *clientOptions) {
 		o.tlsConfig = tlsConfig
 	}
 }
 
-// WithClientDialTimeout 设置拨号超时时间
-// @param dialTimeout time.Duration 拨号超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientDialTimeout sets the dial timeout.
 func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if dialTimeout >= 0 {
@@ -173,9 +165,7 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientReadBufferSize 设置读缓冲区大小
-// @param readBufferSize int 读缓冲区大小
-// @return @1 ClientOption 客户端配置项
+// WithClientReadBufferSize sets the read buffer size.
 func WithClientReadBufferSize(readBufferSize int) ClientOption {
 	return func(o *clientOptions) {
 		if readBufferSize > 0 {
@@ -186,9 +176,7 @@ func WithClientReadBufferSize(readBufferSize int) ClientOption {
 	}
 }
 
-// WithClientWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientWriteTimeout sets the write timeout.
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -199,9 +187,7 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientWriteQueueSize 设置写队列大小
-// @param writeQueueSize int 写队列大小
-// @return @1 ClientOption 客户端配置项
+// WithClientWriteQueueSize sets the write queue size.
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {
@@ -212,9 +198,7 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	}
 }
 
-// WithClientHeartbeatInterval 设置心跳间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间
-// @return @1 ClientOption 客户端配置项
+// WithClientHeartbeatInterval sets the heartbeat interval.
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if heartbeatInterval >= 0 {
@@ -225,10 +209,10 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	}
 }
 
-// WithClientCloseTimeout 设置优雅关闭超时时间
-// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
-// @param closeTimeout time.Duration 优雅关闭超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientCloseTimeout sets the graceful close timeout.
+//
+// When the write queue has not drained before the timeout elapses, the wait is abandoned and the
+// connection is closed forcibly. The default value of 0 means no limit.
 func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if closeTimeout >= 0 {
@@ -239,16 +223,12 @@ func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientCompression 设置是否开启压缩
-// @param enableCompression bool 是否开启压缩
-// @return @1 ClientOption 客户端配置项
+// WithClientCompression sets whether to enable compression.
 func WithClientCompression(enableCompression bool) ClientOption {
 	return func(o *clientOptions) { o.enableCompression = enableCompression }
 }
 
-// WithClientCompressionLevel 设置压缩等级
-// @param compressionLevel int 压缩等级
-// @return @1 ClientOption 客户端配置项
+// WithClientCompressionLevel sets the compression level.
 func WithClientCompressionLevel(compressionLevel int) ClientOption {
 	return func(o *clientOptions) {
 		if compressionLevel >= 1 && compressionLevel <= 9 {

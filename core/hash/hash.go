@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/11/1 1:23 上午
- * @Desc: TODO
- */
-
 package hash
 
 import (
@@ -18,11 +11,11 @@ import (
 type Hash string
 
 const (
-	SHA1   Hash = "sha1"   // 长度为 sha1.Size
-	SHA224 Hash = "sha224" // 长度为 sha256.Size224
-	SHA256 Hash = "sha256" // 长度为 sha256.Size
-	SHA384 Hash = "sha384" // 长度为 sha512.Size384
-	SHA512 Hash = "sha512" // 长度为 sha256.Size
+	SHA1   Hash = "sha1"   // Length is sha1.Size
+	SHA224 Hash = "sha224" // Length is sha256.Size224
+	SHA256 Hash = "sha256" // Length is sha256.Size
+	SHA384 Hash = "sha384" // Length is sha512.Size384
+	SHA512 Hash = "sha512" // Length is sha256.Size
 )
 
 func (h Hash) New() hash.Hash {

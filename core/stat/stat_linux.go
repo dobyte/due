@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// CreateTime 获取文件创建时间
+// CreateTime returns the file creation time.
 func (fs *fileStat) CreateTime() time.Time {
 	stat := fs.fi.Sys().(*syscall.Stat_t)
 
-	return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec)
+	return time.Unix(int64(stat.Ctim.Sec), int64(stat.Ctim.Nsec))
 }

@@ -6,21 +6,19 @@ import (
 	"time"
 )
 
-// Goroutines 协程组，用于批量管理需要并发执行的协程函数
+// Goroutines is a goroutine group that manages a batch of functions to run concurrently.
 type Goroutines struct {
 	mu  sync.Mutex
 	fns []func()
 }
 
-// NewGoroutines 创建一个协程组实例
-// @return @1 *Goroutines 协程组实例
+// NewGoroutines returns a new Goroutines group.
 func NewGoroutines() *Goroutines {
 	return &Goroutines{}
 }
 
-// Add 添加协程函数
-// @param fns ...func() 待添加的协程函数
-// @return @1 *Goroutines 协程组实例（支持链式调用）
+// Add appends the given functions to the group and returns the group itself so that calls can be
+// chained.
 func (g *Goroutines) Add(fns ...func()) *Goroutines {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -30,12 +28,12 @@ func (g *Goroutines) Add(fns ...func()) *Goroutines {
 	return g
 }
 
-// Run 运行协程函数，所有函数在独立的协程中并发执行
-// 执行完毕后会清空已添加的协程函数，以便实例可被复用
-// 未指定超时时间时会等待所有协程执行完毕；
-// 指定超时时间后，若超时则提前返回，不再等待剩余协程
-// @param ctx context.Context 上下文
-// @param timeout ...time.Duration 可选，整体执行的超时时间
+// Run starts every function the group holds, each in its own goroutine, and waits for them
+// according to ctx.
+//
+// The group is emptied before the functions run, so the same instance can be reused. When no
+// timeout is given, Run blocks until all functions have finished; when a timeout is given, it
+// returns early on timeout without waiting for the remaining functions.
 func (g *Goroutines) Run(ctx context.Context, timeout ...time.Duration) {
 	g.mu.Lock()
 	fns := g.fns

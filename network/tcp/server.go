@@ -13,23 +13,21 @@ import (
 )
 
 type server struct {
-	opts              *serverOptions            // 配置
-	mu                sync.Mutex                // 锁
-	listener          net.Listener              // 监听器
-	connMgr           *serverConnMgr            // 连接管理器
-	startHandler      network.StartHandler      // 服务器启动hook函数
-	stopHandler       network.CloseHandler      // 服务器关闭hook函数
-	connectHandler    network.ConnectHandler    // 连接打开hook函数
-	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
-	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
-	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
+	opts              *serverOptions            // Options
+	mu                sync.Mutex                // Lock
+	listener          net.Listener              // Listener
+	connMgr           *serverConnMgr            // Connection manager
+	startHandler      network.StartHandler      // Handler invoked when the server starts
+	stopHandler       network.CloseHandler      // Handler invoked when the server stops
+	connectHandler    network.ConnectHandler    // Handler invoked when a connection is opened
+	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
+	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
+	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
 }
 
 var _ network.Server = &server{}
 
-// NewServer 创建一个服务器
-// @param opts ...ServerOption 服务器配置项
-// @return @1 network.Server 服务器实例
+// NewServer returns a new server.
 func NewServer(opts ...ServerOption) network.Server {
 	o := defaultServerOptions()
 	for _, opt := range opts {
@@ -43,9 +41,10 @@ func NewServer(opts ...ServerOption) network.Server {
 	return s
 }
 
-// Addr 获取监听地址
-// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
-// @return @1 string 监听地址
+// Addr returns the listen address.
+//
+// It returns the actual listener address after the server starts and the configured address before
+// that.
 func (s *server) Addr() string {
 	s.mu.Lock()
 
@@ -61,8 +60,7 @@ func (s *server) Addr() string {
 	return addr
 }
 
-// Start 启动服务器
-// @return @1 error 错误信息
+// Start starts the server.
 func (s *server) Start() error {
 	s.mu.Lock()
 
@@ -84,17 +82,16 @@ func (s *server) Start() error {
 	return nil
 }
 
-// Stop 关闭服务器
-// @return @1 error 错误信息
+// Stop stops the server.
 func (s *server) Stop() error {
 	return s.stop(nil)
 }
 
-// stop 关闭服务器
-// 关闭监听器并关闭所有连接；ln 非空时仅当其仍为当前监听器才执行关闭，
-// 避免旧的服务协程退出时误关重启后的新监听器
-// @param ln net.Listener 期望关闭的监听器，为nil时不做校验
-// @return @1 error 服务器已关闭或监听器不匹配时返回的错误
+// stop stops the server.
+//
+// It closes the listener and closes all connections. When ln is not nil the close is performed only
+// if it is still the current listener, which prevents an old serve goroutine from closing the new
+// listener after a restart by mistake.
 func (s *server) stop(ln net.Listener) error {
 	s.mu.Lock()
 
@@ -116,57 +113,57 @@ func (s *server) stop(ln net.Listener) error {
 	return nil
 }
 
-// Protocol 获取协议名称
-// @return @1 string 协议名称
+// Protocol returns the protocol name.
 func (s *server) Protocol() string {
 	return protocol
 }
 
-// OnStart 监听服务器启动
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.StartHandler 服务器启动处理函数
+// OnStart registers the handler invoked when the server starts.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnStart(handler network.StartHandler) {
 	s.startHandler = handler
 }
 
-// OnStop 监听服务器关闭
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.CloseHandler 服务器关闭处理函数
+// OnStop registers the handler invoked when the server stops.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnStop(handler network.CloseHandler) {
 	s.stopHandler = handler
 }
 
-// OnConnect 监听连接打开
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.ConnectHandler 连接打开处理函数
+// OnConnect registers the handler invoked when a connection is opened.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnConnect(handler network.ConnectHandler) {
 	s.connectHandler = handler
 }
 
-// OnDisconnect 监听连接关闭
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.DisconnectHandler 连接关闭处理函数
+// OnDisconnect registers the handler invoked when a connection is closed.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
 }
 
-// OnHeartbeat 监听心跳
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.HeartbeatHandler 心跳处理函数
+// OnHeartbeat registers the handler invoked when a heartbeat is received.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 	s.heartbeatHandler = handler
 }
 
-// OnReceive 监听接收到消息
-// 须在 Start 之前注册，Start 之后注册存在数据竞争
-// @param handler network.ReceiveHandler 消息接收处理函数
+// OnReceive registers the handler invoked when a message is received.
+//
+// It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
 }
 
-// init 初始化TCP服务器
-// 解析TCP地址，按配置创建TLS或原生TCP监听器；若任一环节失败则回滚启动状态
-// @return @1 error 已启动、证书加载失败或监听地址不合法时返回的错误
+// init initializes the TCP server.
+//
+// It resolves the TCP address and creates a TLS or plain TCP listener according to the options; any
+// failure rolls back the start.
 func (s *server) init() error {
 	if s.listener != nil {
 		return errors.ErrServerStarted
@@ -203,9 +200,12 @@ func (s *server) init() error {
 	return nil
 }
 
-// serve 等待连接
-// 循环接受TCP连接并分配到独立协程处理；临时性错误（如文件描述符耗尽）按指数退避重试，
-// 避免瞬时抖动导致服务器退出，服务器关闭或发生不可恢复错误时结束
+// serve waits for connections.
+//
+// It accepts TCP connections in a loop and dispatches each one to its own goroutine. Temporary
+// errors such as file descriptor exhaustion are retried with exponential backoff so that a
+// transient hiccup does not make the server exit; it ends when the server is closed or an
+// unrecoverable error occurs.
 func (s *server) serve(ln net.Listener) {
 	var tempDelay time.Duration
 

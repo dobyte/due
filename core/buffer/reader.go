@@ -8,18 +8,18 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// Reader 字节读取器
+// Reader is a byte reader.
 type Reader struct {
 	buf []byte
 	off int
 }
 
-// NewReader 以指定数据创建读取器
+// NewReader creates a Reader over data.
 func NewReader(data []byte) *Reader {
 	return &Reader{buf: data}
 }
 
-// Reset 重置
+// Reset resets the read offset to zero.
 func (r *Reader) Reset() {
 	r.off = 0
 }
@@ -44,7 +44,7 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	return abs, nil
 }
 
-// ReadBool 读取bool值
+// ReadBool reads a bool value.
 func (r *Reader) ReadBool() (bool, error) {
 	buf, err := r.slice(b8)
 	if err != nil {
@@ -54,7 +54,7 @@ func (r *Reader) ReadBool() (bool, error) {
 	return buf[0] == 1, nil
 }
 
-// ReadBools 读取多个bool值
+// ReadBools reads n bool values.
 func (r *Reader) ReadBools(n int) ([]bool, error) {
 	if n <= 0 {
 		return nil, nil
@@ -73,7 +73,7 @@ func (r *Reader) ReadBools(n int) ([]bool, error) {
 	return values, nil
 }
 
-// ReadInt8 读取int8值
+// ReadInt8 reads an int8 value.
 func (r *Reader) ReadInt8() (int8, error) {
 	buf, err := r.slice(b8)
 	if err != nil {
@@ -83,7 +83,7 @@ func (r *Reader) ReadInt8() (int8, error) {
 	return int8(buf[0]), nil
 }
 
-// ReadInt8s 读取多个int8值
+// ReadInt8s reads n int8 values.
 func (r *Reader) ReadInt8s(n int) ([]int8, error) {
 	if n <= 0 {
 		return nil, nil
@@ -102,7 +102,7 @@ func (r *Reader) ReadInt8s(n int) ([]int8, error) {
 	return values, nil
 }
 
-// ReadUint8 读取uint8值
+// ReadUint8 reads a uint8 value.
 func (r *Reader) ReadUint8() (uint8, error) {
 	buf, err := r.slice(b8)
 	if err != nil {
@@ -112,7 +112,7 @@ func (r *Reader) ReadUint8() (uint8, error) {
 	return buf[0], nil
 }
 
-// ReadUint8s 读取多个uint8值
+// ReadUint8s reads n uint8 values.
 func (r *Reader) ReadUint8s(n int) ([]uint8, error) {
 	if n <= 0 {
 		return nil, nil
@@ -131,7 +131,7 @@ func (r *Reader) ReadUint8s(n int) ([]uint8, error) {
 	return values, nil
 }
 
-// ReadInt16 读取int16值
+// ReadInt16 reads an int16 value using order.
 func (r *Reader) ReadInt16(order binary.ByteOrder) (int16, error) {
 	buf, err := r.slice(b16)
 	if err != nil {
@@ -141,7 +141,7 @@ func (r *Reader) ReadInt16(order binary.ByteOrder) (int16, error) {
 	return int16(order.Uint16(buf)), nil
 }
 
-// ReadInt16s 读取多个int16值
+// ReadInt16s reads n int16 values using order.
 func (r *Reader) ReadInt16s(order binary.ByteOrder, n int) ([]int16, error) {
 	if n <= 0 {
 		return nil, nil
@@ -160,7 +160,7 @@ func (r *Reader) ReadInt16s(order binary.ByteOrder, n int) ([]int16, error) {
 	return values, nil
 }
 
-// ReadUint16 读取uint16值
+// ReadUint16 reads a uint16 value using order.
 func (r *Reader) ReadUint16(order binary.ByteOrder) (uint16, error) {
 	buf, err := r.slice(b16)
 	if err != nil {
@@ -170,7 +170,7 @@ func (r *Reader) ReadUint16(order binary.ByteOrder) (uint16, error) {
 	return order.Uint16(buf), nil
 }
 
-// ReadUint16s 读取多个uint16值
+// ReadUint16s reads n uint16 values using order.
 func (r *Reader) ReadUint16s(order binary.ByteOrder, n int) ([]uint16, error) {
 	if n <= 0 {
 		return nil, nil
@@ -189,7 +189,7 @@ func (r *Reader) ReadUint16s(order binary.ByteOrder, n int) ([]uint16, error) {
 	return values, nil
 }
 
-// ReadInt32 读取int32值
+// ReadInt32 reads an int32 value using order.
 func (r *Reader) ReadInt32(order binary.ByteOrder) (int32, error) {
 	buf, err := r.slice(b32)
 	if err != nil {
@@ -199,7 +199,7 @@ func (r *Reader) ReadInt32(order binary.ByteOrder) (int32, error) {
 	return int32(order.Uint32(buf)), nil
 }
 
-// ReadInt32s 读取多个int32值
+// ReadInt32s reads n int32 values using order.
 func (r *Reader) ReadInt32s(order binary.ByteOrder, n int) ([]int32, error) {
 	buf, err := r.slices(b32, n)
 	if err != nil {
@@ -214,7 +214,7 @@ func (r *Reader) ReadInt32s(order binary.ByteOrder, n int) ([]int32, error) {
 	return values, nil
 }
 
-// ReadUint32 读取uint32值
+// ReadUint32 reads a uint32 value using order.
 func (r *Reader) ReadUint32(order binary.ByteOrder) (uint32, error) {
 	buf, err := r.slice(b32)
 	if err != nil {
@@ -224,7 +224,7 @@ func (r *Reader) ReadUint32(order binary.ByteOrder) (uint32, error) {
 	return order.Uint32(buf), nil
 }
 
-// ReadUint32s 读取多个uint32值
+// ReadUint32s reads n uint32 values using order.
 func (r *Reader) ReadUint32s(order binary.ByteOrder, n int) ([]uint32, error) {
 	buf, err := r.slices(b32, n)
 	if err != nil {
@@ -239,7 +239,7 @@ func (r *Reader) ReadUint32s(order binary.ByteOrder, n int) ([]uint32, error) {
 	return values, nil
 }
 
-// ReadInt64 读取int64值
+// ReadInt64 reads an int64 value using order.
 func (r *Reader) ReadInt64(order binary.ByteOrder) (int64, error) {
 	buf, err := r.slice(b64)
 	if err != nil {
@@ -249,7 +249,7 @@ func (r *Reader) ReadInt64(order binary.ByteOrder) (int64, error) {
 	return int64(order.Uint64(buf)), nil
 }
 
-// ReadInt64s 读取多个int64值
+// ReadInt64s reads n int64 values using order.
 func (r *Reader) ReadInt64s(order binary.ByteOrder, n int) ([]int64, error) {
 	if n <= 0 {
 		return nil, nil
@@ -268,7 +268,7 @@ func (r *Reader) ReadInt64s(order binary.ByteOrder, n int) ([]int64, error) {
 	return values, nil
 }
 
-// ReadUint64 读取uint64值
+// ReadUint64 reads a uint64 value using order.
 func (r *Reader) ReadUint64(order binary.ByteOrder) (uint64, error) {
 	buf, err := r.slice(b64)
 	if err != nil {
@@ -278,7 +278,7 @@ func (r *Reader) ReadUint64(order binary.ByteOrder) (uint64, error) {
 	return order.Uint64(buf), nil
 }
 
-// ReadUint64s 读取多个uint64值
+// ReadUint64s reads n uint64 values using order.
 func (r *Reader) ReadUint64s(order binary.ByteOrder, n int) ([]uint64, error) {
 	if n <= 0 {
 		return nil, nil
@@ -297,7 +297,7 @@ func (r *Reader) ReadUint64s(order binary.ByteOrder, n int) ([]uint64, error) {
 	return values, nil
 }
 
-// ReadFloat32 读取float32值
+// ReadFloat32 reads a float32 value using order.
 func (r *Reader) ReadFloat32(order binary.ByteOrder) (float32, error) {
 	buf, err := r.slice(b32)
 	if err != nil {
@@ -307,7 +307,7 @@ func (r *Reader) ReadFloat32(order binary.ByteOrder) (float32, error) {
 	return math.Float32frombits(order.Uint32(buf)), nil
 }
 
-// ReadFloat32s 读取多个float32值
+// ReadFloat32s reads n float32 values using order.
 func (r *Reader) ReadFloat32s(order binary.ByteOrder, n int) ([]float32, error) {
 	if n <= 0 {
 		return nil, nil
@@ -326,7 +326,7 @@ func (r *Reader) ReadFloat32s(order binary.ByteOrder, n int) ([]float32, error) 
 	return values, nil
 }
 
-// ReadFloat64 读取float64值
+// ReadFloat64 reads a float64 value using order.
 func (r *Reader) ReadFloat64(order binary.ByteOrder) (float64, error) {
 	buf, err := r.slice(b64)
 	if err != nil {
@@ -336,7 +336,7 @@ func (r *Reader) ReadFloat64(order binary.ByteOrder) (float64, error) {
 	return math.Float64frombits(order.Uint64(buf)), nil
 }
 
-// ReadFloat64s 读取多个float64值
+// ReadFloat64s reads n float64 values using order.
 func (r *Reader) ReadFloat64s(order binary.ByteOrder, n int) ([]float64, error) {
 	if n <= 0 {
 		return nil, nil
@@ -355,22 +355,22 @@ func (r *Reader) ReadFloat64s(order binary.ByteOrder, n int) ([]float64, error) 
 	return values, nil
 }
 
-// ReadRune 读取rune值
+// ReadRune reads a rune value using order.
 func (r *Reader) ReadRune(order binary.ByteOrder) (rune, error) {
 	return r.ReadInt32(order)
 }
 
-// ReadRunes 读取多个rune值
+// ReadRunes reads n rune values using order.
 func (r *Reader) ReadRunes(order binary.ByteOrder, n int) ([]rune, error) {
 	return r.ReadInt32s(order, n)
 }
 
-// ReadByte 读取byte值
+// ReadByte reads a byte value.
 func (r *Reader) ReadByte() (byte, error) {
 	return r.ReadUint8()
 }
 
-// ReadBytes 读取多个byte值
+// ReadBytes reads n bytes.
 func (r *Reader) ReadBytes(n int) ([]byte, error) {
 	if n <= 0 {
 		return nil, nil
@@ -379,7 +379,7 @@ func (r *Reader) ReadBytes(n int) ([]byte, error) {
 	return r.slices(b8, n)
 }
 
-// ReadString 读取string值
+// ReadString reads a string of the given length.
 func (r *Reader) ReadString(len int) (string, error) {
 	if len <= 0 {
 		return "", nil

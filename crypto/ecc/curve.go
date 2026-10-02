@@ -13,7 +13,7 @@ const (
 	P521
 )
 
-// New 根据曲线类型创建椭圆曲线，非法类型默认回退到P256
+// New returns the elliptic curve of c. It falls back to P256 when c is not a valid curve type.
 func (c Curve) New() elliptic.Curve {
 	switch c {
 	case P224:

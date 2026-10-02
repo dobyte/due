@@ -38,7 +38,7 @@ func (s *Server) init() {
 	s.RegisterHandler(route.SetState, s.setState)
 }
 
-// 触发事件
+// trigger triggers an event.
 func (s *Server) trigger(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	event, cid, uid, err := protocol.DecodeTriggerReq(req)
 
@@ -67,7 +67,7 @@ func (s *Server) trigger(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) e
 	}
 }
 
-// 投递消息
+// deliver delivers a message.
 func (s *Server) deliver(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	var (
 		gid string
@@ -99,7 +99,7 @@ func (s *Server) deliver(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) e
 	}
 }
 
-// 获取状态
+// getState returns the state.
 func (s *Server) getState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	err := protocol.DecodeGetStateReq(req)
 
@@ -118,7 +118,7 @@ func (s *Server) getState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) 
 	}
 }
 
-// 设置状态
+// setState sets the state.
 func (s *Server) setState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	state, err := protocol.DecodeSetStateReq(req)
 

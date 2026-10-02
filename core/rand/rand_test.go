@@ -11,8 +11,8 @@ import (
 	"github.com/dobyte/due/v2/core/rand"
 )
 
-// generators 返回所有需要测试的随机数生成器实例
-// 覆盖 PseudoRandom、TrueRandom 以及各自的并发安全模式
+// generators returns every random number generator to be tested, covering PseudoRandom,
+// TrueRandom and their concurrency-safe variants.
 func generators() map[string]*rand.Rand {
 	return map[string]*rand.Rand{
 		"pseudo":      rand.NewRand(&rand.PseudoRandom{}),
@@ -22,7 +22,7 @@ func generators() map[string]*rand.Rand {
 	}
 }
 
-// runForAll 针对每个生成器实例运行相同的断言逻辑
+// runForAll runs the same assertion logic against every generator instance.
 func runForAll(t *testing.T, fn func(t *testing.T, r *rand.Rand)) {
 	t.Helper()
 	for name, r := range generators() {
@@ -32,7 +32,7 @@ func runForAll(t *testing.T, fn func(t *testing.T, r *rand.Rand)) {
 	}
 }
 
-// mustPanic 断言函数执行时必然触发 panic
+// mustPanic asserts that fn panics when it runs.
 func mustPanic(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {
@@ -266,7 +266,7 @@ func TestLetters(t *testing.T) {
 
 func TestDigits(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		// 默认首位不允许为 0
+		// By default the first digit must not be zero.
 		s := r.Digits(6)
 		if len(s) != 6 {
 			t.Fatalf("Digits 长度错误: %d", len(s))
@@ -280,7 +280,7 @@ func TestDigits(t *testing.T) {
 			}
 		}
 
-		// 允许首位为 0
+		// Allow the first digit to be zero.
 		s = r.Digits(6, true)
 		if len(s) != 6 {
 			t.Fatalf("Digits(6,true) 长度错误: %d", len(s))
@@ -291,12 +291,12 @@ func TestDigits(t *testing.T) {
 			}
 		}
 
-		// 长度为 1 时首位不应为 0
+		// The first digit must not be zero when the length is 1.
 		if s = r.Digits(1); len(s) != 1 || s[0] == '0' {
 			t.Fatalf("Digits(1) 异常: %q", s)
 		}
 
-		// 非正长度返回空字符串
+		// A non-positive length returns an empty string.
 		if s = r.Digits(0); s != "" {
 			t.Fatalf("Digits(0) 应为空字符串，实际: %q", s)
 		}
@@ -324,13 +324,13 @@ func TestIntR(t *testing.T) {
 				t.Fatalf("IntR(10,20) 越界: %d", v)
 			}
 		}
-		// min > max 时自动交换
+		// min and max are swapped automatically when min > max.
 		for i := 0; i < 1000; i++ {
 			if v := r.IntR(20, 10); v < 10 || v > 20 {
 				t.Fatalf("IntR(20,10) 越界: %d", v)
 			}
 		}
-		// min == max 时直接返回
+		// min == max returns min directly.
 		if v := r.IntR(5, 5); v != 5 {
 			t.Fatalf("IntR(5,5) 应为 5，实际: %d", v)
 		}
@@ -413,7 +413,7 @@ func TestLucky(t *testing.T) {
 		if !r.Lucky(1000) {
 			t.Fatal("Lucky(1000) 应为 true")
 		}
-		// 概率落在(0,100)区间，多次调用不应 panic
+		// A probability within (0,100) must not panic across repeated calls.
 		for i := 0; i < 1000; i++ {
 			_ = r.Lucky(50)
 		}
@@ -435,12 +435,12 @@ func TestWeight(t *testing.T) {
 			}
 		}
 
-		// 空列表
+		// Empty list.
 		if _, _, ok := r.Weight(func(x int) float64 { return 1 }); ok {
 			t.Fatal("空列表 Weight 应返回 false")
 		}
 
-		// 权重合计为 0
+		// Total weight is zero.
 		if idx, _, ok := r.Weight(func(x int) float64 { return 0 }, 1, 2, 3); ok || idx != -1 {
 			t.Fatalf("全零权重应返回 false 且下标为 -1，实际 ok=%v idx=%d", ok, idx)
 		}

@@ -15,26 +15,22 @@ import (
 )
 
 const (
-	watchMinBackoff = time.Second      // 监听重连最小退避时间
-	watchMaxBackoff = 30 * time.Second // 监听重连最大退避时间
+	watchMinBackoff = time.Second      // Minimum backoff for watch reconnection
+	watchMaxBackoff = 30 * time.Second // Maximum backoff for watch reconnection
 )
 
-// 监听器
+// watcher watches the configuration changes of a Consul config source.
 type watcher struct {
-	ctx     context.Context              // 上下文
-	cancel  context.CancelFunc           // 取消函数
-	source  *Source                      // 配置源
-	plan    *watch.Plan                  // 监听计划
-	mu      sync.Mutex                   // 发送锁
-	stopped atomic.Bool                  // 是否已停止
-	chWatch chan []*config.Configuration // 配置变更通道
+	ctx     context.Context              // Context
+	cancel  context.CancelFunc           // Cancel function
+	source  *Source                      // Config source
+	plan    *watch.Plan                  // Watch plan
+	mu      sync.Mutex                   // Send lock
+	stopped atomic.Bool                  // Whether the watcher has stopped
+	chWatch chan []*config.Configuration // Configuration change channel
 }
 
-// 创建监听器
-// @param ctx context.Context 上下文
-// @param s *Source 配置源
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
+// newWatcher creates a watcher.
 func newWatcher(ctx context.Context, s *Source) (config.Watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
@@ -48,9 +44,8 @@ func newWatcher(ctx context.Context, s *Source) (config.Watcher, error) {
 	return w, nil
 }
 
-// 初始化监听器
-// 解析keyprefix监听计划并启动监听协程
-// @return @1 error 错误信息
+// init initializes the watcher. It parses the plan that watches the key prefix and
+// starts the watch goroutine.
 func (w *watcher) init() (err error) {
 	w.plan, err = watch.Parse(map[string]any{
 		"type":   "keyprefix",
@@ -97,10 +92,8 @@ func (w *watcher) init() (err error) {
 	return
 }
 
-// 处理监听计划回调
-// 将Consul返回的KV集合转换为配置项列表并通知监听器
-// @param idx uint64 索引值
-// @param raw any 原始回调数据
+// planHandler handles the callback of the watch plan. It converts the KV set
+// returned by Consul into a configuration list and notifies the watcher.
 func (w *watcher) planHandler(idx uint64, raw any) {
 	if raw == nil {
 		return // ignore
@@ -119,9 +112,9 @@ func (w *watcher) planHandler(idx uint64, raw any) {
 	w.notify(configs)
 }
 
-// 通知监听器配置列表已更新
-// 清空旧数据后非阻塞发送最新配置快照
-// @param configs []*config.Configuration 配置项列表
+// notify notifies the watcher that the configuration list has been updated. It
+// clears the stale data and then sends the latest configuration snapshot in a
+// non-blocking way.
 func (w *watcher) notify(configs []*config.Configuration) {
 	if w.stopped.Load() {
 		return
@@ -144,7 +137,7 @@ func (w *watcher) notify(configs []*config.Configuration) {
 	w.mu.Unlock()
 }
 
-// 清空所有旧数据，仅保留最新配置快照
+// flush clears every stale item and keeps only the latest configuration snapshot.
 func (w *watcher) flush() {
 	for {
 		select {
@@ -155,10 +148,8 @@ func (w *watcher) flush() {
 	}
 }
 
-// Next 返回配置列表
-// 阻塞等待配置变更，监听被停止时返回错误
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Next returns the configuration list. It blocks until the configuration changes
+// and returns an error once the watcher has been stopped.
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
@@ -172,8 +163,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 }
 
-// Stop 停止监听
-// @return @1 error 错误信息
+// Stop stops the watcher.
 func (w *watcher) Stop() error {
 	if !w.stopped.CompareAndSwap(false, true) {
 		return nil

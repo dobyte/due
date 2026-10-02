@@ -13,26 +13,30 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Maker 锁构建器
-// 基于 redis 的 SET NX 原语与释放/续租 Lua 脚本制造分布式锁，
-// 内部持有 redis 客户端与全局锁配置，并为每把锁生成独立的版本标识(version)以校验锁所有权
+// Maker is a lock maker.
+//
+// It builds distributed locks on top of the redis SET NX primitive and the release/renewal Lua
+// scripts. It holds a redis client and the global lock options, and generates a separate version
+// identifier for every lock to verify lock ownership.
 type Maker struct {
-	err           error           // 初始化错误(如 TLS 配置失败)，非nil时所有操作直接返回该错误
-	opts          *options        // 锁配置项
-	builtin       bool            // 是否内建客户端，内建客户端将随 Close 一并关闭
-	ctx           context.Context // 构建器生命周期上下文，Close 时取消，用于停止所有续租协程
+	err           error           // Initialization error (such as a TLS configuration failure); when non-nil every operation returns it directly.
+	opts          *options        // Lock options
+	builtin       bool            // Reports whether the client is built in; a built-in client is also closed by Close.
+	ctx           context.Context // Maker lifecycle context, canceled by Close, used to stop every renewal goroutine.
 	cancel        context.CancelFunc
-	releaseScript *redis.Script // 释放锁的 Lua 脚本
-	renewalScript *redis.Script // 续租锁的 Lua 脚本
+	releaseScript *redis.Script // Lua script that releases a lock
+	renewalScript *redis.Script // Lua script that renews a lock
 }
 
-// NewMaker 创建锁构建器
-// 初始化锁配置项：未显式配置过期时间时采用默认值，并将不足1毫秒的过期时间收敛为1毫秒，
-// 避免亚毫秒级配置被截断为0(Set 时不设过期、PEXPIRE 0 时直接删除锁)；
-// 循环获取锁的间隔时间小于等于0时收敛为默认值，避免重试退化为无退避忙等循环；
-// 未提供外部客户端时自动创建内建客户端，该内建客户端将随 Close 一并关闭
-// @param opts ...Option 锁配置项
-// @return @1 *Maker 锁构建器实例；初始化失败(如 TLS 配置错误)时，实例的获取/释放等操作将返回该错误
+// NewMaker creates a lock maker.
+//
+// It initializes the lock options: when no expiration is configured explicitly the default is used,
+// and an expiration shorter than one millisecond is clamped to one millisecond so that a
+// sub-millisecond value is not truncated to zero (which would leave the lock without an expiration
+// on Set and delete the lock immediately on PEXPIRE 0). When the interval of the acquire loop is
+// less than or equal to 0 it is clamped to the default, so that retries do not degenerate into a
+// busy-wait loop without backoff. When no external client is provided, a built-in client is created
+// and closed by Close.
 func NewMaker(opts ...Option) *Maker {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -43,13 +47,16 @@ func NewMaker(opts ...Option) *Maker {
 		o.expiration = xconv.Duration(defaultExpiration)
 	}
 
-	// redis 的过期时间精度为 1 毫秒，0 表示不设置过期时间(而 PEXPIRE 0 会直接删除 key)；
-	// 将过期时间下限收敛为 1 毫秒，避免亚毫秒级配置被截断为 0 导致锁永不过期或立即失效
+	// The redis expiration has a precision of 1 millisecond and 0 means no expiration (whereas
+	// PEXPIRE 0 deletes the key immediately); clamp the lower bound of the expiration to 1
+	// millisecond so that a sub-millisecond value is not truncated to 0 and makes the lock never
+	// expire or expire immediately.
 	if o.expiration < time.Millisecond {
 		o.expiration = time.Millisecond
 	}
 
-	// 获取锁的间隔时间必须大于0，0或负值会使重试定时器立即触发，退化为无退避忙等循环
+	// The acquire interval must be greater than 0; a value of 0 or less makes the retry timer fire
+	// immediately and degenerates into a busy-wait loop without backoff.
 	if o.acquireInterval <= 0 {
 		o.acquireInterval = xconv.Duration(defaultAcquireInterval)
 	}
@@ -81,11 +88,11 @@ func NewMaker(opts ...Option) *Maker {
 	return m
 }
 
-// Make 制造一个Locker
-// 依据锁名称拼接配置的前缀生成 redis key，并为该锁生成唯一的版本标识；
-// 每个 Locker 持有独立的版本标识，从而可在同一把锁上公平竞争
-// @param name string 锁名称
-// @return @1 lock.Locker 分布式锁
+// Make creates a locker.
+//
+// It builds the redis key by joining the configured prefix with the lock name and generates a
+// unique version identifier for the lock; every Locker holds its own version identifier so that
+// contenders can compete fairly for the same lock.
 func (m *Maker) Make(name string) lock.Locker {
 	l := &Locker{}
 	l.maker = m
@@ -101,12 +108,13 @@ func (m *Maker) Make(name string) lock.Locker {
 	return l
 }
 
-// Close 关闭构建器
-// 先取消构建器生命周期上下文以停止所有后台续租协程，再关闭内建客户端；
-// 使用外部客户端时，其生命周期由外部调用方管理，此处不做处理
-// @return @1 error 关闭失败时返回的错误
+// Close closes the maker.
+//
+// It first cancels the maker lifecycle context to stop every background renewal goroutine and then
+// closes the built-in client. When an external client is used, its lifecycle is managed by the
+// caller and is left untouched here.
 func (m *Maker) Close() error {
-	// 停止所有后台续租协程；CancelFunc 幂等，可重复调用
+	// Stop every background renewal goroutine; CancelFunc is idempotent and may be called repeatedly.
 	m.cancel()
 
 	if m.err != nil {
@@ -120,19 +128,23 @@ func (m *Maker) Close() error {
 	return nil
 }
 
-// 循环获取锁
-// 以 SET NX 原语周期性地尝试写入锁，写入成功即代表获取成功；写入失败(返回redis.Nil)说明锁已被他人持有，
-// 按配置的间隔与最大重试次数循环重试，直至成功、重试次数耗尽或 ctx 被取消
-// @param ctx context.Context 上下文，取消后立即终止获取
-// @param key string redis键
-// @param version string 锁版本标识
-// @return @1 error 获取成功返回nil；重试耗尽返回errors.ErrDeadlineExceeded；ctx被取消返回ctx.Err()；构建器已关闭返回errors.ErrIllegalOperation
+// acquire acquires the lock in a loop.
+//
+// It periodically tries to write the lock with the SET NX primitive; a successful write means a
+// successful acquisition. A failed write (which returns redis.Nil) means the lock is already held
+// by someone else, so it retries at the configured interval up to the maximum number of retries,
+// until it succeeds, the retries are exhausted, or ctx is canceled.
+//
+// It returns nil on success, [errors.ErrDeadlineExceeded] when the retries are exhausted, the error
+// reported by ctx when ctx is canceled, and [errors.ErrIllegalOperation] when the maker has been
+// closed.
 func (m *Maker) acquire(ctx context.Context, key, version string) error {
 	if m.err != nil {
 		return m.err
 	}
 
-	// 构建器已关闭(Close)时快速失败，避免获取成功后后台续租因生命周期上下文取消而静默失效
+	// Fail fast when the maker has been closed, so that a successful acquisition is not followed by
+	// a background renewal that silently stops because the lifecycle context was canceled.
 	if m.ctx.Err() != nil {
 		return errors.ErrIllegalOperation
 	}
@@ -166,7 +178,7 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 			ticker.Stop()
 			return ctx.Err()
 		case <-m.ctx.Done():
-			// 构建器在等待期间被关闭，停止获取
+			// The maker was closed while waiting, stop acquiring.
 			ticker.Stop()
 			return errors.ErrIllegalOperation
 		case <-ticker.C:
@@ -175,19 +187,20 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 	}
 }
 
-// 尝试获取锁
-// 仅执行一次 SET NX 写入，不等待也不重试；可通过 expiration 指定固定过期时间，未指定时采用配置的默认过期时间
-// @param ctx context.Context 上下文
-// @param key string redis键
-// @param version string 锁版本标识
-// @param expiration ...time.Duration 可选的固定过期时间；为空或小于等于0时采用默认过期时间
-// @return @1 error 获取成功返回nil；锁已被他人持有返回errors.ErrIllegalOperation；构建器已关闭返回errors.ErrIllegalOperation
+// tryAcquire tries to acquire the lock.
+//
+// It performs a single SET NX write without waiting or retrying; a fixed expiration may be given
+// through expiration, otherwise the configured default expiration is used.
+//
+// It returns nil on success, and [errors.ErrIllegalOperation] when the lock is already held by
+// someone else or the maker has been closed.
 func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration ...time.Duration) error {
 	if m.err != nil {
 		return m.err
 	}
 
-	// 构建器已关闭(Close)时快速失败，避免获取成功后后台续租因生命周期上下文取消而静默失效
+	// Fail fast when the maker has been closed, so that a successful acquisition is not followed by
+	// a background renewal that silently stops because the lifecycle context was canceled.
 	if m.ctx.Err() != nil {
 		return errors.ErrIllegalOperation
 	}
@@ -210,12 +223,13 @@ func (m *Maker) tryAcquire(ctx context.Context, key, version string, expiration 
 	return nil
 }
 
-// 执行释放锁操作
-// 通过 Lua 脚本按版本标识原子地删除锁，仅锁的所有者(版本标识匹配)能释放成功
-// @param ctx context.Context 上下文
-// @param key string redis键
-// @param version string 锁版本标识
-// @return @1 error 释放成功返回nil；锁已丢失或所有权已变更返回errors.ErrIllegalOperation
+// release releases the lock.
+//
+// It deletes the lock atomically by version identifier through a Lua script; only the lock owner
+// (whose version identifier matches) can release it successfully.
+//
+// It returns nil on success and [errors.ErrIllegalOperation] when the lock has been lost or its
+// ownership has changed.
 func (m *Maker) release(ctx context.Context, key, version string) error {
 	if m.err != nil {
 		return m.err
@@ -233,15 +247,18 @@ func (m *Maker) release(ctx context.Context, key, version string) error {
 	return nil
 }
 
-// 执行续租锁操作
-// 通过 Lua 脚本按版本标识原子地刷新锁的过期时间；首次操作失败(瞬时故障)时按指数退避重试，
-// 退避睡眠总时长预算控制在锁过期时间的一半以内(见backoffRetries)，尽量避免退避阻塞导致锁过期；
-// 退避仍失败则交由续租调度器(locker.go)按短间隔(renewalRetryInterval)继续补偿重试；
-// 一旦锁所有权丢失(返回errors.ErrIllegalOperation)则立即终止
-// @param ctx context.Context 上下文
-// @param key string redis键
-// @param version string 锁版本标识
-// @return @1 error 续租成功返回nil；锁已丢失或所有权已变更返回errors.ErrIllegalOperation
+// renewal renews the lock.
+//
+// It refreshes the lock expiration atomically by version identifier through a Lua script. When the
+// first attempt fails (a transient failure) it retries with exponential backoff, keeping the total
+// backoff sleeping budget within half of the lock expiration (see [backoffRetries]) so that the
+// backoff is unlikely to block renewal long enough for the lock to expire. If the backoff still
+// fails, the renewal scheduler (locker.go) keeps compensating at a short interval
+// ([renewalRetryInterval]). It terminates immediately once lock ownership is lost (reported as
+// [errors.ErrIllegalOperation]).
+//
+// It returns nil on success and [errors.ErrIllegalOperation] when the lock has been lost or its
+// ownership has changed.
 func (m *Maker) renewal(ctx context.Context, key, version string) error {
 	if m.err != nil {
 		return m.err
@@ -275,7 +292,8 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 
 	retries, baseDelay := backoffRetries(m.opts.expiration)
 	if retries == 0 {
-		// 过期时间过短、退避预算不足，不再退避重试，交由续租调度器按短间隔(renewalRetryInterval)补偿重试
+		// The expiration is too short and the backoff budget is insufficient, so no backoff retry is
+		// performed; the renewal scheduler compensates at the short interval ([renewalRetryInterval]).
 		return err
 	}
 
@@ -289,12 +307,15 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 	}, retries, baseDelay, time.Second)
 }
 
-// 计算续租退避的重试次数与初始间隔
-// 指数退避(间隔按2倍递增，100ms起步)的总时长被限制在锁过期时间的一半以内，
-// 避免退避阻塞续租调度导致锁在故障恢复前过期；最多退避3次，不足一次退避预算时不重试
-// @param expiration time.Duration 锁过期时长
-// @return @1 int 退避重试次数，最小为0(预算不足以支撑一次退避时不再重试)
-// @return @2 time.Duration 退避初始间隔，恒为100ms
+// backoffRetries computes the number of retries and the initial interval of the renewal backoff.
+//
+// The total duration of the exponential backoff (the interval doubles starting from 100ms) is
+// limited to half of the lock expiration, so that a blocked backoff does not delay the renewal
+// schedule and let the lock expire before the failure is recovered. It backs off at most three
+// times and does not retry when the budget cannot cover a single backoff.
+//
+// It returns the number of backoff retries, which is at least 0 (no retry when the budget cannot
+// cover a single backoff), and the initial backoff interval, which is always 100ms.
 func backoffRetries(expiration time.Duration) (int, time.Duration) {
 	var (
 		delay   = 100 * time.Millisecond

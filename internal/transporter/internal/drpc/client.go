@@ -35,8 +35,11 @@ func NewClient(addr string, opts *ClientOptions) (*Client, error) {
 	return c, nil
 }
 
-// Establish 新建连接
-// 循环尝试建立指定数量的连接；存在失败时采用指数退避重试，避免忙等；支持通过 ctx 取消等待
+// Establish establishes the configured number of connections.
+//
+// It tries repeatedly until the requested number of connections is reached. Failures are retried
+// with exponential backoff to avoid busy waiting, and the wait can be canceled through the
+// optional context.
 func (c *Client) Establish(ctx ...context.Context) error {
 	ct := context.Background()
 	if len(ctx) > 0 && ctx[0] != nil {
@@ -88,7 +91,7 @@ func (c *Client) Establish(ctx ...context.Context) error {
 	return nil
 }
 
-// 新建连接
+// doEstablish establishes up to num connections concurrently.
 func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 	var (
 		mu    sync.Mutex
@@ -120,9 +123,11 @@ func (c *Client) doEstablish(num int) ([]*ClientConn, error) {
 	return conns, nil
 }
 
-// Close 关闭客户端所有连接并唤醒全部等待者
-// 连接切片在 Establish 完成后不再变更，此处保留切片内容（仅逐连接置关闭标记），
-// 使并发的 Call/Send 经由 load 取连接时始终安全；已关闭连接会通过 closed 标记拒绝新的发送
+// Close closes every connection of the client and wakes up all waiters.
+//
+// The connection slice no longer changes after Establish completes, so it is kept intact here and
+// only each connection is marked as closed. This keeps concurrent Call and Send safe while they
+// load a connection, and a closed connection rejects new sends through its closed flag.
 func (c *Client) Close() error {
 	for _, conn := range c.conns {
 		if conn != nil {
@@ -133,7 +138,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// Call 调用
+// Call sends a request and waits for its response.
 func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer, idx ...int64) (buffer.Buffer, error) {
 	if conn, err := c.doLoadConn(ctx, idx...); err != nil {
 		buf.Release()
@@ -143,7 +148,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 	}
 }
 
-// Push 发送消息
+// Push sends a message without waiting for a response.
 func (c *Client) Push(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
 	if conn, err := c.doLoadConn(ctx, idx...); err != nil {
 		buf.Release()
@@ -153,7 +158,7 @@ func (c *Client) Push(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int6
 	}
 }
 
-// 获取连接
+// doLoadConn returns a connection, selected by idx or in round-robin order.
 func (c *Client) doLoadConn(ctx context.Context, idx ...int64) (*ClientConn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -170,7 +175,7 @@ func (c *Client) doLoadConn(ctx context.Context, idx ...int64) (*ClientConn, err
 	return nil, errors.ErrClientClosed
 }
 
-// 生成连接时间戳
+// doGenEpoch generates a connection epoch, skipping the value 0.
 func (c *Client) doGenEpoch() uint64 {
 	if epoch := c.epoch.Add(1); epoch == 0 {
 		return c.epoch.Add(1)

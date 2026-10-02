@@ -5,17 +5,18 @@ import (
 )
 
 type Encryptor interface {
-	// Name 名称
+	// Name returns the name of the encryptor.
 	Name() string
-	// Encrypt 加密
+	// Encrypt encrypts data.
 	Encrypt(data []byte) ([]byte, error)
-	// Decrypt 解密
+	// Decrypt decrypts data.
 	Decrypt(data []byte) ([]byte, error)
 }
 
 var encryptors = make(map[string]Encryptor)
 
-// RegisterEncryptor 注册加密器
+// RegisterEncryptor registers an encryptor. It panics when the encryptor is nil or has an empty
+// name, and overwrites the encryptor registered under the same name.
 func RegisterEncryptor(encryptor Encryptor) {
 	if encryptor == nil {
 		log.Fatal("can't register a invalid encryptor")
@@ -34,7 +35,8 @@ func RegisterEncryptor(encryptor Encryptor) {
 	encryptors[name] = encryptor
 }
 
-// InvokeEncryptor 调用加密器
+// InvokeEncryptor returns the encryptor registered under name. It panics when no encryptor is
+// registered under that name.
 func InvokeEncryptor(name string) Encryptor {
 	encryptor, ok := encryptors[name]
 	if !ok {

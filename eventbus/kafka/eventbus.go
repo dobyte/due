@@ -17,7 +17,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
-// Eventbus Kafka事件总线
+// Eventbus is a Kafka eventbus.
 type Eventbus struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -33,7 +33,7 @@ type Eventbus struct {
 	closed       atomic.Bool
 }
 
-// NewEventbus 创建事件总线
+// NewEventbus returns a new eventbus.
 func NewEventbus(opts ...Option) *Eventbus {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -102,7 +102,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	return eb
 }
 
-// Publish 发布事件
+// Publish publishes an event.
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	if eb.err != nil {
 		return eb.err
@@ -129,7 +129,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	}
 }
 
-// Subscribe 订阅事件
+// Subscribe subscribes to an event.
 func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
@@ -142,7 +142,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	channel := eb.doMakeChannel(topic)
 	lb := len(balance) > 0 && balance[0]
 
-	// 快路径：消费者已存在时直接复用，加锁以避免与取消订阅、关闭并发产生竞态
+	// Fast path: reuse the existing consumer, holding the lock to avoid racing with unsubscribe and close.
 	eb.rw.Lock()
 	if c, ok := eb.consumers[channel]; ok {
 		if c.balance != lb {
@@ -160,7 +160,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	}
 	eb.rw.Unlock()
 
-	// 慢路径：将网络 I/O 移出锁外，避免长时间持锁阻塞其他操作
+	// Slow path: perform the network I/O outside the lock to avoid holding it for a long time.
 	if eb.opts.autoCreateTopic && eb.clusterAdmin != nil {
 		if err := eb.clusterAdmin.CreateTopic(channel, &sarama.TopicDetail{
 			NumPartitions:     eb.opts.partitions,
@@ -191,7 +191,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		}
 	}
 
-	// 加锁完成登记与启动，避免并发重复创建消费者
+	// Acquire the lock to finish registration and startup, avoiding concurrent duplicate consumer creation.
 	eb.rw.Lock()
 
 	if eb.closed.Load() {
@@ -226,7 +226,8 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 		return sub, nil
 	}
 
-	// 先添加首个订阅再启动消费，避免启动后消息因无处理器而被丢弃
+	// Add the first subscription before starting consumption, so that messages are not dropped once
+	// consumption starts without a handler.
 	sub := c.addSubscription(handler)
 	sub.eb = eb
 	sub.topic = channel
@@ -244,7 +245,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	return sub, nil
 }
 
-// Close 停止监听
+// Close stops listening.
 func (eb *Eventbus) Close() error {
 	if eb.err != nil {
 		return eb.err
@@ -285,7 +286,7 @@ func (eb *Eventbus) Close() error {
 	return eb.opts.client.Close()
 }
 
-// 取消订阅
+// unsubscribe cancels a subscription.
 func (eb *Eventbus) unsubscribe(sub *subscription) {
 	eb.rw.Lock()
 

@@ -18,46 +18,41 @@ import (
 )
 
 type serverConn struct {
-	id                int64                       // 连接ID
-	uid               atomic.Int64                // 用户ID
-	attr              *attr                       // 连接属性
-	state             atomic.Int32                // 连接状态
-	connMgr           *serverConnMgr              // 连接管理
-	rw                sync.RWMutex                // 锁
-	wg1               sync.WaitGroup              // 读等待组，随连接对象池复用
-	wg2               sync.WaitGroup              // 写等待组，随连接对象池复用
-	conn              net.Conn                    // TCP源连接
-	reader            *bufio.Reader               // 读取缓冲器，随连接对象池复用
-	queue             *queue.Queue[buffer.Buffer] // 消息队列
-	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
-	netBuffers        net.Buffers                 // 待写入的字节切片集合
-	lastHeartbeatTime atomic.Int64                // 上次心跳时间
-	authorizeTimer    atomic.Pointer[time.Timer]  // 授权定时器
+	id                int64                       // Connection ID
+	uid               atomic.Int64                // User ID
+	attr              *attr                       // Connection attributes
+	state             atomic.Int32                // Connection state
+	connMgr           *serverConnMgr              // Connection manager
+	rw                sync.RWMutex                // Lock
+	wg1               sync.WaitGroup              // Read wait group, reused with the connection object pool
+	wg2               sync.WaitGroup              // Write wait group, reused with the connection object pool
+	conn              net.Conn                    // Underlying TCP connection
+	reader            *bufio.Reader               // Read buffer, reused with the connection object pool
+	queue             *queue.Queue[buffer.Buffer] // Message queue
+	dueBuffers        []buffer.Buffer             // Buffers waiting to be written
+	netBuffers        net.Buffers                 // Byte slices waiting to be written
+	lastHeartbeatTime atomic.Int64                // Time of the last received heartbeat
+	authorizeTimer    atomic.Pointer[time.Timer]  // Authorization timer
 }
 
 var _ network.Conn = &serverConn{}
 
-// ID 获取连接ID
-// @return @1 int64 连接ID
+// ID returns the connection ID.
 func (c *serverConn) ID() int64 {
 	return c.id
 }
 
-// UID 获取用户ID
-// @return @1 int64 用户ID
+// UID returns the user ID.
 func (c *serverConn) UID() int64 {
 	return c.uid.Load()
 }
 
-// Attr 获取属性接口
-// @return @1 network.Attr 属性接口
+// Attr returns the attribute interface of the connection.
 func (c *serverConn) Attr() network.Attr {
 	return c.attr
 }
 
-// Bind 绑定用户ID
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// Bind binds the connection to the given user ID.
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
 
@@ -74,8 +69,7 @@ func (c *serverConn) Bind(uid int64) error {
 	return nil
 }
 
-// Unbind 解绑用户ID
-// @return @1 error 错误信息
+// Unbind unbinds the user ID from the connection.
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
 
@@ -92,9 +86,9 @@ func (c *serverConn) Unbind() error {
 	return nil
 }
 
-// Push 发送消息
-// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
-// @return @1 error 错误信息
+// Push sends a message.
+//
+// The caller controls when buf is released when the send fails.
 func (c *serverConn) Push(buf buffer.Buffer) error {
 	if buf.Len() == 0 {
 		return errors.ErrInvalidMessage
@@ -114,16 +108,16 @@ func (c *serverConn) Push(buf buffer.Buffer) error {
 	return err
 }
 
-// State 获取连接状态
-// @return @1 network.ConnState 连接状态
+// State returns the connection state.
 func (c *serverConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
-// Close 关闭连接
-// 连接关闭后连接对象将被回收复用，不应再使用其任何方法与属性（身份标识可能漂移）
-// @param force ...bool 是否强制关闭
-// @return @1 error 错误信息
+// Close closes the connection.
+//
+// After the connection is closed the connection object is recycled and reused, so none of its
+// methods or attributes may be used again (the identity may drift). When force is true the
+// connection is closed forcibly.
 func (c *serverConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
@@ -132,9 +126,7 @@ func (c *serverConn) Close(force ...bool) error {
 	}
 }
 
-// LocalIP 获取本地IP
-// @return @1 string 本地IP地址
-// @return @2 error 错误信息
+// LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -144,9 +136,7 @@ func (c *serverConn) LocalIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// LocalAddr 获取本地地址
-// @return @1 net.Addr 本地地址
-// @return @2 error 错误信息
+// LocalAddr returns the local address.
 func (c *serverConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -161,9 +151,7 @@ func (c *serverConn) LocalAddr() (net.Addr, error) {
 	return conn.LocalAddr(), nil
 }
 
-// RemoteIP 获取远端IP
-// @return @1 string 远端IP地址
-// @return @2 error 错误信息
+// RemoteIP returns the remote IP address.
 func (c *serverConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -173,9 +161,7 @@ func (c *serverConn) RemoteIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// RemoteAddr 获取远端地址
-// @return @1 net.Addr 远端地址
-// @return @2 error 错误信息
+// RemoteAddr returns the remote address.
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -190,13 +176,15 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	return conn.RemoteAddr(), nil
 }
 
-// init 初始化连接
-// 复用对象池中的连接对象，在写锁保护下完成状态重置、分片存储与读写协程启动，
-// 关闭路径与上一生命周期的延迟关闭任务均需获取锁，将被阻塞至初始化完成，
-// 避免连接对象在协程启动前被回收复用；服务器关闭过程中分片拒绝存储时初始化中止，
-// 由调用方归还连接对象并关闭底层连接
-// @param conn net.Conn TCP连接
-// @return @1 bool 是否初始化成功，服务器关闭过程中返回false
+// init initializes the connection.
+//
+// It reuses a connection object from the object pool and, under the write lock, resets the state,
+// stores the connection in a partition and starts the read and write goroutines. The close path and
+// the delayed close tasks of the previous life cycle both need the lock, so they block until
+// initialization completes, which prevents the connection object from being recycled before the
+// goroutines start. When a partition refuses the store while the server is closing, initialization
+// aborts and the caller returns the connection object to the object pool and closes the underlying
+// connection.
 func (c *serverConn) init(conn net.Conn) bool {
 	c.rw.Lock()
 
@@ -209,7 +197,7 @@ func (c *serverConn) init(conn net.Conn) bool {
 	c.authorizeTimer.Store(nil)
 
 	if !c.connMgr.storeConn(conn, c) {
-		// 分片已停止接入，复位状态并清理引用后中止初始化
+		// The partition has stopped accepting connections, so reset the state and clear the references before aborting initialization.
 		c.state.Store(int32(network.ConnClosed))
 		c.conn = nil
 		c.queue = nil
@@ -222,7 +210,7 @@ func (c *serverConn) init(conn net.Conn) bool {
 
 	c.rw.Unlock()
 
-	// 初始化完成前连接可能已被并发关闭，仅在连接仍处于打开状态时执行授权检查与连接钩子
+	// The connection may have been closed concurrently before initialization completes, so run the authorization check and the connect hook only while it is still opened.
 	if c.State() != network.ConnOpened {
 		return true
 	}
@@ -236,8 +224,10 @@ func (c *serverConn) init(conn net.Conn) bool {
 	return true
 }
 
-// reset 重置连接
-// 清空连接对象内的引用与状态，以便归还对象池后安全复用
+// reset resets the connection.
+//
+// It clears the references and state held by the connection object so that it can be safely reused
+// after being returned to the object pool.
 func (c *serverConn) reset() {
 	c.queue = nil
 	c.reader.Reset(nil)
@@ -247,9 +237,8 @@ func (c *serverConn) reset() {
 	c.uncheckAuthorize()
 }
 
-// checkState 检测连接状态
-// 依据挂起/关闭状态返回对应错误，正常时返回nil
-// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
+// checkState checks the connection state. It returns the matching error for the hanged or closed
+// state, and nil when the connection is normal.
 func (c *serverConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -261,10 +250,11 @@ func (c *serverConn) checkState() error {
 	}
 }
 
-// checkAuthorize 授权检查
-// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接ID与连接指针，
-// 避免连接被回收复用后误关闭新连接
-// @param conn net.Conn 当前TCP连接
+// checkAuthorize performs the authorization check.
+//
+// It starts the authorization timeout timer and closes the connection when the timeout elapses
+// while no user ID has been bound. The timer callback compares both the connection ID and the
+// connection pointer so that a recycled connection is not closed by mistake.
 func (c *serverConn) checkAuthorize(conn net.Conn) {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		id := c.id
@@ -281,8 +271,10 @@ func (c *serverConn) checkAuthorize(conn net.Conn) {
 	}
 }
 
-// uncheckAuthorize 取消授权检查
-// 停止授权超时定时器，用于绑定用户ID或关闭连接时解除授权检测
+// uncheckAuthorize cancels the authorization check.
+//
+// It stops the authorization timeout timer and is used to end the authorization check when a user
+// ID is bound or the connection is closed.
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		if timer := c.authorizeTimer.Swap(nil); timer != nil {
@@ -291,10 +283,12 @@ func (c *serverConn) uncheckAuthorize() {
 	}
 }
 
-// graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
-// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
-// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
+// graceClose closes the connection gracefully.
+//
+// It writes a close signal and waits for the write queue to drain before closing the connection, so
+// that buffered messages can be delivered as far as possible. When a graceful close timeout is
+// configured, the underlying connection is closed once the timeout elapses before the queue drains,
+// which forces the wait to end.
 func (c *serverConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -314,7 +308,7 @@ func (c *serverConn) graceClose() error {
 
 	if err == nil {
 		if closeTimeout := c.connMgr.server.opts.closeTimeout; closeTimeout > 0 {
-			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			// Close the underlying connection once the drain times out to interrupt a possibly blocking write in the write goroutine.
 			timer := time.AfterFunc(closeTimeout, func() { _ = conn.Close() })
 			q.Wait()
 			timer.Stop()
@@ -330,9 +324,10 @@ func (c *serverConn) graceClose() error {
 	return c.doClose()
 }
 
-// forceClose 强制关闭
-// 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @return @1 error 连接已处于关闭态时返回的错误
+// forceClose closes the connection forcibly.
+//
+// It immediately switches the state to closed and closes the connection without waiting for the
+// write queue to drain.
 func (c *serverConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -343,11 +338,12 @@ func (c *serverConn) forceClose() error {
 	return c.doClose(true)
 }
 
-// recycleClose 若当前连接仍为指定连接则强制关闭
-// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接对象可能已被回收复用，
-// 且TCP连接对象地址可能被运行时复用，因此需同时比对连接ID与TCP连接指针，避免误关闭新连接
-// @param conn net.Conn 触发关闭时的TCP连接
-// @param id int64 触发关闭时的连接ID
+// recycleClose forcibly closes the connection when it is still the given connection.
+//
+// The read and write goroutines close the connection asynchronously through the task pool on their
+// error paths. By the time the closure runs the connection object may have been recycled and the
+// address of the TCP connection may have been reused by the runtime, so both the connection ID and
+// the TCP connection pointer must match to avoid closing a new connection by mistake.
 func (c *serverConn) recycleClose(conn net.Conn, id int64) {
 	c.rw.RLock()
 	match := c.id == id && c.conn == conn
@@ -358,11 +354,12 @@ func (c *serverConn) recycleClose(conn net.Conn, id int64) {
 	}
 }
 
-// doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭TCP连接，触发断开hook，并将连接对象归还连接池；
-// force 为 true 时先关闭TCP连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
-// @param force ...bool 是否强制关闭
-// @return @1 error 关闭TCP连接时的错误
+// doClose performs the close.
+//
+// It closes the write queue, waits for the read and write goroutines to exit, closes the TCP
+// connection, invokes the disconnect handler and returns the connection object to the connection
+// pool. When force is true it closes the TCP connection first so that a possibly blocking write in
+// the write goroutine is interrupted, preserving the force-close semantics.
 func (c *serverConn) doClose(force ...bool) error {
 	c.rw.Lock()
 	if c.conn == nil {
@@ -400,9 +397,11 @@ func (c *serverConn) doClose(force ...bool) error {
 	return err
 }
 
-// read 读取消息
-// 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
-// @param conn net.Conn TCP连接
+// read reads messages.
+//
+// It keeps reading messages from the stream, updates the heartbeat time, detects empty and
+// heartbeat packets and dispatches them to the receive handler. A read failure triggers a force
+// close.
 func (c *serverConn) read(conn net.Conn) {
 	var (
 		index  = 0
@@ -480,9 +479,10 @@ func (c *serverConn) read(conn net.Conn) {
 	}
 }
 
-// write 写入消息
-// 从写队列批量取出消息写入连接，并按心跳间隔触发心跳检测与下发
-// @param conn net.Conn TCP连接
+// write writes messages.
+//
+// It takes messages from the write queue in batches and writes them to the connection, and triggers
+// heartbeat detection and delivery at the heartbeat interval.
 func (c *serverConn) write(conn net.Conn) {
 	var tickerC <-chan time.Time
 
@@ -512,10 +512,10 @@ func (c *serverConn) write(conn net.Conn) {
 	}
 }
 
-// doBatchWrite 批量写入消息
-// 从写队列批量取出任务，收集字节后通过net.Buffers一次性下发，减少系统调用次数
-// @param conn net.Conn TCP连接
-// @param first buffer.Buffer 首个已取出的任务
+// doBatchWrite writes messages in a batch.
+//
+// It takes tasks from the write queue in batches, collects their bytes and writes them through
+// net.Buffers at once to reduce the number of system calls.
 func (c *serverConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 	closeSig := first.Len() == 0
 
@@ -585,17 +585,16 @@ OVER:
 	c.dueBuffers = c.dueBuffers[:0]
 }
 
-// isClosed 是否已关闭
-// @return @1 bool 连接状态是否为关闭
+// isClosed reports whether the connection state is closed.
 func (c *serverConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }
 
-// doHandleHeartbeat 处理心跳
-// 检测上次收到消息的时间是否超时，超时则触发强制关闭；主动定时心跳模式下额外下发心跳包
-// @param conn net.Conn TCP连接
-// @param t time.Time 当前心跳触发的时间点
-// @return @1 bool 是否继续写入协程循环，心跳超时时返回false
+// doHandleHeartbeat handles heartbeats.
+//
+// It checks whether the time of the last received message has timed out and triggers a force close
+// if so; in the active tick heartbeat mode it also sends a heartbeat packet. It returns false when
+// the write goroutine should stop because the heartbeat timed out.
 func (c *serverConn) doHandleHeartbeat(conn net.Conn, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.connMgr.server.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)

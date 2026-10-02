@@ -19,8 +19,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
-// Server HTTP服务器
-// 基于fiber框架实现的HTTP服务组件，支持路由注册、中间件、跨域、Swagger等能力
+// Server is the HTTP server component.
+//
+// It is built on top of the fiber framework and supports route registration, middleware, CORS,
+// Swagger and more.
 type Server struct {
 	component.Base
 	opts  *options
@@ -119,20 +121,20 @@ func NewServer(opts ...Option) *Server {
 	return s
 }
 
-// Name 组件名称
+// Name returns the component name.
 func (s *Server) Name() string {
 	return s.opts.name
 }
 
-// Init 初始化组件
+// Init initializes the component.
 func (s *Server) Init() {}
 
-// Proxy 获取HTTP代理API
+// Proxy returns the HTTP proxy API.
 func (s *Server) Proxy() *Proxy {
 	return s.proxy
 }
 
-// Start 启动组件
+// Start starts the component.
 func (s *Server) Start() {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(s.opts.addr)
 	if err != nil {
@@ -156,7 +158,7 @@ func (s *Server) Start() {
 	s.printInfo(exposeAddr)
 }
 
-// Destroy 销毁组件
+// Destroy destroys the component.
 func (s *Server) Destroy() {
 	if s.app != nil {
 		ctx, cancel := stctx.WithTimeout(stctx.Background(), 10*time.Second)
@@ -169,11 +171,12 @@ func (s *Server) Destroy() {
 	}
 }
 
-// 打印服务启动信息
-// @param addr string 对外暴露的服务地址
+// printInfo prints the server startup information.
+//
+// addr is the externally exposed address of the server.
 func (s *Server) printInfo(addr string) {
-	infos := make([]string, 0, 3)
-	infos = append(infos, fmt.Sprintf("Name: %s", s.Name()))
+	rows := make([]string, 0, 5)
+	rows = append(rows, fmt.Sprintf("Name: %s", s.Name()))
 
 	var baseUrl string
 	if s.opts.certFile != "" && s.opts.keyFile != "" {
@@ -182,23 +185,23 @@ func (s *Server) printInfo(addr string) {
 		baseUrl = fmt.Sprintf("http://%s", addr)
 	}
 
-	infos = append(infos, fmt.Sprintf("Url: %s", baseUrl))
+	rows = append(rows, fmt.Sprintf("Url: %s", baseUrl))
 
 	if s.opts.swagOpts.Enable {
-		infos = append(infos, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagOpts.BasePath, "/")))
+		rows = append(rows, fmt.Sprintf("Swagger: %s/%s", baseUrl, strings.TrimPrefix(s.opts.swagOpts.BasePath, "/")))
 	}
 
 	if s.opts.registry != nil {
-		infos = append(infos, fmt.Sprintf("Registry: %s", s.opts.registry.Name()))
+		rows = append(rows, fmt.Sprintf("Registry: %s", s.opts.registry.Name()))
 	} else {
-		infos = append(infos, "Registry: -")
+		rows = append(rows, "Registry: -")
 	}
 
 	if s.opts.transporter != nil {
-		infos = append(infos, fmt.Sprintf("Transporter: %s", s.opts.transporter.Name()))
+		rows = append(rows, fmt.Sprintf("Transporter: %s", s.opts.transporter.Name()))
 	} else {
-		infos = append(infos, "Transporter: -")
+		rows = append(rows, "Transporter: -")
 	}
 
-	info.PrintBoxInfo("Http", infos...)
+	info.Print("Http", rows...)
 }

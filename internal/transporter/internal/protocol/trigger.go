@@ -15,9 +15,9 @@ const (
 	triggerResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeTriggerReq 编码触发事件请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{event + cid + [uid]}
+// EncodeTriggerReq encodes a trigger request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {event + cid + [uid]}
 func EncodeTriggerReq(seq uint64, event cluster.Event, cid int64, uid ...int64) *buffer.NocopyBuffer {
 	size := triggerReqBytes - def.SizeBytes
 	if len(uid) == 0 || uid[0] == 0 {
@@ -39,9 +39,9 @@ func EncodeTriggerReq(seq uint64, event cluster.Event, cid int64, uid ...int64) 
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeTriggerReq 解码触发事件请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{event + cid + [uid]}
+// DecodeTriggerReq decodes a trigger request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {event + cid + [uid]}
 func DecodeTriggerReq(buf *buffer.Bytes) (event cluster.Event, cid int64, uid int64, err error) {
 	if buf.Len() != def.B8+def.B64 && buf.Len() != def.B8+def.B64+def.B64 {
 		err = errors.ErrInvalidMessage
@@ -59,9 +59,9 @@ func DecodeTriggerReq(buf *buffer.Bytes) (event cluster.Event, cid int64, uid in
 	return
 }
 
-// EncodeTriggerRes 编码触发事件响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeTriggerRes encodes a trigger response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeTriggerRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(triggerResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(triggerResBytes-def.SizeBytes))
@@ -73,9 +73,9 @@ func EncodeTriggerRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeTriggerRes 解码触发事件响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeTriggerRes decodes a trigger response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeTriggerRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

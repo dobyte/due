@@ -1,5 +1,6 @@
-// Package consul 提供基于 Consul 的服务注册发现组件，实现了 registry.Registry 接口，
-// 支持服务实例的注册、解注册、监听与查询，并支持健康检查与心跳保活。
+// Package consul provides a Consul-based service registry and discovery component that implements
+// the [registry.Registry] interface. It supports registering, deregistering, watching and querying
+// service instances, as well as health checks and heartbeat keep-alive.
 package consul
 
 import (
@@ -13,22 +14,23 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-// name 是服务注册发现组件的名称
+// name is the name of the service registry and discovery component.
 const name = "consul"
 
 var _ registry.Registry = &Registry{}
 
-// Registry 是基于 Consul 的服务注册发现组件，实现了 registry.Registry 接口。
+// Registry is a Consul-based service registry and discovery component that implements
+// [registry.Registry].
 type Registry struct {
-	err        error      // 初始化错误（内建客户端创建失败时记录）
-	opts       *options   // 配置项
-	mu1        sync.Mutex // 保护 watchers 注册表
-	watchers   sync.Map   // 服务监听管理器注册表
-	mu2        sync.Mutex // 保护 registrars 注册表
-	registrars sync.Map   // 服务注册器注册表
+	err        error      // Initialization error, recorded when creating the built-in client fails
+	opts       *options   // Options
+	mu1        sync.Mutex // Protects the watchers registry
+	watchers   sync.Map   // Registry of service watcher managers
+	mu2        sync.Mutex // Protects the registrars registry
+	registrars sync.Map   // Registry of service registrars
 }
 
-// NewRegistry 创建基于 Consul 的服务注册发现组件实例。
+// NewRegistry creates a Consul-based service registry and discovery instance.
 func NewRegistry(opts ...Option) *Registry {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -50,12 +52,12 @@ func NewRegistry(opts ...Option) *Registry {
 	return r
 }
 
-// Name 获取服务注册发现组件名
+// Name returns the name of the service registry and discovery component.
 func (r *Registry) Name() string {
 	return name
 }
 
-// Register 注册服务实例
+// Register registers a service instance.
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -64,7 +66,7 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
 }
 
-// 构建服务注册器
+// doBuildRegistrar builds a service registrar.
 func (r *Registry) doBuildRegistrar(insID string) *registrar {
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
@@ -84,7 +86,7 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 	return reg
 }
 
-// Deregister 解注册服务实例
+// Deregister deregisters a service instance.
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -97,7 +99,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
-// Watch 监听相同服务名的服务实例变化
+// Watch watches for changes to the service instances with the same service name.
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -111,7 +113,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	return mgr.fork()
 }
 
-// 构建服务监听器管理器
+// doBuildWatcherMgr builds a service watcher manager.
 func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
 		return mgr, nil
@@ -136,7 +138,8 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 	}
 }
 
-// loadWatcherMgr 加载服务监听管理器，不存在或已停止时返回 nil。
+// loadWatcherMgr loads the service watcher manager, returning nil when it does not exist or has
+// stopped.
 func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
@@ -147,7 +150,7 @@ func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	return nil
 }
 
-// Close 关闭服务注册发现
+// Close closes the service registry and discovery component.
 func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
@@ -166,7 +169,7 @@ func (r *Registry) Close() error {
 	return nil
 }
 
-// Services 获取服务实例列表
+// Services returns the list of service instances.
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -185,13 +188,14 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	return services, err
 }
 
-// services 从 Consul 查询指定服务的健康实例列表，并返回最新索引。
+// services queries from Consul the healthy instance list of the given service and returns the
+// latest index.
 func (r *Registry) services(ctx context.Context, serviceName string, waitIndex uint64, passingOnly, blocking bool) ([]*registry.ServiceInstance, uint64, error) {
 	opts := &api.QueryOptions{
 		WaitIndex: waitIndex,
 	}
 
-	// 阻塞查询需要设置 WaitTime，非阻塞查询会立即返回
+	// A blocking query needs WaitTime to be set; a non-blocking query returns immediately.
 	if blocking {
 		opts.WaitTime = 60 * time.Second
 	}
@@ -233,7 +237,8 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			}
 		}
 
-		// 跳过非 due 框架注册的服务实例（缺少 ID 元数据），避免混入非法实例
+		// Skip service instances not registered by the due framework (missing the ID metadata) to
+		// avoid mixing in invalid instances.
 		if ins.ID == "" {
 			continue
 		}

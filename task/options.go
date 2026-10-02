@@ -5,28 +5,28 @@ import (
 )
 
 const (
-	defaultSize         = 100000 // 默认任务池大小
-	defaultNonblocking  = true   // 默认是否非阻塞
-	defaultDisablePurge = true   // 默认是否禁用清除
+	defaultSize         = 100000 // Default task pool size
+	defaultNonblocking  = true   // Whether non-blocking is the default
+	defaultDisablePurge = true   // Whether purging is disabled by default
 )
 
 const (
-	defaultSizeKey         = "etc.task.size"         // 任务池大小
-	defaultNonblockingKey  = "etc.task.nonblocking"  // 是否非阻塞
-	defaultDisablePurgeKey = "etc.task.disablePurge" // 是否禁用清除
+	defaultSizeKey         = "etc.task.size"         // Task pool size
+	defaultNonblockingKey  = "etc.task.nonblocking"  // Whether non-blocking
+	defaultDisablePurgeKey = "etc.task.disablePurge" // Whether purging is disabled
 )
 
 type options struct {
-	size         int  // 任务池大小
-	nonblocking  bool // 是否非阻塞
-	disablePurge bool // 是否禁用清除
+	size         int  // Task pool size
+	nonblocking  bool // Whether non-blocking
+	disablePurge bool // Whether purging is disabled
 }
 
-// Option 任务池配置项
+// Option configures the task pool.
 type Option func(o *options)
 
-// defaultOptions 获取默认配置项，配置值优先从配置中心读取
-// @return @1 *options 默认配置项
+// defaultOptions returns the default options, preferring values read from the configuration
+// center.
 func defaultOptions() *options {
 	opts := &options{
 		size:         defaultSize,
@@ -44,25 +44,22 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithSize 设置任务池大小
-// @param size int 任务池大小
-// @return @1 Option 配置项
+// WithSize returns an Option that sets the task pool size.
 func WithSize(size int) Option {
 	return func(o *options) { o.size = size }
 }
 
-// WithNonblocking 设置是否非阻塞
-// 非阻塞模式下池满时任务提交立即返回错误，而非阻塞等待
-// @param nonblocking bool 是否非阻塞
-// @return @1 Option 配置项
+// WithNonblocking returns an Option that sets whether the pool is non-blocking.
+//
+// In non-blocking mode, a task submission returns an error immediately when the pool is full
+// instead of blocking and waiting.
 func WithNonblocking(nonblocking bool) Option {
 	return func(o *options) { o.nonblocking = nonblocking }
 }
 
-// WithDisablePurge 设置是否禁用清除
-// 禁用后空闲协程不会被定期回收
-// @param disablePurge bool 是否禁用清除
-// @return @1 Option 配置项
+// WithDisablePurge returns an Option that sets whether purging is disabled.
+//
+// When purging is disabled, idle goroutines are not reclaimed periodically.
 func WithDisablePurge(disablePurge bool) Option {
 	return func(o *options) { o.disablePurge = disablePurge }
 }

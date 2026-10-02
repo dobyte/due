@@ -17,11 +17,13 @@ type managedConn struct {
 type partition struct {
 	mu          sync.Mutex
 	connections map[int64]managedConn
-	_           [48]byte // 填充至64字节缓存行，避免相邻分片伪共享
+	_           [48]byte // Padding to a 64-byte cache line to avoid false sharing between neighboring partitions
 }
 
-// serverConnMgr 服务器连接管理器
-// 跟踪挂起的流与活跃的连接，并通过 sync.Pool 复用服务器连接对象
+// serverConnMgr is a server connection manager.
+//
+// It tracks pending streams and active connections and reuses server connection objects through a
+// sync.Pool.
 type serverConnMgr struct {
 	server     *server
 	cid        atomic.Int64
@@ -50,11 +52,11 @@ func newServerConnMgr(s *server) *serverConnMgr {
 	return m
 }
 
-// reserve 预留连接
-// 分配连接ID并为挂起的流计数；管理器已关闭或达到最大连接数时预留失败
-// @param qc *quic.Conn QUIC连接
-// @return @1 int64 预留的连接ID
-// @return @2 bool 是否预留成功
+// reserve reserves a connection.
+//
+// It allocates a connection ID and counts the pending stream. Reservation fails when the manager
+// has been closed or the maximum number of connections has been reached. It returns the reserved
+// connection ID and whether the reservation succeeded.
 func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 	for {
 		total := m.total.Load()
@@ -78,14 +80,13 @@ func (m *serverConnMgr) reserve(qc *quic.Conn) (int64, bool) {
 	return id, true
 }
 
-// allocateConn 分配连接
-// 将池化连接对象挂接到预留条目上并完成初始化。
-// 初始化中止（管理器已关闭或预留条目已被清理）时归还连接对象并返回nil，
-// 预留条目由 close/remove 路径负责清理与计数回退，底层连接由调用方关闭
-// @param id int64 预留的连接ID
-// @param qc *quic.Conn QUIC连接
-// @param stream *quic.Stream 双向流
-// @return @1 *serverConn 连接对象，分配失败时返回nil
+// allocateConn allocates a connection.
+//
+// It attaches a pooled connection object to the reserved entry and initializes it. When
+// initialization is aborted, because the manager has been closed or the reserved entry has already
+// been cleaned up, it returns the connection object and yields nil; the reserved entry is cleaned
+// up and its count rolled back by the close and remove paths, and the caller closes the underlying
+// connection.
 func (m *serverConnMgr) allocateConn(id int64, qc *quic.Conn, stream *quic.Stream) *serverConn {
 	c := m.connPool.Get().(*serverConn)
 
@@ -97,12 +98,12 @@ func (m *serverConnMgr) allocateConn(id int64, qc *quic.Conn, stream *quic.Strea
 	return c
 }
 
-// linkConn 将池化连接对象挂接到预留条目上
-// 仅在条目存在且管理器未关闭时挂接成功；须由连接对象在持有自身写锁时调用，
-// 挂接成功后关闭路径即可感知该连接对象，与初始化严格串行
-// @param id int64 预留的连接ID
-// @param c *serverConn 池化连接对象
-// @return @1 bool 是否挂接成功
+// linkConn attaches a pooled connection object to the reserved entry.
+//
+// It succeeds only when the entry exists and the manager has not been closed. It must be called by
+// the connection object while holding its own write lock; once the link succeeds the close path can
+// see the connection object, which keeps the operation strictly serialized with initialization. It
+// reports whether the link succeeded.
 func (m *serverConnMgr) linkConn(id int64, c *serverConn) bool {
 	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
 	p.mu.Lock()
@@ -119,9 +120,9 @@ func (m *serverConnMgr) linkConn(id int64, c *serverConn) bool {
 	return true
 }
 
-// remove 移除预留条目
-// 删除流接入失败的预留条目并回退计数
-// @param id int64 预留的连接ID
+// remove removes a reserved entry.
+//
+// It deletes the reserved entry of a stream that failed to attach and rolls the count back.
 func (m *serverConnMgr) remove(id int64) {
 	p := &m.partitions[uint64(id)%uint64(len(m.partitions))]
 	p.mu.Lock()
@@ -132,9 +133,9 @@ func (m *serverConnMgr) remove(id int64) {
 	p.mu.Unlock()
 }
 
-// recycleConn 回收连接
-// 移除活跃连接并将连接对象归还对象池
-// @param c *serverConn 连接对象
+// recycleConn recycles a connection.
+//
+// It removes the active connection and returns the connection object to the pool.
 func (m *serverConnMgr) recycleConn(c *serverConn) {
 	p := &m.partitions[uint64(c.id)%uint64(len(m.partitions))]
 	p.mu.Lock()
@@ -148,8 +149,9 @@ func (m *serverConnMgr) recycleConn(c *serverConn) {
 	m.connPool.Put(c)
 }
 
-// close 关闭连接管理器
-// 停止所有挂起的流与活跃的连接
+// close closes the connection manager.
+//
+// It stops every pending stream and active connection.
 func (m *serverConnMgr) close() {
 	m.closeOnce.Do(func() {
 		m.closed.Store(true)

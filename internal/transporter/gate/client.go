@@ -24,7 +24,7 @@ func NewClient(cli *drpc.Client) *Client {
 	}
 }
 
-// Bind 绑定用户与连接
+// Bind binds the connection cid and user uid together.
 func (c *Client) Bind(ctx context.Context, cid, uid int64) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeBindReq(seq, cid, uid)
@@ -45,7 +45,7 @@ func (c *Client) Bind(ctx context.Context, cid, uid int64) error {
 	}
 }
 
-// Unbind 解绑用户与连接
+// Unbind unbinds the user from its connection.
 func (c *Client) Unbind(ctx context.Context, uid int64) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeUnbindReq(seq, uid)
@@ -66,7 +66,7 @@ func (c *Client) Unbind(ctx context.Context, uid int64) error {
 	}
 }
 
-// GetIP 获取客户端IP
+// GetIP returns the client IP of the target session.
 func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeGetIPReq(seq, kind, target)
@@ -87,7 +87,7 @@ func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (st
 	}
 }
 
-// Stat 统计会话总数
+// Stat returns the total number of sessions of the given kind.
 func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeStatReq(seq, kind)
@@ -108,7 +108,7 @@ func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 	}
 }
 
-// IsOnline 检测是否在线
+// IsOnline reports whether the target session is online.
 func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeIsOnlineReq(seq, kind, target)
@@ -129,7 +129,7 @@ func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) 
 	}
 }
 
-// Disconnect 断开连接
+// Disconnect disconnects the target session.
 func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeDisconnectReq(seq, kind, target, force)
@@ -150,7 +150,7 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 	}
 }
 
-// Push 推送消息
+// Push pushes a message to the target. When ack is true it waits for the response.
 func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer, ack bool) error {
 	if ack {
 		seq := c.doGenSequence()
@@ -175,7 +175,8 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disc
 	}
 }
 
-// Multicast 推送组播消息
+// Multicast pushes a message to multiple targets. When ack is true it waits for the response and
+// returns the number of targets that received the message.
 func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
 	if len(targets) > 1<<16-1 {
 		buf.Release()
@@ -205,7 +206,8 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 	}
 }
 
-// Broadcast 推送广播消息
+// Broadcast pushes a message to all sessions. When ack is true it waits for the response and
+// returns the number of sessions that received the message.
 func (c *Client) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
 	if ack {
 		seq := c.doGenSequence()
@@ -230,7 +232,8 @@ func (c *Client) Broadcast(ctx context.Context, kind session.Kind, disconnect bo
 	}
 }
 
-// Publish 发布频道消息
+// Publish publishes a message to a channel. When ack is true it waits for the response and returns
+// the number of sessions that received the message.
 func (c *Client) Publish(ctx context.Context, channel string, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
 	if len(channel) > 1<<8-1 {
 		buf.Release()
@@ -260,7 +263,7 @@ func (c *Client) Publish(ctx context.Context, channel string, disconnect bool, b
 	}
 }
 
-// Subscribe 订阅频道
+// Subscribe subscribes the targets to a channel.
 func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
 	if len(targets) > 1<<16-1 {
 		return errors.ErrInvalidArgument
@@ -289,7 +292,7 @@ func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int
 	}
 }
 
-// Unsubscribe 取消订阅频道
+// Unsubscribe unsubscribes the targets from a channel.
 func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
 	if len(targets) > 1<<16-1 {
 		return errors.ErrInvalidArgument
@@ -318,7 +321,7 @@ func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []i
 	}
 }
 
-// GetState 获取状态
+// GetState returns the state of the gate.
 func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeGetStateReq(seq)
@@ -339,7 +342,7 @@ func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	}
 }
 
-// SetState 设置状态
+// SetState sets the state of the gate.
 func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeSetStateReq(seq, state)
@@ -360,7 +363,7 @@ func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	}
 }
 
-// 生成序列号，规避生成序列号为0的编号
+// doGenSequence generates a sequence number, skipping the value 0.
 func (c *Client) doGenSequence() (seq uint64) {
 	if seq := c.seq.Add(1); seq == 0 {
 		return c.seq.Add(1)

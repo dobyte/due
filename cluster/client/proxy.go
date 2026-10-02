@@ -5,69 +5,54 @@ import (
 	"github.com/dobyte/due/v2/network"
 )
 
-// Proxy 客户端代理
-// 对外暴露路由、事件、钩子的注册与拨号等能力
+// Proxy is the client proxy.
+//
+// It exposes the registration of routes, events and hooks as well as dialing.
 type Proxy struct {
-	client *Client // 客户端
+	client *Client // client
 }
 
-// newProxy 创建客户端代理
-// @param client *Client 客户端
-// @return @1 *Proxy 客户端代理
+// newProxy returns a new client proxy for the given client.
 func newProxy(client *Client) *Proxy {
 	return &Proxy{client: client}
 }
 
-// ID 获取客户端ID
-// @return @1 string 客户端ID
+// ID returns the client ID.
 func (p *Proxy) ID() string {
 	return p.client.opts.id
 }
 
-// Name 获取客户端名称
-// @return @1 string 客户端名称
+// Name returns the client name.
 func (p *Proxy) Name() string {
 	return p.client.opts.name
 }
 
-// AddRouteHandler 添加路由处理器
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
+// AddRouteHandler adds a route handler for the given route.
 func (p *Proxy) AddRouteHandler(route int32, handler RouteHandler) {
 	p.client.addRouteHandler(route, handler)
 }
 
-// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
-// @param handler RouteHandler 默认路由处理函数
+// SetDefaultRouteHandler sets the default route handler that serves every unregistered route.
 func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
 	p.client.setDefaultRouteHandler(handler)
 }
 
-// AddEventListener 添加事件监听器
-// @param event cluster.Event 事件类型
-// @param handler EventHandler 事件处理函数
+// AddEventListener adds an event listener for the given event.
 func (p *Proxy) AddEventListener(event cluster.Event, handler EventHandler) {
 	p.client.addEventListener(event, handler)
 }
 
-// AddHookListener 添加钩子监听器
-// @param hook cluster.Hook 钩子类型
-// @param handler HookHandler 钩子处理函数
+// AddHookListener adds a hook listener for the given hook.
 func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 	p.client.addHookListener(hook, handler)
 }
 
-// Dial 拨号
-// 建立与服务端的连接，返回封装后的连接对象
-// @param opts ...DialOption 拨号配置项
-// @return @1 *Conn 连接对象
-// @return @2 error 错误信息
+// Dial dials a connection to the server and returns the wrapped connection.
 func (p *Proxy) Dial(opts ...DialOption) (*Conn, error) {
 	return p.client.dial(opts...)
 }
 
-// Client 获取网络客户端
-// @return @1 network.Client 网络客户端
+// Client returns the network client.
 func (p *Proxy) Client() network.Client {
 	return p.client.opts.client
 }

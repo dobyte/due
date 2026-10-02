@@ -13,15 +13,16 @@ import (
 	"github.com/dobyte/due/v2/task"
 )
 
+// The kinds of a session.
 const (
-	Conn Kind = iota + 1 // 连接SESSION
-	User                 // 用户SESSION
+	Conn Kind = iota + 1 // Conn: a connection session
+	User                 // User: a user session
 )
 
+// Kind is the kind of a session.
 type Kind int
 
-// String 获取会话类型名称
-// @return @1 string 会话类型名称
+// String returns the name of the session kind.
 func (k Kind) String() string {
 	switch k {
 	case Conn:
@@ -33,15 +34,16 @@ func (k Kind) String() string {
 	return ""
 }
 
+// Session manages the connection and user sessions of a node along with their channel
+// subscriptions.
 type Session struct {
-	rw       sync.RWMutex                         // 读写锁
-	conns    map[int64]network.Conn               // 连接会话（连接ID -> network.Conn）
-	users    map[int64]network.Conn               // 用户会话（用户ID -> network.Conn）
-	channels map[string]map[network.Conn]struct{} // 会话频道（频道名 -> [network.Conn --> none]）
+	rw       sync.RWMutex                         // Read-write lock protecting the session maps
+	conns    map[int64]network.Conn               // Connection sessions, keyed by connection ID
+	users    map[int64]network.Conn               // User sessions, keyed by user ID
+	channels map[string]map[network.Conn]struct{} // Channel subscriptions, keyed by channel name
 }
 
-// NewSession 创建一个会话实例
-// @return @1 *Session 会话实例
+// NewSession creates a session instance.
 func NewSession() *Session {
 	return &Session{
 		conns:    make(map[int64]network.Conn),
@@ -50,19 +52,20 @@ func NewSession() *Session {
 	}
 }
 
-// AddConn 添加连接
-// @param conn network.Conn 连接对象
+// AddConn adds conn to the connection sessions.
 func (s *Session) AddConn(conn network.Conn) {
 	s.rw.Lock()
 	s.conns[conn.ID()] = conn
 	s.rw.Unlock()
 }
 
-// RemConn 移除连接
-// 在同一把写锁内完成存在性检查与移除，调用方无需先Has再RemConn两次查找；
-// 并发重复移除时仅首个调用返回true，可防止重复移除导致的计数失衡
-// @param conn network.Conn 连接对象
-// @return @1 bool 连接是否已登记并被移除
+// RemConn removes conn from the connection sessions. It reports whether conn was registered and
+// has been removed.
+//
+// The existence check and the removal happen under the same write lock, so the caller does not
+// need to call [Session.Has] before RemConn and pay for a second lookup. When the same conn is
+// removed concurrently, only the first call reports true, which keeps repeated removals from
+// unbalancing the counters.
 func (s *Session) RemConn(conn network.Conn) bool {
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -86,11 +89,8 @@ func (s *Session) RemConn(conn network.Conn) bool {
 	return true
 }
 
-// Has 判断会话是否存在
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 bool 是否存在
-// @return @2 error 错误信息
+// Has reports whether the session identified by target exists. The kind selects whether target is
+// a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
@@ -107,10 +107,8 @@ func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
 	return
 }
 
-// Bind 绑定用户ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// Bind binds the user ID uid to the connection identified by cid. When uid is already bound to
+// another connection, that connection is closed and replaced.
 func (s *Session) Bind(cid, uid int64) error {
 	s.rw.Lock()
 	old, err := s.bind(cid, uid)
@@ -129,11 +127,8 @@ func (s *Session) Bind(cid, uid int64) error {
 	return nil
 }
 
-// bind 执行绑定用户ID操作
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @return @1 network.Conn 被替换的旧连接
-// @return @2 error 错误信息
+// bind binds uid to the connection identified by cid and returns the replaced connection, if any.
+// The caller must hold the write lock.
 func (s *Session) bind(cid, uid int64) (network.Conn, error) {
 	conn, err := s.conn(Conn, cid)
 	if err != nil {
@@ -164,10 +159,7 @@ func (s *Session) bind(cid, uid int64) (network.Conn, error) {
 	return old, nil
 }
 
-// Unbind 解绑用户ID
-// @param uid int64 用户ID
-// @return @1 int64 连接ID
-// @return @2 error 错误信息
+// Unbind unbinds the user ID uid and returns the ID of the connection it was bound to.
 func (s *Session) Unbind(uid int64) (int64, error) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -186,11 +178,8 @@ func (s *Session) Unbind(uid int64) (int64, error) {
 	return conn.ID(), nil
 }
 
-// LocalIP 获取本地IP
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 string 本地IP地址
-// @return @2 error 错误信息
+// LocalIP returns the local IP address of the session identified by target. The kind selects
+// whether target is a connection ID or a user ID.
 func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -203,11 +192,8 @@ func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
 	return conn.LocalIP()
 }
 
-// LocalAddr 获取本地地址
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 net.Addr 本地地址
-// @return @2 error 错误信息
+// LocalAddr returns the local address of the session identified by target. The kind selects whether
+// target is a connection ID or a user ID.
 func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -220,11 +206,8 @@ func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
 	return conn.LocalAddr()
 }
 
-// RemoteIP 获取远端IP
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 string 远端IP地址
-// @return @2 error 错误信息
+// RemoteIP returns the remote IP address of the session identified by target. The kind selects
+// whether target is a connection ID or a user ID.
 func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -237,11 +220,8 @@ func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
 	return conn.RemoteIP()
 }
 
-// RemoteAddr 获取远端地址
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 net.Addr 远端地址
-// @return @2 error 错误信息
+// RemoteAddr returns the remote address of the session identified by target. The kind selects
+// whether target is a connection ID or a user ID.
 func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -254,11 +234,8 @@ func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 	return conn.RemoteAddr()
 }
 
-// Close 关闭会话
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @param force ...bool 是否强制关闭
-// @return @1 error 错误信息
+// Close closes the session identified by target. The kind selects whether target is a connection ID
+// or a user ID. Pass force as true to close the connection forcibly.
 func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -271,12 +248,9 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 	return conn.Close(force...)
 }
 
-// Push 推送消息（异步）
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @param disconnect bool 推送后是否断开连接
-// @param buf buffer.Buffer 消息内容
-// @return @1 error 错误信息
+// Push pushes buf to the session identified by target asynchronously. The kind selects whether
+// target is a connection ID or a user ID. When disconnect is true, the connection is closed after
+// the push.
 func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buffer) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
@@ -301,13 +275,10 @@ func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buff
 	return nil
 }
 
-// Multicast 推送组播消息（异步）
-// @param kind Kind 会话类型
-// @param targets []int64 会话目标列表（连接ID或用户ID）
-// @param disconnect bool 推送后是否断开连接
-// @param buf buffer.Buffer 消息内容
-// @return @1 int64 成功推送的数量
-// @return @2 error 错误信息
+// Multicast pushes buf to every session in targets asynchronously. The kind selects whether each
+// target is a connection ID or a user ID. When disconnect is true, each connection is closed after
+// the push. It returns the number of sessions the message was pushed to, or
+// [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if len(targets) == 0 {
 		buf.Release()
@@ -345,12 +316,9 @@ func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buf
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Broadcast 推送广播消息（异步）
-// @param kind Kind 会话类型
-// @param disconnect bool 推送后是否断开连接
-// @param buf buffer.Buffer 消息内容
-// @return @1 int64 成功推送的数量
-// @return @2 error 错误信息
+// Broadcast pushes buf to every session of the given kind asynchronously. When disconnect is true,
+// each connection is closed after the push. It returns the number of sessions the message was
+// pushed to, or [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *Session) Broadcast(kind Kind, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
@@ -381,12 +349,9 @@ func (s *Session) Broadcast(kind Kind, disconnect bool, buf buffer.Buffer) (int6
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Publish 发布频道消息（异步）
-// @param channel string 频道名称
-// @param disconnect bool 推送后是否断开连接
-// @param buf buffer.Buffer 消息内容
-// @return @1 int64 成功推送的数量
-// @return @2 error 错误信息
+// Publish pushes buf to every session subscribed to channel asynchronously. When disconnect is
+// true, each connection is closed after the push. It returns the number of sessions the message was
+// pushed to.
 func (s *Session) Publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
@@ -407,11 +372,8 @@ func (s *Session) Publish(channel string, disconnect bool, buf buffer.Buffer) (i
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Subscribe 订阅频道
-// @param kind Kind 会话类型
-// @param targets []int64 会话目标列表（连接ID或用户ID）
-// @param channel string 频道名称
-// @return @1 error 错误信息
+// Subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
+// a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err error) {
 	if len(targets) == 0 {
 		return
@@ -451,11 +413,9 @@ func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err err
 	return
 }
 
-// Unsubscribe 取消订阅频道
-// @param kind Kind 会话类型
-// @param targets []int64 会话目标列表（连接ID或用户ID）
-// @param channel string 频道名称
-// @return @1 error 错误信息
+// Unsubscribe unsubscribes the sessions in targets from channel. The kind selects whether each
+// target is a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown
+// kind.
 func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err error) {
 	if len(targets) == 0 {
 		return
@@ -486,9 +446,7 @@ func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err e
 	return
 }
 
-// doUnsubscribe 取消订阅频道
-// @param channel string 频道名称
-// @param conn network.Conn 连接对象
+// doUnsubscribe removes conn from the subscribers of channel. The caller must hold the write lock.
 func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
 	if channels, ok := s.channels[channel]; ok {
 		delete(channels, conn)
@@ -499,8 +457,8 @@ func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
 	}
 }
 
-// doClearConnAttrs 清除连接属性
-// @param conn network.Conn 连接对象
+// doClearConnAttrs removes conn from every channel it is subscribed to and clears its attributes.
+// The caller must hold the write lock.
 func (s *Session) doClearConnAttrs(conn network.Conn) {
 	if attr := conn.Attr(); attr != nil {
 		attr.Visit(func(key, _ any) bool {
@@ -514,10 +472,8 @@ func (s *Session) doClearConnAttrs(conn network.Conn) {
 	}
 }
 
-// Stat 统计会话总数
-// @param kind Kind 会话类型
-// @return @1 int64 会话数量
-// @return @2 error 错误信息
+// Stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an
+// unknown kind.
 func (s *Session) Stat(kind Kind) (int64, error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
@@ -532,12 +488,8 @@ func (s *Session) Stat(kind Kind) (int64, error) {
 	}
 }
 
-// doBatchPush 批量推送消息（异步）
-// @param conns []network.Conn 连接对象列表
-// @param disconnect bool 推送后是否断开连接
-// @param buf buffer.Buffer 消息内容
-// @return @1 int64 成功推送的数量
-// @return @2 error 错误信息
+// doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
+// connection is closed after the push. It returns the number of sessions the message was pushed to.
 func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
 	switch n := len(conns); n {
 	case 0:
@@ -596,11 +548,8 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.
 	}
 }
 
-// conn 获取会话连接
-// @param kind Kind 会话类型
-// @param target int64 会话目标（连接ID或用户ID）
-// @return @1 network.Conn 连接对象
-// @return @2 error 错误信息
+// conn returns the connection of the session identified by target. The kind selects whether target
+// is a connection ID or a user ID.
 func (s *Session) conn(kind Kind, target int64) (network.Conn, error) {
 	switch kind {
 	case Conn:

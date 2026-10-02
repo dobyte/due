@@ -2,22 +2,12 @@ package info
 
 import (
 	"fmt"
-	"runtime"
+	"io"
+	"os"
 	"strings"
-	"syscall"
-	"unicode/utf8"
 
-	"github.com/dobyte/due/v2/mode"
-	"github.com/dobyte/due/v2/utils/xtime"
+	"github.com/mattn/go-runewidth"
 )
-
-const logo = `
-                    ____  __  ________
-                   / __ \/ / / / ____/	
-                  / / / / / / / __/
-                 / /_/ / /_/ / /___
-                /_____/\____/_____/
-`
 
 const (
 	boxWidth          = 56
@@ -27,72 +17,80 @@ const (
 	rightTopBorder    = "┐"
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
-	website           = "https://github.com/dobyte/due"
-	version           = "v2.6.0"
-	global            = "Global"
+
+	// maxContentWidth is the maximum display width (in columns) of the content area.
+	// It is the total box width minus one column for each of the left and right borders, and
+	// minus one leading space reserved before the content.
+	maxContentWidth = boxWidth - 3
 )
 
-func PrintFrameworkInfo() {
-	fmt.Println(strings.TrimSuffix(strings.TrimPrefix(logo, "\n"), "\n"))
-	PrintBoxInfo("",
-		fmt.Sprintf("[Website] %s", website),
-		fmt.Sprintf("[Version] %s", version),
-	)
+// widthCondition computes terminal display widths.
+//
+// East Asian width is explicitly disabled so that Ambiguous characters such as box-drawing
+// characters count as one column, while Wide/Fullwidth characters such as CJK ones still count as
+// two columns.
+var widthCondition = &runewidth.Condition{
+	EastAsianWidth:     false,
+	StrictEmojiNeutral: true,
 }
 
-func PrintGlobalInfo() {
-	PrintBoxInfo(global,
-		fmt.Sprintf("Go: %s", "v"+strings.TrimPrefix(runtime.Version(), "go")),
-		fmt.Sprintf("PID: %d", syscall.Getpid()),
-		fmt.Sprintf("Mode: %s", mode.GetMode()),
-		fmt.Sprintf("Time: %s", xtime.Now()),
-	)
+// Print prints the grouped information to standard output.
+func Print(name string, rows ...string) {
+	Fprint(os.Stdout, name, rows...)
 }
 
-func PrintBoxInfo(name string, infos ...string) {
-	fmt.Println(buildTopBorder(name))
-	for _, info := range infos {
-		fmt.Println(buildRowInfo(info))
+// Fprint writes the grouped information to w.
+func Fprint(w io.Writer, name string, rows ...string) {
+	builder := &strings.Builder{}
+	builder.WriteString(buildTopBorder(name))
+	builder.WriteString("\n")
+	for _, row := range rows {
+		builder.WriteString(buildRowInfo(row))
+		builder.WriteString("\n")
 	}
-	fmt.Println(buildBottomBorder())
+	builder.WriteString(buildBottomBorder())
+	builder.WriteString("\n")
+
+	fmt.Fprint(w, builder.String())
 }
 
-func MakeHorizontalLine() string {
-	return strings.Repeat(horizontalBorder, boxWidth-4)
+// HorizontalLine returns a horizontal separator line used to fill a row.
+func HorizontalLine() string {
+	return strings.Repeat(horizontalBorder, maxContentWidth)
 }
 
 func buildRowInfo(info string) string {
+	info = widthCondition.Truncate(info, maxContentWidth, "…")
+
 	str := fmt.Sprintf("%s %s", verticalBorder, info)
-	str += strings.Repeat(" ", boxWidth-utf8.RuneCountInString(str)-1)
+	padding := max(0, boxWidth-widthCondition.StringWidth(str)-1)
+	str += strings.Repeat(" ", padding)
 	str += verticalBorder
 	return str
 }
 
 func buildTopBorder(name ...string) string {
-	full := boxWidth - strLen(leftTopBorder) - strLen(rightTopBorder) - strLen(name...)
-	half := full / 2
-	str := leftTopBorder
-	str += strings.Repeat(horizontalBorder, half)
+	var nameStr string
 	if len(name) > 0 {
-		str += name[0]
+		nameStr = widthCondition.Truncate(name[0], maxContentWidth, "…")
 	}
-	str += strings.Repeat(horizontalBorder, full-half)
-	str += rightTopBorder
-	return str
+
+	full := max(0, boxWidth-2-widthCondition.StringWidth(nameStr))
+	half := full / 2
+
+	builder := &strings.Builder{}
+	builder.WriteString(leftTopBorder)
+	builder.WriteString(strings.Repeat(horizontalBorder, half))
+	builder.WriteString(nameStr)
+	builder.WriteString(strings.Repeat(horizontalBorder, full-half))
+	builder.WriteString(rightTopBorder)
+	return builder.String()
 }
 
 func buildBottomBorder() string {
-	full := boxWidth - strLen(leftBottomBorder) - strLen(rightBottomBorder)
-	str := leftBottomBorder
-	str += strings.Repeat(horizontalBorder, full)
-	str += rightBottomBorder
-	return str
-}
-
-func strLen(str ...string) int {
-	if len(str) > 0 {
-		return utf8.RuneCountInString(str[0])
-	} else {
-		return 0
-	}
+	builder := &strings.Builder{}
+	builder.WriteString(leftBottomBorder)
+	builder.WriteString(strings.Repeat(horizontalBorder, boxWidth-2))
+	builder.WriteString(rightBottomBorder)
+	return builder.String()
 }

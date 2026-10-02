@@ -6,35 +6,32 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// Proxy HTTP代理
-// 提供HTTP服务器对外可见的完整功能API
+// Proxy is the HTTP proxy.
+//
+// It exposes the full set of features that an HTTP [Server] provides to the outside.
 type Proxy struct {
 	server *Server
 }
 
-// 创建HTTP代理
-// @param s *Server HTTP服务器
-// @return @1 *Proxy HTTP代理
+// newProxy creates an HTTP proxy for s.
 func newProxy(s *Server) *Proxy {
 	return &Proxy{server: s}
 }
 
-// App 获取fiber原生应用
+// App returns the underlying fiber application.
 func (p *Proxy) App() *fiber.App {
 	return p.server.app
 }
 
-// Router 获取路由器
-// @return @1 Router 路由器
+// Router returns the router.
 func (p *Proxy) Router() Router {
 	return &router{app: p.server.app, proxy: p}
 }
 
-// NewMeshClient 新建微服务客户端
-// target参数可分为三种模式:
-// 服务直连模式: 	direct://127.0.0.1:8011
-// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
-// 服务发现模式: 	discovery://service_name
+// NewMeshClient creates a mesh client. The target may take one of three forms:
+//   - direct connection: direct://127.0.0.1:8011
+//   - direct connection: direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+//   - service discovery: discovery://service_name
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	if p.server.opts.transporter == nil {
 		return nil, errors.ErrMissingTransporter

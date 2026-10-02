@@ -31,52 +31,52 @@ const (
 	defaultDeregisterCriticalServiceAfterKey = "etc.registry.consul.deregisterCriticalServiceAfter"
 )
 
-// Option 是服务注册发现组件的配置项函数。
+// Option configures the service registry and discovery component.
 type Option func(o *options)
 
 type options struct {
-	// Consul 地址
-	// 默认值 127.0.0.1:8500
+	// Consul address.
+	// Defaults to 127.0.0.1:8500.
 	addr string
 
-	// Consul 客户端
-	// 默认值 nil
+	// Consul client.
+	// Defaults to nil.
 	client *api.Client
 
-	// 超时时间
-	// 默认值 3s
+	// Timeout.
+	// Defaults to 3s.
 	timeout time.Duration
 
-	// 异常重试次数
-	// 默认值 3
+	// Number of retries on errors.
+	// Defaults to 3.
 	retryTimes int
 
-	// 是否开启健康检查
-	// 默认值 true
+	// Whether to enable health checks.
+	// Defaults to true.
 	enableHealthCheck bool
 
-	// 健康检查间隔
-	// 默认值 10s
+	// Health check interval.
+	// Defaults to 10s.
 	healthCheckInterval int
 
-	// 健康检查超时时间
-	// 默认值 5s
+	// Health check timeout.
+	// Defaults to 5s.
 	healthCheckTimeout int
 
-	// 是否开启心跳检查
-	// 默认值 true
+	// Whether to enable heartbeat checks.
+	// Defaults to true.
 	enableHeartbeatCheck bool
 
-	// 心跳检查间隔
-	// 默认值 10s
+	// Heartbeat check interval.
+	// Defaults to 10s.
 	heartbeatCheckInterval int
 
-	// 注册服务后，等待多少秒后，自动注销服务
-	// 默认值 30s
+	// Number of seconds to wait after registering a service before automatically deregistering it.
+	// Defaults to 30s.
 	deregisterCriticalServiceAfter int
 }
 
-// defaultOptions 返回带有默认值的配置项。
+// defaultOptions returns the options with their default values.
 func defaultOptions() *options {
 	return &options{
 		addr:                           etc.Get(defaultAddrKey, defaultAddr).String(),
@@ -91,52 +91,53 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddr 设置 Consul 地址
+// WithAddr sets the Consul address.
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
 }
 
-// WithClient 设置 Consul 客户端
+// WithClient sets the Consul client.
 func WithClient(client *api.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithTimeout 设置客户端连接超时时间
+// WithTimeout sets the client connection timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithRetryTimes 设置异常重试次数
+// WithRetryTimes sets the number of retries on errors.
 func WithRetryTimes(retryTimes int) Option {
 	return func(o *options) { o.retryTimes = retryTimes }
 }
 
-// WithEnableHealthCheck 设置是否开启健康检查
+// WithEnableHealthCheck sets whether to enable health checks.
 func WithEnableHealthCheck(enable bool) Option {
 	return func(o *options) { o.enableHealthCheck = enable }
 }
 
-// WithHealthCheckInterval 设置健康检查间隔
+// WithHealthCheckInterval sets the health check interval.
 func WithHealthCheckInterval(interval int) Option {
 	return func(o *options) { o.healthCheckInterval = interval }
 }
 
-// WithHealthCheckTimeout 设置健康检查超时时间
+// WithHealthCheckTimeout sets the health check timeout.
 func WithHealthCheckTimeout(timeout int) Option {
 	return func(o *options) { o.healthCheckTimeout = timeout }
 }
 
-// WithEnableHeartbeatCheck 设置是否开启心跳检查
+// WithEnableHeartbeatCheck sets whether to enable heartbeat checks.
 func WithEnableHeartbeatCheck(enable bool) Option {
 	return func(o *options) { o.enableHeartbeatCheck = enable }
 }
 
-// WithHeartbeatCheckInterval 设置心跳检查间隔
+// WithHeartbeatCheckInterval sets the heartbeat check interval.
 func WithHeartbeatCheckInterval(interval int) Option {
 	return func(o *options) { o.heartbeatCheckInterval = interval }
 }
 
-// WithDeregisterCriticalServiceAfter 设置注册服务后，等待多少秒后，自动注销服务
+// WithDeregisterCriticalServiceAfter sets the number of seconds to wait after registering a service
+// before automatically deregistering it.
 func WithDeregisterCriticalServiceAfter(after int) Option {
 	return func(o *options) { o.deregisterCriticalServiceAfter = after }
 }

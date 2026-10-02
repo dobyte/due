@@ -8,17 +8,13 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// newTestScheduler 创建用于测试的调度器（绑定关系操作不依赖Node实例）
-// @return @1 *Scheduler 调度器实例
+// newTestScheduler creates a scheduler for testing (binding relation operations do not depend on a
+// Node instance).
 func newTestScheduler() *Scheduler {
 	return newScheduler(nil)
 }
 
-// registerTestActor 直接向调度器注册一个处于启动状态的测试Actor
-// @param s *Scheduler 调度器
-// @param kind string Actor类型
-// @param id string Actor编号
-// @return @1 *Actor 测试Actor实例
+// registerTestActor directly registers a started test actor to the scheduler.
 func registerTestActor(s *Scheduler, kind, id string) *Actor {
 	act := &Actor{
 		opts:      &actorOptions{kind: kind, id: id},
@@ -132,7 +128,8 @@ func TestSchedulerConcurrentBindUnbind(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSchedulerBindActorRaceDestroy 绑定与销毁并发：销毁完成后调度器中不得残留指向已销毁Actor的绑定关系
+// TestSchedulerBindActorRaceDestroy binds concurrently with destroy: after destroy completes, no
+// binding pointing to a destroyed actor may remain in the scheduler.
 func TestSchedulerBindActorRaceDestroy(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		s := newTestScheduler()
@@ -160,7 +157,8 @@ func TestSchedulerBindActorRaceDestroy(t *testing.T) {
 	}
 }
 
-// BenchmarkSchedulerLoadActor 模拟真实负载：99%读取绑定关系 + 1%绑定/解绑
+// BenchmarkSchedulerLoadActor simulates a real workload: 99% reading binding relations + 1%
+// bind/unbind.
 func BenchmarkSchedulerLoadActor(b *testing.B) {
 	s := newTestScheduler()
 	registerTestActor(s, "room", "1")

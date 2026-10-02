@@ -13,37 +13,45 @@ import (
 )
 
 const (
-	// 释放锁时写入的过期时间戳
-	// memcached 将超过 30 天的过期时间解析为绝对时间戳(Unix秒)，
-	// 且当该时间戳早于服务器启动时间时会钳制为"立即过期"，据此实现释放锁的效果。
-	// 这里使用固定且足够古老的绝对时间戳(2001年)，确保任意服务器的启动时间都晚于该值；
-	// 不可使用相对当前时间的偏移量(如 now-1年)，否则服务器运行时长一旦超过该偏移，
-	// 时间戳会被当作未来的绝对时间，导致锁无法释放
+	// releaseExpiration is the expiration timestamp written when releasing a lock.
+	//
+	// memcached parses an expiration beyond 30 days as an absolute timestamp (Unix seconds), and
+	// clamps it to "expire immediately" when that timestamp is earlier than the server start time,
+	// which is how releasing is achieved. A fixed and sufficiently old absolute timestamp (the year
+	// 2001) is used here so that any server's start time is later than it; a relative offset to the
+	// current time (such as now-1 year) must not be used, because once the server uptime exceeds
+	// that offset the timestamp would be treated as a future absolute time and the lock could never
+	// be released.
 	releaseExpiration = int32(1000000000)
 
-	// CAS 冲突的最大重试次数
-	// 锁的续租与释放共用"读取-校验-CAS"流程，同一把锁的并发操作(如释放与在途续租)
-	// 可能产生 CAS 冲突，冲突后重新读取并重试即可解决
+	// maxSwapRetries is the maximum number of CAS conflict retries.
+	//
+	// Renewal and release of a lock share the "read-verify-CAS" flow, and concurrent operations on
+	// the same lock (such as release and an in-flight renewal) may cause a CAS conflict, which is
+	// resolved by re-reading and retrying after the conflict.
 	maxSwapRetries = 5
 )
 
-// Maker 锁构建器
-// 基于 memcached 的 Add/Get/CompareAndSwap 原语制造分布式锁，
-// 内部持有 memcached 客户端与全局锁配置，并为每把锁生成独立的版本标识(version)以校验锁所有权
+// Maker is a lock maker.
+//
+// It creates distributed locks from the memcached Add/Get/CompareAndSwap primitives. It holds the
+// memcached client and the global lock configuration internally, and generates an independent
+// version identifier for each lock to verify lock ownership.
 type Maker struct {
-	opts    *options        // 锁配置项
-	builtin bool            // 是否内建客户端，内建客户端将随 Close 一并关闭
-	ctx     context.Context // 构建器生命周期上下文，Close 时取消，用于停止所有续租协程
+	opts    *options        // Lock configuration
+	builtin bool            // Whether the client is built in; a built-in client is closed along with Close
+	ctx     context.Context // Maker lifecycle context, canceled by Close to stop every renewal goroutine
 	cancel  context.CancelFunc
 }
 
-// NewMaker 创建锁构建器
-// 初始化锁配置项：未显式配置过期时间时采用默认值，并将小于1秒的过期时间收敛为1秒，
-// 避免 memcached 将亚秒级过期时间截断为0(永不过期)；
-// 循环获取锁的间隔时间小于等于0时收敛为默认值，避免重试退化为无退避忙等循环；
-// 未提供外部客户端时自动创建内建客户端，该内建客户端将随 Close 一并关闭
-// @param opts ...Option 锁配置项
-// @return @1 *Maker 锁构建器实例
+// NewMaker creates a lock maker.
+//
+// It initializes the lock configuration: when the expiration is not explicitly configured the
+// default value is used, and an expiration below 1 second is clamped to 1 second so that memcached
+// does not truncate a sub-second expiration to 0 (never expires). An acquisition interval of 0 or
+// less is clamped to the default so that the retry loop does not degenerate into a busy-wait
+// without backoff. When no external client is provided, a built-in client is created automatically
+// and is closed along with Close.
 func NewMaker(opts ...Option) *Maker {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -54,13 +62,15 @@ func NewMaker(opts ...Option) *Maker {
 		o.expiration = xconv.Duration(defaultExpiration)
 	}
 
-	// memcached 的过期时间精度为 1 秒，0 表示永不过期；
-	// 将过期时间下限收敛为 1s，避免亚秒级配置被截断为 0 导致锁永不过期
+	// memcached expiration has 1-second granularity and 0 means never expires;
+	// clamp the expiration lower bound to 1s so a sub-second value is not truncated to 0 and the
+	// lock never expires.
 	if o.expiration < time.Second {
 		o.expiration = time.Second
 	}
 
-	// 获取锁的间隔时间必须大于0，0或负值会使重试定时器立即触发，退化为无退避忙等循环
+	// The acquisition interval must be greater than 0; 0 or a negative value makes the retry timer
+	// fire immediately and degenerates into a busy-wait without backoff.
 	if o.acquireInterval <= 0 {
 		o.acquireInterval = xconv.Duration(defaultAcquireInterval)
 	}
@@ -77,11 +87,11 @@ func NewMaker(opts ...Option) *Maker {
 	return m
 }
 
-// Make 制造一个Locker
-// 依据锁名称拼接配置的前缀生成 memcached key，并为该锁生成唯一的版本标识；
-// 每个 Locker 持有独立的版本标识，从而可在同一把锁上公平竞争
-// @param name string 锁名称
-// @return @1 lock.Locker 分布式锁
+// Make makes a Locker.
+//
+// It builds the memcached key by concatenating the configured prefix with the lock name, and
+// generates a unique version identifier for the lock. Every Locker holds an independent version
+// identifier so that they can fairly compete for the same lock.
 func (m *Maker) Make(name string) lock.Locker {
 	l := &Locker{}
 	l.maker = m
@@ -97,12 +107,14 @@ func (m *Maker) Make(name string) lock.Locker {
 	return l
 }
 
-// Close 关闭构建器
-// 先取消构建器生命周期上下文以停止所有后台续租协程，再关闭内建客户端；
-// 使用外部客户端时，其生命周期由外部调用方管理，此处不做处理
-// @return @1 error 关闭失败时返回的错误
+// Close closes the maker.
+//
+// It first cancels the maker lifecycle context to stop every background renewal goroutine, then
+// closes the built-in client. When an external client is used, its lifecycle is managed by the
+// external caller and is left untouched here.
 func (m *Maker) Close() error {
-	// 停止所有后台续租协程；CancelFunc 幂等，可重复调用
+	// Stop every background renewal goroutine; CancelFunc is idempotent and may be called
+	// repeatedly.
 	m.cancel()
 
 	if m.builtin {
@@ -112,15 +124,19 @@ func (m *Maker) Close() error {
 	return nil
 }
 
-// 循环获取锁
-// 以 Add 原语周期性地尝试写入锁，写入成功即代表获取成功；写入失败(ErrNotStored)说明锁已被他人持有，
-// 按配置的间隔与最大重试次数循环重试，直至成功、重试次数耗尽或 ctx 被取消
-// @param ctx context.Context 上下文，取消后立即终止获取
-// @param key string memcached键
-// @param version string 锁版本标识
-// @return @1 error 获取成功返回nil；重试耗尽返回errors.ErrDeadlineExceeded；ctx被取消返回ctx.Err()；构建器已关闭返回errors.ErrIllegalOperation
+// acquire acquires the lock in a loop.
+//
+// It periodically tries to write the lock with the Add primitive, and a successful write means the
+// acquisition succeeded. A failed write (ErrNotStored) means the lock is already held by someone
+// else, so it retries at the configured interval up to the maximum number of retries until it
+// succeeds, the retries are exhausted, or the ctx is canceled. The ctx is the context whose
+// cancellation terminates the acquisition immediately; key is the memcached key and version is the
+// lock version identifier. It returns nil on success, [errors.ErrDeadlineExceeded] when the retries
+// are exhausted, ctx.Err() when the context is canceled, or [errors.ErrIllegalOperation] when the
+// maker has been closed.
 func (m *Maker) acquire(ctx context.Context, key, version string) error {
-	// 构建器已关闭(Close)时快速失败，避免获取成功后后台续租因生命周期上下文取消而静默失效
+	// Fail fast when the maker has been closed to avoid a successful acquisition whose background
+	// renewal silently stops because the lifecycle context was canceled.
 	if m.ctx.Err() != nil {
 		return errors.ErrIllegalOperation
 	}
@@ -158,7 +174,7 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 			ticker.Stop()
 			return ctx.Err()
 		case <-m.ctx.Done():
-			// 构建器在等待期间被关闭，停止获取
+			// The maker was closed while waiting, stop the acquisition.
 			ticker.Stop()
 			return errors.ErrIllegalOperation
 		case <-ticker.C:
@@ -167,14 +183,17 @@ func (m *Maker) acquire(ctx context.Context, key, version string) error {
 	}
 }
 
-// 尝试获取锁
-// 仅执行一次 Add 写入，不等待也不重试；可通过 expiration 指定固定过期时间，未指定时采用配置的默认过期时间
-// @param key string memcached键
-// @param version string 锁版本标识
-// @param expiration ...time.Duration 可选的固定过期时间；为空或小于等于0时采用默认过期时间
-// @return @1 error 获取成功返回nil；锁已被他人持有返回errors.ErrIllegalOperation；构建器已关闭返回errors.ErrIllegalOperation
+// tryAcquire attempts to acquire the lock.
+//
+// It performs a single Add write without waiting or retrying. A fixed expiration may be given
+// through expiration; when it is not given, the configured default expiration is used. The key is
+// the memcached key and version is the lock version identifier. The optional expiration is a fixed
+// expiration time; when it is empty or not positive the default expiration is used. It returns nil
+// on success, [errors.ErrIllegalOperation] when the lock is already held by someone else, or
+// [errors.ErrIllegalOperation] when the maker has been closed.
 func (m *Maker) tryAcquire(_ context.Context, key, version string, expiration ...time.Duration) error {
-	// 构建器已关闭(Close)时快速失败，避免获取成功后后台续租因生命周期上下文取消而静默失效
+	// Fail fast when the maker has been closed to avoid a successful acquisition whose background
+	// renewal silently stops because the lifecycle context was canceled.
 	if m.ctx.Err() != nil {
 		return errors.ErrIllegalOperation
 	}
@@ -198,26 +217,29 @@ func (m *Maker) tryAcquire(_ context.Context, key, version string, expiration ..
 	return nil
 }
 
-// 执行释放锁操作
-// 复用"读取-校验-CAS"流程，将过期时间改写为固定且足够古老的绝对时间戳(见releaseExpiration)，
-// 使 memcached 立即判定该键已过期并删除，从而实现释放
-// @param ctx context.Context 上下文
-// @param key string memcached键
-// @param version string 锁版本标识
-// @return @1 error 释放成功返回nil；锁已丢失或所有权已变更返回errors.ErrIllegalOperation；持续CAS冲突(瞬时竞争)时返回驱动错误
+// release releases the lock.
+//
+// It reuses the "read-verify-CAS" flow and rewrites the expiration to a fixed and sufficiently old
+// absolute timestamp (see [releaseExpiration]) so that memcached immediately considers the key
+// expired and deletes it, which achieves the release. The ctx is the context to use, key is the
+// memcached key and version is the lock version identifier. It returns nil on success,
+// [errors.ErrIllegalOperation] when the lock has been lost or its ownership has changed, or the
+// driver error on a persistent CAS conflict (a transient race).
 func (m *Maker) release(ctx context.Context, key, version string) error {
 	return m.swap(ctx, key, version, releaseExpiration)
 }
 
-// 执行续租锁操作
-// 通过"读取-校验-CAS"将锁的过期时间刷新为配置的过期时长；首次操作失败(瞬时故障)时按指数退避重试，
-// 退避睡眠总时长预算控制在锁过期时间的一半以内(见backoffRetries)，尽量避免退避阻塞导致锁过期；
-// 退避仍失败则交由续租调度器(locker.go)按短间隔(renewalRetryInterval)继续补偿重试；
-// 一旦锁所有权丢失(返回errors.ErrIllegalOperation)则立即终止
-// @param ctx context.Context 上下文
-// @param key string memcached键
-// @param version string 锁版本标识
-// @return @1 error 续租成功返回nil；锁已丢失或所有权已变更返回errors.ErrIllegalOperation
+// renewal renews the lock.
+//
+// It refreshes the lock expiration to the configured duration through "read-verify-CAS". When the
+// first operation fails (a transient failure) it retries with exponential backoff, keeping the
+// total backoff sleep budget within half of the lock expiration (see [backoffRetries]) to avoid the
+// backoff blocking long enough for the lock to expire. If the backoff still fails, the renewal
+// scheduler (locker.go) keeps compensating retries at the short interval [renewalRetryInterval].
+// Once the lock ownership is lost (renewal returns [errors.ErrIllegalOperation]) it terminates
+// immediately. The ctx is the context to use, key is the memcached key and version is the lock
+// version identifier. It returns nil on success or [errors.ErrIllegalOperation] when the lock has
+// been lost or its ownership has changed.
 func (m *Maker) renewal(ctx context.Context, key, version string) error {
 	var (
 		expiration = expirationSeconds(m.opts.expiration)
@@ -237,7 +259,9 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 
 	retries, baseDelay := backoffRetries(m.opts.expiration)
 	if retries == 0 {
-		// 过期时间过短、退避预算不足，不再退避重试，交由续租调度器按短间隔(renewalRetryInterval)补偿重试
+		// The expiration is too short and the backoff budget is insufficient, so do not retry with
+		// backoff; let the renewal scheduler compensate with retries at the short interval
+		// [renewalRetryInterval].
 		return err
 	}
 
@@ -251,12 +275,14 @@ func (m *Maker) renewal(ctx context.Context, key, version string) error {
 	}, retries, baseDelay, time.Second)
 }
 
-// 计算续租退避的重试次数与初始间隔
-// 指数退避(间隔按2倍递增，100ms起步)的总时长被限制在锁过期时间的一半以内，
-// 避免退避阻塞续租调度导致锁在故障恢复前过期；最多退避3次，不足一次退避预算时不重试
-// @param expiration time.Duration 锁过期时长
-// @return @1 int 退避重试次数，最小为0(预算不足以支撑一次退避时不再重试)
-// @return @2 time.Duration 退避初始间隔，恒为100ms
+// backoffRetries computes the number of renewal backoff retries and the initial interval.
+//
+// The total duration of the exponential backoff (the interval doubles starting from 100ms) is
+// limited to half of the lock expiration, so that the backoff does not block the renewal schedule
+// and let the lock expire before the failure recovers. It backs off at most 3 times and does not
+// retry when the budget cannot support a single backoff. The expiration is the lock expiration
+// duration. It returns the number of backoff retries, at least 0 (no retry when the budget cannot
+// support a single backoff), and the initial backoff interval, always 100ms.
 func backoffRetries(expiration time.Duration) (int, time.Duration) {
 	var (
 		delay   = 100 * time.Millisecond
@@ -273,11 +299,12 @@ func backoffRetries(expiration time.Duration) (int, time.Duration) {
 	return retries, 100 * time.Millisecond
 }
 
-// 将过期时间转换为 memcached 的过期秒数
-// memcached 的过期时间精度为 1 秒，且 0 表示永不过期；
-// 为避免亚秒级时长被截断为 0(永不过期)，统一向上取整，并保证最小值为 1 秒
-// @param expiration time.Duration 锁过期时长
-// @return @1 int32 memcached 过期秒数
+// expirationSeconds converts an expiration duration to memcached expiration seconds.
+//
+// memcached expiration has 1-second granularity and 0 means never expires. To avoid a sub-second
+// duration being truncated to 0 (never expires), it always rounds up and guarantees a minimum of
+// 1 second. The expiration is the lock expiration duration and the returned value is the memcached
+// expiration in seconds.
 func expirationSeconds(expiration time.Duration) int32 {
 	if expiration <= 0 {
 		return 0
@@ -286,15 +313,17 @@ func expirationSeconds(expiration time.Duration) int32 {
 	return int32(max(int64(1), (expiration.Milliseconds()+999)/1000))
 }
 
-// 执行替换操作
-// 操作流程为"读取-校验-CAS"，与同一把锁的续租/释放操作并发时可能产生 CAS 冲突，
-// 冲突后重新读取再试；锁不存在或所有权已变更(version不匹配)等确定情形映射为 ErrIllegalOperation，
-// 其余非预期结果原样返回；重试全部因 CAS 冲突耗尽时返回冲突错误(瞬时竞争)，避免误报所有权丢失
-// @param ctx context.Context 上下文
-// @param key string memcached键
-// @param version string 锁版本标识
-// @param expiration int32 新的过期时间
-// @return @1 error 替换成功返回nil；锁不存在或所有权已变更返回errors.ErrIllegalOperation；重试均遇CAS冲突返回memcache.ErrCASConflict
+// swap performs the replace operation.
+//
+// The flow is "read-verify-CAS"; concurrent renewal/release operations on the same lock may cause a
+// CAS conflict, in which case it re-reads and retries. Definite cases such as a missing lock or a
+// changed ownership (a version mismatch) are mapped to [errors.ErrIllegalOperation], while other
+// unexpected results are returned as is. When all retries are exhausted due to CAS conflicts it
+// returns the conflict error (a transient race) instead of falsely reporting a lost ownership. The
+// ctx is the context to use, key is the memcached key, version is the lock version identifier and
+// expiration is the new expiration. It returns nil on success, [errors.ErrIllegalOperation] when
+// the lock does not exist or its ownership has changed, or memcache.ErrCASConflict when every retry
+// hits a CAS conflict.
 func (m *Maker) swap(_ context.Context, key, version string, expiration int32) error {
 	var casErr error
 
@@ -302,14 +331,14 @@ func (m *Maker) swap(_ context.Context, key, version string, expiration int32) e
 		item, err := m.opts.client.Get(key)
 		if err != nil {
 			if errors.Is(err, memcache.ErrCacheMiss) {
-				// 锁不存在，说明锁已过期或已被释放
+				// The lock does not exist, which means it has expired or was released.
 				return errors.ErrIllegalOperation
 			}
 
 			return err
 		}
 
-		// 锁已被其他持有者(不同version)获取
+		// The lock has been acquired by another holder (a different version).
 		if xconv.String(item.Value) != version {
 			return errors.ErrIllegalOperation
 		}
@@ -322,17 +351,21 @@ func (m *Maker) swap(_ context.Context, key, version string, expiration int32) e
 
 		switch {
 		case errors.Is(err, memcache.ErrCASConflict):
-			// 与同锁的续租/释放操作竞争，重新读取后再试，并记录冲突错误
+			// Racing with a renewal/release of the same lock; re-read and retry, and record the
+			// conflict error.
 			casErr = err
 		case errors.Is(err, memcache.ErrNotStored), errors.Is(err, memcache.ErrCacheMiss):
-			// 锁在读取与交换之间已被删除或过期，所有权已丧失
+			// The lock was deleted or expired between the read and the swap, so its ownership is
+			// lost.
 			return errors.ErrIllegalOperation
 		default:
 			return err
 		}
 	}
 
-	// 重试全部因 CAS 冲突耗尽：所有权未必丢失，原样返回冲突错误而非 ErrIllegalOperation，
-	// 使续租调度器将其视为瞬时故障并补偿重试，而非误判"锁已丢失"而停止续租
+	// All retries are exhausted due to CAS conflicts: ownership is not necessarily lost, so return
+	// the conflict error as is instead of [errors.ErrIllegalOperation], letting the renewal
+	// scheduler treat it as a transient failure and compensate with retries rather than wrongly
+	// concluding that the lock is lost and stopping the renewal.
 	return casErr
 }

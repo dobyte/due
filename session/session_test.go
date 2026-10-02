@@ -8,7 +8,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 )
 
-// mockConn 测试用连接实现
+// mockConn is a connection implementation for tests.
 type mockConn struct {
 	id   int64
 	uid  int64
@@ -32,15 +32,15 @@ func (c *mockConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *mockConn) RemoteIP() (string, error)     { return "", nil }
 func (c *mockConn) RemoteAddr() (net.Addr, error) { return nil, nil }
 
-// mockAttr 测试用连接属性实现
+// mockAttr is a connection attribute implementation for tests.
 type mockAttr struct {
 	m map[any]any
 }
 
-func (a *mockAttr) Set(key, value any)        { a.m[key] = value }
-func (a *mockAttr) Get(key any) (any, bool)   { v, ok := a.m[key]; return v, ok }
-func (a *mockAttr) Del(key any) bool          { _, ok := a.m[key]; delete(a.m, key); return ok }
-func (a *mockAttr) Clear()                    { a.m = make(map[any]any) }
+func (a *mockAttr) Set(key, value any)      { a.m[key] = value }
+func (a *mockAttr) Get(key any) (any, bool) { v, ok := a.m[key]; return v, ok }
+func (a *mockAttr) Del(key any) bool        { _, ok := a.m[key]; delete(a.m, key); return ok }
+func (a *mockAttr) Clear()                  { a.m = make(map[any]any) }
 func (a *mockAttr) Visit(fn func(key, value any) bool) {
 	for k, v := range a.m {
 		if !fn(k, v) {
@@ -63,7 +63,8 @@ func TestRemConnRegistered(t *testing.T) {
 		t.Fatalf("conns should be empty, got %d", len(s.conns))
 	}
 
-	// 重复移除必须返回false，防止调用方重复执行断开清理逻辑
+	// A repeated removal must return false so that the caller does not run its disconnect cleanup
+	// logic twice.
 	if s.RemConn(conn) {
 		t.Fatal("RemConn should return false for an already removed conn")
 	}
@@ -109,7 +110,8 @@ func TestRemConnClearsUserAndChannels(t *testing.T) {
 	}
 }
 
-// TestRemConnConcurrent 并发移除同一连接时仅允许一个调用返回true
+// TestRemConnConcurrent verifies that concurrent removals of the same connection allow exactly one
+// call to report true.
 func TestRemConnConcurrent(t *testing.T) {
 	s := NewSession()
 	conn := newMockConn(1)

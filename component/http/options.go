@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	defaultName            = "http"          // 默认HTTP服务名称
-	defaultAddr            = ":8080"         // 默认监听地址
-	defaultBodyLimit       = 4 * 1024 * 1024 // 默认body大小
-	defaultConcurrency     = 256 * 1024      // 默认最大并发连接数
-	defaultReadBufferSize  = 4096            // 默认读取缓冲区大小
-	defaultWriteBufferSize = 4096            // 默认写入缓冲区大小
+	defaultName            = "http"          // Default HTTP service name
+	defaultAddr            = ":8080"         // Default listen address
+	defaultBodyLimit       = 4 * 1024 * 1024 // Default body size
+	defaultConcurrency     = 256 * 1024      // Default maximum number of concurrent connections
+	defaultReadBufferSize  = 4096            // Default read buffer size
+	defaultWriteBufferSize = 4096            // Default write buffer size
 )
 
 const (
@@ -48,82 +48,82 @@ const (
 	defaultEnableSplittingOnParsersKey     = "etc.http.enableSplittingOnParsers"
 )
 
-// Option HTTP服务器配置函数
+// Option is an HTTP server configuration function.
 type Option func(o *options)
 
 type options struct {
-	name                         string                // HTTP服务名称
-	addr                         string                // 监听地址
-	certFile                     string                // 证书文件
-	keyFile                      string                // 秘钥文件
-	console                      bool                  // 是否启用控制台输出
-	corsOpts                     CorsOptions           // 跨域配置
-	swagOpts                     SwagOptions           // swagger配置
-	proxyOpts                    ProxyOptions          // 代理配置
-	middlewares                  []any                 // 中间件
-	registry                     registry.Registry     // 服务注册器
-	transporter                  transport.Transporter // 消息传输器
-	strictRouting                bool                  // 是否启用严格路由模式，默认为false，启用后"/foo"与"/foo/"为两个不同的路由
-	caseSensitive                bool                  // 是否区分路由大小写，默认为false， 启用后"/FoO"与"/foo"为两个不同的路由
-	disableHeadAutoRegister      bool                  // 是否禁用HEAD方法自动注册，默认为false
-	immutable                    bool                  // 是否启用不可变路由，默认为false
-	unescapePath                 bool                  // 是否unescape路径参数，默认为false
-	bodyLimit                    int                   // body大小，默认为4 * 1024 * 1024
-	concurrency                  int                   // 最大并发连接数，默认为256 * 1024
-	views                        fiber.Views           // 视图引擎
-	viewsLayout                  string                // 视图布局
-	passLocalsToViews            bool                  // 是否将上下文 locals 传递给视图引擎
-	readBufferSize               int                   // 读取缓冲区大小，默认为4096
-	writeBufferSize              int                   // 写入缓冲区大小，默认为4096
-	errorHandler                 fiber.ErrorHandler    // 错误处理函数
-	disableKeepalive             bool                  // 是否禁用keepalive，默认为false
-	disableDefaultDate           bool                  // 是否禁用默认日期，默认为false
-	disableDefaultContentType    bool                  // 是否禁用默认Content-Type，默认为false
-	disableHeaderNormalizing     bool                  // 是否禁用默认头部归一化，默认为false
-	streamRequestBody            bool                  // 是否流式请求体，默认为false
-	disablePreParseMultipartForm bool                  // 是否禁用预解析multipart/form-data，默认为false
-	reduceMemoryUsage            bool                  // 是否减少内存占用，默认为false
-	enableIPValidation           bool                  // 是否启用IP验证，默认为false
-	enableSplittingOnParsers     bool                  // 是否启用在解析器上拆分请求体，默认为false
+	name                         string                // HTTP service name
+	addr                         string                // Listen address
+	certFile                     string                // Certificate file
+	keyFile                      string                // Key file
+	console                      bool                  // Whether console output is enabled
+	corsOpts                     CorsOptions           // CORS configuration
+	swagOpts                     SwagOptions           // Swagger configuration
+	proxyOpts                    ProxyOptions          // Proxy configuration
+	middlewares                  []any                 // Middlewares
+	registry                     registry.Registry     // Service registry
+	transporter                  transport.Transporter // Message transporter
+	strictRouting                bool                  // Whether strict routing is enabled; defaults to false. When enabled, "/foo" and "/foo/" are two different routes
+	caseSensitive                bool                  // Whether route matching is case sensitive; defaults to false. When enabled, "/FoO" and "/foo" are two different routes
+	disableHeadAutoRegister      bool                  // Whether automatic HEAD method registration is disabled; defaults to false
+	immutable                    bool                  // Whether immutable routing is enabled; defaults to false
+	unescapePath                 bool                  // Whether path parameters are unescaped; defaults to false
+	bodyLimit                    int                   // Body size; defaults to 4 * 1024 * 1024
+	concurrency                  int                   // Maximum number of concurrent connections; defaults to 256 * 1024
+	views                        fiber.Views           // View engine
+	viewsLayout                  string                // View layout
+	passLocalsToViews            bool                  // Whether context locals are passed to the view engine
+	readBufferSize               int                   // Read buffer size; defaults to 4096
+	writeBufferSize              int                   // Write buffer size; defaults to 4096
+	errorHandler                 fiber.ErrorHandler    // Error handler
+	disableKeepalive             bool                  // Whether keepalive is disabled; defaults to false
+	disableDefaultDate           bool                  // Whether the default date header is disabled; defaults to false
+	disableDefaultContentType    bool                  // Whether the default Content-Type is disabled; defaults to false
+	disableHeaderNormalizing     bool                  // Whether default header normalization is disabled; defaults to false
+	streamRequestBody            bool                  // Whether the request body is streamed; defaults to false
+	disablePreParseMultipartForm bool                  // Whether pre-parsing of multipart/form-data is disabled; defaults to false
+	reduceMemoryUsage            bool                  // Whether memory usage is reduced; defaults to false
+	enableIPValidation           bool                  // Whether IP validation is enabled; defaults to false
+	enableSplittingOnParsers     bool                  // Whether splitting the request body on parsers is enabled; defaults to false
 }
 
 type ProxyOptions struct {
-	ProxyHeader string            `json:"proxyHeader"` // 代理头部，默认为X-Forwarded-For
-	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // 信任代理配置
+	ProxyHeader string            `json:"proxyHeader"` // Proxy header; defaults to X-Forwarded-For
+	TrustProxy  TrustProxyOptions `json:"trustProxy"`  // Trusted proxy configuration
 }
 
 type CorsOptions struct {
-	Enable              bool     `json:"enable"`              // 是否启用
-	AllowOrigins        []string `json:"allowOrigins"`        // 允许跨域的请求源。默认为[]，即为允许所有请求源
-	AllowMethods        []string `json:"allowMethods"`        // 允许跨域的请求方法。默认为["GET", "POST", "HEAD", "PUT", "DELETE", "PATCH"]
-	AllowHeaders        []string `json:"allowHeaders"`        // 允许跨域的请求头部。默认为[]，即为允许所有请求头部
-	AllowCredentials    bool     `json:"allowCredentials"`    // 当允许所有源时，根据CORS规范不允许携带凭据。默认为false
-	ExposeHeaders       []string `json:"exposeHeaders"`       // 允许暴露给客户端的头部。默认为[]，即为允许暴露所有头部
-	MaxAge              int      `json:"maxAge"`              // 浏览器缓存预检请求结果的时间。默认为0
-	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"` // 是否允许来自私有网络的请求。设置为true时，响应头Access-Control-Allow-Private-Network会被设置为true。默认为false
+	Enable              bool     `json:"enable"`              // Whether CORS is enabled
+	AllowOrigins        []string `json:"allowOrigins"`        // Allowed request origins. Defaults to [], which allows every origin
+	AllowMethods        []string `json:"allowMethods"`        // Allowed request methods. Defaults to ["GET", "POST", "HEAD", "PUT", "DELETE", "PATCH"]
+	AllowHeaders        []string `json:"allowHeaders"`        // Allowed request headers. Defaults to [], which allows every header
+	AllowCredentials    bool     `json:"allowCredentials"`    // When every origin is allowed, credentials are not permitted by the CORS specification. Defaults to false
+	ExposeHeaders       []string `json:"exposeHeaders"`       // Headers exposed to the client. Defaults to [], which exposes every header
+	MaxAge              int      `json:"maxAge"`              // Time for which the browser caches the preflight request result. Defaults to 0
+	AllowPrivateNetwork bool     `json:"allowPrivateNetwork"` // Whether requests from private networks are allowed. When true, the Access-Control-Allow-Private-Network response header is set to true. Defaults to false
 }
 
 type SwagOptions struct {
-	Enable           bool   `json:"enable"`           // 是否启用
-	Title            string `json:"title"`            // 文档标题
-	FilePath         string `json:"filePath"`         // 文档路径
-	BasePath         string `json:"basePath"`         // 访问路径
-	SwaggerBundleUrl string `json:"swaggerBundleUrl"` // swagger-ui-bundle.js地址
-	SwaggerPresetUrl string `json:"swaggerPresetUrl"` // swagger-ui-standalone-preset.js地址
-	SwaggerStylesUrl string `json:"swaggerStylesUrl"` // swagger-ui.css地址
+	Enable           bool   `json:"enable"`           // Whether Swagger is enabled
+	Title            string `json:"title"`            // Document title
+	FilePath         string `json:"filePath"`         // Document path
+	BasePath         string `json:"basePath"`         // Access path
+	SwaggerBundleUrl string `json:"swaggerBundleUrl"` // swagger-ui-bundle.js URL
+	SwaggerPresetUrl string `json:"swaggerPresetUrl"` // swagger-ui-standalone-preset.js URL
+	SwaggerStylesUrl string `json:"swaggerStylesUrl"` // swagger-ui.css URL
 }
 
 type TrustProxyOptions struct {
-	Enable    bool     `json:"enable"`    // 是否启用，默认为false
-	Proxies   []string `json:"proxies"`   // 代理是受信任代理 IP 地址或 CIDR 范围的列表
-	LinkLocal bool     `json:"linkLocal"` // 支持信任所有链路本地 IP 范围（例如 169.254.0.0/16、fe80::/10）
-	Loopback  bool     `json:"loopback"`  // 支持信任所有环回 IP 范围（例如 127.0.0.0/8、::1/128）
-	Private   bool     `json:"private"`   // 支持信任所有私有 IP 范围（例如 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、fc00::/7）
+	Enable    bool     `json:"enable"`    // Whether it is enabled; defaults to false
+	Proxies   []string `json:"proxies"`   // Proxies is the list of trusted proxy IP addresses or CIDR ranges
+	LinkLocal bool     `json:"linkLocal"` // Whether all link-local IP ranges are trusted (for example 169.254.0.0/16, fe80::/10)
+	Loopback  bool     `json:"loopback"`  // Whether all loopback IP ranges are trusted (for example 127.0.0.0/8, ::1/128)
+	Private   bool     `json:"private"`   // Whether all private IP ranges are trusted (for example 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7)
 }
 
-// 创建默认配置
-// 从配置环境读取各参数并填充默认值
-// @return @1 *options 默认配置项
+// defaultOptions creates the default configuration.
+//
+// It reads each parameter from the configuration environment and fills in the default values.
 func defaultOptions() *options {
 	opts := &options{
 		name:                         etc.Get(defaultNameKey, defaultName).String(),
@@ -168,227 +168,162 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithName 设置实例名称
-// @param name string 实例名称
-// @return @1 Option HTTP服务器配置函数
+// WithName sets the instance name.
 func WithName(name string) Option {
 	return func(o *options) { o.name = name }
 }
 
-// WithAddr 设置监听地址
-// @param addr string 监听地址
-// @return @1 Option HTTP服务器配置函数
+// WithAddr sets the listen address.
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
 }
 
-// WithCredentials 设置证书和秘钥
-// @param certFile string 证书文件
-// @param keyFile string 秘钥文件
-// @return @1 Option HTTP服务器配置函数
+// WithCredentials sets the certificate and key files.
 func WithCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.keyFile, o.certFile = keyFile, certFile }
 }
 
-// WithConsole 设置是否启用控制台输出
-// @param enable bool 是否启用控制台输出
-// @return @1 Option HTTP服务器配置函数
+// WithConsole sets whether console output is enabled.
 func WithConsole(enable bool) Option {
 	return func(o *options) { o.console = enable }
 }
 
-// WithRegistry 设置服务注册器
-// @param r registry.Registry 服务注册器
-// @return @1 Option HTTP服务器配置函数
+// WithRegistry sets the service registry.
 func WithRegistry(r registry.Registry) Option {
 	return func(o *options) { o.registry = r }
 }
 
-// WithTransporter 设置消息传输器
-// @param transporter transport.Transporter 消息传输器
-// @return @1 Option HTTP服务器配置函数
+// WithTransporter sets the message transporter.
 func WithTransporter(transporter transport.Transporter) Option {
 	return func(o *options) { o.transporter = transporter }
 }
 
-// WithCorsOptions 设置跨域配置
-// @param corsOpts CorsOptions 跨域配置
-// @return @1 Option HTTP服务器配置函数
+// WithCorsOptions sets the CORS configuration.
 func WithCorsOptions(corsOpts CorsOptions) Option {
 	return func(o *options) { o.corsOpts = corsOpts }
 }
 
-// WithSwagOptions 设置swagger配置
-// @param swagOpts SwagOptions swagger配置
-// @return @1 Option HTTP服务器配置函数
+// WithSwagOptions sets the Swagger configuration.
 func WithSwagOptions(swagOpts SwagOptions) Option {
 	return func(o *options) { o.swagOpts = swagOpts }
 }
 
-// WithProxyOptions 设置代理配置
-// @param proxyOpts ProxyOptions 代理配置
-// @return @1 Option HTTP服务器配置函数
+// WithProxyOptions sets the proxy configuration.
 func WithProxyOptions(proxyOpts ProxyOptions) Option {
 	return func(o *options) { o.proxyOpts = proxyOpts }
 }
 
-// WithMiddlewares 设置中间件
-// @param middlewares ...any 中间件
-// @return @1 Option HTTP服务器配置函数
+// WithMiddlewares sets the middlewares.
 func WithMiddlewares(middlewares ...any) Option {
 	return func(o *options) { o.middlewares = middlewares }
 }
 
-// WithStrictRouting 设置是否启用严格路由模式
-// @param enable bool 是否启用严格路由模式
-// @return @1 Option HTTP服务器配置函数
+// WithStrictRouting sets whether strict routing is enabled.
 func WithStrictRouting(enable bool) Option {
 	return func(o *options) { o.strictRouting = enable }
 }
 
-// WithCaseSensitive 设置是否区分路由大小写
-// @param enable bool 是否区分路由大小写
-// @return @1 Option HTTP服务器配置函数
+// WithCaseSensitive sets whether route matching is case sensitive.
 func WithCaseSensitive(enable bool) Option {
 	return func(o *options) { o.caseSensitive = enable }
 }
 
-// WithDisableHeadAutoRegister 设置是否禁用HEAD自动注册
-// @param disable bool 是否禁用HEAD自动注册
-// @return @1 Option HTTP服务器配置函数
+// WithDisableHeadAutoRegister sets whether automatic HEAD registration is disabled.
 func WithDisableHeadAutoRegister(disable bool) Option {
 	return func(o *options) { o.disableHeadAutoRegister = disable }
 }
 
-// WithImmutable 设置是否启用不可变路由
-// @param enable bool 是否启用不可变路由
-// @return @1 Option HTTP服务器配置函数
+// WithImmutable sets whether immutable routing is enabled.
 func WithImmutable(enable bool) Option {
 	return func(o *options) { o.immutable = enable }
 }
 
-// WithUnescapePath 设置是否unescape路径参数
-// @param enable bool 是否unescape路径参数
-// @return @1 Option HTTP服务器配置函数
+// WithUnescapePath sets whether path parameters are unescaped.
 func WithUnescapePath(enable bool) Option {
 	return func(o *options) { o.unescapePath = enable }
 }
 
-// WithBodyLimit 设置body大小
-// @param bodyLimit int body大小
-// @return @1 Option HTTP服务器配置函数
+// WithBodyLimit sets the body size limit.
 func WithBodyLimit(bodyLimit int) Option {
 	return func(o *options) { o.bodyLimit = bodyLimit }
 }
 
-// WithConcurrency 设置最大并发连接数
-// @param concurrency int 最大并发连接数
-// @return @1 Option HTTP服务器配置函数
+// WithConcurrency sets the maximum number of concurrent connections.
 func WithConcurrency(concurrency int) Option {
 	return func(o *options) { o.concurrency = concurrency }
 }
 
-// WithViews 设置视图引擎
-// @param views fiber.Views 视图引擎
-// @return @1 Option HTTP服务器配置函数
+// WithViews sets the view engine.
 func WithViews(views fiber.Views) Option {
 	return func(o *options) { o.views = views }
 }
 
-// WithViewsLayout 设置视图布局
-// @param layout string 视图布局
-// @return @1 Option HTTP服务器配置函数
+// WithViewsLayout sets the view layout.
 func WithViewsLayout(layout string) Option {
 	return func(o *options) { o.viewsLayout = layout }
 }
 
-// WithPassLocalsToViews 设置是否将上下文 locals 传递给视图引擎
-// @param enable bool 是否将上下文 locals 传递给视图引擎
-// @return @1 Option HTTP服务器配置函数
+// WithPassLocalsToViews sets whether context locals are passed to the view engine.
 func WithPassLocalsToViews(enable bool) Option {
 	return func(o *options) { o.passLocalsToViews = enable }
 }
 
-// WithReadBufferSize 设置读取缓冲区大小
-// @param size int 读取缓冲区大小
-// @return @1 Option HTTP服务器配置函数
+// WithReadBufferSize sets the read buffer size.
 func WithReadBufferSize(size int) Option {
 	return func(o *options) { o.readBufferSize = size }
 }
 
-// WithWriteBufferSize 设置写入缓冲区大小
-// @param size int 写入缓冲区大小
-// @return @1 Option HTTP服务器配置函数
+// WithWriteBufferSize sets the write buffer size.
 func WithWriteBufferSize(size int) Option {
 	return func(o *options) { o.writeBufferSize = size }
 }
 
-// WithErrorHandler 设置错误处理函数
-// @param errorHandler fiber.ErrorHandler 错误处理函数
-// @return @1 Option HTTP服务器配置函数
+// WithErrorHandler sets the error handler.
 func WithErrorHandler(errorHandler fiber.ErrorHandler) Option {
 	return func(o *options) { o.errorHandler = errorHandler }
 }
 
-// WithDisableKeepalive 设置是否禁用keepalive
-// @param disable bool 是否禁用keepalive
-// @return @1 Option HTTP服务器配置函数
+// WithDisableKeepalive sets whether keepalive is disabled.
 func WithDisableKeepalive(disable bool) Option {
 	return func(o *options) { o.disableKeepalive = disable }
 }
 
-// WithDisableDefaultDate 设置是否禁用默认日期
-// @param disable bool 是否禁用默认日期
-// @return @1 Option HTTP服务器配置函数
+// WithDisableDefaultDate sets whether the default date header is disabled.
 func WithDisableDefaultDate(disable bool) Option {
 	return func(o *options) { o.disableDefaultDate = disable }
 }
 
-// WithDisableDefaultContentType 设置是否禁用默认Content-Type
-// @param disable bool 是否禁用默认Content-Type
-// @return @1 Option HTTP服务器配置函数
+// WithDisableDefaultContentType sets whether the default Content-Type is disabled.
 func WithDisableDefaultContentType(disable bool) Option {
 	return func(o *options) { o.disableDefaultContentType = disable }
 }
 
-// WithDisableHeaderNormalizing 设置是否禁用默认头部归一化
-// @param disable bool 是否禁用默认头部归一化
-// @return @1 Option HTTP服务器配置函数
+// WithDisableHeaderNormalizing sets whether default header normalization is disabled.
 func WithDisableHeaderNormalizing(disable bool) Option {
 	return func(o *options) { o.disableHeaderNormalizing = disable }
 }
 
-// WithStreamRequestBody 设置是否流式请求体
-// @param enable bool 是否流式请求体
-// @return @1 Option HTTP服务器配置函数
+// WithStreamRequestBody sets whether the request body is streamed.
 func WithStreamRequestBody(enable bool) Option {
 	return func(o *options) { o.streamRequestBody = enable }
 }
 
-// WithDisablePreParseMultipartForm 设置是否禁用预解析multipart/form-data
-// @param disable bool 是否禁用预解析multipart/form-data
-// @return @1 Option HTTP服务器配置函数
+// WithDisablePreParseMultipartForm sets whether pre-parsing of multipart/form-data is disabled.
 func WithDisablePreParseMultipartForm(disable bool) Option {
 	return func(o *options) { o.disablePreParseMultipartForm = disable }
 }
 
-// WithReduceMemoryUsage 设置是否减少内存占用
-// @param enable bool 是否减少内存占用
-// @return @1 Option HTTP服务器配置函数
+// WithReduceMemoryUsage sets whether memory usage is reduced.
 func WithReduceMemoryUsage(enable bool) Option {
 	return func(o *options) { o.reduceMemoryUsage = enable }
 }
 
-// WithEnableIPValidation 设置是否启用IP验证
-// @param enable bool 是否启用IP验证
-// @return @1 Option HTTP服务器配置函数
+// WithEnableIPValidation sets whether IP validation is enabled.
 func WithEnableIPValidation(enable bool) Option {
 	return func(o *options) { o.enableIPValidation = enable }
 }
 
-// WithEnableSplittingOnParsers 设置是否在解析器上拆分请求体
-// @param enable bool 是否在解析器上拆分请求体
-// @return @1 Option HTTP服务器配置函数
+// WithEnableSplittingOnParsers sets whether splitting the request body on parsers is enabled.
 func WithEnableSplittingOnParsers(enable bool) Option {
 	return func(o *options) { o.enableSplittingOnParsers = enable }
 }

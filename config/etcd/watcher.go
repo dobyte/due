@@ -14,27 +14,24 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// 监听器
+// watcher watches the configuration changes of an etcd config source.
 type watcher struct {
-	ctx     context.Context                  // 上下文
-	cancel  context.CancelFunc               // 取消函数
-	source  *Source                          // 配置源
-	watcher clientv3.Watcher                 // etcd监听器
-	watchCh clientv3.WatchChan               // etcd监听通道
-	mu      sync.Mutex                       // 发送锁
-	chWatch chan []*config.Configuration     // 配置变更通道
-	rw      sync.RWMutex                     // 配置快照读写锁
-	configs map[string]*config.Configuration // 配置快照
-	stopped atomic.Bool                      // 是否已停止
-	wg      sync.WaitGroup                   // 等待协程退出
+	ctx     context.Context                  // Context
+	cancel  context.CancelFunc               // Cancel function
+	source  *Source                          // Config source
+	watcher clientv3.Watcher                 // etcd watcher
+	watchCh clientv3.WatchChan               // etcd watch channel
+	mu      sync.Mutex                       // Send lock
+	chWatch chan []*config.Configuration     // Configuration change channel
+	rw      sync.RWMutex                     // Read-write lock guarding the configuration snapshot
+	configs map[string]*config.Configuration // Configuration snapshot
+	stopped atomic.Bool                      // Whether the watcher has stopped
+	wg      sync.WaitGroup                   // Waits for the goroutine to exit
 }
 
-// 创建监听器
-// 以全量拉取结果作为初始快照，并从拉取时的版本号之后开始监听，避免丢失配置变更
-// @param ctx context.Context 上下文
-// @param s *Source 配置源
-// @param res *clientv3.GetResponse 初始快照拉取结果
-// @return @1 *watcher 监听器
+// newWatcher creates a watcher. It uses the full pull result as the initial
+// snapshot and starts watching after the revision recorded at pull time, so that
+// no configuration change is lost.
 func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watcher {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
@@ -44,13 +41,14 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 	w.configs = make(map[string]*config.Configuration)
 
 	if res != nil {
-		// 以全量拉取结果作为初始快照
+		// Use the full pull result as the initial snapshot.
 		for _, kv := range res.Kvs {
 			c := w.source.parseKV(kv.Key, kv.Value)
 			w.configs[c.FullPath] = c
 		}
 
-		// 从拉取时的版本号之后开始监听，避免丢失拉取与监听之间的配置变更
+		// Start watching after the revision of the pull so that changes between the
+		// pull and the watch are not lost.
 		w.watchCh = w.watcher.Watch(
 			w.ctx,
 			w.source.opts.path,
@@ -62,7 +60,9 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 	w.wg.Go(func() {
 		for {
 			if w.watchCh == nil {
-				// 初始快照拉取失败时，先全量重连并重建监听，避免以不完整的快照启动
+				// When the initial snapshot pull failed, reconnect with a full pull and
+				// rebuild the watch first so that the watcher does not start with an
+				// incomplete snapshot.
 				if !w.resync() {
 					return
 				}
@@ -84,10 +84,8 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 	return w
 }
 
-// Next 返回配置列表
-// 阻塞等待配置变更，监听被停止时返回错误
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Next returns the configuration list. It blocks until the configuration changes
+// and returns an error once the watcher has been stopped.
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
@@ -101,8 +99,9 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 }
 
-// 监听事件循环
-// 处理etcd监听事件：PUT更新配置快照，DELETE删除配置快照，然后广播最新配置
+// watchLoop is the watch event loop. It handles etcd watch events: PUT updates an
+// entry of the configuration snapshot and DELETE removes it; the latest
+// configuration is then broadcast.
 func (w *watcher) watchLoop() {
 	for {
 		select {
@@ -135,9 +134,10 @@ func (w *watcher) watchLoop() {
 	}
 }
 
-// 全量重连并重试
-// watch失效后重新拉取全量配置并重建监听，直到成功或监听被停止
-// @return @1 bool 是否重建成功
+// resync reconnects with a full pull and retries.
+//
+// After the watch has failed, resync re-pulls the full configuration and rebuilds
+// the watch until it succeeds or the watcher is stopped.
 func (w *watcher) resync() bool {
 	for {
 		err := xcall.Backoff(w.ctx, func(ctx context.Context, attempt int) (bool, error) {
@@ -182,8 +182,8 @@ func (w *watcher) resync() bool {
 	}
 }
 
-// 广播配置列表
-// 从配置快照中获取全量配置并通知监听器
+// broadcast broadcasts the configuration list. It reads the full configuration
+// from the snapshot and notifies the watcher.
 func (w *watcher) broadcast() {
 	w.rw.RLock()
 	configs := w.snapshot()
@@ -192,9 +192,9 @@ func (w *watcher) broadcast() {
 	w.notify(configs)
 }
 
-// 通知监听器配置列表已更新
-// 清空旧数据后非阻塞发送最新配置快照
-// @param configs []*config.Configuration 配置项列表
+// notify notifies the watcher that the configuration list has been updated. It
+// clears the stale data and then sends the latest configuration snapshot in a
+// non-blocking way.
 func (w *watcher) notify(configs []*config.Configuration) {
 	if w.stopped.Load() {
 		return
@@ -217,7 +217,7 @@ func (w *watcher) notify(configs []*config.Configuration) {
 	w.mu.Unlock()
 }
 
-// 清空所有旧数据，仅保留最新配置快照
+// flush clears every stale item and keeps only the latest configuration snapshot.
 func (w *watcher) flush() {
 	for {
 		select {
@@ -229,7 +229,7 @@ func (w *watcher) flush() {
 	}
 }
 
-// 返回当前全量配置列表
+// snapshot returns the current full configuration list.
 func (w *watcher) snapshot() []*config.Configuration {
 	configs := make([]*config.Configuration, 0, len(w.configs))
 	for _, c := range w.configs {
@@ -239,8 +239,7 @@ func (w *watcher) snapshot() []*config.Configuration {
 	return configs
 }
 
-// Stop 停止监听
-// @return @1 error 错误信息
+// Stop stops the watcher.
 func (w *watcher) Stop() error {
 	w.release()
 
@@ -251,8 +250,8 @@ func (w *watcher) Stop() error {
 	return nil
 }
 
-// 释放资源
-// 取消上下文并关闭配置变更通道
+// release releases the resources. It cancels the context and closes the
+// configuration change channel.
 func (w *watcher) release() {
 	if !w.stopped.CompareAndSwap(false, true) {
 		return

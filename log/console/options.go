@@ -12,11 +12,11 @@ const (
 	defaultFormatKey = "etc.log.console.format"
 )
 
-// Option 配置项
+// Option configures the syncer.
 type Option func(o *options)
 
 type options struct {
-	format Format // 输出格式
+	format Format // Output format
 }
 
 func defaultOptions() *options {
@@ -25,7 +25,7 @@ func defaultOptions() *options {
 	}
 }
 
-// WithFormat 设置输出格式
+// WithFormat sets the output format.
 func WithFormat(format Format) Option {
 	return func(o *options) { o.format = format }
 }

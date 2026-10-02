@@ -11,10 +11,16 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
+// Option configures a configurator.
 type Option func(o *options)
 
+// Encoder encodes content in the given format into bytes.
 type Encoder func(format string, content any) ([]byte, error)
+
+// Decoder decodes content in the given format.
 type Decoder func(format string, content []byte) (any, error)
+
+// Scanner scans content in the given format into dest.
 type Scanner func(format string, content []byte, dest any) error
 
 type options struct {
@@ -34,27 +40,27 @@ func defaultOptions() *options {
 	}
 }
 
-// WithContext 设置上下文
+// WithContext sets the base context of the configurator.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithSources 设置配置源
+// WithSources sets the config sources.
 func WithSources(sources ...Source) Option {
 	return func(o *options) { o.sources = sources[:] }
 }
 
-// WithEncoder 设置编码器
+// WithEncoder sets the encoder used when storing config content.
 func WithEncoder(encoder Encoder) Option {
 	return func(o *options) { o.encoder = encoder }
 }
 
-// WithDecoder 设置解码器
+// WithDecoder sets the decoder used when loading config content.
 func WithDecoder(decoder Decoder) Option {
 	return func(o *options) { o.decoder = decoder }
 }
 
-// 默认编码器
+// defaultEncoder is the default [Encoder]; it supports JSON, XML, YAML and TOML.
 func defaultEncoder(format string, content any) ([]byte, error) {
 	switch strings.ToLower(format) {
 	case json.Name:
@@ -70,7 +76,7 @@ func defaultEncoder(format string, content any) ([]byte, error) {
 	}
 }
 
-// 默认解码器
+// defaultDecoder is the default [Decoder]; it supports JSON, XML, YAML and TOML.
 func defaultDecoder(format string, content []byte) (any, error) {
 	switch strings.ToLower(format) {
 	case json.Name:
@@ -86,7 +92,7 @@ func defaultDecoder(format string, content []byte) (any, error) {
 	}
 }
 
-// 默认扫描器
+// defaultScanner is the default [Scanner]; it supports JSON, XML, YAML and TOML.
 func defaultScanner(format string, content []byte, dest any) error {
 	switch strings.ToLower(format) {
 	case json.Name:

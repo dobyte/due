@@ -21,23 +21,24 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// HookHandler 节点钩子处理函数
+// HookHandler is the node hook handler.
 type HookHandler func(proxy *Proxy)
 
-// 服务实体
+// serviceEntity is a service entity.
 type serviceEntity struct {
-	name     string // 服务名称;用于定位服务发现
-	desc     any    // 服务描述(grpc为desc描述对象; rpcx为服务路径)
-	provider any    // 服务提供者
+	name     string // Service name, used for service discovery
+	desc     any    // Service description (the desc object for grpc, the service path for rpcx)
+	provider any    // Service provider
 }
 
-// Node 节点服务器
+// Node is a node server.
 type Node struct {
 	component.Base
 	opts         *options
 	ctx          context.Context
 	cancel       context.CancelFunc
 	state        atomic.Int32
+	destroyed    atomic.Bool
 	evtPool      *sync.Pool
 	reqPool      *sync.Pool
 	tasker       *queue.Tasker
@@ -49,17 +50,18 @@ type Node struct {
 	linker       *node.Server
 	scheduler    *Scheduler
 	transporter  transport.Server
-	rw1          sync.RWMutex
-	wg           sync.WaitGroup
-	rw2          sync.RWMutex
+	rw           sync.RWMutex
 	hooks        map[cluster.Hook][]HookHandler
 	dispatchGoid atomic.Int64
+	counter      atomic.Int64
+	done         chan struct{}
+	wg           sync.WaitGroup
 }
 
-// NewNode 创建节点服务器
-// 创建后会初始化代理、任务器、路由器、事件触发器与调度器等内部组件，并处于关闭状态
-// @param opts ...Option 节点配置项
-// @return @1 *Node 节点服务器实例
+// NewNode creates a node server.
+//
+// It initializes internal components such as the proxy, tasker, router, trigger and scheduler, and
+// starts in the shut state.
 func NewNode(opts ...Option) *Node {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -70,7 +72,7 @@ func NewNode(opts ...Option) *Node {
 	n.opts = o
 	n.ctx, n.cancel = context.WithCancel(o.ctx)
 	n.proxy = newProxy(n)
-	n.tasker = queue.NewTasker(n.opts.taskQueueSize, n.opts.taskWriteTimeout)
+	n.tasker = queue.NewTasker(n.opts.taskQueueSize, n.opts.taskWriteTimeout, &sync.RWMutex{})
 	n.router = newRouter(n)
 	n.trigger = newTrigger(n)
 	n.scheduler = newScheduler(n)
@@ -80,18 +82,20 @@ func NewNode(opts ...Option) *Node {
 	n.state.Store(int32(cluster.Shut))
 	n.evtPool = &sync.Pool{New: func() any { return &event{node: n} }}
 	n.reqPool = &sync.Pool{New: func() any { return &request{node: n} }}
+	n.done = make(chan struct{})
 
 	return n
 }
 
-// Name 组件名称
-// @return @1 string 组件名称
+// Name returns the component name.
 func (n *Node) Name() string {
 	return n.opts.name
 }
 
-// Init 初始化节点
-// 校验实例ID、实例名称、编解码器、定位器与注册器等必要配置，缺失时直接终止进程
+// Init initializes the node.
+//
+// It validates the required configuration such as the instance ID, instance name, codec, locator
+// and registry, and terminates the process when any of them is missing.
 func (n *Node) Init() {
 	if n.opts.id == "" {
 		log.Fatal("instance id can not be empty")
@@ -116,8 +120,10 @@ func (n *Node) Init() {
 	n.runHookFunc(cluster.Init)
 }
 
-// Start 启动节点
-// 将状态置为工作中，随后依次启动连接服务器、传输服务器、注册服务实例并开启消息分发
+// Start starts the node.
+//
+// It sets the state to working, then starts the linker server and the transport server, registers
+// the service instances and begins dispatching messages.
 func (n *Node) Start() {
 	if !n.state.CompareAndSwap(int32(cluster.Shut), int32(cluster.Work)) {
 		return
@@ -131,15 +137,19 @@ func (n *Node) Start() {
 
 	n.proxy.watch()
 
-	go n.dispatch()
+	n.wg.Go(n.dispatch)
 
 	n.printInfo()
 
 	n.runHookFunc(cluster.Start)
 }
 
-// Close 关闭节点
-// 将状态置为挂起，停止接收新消息并等待任务、路由与事件队列中的存量消息处理完成
+// Close closes the node.
+//
+// It sets the state to hang, stops accepting new messages and waits for all in-flight asynchronous
+// tasks to finish. The messages already in the route and event queues are not waited for and the
+// dispatcher keeps processing them until Destroy; any residual messages not drained by Destroy are
+// discarded.
 func (n *Node) Close() {
 	if !n.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
 		if !n.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
@@ -149,35 +159,30 @@ func (n *Node) Close() {
 
 	n.refreshServiceInstances(cluster.Hang)
 
-	err1 := n.tasker.Done()
-	err2 := n.router.done()
-	err3 := n.trigger.done()
-
-	if err1 == nil {
-		n.tasker.Wait()
-	}
-
-	if err2 == nil {
-		n.router.wait()
-	}
-
-	if err3 == nil {
-		n.trigger.wait()
-	}
-
-	// 持写锁执行最终等待，与doAddWait中的wg.Add互斥，消除WaitGroup并发误用
-	n.rw1.Lock()
-	n.wg.Wait()
-	n.rw1.Unlock()
-
 	n.runHookFunc(cluster.Close)
+
+	if n.counter.Load() <= 0 {
+		if n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+			close(n.done)
+		}
+	}
+
+	<-n.done
 }
 
-// Destroy 销毁节点服务器
-// 将状态置为关闭，解注册服务实例、停止连接与传输服务器并释放内部组件资源
+// Destroy destroys the node server.
+//
+// It sets the state to shut, deregisters the service instances, stops the linker and transport
+// servers and releases the resources of the internal components. Destroy is idempotent and repeated
+// calls have no side effects.
 func (n *Node) Destroy() {
-	if !n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+	if !n.destroyed.CompareAndSwap(false, true) {
 		return
+	}
+
+	// Release the Close waiters that may be interrupted by a timeout.
+	if n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+		close(n.done)
 	}
 
 	n.deregisterServiceInstances()
@@ -192,19 +197,28 @@ func (n *Node) Destroy() {
 
 	n.trigger.close()
 
-	n.cancel()
+	n.wg.Wait()
+
+	n.tasker.Clean()
+
+	n.router.clean()
+
+	n.trigger.clean()
 
 	n.runHookFunc(cluster.Destroy)
+
+	n.cancel()
 }
 
-// Proxy 获取节点代理
-// @return @1 *Proxy 节点代理
+// Proxy returns the node proxy.
 func (n *Node) Proxy() *Proxy {
 	return n.proxy
 }
 
-// 分发处理消息
-// 循环监听任务器、路由器与事件触发器接收到的消息并逐一处理，全部队列关闭且排空后退出
+// dispatch dispatches and handles messages.
+//
+// It loops over the messages received from the tasker, the router and the trigger and handles them
+// one by one, exiting after all queues are closed and drained.
 func (n *Node) dispatch() {
 	n.dispatchGoid.Store(goid.Get())
 
@@ -242,8 +256,10 @@ func (n *Node) dispatch() {
 	}
 }
 
-// 启动连接服务器
-// 创建内部连接服务器用于接收网关下发的事件与消息，并以协程方式启动服务
+// startLinkerServer starts the linker server.
+//
+// It creates the internal linker server used to receive the events and messages delivered by the
+// gateways and starts the service in a goroutine.
 func (n *Node) startLinkerServer() {
 	linker, err := node.NewServer(&provider{node: n}, &node.ServerOptions{
 		Addr:   n.opts.addr,
@@ -260,15 +276,21 @@ func (n *Node) startLinkerServer() {
 	n.linker = linker
 }
 
-// 停止连接服务器
+// stopLinkerServer stops the linker server.
 func (n *Node) stopLinkerServer() {
+	if n.linker == nil {
+		return
+	}
+
 	if err := n.linker.Stop(); err != nil {
 		log.Errorf("linker server stop failed: %v", err)
 	}
 }
 
-// 启动传输服务器
-// 设置默认服务发现并注册服务提供者，无服务提供者时直接返回
+// startTransportServer starts the transport server.
+//
+// It sets the default discovery and registers the service providers, and returns immediately when
+// there is no service provider.
 func (n *Node) startTransportServer() {
 	if n.opts.transporter == nil {
 		return
@@ -300,7 +322,7 @@ func (n *Node) startTransportServer() {
 	}()
 }
 
-// 停止传输服务器
+// stopTransportServer stops the transport server.
 func (n *Node) stopTransportServer() {
 	if n.transporter == nil {
 		return
@@ -311,8 +333,10 @@ func (n *Node) stopTransportServer() {
 	}
 }
 
-// 注册服务实例
-// 收集路由与事件信息生成节点/Mesh服务实例并注册到注册中心
+// registerServiceInstances registers the service instances.
+//
+// It collects the route and event information to build the node and mesh service instances and
+// registers them to the registry.
 func (n *Node) registerServiceInstances() {
 	routes := make([]registry.Route, 0, len(n.router.routes))
 	events := make([]int, 0, len(n.trigger.events))
@@ -367,16 +391,19 @@ func (n *Node) registerServiceInstances() {
 	}
 }
 
-// 刷新服务实例状态
-// @param state ...cluster.State 待设置的服务实例状态；缺省时仅重新注册不更新状态
+// refreshServiceInstances refreshes the state of the service instances.
+//
+// The optional state is the new state of the service instances; when it is omitted the instances
+// are only re-registered without updating the state.
 func (n *Node) refreshServiceInstances(state ...cluster.State) {
 	if err := n.doRefreshServiceInstances(state...); err != nil {
 		log.Errorf("refresh cluster instances failed: %v", err)
 	}
 }
 
-// 解注册服务实例
-// 并行地对所有已注册实例执行解注册操作，并等待全部完成
+// deregisterServiceInstances deregisters the service instances.
+//
+// It deregisters all registered instances in parallel and waits for all of them to complete.
 func (n *Node) deregisterServiceInstances() {
 	eg, ctx := errgroup.WithContext(n.ctx)
 	for i := range n.instances {
@@ -393,9 +420,10 @@ func (n *Node) deregisterServiceInstances() {
 	}
 }
 
-// 执行注册操作
-// 并行地将所有服务实例注册到注册中心，等待全部注册完成
-// @return @1 error 存在实例注册失败时返回的错误
+// doRegisterServiceInstances performs the registration.
+//
+// It registers all service instances to the registry in parallel and waits for all of them to
+// complete. It reports an error when registering any instance fails.
 func (n *Node) doRegisterServiceInstances() error {
 	eg, ctx := errgroup.WithContext(n.ctx)
 
@@ -413,9 +441,10 @@ func (n *Node) doRegisterServiceInstances() error {
 	return eg.Wait()
 }
 
-// 执行刷新实例状态操作
-// @param state ...cluster.State 待设置的服务实例状态；缺省时仅重新注册不更新状态
-// @return @1 error 注册失败时返回的错误
+// doRefreshServiceInstances refreshes the state of the instances.
+//
+// The optional state is the new state of the service instances; when it is omitted the instances
+// are only re-registered without updating the state. It reports an error when registration fails.
 func (n *Node) doRefreshServiceInstances(state ...cluster.State) error {
 	if len(state) > 0 {
 		for _, instance := range n.instances {
@@ -426,16 +455,15 @@ func (n *Node) doRefreshServiceInstances(state ...cluster.State) error {
 	return n.doRegisterServiceInstances()
 }
 
-// 获取状态
-// @return @1 cluster.State 当前节点状态
+// getState returns the current node state.
 func (n *Node) getState() cluster.State {
 	return cluster.State(n.state.Load())
 }
 
-// 更新状态（仅能在Work或Busy状态间切换）
-// 更新成功后会同步刷新服务实例状态到注册中心
-// @param state cluster.State 目标状态，仅支持Work或Busy
-// @return @1 error 状态非法、切换失败或刷新实例失败时返回的错误
+// setState updates the state, which may only be switched between Work and Busy.
+//
+// On success it refreshes the state of the service instances to the registry. It reports an error
+// when the state is illegal, the switch fails or refreshing the instances fails.
 func (n *Node) setState(state cluster.State) error {
 	if state > cluster.Busy {
 		return errors.ErrIllegalOperation
@@ -457,17 +485,16 @@ func (n *Node) setState(state cluster.State) error {
 	}
 }
 
-// 是否已关闭
-// @return @1 bool 节点是否处于关闭状态
+// isShut reports whether the node is in the shut state.
 func (n *Node) isShut() bool {
 	return n.getState() == cluster.Shut
 }
 
-// 执行钩子函数
-// 触发指定钩子对应的全部监听器，并等待所有监听器执行完成
-// @param hook cluster.Hook 钩子类型
+// runHookFunc runs the hook functions.
+//
+// It triggers all listeners of the given hook and waits for all of them to complete.
 func (n *Node) runHookFunc(hook cluster.Hook) {
-	n.rw2.RLock()
+	n.rw.RLock()
 
 	if handlers, ok := n.hooks[hook]; ok {
 		wg := &sync.WaitGroup{}
@@ -481,38 +508,33 @@ func (n *Node) runHookFunc(hook cluster.Hook) {
 			})
 		}
 
-		n.rw2.RUnlock()
+		n.rw.RUnlock()
 
 		wg.Wait()
 	} else {
-		n.rw2.RUnlock()
+		n.rw.RUnlock()
 	}
 }
 
-// 添加钩子监听器
-// @param hook cluster.Hook 钩子类型
-// @param handler HookHandler 钩子处理函数
+// addHookListener adds a hook listener.
 func (n *Node) addHookListener(hook cluster.Hook, handler HookHandler) {
 	switch hook {
 	case cluster.Destroy:
-		n.rw2.Lock()
+		n.rw.Lock()
 		n.hooks[hook] = append(n.hooks[hook], handler)
-		n.rw2.Unlock()
+		n.rw.Unlock()
 	default:
 		if n.getState() == cluster.Shut {
-			n.rw2.Lock()
+			n.rw.Lock()
 			n.hooks[hook] = append(n.hooks[hook], handler)
-			n.rw2.Unlock()
+			n.rw.Unlock()
 		} else {
 			log.Warnf("server is working, can't add hook handler")
 		}
 	}
 }
 
-// 添加服务提供者
-// @param name string 服务名称
-// @param desc any 服务描述对象
-// @param provider any 服务提供者
+// addServiceProvider adds a service provider.
 func (n *Node) addServiceProvider(name string, desc, provider any) {
 	if n.getState() == cluster.Shut {
 		n.services = append(n.services, &serviceEntity{
@@ -525,60 +547,78 @@ func (n *Node) addServiceProvider(name string, desc, provider any) {
 	}
 }
 
-// 打印组件信息
-// 输出节点ID、名称、连接地址、编解码器、定位器、注册器等基础信息
+// printInfo prints the component information.
+//
+// It prints the basic information such as the node ID, name, link address, codec, locator and
+// registry.
 func (n *Node) printInfo() {
-	infos := make([]string, 0, 8)
-	infos = append(infos, fmt.Sprintf("ID: %s", n.opts.id))
-	infos = append(infos, fmt.Sprintf("Name: %s", n.Name()))
-	infos = append(infos, fmt.Sprintf("Link: %s", n.linker.ExposeAddr()))
-	infos = append(infos, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
-	infos = append(infos, fmt.Sprintf("Locator: %s", n.opts.locator.Name()))
-	infos = append(infos, fmt.Sprintf("Registry: %s", n.opts.registry.Name()))
+	rows := make([]string, 0, 8)
+	rows = append(rows, fmt.Sprintf("ID: %s", n.opts.id))
+	rows = append(rows, fmt.Sprintf("Name: %s", n.Name()))
+	rows = append(rows, fmt.Sprintf("Link: %s", n.linker.ExposeAddr()))
+	rows = append(rows, fmt.Sprintf("Codec: %s", n.opts.codec.Name()))
+	rows = append(rows, fmt.Sprintf("Locator: %s", n.opts.locator.Name()))
+	rows = append(rows, fmt.Sprintf("Registry: %s", n.opts.registry.Name()))
 
 	if n.opts.encryptor != nil {
-		infos = append(infos, fmt.Sprintf("Encryptor: %s", n.opts.encryptor.Name()))
+		rows = append(rows, fmt.Sprintf("Encryptor: %s", n.opts.encryptor.Name()))
 	} else {
-		infos = append(infos, "Encryptor: -")
+		rows = append(rows, "Encryptor: -")
 	}
 
 	if n.opts.transporter != nil {
-		infos = append(infos, fmt.Sprintf("Transporter: %s", n.opts.transporter.Name()))
+		rows = append(rows, fmt.Sprintf("Transporter: %s", n.opts.transporter.Name()))
 	} else {
-		infos = append(infos, "Transporter: -")
+		rows = append(rows, "Transporter: -")
 	}
 
-	info.PrintBoxInfo("Node", infos...)
+	info.Print("Node", rows...)
 }
 
-// 完成一次等待计数
-// 节点已关闭时无操作，否则执行等待组Done，用于跟踪后台任务的执行状态
+// doDoneWait completes one wait count.
+//
+// It does nothing when the node has been shut; otherwise it decrements the wait count and, when the
+// count reaches zero in the hang state, completes the node shutdown.
 func (n *Node) doDoneWait() bool {
-	if n == nil || n.getState() == cluster.Shut {
+	if n == nil {
 		return false
 	}
 
-	n.wg.Done()
+	state := n.getState()
+
+	if state == cluster.Shut {
+		return false
+	}
+
+	if n.counter.Add(-1) <= 0 && state == cluster.Hang {
+		if n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+			close(n.done)
+		} else {
+			return false
+		}
+	}
+
 	return true
 }
 
-// 增加一次等待计数
-// 仅在Shut（已关闭）状态下拒绝登记；Hang（关闭中）状态下仍允许登记，
-// 以保证Close等待队列排空期间，路由/事件处理器中投递的异步任务仍能被正常追踪
-// 通过wgMu读锁屏障保证wg.Add不与Close中的wg.Wait并发（WaitGroup误用）；
-// TryRLock在Close持写锁等待期间快速失败，避免登记方阻塞乃至与嵌套登记的任务形成死锁
-// @return @1 bool 是否成功登记计数
+// doAddWait adds one wait count.
+//
+// It only refuses to register in the shut state; registration is still allowed in the hang state so
+// that asynchronous tasks submitted from route and event handlers can still be tracked during the
+// Close wait. After registering, the state is re-checked and rolled back, avoiding a count that
+// nobody waits for when it races with the shutdown decision (Hang to Shut).
 func (n *Node) doAddWait() bool {
 	if n == nil || n.getState() == cluster.Shut {
 		return false
 	}
 
-	if !n.rw1.TryRLock() {
+	n.counter.Add(1)
+
+	if n.getState() == cluster.Shut {
+		n.counter.Add(-1)
+
 		return false
 	}
-
-	n.wg.Add(1)
-	n.rw1.RUnlock()
 
 	return true
 }

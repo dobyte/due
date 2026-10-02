@@ -15,9 +15,9 @@ const (
 	isOnlineResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B8
 )
 
-// EncodeIsOnlineReq 编码检测用户是否在线请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
+// EncodeIsOnlineReq encodes an is-online request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
 func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(isOnlineReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineReqBytes-def.SizeBytes))
@@ -30,9 +30,9 @@ func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) *buffer.Noco
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeIsOnlineReq 解码检测用户是否在线请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
+// DecodeIsOnlineReq decodes an is-online request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
 func DecodeIsOnlineReq(buf buffer.Buffer) (kind session.Kind, target int64, err error) {
 	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
@@ -46,9 +46,9 @@ func DecodeIsOnlineReq(buf buffer.Buffer) (kind session.Kind, target int64, err 
 	return
 }
 
-// EncodeIsOnlineRes 编码检测用户是否在线响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + online state}
+// EncodeIsOnlineRes encodes an is-online response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + online state}
 func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(isOnlineResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineResBytes-def.SizeBytes))
@@ -61,9 +61,9 @@ func EncodeIsOnlineRes(seq uint64, code uint16, isOnline bool) *buffer.NocopyBuf
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeIsOnlineRes 解码检测用户是否在线响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + online state}
+// DecodeIsOnlineRes decodes an is-online response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + online state}
 func DecodeIsOnlineRes(buf buffer.Buffer) (code uint16, isOnline bool, err error) {
 	if buf.Len() != def.CodeBytes+def.B8 {
 		err = errors.ErrInvalidMessage

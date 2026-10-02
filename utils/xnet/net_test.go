@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestIP2Long_ValidIPv4 验证合法的IPv4地址可正确往返转换
+// TestIP2Long_ValidIPv4 verifies that valid IPv4 addresses round-trip correctly.
 func TestIP2Long_ValidIPv4(t *testing.T) {
 	cases := []string{
 		"0.0.0.0",
@@ -21,11 +21,11 @@ func TestIP2Long_ValidIPv4(t *testing.T) {
 	}
 
 	if got := IP2Long("218.108.212.34"); got != 0xDA6CD422 {
-		t.Errorf("IP2Long(218.108.212.34) = %d, want %d", got, 0xDA6CD422)
+		t.Errorf("IP2Long(218.108.212.34) = %d, want %d", got, uint32(0xDA6CD422))
 	}
 }
 
-// TestIP2Long_Invalid 验证非法及非IPv4地址返回0
+// TestIP2Long_Invalid verifies that invalid and non-IPv4 addresses return 0.
 func TestIP2Long_Invalid(t *testing.T) {
 	cases := []string{
 		"invalid",

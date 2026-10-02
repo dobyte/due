@@ -13,7 +13,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 )
 
-// triggerRecord 记录一次事件触发的入参
+// triggerRecord records the arguments of one event trigger.
 type triggerRecord struct {
 	gid   string
 	cid   int64
@@ -21,7 +21,7 @@ type triggerRecord struct {
 	event cluster.Event
 }
 
-// mockProvider 捕获事件触发的测试服务提供者
+// mockProvider is a test service provider that captures event triggers.
 type mockProvider struct {
 	ch chan triggerRecord
 }
@@ -40,7 +40,7 @@ func (p *mockProvider) GetState() (cluster.State, error) { return cluster.Work, 
 
 func (p *mockProvider) SetState(state cluster.State) error { return nil }
 
-// listenFreeAddr 获取一个空闲的本地监听地址
+// listenFreeAddr returns an idle local listen address.
 func listenFreeAddr(t *testing.T) string {
 	t.Helper()
 
@@ -53,7 +53,7 @@ func listenFreeAddr(t *testing.T) string {
 	return listener.Addr().String()
 }
 
-// newTestNodeLinker 创建测试用的节点链接器
+// newTestNodeLinker creates a NodeLinker for tests.
 func newTestNodeLinker() *NodeLinker {
 	return NewNodeLinker(context.Background(), &Options{
 		ID:                  "test-gate",
@@ -94,8 +94,9 @@ func TestNodeLinkerTrigger(t *testing.T) {
 
 	linker := newTestNodeLinker()
 
-	// 同时注册一个可达节点与一个不可达节点：
-	// 不可达节点的触发失败不得阻塞调用方，也不得影响可达节点的事件投递
+	// Register a reachable node and an unreachable node at the same time: a failing trigger on
+	// the unreachable node must neither block the caller nor affect event delivery to the
+	// reachable node.
 	linker.dispatcher.ReplaceServices(
 		&registry.ServiceInstance{
 			ID:       "test-node",

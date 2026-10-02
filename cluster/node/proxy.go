@@ -15,18 +15,20 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// Proxy 代理
-// 提供节点服务器对外可见的完整功能API，包括网关/节点链接、路由、事件、消息推送与Actor管理等
+// Proxy is a proxy.
+//
+// It provides the complete API of a node server, including gateway/node links, routing, events,
+// message pushing and actor management.
 type Proxy struct {
-	node       *Node            // 节点服务器
-	gateLinker *link.GateLinker // 网关链接器
-	nodeLinker *link.NodeLinker // 节点链接器
+	node       *Node            // Node server
+	gateLinker *link.GateLinker // Gateway linker
+	nodeLinker *link.NodeLinker // Node linker
 }
 
-// 创建节点代理
-// 初始化网关链接器与节点链接器，底层复用Node的编解码器、定位器、注册器等配置
-// @param node *Node 节点服务器
-// @return @1 *Proxy 节点代理
+// newProxy creates a node proxy.
+//
+// It initializes the gateway linker and the node linker, reusing the codec, locator, registry and
+// other options of the node.
 func newProxy(node *Node) *Proxy {
 	return &Proxy{
 		node: node,
@@ -65,94 +67,76 @@ func newProxy(node *Node) *Proxy {
 	}
 }
 
-// GetID 获取当前节点ID
-// @return @1 string 当前节点ID
+// GetID returns the current node ID.
 func (p *Proxy) GetID() string {
 	return p.node.opts.id
 }
 
-// GetName 获取当前节点名称
-// @return @1 string 当前节点名称
+// GetName returns the current node name.
 func (p *Proxy) GetName() string {
 	return p.node.opts.name
 }
 
-// GetState 获取当前节点状态
-// @return @1 cluster.State 当前节点状态
+// GetState returns the current node state.
 func (p *Proxy) GetState() cluster.State {
 	return p.node.getState()
 }
 
-// SetState 设置当前节点状态
-// @param state cluster.State 目标状态
-// @return @1 error 状态设置失败时返回的错误
+// SetState sets the current node state. It returns the error reported while setting the state.
 func (p *Proxy) SetState(state cluster.State) error {
 	return p.node.setState(state)
 }
 
-// Router 路由器
-// @return @1 *Router 路由器
+// Router returns the router.
 func (p *Proxy) Router() *Router {
 	return p.node.router
 }
 
-// RouteGroup 路由组
-// @param groups ...func(group *RouterGroup) 路由组配置函数
-// @return @1 *RouterGroup 路由组
+// RouteGroup returns a route group configured by the given functions.
 func (p *Proxy) RouteGroup(groups ...func(group *RouterGroup)) *RouterGroup {
 	return p.node.router.Group(groups...)
 }
 
-// Trigger 事件触发器
-// @return @1 *Trigger 事件触发器
+// Trigger returns the event trigger.
 func (p *Proxy) Trigger() *Trigger {
 	return p.node.trigger
 }
 
-// AddRouteHandler 添加路由处理器
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
-// @param opts ...RouteOptions 路由选项
+// AddRouteHandler adds a route handler.
 func (p *Proxy) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
 	p.node.router.AddRouteHandler(route, handler, opts...)
 }
 
-// SetDefaultRouteHandler 设置默认路由处理器，所有未注册的路由均走默认路由处理器
-// @param handler RouteHandler 默认路由处理函数
+// SetDefaultRouteHandler sets the default route handler. Every unregistered route goes through the
+// default route handler.
 func (p *Proxy) SetDefaultRouteHandler(handler RouteHandler) {
 	p.node.router.SetDefaultRouteHandler(handler)
 }
 
-// AddEventHandler 添加事件处理器
-// @param event cluster.Event 事件类型
-// @param handler EventHandler 事件处理函数
+// AddEventHandler adds an event handler.
 func (p *Proxy) AddEventHandler(event cluster.Event, handler EventHandler) {
 	p.node.trigger.addEventHandler(event, handler)
 }
 
-// AddHookListener 添加钩子监听器
-// @param hook cluster.Hook 钩子类型
-// @param handler HookHandler 钩子处理函数
+// AddHookListener adds a hook listener.
 func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 	p.node.addHookListener(hook, handler)
 }
 
-// AddServiceProvider 添加服务提供者
-// @param name string 服务名称
-// @param desc any 服务描述对象
-// @param provider any 服务提供者
+// AddServiceProvider adds a service provider described by desc.
 func (p *Proxy) AddServiceProvider(name string, desc, provider any) {
 	p.node.addServiceProvider(name, desc, provider)
 }
 
-// NewMeshClient 新建微服务客户端
-// target参数可分为三种模式:
-// 服务直连模式: 	direct://127.0.0.1:8011
-// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
-// 服务发现模式: 	discovery://service_name
-// @param target string 微服务目标地址
-// @return @1 transport.Client 微服务客户端
-// @return @2 error 节点关闭或未配置消息传输器时返回的错误
+// NewMeshClient creates a new microservice client.
+//
+// target supports three modes:
+//
+//	service direct mode:    direct://127.0.0.1:8011
+//	service direct mode:    direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+//	service discovery mode: discovery://service_name
+//
+// It returns the error reported when the node is shut down or no message transporter is configured.
 func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -165,10 +149,7 @@ func (p *Proxy) NewMeshClient(target string) (transport.Client, error) {
 	return p.node.opts.transporter.NewClient(target)
 }
 
-// HasGate 检测是否存在某个网关
-// @param gid string 网关ID
-// @return @1 bool 网关是否存在
-// @return @2 error 节点关闭时返回的错误
+// HasGate reports whether the given gateway exists. It returns an error when the node is shut down.
 func (p *Proxy) HasGate(gid string) (bool, error) {
 	if p.node.isShut() {
 		return false, errors.ErrNodeShutdown
@@ -177,13 +158,9 @@ func (p *Proxy) HasGate(gid string) (bool, error) {
 	}
 }
 
-// AskGate 检测用户是否在给定的网关上
-// @param ctx context.Context 上下文
-// @param gid string 网关ID
-// @param uid int64 用户ID
-// @return @1 string 用户实际所在的网关ID
-// @return @2 bool 用户是否在给定的网关上
-// @return @3 error 节点关闭时返回的错误
+// AskGate reports whether the user is on the given gateway. It returns the gateway ID the user
+// actually resides on, whether the user is on the given gateway, and an error when the node is shut
+// down.
 func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, bool, error) {
 	if p.node.isShut() {
 		return "", false, errors.ErrNodeShutdown
@@ -192,11 +169,8 @@ func (p *Proxy) AskGate(ctx context.Context, gid string, uid int64) (string, boo
 	}
 }
 
-// LocateGate 定位用户所在网关
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @return @1 string 用户所在的网关ID
-// @return @2 error 节点关闭时返回的错误
+// LocateGate locates the gateway the user resides on. It returns the gateway ID and an error when
+// the node is shut down.
 func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 	if p.node.isShut() {
 		return "", errors.ErrNodeShutdown
@@ -205,12 +179,8 @@ func (p *Proxy) LocateGate(ctx context.Context, uid int64) (string, error) {
 	}
 }
 
-// BindGate 绑定网关
-// @param ctx context.Context 上下文
-// @param gid string 网关ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID，绑定后用户与该连接关联
-// @return @1 error 节点关闭或绑定失败时返回的错误
+// BindGate binds the gateway. Once bound, the user is associated with the connection. It returns the
+// error reported when the node is shut down or the binding fails.
 func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -219,10 +189,8 @@ func (p *Proxy) BindGate(ctx context.Context, gid string, cid, uid int64) error 
 	}
 }
 
-// UnbindGate 解绑网关
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @return @1 error 节点关闭或解绑失败时返回的错误
+// UnbindGate unbinds the gateway. It returns the error reported when the node is shut down or the
+// unbinding fails.
 func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -231,11 +199,8 @@ func (p *Proxy) UnbindGate(ctx context.Context, uid int64) error {
 	}
 }
 
-// FetchGateList 拉取网关列表
-// @param ctx context.Context 上下文
-// @param states ...cluster.State 状态过滤条件
-// @return @1 []*registry.ServiceInstance 网关服务实例列表
-// @return @2 error 节点关闭时返回的错误
+// FetchGateList fetches the gateway list filtered by states. It returns the gateway service
+// instances and an error when the node is shut down.
 func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -244,21 +209,13 @@ func (p *Proxy) FetchGateList(ctx context.Context, states ...cluster.State) ([]*
 	}
 }
 
-// HasNode 检测是否存在某个节点
-// @param nid string 节点ID
-// @return @1 bool 节点是否存在
+// HasNode reports whether the given node exists.
 func (p *Proxy) HasNode(nid string) bool {
 	return p.nodeLinker.HasNode(nid)
 }
 
-// AskNode 检测用户是否在给定的节点上
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @param name string 节点名称
-// @param nid string 节点ID
-// @return @1 string 用户实际所在的节点ID
-// @return @2 bool 用户是否在给定的节点上
-// @return @3 error 节点关闭时返回的错误
+// AskNode reports whether the user is on the given node. It returns the node ID the user actually
+// resides on, whether the user is on the given node, and an error when the node is shut down.
 func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (string, bool, error) {
 	if p.node.isShut() {
 		return "", false, errors.ErrNodeShutdown
@@ -267,12 +224,8 @@ func (p *Proxy) AskNode(ctx context.Context, uid int64, name, nid string) (strin
 	}
 }
 
-// LocateNode 定位用户所在节点
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @param name string 节点名称
-// @return @1 string 用户所在的节点ID
-// @return @2 error 节点关闭时返回的错误
+// LocateNode locates the node the user resides on. It returns the node ID and an error when the node
+// is shut down.
 func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string, error) {
 	if p.node.isShut() {
 		return "", errors.ErrNodeShutdown
@@ -281,11 +234,8 @@ func (p *Proxy) LocateNode(ctx context.Context, uid int64, name string) (string,
 	}
 }
 
-// LocateNodes 定位用户所在节点列表
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @return @1 map[string]string 用户绑定的节点名称到节点ID的映射
-// @return @2 error 节点关闭时返回的错误
+// LocateNodes locates the nodes the user resides on. It returns a map from node name to node ID the
+// user is bound to, and an error when the node is shut down.
 func (p *Proxy) LocateNodes(ctx context.Context, uid int64) (map[string]string, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -294,13 +244,12 @@ func (p *Proxy) LocateNodes(ctx context.Context, uid int64) (map[string]string, 
 	}
 }
 
-// BindNode 绑定节点
-// 单个用户可以绑定到多个节点服务器上，相同名称的节点服务器只能绑定一个，多次绑定会到相同名称的节点服务器会覆盖之前的绑定。
-// 绑定操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @param nameAndNID ...string 名称与节点ID对；缺省时使用当前节点
-// @return @1 error 节点关闭或绑定失败时返回的错误
+// BindNode binds the node.
+//
+// A user can be bound to multiple node servers, but only one node server per name; binding to a node
+// server with the same name again overrides the previous binding. The binding is synchronized to the
+// gateway servers and other related node servers through publish and subscribe. It returns the error
+// reported when the node is shut down or the binding fails.
 func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -315,13 +264,12 @@ func (p *Proxy) BindNode(ctx context.Context, uid int64, nameAndNID ...string) e
 	}
 }
 
-// UnbindNode 解绑节点
-// 解绑时会对对应名称的节点服务器进行解绑，解绑时会对解绑节点ID进行校验，不匹配则解绑失败。
-// 解绑操作会通过发布订阅方式同步到网关服务器和其他相关节点服务器上。
-// @param ctx context.Context 上下文
-// @param uid int64 用户ID
-// @param nameAndNID ...string 名称与节点ID对；缺省时使用当前节点
-// @return @1 error 节点关闭或解绑失败时返回的错误
+// UnbindNode unbinds the node.
+//
+// It unbinds the node server with the corresponding name and verifies the node ID, so the unbinding
+// fails on a mismatch. The unbinding is synchronized to the gateway servers and other related node
+// servers through publish and subscribe. It returns the error reported when the node is shut down or
+// the unbinding fails.
 func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -336,11 +284,8 @@ func (p *Proxy) UnbindNode(ctx context.Context, uid int64, nameAndNID ...string)
 	}
 }
 
-// FetchNodeList 拉取节点列表
-// @param ctx context.Context 上下文
-// @param states ...cluster.State 状态过滤条件
-// @return @1 []*registry.ServiceInstance 节点服务实例列表
-// @return @2 error 节点关闭时返回的错误
+// FetchNodeList fetches the node list filtered by states. It returns the node service instances and
+// an error when the node is shut down.
 func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*registry.ServiceInstance, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -349,11 +294,8 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	}
 }
 
-// BindActor 绑定Actor
-// @param uid int64 用户ID
-// @param kind string Actor类型
-// @param id string Actor编号
-// @return @1 error 节点关闭或绑定失败时返回的错误
+// BindActor binds an actor. It returns the error reported when the node is shut down or the binding
+// fails.
 func (p *Proxy) BindActor(uid int64, kind, id string) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -362,10 +304,8 @@ func (p *Proxy) BindActor(uid int64, kind, id string) error {
 	}
 }
 
-// UnbindActor 解绑Actor
-// @param uid int64 用户ID
-// @param kind string Actor类型
-// @return @1 error 节点关闭或解绑失败时返回的错误
+// UnbindActor unbinds an actor. It returns the error reported when the node is shut down or the
+// unbinding fails.
 func (p *Proxy) UnbindActor(uid int64, kind string) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -374,10 +314,8 @@ func (p *Proxy) UnbindActor(uid int64, kind string) error {
 	}
 }
 
-// PackMessage 打包消息
-// @param message *cluster.Message 待打包的消息
-// @return @1 []byte 打包后的消息字节
-// @return @2 error 打包失败时返回的错误
+// PackMessage packs a message. It returns the packed bytes and the error reported when packing
+// fails.
 func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
 	buf, err := p.gateLinker.PackMessage(message, true)
 	if err != nil {
@@ -387,19 +325,14 @@ func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// PackBuffer 打包Buffer
-// @param message any 待打包的消息内容
-// @return @1 []byte 打包后的消息字节
-// @return @2 error 打包失败时返回的错误
+// PackBuffer packs the given message content. It returns the packed bytes and the error reported
+// when packing fails.
 func (p *Proxy) PackBuffer(message any) ([]byte, error) {
 	return p.gateLinker.PackBuffer(message, true)
 }
 
-// GetIP 获取客户端IP
-// @param ctx context.Context 上下文
-// @param args *cluster.GetIPArgs 查询参数
-// @return @1 string 客户端IP
-// @return @2 error 节点关闭或查询失败时返回的错误
+// GetIP returns the client IP. It returns the error reported when the node is shut down or the query
+// fails.
 func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, error) {
 	if p.node.isShut() {
 		return "", errors.ErrNodeShutdown
@@ -408,11 +341,8 @@ func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, err
 	}
 }
 
-// Stat 统计会话总数
-// @param ctx context.Context 上下文
-// @param kind session.Kind 会话类型
-// @return @1 int64 会话总数
-// @return @2 error 节点关闭时返回的错误
+// Stat counts the sessions of the given kind. It returns the session count and an error when the
+// node is shut down.
 func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 	if p.node.isShut() {
 		return 0, errors.ErrNodeShutdown
@@ -421,11 +351,8 @@ func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 	}
 }
 
-// IsOnline 检测是否在线
-// @param ctx context.Context 上下文
-// @param args *cluster.IsOnlineArgs 查询参数
-// @return @1 bool 是否在线
-// @return @2 error 节点关闭或查询失败时返回的错误
+// IsOnline reports whether the target is online. It returns the error reported when the node is shut
+// down or the query fails.
 func (p *Proxy) IsOnline(ctx context.Context, args *cluster.IsOnlineArgs) (bool, error) {
 	if p.node.isShut() {
 		return false, errors.ErrNodeShutdown
@@ -434,10 +361,8 @@ func (p *Proxy) IsOnline(ctx context.Context, args *cluster.IsOnlineArgs) (bool,
 	}
 }
 
-// Disconnect 断开连接
-// @param ctx context.Context 上下文
-// @param args *cluster.DisconnectArgs 断开参数
-// @return @1 error 节点关闭或断开失败时返回的错误
+// Disconnect disconnects a connection. It returns the error reported when the node is shut down or
+// the disconnection fails.
 func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -446,11 +371,10 @@ func (p *Proxy) Disconnect(ctx context.Context, args *cluster.DisconnectArgs) er
 	}
 }
 
-// Push 推送消息
-// args.Ack设为true时可获得消息真实发送的情况
-// @param ctx context.Context 上下文
-// @param args *cluster.PushArgs 推送参数
-// @return @1 error 节点关闭或推送失败时返回的错误
+// Push pushes a message.
+//
+// Set args.Ack to true to get the actual sending result of the message. It returns the error
+// reported when the node is shut down or the push fails.
 func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -459,12 +383,10 @@ func (p *Proxy) Push(ctx context.Context, args *cluster.PushArgs) error {
 	}
 }
 
-// Multicast 推送组播消息
-// 要想获得推送成功的目标数，需将args.Ack设为true
-// @param ctx context.Context 上下文
-// @param args *cluster.MulticastArgs 组播参数
-// @return @1 int64 组播成功的目标数
-// @return @2 error 节点关闭或推送失败时返回的错误
+// Multicast pushes a multicast message.
+//
+// Set args.Ack to true to get the number of targets the push succeeded on. It returns that number
+// and the error reported when the node is shut down or the push fails.
 func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int64, error) {
 	if p.node.isShut() {
 		return 0, errors.ErrNodeShutdown
@@ -473,12 +395,10 @@ func (p *Proxy) Multicast(ctx context.Context, args *cluster.MulticastArgs) (int
 	}
 }
 
-// Broadcast 推送广播消息
-// 要想获得推送成功的目标数，需将args.Ack设为true
-// @param ctx context.Context 上下文
-// @param args *cluster.BroadcastArgs 广播参数
-// @return @1 int64 广播成功的目标数
-// @return @2 error 节点关闭或推送失败时返回的错误
+// Broadcast pushes a broadcast message.
+//
+// Set args.Ack to true to get the number of targets the push succeeded on. It returns that number
+// and the error reported when the node is shut down or the push fails.
 func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int64, error) {
 	if p.node.isShut() {
 		return 0, errors.ErrNodeShutdown
@@ -487,12 +407,10 @@ func (p *Proxy) Broadcast(ctx context.Context, args *cluster.BroadcastArgs) (int
 	}
 }
 
-// Publish 发布消息
-// 要想获得推送成功的目标数，需将args.Ack设为true
-// @param ctx context.Context 上下文
-// @param args *cluster.PublishArgs 发布参数
-// @return @1 int64 发布成功的目标数
-// @return @2 error 节点关闭或发布失败时返回的错误
+// Publish publishes a message.
+//
+// Set args.Ack to true to get the number of targets the publish succeeded on. It returns that number
+// and the error reported when the node is shut down or the publish fails.
 func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) (int64, error) {
 	if p.node.isShut() {
 		return 0, errors.ErrNodeShutdown
@@ -501,10 +419,8 @@ func (p *Proxy) Publish(ctx context.Context, args *cluster.PublishArgs) (int64, 
 	}
 }
 
-// Subscribe 订阅频道
-// @param ctx context.Context 上下文
-// @param args *cluster.SubscribeArgs 订阅参数
-// @return @1 error 节点关闭或订阅失败时返回的错误
+// Subscribe subscribes to a channel. It returns the error reported when the node is shut down or the
+// subscription fails.
 func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -513,10 +429,8 @@ func (p *Proxy) Subscribe(ctx context.Context, args *cluster.SubscribeArgs) erro
 	}
 }
 
-// Unsubscribe 取消订阅频道
-// @param ctx context.Context 上下文
-// @param args *cluster.UnsubscribeArgs 取消订阅参数
-// @return @1 error 节点关闭或取消订阅失败时返回的错误
+// Unsubscribe unsubscribes from a channel. It returns the error reported when the node is shut down
+// or the unsubscription fails.
 func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -525,10 +439,8 @@ func (p *Proxy) Unsubscribe(ctx context.Context, args *cluster.UnsubscribeArgs) 
 	}
 }
 
-// Deliver 投递消息给节点处理
-// @param ctx context.Context 上下文
-// @param args *cluster.DeliverArgs 投递参数
-// @return @1 error 节点关闭、目标为当前节点或投递失败时返回的错误
+// Deliver delivers a message to a node for handling. It returns the error reported when the node is
+// shut down, the target is the current node or the delivery fails.
 func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -546,10 +458,14 @@ func (p *Proxy) Deliver(ctx context.Context, args *cluster.DeliverArgs) error {
 	})
 }
 
-// Invoke 调用函数（线程安全）
-// @param f func() 待调用的函数
-// @param wait ...bool 是否等待调用完成，默认不等待
-// @return @1 error 节点关闭或任务入队失败时返回的错误
+// Invoke calls a function in a thread-safe way.
+//
+// A synchronous call (wait=true) issued from within the node dispatch goroutine executes the
+// function directly, avoiding a deadlock while waiting for the queue it runs in. Do not wait
+// synchronously across queues in a dispatch chain (for example, a node task synchronously waiting
+// for an actor task to finish while the actor task is synchronously waiting for the node task); the
+// mutual wait forms a cross-queue circular wait and deadlocks. It returns the error reported when
+// the node is shut down or the task fails to be enqueued.
 func (p *Proxy) Invoke(f func(), wait ...bool) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -576,11 +492,8 @@ func (p *Proxy) Invoke(f func(), wait ...bool) error {
 	return nil
 }
 
-// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-// @param d time.Duration 延迟时长
-// @param f func() 待调用的函数
-// @return @1 *Timer 定时器，可通过Stop取消
-// @return @2 error 节点关闭时返回的错误
+// AfterFunc schedules a delayed call and is used the same way as [time.AfterFunc]. It returns a
+// timer that can be cancelled with Stop, or an error when the node is shut down.
 func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -603,12 +516,11 @@ func (p *Proxy) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	return &Timer{node: p.node, timer: timer}, nil
 }
 
-// AfterInvoke 延迟调用（线程安全）
-// 延迟后通过任务队列串行执行函数，保证线程安全
-// @param d time.Duration 延迟时长
-// @param f func() 待调用的函数
-// @return @1 *Timer 定时器，可通过Stop取消
-// @return @2 error 节点关闭时返回的错误
+// AfterInvoke schedules a thread-safe delayed call.
+//
+// The function is executed serially through the task queue after the delay, which guarantees thread
+// safety. It returns a timer that can be cancelled with Stop, or an error when the node is shut
+// down.
 func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -636,11 +548,8 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	return &Timer{node: p.node, timer: timer}, nil
 }
 
-// Spawn 衍生出一个新的Actor
-// @param creator Creator Actor处理器创建函数
-// @param opts ...ActorOption Actor配置项
-// @return @1 *Actor 衍生出的Actor实例
-// @return @2 error 节点关闭或创建失败时返回的错误
+// Spawn creates a new actor. It returns the error reported when the node is shut down or the actor
+// fails to be created.
 func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	if p.node.isShut() {
 		return nil, errors.ErrNodeShutdown
@@ -649,10 +558,8 @@ func (p *Proxy) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	}
 }
 
-// Kill 杀死存在的一个Actor
-// @param kind string Actor类型
-// @param id string Actor编号
-// @return @1 bool 是否成功杀死，节点关闭或Actor不存在时返回false
+// Kill kills an existing actor. It reports whether the actor was killed successfully, and returns
+// false when the node is shut down or the actor does not exist.
 func (p *Proxy) Kill(kind, id string) bool {
 	if p.node.isShut() {
 		return false
@@ -661,17 +568,15 @@ func (p *Proxy) Kill(kind, id string) bool {
 	}
 }
 
-// Actor 获取Actor
-// @param kind string Actor类型
-// @param id string Actor编号
-// @return @1 *Actor Actor实例
-// @return @2 bool Actor是否存在
+// Actor returns an actor and whether it exists.
 func (p *Proxy) Actor(kind, id string) (*Actor, bool) {
 	return p.node.scheduler.load(kind, id)
 }
 
-// 开始监听
-// 监听用户定位与集群实例变化，网关与节点链接器均订阅相关变更
+// watch starts watching.
+//
+// It watches user location and cluster instance changes; both the gateway linker and the node linker
+// subscribe to the related changes.
 func (p *Proxy) watch() {
 	p.gateLinker.WatchUserLocate()
 

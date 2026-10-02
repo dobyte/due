@@ -1,10 +1,7 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/13 12:32 上午
- * @Desc: TODO
- */
-
+// Package etcd provides an etcd-backed implementation of service registry and discovery.
+//
+// It supports registering and deregistering service instances, watching the instance changes of a
+// service, and querying service instances.
 package etcd
 
 import (
@@ -19,23 +16,23 @@ const name = "etcd"
 
 var _ registry.Registry = &Registry{}
 
-// Registry 服务注册发现组件
-// 基于 etcd 实现服务注册与发现，支持注册/解注册、监听服务实例变化及查询服务实例
+// Registry is a service registry and discovery component.
+//
+// It is backed by etcd and supports registering and deregistering service instances, watching the
+// instance changes of a service, and querying service instances.
 type Registry struct {
-	err        error              // 初始化错误（内建客户端创建失败时记录）
-	opts       *options           // 配置项
-	builtin    bool               // 是否使用内建客户端
-	ctx        context.Context    // 组件根上下文，保活/监听协程均派生自它，确保随组件销毁联动终止
-	cancel     context.CancelFunc // 组件根上下文取消函数
-	mu1        sync.Mutex         // 保护 watchers 注册表
-	watchers   sync.Map           // 服务监听管理器注册表
-	mu2        sync.Mutex         // 保护 registrars 注册表
-	registrars sync.Map           // 服务注册器注册表
+	err        error              // Initialization error, recorded when the built-in client fails to be created
+	opts       *options           // Configuration options
+	builtin    bool               // Whether the built-in client is used
+	ctx        context.Context    // Component root context; keepalive and watch goroutines derive from it and terminate with the component
+	cancel     context.CancelFunc // Cancel function of the component root context
+	mu1        sync.Mutex         // Guards the watchers registry
+	watchers   sync.Map           // Registry of service watch managers
+	mu2        sync.Mutex         // Guards the registrars registry
+	registrars sync.Map           // Registry of service registrars
 }
 
-// NewRegistry 创建服务注册发现组件
-// @param opts ...Option 服务注册发现配置项
-// @return @1 *Registry 服务注册发现组件实例
+// NewRegistry returns a new service registry and discovery component.
 func NewRegistry(opts ...Option) *Registry {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -59,12 +56,12 @@ func NewRegistry(opts ...Option) *Registry {
 	return r
 }
 
-// Name 获取服务注册发现组件名
+// Name returns the name of the service registry and discovery component.
 func (r *Registry) Name() string {
 	return name
 }
 
-// Register 注册服务实例
+// Register registers a service instance.
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -73,10 +70,10 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
 }
 
-// 构建服务注册器
-// 同一实例ID对应的注册器在注册表中复用，避免重复创建导致保活流错乱
-// @param insID string 服务实例ID
-// @return @1 *registrar 服务注册器实例
+// doBuildRegistrar returns the registrar for insID.
+//
+// The registrar of an instance ID is reused from the registry, so that recreating it does not
+// interleave the keepalive streams.
 func (r *Registry) doBuildRegistrar(insID string) *registrar {
 	if v, ok := r.registrars.Load(insID); ok {
 		return v.(*registrar)
@@ -96,7 +93,7 @@ func (r *Registry) doBuildRegistrar(insID string) *registrar {
 	return reg
 }
 
-// Deregister 解注册服务实例
+// Deregister deregisters a service instance.
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -109,7 +106,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
-// Watch 监听相同服务名的服务实例变化
+// Watch watches the instance changes of the service with the given name.
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -123,12 +120,10 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	return mgr.fork()
 }
 
-// 构建服务监听管理器
-// 同一服务名的监听管理器在注册表中复用；仅当注册表中不存在或已停止时才重建
-// @param ctx context.Context 上下文
-// @param serviceName string 服务名称
-// @return @1 *watcherMgr 服务监听管理器实例
-// @return @2 error 构建失败时返回的错误
+// doBuildWatcherMgr returns the watch manager for serviceName.
+//
+// The watch manager of a service name is reused from the registry and is only rebuilt when it is
+// missing or has been stopped.
 func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*watcherMgr, error) {
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
 		return mgr, nil
@@ -153,9 +148,7 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 	}
 }
 
-// loadWatcherMgr 加载服务监听管理器
-// @param serviceName string 服务名称
-// @return @1 *watcherMgr 服务监听管理器实例
+// loadWatcherMgr loads the watch manager for serviceName.
 func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
@@ -166,12 +159,10 @@ func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	return nil
 }
 
-// Services 获取服务实例列表
-// watch 链路健康时返回缓存数据，否则回源 etcd 实时查询，避免提供过期数据
-// @param ctx context.Context 上下文
-// @param serviceName string 服务名称
-// @return @1 []*registry.ServiceInstance 服务实例列表
-// @return @2 error 获取失败时返回的错误
+// Services returns the instances of the service with the given name.
+//
+// It returns cached data while the watch link is healthy and otherwise queries etcd directly, so
+// that stale data is not served.
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -188,15 +179,17 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	return r.services(ctx, serviceName)
 }
 
-// Close 关闭服务注册发现
-// 停止全部服务注册器与监听管理器并释放资源；使用内建客户端时一并关闭客户端
-// @return @1 error 关闭失败时返回的错误
+// Close closes service registry and discovery.
+//
+// It stops every service registrar and watch manager and releases their resources; the client is
+// closed as well when it is the built-in one.
 func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
 	}
 
-	// 先取消组件根上下文，联动终止所有派生的保活/监听协程
+	// Cancel the component root context first so that every derived keepalive and watch goroutine
+	// terminates with the component.
 	r.cancel()
 
 	r.registrars.Range(func(key, value any) bool {
@@ -216,7 +209,7 @@ func (r *Registry) Close() error {
 	return nil
 }
 
-// 获取服务实例列表
+// services returns the instances of the service with the given name.
 func (r *Registry) services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	res, err := r.opts.client.Get(ctx, buildPrefixKey(r.opts.namespace, serviceName), clientv3.WithPrefix())
 	if err != nil {

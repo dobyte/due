@@ -9,18 +9,13 @@ import (
 	"github.com/dobyte/due/v2/packet"
 )
 
-// 服务提供者
+// provider is a service provider.
 type provider struct {
 	node *Node
 }
 
-// Trigger 触发事件
-// @param ctx context.Context 上下文
-// @param gid string 网关ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @param event cluster.Event 事件类型
-// @return @1 error 节点已关闭时返回ErrNodeShutdown，否则为触发错误
+// Trigger triggers an event for the given gateway ID, connection ID, user ID and event type. It
+// returns [errors.ErrNodeShutdown] when the node has been shut down, otherwise the trigger error.
 func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, event cluster.Event) error {
 	if p.node.isShut() {
 		return errors.ErrNodeShutdown
@@ -29,14 +24,9 @@ func (p *provider) Trigger(ctx context.Context, gid string, cid, uid int64, even
 	}
 }
 
-// Deliver 投递消息
-// @param ctx context.Context 上下文
-// @param gid string 网关ID
-// @param nid string 节点ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 error 投递失败时返回的错误
+// Deliver delivers a message buffer to the given gateway, node, connection and user. It returns the
+// error reported when the delivery fails, and [errors.ErrNodeShutdown] when the node has been shut
+// down.
 func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64, buf buffer.Buffer) error {
 	if p.node.isShut() {
 		buf.Release()
@@ -75,16 +65,12 @@ func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64,
 	return p.node.router.deliver(gid, nid, "", cid, uid, seq, route, message)
 }
 
-// GetState 获取状态
-// @return @1 cluster.State 当前节点状态
-// @return @2 error 通常返回nil
+// GetState returns the current node state. The error is always nil.
 func (p *provider) GetState() (cluster.State, error) {
 	return p.node.getState(), nil
 }
 
-// SetState 设置状态
-// @param state cluster.State 目标状态
-// @return @1 error 状态设置失败时返回的错误
+// SetState sets the node state. It returns the error reported while setting the state.
 func (p *provider) SetState(state cluster.State) error {
 	return p.node.setState(state)
 }

@@ -9,32 +9,32 @@ import (
 )
 
 type Provider interface {
-	// Bind 绑定用户与网关间的关系
+	// Bind binds the relationship between the user and the gate.
 	Bind(ctx context.Context, cid, uid int64) error
-	// Unbind 解绑用户与网关间的关系
+	// Unbind unbinds the relationship between the user and the gate.
 	Unbind(ctx context.Context, uid int64) error
-	// GetIP 获取客户端IP地址
+	// GetIP returns the client IP address.
 	GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, err error)
-	// IsOnline 检测是否在线
+	// IsOnline reports whether the target is online.
 	IsOnline(ctx context.Context, kind session.Kind, target int64) (isOnline bool, err error)
-	// Stat 统计会话总数
+	// Stat returns the total number of sessions.
 	Stat(ctx context.Context, kind session.Kind) (total int64, err error)
-	// Disconnect 断开连接
+	// Disconnect disconnects the target session.
 	Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error
-	// Push 发送消息
+	// Push sends a message.
 	Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error
-	// Multicast 推送组播消息
+	// Multicast pushes a multicast message.
 	Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer) (total int64, err error)
-	// Broadcast 推送广播消息
+	// Broadcast pushes a broadcast message.
 	Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer) (total int64, err error)
-	// Publish 发布频道消息
+	// Publish publishes a channel message.
 	Publish(ctx context.Context, channel string, disconnect bool, buf buffer.Buffer) (total int64, err error)
-	// Subscribe 订阅频道
+	// Subscribe subscribes to channels.
 	Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error
-	// Unsubscribe 取消订阅频道
+	// Unsubscribe unsubscribes from channels.
 	Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error
-	// GetState 获取状态
+	// GetState returns the state.
 	GetState() (cluster.State, error)
-	// SetState 设置状态
+	// SetState sets the state.
 	SetState(state cluster.State) error
 }

@@ -8,32 +8,32 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// Result 表示 IP 地址的地理位置解析结果
+// Result is the geolocation result of an IP address.
 type Result struct {
-	IP       string `json:"ip"`       // IP地址
-	Country  string `json:"country"`  // 国家
-	Province string `json:"province"` // 省/自治区/直辖市
-	City     string `json:"city"`     // 城市
-	ISP      string `json:"isp"`      // 运营商
+	IP       string `json:"ip"`       // IP address
+	Country  string `json:"country"`  // Country
+	Province string `json:"province"` // Province, autonomous region or municipality
+	City     string `json:"city"`     // City
+	ISP      string `json:"isp"`      // ISP
 }
 
-// Location 表示地理位置解析器，聚合多个解析器并发解析 IP 地址
+// Location is a geolocation resolver that runs several resolvers concurrently to resolve an IP
+// address.
 type Location struct {
-	resolvers []Resolver // 解析器列表
+	resolvers []Resolver // Resolver list
 }
 
-// NewLocation 创建一个新的 Location 实例
+// NewLocation returns a new Location backed by the given resolvers.
 func NewLocation(resolvers ...Resolver) *Location {
 	return &Location{
 		resolvers: resolvers,
 	}
 }
 
-// Parse 解析 IP 地址的地理位置信息
-// @param ctx context.Context 上下文，用于超时控制
-// @param ip string IP 地址
-// @return @1 *Result 解析结果
-// @return @2 error 错误信息
+// Parse resolves the geolocation information of ip.
+//
+// It returns as soon as one resolver succeeds, or an error when every resolver fails or ctx is
+// done.
 func (l *Location) Parse(ctx context.Context, ip string) (*Result, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

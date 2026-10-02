@@ -18,7 +18,7 @@ import (
 	"github.com/dobyte/due/v2/registry"
 )
 
-// newCAFile 生成一个自签名CA证书文件，用于TLS相关测试
+// newCAFile generates a self-signed CA certificate file for TLS-related tests.
 func newCAFile(t *testing.T) string {
 	t.Helper()
 
@@ -49,7 +49,7 @@ func newCAFile(t *testing.T) string {
 	return path
 }
 
-// failDiscovery 模拟注册中心初始化失败的场景
+// failDiscovery simulates a registry initialization failure.
 type failDiscovery struct{}
 
 func (d *failDiscovery) Watch(_ context.Context, _ string) (registry.Watcher, error) {
@@ -60,7 +60,7 @@ func (d *failDiscovery) Services(_ context.Context, _ string) ([]*registry.Servi
 	return nil, errors.New("discovery unavailable")
 }
 
-// TestBuilderClose 验证 Close 链路释放全部连接池资源
+// TestBuilderClose verifies that the Close path releases all connection pool resources.
 func TestBuilderClose(t *testing.T) {
 	b := NewBuilder(&Options{})
 	if b.err != nil {
@@ -73,7 +73,7 @@ func TestBuilderClose(t *testing.T) {
 	}
 	_ = cli
 
-	// 连接池已缓存
+	// The connection pool is cached.
 	if _, ok := b.pools.Load("direct://127.0.0.1:8011"); !ok {
 		t.Fatal("pool should be cached")
 	}
@@ -82,7 +82,7 @@ func TestBuilderClose(t *testing.T) {
 		t.Fatalf("Close error: %v", err)
 	}
 
-	// 连接池已清空
+	// The connection pools are cleared.
 	var remain int
 	b.pools.Range(func(_, _ any) bool {
 		remain++
@@ -92,20 +92,22 @@ func TestBuilderClose(t *testing.T) {
 		t.Errorf("pools should be cleared, %d remain", remain)
 	}
 
-	// Close 幂等
+	// Close is idempotent.
 	if err := b.Close(); err != nil {
 		t.Errorf("second Close should return nil, got %v", err)
 	}
 
-	// 关闭后 Build 返回 ErrClientClosed
+	// Build returns ErrClientClosed after Close.
 	if _, err := b.Build("direct://127.0.0.1:8011"); !derrors.Is(err, derrors.ErrClientClosed) {
 		t.Errorf("Build after Close should return ErrClientClosed, got %v", err)
 	}
 }
 
-// TestBuilderTLSValidation 验证 TLS 配置行为：证书与校验域名均配置时启用TLS，单独配置时警告降级为明文
+// TestBuilderTLSValidation verifies the TLS configuration behavior: TLS is enabled when both the
+// certificate and the server name are configured, and a warning fallback to plaintext occurs when
+// only one of them is set.
 func TestBuilderTLSValidation(t *testing.T) {
-	// 均未配置 → 明文连接
+	// Neither is configured -> plaintext connection.
 	b := NewBuilder(&Options{})
 	if b.err != nil {
 		t.Fatalf("want nil error for plaintext, got %v", b.err)
@@ -114,7 +116,7 @@ func TestBuilderTLSValidation(t *testing.T) {
 		t.Fatal("TLSConfig should be nil for plaintext")
 	}
 
-	// 仅配置 ServerName → 警告降级为明文，不报错
+	// Only ServerName is configured -> warning fallback to plaintext, no error.
 	b = NewBuilder(&Options{ServerName: "example.com"})
 	if b.err != nil {
 		t.Fatalf("want nil error for warning fallback, got %v", b.err)
@@ -123,7 +125,7 @@ func TestBuilderTLSValidation(t *testing.T) {
 		t.Fatal("TLSConfig should be nil when only ServerName is set")
 	}
 
-	// 仅配置 CAFile（文件不存在）→ 警告降级为明文，不报错
+	// Only CAFile is configured (the file does not exist) -> warning fallback to plaintext, no error.
 	b = NewBuilder(&Options{CAFile: "not-exist.pem"})
 	if b.err != nil {
 		t.Fatalf("want nil error for warning fallback, got %v", b.err)
@@ -132,7 +134,7 @@ func TestBuilderTLSValidation(t *testing.T) {
 		t.Fatal("TLSConfig should be nil when only CAFile is set")
 	}
 
-	// CAFile + ServerName 均配置 → 启用TLS
+	// Both CAFile and ServerName are configured -> TLS is enabled.
 	caFile := newCAFile(t)
 	b = NewBuilder(&Options{CAFile: caFile, ServerName: "localhost"})
 	if b.err != nil {
@@ -143,7 +145,8 @@ func TestBuilderTLSValidation(t *testing.T) {
 	}
 }
 
-// TestBuilderInitError 验证注册中心初始化失败时错误经 Build 返回而非 fatal
+// TestBuilderInitError verifies that a registry initialization failure is returned through Build
+// rather than being fatal.
 func TestBuilderInitError(t *testing.T) {
 	b := NewBuilder(&Options{Discovery: &failDiscovery{}})
 

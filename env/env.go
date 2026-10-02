@@ -6,7 +6,7 @@ import (
 	"github.com/dobyte/due/v2/core/value"
 )
 
-// Get 获取环境变量值
+// Get returns the value of the environment variable key, falling back to def when it is unset.
 func Get(key string, def ...any) value.Value {
 	if val, ok := os.LookupEnv(key); ok {
 		return value.NewValue(val)
@@ -15,17 +15,17 @@ func Get(key string, def ...any) value.Value {
 	return value.NewValue(def...)
 }
 
-// Set 设置环境变量值
+// Set sets the environment variable key to value.
 func Set(key string, value string) error {
 	return os.Setenv(key, value)
 }
 
-// Del 删除环境变量
+// Del removes the environment variable key.
 func Del(key string) error {
 	return os.Unsetenv(key)
 }
 
-// Has 是否存在环境变量
+// Has reports whether the environment variable key exists.
 func Has(key string) bool {
 	_, ok := os.LookupEnv(key)
 	return ok

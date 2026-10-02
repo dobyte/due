@@ -8,13 +8,16 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-// WeightAttrKey 服务实例权重属性键，由解析器在地址上附加
+// WeightAttrKey is the attribute key for the service instance weight, attached to the address by
+// the resolver.
 const WeightAttrKey = "weight"
 
 var _ balancer.Balancer = &Balancer{}
 
-// Balancer 加权轮询负载均衡器
-// 基于平滑加权轮询算法在就绪子连接间按权重分配请求
+// Balancer is a weighted round-robin load balancer.
+//
+// It distributes requests among ready sub-connections by weight using the smooth weighted
+// round-robin algorithm.
 type Balancer struct {
 	cc       balancer.ClientConn
 	opts     balancer.BuildOptions
@@ -25,10 +28,10 @@ type Balancer struct {
 	mu       sync.Mutex
 }
 
-// UpdateClientConnState 更新客户端连接状态
-// 同步解析器下发的地址列表，移除失效子连接并新建缺失子连接
-// @param s balancer.ClientConnState 客户端连接状态
-// @return @1 error 错误信息
+// UpdateClientConnState updates the client connection state.
+//
+// It synchronizes the address list pushed by the resolver, removes stale sub-connections and
+// creates missing ones.
 func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -115,10 +118,10 @@ func (b *Balancer) ResolverError(err error) {
 	})
 }
 
-// UpdateSubConnState 更新子连接状态
-// 空闲连接触发重新连接，关闭连接从映射中移除，并同步更新选择器
-// @param sc balancer.SubConn 子连接
-// @param state balancer.SubConnState 子连接状态
+// UpdateSubConnState updates the sub-connection state.
+//
+// An idle connection triggers a reconnect, a shutdown connection is removed from the map, and the
+// picker is updated accordingly.
 func (b *Balancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -150,7 +153,7 @@ func (b *Balancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubCon
 	})
 }
 
-// Close 关闭负载均衡器，关闭全部子连接并清空状态
+// Close closes the load balancer, shuts down all sub-connections and clears its state.
 func (b *Balancer) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -164,7 +167,7 @@ func (b *Balancer) Close() {
 	b.picker = nil
 }
 
-// ExitIdle 退出空闲状态，触发全部空闲子连接建立连接
+// ExitIdle leaves the idle state and triggers a connection for every idle sub-connection.
 func (b *Balancer) ExitIdle() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -176,9 +179,8 @@ func (b *Balancer) ExitIdle() {
 	}
 }
 
-// getWeight 从地址属性中读取服务实例权重，未配置或缺省时默认为1
-// @param addr resolver.Address 地址信息
-// @return @1 int 权重值
+// getWeight reads the service instance weight from the address attributes, defaulting to 1 when it
+// is unset or missing.
 func getWeight(addr resolver.Address) int {
 	if addr.Attributes != nil {
 		if v, ok := addr.Attributes.Value(WeightAttrKey).(uint32); ok && v > 0 {
@@ -188,14 +190,15 @@ func getWeight(addr resolver.Address) int {
 	return 1
 }
 
-// weightedSubConn 加权子连接，保存平滑加权轮询所需的权重状态
+// weightedSubConn is a weighted sub-connection that keeps the weight state required by the smooth
+// weighted round-robin algorithm.
 type weightedSubConn struct {
 	sc            balancer.SubConn
-	weight        int // 静态权重
-	currentWeight int // 平滑加权轮询动态权重
+	weight        int // Static weight
+	currentWeight int // Smooth weighted round-robin dynamic weight
 }
 
-// Picker 加权轮询选择器
+// Picker is the weighted round-robin picker.
 type Picker struct {
 	subConns []*weightedSubConn
 	err      error
@@ -204,11 +207,10 @@ type Picker struct {
 
 var _ balancer.Picker = &Picker{}
 
-// Pick 选择目标子连接
-// 采用平滑加权轮询算法，每次选取当前动态权重最大的子连接
-// @param _ balancer.PickInfo 请求信息
-// @return @1 balancer.PickResult 选择结果
-// @return @2 error 错误信息
+// Pick selects a target sub-connection.
+//
+// It uses the smooth weighted round-robin algorithm and each time selects the sub-connection with
+// the largest current dynamic weight.
 func (p *Picker) Pick(_ balancer.PickInfo) (balancer.PickResult, error) {
 	if p.err != nil {
 		return balancer.PickResult{}, p.err
@@ -221,7 +223,8 @@ func (p *Picker) Pick(_ balancer.PickInfo) (balancer.PickResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// 平滑加权轮询：每次选取当前动态权重最大的子连接
+	// Smooth weighted round-robin: select the sub-connection with the largest current dynamic
+	// weight each time.
 	var (
 		best  *weightedSubConn
 		total int

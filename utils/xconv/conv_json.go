@@ -7,11 +7,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Json 将任意值转换为 JSON 字符串
-// 对已满足 JSON 格式（以 { } 或 [ ] 包裹）的字符串/字节切片直接返回；
-// 对 map、数组、切片、结构体等类型进行 JSON 序列化；其他类型返回空字符串
-// @param val any 待转换的值
-// @return @1 string 转换后的 JSON 字符串
+// Json converts val to a JSON string.
+//
+// A string or byte slice that already looks like JSON (wrapped in { } or [ ]) is returned as is;
+// maps, arrays, slices, structs and the like are JSON-marshalled; other types yield an empty
+// string.
 func Json(val any) string {
 	isJson := func(s string) bool {
 		l := len(s)

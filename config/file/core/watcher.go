@@ -58,7 +58,7 @@ func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
 	return w, nil
 }
 
-// Next 返回配置列表
+// Next blocks until a config changes and returns the changed configurations.
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	for {
 		select {
@@ -67,12 +67,14 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 				return nil, io.EOF
 			}
 
-			// 忽略点文件等临时文件，与加载目录配置时的过滤规则保持一致
+			// Ignore dot files and other temporary files, matching the filter used when loading a
+			// config directory.
 			if strings.HasPrefix(filepath.Base(event.Name), ".") {
 				continue
 			}
 
-			// 新建目录需添加到监听器，否则其内部配置文件的变更无法被感知
+			// A newly created directory must be added to the watcher, otherwise changes to its
+			// config files cannot be observed.
 			if event.Has(fsnotify.Create) {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					_ = w.watcher.Add(event.Name)
@@ -98,7 +100,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 }
 
-// Stop 停止监听
+// Stop stops watching.
 func (w *watcher) Stop() error {
 	w.cancel()
 	return w.watcher.Close()

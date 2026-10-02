@@ -1,64 +1,59 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/18 11:40 上午
- * @Desc: 定位用户所在网关和节点
- */
-
+// Package locate defines the locator abstraction used to track the gate and
+// node a user is bound to.
 package locate
 
 import (
 	"context"
 )
 
+// Locator locates the gate and the node a user is bound to.
 type Locator interface {
-	// Name 获取定位器组件名
+	// Name returns the component name of the locator.
 	Name() string
-	// Watch 监听用户定位变化
+	// Watch watches changes to user locations, optionally filtered by kinds.
 	Watch(ctx context.Context, kinds ...string) (Watcher, error)
-	// BindGate 绑定网关
+	// BindGate binds the user to the gate identified by gid.
 	BindGate(ctx context.Context, uid int64, gid string) error
-	// BindNode 绑定节点
+	// BindNode binds the user to the node identified by name and nid.
 	BindNode(ctx context.Context, uid int64, name, nid string) error
-	// UnbindGate 解绑网关
+	// UnbindGate unbinds the user from the gate identified by gid.
 	UnbindGate(ctx context.Context, uid int64, gid string) error
-	// UnbindNode 解绑节点
+	// UnbindNode unbinds the user from the node identified by name and nid.
 	UnbindNode(ctx context.Context, uid int64, name string, nid string) error
-	// LocateGate 定位用户所在网关
+	// LocateGate locates the gate the user is bound to.
 	LocateGate(ctx context.Context, uid int64) (string, error)
-	// LocateNode 定位用户所在节点
+	// LocateNode locates the node the user is bound to under the given name.
 	LocateNode(ctx context.Context, uid int64, name string) (string, error)
-	// LocateNodes 定位用户所在节点列表
+	// LocateNodes locates every node the user is bound to.
 	LocateNodes(ctx context.Context, uid int64) (map[string]string, error)
-	// Close 关闭定位器
+	// Close closes the locator.
 	Close() error
 }
 
+// Watcher watches changes to user locations.
 type Watcher interface {
-	// Next 返回用户位置列表
+	// Next returns the next batch of user location events.
 	Next() ([]*Event, error)
-	// Stop 停止监听
+	// Stop stops watching.
 	Stop() error
 }
 
+// Event describes a change to a user location.
 type Event struct {
-	// 用户ID
-	UID int64 `json:"uid"`
-	// 事件类型
-	Type EventType `json:"type"`
-	// 实例ID
-	InsID string `json:"insID"`
-	// 实例类型
-	InsKind string `json:"insKind"`
-	// 实例名称
-	InsName string `json:"insName"`
+	UID     int64     `json:"uid"`     // User ID
+	Type    EventType `json:"type"`    // Event type
+	InsID   string    `json:"insID"`   // Instance ID
+	InsKind string    `json:"insKind"` // Instance kind
+	InsName string    `json:"insName"` // Instance name
 }
 
+// EventType is the type of a location event.
 type EventType int
 
+// The types of a location event.
 const (
-	BindGate   EventType = iota + 1 // 绑定网关
-	BindNode                        // 绑定节点
-	UnbindGate                      // 解绑网关
-	UnbindNode                      // 解绑节点
+	BindGate   EventType = iota + 1 // BindGate: the user is bound to a gate
+	BindNode                        // BindNode: the user is bound to a node
+	UnbindGate                      // UnbindGate: the user is unbound from a gate
+	UnbindNode                      // UnbindNode: the user is unbound from a node
 )

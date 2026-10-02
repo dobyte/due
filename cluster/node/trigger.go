@@ -10,35 +10,28 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-// EventHandler 事件处理函数
+// EventHandler is an event handler function.
 type EventHandler func(ctx Context)
 
-// Trigger 事件触发器
+// Trigger is an event trigger.
 type Trigger struct {
 	node   *Node
-	rw     sync.RWMutex
 	queue  *queue.Queue[*event]
 	events map[cluster.Event]EventHandler
 }
 
-// 创建事件触发器
-// @param node *Node 节点服务器
-// @return @1 *Trigger 事件触发器
+// newTrigger creates a new event trigger for the given node server.
 func newTrigger(node *Node) *Trigger {
 	return &Trigger{
 		node:   node,
-		queue:  queue.NewQueue[*event](node.opts.messageQueueSize, node.opts.messageWriteTimeout),
+		queue:  queue.NewQueue[*event](node.opts.messageQueueSize, node.opts.messageWriteTimeout, &sync.RWMutex{}),
 		events: make(map[cluster.Event]EventHandler, 3),
 	}
 }
 
-// 触发事件
-// 从对象池获取事件对象填充后写入事件队列等待异步处理
-// @param kind cluster.Event 事件类型
-// @param gid string 网关ID
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @return @1 error 事件入队失败时返回的错误
+// trigger triggers an event. It fetches an event object from the pool, fills it in and writes it to
+// the event queue for asynchronous handling. It returns the error reported when the event fails to
+// be enqueued.
 func (t *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error {
 	evt := t.node.evtPool.Get().(*event)
 	evt.event = kind
@@ -52,11 +45,7 @@ func (t *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error 
 		evt.ctx = context.Background()
 	}
 
-	t.rw.RLock()
-	err := t.queue.Write(evt)
-	t.rw.RUnlock()
-
-	if err != nil {
+	if err := t.queue.Write(evt); err != nil {
 		evt.release()
 		return err
 	}
@@ -64,37 +53,23 @@ func (t *Trigger) trigger(kind cluster.Event, gid string, cid, uid int64) error 
 	return nil
 }
 
-// 接收事件消息
-// @return @1 <-chan *event 事件消息通道
+// receive returns the channel from which event messages are received.
 func (t *Trigger) receive() <-chan *event {
 	return t.queue.Read()
 }
 
-// 停止接收事件
-// 写入空事件以通知分发器事件队列已结束
-// @return @1 error 写入失败时返回的错误
-func (t *Trigger) done() error {
-	return t.queue.Write(nil, true)
-}
-
-// 等待所有事件完成
-func (t *Trigger) wait() {
-	t.queue.Wait()
-}
-
-// 关闭事件触发器
-// 关闭事件队列并清空已注册的事件处理器
+// close closes the event trigger.
 func (t *Trigger) close() {
-	t.rw.Lock()
 	t.queue.Close()
-	t.rw.Unlock()
-
-	clear(t.events)
 }
 
-// 处理事件消息
-// 查找对应事件处理器并执行，处理完成后回收事件对象
-// @param evt *event 事件对象
+// clean releases every event object still in the event queue.
+func (t *Trigger) clean() {
+	t.queue.Clean(func(evt *event) { evt.release() })
+}
+
+// handle handles an event message. It looks up the matching event handler and executes it, then
+// recycles the event object once handling is done.
 func (t *Trigger) handle(evt *event) {
 	t.queue.Done(evt == nil)
 
@@ -113,9 +88,7 @@ func (t *Trigger) handle(evt *event) {
 	evt.compareVersionRecycle(version)
 }
 
-// 添加事件处理器
-// @param event cluster.Event 事件类型
-// @param handler EventHandler 事件处理函数
+// addEventHandler adds an event handler for the given event type.
 func (t *Trigger) addEventHandler(event cluster.Event, handler EventHandler) {
 	if t.node.getState() != cluster.Shut {
 		log.Warnf("the node server is working, can't add Event handler")

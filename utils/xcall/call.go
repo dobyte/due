@@ -12,9 +12,10 @@ type funcType interface {
 	func() | func() error
 }
 
-// Call 安全地调用函数
-// 捕获函数执行过程中产生的 panic：运行时错误（runtime.Error）记录为致命错误，其他 panic 记录错误信息
-// @param fn func() 待调用的函数
+// Call invokes fn safely.
+//
+// It recovers from any panic raised while fn runs: a runtime error ([runtime.Error]) is logged as
+// a fatal error, while any other panic is logged together with its error message.
 func Call[T funcType](fn T) error {
 	if fn == nil {
 		return nil
@@ -41,22 +42,21 @@ func Call[T funcType](fn T) error {
 	return nil
 }
 
-// Go 执行单个协程
-// 将函数放入新的协程中执行，并自动捕获 panic，避免协程崩溃导致整个进程退出
-// @param fn func() 待执行的函数
+// Go runs fn in a new goroutine.
+//
+// fn is executed in its own goroutine and any panic is recovered by [Call], so a crashing
+// goroutine does not bring down the whole process.
 func Go[T funcType](fn T) {
 	go Call(fn)
 }
 
-// Backoff 指数退避调用函数
-// 按指数递增的间隔重试调用 fn：第 i 次尝试的间隔为 1<<i 倍的基础延迟（封顶为 maxDelay），
-// 直到 fn 返回 next=false、ctx 被取消或达到最大重试次数 retry
-// @param ctx context.Context 上下文
-// @param fn func(ctx context.Context, attempt int) (bool, error) 待调用的函数，attempt 为当前尝试次数（从1开始），返回值 next 表示是否继续重试
-// @param retry int 最大重试次数
-// @param baseDelay time.Duration 基础延迟时间
-// @param maxDelay time.Duration 最大延迟时间
-// @return @1 error 最后一次调用返回的错误；若 ctx 被取消，则返回 ctx.Err()
+// Backoff calls fn with an exponentially increasing delay.
+//
+// The delay starts at baseDelay, doubles after every attempt and is capped at maxDelay. Retrying
+// stops when fn returns next as false, when ctx is cancelled, or after retry attempts have been
+// made. The attempt argument passed to fn starts at 1.
+//
+// It returns the error of the last fn call, or ctx.Err() when ctx has been cancelled.
 func Backoff(ctx context.Context, fn func(ctx context.Context, attempt int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
 	defer func() {
 		if err := recover(); err != nil {
@@ -103,18 +103,19 @@ func Backoff(ctx context.Context, fn func(ctx context.Context, attempt int) (boo
 	return err
 }
 
-// GoWithTimeout 并发执行多个协程，并阻塞等待所有协程执行完毕或超时
-// 与 Go 不同，本函数会阻塞当前协程直到所有 fn 执行完成或达到超时时间
-// @param timeout time.Duration 整体执行的超时时间
-// @param fns ...func() 待执行的协程函数
+// GoWithTimeout runs fns concurrently and blocks until all of them finish or the timeout elapses.
+//
+// Unlike [Go], it blocks the calling goroutine until every fn has completed or the timeout is
+// reached.
 func GoWithTimeout(timeout time.Duration, fns ...func()) {
 	NewGoroutines().Add(fns...).Run(context.Background(), timeout)
 }
 
-// GoWithDeadline 并发执行多个协程，并阻塞等待所有协程执行完毕或到达最后期限
-// 与 Go 不同，本函数会阻塞当前协程直到所有 fn 执行完成或到达最后期限
-// @param deadline time.Time 最后期限，到达后停止等待
-// @param fns ...func() 待执行的协程函数
+// GoWithDeadline runs fns concurrently and blocks until all of them finish or the deadline is
+// reached.
+//
+// Unlike [Go], it blocks the calling goroutine until every fn has completed or the deadline is
+// reached, at which point it stops waiting.
 func GoWithDeadline(deadline time.Time, fns ...func()) {
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()

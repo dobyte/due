@@ -15,9 +15,9 @@ const (
 	publishResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B64
 )
 
-// EncodePublishReq 编码发布频道消息请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{channel len + channel + disconnect + <message packet>}
+// EncodePublishReq encodes a publish request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {channel len + channel + disconnect + <message packet>}
 func EncodePublishReq(seq uint64, channel string, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	channelBytes := len([]byte(channel))
 	size := publishReqBytes + channelBytes
@@ -34,9 +34,9 @@ func EncodePublishReq(seq uint64, channel string, disconnect bool, message buffe
 	return buffer.NewNocopyBuffer(writer, message)
 }
 
-// DecodePublishReq 解码发布频道消息请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{channel len + channel + disconnect + <message packet>}
+// DecodePublishReq decodes a publish request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {channel len + channel + disconnect + <message packet>}
 func DecodePublishReq(req *buffer.Bytes) (string, bool, *buffer.Bytes, error) {
 	data := req.Bytes()
 
@@ -58,9 +58,9 @@ func DecodePublishReq(req *buffer.Bytes) (string, bool, *buffer.Bytes, error) {
 	return channel, disconnect, req, nil
 }
 
-// EncodePublishRes 编码发布频道消息响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// EncodePublishRes encodes a publish response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func EncodePublishRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := publishResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
@@ -81,9 +81,9 @@ func EncodePublishRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBu
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodePublishRes 解码发布频道消息响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// DecodePublishRes decodes a publish response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func DecodePublishRes(buf buffer.Buffer) (code uint16, total uint64, err error) {
 	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B64 {
 		err = errors.ErrInvalidMessage

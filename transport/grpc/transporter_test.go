@@ -46,7 +46,7 @@ func (d *mockDiscovery) Services(_ context.Context, _ string) ([]*registry.Servi
 	return nil, nil
 }
 
-// TestTransporterClose 验证 Transporter.Close 端到端释放链路
+// TestTransporterClose verifies the end-to-end release path of Transporter.Close.
 func TestTransporterClose(t *testing.T) {
 	w := newMockWatcher()
 	tr := grpc.NewTransporter(grpc.WithClientDiscovery(&mockDiscovery{watcher: w}))
@@ -61,12 +61,12 @@ func TestTransporterClose(t *testing.T) {
 		t.Fatalf("Close error: %v", err)
 	}
 
-	// 监听器通过完整链路被停止
+	// The watcher is stopped through the full path.
 	if n := w.stopCalls.Load(); n != 1 {
 		t.Errorf("watcher.Stop should be called once, got %d", n)
 	}
 
-	// 关闭后 NewClient 返回 ErrClientClosed
+	// NewClient returns ErrClientClosed after Close.
 	if _, err := tr.NewClient("direct://127.0.0.1:8011"); !errors.Is(err, errors.ErrClientClosed) {
 		t.Errorf("NewClient after Close should return ErrClientClosed, got %v", err)
 	}

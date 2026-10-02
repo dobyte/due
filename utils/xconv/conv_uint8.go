@@ -6,16 +6,12 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Uint8 将任意值转换为 uint8
-// @param val any 待转换的值
-// @return @1 uint8 转换后的 uint8
+// Uint8 converts val to a uint8.
 func Uint8(val any) uint8 {
 	return uint8(Uint64(val))
 }
 
-// Uint8s 将任意值转换为 uint8 切片
-// @param val any 待转换的值
-// @return @1 []uint8 转换后的 uint8 切片
+// Uint8s converts val to a uint8 slice.
 func Uint8s(val any) (slice []uint8) {
 	if val == nil {
 		return
@@ -264,17 +260,13 @@ func Uint8s(val any) (slice []uint8) {
 	return
 }
 
-// Uint8Pointer 将任意值转换为 uint8 指针
-// @param val any 待转换的值
-// @return @1 *uint8 转换后的 uint8 指针
+// Uint8Pointer converts val to a pointer to uint8.
 func Uint8Pointer(val any) *uint8 {
 	v := Uint8(val)
 	return &v
 }
 
-// Uint8sPointer 将任意值转换为 uint8 切片指针
-// @param val any 待转换的值
-// @return @1 *[]uint8 转换后的 uint8 切片指针
+// Uint8sPointer converts val to a pointer to a uint8 slice.
 func Uint8sPointer(val any) *[]uint8 {
 	v := Uint8s(val)
 	return &v

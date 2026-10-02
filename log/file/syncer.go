@@ -20,6 +20,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xtime"
 )
 
+// Name is the syncer name.
 const Name = "file"
 
 const gzipExt = ".gz"
@@ -119,12 +120,12 @@ func (s *Syncer) init() error {
 	return nil
 }
 
-// Name 同步器名称
+// Name returns the syncer name.
 func (s *Syncer) Name() string {
 	return Name
 }
 
-// Write 写入日志
+// Write writes the given entity. It reports [errors.ErrSyncerClosed] when the syncer has been closed.
 func (s *Syncer) Write(entity *internal.Entity) error {
 	if s.closing.Load() {
 		return errors.ErrSyncerClosed
@@ -137,7 +138,7 @@ func (s *Syncer) Write(entity *internal.Entity) error {
 	return s.doWrite(e)
 }
 
-// 执行写入日志操作
+// doWrite writes the entry to the file directly or enqueues it for a batched flush.
 func (s *Syncer) doWrite(e *entry) error {
 	if s.mu.TryLock() {
 		defer s.mu.Unlock()
@@ -166,7 +167,7 @@ func (s *Syncer) doWrite(e *entry) error {
 	}
 }
 
-// Close 关闭同步器
+// Close closes the syncer, flushing and closing the underlying file.
 func (s *Syncer) Close() error {
 	s.chMu.Lock()
 	if !s.closing.CompareAndSwap(false, true) {
@@ -198,7 +199,7 @@ func (s *Syncer) Close() error {
 	}
 }
 
-// 尝试将数据刷入文件中
+// tryFlushToFile flushes buffered data to the file.
 func (s *Syncer) tryFlushToFile() {
 	if s.closing.Load() {
 		return
@@ -209,7 +210,7 @@ func (s *Syncer) tryFlushToFile() {
 	s.mu.Unlock()
 }
 
-// 写入将缓冲区数据写入文件
+// flushToFile writes buffered data to the file and optionally writes the given entry.
 func (s *Syncer) flushToFile(e ...*entry) error {
 	if err := s.flushToWriter(len(e) > 0); err != nil {
 		if len(e) > 0 {
@@ -225,7 +226,7 @@ func (s *Syncer) flushToFile(e ...*entry) error {
 	}
 }
 
-// 写入将缓冲区数据写入writer
+// flushToWriter writes buffered data to the writer.
 func (s *Syncer) flushToWriter(isOpenFile bool) error {
 	acc := s.acc.Load()
 
@@ -258,7 +259,7 @@ func (s *Syncer) flushToWriter(isOpenFile bool) error {
 	return nil
 }
 
-// 释放日志实体
+// releaseEntry releases the entry back to the pool.
 func (s *Syncer) releaseEntry(e *entry) {
 	if e.buf != nil {
 		e.buf.Release()
@@ -268,7 +269,7 @@ func (s *Syncer) releaseEntry(e *entry) {
 	s.pool.Put(e)
 }
 
-// 写入日志
+// writeEntry writes the entry to the writer.
 func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 	defer s.releaseEntry(e)
 
@@ -312,7 +313,7 @@ func (s *Syncer) writeEntry(e *entry, isAutoFlush bool) error {
 	return nil
 }
 
-// 定时刷盘
+// tickFlushFile flushes the file periodically.
 func (s *Syncer) tickFlushFile() {
 	if s.opts.flushInterval <= 0 {
 		return
@@ -335,7 +336,7 @@ func (s *Syncer) tickFlushFile() {
 	}
 }
 
-// 定时翻滚文件
+// tickRotateFile rotates the file periodically.
 func (s *Syncer) tickRotateFile() {
 	if s.opts.rotate == RotateNone {
 		return
@@ -362,7 +363,7 @@ func (s *Syncer) tickRotateFile() {
 	}
 }
 
-// 翻滚文件
+// rotateFile rotates the current file.
 func (s *Syncer) rotateFile() error {
 	if s.file == nil {
 		return nil
@@ -379,19 +380,19 @@ func (s *Syncer) rotateFile() error {
 	return s.doRotateFile(s.getFileTag(), s.fileVersion)
 }
 
-// 处理翻转文件
+// doRotateFile rotates the current file to the given tag and version.
 func (s *Syncer) doRotateFile(fileTag string, fileVersion int64) (err error) {
 	filePath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, s.fileExt))
 	gzipPath := filepath.Join(s.fileDir, s.makeFileName(fileTag, fileVersion, gzipExt))
 
 	for {
 		if _, statErr := os.Stat(filePath); statErr == nil {
-			// 文件已存在，尝试下一个版本号
+			// The file already exists; try the next version number.
 		} else if os.IsNotExist(statErr) {
 			if _, gzErr := os.Stat(gzipPath); gzErr == nil {
-				// gzip 文件已存在，尝试下一个版本号
+				// The gzip file already exists; try the next version number.
 			} else if os.IsNotExist(gzErr) {
-				break // 两者都不存在，找到可用版本号
+				break // Neither exists; a usable version number has been found.
 			} else {
 				return gzErr
 			}
@@ -425,7 +426,7 @@ func (s *Syncer) doRotateFile(fileTag string, fileVersion int64) (err error) {
 	return
 }
 
-// 压缩文件
+// compressFile compresses src into dst.
 func (s *Syncer) compressFile(dst, src string) (err error) {
 	var (
 		srcFile *os.File
@@ -467,7 +468,7 @@ func (s *Syncer) compressFile(dst, src string) (err error) {
 	return
 }
 
-// 清理过期文件
+// cleanExpiredFiles removes files older than maxAge.
 func (s *Syncer) cleanExpiredFiles() {
 	if s.opts.maxAge <= 0 {
 		return
@@ -538,7 +539,7 @@ func (s *Syncer) cleanExpiredFiles() {
 	}
 }
 
-// 从 fileTag 字符串解析时间
+// parseFileTagTime parses a file tag into a time.
 func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
 	switch s.opts.rotate {
 	case RotateYear:
@@ -554,11 +555,11 @@ func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
 			year, err1 := strconv.Atoi(tag[:4])
 			week, err2 := strconv.Atoi(tag[4:])
 			if err1 == nil && err2 == nil && week >= 1 && week <= 53 {
-				// 1月4日始终属于 ISO 第1周，据此推算出第1周的周一
+				// January 4 always belongs to ISO week 1, so week 1's Monday can be derived from it.
 				jan4 := time.Date(year, 1, 4, 0, 0, 0, 0, xtime.GetLocation())
 				weekday := int(jan4.Weekday())
 				if weekday == 0 {
-					weekday = 7 // 周日
+					weekday = 7 // Sunday
 				}
 				monday := jan4.AddDate(0, 0, -(weekday - 1))
 				return monday.AddDate(0, 0, (week-1)*7), true
@@ -576,7 +577,7 @@ func (s *Syncer) parseFileTagTime(tag string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// 获取文件修改时间（兜底）
+// fileModTime returns the file modification time as a fallback.
 func (s *Syncer) fileModTime(entry os.DirEntry) time.Time {
 	info, err := entry.Info()
 	if err != nil {
@@ -585,7 +586,7 @@ func (s *Syncer) fileModTime(entry os.DirEntry) time.Time {
 	return info.ModTime()
 }
 
-// 打开文件
+// openFile opens the log file.
 func (s *Syncer) openFile() error {
 	if _, err := os.Stat(s.fileDir); err != nil {
 		if err = os.MkdirAll(s.fileDir, 0755); err != nil {
@@ -622,7 +623,7 @@ func (s *Syncer) openFile() error {
 	return nil
 }
 
-// 解析文件标识
+// parseFileMark parses the file mark from existing files.
 func (s *Syncer) parseFileMark() error {
 	entries, err := os.ReadDir(s.fileDir)
 	if err != nil {
@@ -684,7 +685,7 @@ func (s *Syncer) parseFileMark() error {
 	return nil
 }
 
-// 过滤文件标识
+// filterFileMark updates the file tag and version from the given mark.
 func (s *Syncer) filterFileMark(fileTag string, fileVersion int64) {
 	switch {
 	case fileTag > s.getFileTag():
@@ -699,7 +700,7 @@ func (s *Syncer) filterFileMark(fileTag string, fileVersion int64) {
 	}
 }
 
-// 生成文件名称
+// makeFileName builds the file name for the tag, version and extension.
 func (s *Syncer) makeFileName(fileTag string, fileVersion int64, fileExt string) string {
 	if fileTag == "" {
 		return fmt.Sprintf("%s.%d%s", s.fileName, fileVersion, fileExt)
@@ -708,7 +709,7 @@ func (s *Syncer) makeFileName(fileTag string, fileVersion int64, fileExt string)
 	}
 }
 
-// getFileTag 获取当前文件标签
+// getFileTag returns the current file tag.
 func (s *Syncer) getFileTag() string {
 	if tag := s.fileTag.Load(); tag != nil {
 		return *tag
@@ -716,12 +717,12 @@ func (s *Syncer) getFileTag() string {
 	return ""
 }
 
-// setFileTag 设置当前文件标签
+// setFileTag sets the current file tag.
 func (s *Syncer) setFileTag(fileTag string) {
 	s.fileTag.Store(&fileTag)
 }
 
-// 生成文件标签
+// makeFileTag builds the file tag for the given time according to the rotation rule.
 func (s *Syncer) makeFileTag(t time.Time) string {
 	switch s.opts.rotate {
 	case RotateYear:

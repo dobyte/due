@@ -13,13 +13,14 @@ import (
 )
 
 func main() {
-	// 创建容器
+	// Create the container
 	container := due.NewContainer()
-	// 创建服务器
+	// Create the server
 	server := ws.NewServer()
 
-	// 在 WebSocket 升级前检查是否为合法的 WebSocket 请求，
-	// 非 WebSocket 请求（如浏览器直接访问）直接返回 426，避免触发 upgrade error 日志
+	// Check whether the request is a valid WebSocket request before the upgrade; a non-WebSocket
+	// request (such as a direct browser visit) is answered with 426 to avoid triggering upgrade
+	// error logs
 	server.OnUpgrade(func(w http.ResponseWriter, r *http.Request) (allowed bool) {
 		if websocket.IsWebSocketUpgrade(r) {
 			return true
@@ -28,20 +29,20 @@ func main() {
 		return false
 	})
 
-	// 创建用户定位器
+	// Create the user locator
 	locator := redis.NewLocator()
-	// 创建服务发现
+	// Create the service registry
 	registry := nacos.NewRegistry()
-	// 创建网关组件
+	// Create the gate component
 	component1 := gate.NewGate(
 		gate.WithServer(server),
 		gate.WithLocator(locator),
 		gate.WithRegistry(registry),
 	)
-	// 创建PProf组件
+	// Create the pprof component
 	component2 := pprof.NewPProf()
-	// 添加网关组件
+	// Add the gate component
 	container.Add(component1, component2)
-	// 启动容器
+	// Start the container
 	container.Serve()
 }

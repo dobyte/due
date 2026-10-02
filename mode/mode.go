@@ -7,26 +7,28 @@ import (
 )
 
 const (
-	dueModeEtcName = "etc.mode" // 配置文件中的模式键名
-	dueModeArgName = "mode"     // 运行参数中的模式项名
-	dueModeEnvName = "DUE_MODE" // 环境变量中的模式键名
+	dueModeEtcName = "etc.mode" // Mode key in the configuration file
+	dueModeArgName = "mode"     // Mode option in the command-line arguments
+	dueModeEnvName = "DUE_MODE" // Mode key in the environment variables
 )
 
 const (
-	// DebugMode 调试模式
+	// DebugMode is the debug mode.
 	DebugMode = "debug"
-	// TestMode 测试模式
+	// TestMode is the test mode.
 	TestMode = "test"
-	// PreReleaseMode 预发布模式
+	// PreReleaseMode is the pre-release mode.
 	PreReleaseMode = "pre-release"
-	// ReleaseMode 发布模式
+	// ReleaseMode is the release mode.
 	ReleaseMode = "release"
 )
 
 var dueMode string
 
-// init 初始化运行模式
-// 按优先级从配置来源读取运行模式并设置；优先级：配置文件 < 环境变量 < 运行参数 < mode.SetMode()
+// init initializes the run mode.
+//
+// The mode is read from each source in priority order: configuration file < environment variable <
+// command-line argument < [SetMode].
 func init() {
 	mode := etc.Get(dueModeEtcName, DebugMode).String()
 	mode = env.Get(dueModeEnvName, mode).String()
@@ -34,9 +36,9 @@ func init() {
 	SetMode(mode)
 }
 
-// SetMode 设置运行模式
-// 模式需为debug、test、pre-release或release之一，空值按debug处理
-// @param m string 待设置的运行模式
+// SetMode sets the run mode.
+//
+// The mode must be one of debug, test, pre-release or release; an empty value is treated as debug.
 func SetMode(m string) {
 	if m == "" {
 		m = DebugMode
@@ -50,32 +52,27 @@ func SetMode(m string) {
 	}
 }
 
-// GetMode 获取运行模式
-// @return @1 string 当前运行模式
+// GetMode returns the current run mode.
 func GetMode() string {
 	return dueMode
 }
 
-// IsDebugMode 是否Debug模式
-// @return @1 bool 当前是否为Debug模式
+// IsDebugMode reports whether the run mode is debug.
 func IsDebugMode() bool {
 	return dueMode == DebugMode
 }
 
-// IsTestMode 是否Test模式
-// @return @1 bool 当前是否为Test模式
+// IsTestMode reports whether the run mode is test.
 func IsTestMode() bool {
 	return dueMode == TestMode
 }
 
-// IsPreReleaseMode 是否PreRelease模式
-// @return @1 bool 当前是否为PreRelease模式
+// IsPreReleaseMode reports whether the run mode is pre-release.
 func IsPreReleaseMode() bool {
 	return dueMode == PreReleaseMode
 }
 
-// IsReleaseMode 是否Release模式
-// @return @1 bool 当前是否为Release模式
+// IsReleaseMode reports whether the run mode is release.
 func IsReleaseMode() bool {
 	return dueMode == ReleaseMode
 }

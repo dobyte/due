@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/14 10:47 上午
- * @Desc: TODO
- */
-
 package encoding
 
 import (
@@ -29,15 +22,15 @@ func init() {
 }
 
 type Codec interface {
-	// Name 编解码器类型
+	// Name returns the codec type.
 	Name() string
-	// Marshal 编码
+	// Marshal encodes v.
 	Marshal(v any) ([]byte, error)
-	// Unmarshal 解码
+	// Unmarshal decodes data into v.
 	Unmarshal(data []byte, v any) error
 }
 
-// Register 注册编解码器
+// Register registers a codec.
 func Register(codec Codec) {
 	if codec == nil {
 		log.Fatal("can't register a invalid codec")
@@ -56,7 +49,7 @@ func Register(codec Codec) {
 	codecs[name] = codec
 }
 
-// Invoke 调用编解码器
+// Invoke returns the codec registered under name, panicking when it is not registered.
 func Invoke(name string) Codec {
 	codec, ok := codecs[name]
 	if !ok {

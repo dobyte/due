@@ -12,7 +12,7 @@ type subscription struct {
 	handler eventbus.EventHandler
 }
 
-// Unsubscribe 取消订阅
+// Unsubscribe cancels the subscription.
 func (s *subscription) Unsubscribe(_ context.Context) error {
 	return s.eb.unsubscribe(s.topic, s)
 }

@@ -2,15 +2,15 @@ package rsa
 
 const Name = "rsa"
 
-// EncryptPadding 加密填充算法
+// EncryptPadding is the padding scheme used for encryption.
 type EncryptPadding string
 
 const (
-	NORMAL EncryptPadding = "NORMAL" // RSA_PKCS1_PADDING，数据切割加密长度算法为：模数长度-11
-	OAEP   EncryptPadding = "OAEP"   // RSA_PKCS1_OAEP_PADDING，数据切割加密长度算法为：公共模数长度-(2*哈希长度的)-2
+	NORMAL EncryptPadding = "NORMAL" // RSA_PKCS1_PADDING; the block size for chunked encryption is modulus length - 11
+	OAEP   EncryptPadding = "OAEP"   // RSA_PKCS1_OAEP_PADDING; the block size for chunked encryption is public modulus length - 2*hash length - 2
 )
 
-// SignPadding 签名填充算法
+// SignPadding is the padding scheme used for signing.
 type SignPadding string
 
 const (

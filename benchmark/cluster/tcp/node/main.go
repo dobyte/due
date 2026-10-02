@@ -14,28 +14,28 @@ import (
 const greet = 1
 
 func main() {
-	// 创建容器
+	// Create the container
 	container := due.NewContainer()
-	// 创建用户定位器
+	// Create the user locator
 	locator := redis.NewLocator()
-	// 创建服务发现
+	// Create the service registry
 	registry := nacos.NewRegistry()
-	// 创建节点组件
+	// Create the node component
 	component1 := node.NewNode(
 		node.WithLocator(locator),
 		node.WithRegistry(registry),
 	)
-	// 创建PProf组件
+	// Create the pprof component
 	component2 := pprof.NewPProf()
-	// 初始化监听
+	// Initialize the listeners
 	initListen(component1.Proxy())
-	// 添加节点组件
+	// Add the node component
 	container.Add(component1, component2)
-	// 启动容器
+	// Start the container
 	container.Serve()
 }
 
-// 初始化监听
+// initListen initializes the listeners.
 func initListen(proxy *node.Proxy) {
 	proxy.Router().AddRouteHandler(greet, greetHandler)
 }

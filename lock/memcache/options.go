@@ -8,57 +8,64 @@ import (
 )
 
 const (
-	defaultAddr              = "127.0.0.1:11211" // 默认客户端连接地址
-	defaultPrefix            = "due:lock"        // 默认key前缀
-	defaultExpiration        = "3s"              // 默认锁过期时间
-	defaultAcquireInterval   = "20ms"            // 默认循环获取锁的时间间隔
-	defaultAcquireMaxRetries = 0                 // 默认循环获取锁的最大重试次数，0表示无限次重试
+	defaultAddr              = "127.0.0.1:11211" // Default client connection address
+	defaultPrefix            = "due:lock"        // Default key prefix
+	defaultExpiration        = "3s"              // Default lock expiration
+	defaultAcquireInterval   = "20ms"            // Default interval between lock acquisition attempts
+	defaultAcquireMaxRetries = 0                 // Default maximum number of lock acquisition retries; 0 means unlimited retries
 )
 
 const (
-	defaultAddrsKey             = "etc.lock.memcache.addrs"             // 连接地址配置key
-	defaultPrefixKey            = "etc.lock.memcache.prefix"            // key前缀配置key
-	defaultExpirationKey        = "etc.lock.memcache.expiration"        // 锁过期时间配置key
-	defaultAcquireIntervalKey   = "etc.lock.memcache.acquireInterval"   // 循环获取锁间隔配置key
-	defaultAcquireMaxRetriesKey = "etc.lock.memcache.acquireMaxRetries" // 循环获取锁最大重试次数配置key
+	defaultAddrsKey             = "etc.lock.memcache.addrs"             // Connection addresses config key
+	defaultPrefixKey            = "etc.lock.memcache.prefix"            // Key prefix config key
+	defaultExpirationKey        = "etc.lock.memcache.expiration"        // Lock expiration config key
+	defaultAcquireIntervalKey   = "etc.lock.memcache.acquireInterval"   // Lock acquisition interval config key
+	defaultAcquireMaxRetriesKey = "etc.lock.memcache.acquireMaxRetries" // Lock acquisition max retries config key
 )
 
-// Option 锁配置函数
+// Option is a lock configuration function.
 type Option func(o *options)
 
-// 锁配置项
-// 控制 memcached 客户端、key前缀、锁过期时间以及循环获取锁的行为；
-// 各参数均优先从配置环境读取，未配置时采用默认值
+// options holds the lock configuration.
+//
+// It controls the memcached client, the key prefix, the lock expiration and the lock acquisition
+// behavior. Every field is read from the configuration environment first and falls back to a
+// default when it is not configured.
 type options struct {
-	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:11211"}
+	// Client connection addresses.
+	// Configured for the built-in client; defaults to []string{"127.0.0.1:11211"}.
 	addrs []string
 
-	// 客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// Client.
+	// An external client; when set, it is preferred over the built-in client. Defaults to nil.
 	client *memcache.Client
 
-	// 前缀
-	// key前缀，默认为due:lock
+	// Prefix.
+	// The key prefix; defaults to due:lock.
 	prefix string
 
-	// 锁过期时间，默认为3s
-	// 注意：memcached 过期精度为秒且 0 表示永不过期，NewMaker 会将小于 1s 的配置收敛为 1s；
-	// memcached 按整秒记录过期时间，实际存活时长可能比配置值短近1秒；Acquire/TryAcquire(未指定固定过期)
-	// 会自动续租，续租间隔为过期时间的一半，过期时间小于等于2s时续租难以在锁过期前完成刷新，建议不小于3s
+	// Lock expiration; defaults to 3s.
+	// Note: memcached expiration has second granularity and 0 means never expires, so NewMaker
+	// clamps an expiration below 1s to 1s. memcached records the expiration in whole seconds, so the
+	// actual lifetime may be nearly one second shorter than the configured value. Acquire and
+	// TryAcquire without a fixed expiration renew automatically at half of the expiration; when the
+	// expiration is 2s or less the renewal can hardly finish before the lock expires, so a value of
+	// at least 3s is recommended.
 	expiration time.Duration
 
-	// 循环获取锁的频率间隔时间，默认为20ms
-	// 注意：小于等于0时在 NewMaker 中收敛为默认值20ms，避免重试退化为无退避忙等循环
+	// Interval between lock acquisition attempts; defaults to 20ms.
+	// Note: a value of 0 or less is clamped to the default 20ms in NewMaker to avoid the retry loop
+	// degenerating into a busy-wait without backoff.
 	acquireInterval time.Duration
 
-	// 循环获取锁的最大重试次数，默认为无限次
+	// Maximum number of lock acquisition retries; defaults to unlimited.
 	acquireMaxRetries int
 }
 
-// 创建默认锁配置项
-// 依次从配置环境读取各参数并填充默认值，未配置时采用内置默认值
-// @return @1 *options 默认锁配置项
+// defaultOptions creates the default lock configuration.
+//
+// It reads every parameter from the configuration environment in turn and fills in the built-in
+// defaults for the ones that are not configured.
 func defaultOptions() *options {
 	return &options{
 		addrs:             etc.Get(defaultAddrsKey, []string{defaultAddr}).Strings(),
@@ -69,52 +76,53 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddrs 设置客户端连接地址
-// 设置内建客户端的连接地址，未指定外部客户端时生效
-// @param addrs ...string 客户端连接地址
-// @return @1 Option 锁配置函数
+// WithAddrs sets the client connection addresses.
+//
+// It sets the connection addresses of the built-in client and takes effect only when no external
+// client is specified.
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
-// WithClient 设置外部客户端
-// 设置外部客户端，存在外部客户端时优先使用之；此时构建器关闭将不再管理客户端生命周期
-// @param client *memcache.Client 外部客户端
-// @return @1 Option 锁配置函数
+// WithClient sets an external client.
+//
+// It sets an external client, which is preferred when present; in that case the Maker no longer
+// manages the client's lifecycle when it is closed.
 func WithClient(client *memcache.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithPrefix 设置前缀
-// 设置key前缀，最终锁key为 prefix + ":" + name；前缀为空时不进行拼接
-// @param prefix string key前缀
-// @return @1 Option 锁配置函数
+// WithPrefix sets the key prefix.
+//
+// The final lock key is prefix + ":" + name; when the prefix is empty no concatenation happens.
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
-// WithExpiration 设置锁过期时间
-// 锁的过期时长，同时是后台续租刷新的目标时长；memcached 精度为秒，小于1秒的配置会被收敛为1秒；
-// 注意：memcached 按整秒记录过期时间，实际存活时长可能比配置值短近1秒；后台续租间隔为过期时间的一半，
-// 小于2秒的过期时间可能使续租难以在锁过期前完成刷新，需持续持有锁的续租场景建议不小于3s
-// @param expiration time.Duration 锁过期时间
-// @return @1 Option 锁配置函数
+// WithExpiration sets the lock expiration.
+//
+// It sets the expiration of the lock, which is also the target duration refreshed by the background
+// renewal. memcached has second granularity, so a value below 1s is clamped to 1s. Note: memcached
+// records the expiration in whole seconds, so the actual lifetime may be nearly one second shorter
+// than the configured value. The background renewal interval is half of the expiration, so an
+// expiration below 2s may make it hard for the renewal to finish before the lock expires; for a
+// renewal scenario that needs to hold the lock continuously, a value of at least 3s is recommended.
 func WithExpiration(expiration time.Duration) Option {
 	return func(o *options) { o.expiration = expiration }
 }
 
-// WithAcquireInterval 设置获取锁的时间间隔
-// 循环获取锁失败后再次尝试的时间间隔；小于等于0时在 NewMaker 中收敛为默认值20ms
-// @param acquireInterval time.Duration 获取锁的时间间隔
-// @return @1 Option 锁配置函数
+// WithAcquireInterval sets the interval between lock acquisition attempts.
+//
+// It is the interval between retries after a failed lock acquisition; a value of 0 or less is
+// clamped to the default 20ms in NewMaker.
 func WithAcquireInterval(acquireInterval time.Duration) Option {
 	return func(o *options) { o.acquireInterval = acquireInterval }
 }
 
-// WithAcquireMaxRetries 设置循环获取锁的最大重试次数
-// 达到最大重试次数后仍未获取成功则返回超时错误；0表示无限次重试直至成功或上下文取消
-// @param acquireMaxRetries int 最大重试次数
-// @return @1 Option 锁配置函数
+// WithAcquireMaxRetries sets the maximum number of lock acquisition retries.
+//
+// When the maximum number of retries is reached without acquiring the lock, a timeout error is
+// returned; 0 means unlimited retries until success or context cancellation.
 func WithAcquireMaxRetries(acquireMaxRetries int) Option {
 	return func(o *options) { o.acquireMaxRetries = acquireMaxRetries }
 }

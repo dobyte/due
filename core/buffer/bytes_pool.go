@@ -7,17 +7,17 @@ import (
 
 var defaultBytesPool = NewBytesPool(32)
 
-// MallocBytes 从字节池分配字节
+// MallocBytes allocates a Bytes with the given capacity from the default byte pool.
 func MallocBytes(cap int) *Bytes {
 	return defaultBytesPool.Get(cap)
 }
 
-// BytesPool 字节缓冲池
+// BytesPool is a byte buffer pool.
 type BytesPool struct {
 	pools []*sync.Pool
 }
 
-// NewBytesPool 分级创建字节池
+// NewBytesPool creates a byte pool with the given number of grades.
 func NewBytesPool(grade int) *BytesPool {
 	p := &BytesPool{}
 	p.pools = make([]*sync.Pool, grade+1)
@@ -32,12 +32,12 @@ func NewBytesPool(grade int) *BytesPool {
 	return p
 }
 
-// NewBytesPoolWithCapacity 以指定容量创建字节池
+// NewBytesPoolWithCapacity creates a byte pool whose maximum capacity fits cap.
 func NewBytesPoolWithCapacity(cap int) *BytesPool {
 	return NewBytesPool(bits.Len(uint(max(1, cap) - 1)))
 }
 
-// Get 获取
+// Get returns a Bytes with the given capacity, or nil when no matching pool exists.
 func (p *BytesPool) Get(cap int) *Bytes {
 	pool := p.getPool(cap)
 
@@ -54,7 +54,7 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	return b
 }
 
-// getPool 获取对象池
+// getPool returns the pool matching cap, or nil when cap is out of range.
 func (p *BytesPool) getPool(cap int) *sync.Pool {
 	if cap <= 0 {
 		return nil

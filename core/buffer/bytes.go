@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 )
 
-// Bytes 字节缓冲
+// Bytes is a byte buffer.
 type Bytes struct {
 	buf      []byte
 	lower    int
@@ -18,32 +18,33 @@ type Bytes struct {
 
 var _ Buffer = (*Bytes)(nil)
 
-// NewBytes 以指定buf创建字节
+// NewBytes creates a Bytes over buf. When static is true, the buffer is not returned to the pool
+// on release.
 func NewBytes(buf []byte, static ...bool) *Bytes {
 	return &Bytes{buf: buf, upper: len(buf), static: len(static) > 0 && static[0]}
 }
 
-// NewBytesWithCapacity 以指定容量创建字节
+// NewBytesWithCapacity creates a Bytes with the given capacity.
 func NewBytesWithCapacity(cap int) *Bytes {
 	return &Bytes{buf: make([]byte, cap), upper: cap}
 }
 
-// Len 返回数据长度
+// Len returns the data length.
 func (b *Bytes) Len() int {
 	return b.upper - b.lower
 }
 
-// Cap 返回容量
+// Cap returns the capacity.
 func (b *Bytes) Cap() int {
 	return cap(b.buf)
 }
 
-// Available 返回可用空间
+// Available returns the available space.
 func (b *Bytes) Available() int {
 	return b.Cap() - b.upper
 }
 
-// Slide 滑动lower索引
+// Slide slides the lower index.
 func (b *Bytes) Slide(delta int) bool {
 	if delta >= 0 && delta+b.lower <= b.upper {
 		b.lower += delta
@@ -53,27 +54,27 @@ func (b *Bytes) Slide(delta int) bool {
 	return false
 }
 
-// Nodes 获取节点数
+// Nodes returns the number of nodes.
 func (b *Bytes) Nodes() int {
 	return 1
 }
 
-// Bytes 获取字节数据
+// Bytes returns the byte data.
 func (b *Bytes) Bytes() []byte {
 	return b.buf[b.lower:b.upper]
 }
 
-// VisitBytes 迭代所有字节
+// VisitBytes iterates over all bytes.
 func (b *Bytes) VisitBytes(fn func(bytes []byte) bool) bool {
 	return fn(b.Bytes())
 }
 
-// Delay 设置延迟释放点
+// Delay sets the delayed release point.
 func (b *Bytes) Delay(delay int) {
 	b.delay.Store(int32(delay))
 }
 
-// Release 释放
+// Release releases the buffer.
 func (b *Bytes) Release() {
 	if b.static {
 		return

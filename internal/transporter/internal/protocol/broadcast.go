@@ -16,9 +16,9 @@ const (
 	broadcastResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B64
 )
 
-// EncodeBroadcastReq 编码广播请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + disconnect + <message packet>}
+// EncodeBroadcastReq encodes a broadcast request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + disconnect + <message packet>}
 func EncodeBroadcastReq(seq uint64, kind session.Kind, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(broadcastReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-def.SizeBytes+message.Len()))
@@ -31,9 +31,9 @@ func EncodeBroadcastReq(seq uint64, kind session.Kind, disconnect bool, message 
 	return buffer.NewNocopyBuffer(writer, message)
 }
 
-// DecodeBroadcastReq 解码广播请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + disconnect + <message packet>}
+// DecodeBroadcastReq decodes a broadcast request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + disconnect + <message packet>}
 func DecodeBroadcastReq(req *buffer.Bytes) (session.Kind, bool, *buffer.Bytes, error) {
 	if req.Len() < def.B8+def.B8 {
 		return 0, false, nil, errors.ErrInvalidMessage
@@ -48,9 +48,9 @@ func DecodeBroadcastReq(req *buffer.Bytes) (session.Kind, bool, *buffer.Bytes, e
 	return kind, disconnect, req, nil
 }
 
-// EncodeBroadcastRes 编码广播响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// EncodeBroadcastRes encodes a broadcast response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := broadcastResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
@@ -71,9 +71,9 @@ func EncodeBroadcastRes(seq uint64, code uint16, total ...uint64) *buffer.Nocopy
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeBroadcastRes 解码广播响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// DecodeBroadcastRes decodes a broadcast response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func DecodeBroadcastRes(buf buffer.Buffer) (code uint16, total uint64, err error) {
 	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B64 {
 		err = errors.ErrInvalidMessage

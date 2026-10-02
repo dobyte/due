@@ -11,55 +11,40 @@ import (
 )
 
 const (
-	dataBit          = 0 << 7 // 数据标识
-	heartbeatBit     = 1 << 7 // 心跳标识
-	heartbeatTimeBit = 1 << 6 // 心跳时间戳标识
+	dataBit          = 0 << 7 // Data flag
+	heartbeatBit     = 1 << 7 // Heartbeat flag
+	heartbeatTimeBit = 1 << 6 // Heartbeat timestamp flag
 )
 
-// Packer 打包器接口
-// 定义消息的编码与解码能力
+// Packer defines the encoding and decoding capabilities of messages.
 type Packer interface {
-	// Read 以buffer的形式读取消息
-	// @param reader io.Reader 数据读取源
-	// @return @1 bool 是否为心跳消息
-	// @return @2 int64 服务器侧时间戳（纳秒）
-	// @return @3 buffer.Buffer 消息缓冲区
-	// @return @4 error 读取失败时返回的错误
+	// Read reads a message as a buffer. It reports whether the message is a heartbeat, the
+	// server-side timestamp in nanoseconds, the message buffer and any read error.
 	Read(reader io.Reader) (bool, int64, buffer.Buffer, error)
-	// PackMessage 以buffer的形式打包消息
-	// @param message *Message 消息
-	// @return @1 buffer.Buffer 打包后的消息缓冲区
-	// @return @2 error 打包失败时返回的错误
+	// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 	PackMessage(message *Message) (buffer.Buffer, error)
-	// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
-	// @param buf buffer.Buffer 消息缓冲区
-	// @return @1 int32 路由
-	// @return @2 int32 序列号
-	// @return @3 error 解包失败时返回的错误
+	// ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It
+	// returns the route, the sequence number and any unpacking error.
 	ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
-	// UnpackMessage 解包消息
-	// @param buf buffer.Buffer 消息缓冲区
-	// @return @1 *Message 消息对象
-	// @return @2 error 解包失败时返回的错误
+	// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number,
+	// the message buffer and any unpacking error.
 	UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error)
-	// PackHeartbeat 打包心跳
-	// @param server ...bool 是否为服务端心跳
-	// @return @1 buffer.Buffer 心跳包缓冲区
+	// PackHeartbeat packs a heartbeat. Pass server as true to pack a server-side heartbeat.
 	PackHeartbeat(server ...bool) buffer.Buffer
 }
 
-// defaultPacker 默认打包器
+// defaultPacker is the default packer.
 type defaultPacker struct {
-	opts      *options      // 打包配置
-	heartbeat buffer.Buffer // 预构建的心跳包
+	opts      *options      // Packing options
+	heartbeat buffer.Buffer // Prebuilt heartbeat packet
 }
 
 var _ Packer = (*defaultPacker)(nil)
 
-// NewPacker 创建默认打包器
-// 校验配置合法性并预构建心跳包；传入参数不合法时将直接终止程序
-// @param opts ...Option 打包配置选项
-// @return @1 *defaultPacker 默认打包器
+// NewPacker returns a new default packer.
+//
+// It validates the options and prebuilds the heartbeat packet. The program terminates when the
+// given options are invalid.
 func NewPacker(opts ...Option) *defaultPacker {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -85,13 +70,10 @@ func NewPacker(opts ...Option) *defaultPacker {
 	return p
 }
 
-// Read 以buffer的形式读取消息
-// 优先识别 *bufio.Reader 走零分配快路径，其余读取源回退到池化头部缓冲读取
-// @param reader io.Reader 数据读取源
-// @return @1 bool 是否为心跳消息
-// @return @2 int64 服务器侧时间戳（纳秒）
-// @return @3 buffer.Buffer 消息缓冲区
-// @return @4 error 读取失败时返回的错误
+// Read reads a message as a buffer.
+//
+// It takes the zero-allocation fast path for *bufio.Reader and falls back to pooled header-buffer
+// reading for other sources.
 func (p *defaultPacker) Read(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 	if r, ok := reader.(*bufio.Reader); ok {
 		return p.readBuffered(r)
@@ -100,13 +82,11 @@ func (p *defaultPacker) Read(reader io.Reader) (bool, int64, buffer.Buffer, erro
 	return p.readPooled(reader)
 }
 
-// readBuffered 基于 *bufio.Reader 的零分配读取
-// 通过 Peek/Discard 直接复用读取缓冲区解析消息头，数据消息仅做一次消息体池分配，心跳消息零分配
-// @param r *bufio.Reader 数据读取源
-// @return @1 bool 是否为心跳消息
-// @return @2 int64 服务器侧时间戳（纳秒）
-// @return @3 buffer.Buffer 消息缓冲区
-// @return @4 error 读取失败时返回的错误
+// readBuffered reads from r without allocating.
+//
+// It parses the message header directly from the read buffer through Peek/Discard, performs a
+// single pooled allocation of the message body for data messages, and allocates nothing for
+// heartbeat messages.
 func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffer, error) {
 	head, err := r.Peek(defaultSizeBytes + defaultHeaderBytes)
 	if err != nil {
@@ -173,13 +153,10 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffe
 	return false, 0, buf, nil
 }
 
-// readPooled 池化头部缓冲读取
-// 头部经字节池读取并显式释放，数据消息额外做一次消息体池分配与头部拷贝
-// @param reader io.Reader 数据读取源
-// @return @1 bool 是否为心跳消息
-// @return @2 int64 服务器侧时间戳（纳秒）
-// @return @3 buffer.Buffer 消息缓冲区
-// @return @4 error 读取失败时返回的错误
+// readPooled reads through a pooled header buffer.
+//
+// The header is read from the byte pool and explicitly released; data messages additionally
+// perform one pooled allocation of the message body and a header copy.
 func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 	buf1 := buffer.MallocBytes(defaultSizeBytes + defaultHeaderBytes)
 
@@ -260,10 +237,7 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 	return false, 0, buf2, nil
 }
 
-// PackMessage 以buffer的形式打包消息
-// @param message *Message 消息
-// @return @1 buffer.Buffer 打包后的消息缓冲区
-// @return @2 error 打包失败时返回的错误
+// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
@@ -312,11 +286,8 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	return buffer.NewNocopyBuffer(writer, message.Buffer), nil
 }
 
-// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 int32 路由
-// @return @2 int32 序列号
-// @return @3 error 解包失败时返回的错误
+// ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It returns
+// the route, the sequence number and any unpacking error.
 func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
 	var (
 		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
@@ -370,12 +341,8 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	return route, seq, nil
 }
 
-// UnpackMessage 解包消息
-// @param data []byte 待解包的原始消息缓冲区
-// @return @1 int32 路由
-// @return @2 int32 序列号
-// @return @3 *buffer.Bytes 消息内容
-// @return @4 error 解包失败时返回的错误
+// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number, the
+// message buffer and any unpacking error.
 func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	var (
 		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
@@ -431,10 +398,11 @@ func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.B
 	return route, seq, buf, nil
 }
 
-// PackHeartbeat 打包心跳
-// 开启心跳时间时携带当前时间戳，否则返回预构建的心跳包
-// 注意：无心跳时间时返回的为共享预构建缓冲区，调用方不可修改或释放
-// @return @1 buffer.Buffer 心跳包字节
+// PackHeartbeat packs a heartbeat.
+//
+// When the heartbeat time is enabled it carries the current timestamp; otherwise it returns the
+// prebuilt heartbeat packet. Note that the packet returned without a heartbeat time is a shared,
+// prebuilt buffer that the caller must neither modify nor release.
 func (p *defaultPacker) PackHeartbeat(server ...bool) buffer.Buffer {
 	if p.opts.heartbeatTime && len(server) > 0 && server[0] {
 		writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
@@ -448,8 +416,8 @@ func (p *defaultPacker) PackHeartbeat(server ...bool) buffer.Buffer {
 	}
 }
 
-// init 初始化打包器
-// 按指定字节序生成不含时间戳的基础心跳包
+// init initializes the packer by building the base heartbeat packet without a timestamp using the
+// configured byte order.
 func (p *defaultPacker) init() {
 	writer := buffer.NewWriter(make([]byte, defaultSizeBytes+defaultHeaderBytes), true)
 	writer.WriteUint32s(p.opts.byteOrder, uint32(defaultHeaderBytes))

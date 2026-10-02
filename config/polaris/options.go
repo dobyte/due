@@ -27,46 +27,38 @@ const (
 	defaultProtocolKey  = "etc.config.polaris.protocol"
 )
 
-// Option 配置项
+// Option is a config option.
 type Option func(o *options)
 
-// options 配置选项
+// options are the config options.
 type options struct {
-	// 上下文
-	// 默认context.Background
+	// Context, defaults to context.Background.
 	ctx context.Context
 
-	// 读写模式
-	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	// Read-write mode; supports read-only, write-only and read-write modes,
+	// defaulting to read-only.
 	mode config.Mode
 
-	// 服务器地址 ip:port
-	// 默认为[]string{127.0.0.1:8091}
+	// Server addresses in the form ip:port, defaulting to []string{"127.0.0.1:8091"}.
 	urls []string
 
-	// 外部SDK上下文
-	// 外部SDK上下文配置，存在外部SDK上下文时，优先使用外部SDK上下文，默认为nil
+	// External SDK context; when present it takes precedence, defaulting to nil.
 	client api.SDKContext
 
-	// 命名空间
-	// 默认为default
+	// Namespace, defaulting to default.
 	namespace string
 
-	// 配置分组
-	// 默认为default
+	// Config group, defaulting to default.
 	group string
 
-	// 请求Polaris服务端超时时间
-	// 默认为3秒
+	// Timeout for requests to the Polaris server, defaulting to 3 seconds.
 	timeout time.Duration
 
-	// 与Polaris服务端的通信协议
-	// 默认为grpc
+	// Protocol for communicating with the Polaris server, defaulting to grpc.
 	protocol string
 }
 
-// defaultOptions 获取默认配置项
-// @return @1 *options 默认配置项
+// defaultOptions returns the default config options.
 func defaultOptions() *options {
 	return &options{
 		ctx:       context.Background(),
@@ -79,60 +71,44 @@ func defaultOptions() *options {
 	}
 }
 
-// WithContext 设置上下文
-// @param ctx context.Context 上下文
-// @return @1 Option 配置项
+// WithContext sets the context.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithMode 设置读写模式
-// @param mode config.Mode 读写模式
-// @return @1 Option 配置项
+// WithMode sets the read-write mode.
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }
 
-// WithUrls 设置服务器地址
-// @param urls ...string 服务器地址列表
-// @return @1 Option 配置项
+// WithUrls sets the server addresses.
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
 }
 
-// WithClient 设置外部SDK上下文
-// 传入外部SDK上下文时，配置源的构建将跳过客户端构建流程，
-// 且该SDK上下文的销毁由调用方负责
-// @param client api.SDKContext 外部SDK上下文
-// @return @1 Option 配置项
+// WithClient sets the external SDK context. When one is supplied, the config
+// source skips the client build process, and the caller is responsible for
+// destroying the SDK context.
 func WithClient(client api.SDKContext) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithNamespace 设置命名空间
-// @param namespace string 命名空间
-// @return @1 Option 配置项
+// WithNamespace sets the namespace.
 func WithNamespace(namespace string) Option {
 	return func(o *options) { o.namespace = namespace }
 }
 
-// WithGroup 设置配置分组
-// @param group string 配置分组
-// @return @1 Option 配置项
+// WithGroup sets the config group.
 func WithGroup(group string) Option {
 	return func(o *options) { o.group = group }
 }
 
-// WithTimeout 设置请求Polaris服务端超时时间
-// @param timeout time.Duration 请求超时时间
-// @return @1 Option 配置项
+// WithTimeout sets the timeout for requests to the Polaris server.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithProtocol 设置与Polaris服务端的通信协议
-// @param protocol string 通信协议
-// @return @1 Option 配置项
+// WithProtocol sets the protocol for communicating with the Polaris server.
 func WithProtocol(protocol string) Option {
 	return func(o *options) { o.protocol = protocol }
 }

@@ -5,10 +5,12 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-// Builder 解析器构建器接口
-// 在标准 gRPC 解析器构建器基础上扩展了服务实例状态更新能力
+// Builder is the resolver builder interface.
+//
+// It extends the standard gRPC resolver builder with the ability to update the state of service
+// instances.
 type Builder interface {
 	resolver.Builder
-	// UpdateStates 更新解析器的状态
+	// UpdateStates updates the resolver state.
 	UpdateStates(instances []*registry.ServiceInstance)
 }

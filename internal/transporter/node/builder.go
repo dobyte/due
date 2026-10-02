@@ -22,11 +22,10 @@ func NewBuilder(opts *ClientOptions) *Builder {
 	}
 }
 
-// Build 构建客户端
-// 拨号建立连接受限于上下文超时，避免对不可达端点无限重试
-// @param addr string 节点地址
-// @return @1 *Client 客户端实例
-// @return @2 error 错误信息
+// Build returns a client for addr, reusing a cached client when one already exists.
+//
+// Dialing is bounded by the dial timeout so that an unreachable endpoint does not trigger
+// indefinite retries.
 func (b *Builder) Build(addr string) (*Client, error) {
 	if cli, ok := b.clients.Load(addr); ok {
 		return cli.(*Client), nil

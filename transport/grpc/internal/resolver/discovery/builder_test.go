@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-// makeInstance 构造测试用服务实例
+// makeInstance builds a service instance for tests.
 func makeInstance(id, state, endpoint string, weight int, services ...string) *registry.ServiceInstance {
 	return &registry.ServiceInstance{
 		ID:       id,
@@ -22,7 +22,7 @@ func makeInstance(id, state, endpoint string, weight int, services ...string) *r
 	}
 }
 
-// stateAddrs 从 resolver.State 中提取地址列表（排序后返回，便于比较）
+// stateAddrs extracts the address list from a resolver.State, returning it sorted for easy comparison.
 func stateAddrs(state *resolver.State) []string {
 	if state == nil {
 		return nil
@@ -35,7 +35,7 @@ func stateAddrs(state *resolver.State) []string {
 	return addrs
 }
 
-// addrWeight 从地址属性中读取权重
+// addrWeight reads the weight from the address attributes.
 func addrWeight(addr resolver.Address) uint32 {
 	if addr.Attributes == nil {
 		return 0
@@ -44,7 +44,7 @@ func addrWeight(addr resolver.Address) uint32 {
 	return v
 }
 
-// snapshotStates 在读锁下拷贝 b.states 的地址列表，便于断言
+// snapshotStates copies the address lists of b.states under the read lock for assertions.
 func snapshotStates(b *Builder) map[string][]string {
 	b.rw.RLock()
 	result := make(map[string][]string, len(b.states))

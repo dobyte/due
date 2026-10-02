@@ -14,31 +14,29 @@ import (
 
 const scheme = "direct"
 
-// Builder 直连模式解析器构建器
-// 支持 direct://地址 与 direct://实例ID 两种直连方式
+// Builder is the resolver builder for direct connection mode.
+//
+// It supports both direct://address and direct://instance_ID forms.
 type Builder struct {
 	rw        sync.RWMutex
 	pairs     map[string][]*cli.KVPair
 	resolvers sync.Map
 }
 
-// NewBuilder 新建直连解析器构建器
-// @return @1 *Builder 构建器实例
+// NewBuilder returns a new builder for the direct connection resolver.
 func NewBuilder() *Builder {
 	return &Builder{}
 }
 
-// Scheme 获取解析器协议
-// @return @1 string 协议名称
+// Scheme returns the resolver scheme.
 func (b *Builder) Scheme() string {
 	return scheme
 }
 
-// Build 构建服务发现器
-// 地址可直接解析为 host:port 时返回点对点发现器，否则按实例ID查找缓存地址
-// @param target *url.URL 目标地址
-// @return @1 cli.ServiceDiscovery 服务发现器
-// @return @2 error 错误信息
+// Build builds a service discovery instance.
+//
+// It returns a peer-to-peer discovery instance when the address can be parsed directly as host:port,
+// and otherwise looks up the cached address by instance ID.
 func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
 	if _, _, err := net.SplitHostPort(target.Host); err == nil {
 		return cli.NewPeer2PeerDiscovery("tcp@"+target.Host, "")
@@ -59,9 +57,11 @@ func (b *Builder) Build(target *url.URL) (cli.ServiceDiscovery, error) {
 	return r, nil
 }
 
-// UpdateStates 更新服务实例状态并同步到各服务发现器
-// 将实例端点按实例ID聚合为地址对，实例下线时下发空状态
-// @param instances []*registry.ServiceInstance 服务实例列表
+// UpdateStates updates the state of service instances and synchronizes it to each service discovery
+// instance.
+//
+// It aggregates instance endpoints into address pairs keyed by instance ID, and pushes an empty
+// state when an instance goes offline.
 func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 	pairs := make(map[string][]*cli.KVPair, len(instances))
 	for _, instance := range instances {
@@ -86,14 +86,12 @@ func (b *Builder) UpdateStates(instances []*registry.ServiceInstance) {
 	})
 }
 
-// removeResolver 移除服务发现器
-// @param r *Resolver 服务发现器
+// removeResolver removes a service discovery instance.
 func (b *Builder) removeResolver(r *Resolver) {
 	b.resolvers.Delete(r.name)
 }
 
-// Close 关闭构建器，释放全部服务发现器
-// @return @1 error 错误信息
+// Close closes the builder and releases all service discovery instances.
 func (b *Builder) Close() error {
 	b.resolvers.Range(func(_, value any) bool {
 		value.(*Resolver).Close()

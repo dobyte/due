@@ -17,9 +17,9 @@ const (
 	setStateResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeGetStateReq 编码获取状态请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq}
+// EncodeGetStateReq encodes a get-state request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq}
 func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateReqBytes-def.SizeBytes))
@@ -30,9 +30,9 @@ func EncodeGetStateReq(seq uint64) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeGetStateReq 解码获取状态请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq}
+// DecodeGetStateReq decodes a get-state request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq}
 func DecodeGetStateReq(buf buffer.Buffer) error {
 	if buf.Len() != 0 {
 		return errors.ErrInvalidMessage
@@ -41,9 +41,9 @@ func DecodeGetStateReq(buf buffer.Buffer) error {
 	return nil
 }
 
-// EncodeGetStateRes 编码获取状态响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + cluster state}
+// EncodeGetStateRes encodes a get-state response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + cluster state}
 func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getStateResBytes-def.SizeBytes))
@@ -56,9 +56,9 @@ func EncodeGetStateRes(seq uint64, code uint16, state cluster.State) *buffer.Noc
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeGetStateRes 解码获取状态响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + cluster state}
+// DecodeGetStateRes decodes a get-state response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + cluster state}
 func DecodeGetStateRes(buf buffer.Buffer) (code uint16, state cluster.State, err error) {
 	if buf.Len() != def.CodeBytes+def.B8 {
 		err = errors.ErrInvalidMessage
@@ -72,9 +72,9 @@ func DecodeGetStateRes(buf buffer.Buffer) (code uint16, state cluster.State, err
 	return
 }
 
-// EncodeSetStateReq 编码设置状态请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{cluster state}
+// EncodeSetStateReq encodes a set-state request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {cluster state}
 func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateReqBytes-def.SizeBytes))
@@ -86,9 +86,9 @@ func EncodeSetStateReq(seq uint64, state cluster.State) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeSetStateReq 解码设置状态请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{cluster state}
+// DecodeSetStateReq decodes a set-state request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {cluster state}
 func DecodeSetStateReq(buf buffer.Buffer) (state cluster.State, err error) {
 	if buf.Len() != def.B8 {
 		err = errors.ErrInvalidMessage
@@ -100,9 +100,9 @@ func DecodeSetStateReq(buf buffer.Buffer) (state cluster.State, err error) {
 	return
 }
 
-// EncodeSetStateRes 编码设置状态响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeSetStateRes encodes a set-state response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(setStateResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(setStateResBytes-def.SizeBytes))
@@ -114,9 +114,9 @@ func EncodeSetStateRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeSetStateRes 解码设置状态响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeSetStateRes decodes a set-state response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeSetStateRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

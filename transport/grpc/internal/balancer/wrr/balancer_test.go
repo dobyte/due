@@ -51,7 +51,7 @@ func TestPickerWeightedDistribution(t *testing.T) {
 		counts[res.SubConn]++
 	}
 
-	// 权重比 3:1，60000 次抽样应接近 45000:15000
+	// With a 3:1 weight ratio, 60000 samples should be close to 45000:15000.
 	want := total * 3 / 4
 	if got := counts[subs[0].sc]; got < want-500 || got > want+500 {
 		t.Errorf("weighted distribution mismatch: first=%d want ~%d", got, want)
@@ -88,18 +88,18 @@ func TestPickerConcurrentSafe(t *testing.T) {
 }
 
 func TestGetWeight(t *testing.T) {
-	// 无属性时默认权重为1
+	// The default weight is 1 when there are no attributes.
 	if w := getWeight(resolver.Address{}); w != 1 {
 		t.Errorf("want default weight 1, got %d", w)
 	}
 
-	// 读取解析器附加的权重属性
+	// Read the weight attribute attached by the resolver.
 	addr := resolver.Address{Attributes: attributes.New(WeightAttrKey, uint32(5))}
 	if w := getWeight(addr); w != 5 {
 		t.Errorf("want weight 5, got %d", w)
 	}
 
-	// 权重为0时兜底为1
+	// A zero weight falls back to 1.
 	addr = resolver.Address{Attributes: attributes.New(WeightAttrKey, uint32(0))}
 	if w := getWeight(addr); w != 1 {
 		t.Errorf("want weight 1 for zero weight, got %d", w)

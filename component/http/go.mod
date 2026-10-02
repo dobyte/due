@@ -16,6 +16,7 @@ require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.4 // indirect
 	github.com/bytedance/sonic/loader v0.5.2 // indirect
+	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-openapi/analysis v0.26.0 // indirect
@@ -46,6 +47,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect

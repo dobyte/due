@@ -6,23 +6,20 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-// Name 负载均衡器名称
+// Name is the load balancer name.
 const Name = "wrr"
 
 var _ balancer.Builder = &Builder{}
 
-// init 注册加权轮询负载均衡器到 gRPC 全局构建器
+// init registers the weighted round-robin load balancer with the global gRPC builder.
 func init() {
 	balancer.Register(&Builder{})
 }
 
-// Builder 加权轮询负载均衡器构建器
+// Builder is the builder of the weighted round-robin load balancer.
 type Builder struct{}
 
-// Build 构建负载均衡器实例
-// @param cc balancer.ClientConn 客户端连接
-// @param opts balancer.BuildOptions 构建选项
-// @return @1 balancer.Balancer 负载均衡器实例
+// Build returns a new load balancer instance.
 func (b *Builder) Build(cc balancer.ClientConn, opts balancer.BuildOptions) balancer.Balancer {
 	return &Balancer{
 		cc:       cc,
@@ -32,8 +29,7 @@ func (b *Builder) Build(cc balancer.ClientConn, opts balancer.BuildOptions) bala
 	}
 }
 
-// Name 获取负载均衡器名称
-// @return @1 string 名称
+// Name returns the load balancer name.
 func (b *Builder) Name() string {
 	return Name
 }

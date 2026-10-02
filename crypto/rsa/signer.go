@@ -24,12 +24,12 @@ func NewSigner(opts ...SignerOption) *Signer {
 	return s
 }
 
-// Name 名称
+// Name returns the name of the signer.
 func (s *Signer) Name() string {
 	return Name
 }
 
-// Sign 签名
+// Sign signs data with the RSA private key.
 func (s *Signer) Sign(data []byte) ([]byte, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -49,7 +49,7 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 	}
 }
 
-// Verify 验签
+// Verify verifies the signature of data with the RSA public key.
 func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
 	if s.err != nil {
 		return false, s.err

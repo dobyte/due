@@ -19,25 +19,29 @@ import (
 	"github.com/jinzhu/copier"
 )
 
+// Configurator manages a set of config sources and exposes the config loaded from them.
 type Configurator interface {
-	// Has 检测多个匹配规则中是否存在配置
+	// Has reports whether a config matching pattern exists.
 	Has(pattern string) bool
-	// Get 获取配置值
+	// Get returns the config value under pattern, falling back to def when the config is missing.
 	Get(pattern string, def ...any) value.Value
-	// Set 设置配置值
+	// Set sets the config value under pattern.
 	Set(pattern string, value any) error
-	// Match 匹配多个规则
+	// Match returns a [Matcher] over the given patterns.
 	Match(patterns ...string) Matcher
-	// Watch 设置监听回调
+	// Watch registers cb to be called when one of the named configs changes; empty names means every
+	// config.
 	Watch(cb WatchCallbackFunc, names ...string)
-	// Load 加载配置项
+	// Load loads the configurations of the named source; empty file means every file of the source.
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
-	// Store 保存配置项
+	// Store saves content as file under the named source, merging it with the existing config unless
+	// override is true.
 	Store(ctx context.Context, source string, file string, content any, override ...bool) error
-	// Close 关闭配置监听
+	// Close closes the configurator and its config sources.
 	Close()
 }
 
+// WatchCallbackFunc is called with the names of the configs that changed.
 type WatchCallbackFunc func(names ...string)
 
 type watcher struct {
@@ -59,6 +63,8 @@ type defaultConfigurator struct {
 
 var _ Configurator = &defaultConfigurator{}
 
+// NewConfigurator returns a new [Configurator] configured with opts and starts watching the config
+// sources for changes.
 func NewConfigurator(opts ...Option) Configurator {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -75,7 +81,7 @@ func NewConfigurator(opts ...Option) Configurator {
 	return r
 }
 
-// 初始化配置源
+// init initializes the config sources and loads their config into the value store.
 func (c *defaultConfigurator) init() {
 	c.sources = make(map[string]Source, len(c.opts.sources))
 	for _, s := range c.opts.sources {
@@ -110,17 +116,17 @@ func (c *defaultConfigurator) init() {
 	c.store(values)
 }
 
-// 保存配置
+// store publishes values to the slot that follows the current index.
 func (c *defaultConfigurator) store(values map[string]any) {
 	c.values[c.idx.Add(1)%int64(len(c.values))] = values
 }
 
-// 加载配置
+// load returns the values of the slot that follows the current index.
 func (c *defaultConfigurator) load() map[string]any {
 	return c.values[c.idx.Load()%int64(len(c.values))]
 }
 
-// 拷贝配置
+// copy returns a deep copy of the currently loaded values.
 func (c *defaultConfigurator) copy() (map[string]any, error) {
 	values := c.load()
 
@@ -136,7 +142,7 @@ func (c *defaultConfigurator) copy() (map[string]any, error) {
 	return dst, nil
 }
 
-// 监听配置源变化
+// watch starts a goroutine per source that watches it and merges its changes into the store.
 func (c *defaultConfigurator) watch() {
 	for _, s := range c.opts.sources {
 		w, err := s.Watch(c.ctx)
@@ -200,7 +206,7 @@ func (c *defaultConfigurator) watch() {
 	}
 }
 
-// 通知给监听器
+// notify calls every watcher that matches one of the given names.
 func (c *defaultConfigurator) notify(names ...string) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()
@@ -223,7 +229,7 @@ func (c *defaultConfigurator) notify(names ...string) {
 	}
 }
 
-// Close 关闭配置监听
+// Close closes the configurator and its config sources.
 func (c *defaultConfigurator) Close() {
 	c.cancel()
 
@@ -232,12 +238,12 @@ func (c *defaultConfigurator) Close() {
 	}
 }
 
-// Has 检测多个匹配规则中是否存在配置
+// Has reports whether a config matching pattern exists.
 func (c *defaultConfigurator) Has(pattern string) bool {
 	return c.doHas(pattern)
 }
 
-// 执行检测配置是否存在操作
+// doHas reports whether pattern resolves to a value in the loaded config.
 func (c *defaultConfigurator) doHas(pattern string) bool {
 	var (
 		keys   = strings.Split(pattern, ".")
@@ -277,7 +283,7 @@ func (c *defaultConfigurator) doHas(pattern string) bool {
 	return found
 }
 
-// Get 获取配置值
+// Get returns the config value under pattern, falling back to def when the config is missing.
 func (c *defaultConfigurator) Get(pattern string, def ...any) value.Value {
 	if val, ok := c.doGet(pattern); ok {
 		return val
@@ -286,12 +292,12 @@ func (c *defaultConfigurator) Get(pattern string, def ...any) value.Value {
 	return value.NewValue(def...)
 }
 
-// Match 匹配多个规则
+// Match returns a [Matcher] over the given patterns.
 func (c *defaultConfigurator) Match(patterns ...string) Matcher {
 	return &defaultMatcher{c: c, patterns: patterns}
 }
 
-// 执行获取配置操作
+// doGet resolves pattern against the loaded values.
 func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 	var (
 		keys   = strings.Split(pattern, ".")
@@ -340,7 +346,7 @@ NOTFOUND:
 	return nil, false
 }
 
-// Set 设置配置值
+// Set sets the config value under pattern.
 func (c *defaultConfigurator) Set(pattern string, value any) error {
 	var (
 		keys = strings.Split(pattern, ".")
@@ -444,7 +450,8 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 	return nil
 }
 
-// Watch 设置监听回调
+// Watch registers cb to be called when one of the named configs changes; empty names means every
+// config.
 func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 	w := &watcher{}
 	w.names = make(map[string]struct{}, len(names))
@@ -459,7 +466,7 @@ func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 	c.rw.Unlock()
 }
 
-// Load 加载配置项
+// Load loads the configurations of the named source; empty file means every file of the source.
 func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
 	s, ok := c.sources[source]
 	if !ok {
@@ -478,7 +485,8 @@ func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...s
 	return configs, nil
 }
 
-// Store 保存配置项
+// Store saves content as file under the named source, merging it with the existing config unless
+// override is true.
 func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content any, override ...bool) error {
 	if content == nil {
 		return errors.ErrInvalidConfigContent

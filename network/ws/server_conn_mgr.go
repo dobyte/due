@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/28 3:48 下午
- * @Desc: 连接管理器
- */
-
 package ws
 
 import (
@@ -22,17 +15,17 @@ import (
 )
 
 type serverConnMgr struct {
-	cid        atomic.Int64 // 连接ID
-	total      atomic.Int64 // 总连接数
-	server     *server      // 服务器
-	connPool   sync.Pool    // 连接池
-	partitions []*partition // 连接管理
+	cid        atomic.Int64 // Connection ID
+	total      atomic.Int64 // Total number of connections
+	server     *server      // Server
+	connPool   sync.Pool    // Connection pool
+	partitions []*partition // Connection management
 }
 
-// newConnMgr 创建连接管理器
-// 初始化连接池、任务池以及按 CPU 数量动态扩容的分片结构
-// @param server *server 所属服务器
-// @return @1 *serverConnMgr 连接管理器
+// newConnMgr returns a new connection manager.
+//
+// It initializes the connection pool, the task pool and the partition structure that grows
+// dynamically with the number of CPUs.
 func newConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
@@ -46,8 +39,10 @@ func newConnMgr(server *server) *serverConnMgr {
 	return cm
 }
 
-// close 关闭所有连接
-// 并行遍历所有分片，逐个关闭其中的连接并等待完成
+// close closes all connections.
+//
+// It traverses every partition in parallel, closes the connections in each partition one by one and
+// waits for completion.
 func (cm *serverConnMgr) close() {
 	wg, _ := taskpool.WithContext(context.Background())
 
@@ -60,8 +55,10 @@ func (cm *serverConnMgr) close() {
 	}
 }
 
-// open 开放连接接入
-// 清除所有分片的停止标志，服务器每次启动时调用以支持重启
+// open allows connections to be accepted.
+//
+// It clears the stopped flag of every partition and is called on each server start to support a
+// restart.
 func (cm *serverConnMgr) open() {
 	for _, p := range cm.partitions {
 		p.rw.Lock()
@@ -70,11 +67,12 @@ func (cm *serverConnMgr) open() {
 	}
 }
 
-// allocateConn 分配连接
-// 自增总连接数并校验上限，超限则回退计数；从连接池取用连接对象初始化后存入分片
-// @param c *websocket.Conn WS连接
-// @param remoteAddr net.Addr 客户端真实地址，应用层代理模式下从代理头解析得到，可为nil
-// @return @1 error 连接数已达上限或服务器已停止时返回的错误
+// allocateConn allocates a connection.
+//
+// It increments the total connection count and checks it against the limit, rolling the count back
+// when the limit is exceeded; it takes a connection object from the connection pool, initializes it
+// and stores it in a partition. remoteAddr is the real client address resolved from the proxy
+// headers in the application proxy mode and may be nil.
 func (cm *serverConnMgr) allocateConn(c *websocket.Conn, remoteAddr net.Addr) error {
 	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
 		cm.total.Add(-1)
@@ -84,7 +82,7 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn, remoteAddr net.Addr) er
 	conn := cm.connPool.Get().(*serverConn)
 
 	if !conn.init(c, remoteAddr) {
-		// 服务器关闭过程中分片拒绝存储，回退计数后归还连接对象，底层连接由调用方关闭
+		// The partition refused the store while the server was closing, so roll the count back and return the connection object; the caller closes the underlying connection.
 		cm.total.Add(-1)
 		cm.connPool.Put(conn)
 		return errors.ErrServerClosed
@@ -93,18 +91,18 @@ func (cm *serverConnMgr) allocateConn(c *websocket.Conn, remoteAddr net.Addr) er
 	return nil
 }
 
-// storeConn 存储连接
-// 按连接指针哈希存入对应分片，分片已停止时拒绝存储
-// @param c *websocket.Conn WS连接
-// @param conn *serverConn 对应的连接对象
-// @return @1 bool 是否存储成功，服务器关闭过程中返回false
+// storeConn stores the connection.
+//
+// It stores the connection in the partition selected by hashing the connection pointer, and refuses
+// the store when the partition has stopped.
 func (cm *serverConnMgr) storeConn(c *websocket.Conn, conn *serverConn) bool {
 	return cm.partitions[cm.connHash(c)].store(c, conn)
 }
 
-// recycleConn 回收连接
-// 从分片中移除连接对象，重置后归还连接池并递减总连接数
-// @param c *websocket.Conn WS连接
+// recycleConn recycles the connection.
+//
+// It removes the connection object from the partition, resets it, returns it to the connection pool
+// and decrements the total connection count.
 func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 	if conn, ok := cm.partitions[cm.connHash(c)].delete(c); ok {
 		conn.reset()
@@ -113,15 +111,16 @@ func (cm *serverConnMgr) recycleConn(c *websocket.Conn) {
 	}
 }
 
-// connHash 通过连接指针计算哈希
-// 对连接对象指针地址做位混合后取模，确定其所属分片索引，避免对象地址对齐导致分片分布不均
-// @param c *websocket.Conn WS连接
-// @return @1 int 分片索引
+// connHash computes the hash from the connection pointer.
+//
+// It mixes the pointer address of the connection object and takes the modulus to determine the
+// partition index, avoiding an uneven partition distribution caused by object address alignment.
 func (cm *serverConnMgr) connHash(c *websocket.Conn) int {
 	return int(cm.mixPointer(uintptr(unsafe.Pointer(c))) % uintptr(len(cm.partitions)))
 }
 
-// mixPointer 打散指针地址，避免对象地址低位对齐导致取模后分片分布不均
+// mixPointer spreads the pointer address to avoid an uneven partition distribution after the
+// modulus caused by the low-bit alignment of object addresses.
 func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
 	x := uint64(p)
 	x ^= x >> 33
@@ -134,15 +133,14 @@ func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
 type partition struct {
 	rw          sync.RWMutex
 	connections map[*websocket.Conn]*serverConn
-	stopped     bool     // 是否已停止接入新连接，关闭分片时置位，服务器重启时复位
-	_           [31]byte // 填充至64字节缓存行，避免相邻分片伪共享
+	stopped     bool     // Whether new connections are no longer accepted; set when the partition closes and reset when the server restarts
+	_           [31]byte // Padding to a 64-byte cache line to avoid false sharing between adjacent partitions
 }
 
-// store 存储连接
-// 将连接映射写入分片；分片已停止时拒绝写入，避免服务器关闭过程中的在途连接泄漏
-// @param c *websocket.Conn WS连接
-// @param conn *serverConn 对应的连接对象
-// @return @1 bool 是否存储成功，分片已停止时返回false
+// store stores the connection.
+//
+// It writes the connection mapping into the partition and refuses the write when the partition has
+// stopped, avoiding a leak of in-flight connections while the server is closing.
 func (p *partition) store(c *websocket.Conn, conn *serverConn) bool {
 	p.rw.Lock()
 
@@ -157,11 +155,9 @@ func (p *partition) store(c *websocket.Conn, conn *serverConn) bool {
 	return true
 }
 
-// delete 删除连接
-// 从分片中移除并返回对应的连接对象
-// @param c *websocket.Conn WS连接
-// @return @1 *serverConn 对应的连接对象，不存在时为nil
-// @return @2 bool 连接是否存在
+// delete deletes the connection.
+//
+// It removes the connection object from the partition and returns it.
 func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 	p.rw.Lock()
 	conn, ok := p.connections[c]
@@ -173,10 +169,12 @@ func (p *partition) delete(c *websocket.Conn) (*serverConn, bool) {
 	return conn, ok
 }
 
-// close 关闭该分片内的所有连接
-// 先置位停止标志阻断新连接写入，再串行关闭分片下所有连接，分片之间由外层并行驱动，
-// 避免向任务池瞬时提交海量阻塞任务；连接被其他路径并发关闭属正常竞态，不视为错误
-// @return @1 error 任一连接关闭失败时返回的首个错误
+// close closes every connection in the partition.
+//
+// It first sets the stopped flag to block new connection writes and then closes every connection in
+// the partition serially; the outer layer drives the partitions in parallel, which avoids
+// submitting a huge number of blocking tasks to the task pool at once. Closing the same connection
+// concurrently from another path is a normal race and is not treated as an error.
 func (p *partition) close() error {
 	p.rw.Lock()
 	p.stopped = true

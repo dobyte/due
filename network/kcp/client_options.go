@@ -44,24 +44,24 @@ const (
 type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
-	addr              string        // 地址
-	dialTimeout       time.Duration // 拨号超时时间，默认3s
-	writeTimeout      time.Duration // 写入超时时间，默认无超时
-	writeQueueSize    int           // 写入队列大小，默认1024
-	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
-	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
-	mtu               int           // 最大传输单元，默认不设置
-	noDelay           []int         // 是否开启无延迟模式，默认不设置
-	ackNoDelay        bool          // 是否开启ACK延迟确认，默认不设置
-	writeDelay        bool          // 是否开启写延迟，默认不设置
-	windowSize        []int         // 窗口大小，默认不设置
-	readBuffer        int           // 读取缓冲区大小，默认不设置
-	writeBuffer       int           // 写入缓冲区大小，默认不设置
+	addr              string        // Address
+	dialTimeout       time.Duration // Dial timeout, 3s by default
+	writeTimeout      time.Duration // Write timeout, no timeout by default
+	writeQueueSize    int           // Write queue size, 1024 by default
+	heartbeatInterval time.Duration // Heartbeat interval, 10s by default
+	closeTimeout      time.Duration // Graceful close timeout, 0s by default, meaning unlimited
+	mtu               int           // Maximum transmission unit, unset by default
+	noDelay           []int         // Whether to enable no-delay mode, unset by default
+	ackNoDelay        bool          // Whether to enable ACK no-delay, unset by default
+	writeDelay        bool          // Whether to enable write delay, unset by default
+	windowSize        []int         // Window size, unset by default
+	readBuffer        int           // Read buffer size, unset by default
+	writeBuffer       int           // Write buffer size, unset by default
 }
 
-// defaultClientOptions 默认客户端配置
-// 从配置中心读取各配置项，生成默认客户端配置
-// @return @1 *clientOptions 客户端配置
+// defaultClientOptions returns the default client options.
+//
+// Every option is read from the configuration center, falling back to the built-in defaults.
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 
@@ -71,7 +71,8 @@ func defaultClientOptions() *clientOptions {
 		opts.addr = defaultClientDialAddr
 	}
 
-	// 优先读取对齐TCP命名的新键dialTimeout，缺省时回退到历史键timeout以保持兼容
+	// Prefer the new dialTimeout key that aligns with TCP naming, falling back to the legacy
+	// timeout key for compatibility when it is absent.
 	if dialTimeout := etc.Get(defaultClientDialTimeoutKey, etc.Get(defaultClientDialTimeoutLegacyKey, defaultClientDialTimeout)).Duration(); dialTimeout > 0 {
 		opts.dialTimeout = dialTimeout
 	} else {
@@ -113,9 +114,7 @@ func defaultClientOptions() *clientOptions {
 	return opts
 }
 
-// WithClientDialAddr 设置拨号地址
-// @param addr string 拨号地址
-// @return @1 ClientOption 客户端配置选项
+// WithClientDialAddr sets the dial address.
 func WithClientDialAddr(addr string) ClientOption {
 	return func(o *clientOptions) {
 		if addr != "" {
@@ -126,9 +125,7 @@ func WithClientDialAddr(addr string) ClientOption {
 	}
 }
 
-// WithClientDialTimeout 设置拨号超时时间
-// @param dialTimeout time.Duration 拨号超时时间，小于0时忽略
-// @return @1 ClientOption 客户端配置选项
+// WithClientDialTimeout sets the dial timeout. A negative dialTimeout is ignored.
 func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if dialTimeout >= 0 {
@@ -139,9 +136,7 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientHeartbeatInterval 设置心跳间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间
-// @return @1 ClientOption 客户端配置选项
+// WithClientHeartbeatInterval sets the heartbeat interval.
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if heartbeatInterval >= 0 {
@@ -152,16 +147,14 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	}
 }
 
-// WithClientMtu 设置最大传输单元
-// @param mtu int 最大传输单元
-// @return @1 ClientOption 客户端配置选项
+// WithClientMtu sets the maximum transmission unit.
 func WithClientMtu(mtu int) ClientOption {
 	return func(o *clientOptions) { o.mtu = mtu }
 }
 
-// WithClientNoDelay 设置是否开启无延迟模式
-// @param noDelay []int 无延迟模式参数，须为4元组(nodelay, interval, resend, nc)
-// @return @1 ClientOption 客户端配置选项
+// WithClientNoDelay sets whether to enable no-delay mode.
+//
+// noDelay must be a 4-tuple (nodelay, interval, resend, nc).
 func WithClientNoDelay(noDelay []int) ClientOption {
 	return func(o *clientOptions) {
 		if len(noDelay) == 4 {
@@ -172,23 +165,19 @@ func WithClientNoDelay(noDelay []int) ClientOption {
 	}
 }
 
-// WithClientAckNoDelay 设置是否开启ACK延迟确认
-// @param ackNoDelay bool 是否开启ACK延迟确认
-// @return @1 ClientOption 客户端配置选项
+// WithClientAckNoDelay sets whether to enable ACK no-delay.
 func WithClientAckNoDelay(ackNoDelay bool) ClientOption {
 	return func(o *clientOptions) { o.ackNoDelay = ackNoDelay }
 }
 
-// WithClientWriteDelay 设置是否开启写延迟
-// @param writeDelay bool 是否开启写延迟
-// @return @1 ClientOption 客户端配置选项
+// WithClientWriteDelay sets whether to enable write delay.
 func WithClientWriteDelay(writeDelay bool) ClientOption {
 	return func(o *clientOptions) { o.writeDelay = writeDelay }
 }
 
-// WithClientWindowSize 设置窗口大小
-// @param windowSize []int 窗口大小取值，须为2元组(sndwnd, rcvwnd)
-// @return @1 ClientOption 客户端配置选项
+// WithClientWindowSize sets the window size.
+//
+// windowSize must be a 2-tuple (sndwnd, rcvwnd).
 func WithClientWindowSize(windowSize []int) ClientOption {
 	return func(o *clientOptions) {
 		if len(windowSize) == 2 {
@@ -199,23 +188,17 @@ func WithClientWindowSize(windowSize []int) ClientOption {
 	}
 }
 
-// WithClientReadBuffer 设置读取缓冲区大小
-// @param readBuffer int 读取缓冲区大小
-// @return @1 ClientOption 客户端配置选项
+// WithClientReadBuffer sets the read buffer size.
 func WithClientReadBuffer(readBuffer int) ClientOption {
 	return func(o *clientOptions) { o.readBuffer = readBuffer }
 }
 
-// WithClientWriteBuffer 设置写入缓冲区大小
-// @param writeBuffer int 写入缓冲区大小
-// @return @1 ClientOption 客户端配置选项
+// WithClientWriteBuffer sets the write buffer size.
 func WithClientWriteBuffer(writeBuffer int) ClientOption {
 	return func(o *clientOptions) { o.writeBuffer = writeBuffer }
 }
 
-// WithClientWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间，小于0时忽略
-// @return @1 ClientOption 客户端配置选项
+// WithClientWriteTimeout sets the write timeout. A negative writeTimeout is ignored.
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -226,9 +209,7 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientWriteQueueSize 设置写入队列大小
-// @param writeQueueSize int 写入队列大小，小于等于0时忽略
-// @return @1 ClientOption 客户端配置选项
+// WithClientWriteQueueSize sets the write queue size. A value less than or equal to 0 is ignored.
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {
@@ -239,10 +220,10 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	}
 }
 
-// WithClientCloseTimeout 设置优雅关闭超时时间
-// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
-// @param closeTimeout time.Duration 优雅关闭超时时间
-// @return @1 ClientOption 客户端配置选项
+// WithClientCloseTimeout sets the graceful close timeout.
+//
+// When the write queue has not drained before the timeout elapses, the connection gives up waiting
+// and is closed forcibly. A value of 0, the default, means unlimited.
 func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if closeTimeout >= 0 {

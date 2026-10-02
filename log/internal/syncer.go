@@ -1,10 +1,11 @@
 package internal
 
+// Syncer writes log entities to a destination.
 type Syncer interface {
-	// Name 同步器名称
+	// Name returns the syncer name.
 	Name() string
-	// Write 写入日志
+	// Write writes the log entity.
 	Write(entity *Entity) error
-	// Close 关闭同步器
+	// Close closes the syncer.
 	Close() error
 }

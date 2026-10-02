@@ -22,17 +22,17 @@ func NewClient(cli *drpc.Client) *Client {
 	}
 }
 
-// Trigger 触发事件
+// Trigger triggers an event on the node.
 func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int64) error {
 	return c.cli.Push(ctx, protocol.EncodeTriggerReq(0, event, cid, uid), cid)
 }
 
-// Deliver 投递消息
+// Deliver delivers a message to the node.
 func (c *Client) Deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) error {
 	return c.cli.Push(ctx, protocol.EncodeDeliverReq(0, cid, uid, buf), cid)
 }
 
-// GetState 获取状态
+// GetState returns the state of the node.
 func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeGetStateReq(seq)
@@ -53,7 +53,7 @@ func (c *Client) GetState(ctx context.Context) (cluster.State, error) {
 	}
 }
 
-// SetState 设置状态
+// SetState sets the state of the node.
 func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeSetStateReq(seq, state)
@@ -74,7 +74,7 @@ func (c *Client) SetState(ctx context.Context, state cluster.State) error {
 	}
 }
 
-// 生成序列号，规避生成序列号为0的编号
+// doGenSequence generates a sequence number, skipping the value 0.
 func (c *Client) doGenSequence() uint64 {
 	if seq := c.seq.Add(1); seq == 0 {
 		return c.seq.Add(1)

@@ -1,7 +1,7 @@
 package ws
 
-// protocol 协议标识
+// protocol is the protocol identifier.
 const protocol = "ws"
 
-// minWriteQueueSize 最小写入队列大小
+// minWriteQueueSize is the minimum write queue size.
 const minWriteQueueSize = 128

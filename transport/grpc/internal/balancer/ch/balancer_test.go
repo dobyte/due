@@ -44,7 +44,7 @@ func TestPickerDeterministic(t *testing.T) {
 	}
 	p := &Picker{ring: newConsistentRing(subs)}
 
-	// 同一哈希键多次 Pick 结果一致（粘性路由）
+	// Repeated Pick calls with the same hash key return the same result (sticky routing).
 	for _, method := range []string{"/a.Service/Foo", "/b.Service/Bar", "/c.Service/Baz", "/d.Service/Qux"} {
 		first, err := p.Pick(balancer.PickInfo{FullMethodName: method})
 		if err != nil {
@@ -69,7 +69,7 @@ func TestPickerContextKey(t *testing.T) {
 	}
 	p := &Picker{ring: newConsistentRing(subs)}
 
-	// 同一哈希键在不同方法下路由到同一节点
+	// The same hash key routes to the same node under different methods.
 	ctx := WithHashKey(context.Background(), "user-1001")
 	var first balancer.SubConn
 	for _, method := range []string{"/a.Service/Foo", "/b.Service/Bar", "/c.Service/Baz"} {
@@ -93,7 +93,7 @@ func TestPickerDistribution(t *testing.T) {
 	}
 	p := &Picker{ring: newConsistentRing(subs)}
 
-	// 大量不同键应覆盖全部节点
+	// A large number of distinct keys should cover all nodes.
 	counts := make(map[balancer.SubConn]int)
 	for i := 0; i < 3000; i++ {
 		res, err := p.Pick(balancer.PickInfo{FullMethodName: "/svc.Method" + strconv.Itoa(i)})
@@ -117,7 +117,7 @@ func TestPickerRebalance(t *testing.T) {
 	}
 	p := &Picker{ring: newConsistentRing(subs)}
 
-	// 记录一批键的初始路由
+	// Record the initial routing for a batch of keys.
 	keys := make([]string, 0, 1000)
 	for i := 0; i < 1000; i++ {
 		keys = append(keys, "key-"+strconv.Itoa(i))
@@ -131,7 +131,7 @@ func TestPickerRebalance(t *testing.T) {
 		initial[k] = res.SubConn
 	}
 
-	// 移除节点 c 后重建环，仅受影响键迁移
+	// Rebuild the ring after removing node c; only the affected keys migrate.
 	p2 := &Picker{ring: newConsistentRing(subs[:2])}
 	moved := 0
 	for _, k := range keys {
@@ -144,7 +144,7 @@ func TestPickerRebalance(t *testing.T) {
 		}
 	}
 
-	// 移除 1/3 节点，理论迁移约 1/3 的键
+	// Removing 1 of 3 nodes should theoretically migrate about 1/3 of the keys.
 	if moved < 200 || moved > 450 {
 		t.Errorf("rebalance ratio unexpected: moved=%d/1000", moved)
 	}

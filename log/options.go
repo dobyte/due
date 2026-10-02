@@ -25,16 +25,17 @@ const (
 
 var defaultTerminals = []Terminal{TerminalConsole, TerminalFile}
 
+// Option configures a logger.
 type Option func(o *options)
 
 type options struct {
-	level        Level    // 输出级别
-	syncers      []Syncer // 日志同步器
-	terminals    any      // 输出终端
-	stackLevel   Level    // 输出栈的日志级别
-	callSkip     int      // 输出栈的跳过深度
-	callFullPath bool     // 输出栈的调用文件全路径
-	timeFormat   string   // 时间格式，标准库时间格式，默认2006/01/02 15:04:05.000000
+	level        Level    // Output level
+	syncers      []Syncer // Log syncers
+	terminals    any      // Output terminals
+	stackLevel   Level    // Log level from which the stack is emitted
+	callSkip     int      // Number of stack frames to skip when emitting the stack
+	callFullPath bool     // Whether to emit the full path of the caller file for the stack
+	timeFormat   string   // Time format in the standard library layout, default 2006/01/02 15:04:05.000000
 }
 
 func defaultOptions() *options {
@@ -71,17 +72,17 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithLevel 设置日志的输出级别
+// WithLevel sets the output level of the logger.
 func WithLevel(level Level) Option {
 	return func(o *options) { o.level = level }
 }
 
-// WithSyncers 设置日志同步器
+// WithSyncers sets the log syncers.
 func WithSyncers(syncers ...Syncer) Option {
 	return func(o *options) { o.syncers = syncers }
 }
 
-// WithTerminals 设置日志的输出终端
+// WithTerminals sets the output terminals of the logger.
 func WithTerminals[T Terminal | []Terminal | map[Terminal][]Level](terminals ...T) Option {
 	return func(o *options) {
 		switch v := any(terminals).(type) {
@@ -99,22 +100,22 @@ func WithTerminals[T Terminal | []Terminal | map[Terminal][]Level](terminals ...
 	}
 }
 
-// WithStackLevel 设置日志的输出栈的日志级别
+// WithStackLevel sets the log level from which the stack is emitted.
 func WithStackLevel(level Level) Option {
 	return func(o *options) { o.stackLevel = level }
 }
 
-// WithTimeFormat 设置日志输出时间格式
+// WithTimeFormat sets the time format of the log output.
 func WithTimeFormat(timeFormat string) Option {
 	return func(o *options) { o.timeFormat = timeFormat }
 }
 
-// WithCallSkip 设置输出栈的跳过深度
+// WithCallSkip sets the number of stack frames to skip when emitting the stack.
 func WithCallSkip(skip int) Option {
 	return func(o *options) { o.callSkip = skip }
 }
 
-// WithCallFullPath 设置日志的输出栈的调用文件全路径
+// WithCallFullPath sets whether to emit the full path of the caller file for the stack.
 func WithCallFullPath(fullPath bool) Option {
 	return func(o *options) { o.callFullPath = fullPath }
 }

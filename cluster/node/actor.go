@@ -14,73 +14,76 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// Creator Actor处理器创建函数
+// Creator is the function that creates an actor processor.
 type Creator func(actor *Actor, args ...any) Processor
 
+// The states of an [Actor].
 const (
-	unstart   int32 = iota // 未启动
-	started                // 已启动
-	destroyed              // 已销毁
+	unstart   int32 = iota // unstart: the actor has not been started
+	started                // started: the actor is running
+	destroyed              // destroyed: the actor has been destroyed
 )
 
-// Actor Actor模型
-// 拥有独立的消息队列与任务队列，保证其内部处理是线程安全的
+// Actor is an actor model.
+//
+// An actor owns an independent message queue and task queue, which keeps its internal processing
+// thread-safe.
 type Actor struct {
-	opts                *actorOptions          // 配置项
-	pid                 string                 // 唯一识别ID（Kind/ID），创建时缓存避免重复拼接
-	scheduler           *Scheduler             // 调度器
-	state               atomic.Int32           // 状态
-	routes              map[int32]RouteHandler // 路由处理器
-	events              sync.Map               // 事件处理器
-	defaultRouteHandler RouteHandler           // 默认路由处理器
-	processor           Processor              // 处理器
-	rw                  *sync.RWMutex          // 锁
-	taskQueue           *queue.Tasker          // 任务队列
-	messageQueue        *queue.Queue[Context]  // 消息队列
-	binds               sync.Map               // 绑定的用户
-	registered          atomic.Bool            // 是否已登记到调度器的kind引用计数中
-	dispatchGoid        atomic.Int64           // 分发器协程ID
+	opts                *actorOptions          // Actor options
+	pid                 string                 // Unique identifier (Kind/ID), cached at creation time to avoid repeated concatenation
+	scheduler           *Scheduler             // Scheduler
+	state               atomic.Int32           // Actor state
+	routes              map[int32]RouteHandler // Route handlers
+	events              sync.Map               // Event handlers
+	defaultRouteHandler RouteHandler           // Default route handler
+	processor           Processor              // Processor
+	rw                  *sync.RWMutex          // Read-write lock
+	taskQueue           *queue.Tasker          // Task queue
+	messageQueue        *queue.Queue[Context]  // Message queue
+	binds               sync.Map               // Bound users
+	registered          atomic.Bool            // Whether the actor has been registered in the scheduler's kind reference count
+	dispatchGoid        atomic.Int64           // Goroutine ID of the dispatcher
 }
 
-// ID 获取Actor的ID
-// @return @1 string Actor的ID
+// ID returns the actor ID.
 func (a *Actor) ID() string {
 	return a.opts.id
 }
 
-// PID 获取Actor的唯一识别ID
-// 由Kind与ID组合而成，用于全局唯一定位该Actor
-// @return @1 string Actor的唯一识别ID
+// PID returns the unique identifier of the actor.
+//
+// The identifier is composed of the kind and the ID and is used to globally locate the actor.
 func (a *Actor) PID() string {
 	return a.pid
 }
 
-// Kind 获取Actor类型
-// @return @1 string Actor类型
+// Kind returns the actor kind.
 func (a *Actor) Kind() string {
 	return a.opts.kind
 }
 
-// Spawn 衍生出一个Actor
-// @param creator Creator Actor处理器创建函数
-// @param opts ...ActorOption Actor配置项
-// @return @1 *Actor 衍生出的Actor实例
-// @return @2 error Actor已存在或创建失败时返回的错误
+// Spawn derives a new actor from the actor.
+//
+// creator creates the processor of the new actor and opts configures it. It reports an error when
+// an actor with the same kind and ID already exists or when creation fails.
 func (a *Actor) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	return a.scheduler.spawn(creator, opts...)
 }
 
-// Proxy 获取代理API
-// @return @1 *Proxy 节点代理
+// Proxy returns the node proxy.
 func (a *Actor) Proxy() *Proxy {
 	return a.scheduler.node.proxy
 }
 
-// Invoke 调用函数（Actor内线程安全）
-// 任务写入Actor的任务队列串行执行；阻塞模式下会等待函数执行完成
-// @param f func() 待调用的函数
-// @param wait ...bool 是否等待调用完成，默认不等待
-// @return @1 error Actor未启动或任务入队失败时返回的错误
+// Invoke calls f in a thread-safe manner inside the actor.
+//
+// The call is written to the actor's task queue and executed serially; in blocking mode (wait is
+// true) it waits for the function to complete and by default it does not wait. A synchronous call
+// made from the actor's own dispatcher goroutine is executed directly, avoiding a deadlock caused
+// by waiting on the queue the caller is running in. Do not wait synchronously across queues in the
+// dispatch chain, for example an actor task that waits synchronously for a node task while that
+// node task waits synchronously for an actor task; the mutual wait forms a cross-queue circular
+// wait deadlock.
 func (a *Actor) Invoke(f func(), wait ...bool) error {
 	if !a.started() {
 		return errors.ErrActorNotStarted
@@ -105,11 +108,8 @@ func (a *Actor) Invoke(f func(), wait ...bool) error {
 	return nil
 }
 
-// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-// @param d time.Duration 延迟时长
-// @param f func() 待调用的函数
-// @return @1 *Timer 定时器，可通过Stop取消
-// @return @2 error Actor未启动时返回的错误
+// AfterFunc schedules f to run after d, matching the semantics of [time.AfterFunc]. The returned
+// [Timer] can be cancelled with Timer.Stop.
 func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if !a.started() {
 		return nil, errors.ErrActorNotStarted
@@ -126,12 +126,10 @@ func (a *Actor) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	return &Timer{timer: timer}, nil
 }
 
-// AfterInvoke 延迟调用（线程安全）
-// 延迟后通过任务队列串行执行函数，保证Actor内线程安全
-// @param d time.Duration 延迟时长
-// @param f func() 待调用的函数
-// @return @1 *Timer 定时器，可通过Stop取消
-// @return @2 error Actor未启动时返回的错误
+// AfterInvoke schedules f to run after d in a thread-safe manner.
+//
+// After the delay, f is executed serially through the task queue, which keeps the actor
+// thread-safe. The returned [Timer] can be cancelled with Timer.Stop.
 func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if !a.started() {
 		return nil, errors.ErrActorNotStarted
@@ -156,8 +154,8 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	return &Timer{timer: timer}, nil
 }
 
-// SetDefaultRouteHandler 设置默认路由处理器
-// @param handler RouteHandler 默认路由处理器，所有未注册路由均由其处理
+// SetDefaultRouteHandler sets the default route handler, which handles every route that has not
+// been registered.
 func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
@@ -176,9 +174,7 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	}
 }
 
-// AddRouteHandler 添加路由处理器
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
+// AddRouteHandler registers handler for the given route.
 func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
@@ -205,9 +201,7 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	}
 }
 
-// AddEventHandler 添加事件处理器
-// @param event cluster.Event 事件类型
-// @param handler EventHandler 事件处理函数
+// AddEventHandler registers handler for the given event.
 func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
@@ -226,9 +220,10 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	}
 }
 
-// Next 投递消息到Actor中进行处理
-// @param ctx Context 消息上下文，写入Actor消息队列串行处理
-// @return @1 error Actor未启动或消息入队失败时返回的错误
+// Next delivers ctx to the actor for processing.
+//
+// The context is written to the actor's message queue and processed serially. It reports an error
+// when the actor has not been started or when enqueuing the message fails.
 func (a *Actor) Next(ctx Context) error {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
@@ -251,10 +246,9 @@ func (a *Actor) Next(ctx Context) error {
 	return nil
 }
 
-// Deliver 投递消息到当前Actor中进行处理
-// @param uid int64 用户ID
-// @param message *cluster.Message 待投递的消息
-// @return @1 error 打包消息或投递失败时返回的错误
+// Deliver delivers message to the current actor for the given user.
+//
+// It reports an error when packing the message or delivering it fails.
 func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	buf, err := a.scheduler.node.proxy.PackBuffer(message.Data)
 	if err != nil {
@@ -283,10 +277,9 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	return nil
 }
 
-// Push 推送消息到本地Node队列上进行处理
-// @param uid int64 用户ID
-// @param message *cluster.Message 待推送的消息
-// @return @1 error 打包消息或推送失败时返回的错误
+// Push pushes message to the local node queue for the given user.
+//
+// It reports an error when packing the message fails.
 func (a *Actor) Push(uid int64, message *cluster.Message) error {
 	buf, err := a.scheduler.node.proxy.PackBuffer(message.Data)
 	if err != nil {
@@ -296,8 +289,8 @@ func (a *Actor) Push(uid int64, message *cluster.Message) error {
 	return a.scheduler.node.router.deliver("", a.scheduler.node.opts.id, a.PID(), 0, uid, message.Seq, message.Route, buf)
 }
 
-// Destroy 销毁Actor
-// @return @1 bool 是否成功销毁，Actor不存在或已销毁时返回false
+// Destroy destroys the actor. It reports false when the actor does not exist or has already been
+// destroyed.
 func (a *Actor) Destroy() (ok bool) {
 	if ok = a.destroy(); !ok {
 		return
@@ -307,9 +300,11 @@ func (a *Actor) Destroy() (ok bool) {
 	return
 }
 
-// 销毁Actor
-// 批量解绑用户、关闭任务与消息队列，释放队列中的残留消息并回调处理器销毁方法
-// @return @1 bool 是否成功销毁，Actor非启动状态时返回false
+// destroy destroys the actor.
+//
+// It unbinds all users, closes the task and message queues, releases the residual messages in the
+// queues and invokes the processor's Destroy method. It reports false when the actor is not in the
+// started state.
 func (a *Actor) destroy() bool {
 	if !a.state.CompareAndSwap(started, destroyed) {
 		return false
@@ -328,10 +323,10 @@ func (a *Actor) destroy() bool {
 	a.messageQueue.Close()
 	a.rw.Unlock()
 
-	// 释放掉所有任务队列中的任务
+	// Release all tasks left in the task queue.
 	a.taskQueue.Clean()
 
-	// 释放掉所有消息队列中的消息
+	// Release all messages left in the message queue.
 	a.messageQueue.Clean(func(ctx Context) { ctx.release() })
 
 	if processor != nil {
@@ -345,22 +340,22 @@ func (a *Actor) destroy() bool {
 	return true
 }
 
-// 绑定用户
-// @param uid int64 用户ID
+// bindUser binds the user with the given uid to the actor.
 func (a *Actor) bindUser(uid int64) {
 	a.binds.Store(uid, struct{}{})
 }
 
-// 解绑用户
-// @param uid int64 待解绑的用户ID
-// @return @1 bool 用户是否已绑定到当前Actor
+// unbindUser unbinds the user with the given uid. It reports whether the user was bound to the
+// actor.
 func (a *Actor) unbindUser(uid int64) bool {
 	_, ok := a.binds.LoadAndDelete(uid)
 	return ok
 }
 
-// 分发
-// 循环监听消息队列与任务队列并分别处理事件/路由消息与任务，队列关闭时退出
+// dispatch dispatches messages and tasks.
+//
+// It loops over the message queue and the task queue, handling event or route messages and tasks
+// respectively, and exits when the queues are closed.
 func (a *Actor) dispatch() {
 	a.dispatchGoid.Store(goid.Get())
 
@@ -408,8 +403,7 @@ func (a *Actor) dispatch() {
 	}
 }
 
-// 是否已启动
-// @return @1 bool 是否处于启动状态
+// started reports whether the actor is in the started state.
 func (a *Actor) started() bool {
 	return a.state.Load() == started
 }

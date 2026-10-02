@@ -7,13 +7,15 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
 
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        go: [1.20.x, 1.21.x, 1.22.x]
+        go: [ "1.27.x" ]
     name: build & test
     runs-on: ubuntu-latest
     services:
@@ -33,10 +35,10 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
 
@@ -44,18 +46,19 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: |
-          go test -v -cover ./... -coverprofile coverage.out -coverpkg ./...
-          go tool cover -func coverage.out -o coverage.out  # Replaces coverage.out with the analysis of coverage.out
+        run: go test -v -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - name: Coverage Summary
+        run: go tool cover -func coverage.out
 
       - name: Go Coverage Badge
-        uses: tj-actions/coverage-badge-go@v1
-        if: ${{ runner.os == 'Linux' && matrix.go == '1.16' }} # Runs this on only one of the ci builds.
+        if: ${{ matrix.go == '1.27.x' }} # Runs this on only one of the ci builds.
+        uses: tj-actions/coverage-badge-go@v3
         with:
           green: 80
           filename: coverage.out
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - uses: stefanzweifel/git-auto-commit-action@v7
         id: auto-commit-action
         with:
           commit_message: Apply Code Coverage Badge
@@ -71,4 +74,8 @@ jobs:
           branch: main
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+          fail_ci_if_error: false

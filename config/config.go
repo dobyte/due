@@ -8,7 +8,7 @@ import (
 
 var globalConfigurator Configurator
 
-// SetConfigurator 设置配置器
+// SetConfigurator sets the global configurator, closing the previous one when it is not nil.
 func SetConfigurator(configurator Configurator) {
 	if globalConfigurator != nil {
 		globalConfigurator.Close()
@@ -16,17 +16,18 @@ func SetConfigurator(configurator Configurator) {
 	globalConfigurator = configurator
 }
 
-// GetConfigurator 获取配置器
+// GetConfigurator returns the global configurator.
 func GetConfigurator() Configurator {
 	return globalConfigurator
 }
 
-// SetConfiguratorWithSources 通过设置配置源来设置配置器
+// SetConfiguratorWithSources creates a configurator from sources and installs it as the global
+// configurator.
 func SetConfiguratorWithSources(sources ...Source) {
 	SetConfigurator(NewConfigurator(WithSources(sources...)))
 }
 
-// Has 检测多个匹配规则中是否存在配置
+// Has reports whether a config matching pattern exists.
 func Has(pattern string) bool {
 	if globalConfigurator == nil {
 		return false
@@ -35,7 +36,7 @@ func Has(pattern string) bool {
 	return globalConfigurator.Has(pattern)
 }
 
-// Get 获取配置值
+// Get returns the config value under pattern, falling back to def when the config is missing.
 func Get(pattern string, def ...any) value.Value {
 	if globalConfigurator == nil {
 		return value.NewValue()
@@ -44,7 +45,7 @@ func Get(pattern string, def ...any) value.Value {
 	return globalConfigurator.Get(pattern, def...)
 }
 
-// Set 设置配置值
+// Set sets the config value under pattern.
 func Set(pattern string, value any) error {
 	if globalConfigurator == nil {
 		return nil
@@ -53,7 +54,7 @@ func Set(pattern string, value any) error {
 	return globalConfigurator.Set(pattern, value)
 }
 
-// Match 匹配多个规则
+// Match returns a [Matcher] over the given patterns.
 func Match(patterns ...string) Matcher {
 	if globalConfigurator == nil {
 		return newEmptyMatcher()
@@ -62,7 +63,8 @@ func Match(patterns ...string) Matcher {
 	return globalConfigurator.Match(patterns...)
 }
 
-// Watch 设置监听回调
+// Watch registers cb to be called when one of the named configs changes; empty names means every
+// config.
 func Watch(cb WatchCallbackFunc, names ...string) {
 	if globalConfigurator == nil {
 		return
@@ -71,7 +73,7 @@ func Watch(cb WatchCallbackFunc, names ...string) {
 	globalConfigurator.Watch(cb, names...)
 }
 
-// Load 加载配置项
+// Load loads the configurations of the named source; empty file means every file of the source.
 func Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
 	if globalConfigurator == nil {
 		return nil, nil
@@ -80,7 +82,8 @@ func Load(ctx context.Context, source string, file ...string) ([]*Configuration,
 	return globalConfigurator.Load(ctx, source, file...)
 }
 
-// Store 保存配置项
+// Store saves content as file under the named source, merging it with the existing config unless
+// override is true.
 func Store(ctx context.Context, source string, file string, content any, override ...bool) error {
 	if globalConfigurator == nil {
 		return nil
@@ -89,7 +92,7 @@ func Store(ctx context.Context, source string, file string, content any, overrid
 	return globalConfigurator.Store(ctx, source, file, content, override...)
 }
 
-// Close 关闭配置监听
+// Close closes the global configurator and stops watching config changes.
 func Close() {
 	if globalConfigurator != nil {
 		globalConfigurator.Close()

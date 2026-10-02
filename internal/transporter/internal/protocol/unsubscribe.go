@@ -15,9 +15,9 @@ const (
 	unsubscribeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeUnsubscribeReq 编码取消订阅频道请求（单次最多取消订阅65535个对象）
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
+// EncodeUnsubscribeReq encodes an unsubscribe request (at most 65535 targets per call).
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
 func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
@@ -34,9 +34,9 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeUnsubscribeReq 解码取消订阅频道请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
+// DecodeUnsubscribeReq decodes an unsubscribe request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
 func DecodeUnsubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64, channel string, err error) {
 	data := buf.Bytes()
 
@@ -65,9 +65,9 @@ func DecodeUnsubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64
 	return
 }
 
-// EncodeUnsubscribeRes 编码取消订阅频道响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeUnsubscribeRes encodes an unsubscribe response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unsubscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unsubscribeResBytes-def.SizeBytes))
@@ -79,9 +79,9 @@ func EncodeUnsubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeUnsubscribeRes 解码取消订阅频道响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeUnsubscribeRes decodes an unsubscribe response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeUnsubscribeRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

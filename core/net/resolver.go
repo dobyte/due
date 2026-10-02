@@ -24,21 +24,21 @@ var (
 	globalPrivateIPResolver IPResolver = defaultPrivateIPResolver
 )
 
-// SetPublicIPResolver 设置公网IP解析器
+// SetPublicIPResolver sets the public IP resolver.
 func SetPublicIPResolver(resolver IPResolver) {
 	if resolver != nil {
 		globalPublicIPResolver = resolver
 	}
 }
 
-// SetPrivateIPResolver 设置私网IP解析器
+// SetPrivateIPResolver sets the private IP resolver.
 func SetPrivateIPResolver(resolver IPResolver) {
 	if resolver != nil {
 		globalPrivateIPResolver = resolver
 	}
 }
 
-// 默认私网IP解析器
+// defaultPrivateIPResolver is the default private IP resolver.
 func defaultPrivateIPResolver() (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -96,7 +96,7 @@ func defaultPrivateIPResolver() (string, error) {
 	}
 }
 
-// 默认公网IP解析器
+// defaultPublicIPResolver is the default public IP resolver.
 func defaultPublicIPResolver() (string, error) {
 	var (
 		ch      = make(chan string)
@@ -124,7 +124,7 @@ func defaultPublicIPResolver() (string, error) {
 	}
 }
 
-// 获取公网IP地址
+// doQueryPublicIP queries the public IP address from url.
 func doQueryPublicIP(url string, timeout time.Duration) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {

@@ -20,7 +20,7 @@ func NewChain() *Chain {
 	return &Chain{}
 }
 
-// AddToHead 添加头部
+// AddToHead adds fn to the head of the chain.
 func (c *Chain) AddToHead(fn func()) {
 	if c.head == nil || c.canceled {
 		c.head = &node{fn: fn}
@@ -32,7 +32,7 @@ func (c *Chain) AddToHead(fn func()) {
 	}
 }
 
-// AddToTail 添加到尾部
+// AddToTail adds fn to the tail of the chain.
 func (c *Chain) AddToTail(fn func()) {
 	if c.tail == nil || c.canceled {
 		c.tail = &node{fn: fn}
@@ -44,7 +44,7 @@ func (c *Chain) AddToTail(fn func()) {
 	}
 }
 
-// FireHead 从头部开始执行
+// FireHead executes the chain from the head.
 func (c *Chain) FireHead() {
 	if c.canceled {
 		return
@@ -64,7 +64,7 @@ func (c *Chain) FireHead() {
 	c.canceled = false
 }
 
-// FireTail 从尾部开始执行
+// FireTail executes the chain from the tail.
 func (c *Chain) FireTail() {
 	if c.canceled {
 		return
@@ -84,17 +84,17 @@ func (c *Chain) FireTail() {
 	c.canceled = false
 }
 
-// Cancel 取消调用栈
+// Cancel cancels execution of the chain.
 func (c *Chain) Cancel() {
 	c.canceled = true
 }
 
-// Recover 恢复调用栈
+// Recover restores the chain after it has been canceled.
 func (c *Chain) Recover() {
 	c.canceled = false
 }
 
-// Release 释放调用栈
+// Release releases the chain.
 func (c *Chain) Release() {
 	c.head = nil
 	c.tail = nil

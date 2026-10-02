@@ -1,9 +1,7 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/6/19 12:20 下午
- * @Desc: TODO
- */
+// Author: fuxiao
+// Email: 576101059@qq.com
+// Date: 2022/6/19 12:20 PM
+// Desc: TODO
 
 package node
 
@@ -25,65 +23,65 @@ import (
 	"github.com/jinzhu/copier"
 )
 
-// 请求上下文
+// request is a request context.
 type request struct {
 	node    *Node
-	ctx     context.Context       // 上下文
-	gid     string                // 来源网关ID
-	nid     string                // 来源节点ID
-	pid     string                // 来源Actor ID
-	cid     int64                 // 连接ID
-	uid     int64                 // 用户ID
-	seq     int32                 // 消息序列号
-	route   int32                 // 消息路由号
-	message any                   // 消息数据
-	cache   []byte                // 消息序列化缓存，克隆时避免重复序列化
-	version atomic.Int32          // 版本号
-	chain   *chains.Chain         // 调用链
-	actor   atomic.Pointer[Actor] // 当前Actor
+	ctx     context.Context       // Context
+	gid     string                // Source gateway ID
+	nid     string                // Source node ID
+	pid     string                // Source actor ID
+	cid     int64                 // Connection ID
+	uid     int64                 // User ID
+	seq     int32                 // Message sequence number
+	route   int32                 // Message route number
+	message any                   // Message data
+	cache   []byte                // Serialized message cache, reused across clones to avoid re-serializing
+	version atomic.Int32          // Version number
+	chain   *chains.Chain         // Call chain
+	actor   atomic.Pointer[Actor] // Current actor
 }
 
-// GID 获取网关ID
+// GID returns the gateway ID.
 func (r *request) GID() string {
 	return r.gid
 }
 
-// NID 获取节点ID
+// NID returns the node ID.
 func (r *request) NID() string {
 	return r.nid
 }
 
-// CID 获取连接ID
+// CID returns the connection ID.
 func (r *request) CID() int64 {
 	return r.cid
 }
 
-// UID 获取用户ID
+// UID returns the user ID.
 func (r *request) UID() int64 {
 	return r.uid
 }
 
-// Seq 获取消息序列号
+// Seq returns the message sequence number.
 func (r *request) Seq() int32 {
 	return r.seq
 }
 
-// Route 获取消息路由号
+// Route returns the message route number.
 func (r *request) Route() int32 {
 	return r.route
 }
 
-// Event 获取事件类型
+// Event returns the event type, which is always 0 for a request.
 func (r *request) Event() cluster.Event {
 	return 0
 }
 
-// Kind 上下文消息类型
+// Kind returns the message kind of the context.
 func (r *request) Kind() Kind {
 	return Request
 }
 
-// Parse 解析消息
+// Parse parses the message into v.
 func (r *request) Parse(v any) error {
 	var msg []byte
 
@@ -114,12 +112,12 @@ func (r *request) Parse(v any) error {
 	return r.node.opts.codec.Unmarshal(msg, v)
 }
 
-// Defer 添加defer延迟调用栈
-// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
-// 区别在于使用Defer方法可以对调用栈进行取消操作
-// 同时，在调用Task和Next方法时会自动取消调用栈
-// 也可通过Cancel方法进行手动取消
-// bottom用于标识是否挂载到栈底部
+// Defer adds a deferred call to the defer call chain.
+//
+// It behaves like the go defer statement but is scoped to the current handler function only, and it
+// is recommended over go defer. The difference is that the chain can be cancelled: calling Task or
+// Next cancels the chain automatically, and Cancel cancels it manually. bottom reports whether fn is
+// attached to the bottom of the chain instead of the top.
 func (r *request) Defer(fn func(), bottom ...bool) {
 	if r.chain == nil {
 		r.chain = chains.NewChain()
@@ -132,21 +130,22 @@ func (r *request) Defer(fn func(), bottom ...bool) {
 	}
 }
 
-// Cancel 取消Defer调用栈
+// Cancel cancels the defer call chain.
 func (r *request) Cancel() {
 	if r.chain != nil {
 		r.chain.Release()
 	}
 }
 
-// 执行defer调用栈
+// compareVersionExecDefer fires the head of the defer call chain when the given version is still
+// current.
 func (r *request) compareVersionExecDefer(version int32) {
 	if r.chain != nil && r.loadVersion() == version {
 		r.chain.FireHead()
 	}
 }
 
-// Clone 克隆Context
+// Clone clones the Context.
 func (r *request) Clone() Context {
 	c := r.node.reqPool.Get().(*request)
 	c.ctx = r.ctx
@@ -173,7 +172,8 @@ func (r *request) Clone() Context {
 		copy(message, m)
 		c.message = message
 	default:
-		// 序列化结果缓存到请求上，多次克隆（如消息转发到多个Actor）仅序列化一次
+		// Cache the serialization result on the request so that repeated clones (for example when
+		// forwarding a message to multiple actors) serialize only once.
 		if r.cache == nil {
 			if msg, err := json.Marshal(m); err != nil {
 				log.Warnf("marshal request message failed: %v", err)
@@ -192,9 +192,10 @@ func (r *request) Clone() Context {
 	return c
 }
 
-// Task 投递任务
-// 推荐使用此方法替代task.Add和go func
-// 调用此方法会自动取消Defer调用栈的所有执行函数
+// Task submits a task.
+//
+// It is recommended over taskpool.Add and go func. Calling it cancels every function of the defer
+// call chain automatically.
 func (r *request) Task(fn func(ctx Context)) {
 	if !r.node.doAddWait() {
 		return
@@ -217,33 +218,34 @@ func (r *request) Task(fn func(ctx Context)) {
 	})
 }
 
-// Next 消息下放
-// 调用此方法会自动取消Defer调用栈的所有执行函数
+// Next dispatches the message to the next stage.
+//
+// Calling it cancels every function of the defer call chain automatically.
 func (r *request) Next() error {
 	return r.node.scheduler.dispatch(r)
 }
 
-// Proxy 获取代理API
+// Proxy returns the proxy API.
 func (r *request) Proxy() *Proxy {
 	return r.node.proxy
 }
 
-// Context 获取上下文
+// Context returns the context.
 func (r *request) Context() context.Context {
 	return r.ctx
 }
 
-// SetValue 为上下文设置值
+// SetValue sets a value on the context.
 func (r *request) SetValue(key, val any) {
 	r.ctx = context.WithValue(r.ctx, key, val)
 }
 
-// GetValue 获取上下文中的值
+// GetValue returns the value associated with key from the context.
 func (r *request) GetValue(key any) any {
 	return r.ctx.Value(key)
 }
 
-// BindGate 绑定网关
+// BindGate binds the gateway.
 func (r *request) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -261,7 +263,7 @@ func (r *request) BindGate(uid ...int64) error {
 	}
 }
 
-// UnbindGate 解绑网关
+// UnbindGate unbinds the gateway.
 func (r *request) UnbindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -273,7 +275,7 @@ func (r *request) UnbindGate(uid ...int64) error {
 	}
 }
 
-// BindNode 绑定节点
+// BindNode binds the node.
 func (r *request) BindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -285,7 +287,7 @@ func (r *request) BindNode(uid ...int64) error {
 	}
 }
 
-// UnbindNode 解绑节点
+// UnbindNode unbinds the node.
 func (r *request) UnbindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -297,7 +299,7 @@ func (r *request) UnbindNode(uid ...int64) error {
 	}
 }
 
-// Subscribe 订阅频道
+// Subscribe subscribes to a channel.
 func (r *request) Subscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
@@ -319,7 +321,7 @@ func (r *request) Subscribe(channel string, uids ...int64) error {
 	}
 }
 
-// Unsubscribe 取消订阅
+// Unsubscribe unsubscribes from a channel.
 func (r *request) Unsubscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
@@ -341,35 +343,35 @@ func (r *request) Unsubscribe(channel string, uids ...int64) error {
 	}
 }
 
-// BindActor 绑定Actor
+// BindActor binds an actor.
 func (r *request) BindActor(kind, id string) error {
 	return r.node.scheduler.bindActor(r.uid, kind, id)
 }
 
-// UnbindActor 解绑Actor
+// UnbindActor unbinds an actor.
 func (r *request) UnbindActor(kind string) {
 	r.node.scheduler.unbindActor(r.uid, kind)
 }
 
-// Spawn 衍生出一个新的Actor
+// Spawn creates a new actor.
 func (r *request) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	return r.node.scheduler.spawn(creator, opts...)
 }
 
-// Kill 杀死存在的一个Actor
+// Kill kills an existing actor.
 func (r *request) Kill(kind, id string) bool {
 	return r.node.scheduler.kill(kind, id)
 }
 
-// Actor 获取Actor
+// Actor returns an actor.
 func (r *request) Actor(kind, id string) (*Actor, bool) {
 	return r.node.scheduler.load(kind, id)
 }
 
-// Invoke 调用函数（线程安全）
-// ctx在全局的处理器中，调用的就是proxy.Invoke
-// ctx在Actor的处理器中，调用的就是actor.Invoke
-// isBlock 表示是否阻塞调用，默认阻塞调用
+// Invoke calls a function in a thread-safe way.
+//
+// In a global handler the context delegates to [Proxy.Invoke], and in an actor handler it delegates
+// to [Actor.Invoke]. isBlock reports whether the call blocks, and it blocks by default.
 func (r *request) Invoke(fn func(), isBlock ...bool) error {
 	if actor := r.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)
@@ -378,9 +380,10 @@ func (r *request) Invoke(fn func(), isBlock ...bool) error {
 	}
 }
 
-// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-// ctx在全局的处理器中，调用的就是proxy.AfterFunc
-// ctx在Actor的处理器中，调用的就是actor.AfterFunc
+// AfterFunc schedules a delayed call and is used the same way as [time.AfterFunc].
+//
+// In a global handler the context delegates to [Proxy.AfterFunc], and in an actor handler it
+// delegates to [Actor.AfterFunc].
 func (r *request) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if actor := r.actor.Load(); actor != nil {
 		return actor.AfterFunc(d, f)
@@ -389,9 +392,10 @@ func (r *request) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	}
 }
 
-// AfterInvoke 延迟调用（线程安全）
-// ctx在全局的处理器中，调用的就是proxy.AfterInvoke
-// ctx在Actor的处理器中，调用的就是actor.AfterInvoke
+// AfterInvoke schedules a thread-safe delayed call.
+//
+// In a global handler the context delegates to [Proxy.AfterInvoke], and in an actor handler it
+// delegates to [Actor.AfterInvoke].
 func (r *request) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if actor := r.actor.Load(); actor != nil {
 		return actor.AfterInvoke(d, f)
@@ -400,7 +404,7 @@ func (r *request) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	}
 }
 
-// GetIP 获取客户端IP
+// GetIP returns the client IP.
 func (r *request) GetIP() (string, error) {
 	if r.gid == "" {
 		return "", errors.ErrIllegalOperation
@@ -413,28 +417,28 @@ func (r *request) GetIP() (string, error) {
 	})
 }
 
-// Deliver 投递消息给节点处理
+// Deliver delivers a message to a node for handling.
 func (r *request) Deliver(args *cluster.DeliverArgs) error {
 	return r.node.proxy.Deliver(r.ctx, args)
 }
 
-// Reply 回复消息
+// Reply replies with a message.
 func (r *request) Reply(message *cluster.Message) error {
 	switch {
-	case r.gid != "": // 来源于网关
+	case r.gid != "": // From a gateway
 		return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
 			GID:     r.gid,
 			Kind:    session.Conn,
 			Target:  r.cid,
 			Message: message,
 		})
-	case r.pid != "": // 来源于Actor
+	case r.pid != "": // From an actor
 		if actor, ok := r.node.scheduler.doLoad(r.pid); ok {
 			return actor.Deliver(r.uid, message)
 		}
 
 		return nil
-	case r.nid != "": // 来源于其他Node
+	case r.nid != "": // From another node
 		if r.nid == r.node.opts.id {
 			return nil
 		}
@@ -449,7 +453,7 @@ func (r *request) Reply(message *cluster.Message) error {
 	}
 }
 
-// Response 响应消息
+// Response responds with a message.
 func (r *request) Response(message any) error {
 	return r.Reply(&cluster.Message{
 		Route: r.route,
@@ -458,7 +462,7 @@ func (r *request) Response(message any) error {
 	})
 }
 
-// Disconnect 关闭来自网关的连接
+// Disconnect closes the connection that comes from a gateway.
 func (r *request) Disconnect(force ...bool) error {
 	if r.gid == "" {
 		return errors.ErrIllegalOperation
@@ -472,62 +476,64 @@ func (r *request) Disconnect(force ...bool) error {
 	})
 }
 
-// NewMeshClient 新建微服务客户端
-// target参数可分为三种模式:
-// 服务直连模式: 	direct://127.0.0.1:8011
-// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
-// 服务发现模式: 	discovery://service_name
+// NewMeshClient creates a new microservice client.
+//
+// target supports three modes:
+//
+//	service direct mode:    direct://127.0.0.1:8011
+//	service direct mode:    direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+//	service discovery mode: discovery://service_name
 func (r *request) NewMeshClient(target string) (transport.Client, error) {
 	return r.node.proxy.NewMeshClient(target)
 }
 
-// 保存当前Actor
+// storeActor stores the current actor.
 func (r *request) storeActor(actor *Actor) {
 	r.actor.Store(actor)
 }
 
-// 删除当前Actor
+// deleteActor clears the current actor.
 func (r *request) deleteActor() {
 	r.actor.Store(nil)
 }
 
-// 增长版本号
+// incrVersion increments the version number.
 func (r *request) incrVersion() int32 {
 	return r.version.Add(1)
 }
 
-// 减少版本号
+// decrVersion decrements the version number.
 func (r *request) decrVersion() int32 {
 	return r.version.Add(-1)
 }
 
-// 获取版本号
+// loadVersion returns the version number.
 func (r *request) loadVersion() int32 {
 	return r.version.Load()
 }
 
-// 取消Defer调用栈
+// cancelDefer cancels the defer call chain.
 func (r *request) cancelDefer() {
 	if r.chain != nil {
 		r.chain.Cancel()
 	}
 }
 
-// 恢复Defer调用栈
+// recoverDefer recovers the defer call chain.
 func (r *request) recoverDefer() {
 	if r.chain != nil {
 		r.chain.Recover()
 	}
 }
 
-// 释放Defer调用栈
+// releaseDefer releases the defer call chain.
 func (r *request) releaseDefer() {
 	if r.chain != nil {
 		r.chain.Release()
 	}
 }
 
-// 比对版本号后进行回收对象
+// compareVersionRecycle recycles the request object after comparing the version number.
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
 		if r.node.router.postRouteHandler != nil {
@@ -538,7 +544,7 @@ func (r *request) compareVersionRecycle(version int32) {
 	}
 }
 
-// 释放请求对象
+// release releases the request object.
 func (r *request) release() {
 	if b, ok := r.message.(buffer.Buffer); ok {
 		b.Release()
