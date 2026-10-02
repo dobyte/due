@@ -21,7 +21,7 @@ func TestIP2Long_ValidIPv4(t *testing.T) {
 	}
 
 	if got := IP2Long("218.108.212.34"); got != 0xDA6CD422 {
-		t.Errorf("IP2Long(218.108.212.34) = %d, want %d", got, 0xDA6CD422)
+		t.Errorf("IP2Long(218.108.212.34) = %d, want %d", got, uint32(0xDA6CD422))
 	}
 }
 

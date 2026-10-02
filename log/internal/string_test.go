@@ -130,7 +130,7 @@ func Benchmark(b *testing.B) {
 			// fmt.Sprintf("%v", v10)
 			// fmt.Sprintf("%v", v11)
 			// fmt.Sprintf("%v", v12)
-			fmt.Sprintf("%v", v13)
+			_ = fmt.Sprintf("%v", v13)
 			// fmt.Sprintf("%v", v14)
 		}
 	})
