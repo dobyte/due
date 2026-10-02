@@ -17,34 +17,33 @@ import (
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
-// Name 配置源名称
+// Name is the name of the config source.
 const Name = "polaris"
 
-// Source 配置源
+// Source is a config source backed by Polaris.
 type Source struct {
-	err            error              // 构建客户端错误信息
-	opts           *options           // 配置项
-	ctx            context.Context    // 上下文
-	cancel         context.CancelFunc // 取消函数
-	builtin        bool               // 是否为内置客户端
-	version        uint64             // 当前搜索版本号
-	versions       map[string]uint64  // 各配置文件对应的搜索版本号
-	chListen       chan string        // 监听指令通道
-	chCancel       chan string        // 取消监听指令通道
-	watchers       sync.Map           // 监听器集合
-	once           sync.Once          // 保证关闭操作只执行一次
-	wg             sync.WaitGroup     // 协程退出等待组
-	searchDisabled bool               // 分组搜索是否不可用
-	configClient   api.ConfigFileAPI  // 配置文件客户端
-	groupClient    api.ConfigGroupAPI // 配置分组客户端
-	subscribed     sync.Map           // 已注册变更监听器的配置文件集合
+	err            error              // Error encountered while building the client
+	opts           *options           // Config options
+	ctx            context.Context    // Context
+	cancel         context.CancelFunc // Cancel function
+	builtin        bool               // Whether the client is built in
+	version        uint64             // Current search version
+	versions       map[string]uint64  // Search version of each config file
+	chListen       chan string        // Listen request channel
+	chCancel       chan string        // Cancel-listen request channel
+	watchers       sync.Map           // Watcher set
+	once           sync.Once          // Ensures the shutdown runs only once
+	wg             sync.WaitGroup     // Wait group for goroutine exit
+	searchDisabled bool               // Whether group search is unavailable
+	configClient   api.ConfigFileAPI  // Config file client
+	groupClient    api.ConfigGroupAPI // Config group client
+	subscribed     sync.Map           // Config files that have registered a change listener
 }
 
-// NewSource 创建配置源
-// 根据选项构建Polaris配置中心客户端，并启动配置监听与刷新协程；
-// 传入外部SDK上下文时优先使用外部SDK上下文，且该上下文由调用方负责销毁
-// @param opts ...Option 配置项
-// @return @1 config.Source 配置源
+// NewSource creates a config source. It builds a Polaris config center client from
+// the options and starts the config listen and refresh goroutines. When an
+// external SDK context is supplied it takes precedence, and the caller is
+// responsible for destroying it.
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -83,18 +82,15 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 获取配置源名称
-// @return @1 string 配置源名称
+// Name returns the name of the config source.
 func (s *Source) Name() string {
 	return Name
 }
 
-// Load 加载配置项
-// 传入file参数时仅加载指定的配置项；未传入file参数时，加载分组下所有已发布的配置项
-// @param ctx context.Context 上下文
-// @param file ...string 待加载的配置文件名称
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Load loads configuration items.
+//
+// When file is provided it loads only that item; otherwise it loads every
+// published item under the group.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -152,13 +148,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 }
 
-// load 加载单个配置项
-// 通过配置文件名称从Polaris服务端拉取配置内容，并转换为统一的配置结构；
-// 加载成功后同时订阅该配置文件的变更，保证旧版本服务端（不支持分组查询接口）也能收到变更通知
-// @param ctx context.Context 上下文
-// @param file string 配置文件名称
-// @return @1 *config.Configuration 配置项
-// @return @2 error 错误信息
+// load loads a single configuration item. It fetches the content from the Polaris
+// server by config file name and converts it into the unified configuration
+// structure. On success it also subscribes to the file's changes, so that older
+// servers without the group query API can still deliver change notifications.
 func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -180,14 +173,14 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	return configuration, nil
 }
 
-// Store 保存配置项
-// 仅支持write-only和read-write模式；优先使用UpsertAndPublishConfigFile一步完成创建或更新并发布，
-// 服务端不支持该接口（Unimplemented）或返回数据冲突（DataConflict）时，退化为创建（已存在则更新）后发布，
-// 发布成功后由服务端推送变更给已注册的监听器
-// @param ctx context.Context 上下文
-// @param file string 配置文件名称
-// @param content []byte 配置内容
-// @return @1 error 错误信息
+// Store stores a configuration item.
+//
+// It supports only the write-only and read-write modes. It first tries
+// UpsertAndPublishConfigFile to create or update and publish in one step; when the
+// server does not support that API (Unimplemented) or reports a data conflict
+// (DataConflict), it falls back to creating (or updating an existing) file and
+// then publishing. After a successful publish the server pushes the change to
+// every registered watcher.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -214,11 +207,9 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return s.configClient.PublishConfigFile(s.opts.namespace, s.opts.group, file)
 }
 
-// createOrUpdateConfigFile 创建或更新配置文件
-// 先尝试创建配置文件，创建失败且提示资源已存在时转为更新
-// @param file string 配置文件名称
-// @param content string 配置内容
-// @return @1 error 错误信息
+// createOrUpdateConfigFile creates or updates a config file. It first tries to
+// create the file and, when creation fails because the resource already exists,
+// falls back to updating it.
 func (s *Source) createOrUpdateConfigFile(file, content string) error {
 	if err := s.configClient.CreateConfigFile(s.opts.namespace, s.opts.group, file, content); err == nil {
 		return nil
@@ -229,11 +220,8 @@ func (s *Source) createOrUpdateConfigFile(file, content string) error {
 	return s.configClient.UpdateConfigFile(s.opts.namespace, s.opts.group, file, content)
 }
 
-// Watch 监听配置项
-// 创建新的监听器并注册到配置源中，配置变更时通过监听器通知
-// @param ctx context.Context 上下文
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
+// Watch watches configuration items. It creates a new watcher and registers it
+// with the config source; the watcher is notified when the configuration changes.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -249,19 +237,19 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return w, nil
 }
 
-// Close 关闭配置源
-// 取消上下文并销毁内置SDK上下文，终止监听与刷新协程；保证关闭操作只执行一次
-// @return @1 error 错误信息
+// Close closes the config source. It cancels the context and destroys the
+// built-in SDK context, terminating the listen and refresh goroutines; Close
+// performs the shutdown only once.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
 	}
 
-	// 保证关闭操作只执行一次，避免重复销毁SDK上下文导致panic
+	// Ensure the shutdown runs only once to avoid destroying the SDK context twice and panicking.
 	s.once.Do(func() {
 		s.cancel()
 
-		// 等待监听与刷新协程退出，避免并发销毁SDK上下文
+		// Wait for the listen and refresh goroutines to exit so that the SDK context is not destroyed concurrently.
 		s.wg.Wait()
 
 		if s.builtin {
@@ -272,8 +260,8 @@ func (s *Source) Close() error {
 	return nil
 }
 
-// listen 处理监听指令
-// 消费search循环产生的配置文件名称，为其注册变更监听器
+// listen handles listen requests. It consumes the config file names produced by
+// the search loop and registers a change listener for each.
 func (s *Source) listen() {
 	if s.err != nil {
 		return
@@ -290,22 +278,25 @@ func (s *Source) listen() {
 
 			s.subscribe(fileName)
 		case <-s.chCancel:
-			// SDK未提供移除文件监听器的接口，配置文件删除后服务端停止推送变更，
-			// 已注册的监听器保持不动，待配置文件重新创建后仍可继续收到变更通知
+			// The SDK exposes no API to remove a file listener; after the config file is deleted
+			// the server stops pushing changes, so the registered listener is kept as is and can
+			// still receive change notifications if the file is recreated.
 		}
 	}
 }
 
-// subscribe 订阅配置文件变更
-// 为配置文件创建对象并注册变更监听器，同一配置文件只注册一次；
-// SDK未提供移除监听器的接口，文件删除后重新创建时已注册的监听器依然有效，
-// 因此记录已订阅的配置文件，避免重复注册导致重复通知；
-// 首次订阅时立即推送当前配置内容，保证监听器能感知到已发布的最新配置
-// （与Nacos的ListenConfig行为一致：注册监听后立即回调一次当前配置）
-// @param fileName string 配置文件名称
+// subscribe subscribes to config file changes. It creates an object for the config
+// file and registers a change listener, registering at most once per file. The SDK
+// exposes no API to remove a listener, so a listener registered before a file is
+// deleted stays valid when the file is recreated; the set of subscribed files is
+// therefore recorded to avoid duplicate registration and duplicate notifications.
+// The first subscription immediately pushes the current config content so that the
+// watcher sees the latest published configuration (matching Nacos ListenConfig,
+// which also invokes the callback once right after a listener is registered).
 func (s *Source) subscribe(fileName string) {
-	// 原子占位，确保同一文件只由一个协程执行网络订阅与监听器注册，
-	// 避免并发场景下重复注册监听器导致重复通知
+	// Reserve the slot atomically so that only one goroutine performs the network
+	// subscription and listener registration per file, avoiding duplicate listeners
+	// and duplicate notifications under concurrency.
 	if _, loaded := s.subscribed.LoadOrStore(fileName, struct{}{}); loaded {
 		return
 	}
@@ -318,7 +309,7 @@ func (s *Source) subscribe(fileName string) {
 
 	configFile, err := s.configClient.FetchConfigFile(req)
 	if err != nil {
-		// 订阅失败时移除占位记录，便于后续搜索周期重新订阅
+		// Remove the reservation when the subscription fails so that a later search cycle can retry it.
 		s.subscribed.Delete(fileName)
 		log.Warnf("%s/%s/%s listen failed: %v", s.opts.namespace, s.opts.group, fileName, err)
 		return
@@ -329,9 +320,8 @@ func (s *Source) subscribe(fileName string) {
 	s.notify(conv(fileName, configFile.GetContent()))
 }
 
-// notify 通知配置变更
-// 将变更后的配置通知给所有已注册的监听器
-// @param configuration *config.Configuration 配置项
+// notify notifies a configuration change. It notifies every registered watcher of
+// the new configuration.
 func (s *Source) notify(configuration *config.Configuration) {
 	s.watchers.Range(func(key, value any) bool {
 		w := key.(*watcher)
@@ -340,8 +330,8 @@ func (s *Source) notify(configuration *config.Configuration) {
 	})
 }
 
-// refresh 定时刷新配置
-// 每隔3秒执行一次配置搜索，检测分组下新增或删除的配置文件
+// refresh refreshes the configuration periodically. It runs a config search every
+// 3 seconds to detect config files added to or removed from the group.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
@@ -360,8 +350,9 @@ func (s *Source) refresh() {
 	}
 }
 
-// search 搜索分组下的配置文件
-// 获取分组下所有已发布的配置文件，对新增的配置文件发送监听指令，对已删除的配置文件发送取消监听指令
+// search searches for config files under the group. It fetches every published
+// config file in the group, sends a listen request for each added file and a
+// cancel request for each removed file.
 func (s *Source) search() {
 	if s.searchDisabled {
 		return
@@ -372,21 +363,23 @@ func (s *Source) search() {
 	group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
 	if err != nil {
 		if isUnimplementedError(err) {
-			// 服务端不支持分组查询接口（GetConfigFileMetadataList），
-			// 禁用分组搜索，仅通过显式加载（Load）订阅配置文件变更
+			// The server does not support the group query API (GetConfigFileMetadataList);
+			// disable group search and rely solely on explicit Load calls to subscribe to
+			// config file changes.
 			s.searchDisabled = true
 			log.Warnf("search config list is not supported by server, disable group search: %v", err)
 		} else {
 			log.Warnf("search config list failed: %v", err)
-			// 查询失败时直接返回，避免版本号已递增而配置未刷新，
-			// 导致下方取消循环误判所有配置均已失效而批量取消监听
+			// Return immediately when the query fails; otherwise the incremented version
+			// with an unrefreshed config list would make the cancel loop below treat every
+			// item as stale and cancel all listeners in bulk.
 		}
 		return
 	}
 
 	files, _, ok := group.GetFiles()
 	if !ok {
-		// 分组不存在或分组下无已发布配置，取消全部监听
+		// The group does not exist or has no published config, so cancel all listeners.
 		for fileName := range s.versions {
 			select {
 			case s.chCancel <- fileName:
@@ -404,7 +397,8 @@ func (s *Source) search() {
 		_, found := s.versions[item.FileName]
 		_, subscribed := s.subscribed.Load(item.FileName)
 
-		// 新发现的文件或上次订阅失败的文件，均需（重新）发送监听指令
+		// Both newly discovered files and files whose previous subscription failed need
+		// a (re)issued listen request.
 		if !found || !subscribed {
 			select {
 			case s.chListen <- item.FileName:
@@ -424,17 +418,17 @@ func (s *Source) search() {
 				return
 			}
 
-			// 取消监听后立即从版本表中移除，
-			// 避免重复发送取消指令，同时保证该配置被删除后重新创建时能够再次被监听
+			// Remove it from the version table right after cancelling so that no duplicate
+			// cancel request is sent and the file can be listened to again if it is recreated.
 			delete(s.versions, fileName)
 		}
 	}
 }
 
-// onChange 配置变更回调
-// Polaris服务端推送配置变更时触发，将变更后的配置通知给所有已注册的监听器；
-// 配置文件被删除时（Deleted）跳过通知，避免向监听器推送空内容
-// @param event model.ConfigFileChangeEvent 配置变更事件
+// onChange is the config change callback. It is triggered when the Polaris server
+// pushes a configuration change and notifies every registered watcher of the new
+// configuration. When the config file is deleted (Deleted) notification is
+// skipped so that no empty content is pushed to the watchers.
 func (s *Source) onChange(event model.ConfigFileChangeEvent) {
 	if event.ChangeType == model.Deleted {
 		return
@@ -443,10 +437,9 @@ func (s *Source) onChange(event model.ConfigFileChangeEvent) {
 	s.notify(conv(event.ConfigFileMetadata.GetFileName(), event.NewValue))
 }
 
-// buildClient 构建Polaris SDK上下文
-// 设置服务器地址、通信协议与请求超时时间，并基于配置对象构建SDK上下文
-// @return @1 api.SDKContext SDK上下文
-// @return @2 error 错误信息
+// buildClient builds the Polaris SDK context. It sets the server addresses, the
+// communication protocol and the request timeout, then builds the SDK context
+// from the configuration.
 func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg := api.NewConfiguration()
 
@@ -458,21 +451,20 @@ func (s *Source) buildClient() (api.SDKContext, error) {
 	return api.InitContextByConfig(cfg)
 }
 
-// isUnimplementedError 判断是否为服务端未实现接口错误
-// 服务端版本较旧时可能未实现UpsertAndPublishConfigFile接口，gRPC层返回Unimplemented状态码；
-// 该错误已被SDK包装为model.SDKError且底层cause不可导出，无法通过status.Code直接判断，
-// 故只能匹配错误文本中的Unimplemented标识
-// @param err error 错误信息
-// @return @1 bool 是否为未实现接口错误
+// isUnimplementedError reports whether err is an unimplemented API error. Older
+// servers may not implement UpsertAndPublishConfigFile and the gRPC layer then
+// returns an Unimplemented status code. The SDK wraps that error as a
+// model.SDKError whose underlying cause is not exported, so status.Code cannot be
+// used directly and only the "Unimplemented" marker in the error text can be matched.
 func isUnimplementedError(err error) bool {
 	return strings.Contains(err.Error(), "Unimplemented")
 }
 
-// isDataConflictError 判断是否为数据冲突错误
-// 部分版本服务端的UpsertAndPublishConfigFile实现存在缺陷，配置文件已存在时返回Code_DataConflict(409000)，
-// 此时退化为创建（已存在则更新）后发布
-// @param err error 错误信息
-// @return @1 bool 是否为数据冲突错误
+// isDataConflictError reports whether err is a data conflict error. The
+// UpsertAndPublishConfigFile implementation of some server versions is flawed and
+// returns Code_DataConflict (409000) when the config file already exists; in that
+// case the caller falls back to creating (or updating an existing) file and then
+// publishing.
 func isDataConflictError(err error) bool {
 	e, ok := err.(model.SDKError)
 	if !ok {
@@ -482,10 +474,8 @@ func isDataConflictError(err error) bool {
 	return strings.Contains(e.Error(), fmt.Sprintf("server code %d", apimodel.Code_DataConflict))
 }
 
-// isExistedResourceError 判断是否为资源已存在错误
-// 服务端返回Code_ExistedResource(400201)表示配置文件已存在
-// @param err error 错误信息
-// @return @1 bool 是否为资源已存在错误
+// isExistedResourceError reports whether err is an already-exists error. The server
+// returns Code_ExistedResource (400201) when the config file already exists.
 func isExistedResourceError(err error) bool {
 	e, ok := err.(model.SDKError)
 	if !ok {
@@ -495,11 +485,9 @@ func isExistedResourceError(err error) bool {
 	return strings.Contains(e.Error(), fmt.Sprintf("server code %d", apimodel.Code_ExistedResource))
 }
 
-// conv 转换配置
-// 将配置文件名称和内容转换为统一的配置结构，文件名称的后缀作为配置格式
-// @param file string 配置文件名称
-// @param content string 配置内容
-// @return @1 *config.Configuration 配置项
+// conv converts a configuration. It converts a config file name and its content
+// into the unified configuration structure, using the file extension of the name
+// as the config format.
 func conv(file, content string) *config.Configuration {
 	ext := filepath.Ext(file)
 

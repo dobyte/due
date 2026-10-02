@@ -23,26 +23,27 @@ const (
 
 type Option func(o *options)
 
-// options Polaris注册中心配置项
+// options holds the Polaris registry configuration.
 type options struct {
-	// 服务器地址 ip:port
-	// 默认为[]string{127.0.0.1:8091}
+	// Server address as ip:port.
+	// Defaults to []string{127.0.0.1:8091}.
 	urls []string
 
-	// 外部SDK上下文
-	// 外部SDK上下文配置，存在外部SDK上下文时，优先使用外部SDK上下文，默认为nil
+	// External SDK context.
+	// When an external SDK context is provided it takes precedence over the built-in one;
+	// defaults to nil.
 	client api.SDKContext
 
-	// 命名空间
-	// 默认为default
+	// Namespace.
+	// Defaults to default.
 	namespace string
 
-	// 请求Polaris服务端超时时间
-	// 默认为3秒
+	// Timeout for requests to the Polaris server.
+	// Defaults to 3 seconds.
 	timeout time.Duration
 
-	// 与Polaris服务端的通信协议
-	// 默认为grpc
+	// Protocol for communicating with the Polaris server.
+	// Defaults to grpc.
 	protocol string
 }
 
@@ -55,27 +56,27 @@ func defaultOptions() *options {
 	}
 }
 
-// WithUrls 设置服务器地址
+// WithUrls sets the server addresses.
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
 }
 
-// WithClient 设置外部SDK上下文
+// WithClient sets the external SDK context.
 func WithClient(client api.SDKContext) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithNamespace 设置命名空间
+// WithNamespace sets the namespace.
 func WithNamespace(namespace string) Option {
 	return func(o *options) { o.namespace = namespace }
 }
 
-// WithTimeout 设置请求Polaris服务端超时时间
+// WithTimeout sets the timeout for requests to the Polaris server.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithProtocol 设置与Polaris服务端的通信协议
+// WithProtocol sets the protocol for communicating with the Polaris server.
 func WithProtocol(protocol string) Option {
 	return func(o *options) { o.protocol = protocol }
 }

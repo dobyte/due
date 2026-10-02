@@ -1,32 +1,34 @@
 package component
 
+// Component is the interface that every component of the framework must implement.
 type Component interface {
-	// Name 组件名称
+	// Name returns the component name.
 	Name() string
-	// Init 初始化组件
+	// Init initializes the component.
 	Init()
-	// Start 启动组件
+	// Start starts the component.
 	Start()
-	// Close 关闭组件
+	// Close closes the component.
 	Close()
-	// Destroy 销毁组件
+	// Destroy destroys the component.
 	Destroy()
 }
 
+// Base is an embeddable no-op implementation of [Component].
 type Base struct {
 }
 
-// Name 组件名称
+// Name returns the component name.
 func (b *Base) Name() string { return "base" }
 
-// Init 初始化组件
+// Init initializes the component.
 func (b *Base) Init() {}
 
-// Start 启动组件
+// Start starts the component.
 func (b *Base) Start() {}
 
-// Close 关闭组件
+// Close closes the component.
 func (b *Base) Close() {}
 
-// Destroy 销毁组件
+// Destroy destroys the component.
 func (b *Base) Destroy() {}

@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	defaultServerAddr     = ":0"               // 默认服务器地址
-	defaultClientDispatch = cluster.RoundRobin // 默认客户端请求分发策略（负载均衡策略）
+	defaultServerAddr     = ":0"               // Default server address
+	defaultClientDispatch = cluster.RoundRobin // Default client request dispatch (load balancing) strategy
 )
 
 const (
@@ -25,14 +25,14 @@ const (
 	defaultClientDispatchKey   = "etc.transport.grpc.client.dispatch"
 )
 
-// Dispatch 分发策略
+// Dispatch is the request dispatch strategy.
 type Dispatch = def.Dispatch
 
 const (
-	Random             = def.Random             // 随机
-	RoundRobin         = def.RoundRobin         // 轮询
-	WeightedRoundRobin = def.WeightedRoundRobin // 加权轮询
-	ConsistentHash     = def.ConsistentHash     // 一致性哈希分发
+	Random             = def.Random             // Random
+	RoundRobin         = def.RoundRobin         // Round-robin
+	WeightedRoundRobin = def.WeightedRoundRobin // Weighted round-robin
+	ConsistentHash     = def.ConsistentHash     // Consistent hash
 )
 
 type Option func(o *options)
@@ -55,44 +55,42 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithServerAddr 设置服务器监听地址
+// WithServerAddr sets the server listening address.
 func WithServerAddr(addr string) Option {
 	return func(o *options) { o.server.Addr = addr }
 }
 
-// WithServerExpose 设置是否将内部通信地址暴露到公网
+// WithServerExpose sets whether to expose the internal communication address to the public network.
 func WithServerExpose(expose bool) Option {
 	return func(o *options) { o.server.Expose = expose }
 }
 
-// WithServerCredentials 设置服务器证书和秘钥
+// WithServerCredentials sets the server certificate and key.
 func WithServerCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.server.CertFile, o.server.KeyFile = certFile, keyFile }
 }
 
-// WithServerOptions 设置服务器选项
+// WithServerOptions sets the server options.
 func WithServerOptions(opts ...grpc.ServerOption) Option {
 	return func(o *options) { o.server.ServerOpts = opts }
 }
 
-// WithClientCredentials 设置客户端证书和校验域名
+// WithClientCredentials sets the client certificate and the server name to verify.
 func WithClientCredentials(caFile string, serverName string) Option {
 	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
 }
 
-// WithClientDispatch 设置客户端请求分发策略（负载均衡策略）
+// WithClientDispatch sets the client request dispatch (load balancing) strategy.
 func WithClientDispatch(dispatch Dispatch) Option {
 	return func(o *options) { o.client.Dispatch = dispatch }
 }
 
-// WithClientDiscovery 设置客户端服务发现组件
+// WithClientDiscovery sets the client service discovery component.
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
 }
 
-// WithClientDialOptions 设置客户端拨号选项
-// @param opts ...grpc.DialOption 拨号选项
-// @return @1 Option 配置项
+// WithClientDialOptions sets the client dial options.
 func WithClientDialOptions(opts ...grpc.DialOption) Option {
 	return func(o *options) { o.client.DialOpts = opts }
 }

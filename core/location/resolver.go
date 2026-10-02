@@ -13,24 +13,20 @@ import (
 )
 
 const (
-	maxResponseSize = 1 << 20 // 限制响应体最大读取字节数(1MB)
+	maxResponseSize = 1 << 20 // Maximum number of response body bytes to read (1MB)
 )
 
-// Resolver 定义 IP 地址解析器接口
+// Resolver is the IP address resolver interface.
 type Resolver interface {
-	// Name 获取解析器名称
+	// Name returns the resolver name.
 	Name() string
-	// Resolve 解析 IP 地址
+	// Resolve resolves the geolocation of ip.
 	Resolve(ctx context.Context, ip string) (*Result, error)
 }
 
 var httpClient = &http.Client{Timeout: 3 * time.Second}
 
-// fetchJSON 发起HTTP请求并解析JSON响应
-// @param ctx context.Context 上下文，用于超时控制
-// @param url string 请求地址
-// @param out any 解析目标
-// @return @1 error 错误信息
+// fetchJSON performs an HTTP GET request to url and decodes the JSON response into out.
 func fetchJSON(ctx context.Context, url string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -60,9 +56,8 @@ func fetchJSON(ctx context.Context, url string, out any) error {
 	return json.Unmarshal(data, out)
 }
 
-// normalizeISP 将运营商名称转换为中文
-// @param isp string 运营商名称
-// @return @1 string 转换后的中文运营商名称
+// normalizeISP converts the ISP name to its Chinese name, returning isp unchanged when it is not
+// recognized.
 func normalizeISP(isp string) string {
 	lower := strings.ToLower(isp)
 	switch {

@@ -8,63 +8,50 @@ import (
 
 var globalPacker Packer
 
-// init 初始化全局打包器
+// init initializes the global packer.
 func init() {
 	globalPacker = NewPacker()
 }
 
-// SetPacker 设置打包器
-// 覆盖全局打包器，用于替换默认的打包实现
-// @param packer Packer 打包器
+// SetPacker sets the global packer.
+//
+// It overrides the global packer and is used to replace the default packing implementation.
 func SetPacker(packer Packer) {
 	globalPacker = packer
 }
 
-// GetPacker 获取打包器
-// @return @1 Packer 全局打包器
+// GetPacker returns the global packer.
 func GetPacker() Packer {
 	return globalPacker
 }
 
-// Read 以buffer的形式读取消息
-// @param reader io.Reader 数据读取源
-// @return @1 bool 是否为心跳消息
-// @return @2 int64 服务器侧时间戳（纳秒）
-// @return @3 buffer.Buffer 消息缓冲区
-// @return @4 error 读取失败时返回的错误
+// Read reads a message as a buffer. It reports whether the message is a heartbeat, the server-side
+// timestamp in nanoseconds, the message buffer and any read error.
 func Read(reader io.Reader) (bool, int64, buffer.Buffer, error) {
 	return globalPacker.Read(reader)
 }
 
-// PackMessage 以buffer的形式打包消息
-// @param message *Message 消息
-// @return @1 buffer.Buffer 打包后的消息缓冲区
-// @return @2 error 打包失败时返回的错误
+// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 func PackMessage(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackMessage(message)
 }
 
-// ExtractRouteSeq 从消息缓冲区中提取路由与序列号
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 int32 路由
-// @return @2 int32 序列号
-// @return @3 error 解包失败时返回的错误
+// ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It returns
+// the route, the sequence number and any unpacking error.
 func ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
 	return globalPacker.ExtractRouteSeq(buf)
 }
 
-// UnpackMessage 解包消息
-// @param buf buffer.Buffer 消息缓冲区
-// @return @1 *Message 消息对象
-// @return @2 error 解包失败时返回的错误
+// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number, the
+// message buffer and any unpacking error.
 func UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	return globalPacker.UnpackMessage(buf)
 }
 
-// PackHeartbeat 打包心跳
-// 返回的心跳包缓冲区不可修改或释放
-// @param server ...bool 是否为服务端心跳
-// @return @1 buffer.Buffer 心跳包缓冲区
+// PackHeartbeat packs a heartbeat.
+//
+// The returned heartbeat buffer must neither be modified nor released. Pass server as true to pack
+// a server-side heartbeat.
 func PackHeartbeat(server ...bool) buffer.Buffer {
 	return globalPacker.PackHeartbeat(server...)
 }

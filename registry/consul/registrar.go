@@ -18,24 +18,25 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-// 心跳检查相关常量
+// Constants related to heartbeat checks.
 const (
-	checkIDFormat     = "service:%s" // 心跳检查 ID 格式
-	checkUpdateOutput = "passed"     // 心跳更新输出
+	checkIDFormat     = "service:%s" // Heartbeat check ID format
+	checkUpdateOutput = "passed"     // Heartbeat update output
 )
 
-// registrar 服务注册器，负责服务实例的注册、心跳保活与解注册。
+// registrar is a service registrar responsible for registering service instances, keeping them
+// alive via heartbeats and deregistering them.
 type registrar struct {
-	registry *Registry          // 所属注册发现组件
-	ctx      context.Context    // 心跳协程上下文
-	cancel   context.CancelFunc // 心跳协程取消函数
-	insID    string             // 实例唯一标识
-	mu       sync.Mutex         // 保护 ctx、cancel 字段
-	stopped  atomic.Bool        // 是否已停止
-	wg       sync.WaitGroup     // 等待心跳协程退出
+	registry *Registry          // Owning registry and discovery component
+	ctx      context.Context    // Heartbeat goroutine context
+	cancel   context.CancelFunc // Heartbeat goroutine cancel function
+	insID    string             // Unique instance identifier
+	mu       sync.Mutex         // Protects the ctx and cancel fields
+	stopped  atomic.Bool        // Whether the registrar has stopped
+	wg       sync.WaitGroup     // Waits for the heartbeat goroutine to exit
 }
 
-// newRegistrar 创建服务注册器。
+// newRegistrar creates a service registrar.
 func newRegistrar(registry *Registry, insID string) *registrar {
 	r := &registrar{}
 	r.registry = registry
@@ -44,7 +45,8 @@ func newRegistrar(registry *Registry, insID string) *registrar {
 	return r
 }
 
-// register 注册服务实例，并在需要时启动心跳保活协程。
+// register registers a service instance and, when needed, starts the heartbeat keep-alive
+// goroutine.
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.stopped.Load() {
 		return errors.ErrIllegalOperation
@@ -89,15 +91,17 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	return nil
 }
 
-// deregister 解注册服务实例，停止心跳并注销服务。
+// deregister deregisters a service instance, stops the heartbeat and deregisters the service.
 func (r *registrar) deregister(ctx context.Context) error {
 	r.stop()
 
 	return r.deregisterService(ctx, r.insID)
 }
 
-// 停止注册
-// 仅停止心跳并等待协程退出，不主动注销服务
+// stop stops registration.
+//
+// It only stops the heartbeat and waits for the goroutine to exit; it does not deregister the
+// service.
 func (r *registrar) stop() {
 	if !r.stopped.CompareAndSwap(false, true) {
 		return
@@ -108,8 +112,9 @@ func (r *registrar) stop() {
 	r.wg.Wait()
 }
 
-// 关闭注册
-// 主动注销服务并停止心跳，等待协程退出
+// close closes registration.
+//
+// It proactively deregisters the service, stops the heartbeat and waits for the goroutine to exit.
 func (r *registrar) close() {
 	r.stop()
 
@@ -118,8 +123,10 @@ func (r *registrar) close() {
 	}
 }
 
-// 清理注册资源
-// 取消心跳并移除注册器，不等待心跳协程退出（供心跳协程自身调用，避免自等待）
+// cleanup releases the registration resources.
+//
+// It cancels the heartbeat and removes the registrar without waiting for the heartbeat goroutine to
+// exit. It is called by the heartbeat goroutine itself to avoid waiting on itself.
 func (r *registrar) cleanup() {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -133,7 +140,7 @@ func (r *registrar) cleanup() {
 	r.registry.registrars.Delete(r.insID)
 }
 
-// put 将服务实例注册到 Consul，返回实例唯一标识。
+// put registers a service instance with Consul and returns the unique instance identifier.
 func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (string, error) {
 	raw, err := url.Parse(ins.Endpoint)
 	if err != nil {
@@ -223,7 +230,7 @@ func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (str
 	return insID, nil
 }
 
-// deregisterService 从 Consul 注销指定实例标识的服务。
+// deregisterService deregisters from Consul the service with the given instance identifier.
 func (r *registrar) deregisterService(ctx context.Context, insID string) error {
 	tctx, tcancel := context.WithTimeout(ctx, r.registry.opts.timeout)
 	defer tcancel()
@@ -235,10 +242,13 @@ func (r *registrar) deregisterService(ctx context.Context, insID string) error {
 	return nil
 }
 
-// 心跳保活
-// 心跳更新失败时，在退避重试中尝试重新注册实现自愈；连续失败时长超过
-// deregisterCriticalServiceAfter 阈值后，判定注册已丢失，停止维护并清理。
-// 当 deregisterCriticalServiceAfter 小于等于 0（即 Consul 永不自动注销）时，持续重试而不放弃维护
+// heartbeat keeps the service alive.
+//
+// When a heartbeat update fails, it attempts to re-register during the backoff retries to heal
+// itself. Once the continuous failure duration exceeds the deregisterCriticalServiceAfter
+// threshold, the registration is considered lost and maintenance is stopped and cleaned up. When
+// deregisterCriticalServiceAfter is less than or equal to 0, meaning Consul never automatically
+// deregisters the service, the heartbeat keeps retrying instead of giving up.
 func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance) {
 	defer r.wg.Done()
 
@@ -283,14 +293,16 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 			}, max(1, r.registry.opts.retryTimes), 100*time.Millisecond, time.Second)
 
 			if err == nil {
-				// 重新注册成功，服务已自愈
+				// Re-registration succeeded; the service has healed itself.
 				failureAt = time.Time{}
 				ok = true
 			} else if critical > 0 && time.Since(failureAt) >= critical {
-				// 连续失败已超过自动注销阈值，注册不可恢复，放弃维护
+				// Continuous failures exceeded the auto-deregistration threshold; the registration
+				// is unrecoverable, so give up maintenance.
 				r.mu.Lock()
 				if r.ctx != ctx {
-					// 已被新的注册取代，直接退出，不影响新注册
+					// It has been superseded by a new registration; return without affecting the
+					// new registration.
 					r.mu.Unlock()
 					return
 				}
@@ -334,7 +346,7 @@ func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance
 	}
 }
 
-// 更新服务健康检查心跳
+// updateTTL updates the service's health check heartbeat.
 func (r *registrar) updateTTL(ctx context.Context, checkID string) error {
 	tctx, cancel := context.WithTimeout(ctx, r.registry.opts.timeout)
 	defer cancel()

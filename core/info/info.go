@@ -18,30 +18,28 @@ const (
 	leftBottomBorder  = "└"
 	rightBottomBorder = "┘"
 
-	// maxContentWidth 内容区域的最大显示宽度（列）
-	// 盒子总宽度减去左右边框各 1 列，再减去内容前预留的 1 个空格
+	// maxContentWidth is the maximum display width (in columns) of the content area.
+	// It is the total box width minus one column for each of the left and right borders, and
+	// minus one leading space reserved before the content.
 	maxContentWidth = boxWidth - 3
 )
 
-// widthCondition 用于计算终端显示宽度
-// 显式关闭东亚宽度模式，使 box-drawing 等 Ambiguous 字符按 1 列计算，
-// 同时中文等 Wide/Fullwidth 字符仍按 2 列计算
+// widthCondition computes terminal display widths.
+//
+// East Asian width is explicitly disabled so that Ambiguous characters such as box-drawing
+// characters count as one column, while Wide/Fullwidth characters such as CJK ones still count as
+// two columns.
 var widthCondition = &runewidth.Condition{
 	EastAsianWidth:     false,
 	StrictEmojiNeutral: true,
 }
 
-// Print 打印分组信息到标准输出
-// @param name string 分组标题
-// @param rows ...string 分组内容
+// Print prints the grouped information to standard output.
 func Print(name string, rows ...string) {
 	Fprint(os.Stdout, name, rows...)
 }
 
-// Fprint 将分组信息写入指定 writer
-// @param w io.Writer 输出目标
-// @param name string 分组标题
-// @param rows ...string 分组内容
+// Fprint writes the grouped information to w.
 func Fprint(w io.Writer, name string, rows ...string) {
 	builder := &strings.Builder{}
 	builder.WriteString(buildTopBorder(name))
@@ -56,7 +54,7 @@ func Fprint(w io.Writer, name string, rows ...string) {
 	fmt.Fprint(w, builder.String())
 }
 
-// HorizontalLine 返回一条用于填充行的水平分隔线
+// HorizontalLine returns a horizontal separator line used to fill a row.
 func HorizontalLine() string {
 	return strings.Repeat(horizontalBorder, maxContentWidth)
 }

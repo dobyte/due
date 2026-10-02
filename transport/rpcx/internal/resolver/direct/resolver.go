@@ -8,8 +8,9 @@ import (
 	cli "github.com/smallnest/rpcx/client"
 )
 
-// Resolver 直连模式服务发现器
-// 维护服务地址列表，并支持订阅者接收地址变更通知
+// Resolver is the direct connection mode service discovery instance.
+//
+// It maintains the service address list and lets subscribers receive address change notifications.
 type Resolver struct {
 	builder *Builder
 	name    string
@@ -21,10 +22,7 @@ type Resolver struct {
 	closed  bool
 }
 
-// newResolver 新建直连模式服务发现器
-// @param name string 实例ID
-// @param builder *Builder 所属构建器
-// @return @1 *Resolver 服务发现器实例
+// newResolver returns a new service discovery instance for direct connection mode.
 func newResolver(name string, builder *Builder) *Resolver {
 	return &Resolver{
 		name:    name,
@@ -32,8 +30,7 @@ func newResolver(name string, builder *Builder) *Resolver {
 	}
 }
 
-// GetServices 获取服务地址列表
-// @return @1 []*cli.KVPair 服务地址列表
+// GetServices returns the service address list.
 func (r *Resolver) GetServices() []*cli.KVPair {
 	r.prw.RLock()
 	defer r.prw.RUnlock()
@@ -41,9 +38,10 @@ func (r *Resolver) GetServices() []*cli.KVPair {
 	return r.pairs
 }
 
-// WatchService 监听服务地址变更
-// 返回带缓冲的变更通知通道，已关闭时立即返回已关闭的通道
-// @return @1 chan []*cli.KVPair 变更通知通道
+// WatchService watches service address changes.
+//
+// It returns a buffered change notification channel, or an already closed channel when the resolver
+// has been closed.
 func (r *Resolver) WatchService() chan []*cli.KVPair {
 	ch := make(chan []*cli.KVPair, 10)
 
@@ -59,8 +57,7 @@ func (r *Resolver) WatchService() chan []*cli.KVPair {
 	return ch
 }
 
-// RemoveWatcher 移除监听通道
-// @param ch chan []*cli.KVPair 待移除的通道
+// RemoveWatcher removes a watch channel.
 func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 	r.crw.Lock()
 	defer r.crw.Unlock()
@@ -79,23 +76,20 @@ func (r *Resolver) RemoveWatcher(ch chan []*cli.KVPair) {
 	r.chans = r.chans[:i+1]
 }
 
-// Clone 克隆服务发现器
-// 直连模式直接复用当前实例
-// @param servicePath string 服务路径
-// @return @1 cli.ServiceDiscovery 服务发现器
-// @return @2 error 错误信息
+// Clone clones the service discovery instance; the direct connection mode reuses the current
+// instance directly.
 func (r *Resolver) Clone(servicePath string) (cli.ServiceDiscovery, error) {
 	return r, nil
 }
 
-// SetFilter 设置服务过滤函数
-// @param filter cli.ServiceDiscoveryFilter 过滤函数
+// SetFilter sets the service filter function.
 func (r *Resolver) SetFilter(filter cli.ServiceDiscoveryFilter) {
 	r.filter = filter
 }
 
-// Close 关闭服务发现器
-// 从构建器移除自身并关闭全部监听通道
+// Close closes the service discovery instance.
+//
+// It removes itself from the builder and closes all watch channels.
 func (r *Resolver) Close() {
 	r.builder.removeResolver(r)
 
@@ -112,8 +106,7 @@ func (r *Resolver) Close() {
 	r.crw.Unlock()
 }
 
-// updateState 更新服务地址状态并广播变更
-// @param list []*cli.KVPair 最新服务地址列表
+// updateState updates the service address state and broadcasts the change.
 func (r *Resolver) updateState(list []*cli.KVPair) {
 	var pairs []*cli.KVPair
 
@@ -142,9 +135,9 @@ func (r *Resolver) updateState(list []*cli.KVPair) {
 	for _, ch := range r.chans {
 		select {
 		case ch <- pairs:
-			// 快速路径：消费方及时读，不产生协程
+			// Fast path: the consumer reads in time, no goroutine is spawned.
 		default:
-			// 慢路径：通道已满，最多等 1 分钟后丢弃
+			// Slow path: the channel is full; wait up to 1 minute before dropping.
 			go func(ch chan []*cli.KVPair) {
 				defer func() { recover() }()
 

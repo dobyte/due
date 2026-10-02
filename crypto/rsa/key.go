@@ -26,7 +26,7 @@ type Key struct {
 	prv *rsa.PrivateKey
 }
 
-// GenerateKey 生成密钥
+// GenerateKey generates a key pair with the given bit size.
 func GenerateKey(bits int) (*Key, error) {
 	prv, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
@@ -36,17 +36,17 @@ func GenerateKey(bits int) (*Key, error) {
 	return &Key{prv: prv}, nil
 }
 
-// PublicKey 获取公钥
+// PublicKey returns the public key.
 func (k *Key) PublicKey() *rsa.PublicKey {
 	return &k.prv.PublicKey
 }
 
-// PrivateKey 获取私钥
+// PrivateKey returns the private key.
 func (k *Key) PrivateKey() *rsa.PrivateKey {
 	return k.prv
 }
 
-// MarshalPublicKey 编码公钥
+// MarshalPublicKey encodes the public key in the given format.
 func (k *Key) MarshalPublicKey(format Format) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
@@ -58,7 +58,7 @@ func (k *Key) MarshalPublicKey(format Format) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// 编码公钥
+// marshalPublicKey writes the public key to out in the given format.
 func (k *Key) marshalPublicKey(format Format, out io.Writer) (err error) {
 	var (
 		derText   []byte
@@ -86,7 +86,7 @@ func (k *Key) marshalPublicKey(format Format, out io.Writer) (err error) {
 	return
 }
 
-// MarshalPrivateKey 编码私钥
+// MarshalPrivateKey encodes the private key in the given format.
 func (k *Key) MarshalPrivateKey(format Format) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
@@ -98,7 +98,7 @@ func (k *Key) MarshalPrivateKey(format Format) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// 编码私钥
+// marshalPrivateKey writes the private key to out in the given format.
 func (k *Key) marshalPrivateKey(format Format, out io.Writer) (err error) {
 	var (
 		derText   []byte
@@ -126,7 +126,7 @@ func (k *Key) marshalPrivateKey(format Format, out io.Writer) (err error) {
 	return
 }
 
-// SaveKeyPair 保存密钥对
+// SaveKeyPair saves the key pair in the given format under dir with the given file name.
 func (k *Key) SaveKeyPair(format Format, dir string, file string) (err error) {
 	err = k.savePublicKey(format, dir, file)
 	if err != nil {
@@ -136,7 +136,7 @@ func (k *Key) SaveKeyPair(format Format, dir string, file string) (err error) {
 	return k.savePrivateKey(format, dir, file)
 }
 
-// 保存私钥
+// savePrivateKey writes the private key to its file, removing the file on failure.
 func (k *Key) savePrivateKey(format Format, dir string, file string) (err error) {
 	filepath := path.Join(dir, file)
 	defer func() {
@@ -154,7 +154,8 @@ func (k *Key) savePrivateKey(format Format, dir string, file string) (err error)
 	return k.marshalPrivateKey(format, f)
 }
 
-// 保存公钥
+// savePublicKey writes the public key to its file, removing the file on failure. The public key
+// file name is derived from file by inserting a ".pub" suffix before its extension.
 func (k *Key) savePublicKey(format Format, dir string, file string) (err error) {
 	subdir, _, name, ext := xos.Split(file)
 	if ext != "" {

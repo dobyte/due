@@ -22,9 +22,8 @@ type Cache struct {
 	sfg     singleflight.Group
 }
 
-// NewCache 创建一个 Memcache 缓存实例
-// @param opts ...Option 可选配置项，用于覆盖默认配置
-// @return @1 *Cache 缓存实例
+// NewCache returns a new Memcache-backed Cache. The optional opts override the default
+// configuration.
 func NewCache(opts ...Option) *Cache {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -41,11 +40,7 @@ func NewCache(opts ...Option) *Cache {
 	return c
 }
 
-// Has 检测缓存是否存在
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @return @1 bool 缓存是否存在
-// @return @2 error 错误信息
+// Has reports whether the entry identified by key exists.
 func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	if err := c.check(); err != nil {
 		return false, err
@@ -62,11 +57,7 @@ func (c *Cache) Has(ctx context.Context, key string) (bool, error) {
 	}
 }
 
-// Get 获取缓存值
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param def ...any 可选默认值，当缓存不存在时返回该默认值
-// @return @1 cache.Result 缓存结果
+// Get returns the value of key. The optional def is returned when the entry does not exist.
 func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 	if err := c.check(); err != nil {
 		return cache.NewResult(nil, err)
@@ -88,12 +79,8 @@ func (c *Cache) Get(ctx context.Context, key string, def ...any) cache.Result {
 	return cache.NewResult(xconv.String(item.Value))
 }
 
-// Set 设置缓存值
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param value any 缓存值
-// @param expiration ...time.Duration 可选过期时间，省略时在最小/最大过期时间区间内随机生成
-// @return @1 error 错误信息
+// Set stores value under key. The optional expiration sets the entry's time to live; when it is
+// omitted a random duration within the configured expiration range is used.
 func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...time.Duration) error {
 	if err := c.check(); err != nil {
 		return err
@@ -114,11 +101,8 @@ func (c *Cache) Set(ctx context.Context, key string, value any, expiration ...ti
 	})
 }
 
-// GetSet 获取缓存值，若不存在则通过 fn 生成后写入并返回
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param fn cache.SetValueFunc 缓存未命中时执行的回调，用于生成缓存值
-// @return @1 cache.Result 缓存结果
+// GetSet returns the value of key, generating it with fn and storing it when the entry does not
+// exist.
 func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) cache.Result {
 	if err := c.check(); err != nil {
 		return cache.NewResult(nil, err)
@@ -182,11 +166,7 @@ func (c *Cache) GetSet(ctx context.Context, key string, fn cache.SetValueFunc) c
 	return rst.(cache.Result)
 }
 
-// Delete 删除缓存
-// @param ctx context.Context 上下文
-// @param keys ...string 缓存键，可传入多个
-// @return @1 int64 实际删除的 key 数量
-// @return @2 error 错误信息
+// Delete removes the given keys and reports how many keys were actually deleted.
 func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
 	if len(keys) == 0 {
 		return 0, nil
@@ -226,12 +206,7 @@ func (c *Cache) Delete(ctx context.Context, keys ...string) (int64, error) {
 	return 0, err
 }
 
-// IncrInt 整数自增
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param value int64 自增步长
-// @return @1 int64 自增后的值
-// @return @2 error 错误信息
+// IncrInt increments the integer stored at key by value and returns the resulting value.
 func (c *Cache) IncrInt(ctx context.Context, key string, value int64) (int64, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -269,12 +244,8 @@ func (c *Cache) IncrInt(ctx context.Context, key string, value int64) (int64, er
 	}
 }
 
-// IncrFloat 浮点数自增，鉴于memcache不支持浮点数，这里通过整数自增来实现
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param value float64 自增步长
-// @return @1 float64 自增后的值
-// @return @2 error 错误信息
+// IncrFloat increments the float stored at key by value and returns the resulting value. Since
+// Memcache does not support floats, the increment is implemented through integer increments.
 func (c *Cache) IncrFloat(ctx context.Context, key string, value float64) (float64, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -287,12 +258,7 @@ func (c *Cache) IncrFloat(ctx context.Context, key string, value float64) (float
 	}
 }
 
-// DecrInt 整数自减
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param value int64 自减步长
-// @return @1 int64 自减后的值
-// @return @2 error 错误信息
+// DecrInt decrements the integer stored at key by value and returns the resulting value.
 func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -330,12 +296,8 @@ func (c *Cache) DecrInt(ctx context.Context, key string, value int64) (int64, er
 	}
 }
 
-// DecrFloat 浮点数自减，鉴于memcache不支持浮点数，这里通过整数自减来实现
-// @param ctx context.Context 上下文
-// @param key string 缓存键
-// @param value float64 自减步长
-// @return @1 float64 自减后的值
-// @return @2 error 错误信息
+// DecrFloat decrements the float stored at key by value and returns the resulting value. Since
+// Memcache does not support floats, the decrement is implemented through integer decrements.
 func (c *Cache) DecrFloat(ctx context.Context, key string, value float64) (float64, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -348,9 +310,7 @@ func (c *Cache) DecrFloat(ctx context.Context, key string, value float64) (float
 	}
 }
 
-// AddPrefix 添加Key前缀
-// @param key string 缓存键
-// @return @1 string 添加前缀后的完整键名
+// AddPrefix returns key prefixed with the cache's key prefix.
 func (c *Cache) AddPrefix(key string) string {
 	if c.opts.prefix == "" {
 		return key
@@ -359,8 +319,7 @@ func (c *Cache) AddPrefix(key string) string {
 	}
 }
 
-// Client 获取客户端
-// @return @1 any 底层 Memcache 客户端
+// Client returns the underlying Memcache client.
 func (c *Cache) Client() any {
 	if err := c.check(); err != nil {
 		return nil
@@ -369,7 +328,7 @@ func (c *Cache) Client() any {
 	return c.opts.client
 }
 
-// check 检查缓存是否已关闭
+// check reports an error when the cache has been closed.
 func (c *Cache) check() error {
 	if c.closed.Load() {
 		return errors.ErrCacheClosed
@@ -378,8 +337,8 @@ func (c *Cache) check() error {
 	return nil
 }
 
-// Close 关闭客户端
-// @return @1 error 错误信息
+// Close closes the cache. It reports [errors.ErrCacheClosed] when the cache is already closed. The
+// built-in client is closed only when it was created by [NewCache].
 func (c *Cache) Close() (err error) {
 	if c.closed.Swap(true) {
 		return errors.ErrCacheClosed

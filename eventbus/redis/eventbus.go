@@ -18,9 +18,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// minIDClockBuffer 时钟偏差缓冲
-// MINID裁剪基于发布方本地时钟计算，而Stream条目ID使用Redis服务器时钟，
-// 需要预留缓冲以吸收两者之间的时钟偏差，避免刚写入的消息被立即裁剪
+// minIDClockBuffer is the clock skew buffer.
+// MINID trimming is computed from the publisher's local clock, whereas stream entry IDs use the
+// Redis server clock. The buffer absorbs the skew between them so that a freshly written message
+// is not trimmed immediately.
 const minIDClockBuffer = time.Second
 
 type Eventbus struct {
@@ -81,7 +82,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	return eb
 }
 
-// Publish 发布事件
+// Publish publishes an event.
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	if eb.err != nil {
 		return eb.err
@@ -95,15 +96,16 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	channel := eb.doMakeChannel(topic)
 	stream := eb.doMakeStream(topic)
 
-	// 设置消息保留时长：超过该时长的消息会在写入时被自动裁剪丢弃
-	// staleDuration为0时消息不保留，未被消费的消息将被立即丢弃
+	// Set the message retention window: messages older than it are trimmed and dropped on write.
+	// When staleDuration is 0, messages are not retained and unconsumed messages are dropped immediately.
 	xaddArgs := &redis.XAddArgs{
 		Stream: stream,
 		MinID:  strconv.FormatInt(time.Now().Add(-eb.opts.staleDuration).Add(-minIDClockBuffer).UnixMilli(), 10),
 		Values: map[string]any{"payload": xconv.String(buf)},
 	}
 
-	// 先写入Stream持久化，再广播到频道；即使广播失败，消息仍保留在Stream中可被消费
+	// Persist to the stream first, then broadcast to the channel; even if the broadcast fails, the
+	// message remains in the stream and can still be consumed.
 	if err = eb.opts.client.XAdd(ctx, xaddArgs).Err(); err != nil {
 		return err
 	}
@@ -111,7 +113,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	return eb.opts.client.Publish(ctx, channel, buf).Err()
 }
 
-// Subscribe 订阅事件
+// Subscribe subscribes to an event.
 func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
@@ -127,7 +129,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 func (eb *Eventbus) subscribeBroadcast(ctx context.Context, topic string, handler eventbus.EventHandler) (eventbus.Subscription, error) {
 	channel := eb.doMakeChannel(topic)
 
-	// 快路径：消费者已存在时直接复用，避免重复订阅
+	// Fast path: reuse the existing consumer to avoid duplicate subscriptions.
 	eb.rw.Lock()
 	if c, ok := eb.consumers[channel]; ok {
 		sub := c.addSubscription(handler)
@@ -138,12 +140,13 @@ func (eb *Eventbus) subscribeBroadcast(ctx context.Context, topic string, handle
 	}
 	eb.rw.Unlock()
 
-	// 慢路径：将网络 I/O 移出锁外，避免长时间持锁阻塞其他订阅操作
+	// Slow path: perform the network I/O outside the lock to avoid blocking other subscribe
+	// operations.
 	if err := eb.sub.Subscribe(ctx, channel); err != nil {
 		return nil, err
 	}
 
-	// 重新加锁完成登记，避免并发重复创建消费者
+	// Reacquire the lock to finish registration, avoiding concurrent duplicate consumer creation.
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
@@ -177,7 +180,7 @@ func (eb *Eventbus) subscribeGroup(ctx context.Context, topic string, handler ev
 		group:   group,
 	}
 
-	// 快路径：已存在订阅者时直接复用，避免重复创建消费组
+	// Fast path: reuse the existing subscriber to avoid creating duplicate consumer groups.
 	eb.rw.Lock()
 	if subs, ok := eb.groupSubs[stream]; ok && len(subs) > 0 {
 		eb.groupSubs[stream] = append(subs, sub)
@@ -186,12 +189,13 @@ func (eb *Eventbus) subscribeGroup(ctx context.Context, topic string, handler ev
 	}
 	eb.rw.Unlock()
 
-	// 慢路径：将网络 I/O 移出锁外，避免长时间持锁阻塞其他订阅操作
+	// Slow path: perform the network I/O outside the lock to avoid blocking other subscribe
+	// operations.
 	if _, err := eb.opts.client.XGroupCreateMkStream(ctx, stream, group, "$").Result(); err != nil && !isBusyGroupError(err) {
 		return nil, err
 	}
 
-	// 重新加锁完成登记，避免并发重复创建消费者
+	// Reacquire the lock to finish registration, avoiding concurrent duplicate consumer creation.
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
 
@@ -211,7 +215,7 @@ func (eb *Eventbus) subscribeGroup(ctx context.Context, topic string, handler ev
 	return sub, nil
 }
 
-// Close 停止监听
+// Close stops listening.
 func (eb *Eventbus) Close() error {
 	if eb.err != nil {
 		return eb.err
@@ -230,7 +234,7 @@ func (eb *Eventbus) Close() error {
 	return nil
 }
 
-// 取消订阅
+// unsubscribe cancels a subscription.
 func (eb *Eventbus) unsubscribe(ctx context.Context, sub *subscription) {
 	if sub.single {
 		eb.unsubscribeGroup(ctx, sub)
@@ -254,7 +258,7 @@ func (eb *Eventbus) unsubscribeBroadcast(ctx context.Context, topic string, sub 
 	}
 	eb.rw.Unlock()
 
-	// 将退订网络 I/O 移出锁外，仅在最后一个订阅被移除时执行
+	// Perform the unsubscribe network I/O outside the lock, only when the last subscription is removed.
 	if empty {
 		_ = eb.sub.Unsubscribe(ctx, topic)
 	}
@@ -287,7 +291,7 @@ func (eb *Eventbus) unsubscribeGroup(_ context.Context, sub *subscription) {
 	}
 }
 
-// watch 监听广播事件
+// watch listens for broadcast events.
 func (eb *Eventbus) watch() {
 	backoff := 100 * time.Millisecond
 	maxBackoff := 10 * time.Second
@@ -323,7 +327,7 @@ func (eb *Eventbus) watch() {
 	}
 }
 
-// watchGroup 监听消费组事件
+// watchGroup listens for consumer group events.
 func (eb *Eventbus) watchGroup(ctx context.Context, stream, group string) {
 	defer eb.wg.Done()
 
@@ -337,7 +341,8 @@ func (eb *Eventbus) watchGroup(ctx context.Context, stream, group string) {
 		default:
 		}
 
-		// 回收因网络抖动等原因未能确认的pending消息，避免消息长期卡死
+		// Reclaim pending messages that were not acknowledged due to network jitter and similar
+		// issues, so that they do not get stuck for a long time.
 		eb.reclaimPending(ctx, stream, group, consumer, &index)
 
 		streams, err := eb.opts.client.XReadGroup(ctx, &redis.XReadGroupArgs{
@@ -369,7 +374,7 @@ func (eb *Eventbus) watchGroup(ctx context.Context, stream, group string) {
 	}
 }
 
-// reclaimPending 回收pending列表中闲置过久的消息
+// reclaimPending reclaims messages that have been idle for too long in the pending list.
 func (eb *Eventbus) reclaimPending(ctx context.Context, stream, group, consumer string, index *uint64) {
 	messages, _, err := eb.opts.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
 		Stream:   stream,
@@ -391,7 +396,7 @@ func (eb *Eventbus) reclaimPending(ctx context.Context, stream, group, consumer 
 	}
 }
 
-// process 处理单条流消息
+// process handles a single stream message.
 func (eb *Eventbus) process(ctx context.Context, stream, group string, msg redis.XMessage, index *uint64) {
 	payload, ok := msg.Values["payload"].(string)
 	if !ok {
@@ -404,7 +409,7 @@ func (eb *Eventbus) process(ctx context.Context, stream, group string, msg redis
 		return
 	}
 
-	// 事件已过期，直接确认并丢弃，避免消费过期消息
+	// The event is stale; acknowledge and drop it directly to avoid consuming stale messages.
 	if eb.opts.staleDuration > 0 && time.Since(event.Timestamp) > eb.opts.staleDuration {
 		if _, err := eb.opts.client.XAck(ctx, stream, group, msg.ID).Result(); err != nil {
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -458,7 +463,7 @@ func (eb *Eventbus) doMakeGroupID(topic string) string {
 	}
 }
 
-// 序列化事件
+// serialize serializes an event.
 func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)
@@ -471,7 +476,7 @@ func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	return json.Marshal(d)
 }
 
-// 反序列化事件
+// deserialize deserializes an event.
 func (eb *Eventbus) deserialize(v []byte) (*eventbus.Event, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)

@@ -14,7 +14,7 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// listenFreeAddr 获取一个空闲的本地监听地址
+// listenFreeAddr returns an idle local listen address.
 func listenFreeAddr(t *testing.T) string {
 	t.Helper()
 
@@ -27,8 +27,9 @@ func listenFreeAddr(t *testing.T) string {
 	return listener.Addr().String()
 }
 
-// TestHandleMessageDispatchPolicy 验证处理器调度策略：
-// Deliver/Trigger（上行入队型）由read协程直接同步执行，管理类处理器经任务池异步执行
+// TestHandleMessageDispatchPolicy verifies the handler dispatch policy: enqueue-style uplink
+// handlers (Deliver and Trigger) run synchronously on the read goroutine, while management
+// handlers run asynchronously through the task pool.
 func TestHandleMessageDispatchPolicy(t *testing.T) {
 	s := &Server{}
 
@@ -68,7 +69,8 @@ func TestHandleMessageDispatchPolicy(t *testing.T) {
 		t.Fatalf("trigger should execute on the read goroutine, caller: %d, got: %d", callerGoid, got)
 	}
 
-	// 管理类处理器经任务池异步执行，不应占用read协程
+	// Management handlers run asynchronously on the task pool and must not occupy the read
+	// goroutine.
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		mu.Lock()
@@ -90,7 +92,8 @@ func TestHandleMessageDispatchPolicy(t *testing.T) {
 	}
 }
 
-// TestServerDeliverOrdering 同一连接连发多条Deliver消息，read协程直执时必须按发送顺序处理
+// TestServerDeliverOrdering sends multiple Deliver messages over one connection and requires the
+// read goroutine to process them synchronously in send order.
 func TestServerDeliverOrdering(t *testing.T) {
 	const total = 100
 
@@ -171,7 +174,9 @@ func TestServerDeliverOrdering(t *testing.T) {
 	}
 }
 
-// TestServerDeliverBackpressure 处理器阻塞时read协程停住：后续消息不丢失、不并发抢跑，放行后按序处理
+// TestServerDeliverBackpressure verifies that the read goroutine stalls when a handler blocks:
+// later messages are neither lost nor processed concurrently, and after release they are handled
+// in order.
 func TestServerDeliverBackpressure(t *testing.T) {
 	release := make(chan struct{})
 	processed := make(chan int64, 2)
@@ -190,7 +195,7 @@ func TestServerDeliverBackpressure(t *testing.T) {
 			return err
 		}
 
-		// 阻塞直至放行，模拟节点消息队列满产生的背压
+		// Block until released, simulating the backpressure produced by a full node message queue.
 		<-release
 
 		processed <- cid
@@ -225,7 +230,7 @@ func TestServerDeliverBackpressure(t *testing.T) {
 		}
 	}
 
-	// 首条消息阻塞期间，第二条消息不得并发抢跑
+	// While the first message is blocked, the second message must not race ahead.
 	select {
 	case cid := <-processed:
 		t.Fatalf("message %d should not be processed while the first is blocked", cid)
@@ -234,7 +239,7 @@ func TestServerDeliverBackpressure(t *testing.T) {
 
 	close(release)
 
-	// 放行后两条消息按序处理且无丢失
+	// After release, both messages are processed in order without loss.
 	for _, want := range []int64{1, 2} {
 		select {
 		case cid := <-processed:

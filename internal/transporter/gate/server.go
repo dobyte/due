@@ -46,7 +46,7 @@ func (s *Server) init() {
 	s.RegisterHandler(route.SetState, s.setState)
 }
 
-// 绑定用户
+// bind binds the user to the connection.
 func (s *Server) bind(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	cid, uid, err := protocol.DecodeBindReq(req)
 
@@ -65,7 +65,7 @@ func (s *Server) bind(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) erro
 	return conn.Push(protocol.EncodeBindRes(seq, codes.ErrorToCode(err)))
 }
 
-// 解绑用户
+// unbind unbinds the user from its connection.
 func (s *Server) unbind(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	uid, err := protocol.DecodeUnbindReq(req)
 
@@ -84,7 +84,7 @@ func (s *Server) unbind(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) er
 	return conn.Push(protocol.EncodeUnbindRes(seq, codes.ErrorToCode(err)))
 }
 
-// 获取IP地址
+// getIP returns the client IP address.
 func (s *Server) getIP(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, target, err := protocol.DecodeGetIPReq(req)
 
@@ -103,7 +103,7 @@ func (s *Server) getIP(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) err
 	}
 }
 
-// 统计在线人数
+// stat returns the total number of online sessions.
 func (s *Server) stat(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, err := protocol.DecodeStatReq(req)
 
@@ -122,7 +122,7 @@ func (s *Server) stat(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) erro
 	}
 }
 
-// 检测用户是否在线
+// isOnline reports whether the target session is online.
 func (s *Server) isOnline(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, target, err := protocol.DecodeIsOnlineReq(req)
 
@@ -141,7 +141,7 @@ func (s *Server) isOnline(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) 
 	}
 }
 
-// 断开连接
+// disconnect disconnects the target session.
 func (s *Server) disconnect(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, target, force, err := protocol.DecodeDisconnectReq(req)
 
@@ -160,8 +160,9 @@ func (s *Server) disconnect(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes
 	}
 }
 
-// 推送单个消息
-// 注意：buf不进行释放，需要在消息发送时进行释放
+// push pushes a single message.
+//
+// Note that buf is not released here; it must be released when the message is sent.
 func (s *Server) push(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, target, disconnect, buf, err := protocol.DecodePushReq(req)
 	if err != nil {
@@ -178,7 +179,7 @@ func (s *Server) push(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) erro
 	}
 }
 
-// 推送组播消息
+// multicast pushes a message to multiple targets.
 func (s *Server) multicast(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, targets, disconnect, buf, err := protocol.DecodeMulticastReq(req)
 	if err != nil {
@@ -195,7 +196,7 @@ func (s *Server) multicast(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes)
 	}
 }
 
-// 推送广播消息
+// broadcast pushes a message to all sessions.
 func (s *Server) broadcast(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, disconnect, buf, err := protocol.DecodeBroadcastReq(req)
 	if err != nil {
@@ -212,7 +213,7 @@ func (s *Server) broadcast(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes)
 	}
 }
 
-// 发布频道消息
+// publish publishes a channel message.
 func (s *Server) publish(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	channel, disconnect, buf, err := protocol.DecodePublishReq(req)
 	if err != nil {
@@ -229,7 +230,7 @@ func (s *Server) publish(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) e
 	}
 }
 
-// 订阅频道
+// subscribe subscribes the targets to a channel.
 func (s *Server) subscribe(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, targets, channel, err := protocol.DecodeSubscribeReq(req)
 
@@ -248,7 +249,7 @@ func (s *Server) subscribe(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes)
 	}
 }
 
-// 取消订阅频道
+// unsubscribe unsubscribes the targets from a channel.
 func (s *Server) unsubscribe(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	kind, targets, channel, err := protocol.DecodeUnsubscribeReq(req)
 
@@ -267,7 +268,7 @@ func (s *Server) unsubscribe(conn *drpc.ServerConn, seq uint64, req *buffer.Byte
 	}
 }
 
-// 获取状态
+// getState returns the state.
 func (s *Server) getState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	err := protocol.DecodeGetStateReq(req)
 
@@ -286,7 +287,7 @@ func (s *Server) getState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) 
 	}
 }
 
-// 设置状态
+// setState sets the state.
 func (s *Server) setState(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
 	state, err := protocol.DecodeSetStateReq(req)
 

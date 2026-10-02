@@ -8,27 +8,23 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// IPAPICOResolver 基于 ipapi.co 服务的 IP 地址解析器
+// IPAPICOResolver is an IP address resolver based on the ipapi.co service.
 type IPAPICOResolver struct {
 }
 
 var _ Resolver = (*IPAPICOResolver)(nil)
 
-// NewIPAPICOResolver 创建一个基于 ipapi.co 服务的 IP 地址解析器
+// NewIPAPICOResolver returns an IP address resolver based on the ipapi.co service.
 func NewIPAPICOResolver() *IPAPICOResolver {
 	return &IPAPICOResolver{}
 }
 
-// Name 获取解析器名称
+// Name returns the resolver name.
 func (i *IPAPICOResolver) Name() string {
 	return "ipapi.co"
 }
 
-// Resolve 解析 IP 地址
-// @param ctx context.Context 上下文，用于超时控制
-// @param ip string IP 地址
-// @return @1 *Result 解析结果
-// @return @2 error 错误信息
+// Resolve resolves the geolocation of ip.
 func (i *IPAPICOResolver) Resolve(ctx context.Context, ip string) (*Result, error) {
 	var resp struct {
 		IP      string `json:"ip"`

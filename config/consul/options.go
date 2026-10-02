@@ -20,35 +20,32 @@ const (
 	defaultModeKey = "etc.config.consul.mode"
 )
 
-// Option 配置选项函数
+// Option is a function that configures the [options].
 type Option func(o *options)
 
-// 配置项
+// options holds the configuration options of a [Source].
 type options struct {
-	// 上下文
-	// 默认为context.Background
+	// ctx is the context and defaults to [context.Background].
 	ctx context.Context
 
-	// 客户端连接地址
-	// 内建客户端配置，默认为127.0.0.1:8500
+	// addr is the client connection address.
+	// It configures the built-in client and defaults to 127.0.0.1:8500.
 	addr string
 
-	// 外部客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// client is the external client.
+	// When it is provided, it takes precedence over the built-in client. It defaults to nil.
 	client *api.Client
 
-	// 路径
-	// 默认为 /config
+	// path is the path and defaults to /config.
 	path string
 
-	// 读写模式
-	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	// mode is the read-write mode.
+	// It supports the read-only, write-only and read-write modes and defaults to read-only.
 	mode config.Mode
 }
 
-// 创建默认配置项
-// 从配置环境中读取各参数并填充默认值
-// @return @1 *options 默认配置项
+// defaultOptions creates the default options, reading each parameter from the
+// configuration environment and filling in its default value.
 func defaultOptions() *options {
 	return &options{
 		ctx:  context.Background(),
@@ -58,31 +55,27 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddr 设置客户端连接地址
+// WithAddr sets the client connection address.
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
 }
 
-// WithClient 设置外部客户端
+// WithClient sets the external client.
 func WithClient(client *api.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithContext 设置上下文
-// @param ctx context.Context 上下文
-// @return @1 Option 配置选项函数
+// WithContext sets the context.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithPath 设置基础路径
-// @param path string 基础路径
-// @return @1 Option 配置选项函数
+// WithPath sets the base path.
 func WithPath(path string) Option {
 	return func(o *options) { o.path = path }
 }
 
-// WithMode 设置读写模式
+// WithMode sets the read-write mode.
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }

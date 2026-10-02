@@ -12,12 +12,12 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-// mockWatcher 模拟注册中心监听器
+// mockWatcher simulates a registry watcher.
 type mockWatcher struct {
 	ch          chan struct{}
-	nextEntered atomic.Int32 // Next 被调用次数（含阻塞中）
-	nextCalls   atomic.Int32 // Next 已返回次数
-	stopCalls   atomic.Int32 // Stop 被调用次数
+	nextEntered atomic.Int32 // Number of times Next has been called, including blocked calls
+	nextCalls   atomic.Int32 // Number of times Next has returned
+	stopCalls   atomic.Int32 // Number of times Stop has been called
 }
 
 func newMockWatcher() *mockWatcher {
@@ -41,7 +41,7 @@ func (w *mockWatcher) Stop() error {
 	return nil
 }
 
-// mockDiscovery 模拟服务发现组件
+// mockDiscovery simulates a service discovery component.
 type mockDiscovery struct {
 	watcher *mockWatcher
 }
@@ -66,7 +66,7 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Fatalf("condition not met within %v", timeout)
 }
 
-// TestBuilderClose 验证 Builder.Close 链路是否彻底释放全部资源
+// TestBuilderClose verifies whether the Builder.Close path releases all resources thoroughly.
 func TestBuilderClose(t *testing.T) {
 	discovery := &mockDiscovery{watcher: newMockWatcher()}
 	b := NewBuilder(&Options{Discovery: discovery})
@@ -75,10 +75,10 @@ func TestBuilderClose(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = b.Close() })
 
-	// 等待 watch 协程启动并阻塞在 Next()
+	// Wait for the watch goroutine to start and block in Next.
 	waitFor(t, 2*time.Second, func() bool { return discovery.watcher.nextEntered.Load() >= 1 })
 
-	// 建立多个连接，验证全部被释放
+	// Open several connections and verify that all of them are released.
 	cc1, err := b.Build("direct://127.0.0.1:8011")
 	if err != nil {
 		t.Fatalf("Build error: %v", err)
@@ -88,22 +88,22 @@ func TestBuilderClose(t *testing.T) {
 		t.Fatalf("Build error: %v", err)
 	}
 
-	// 记录基准协程数（含 grpc 内部协程）
+	// Record the baseline goroutine count (including gRPC internal goroutines).
 	before := runtime.NumGoroutine()
 
 	if err := b.Close(); err != nil {
 		t.Fatalf("Close error: %v", err)
 	}
 
-	// 1. 监听器被停止
+	// 1. The watcher is stopped.
 	if n := discovery.watcher.stopCalls.Load(); n != 1 {
 		t.Errorf("watcher.Stop should be called once, got %d", n)
 	}
 
-	// 2. watch 协程收到 ErrWatcherStopped 并退出阻塞的 Next()
+	// 2. The watch goroutine receives ErrWatcherStopped and exits the blocked Next.
 	waitFor(t, 2*time.Second, func() bool { return discovery.watcher.nextCalls.Load() >= 1 })
 
-	// 3. 连接缓存已清空
+	// 3. The connection cache is cleared.
 	var remain int
 	b.connections.Range(func(_, _ any) bool {
 		remain++
@@ -113,7 +113,7 @@ func TestBuilderClose(t *testing.T) {
 		t.Errorf("connections should be cleared, %d remain", remain)
 	}
 
-	// 4. 已建立的连接全部关闭
+	// 4. All established connections are closed.
 	if state := cc1.GetState(); state != connectivity.Shutdown {
 		t.Errorf("connection 1 should be Shutdown, got %v", state)
 	}
@@ -121,17 +121,17 @@ func TestBuilderClose(t *testing.T) {
 		t.Errorf("connection 2 should be Shutdown, got %v", state)
 	}
 
-	// 5. Close 幂等
+	// 5. Close is idempotent.
 	if err := b.Close(); err != nil {
 		t.Errorf("second Close should return nil, got %v", err)
 	}
 
-	// 6. 关闭后 Build 返回 ErrClientClosed
+	// 6. Build returns ErrClientClosed after Close.
 	if _, err := b.Build("direct://127.0.0.1:8011"); !errors.Is(err, errors.ErrClientClosed) {
 		t.Errorf("Build after Close should return ErrClientClosed, got %v", err)
 	}
 
-	// 7. 无协程泄漏（等待 grpc 内部协程退出）
+	// 7. No goroutine leak (wait for gRPC internal goroutines to exit).
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if runtime.NumGoroutine() <= before {

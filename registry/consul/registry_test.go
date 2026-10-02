@@ -84,7 +84,7 @@ func TestRegistry_Register(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 等待 Consul 完成健康检查后再更新实例状态
+	// Wait for Consul to finish the health check before updating the instance state.
 	time.Sleep(5 * time.Second)
 
 	ins.State = cluster.Busy.String()

@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/17 1:22 上午
- * @Desc: TODO
- */
-
 package etcd
 
 import (
@@ -20,25 +13,24 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// registrar 服务注册器
-// 负责服务实例的注册与解注册，并通过保活协程维持服务键绑定的租约
+// registrar is a service registrar.
+//
+// It registers and deregisters service instances and keeps the lease bound to the service key
+// alive through a keepalive goroutine.
 type registrar struct {
-	registry *Registry          // 服务注册中心
-	insID    string             // 服务实例ID
-	ctx      context.Context    // 保活上下文
-	cancel   context.CancelFunc // 保活取消函数
-	kv       clientv3.KV        // KV客户端
-	lease    clientv3.Lease     // 租约客户端
-	leaseID  clientv3.LeaseID   // 当前生效的租约ID
-	mu       sync.Mutex         // 保护 ctx/cancel/leaseID 的互斥锁
-	stopped  atomic.Bool        // 是否已停止
-	wg       sync.WaitGroup     // 等待保活协程退出
+	registry *Registry          // Service registry
+	insID    string             // Service instance ID
+	ctx      context.Context    // Keepalive context
+	cancel   context.CancelFunc // Keepalive cancel function
+	kv       clientv3.KV        // KV client
+	lease    clientv3.Lease     // Lease client
+	leaseID  clientv3.LeaseID   // Currently effective lease ID
+	mu       sync.Mutex         // Guards ctx, cancel and leaseID
+	stopped  atomic.Bool        // Whether the registrar has stopped
+	wg       sync.WaitGroup     // Waits for the keepalive goroutine to exit
 }
 
-// 构建服务注册器
-// @param registry *Registry 服务注册中心
-// @param insID string 服务实例ID
-// @return @1 *registrar 服务注册器实例
+// newRegistrar returns a new service registrar for the given registry and instance ID.
 func newRegistrar(registry *Registry, insID string) *registrar {
 	r := &registrar{}
 	r.kv = clientv3.NewKV(registry.opts.client)
@@ -49,12 +41,11 @@ func newRegistrar(registry *Registry, insID string) *registrar {
 	return r
 }
 
-// 注册服务
-// 将服务实例序列化后写入 etcd 并绑定租约，随后启动保活协程维持租约；
-// 重复注册同一服务实例会撤销旧租约并重建保活流
-// @param ctx context.Context 上下文
-// @param ins *registry.ServiceInstance 服务实例
-// @return @1 error 注册失败时返回的错误
+// register registers a service instance.
+//
+// It serializes the instance, writes it to etcd with a bound lease and then starts a keepalive
+// goroutine for that lease. Registering the same instance again revokes the previous lease and
+// rebuilds the keepalive stream.
 func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.stopped.Load() {
 		return errors.ErrIllegalOperation
@@ -101,12 +92,11 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	return nil
 }
 
-// 解注册服务
-// 先显式删除服务键；删除失败不致命——stop 会撤销当前租约（键随租约回收）作为兜底删除，
-// 故不向调用方返回误导性的失败错误
-// @param ctx context.Context 上下文
-// @param ins *registry.ServiceInstance 服务实例
-// @return @1 error 解注册失败时返回的错误
+// deregister deregisters a service instance.
+//
+// It deletes the service key explicitly first. A failed delete is not fatal: stop revokes the
+// current lease, which reclaims the key as a fallback, so no misleading failure error is returned
+// to the caller.
 func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	defer r.stop()
 
@@ -119,19 +109,22 @@ func (r *registrar) deregister(ctx context.Context, ins *registry.ServiceInstanc
 	return nil
 }
 
-// 停止注册
-// 依次完成：从注册表中移除注册器、取消保活上下文并等待保活协程退出、
-// 撤销最后一次生效的租约并关闭租约客户端；幂等，重复调用直接返回
+// stop stops the registrar.
+//
+// It removes the registrar from the registry, cancels the keepalive context and waits for the
+// keepalive goroutine to exit, then revokes the last effective lease and closes the lease client.
+// It is idempotent and returns immediately on repeated calls.
 func (r *registrar) stop() {
 	if !r.stopped.CompareAndSwap(false, true) {
 		return
 	}
 
-	// 先将注册器从注册表中移除，避免并发重新注册时命中已停止的注册器
+	// Remove the registrar from the registry first so that a concurrent re-registration does not
+	// hit an already stopped registrar.
 	r.registry.registrars.Delete(r.insID)
 
-	// 取消保活上下文，等待保活协程退出后再释放资源，
-	// 确保不会在租约客户端关闭后仍有进行中的网络操作
+	// Cancel the keepalive context and wait for the keepalive goroutine to exit before releasing
+	// resources, so that no in-flight network operation outlives the closed lease client.
 	r.mu.Lock()
 	cancel := r.cancel
 	r.cancel = nil
@@ -143,7 +136,8 @@ func (r *registrar) stop() {
 
 	r.wg.Wait()
 
-	// 撤销最后一次生效的租约（保活协程已退出，不再有新的租约提交，此时读取的即为最终租约）
+	// Revoke the last effective lease. The keepalive goroutine has exited and no new lease can be
+	// committed, so the value read here is the final lease.
 	r.mu.Lock()
 	leaseID := r.leaseID
 	r.leaseID = 0
@@ -160,7 +154,7 @@ func (r *registrar) stop() {
 	}
 }
 
-// 写入KV
+// put writes the key-value pair to etcd and returns the newly granted lease ID.
 func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseID, error) {
 	res, err := r.lease.Grant(ctx, int64(r.registry.opts.leaseTTL.Seconds()))
 	if err != nil {
@@ -175,9 +169,10 @@ func (r *registrar) put(ctx context.Context, key, value string) (clientv3.LeaseI
 	return res.ID, nil
 }
 
-// 撤销租约
-// 以独立超时上下文执行撤销，避免因 etcd 异常导致长时间阻塞
-// @param leaseID clientv3.LeaseID 待撤销的租约ID
+// revoke revokes leaseID.
+//
+// It revokes with a dedicated timeout context so that an etcd failure does not block for a long
+// time.
 func (r *registrar) revoke(leaseID clientv3.LeaseID) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.registry.opts.timeout)
 	defer cancel()
@@ -187,34 +182,34 @@ func (r *registrar) revoke(leaseID clientv3.LeaseID) {
 	}
 }
 
-// 保活
-// 保活流中断后自动重新注册并重建保活流，不会因瞬时网络故障主动注销服务；
-// 重建退避（minRetryDelay ~ maxRetryDelay）由本协程跨轮次统一维护：
-// 上一次保活流稳定存活超过 stableDuration 才允许重置退避，防止流频繁短命断开时退避被反复重置失效；
-// 仅当注册被停止或取代时退出
-// @param ctx context.Context 保活上下文
-// @param leaseID clientv3.LeaseID 当前生效的租约ID
-// @param key string 服务键
-// @param value string 服务数据
+// keepalive keeps the service lease alive.
+//
+// When the keepalive stream breaks, it re-registers the service and rebuilds the stream instead of
+// deregistering it on a transient network failure. The rebuild backoff (minRetryDelay to
+// maxRetryDelay) is maintained across rounds by this goroutine: the backoff is only reset when the
+// previous stream stayed alive for at least stableDuration, which prevents a frequently dying
+// stream from repeatedly resetting the backoff. It exits only when the registration is stopped or
+// superseded.
 func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key, value string) {
 	defer r.wg.Done()
 
 	var (
 		ok    bool
 		delay = minRetryDelay
-		start time.Time // 当前保活流建立时刻，用于稳定判定
+		start time.Time // Establishment time of the current keepalive stream, used for the stability check
 	)
 
 	chKA, err := r.lease.KeepAlive(ctx, leaseID)
 	ok = err == nil
 	if ok {
-		// 首次保活流建立成功，记录建立时刻，供该流断开时进行稳定判定
+		// The first keepalive stream was established successfully; record the time so that the
+		// stability of this stream can be evaluated when it breaks.
 		start = time.Now()
 	}
 
 	for {
 		if !ok {
-			// 保活流中断，重新注册并重建保活流
+			// The keepalive stream broke; re-register and rebuild the stream.
 			if chKA, ok, delay = r.renew(ctx, key, value, delay); !ok {
 				return
 			}
@@ -229,9 +224,12 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 					return
 				}
 
-				// 根据上一次保活流的存活时长调整重建退避：
-				// - 稳定存活超过 stableDuration：链路健康，重置退避以便快速恢复；
-				// - 短命即断开：链路不稳定，指数退避防空转
+				// Adjust the rebuild backoff according to how long the previous keepalive stream
+				// lived:
+				// - Alive for at least stableDuration: the link is healthy, so reset the backoff to
+				//   recover quickly.
+				// - Died shortly after being established: the link is unstable, so use exponential
+				//   backoff to avoid busy spinning.
 				if time.Since(start) >= stableDuration {
 					delay = minRetryDelay
 				} else {
@@ -245,16 +243,12 @@ func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key
 	}
 }
 
-// 重新注册并重建保活流
-// 采用指数退避（minRetryDelay ~ maxRetryDelay 封顶）持续重试，直至重新注册成功或当前注册被停止/取代；
-// 起始退避由调用方传入并回传最新间隔，使退避状态跨轮次延续，避免保活流频繁短命断开时退避失效
-// @param ctx context.Context 保活上下文（当前注册的保活上下文）
-// @param key string 服务键
-// @param value string 服务数据
-// @param delay time.Duration 本次重建的起始等待间隔
-// @return @1 <-chan *clientv3.LeaseKeepAliveResponse 保活响应通道，重新注册成功后返回
-// @return @2 bool 是否重新注册成功；返回false表示本协程应退出
-// @return @3 time.Duration 最新等待间隔（内部指数退避递增后的结果，供调用方跨轮次延续）
+// renew re-registers the service and rebuilds the keepalive stream.
+//
+// It retries with exponential backoff capped at maxRetryDelay until the re-registration succeeds or
+// the current registration is stopped or superseded. The starting delay is passed in by the caller
+// and the latest interval is returned, so that the backoff state carries across rounds instead of
+// being lost when keepalive streams frequently die early.
 func (r *registrar) renew(ctx context.Context, key, value string, delay time.Duration) (<-chan *clientv3.LeaseKeepAliveResponse, bool, time.Duration) {
 	var chKA <-chan *clientv3.LeaseKeepAliveResponse
 
@@ -269,8 +263,9 @@ func (r *registrar) renew(ctx context.Context, key, value string, delay time.Dur
 		case <-time.After(delay):
 		}
 
-		// put 前再次确认注册仍由本协程维护，避免等待退避期间注册被停止/取代后，
-		// 仍发出迟到的写入覆盖新注册的 key
+		// Confirm before putting that the registration is still maintained by this goroutine, so
+		// that a late write does not overwrite the key of a new registration after the current one
+		// was stopped or superseded while waiting for the backoff.
 		r.mu.Lock()
 		if r.stopped.Load() || r.ctx != ctx {
 			r.mu.Unlock()
@@ -293,7 +288,8 @@ func (r *registrar) renew(ctx context.Context, key, value string, delay time.Dur
 			continue
 		}
 
-		// 重新注册成功，确认注册仍由本协程维护后再提交新租约
+		// Re-registration succeeded; make sure the registration is still maintained by this
+		// goroutine before committing the new lease.
 		r.mu.Lock()
 		if r.stopped.Load() || r.ctx != ctx {
 			r.mu.Unlock()

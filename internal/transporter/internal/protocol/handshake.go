@@ -15,9 +15,9 @@ const (
 	handshakeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeHandshakeReq 编码握手请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{ins kind + ins id + conn epoch}
+// EncodeHandshakeReq encodes a handshake request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {ins kind + ins id + conn epoch}
 func EncodeHandshakeReq(seq uint64, kind cluster.Kind, inst string, epoch uint64) buffer.Buffer {
 	size := handshakeReqBytes + len(inst)
 	writer := buffer.MallocWriter(size)
@@ -32,9 +32,9 @@ func EncodeHandshakeReq(seq uint64, kind cluster.Kind, inst string, epoch uint64
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeHandshakeReq 解码握手请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{ins kind + ins id + conn epoch}
+// DecodeHandshakeReq decodes a handshake request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {ins kind + ins id + conn epoch}
 func DecodeHandshakeReq(buf buffer.Buffer) (cluster.Kind, string, uint64, error) {
 	if buf.Len() < def.B8+def.B64+1 {
 		return 0, "", 0, errors.ErrInvalidMessage
@@ -48,9 +48,9 @@ func DecodeHandshakeReq(buf buffer.Buffer) (cluster.Kind, string, uint64, error)
 	return kind, inst, epoch, nil
 }
 
-// EncodeHandshakeRes 编码握手响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeHandshakeRes encodes a handshake response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeHandshakeRes(seq uint64, code uint16) buffer.Buffer {
 	writer := buffer.MallocWriter(handshakeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(handshakeResBytes-def.SizeBytes))
@@ -62,9 +62,9 @@ func EncodeHandshakeRes(seq uint64, code uint16) buffer.Buffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeHandshakeRes 解码握手响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeHandshakeRes decodes a handshake response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeHandshakeRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

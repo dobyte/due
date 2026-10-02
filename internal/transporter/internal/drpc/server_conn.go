@@ -20,23 +20,23 @@ import (
 )
 
 type ServerConn struct {
-	svr               *Server                     // 服务器
-	rw                sync.RWMutex                // 锁
-	ctx               context.Context             // 上下文
-	cancel            context.CancelFunc          // 取消函数
-	wg1               *sync.WaitGroup             // 读等待组
-	wg2               *sync.WaitGroup             // 写等待组
-	conn              *net.TCPConn                // 连接实例
-	state             atomic.Int32                // 连接状态
-	queue             *queue.Queue[buffer.Buffer] // 消息队列
-	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
-	netBuffers        net.Buffers                 // 待写入的字节切片集合
-	writeDeadline     time.Time                   // 写截止时间（写协程独享）
-	lastHeartbeatTime atomic.Int64                // 上次心跳时间
-	key               string                      // 连接键值
-	kind              cluster.Kind                // 实例类型
-	inst              string                      // 实例ID
-	epoch             uint64                      // 连接时间戳
+	svr               *Server                     // Server
+	rw                sync.RWMutex                // Lock
+	ctx               context.Context             // Context
+	cancel            context.CancelFunc          // Cancel function
+	wg1               *sync.WaitGroup             // Read wait group
+	wg2               *sync.WaitGroup             // Write wait group
+	conn              *net.TCPConn                // Underlying connection
+	state             atomic.Int32                // Connection state
+	queue             *queue.Queue[buffer.Buffer] // Message queue
+	dueBuffers        []buffer.Buffer             // Message buffers pending write
+	netBuffers        net.Buffers                 // Byte slices pending write
+	writeDeadline     time.Time                   // Write deadline (owned by the write goroutine)
+	lastHeartbeatTime atomic.Int64                // Time of the last heartbeat
+	key               string                      // Connection key
+	kind              cluster.Kind                // Instance kind
+	inst              string                      // Instance ID
+	epoch             uint64                      // Connection epoch
 }
 
 func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
@@ -56,7 +56,7 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	return c
 }
 
-// Push 推送消息
+// Push pushes a message to the connection.
 func (c *ServerConn) Push(buf *buffer.NocopyBuffer) error {
 	c.rw.RLock()
 
@@ -81,16 +81,16 @@ func (c *ServerConn) Push(buf *buffer.NocopyBuffer) error {
 	return nil
 }
 
-// HandshakeInfo 获取握手信息
-// @return kind 实例类型
-// @return inst 实例ID
+// HandshakeInfo returns the instance kind and instance ID negotiated during the handshake.
 func (s *ServerConn) HandshakeInfo() (cluster.Kind, string) {
 	return s.kind, s.inst
 }
 
-// read 读取消息
-// 持续从流中读取消息，每条数据帧直接刷新活性时间（数据即心跳）、检测空包/心跳包并分发到接收hook；读取失败时触发强制关闭
-// @param conn net.Conn TCP连接
+// read reads messages from the stream.
+//
+// It continuously reads messages, refreshing the liveness time on every data frame (a data frame
+// acts as a heartbeat), detecting empty and heartbeat packets, and dispatching the rest to the
+// receive hook. A read error triggers a forced close.
 func (c *ServerConn) read(conn *net.TCPConn) {
 	reader := newReader(conn)
 
@@ -119,7 +119,8 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 			if isHeartbeat {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			} else {
-				// 每条数据帧直接刷新活性时间，客户端空闲抑制心跳后仍能保持准确的活性判定
+				// Refresh the liveness time on every data frame, so liveness stays accurate even
+				// after the client suppresses idle heartbeats.
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 
 				// ignore empty packet
@@ -152,9 +153,10 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 	}
 }
 
-// write 写入消息
-// 从消息队列取出消息写入连接；同时按固定间隔检测心跳超时，超时则触发强制关闭
-// @param conn net.Conn TCP连接
+// write writes queued messages to the connection.
+//
+// It also checks for heartbeat timeouts at a fixed interval and triggers a forced close on
+// timeout.
 func (c *ServerConn) write(conn *net.TCPConn) {
 	for {
 		if c.ctx.Err() != nil {
@@ -174,10 +176,10 @@ func (c *ServerConn) write(conn *net.TCPConn) {
 	}
 }
 
-// doBatchWrite 批量写入消息
-// 从写队列批量取出任务，收集字节后通过net.Buffers一次性下发，减少系统调用次数
-// @param conn net.Conn TCP连接
-// @param first buffer.Buffer 首个已取出的任务
+// doBatchWrite writes messages in batches.
+//
+// It takes tasks from the write queue in batches and sends the collected bytes through a single
+// net.Buffers.WriteTo call to reduce the number of system calls.
 func (c *ServerConn) doBatchWrite(conn net.Conn, first buffer.Buffer) {
 	closeSig := first.Len() == 0
 
@@ -228,7 +230,8 @@ OVER:
 	if len(c.netBuffers) > 0 {
 		if timeout := c.svr.opts.WriteTimeout; timeout > 0 {
 			now := time.Now()
-			// 仅在剩余时间不足一半时续期，避免每批次写入都产生 netpoller 系统调用
+			// Extend the deadline only when less than half of it remains, avoiding a netpoller
+			// syscall on every batch write.
 			if now.Add(timeout / 2).After(c.writeDeadline) {
 				c.writeDeadline = now.Add(timeout)
 				_ = conn.SetWriteDeadline(c.writeDeadline)
@@ -251,17 +254,18 @@ OVER:
 	c.dueBuffers = c.dueBuffers[:0]
 }
 
-// checkHeartbeat 检查心跳是否超时
-// @param t *time.Time 当前心跳触发的时间点
+// checkHeartbeat force-closes the connection when its heartbeat has timed out at time t.
 func (c *ServerConn) checkHeartbeat(t *time.Time) {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*heartbeatInterval).UnixNano() {
 		taskpool.Add(func() { c.forceClose() })
 	}
 }
 
-// checkState 检测连接状态
-// 依据挂起/关闭状态返回对应错误，正常时返回nil
-// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
+// checkState returns an error matching the connection state.
+//
+// It reports [errors.ErrConnectionNotAlived] for a connection that has not completed the
+// handshake, [errors.ErrConnectionHanged] for a hung connection, [errors.ErrConnectionClosed] for
+// a closed connection and nil when the connection is alive.
 func (c *ServerConn) checkState() error {
 	switch c.state.Load() {
 	case connOpened:
@@ -275,9 +279,10 @@ func (c *ServerConn) checkState() error {
 	}
 }
 
-// graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息
-// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
+// graceClose closes the connection gracefully.
+//
+// It writes a close signal and waits for the write queue to drain before closing the connection,
+// so that the buffered messages are delivered as far as possible.
 func (c *ServerConn) graceClose() error {
 	c.rw.RLock()
 	switch {
@@ -306,9 +311,10 @@ func (c *ServerConn) graceClose() error {
 	return c.forceClose()
 }
 
-// forceClose 强制关闭
-// 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @return @1 error 连接已处于关闭态时返回的错误
+// forceClose closes the connection immediately.
+//
+// It switches the state to closed and closes the connection without waiting for the write queue to
+// drain. It reports [errors.ErrConnectionClosed] when the connection is already closed.
 func (c *ServerConn) forceClose() error {
 	c.rw.Lock()
 
@@ -328,10 +334,12 @@ func (c *ServerConn) forceClose() error {
 	key := c.key
 	c.rw.Unlock()
 
-	// 队列尚未关闭，写协程只能通过ctx退出，不再排空残留消息
+	// The queue is not closed yet, so the write goroutine can only exit through ctx and no longer
+	// drains the remaining messages.
 	c.wg2.Wait()
 
-	// 关闭队列，使回放时的range能读完残留消息后正常终止
+	// Close the queue so that a replaying range loop terminates after reading the remaining
+	// messages.
 	c.queue.Close()
 
 	if key != "" {
@@ -346,10 +354,7 @@ func (c *ServerConn) forceClose() error {
 	return err
 }
 
-// doHandshake 处理握手请求
-// @param seq uint64 序列号
-// @param buf buffer.Buffer 手势请求缓冲区
-// @return @1 error 处理错误
+// doHandshake handles a handshake request.
 func (c *ServerConn) doHandshake(seq uint64, buf buffer.Buffer) error {
 	kind, inst, epoch, err := protocol.DecodeHandshakeReq(buf)
 	buf.Release()

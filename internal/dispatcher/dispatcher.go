@@ -28,7 +28,7 @@ func NewDispatcher(dispatch cluster.Dispatch) *Dispatcher {
 	return &Dispatcher{dispatch: dispatch}
 }
 
-// FindEndpoint 查找服务端口
+// FindEndpoint returns the endpoint of the service instance identified by insID.
 func (d *Dispatcher) FindEndpoint(insID string) (*endpoint.Endpoint, error) {
 	if endpoints, ok := d.endpoints.Load().(map[string]*endpoint.Endpoint); ok {
 		if ep, ok := endpoints[insID]; ok {
@@ -39,7 +39,7 @@ func (d *Dispatcher) FindEndpoint(insID string) (*endpoint.Endpoint, error) {
 	return nil, errors.ErrNotFoundEndpoint
 }
 
-// Endpoints 获取所有端口
+// Endpoints returns all endpoints keyed by instance ID.
 func (d *Dispatcher) Endpoints() map[string]*endpoint.Endpoint {
 	if endpoints, ok := d.endpoints.Load().(map[string]*endpoint.Endpoint); ok {
 		return endpoints
@@ -48,7 +48,7 @@ func (d *Dispatcher) Endpoints() map[string]*endpoint.Endpoint {
 	return nil
 }
 
-// VisitEndpoints 迭代服务端口
+// VisitEndpoints iterates over all service endpoints, stopping early when fn returns false.
 func (d *Dispatcher) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint) bool) {
 	if endpoints, ok := d.endpoints.Load().(map[string]*endpoint.Endpoint); ok {
 		for insID, ep := range endpoints {
@@ -59,7 +59,7 @@ func (d *Dispatcher) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint)
 	}
 }
 
-// FindRoute 查找节点路由
+// FindRoute returns the node route identified by route.
 func (d *Dispatcher) FindRoute(route int32) (*Route, error) {
 	if routes, ok := d.routes.Load().(map[int32]*Route); ok {
 		if r, ok := routes[route]; ok {
@@ -70,7 +70,7 @@ func (d *Dispatcher) FindRoute(route int32) (*Route, error) {
 	return nil, errors.ErrNotFoundRoute
 }
 
-// FindEvent 查找节点事件
+// FindEvent returns the node event identified by event.
 func (d *Dispatcher) FindEvent(event int) (*Event, error) {
 	if events, ok := d.events.Load().(map[int]*Event); ok {
 		if e, ok := events[event]; ok {
@@ -81,7 +81,8 @@ func (d *Dispatcher) FindEvent(event int) (*Event, error) {
 	return nil, errors.ErrNotFoundEvent
 }
 
-// ReplaceServices 替换服务
+// ReplaceServices rebuilds the routing table from the given service instances. It replaces the
+// routes, events and endpoints in use; instances whose endpoint cannot be parsed are skipped.
 func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	routes := make(map[int32]*Route, len(services))
 	events := make(map[int]*Event, len(services))

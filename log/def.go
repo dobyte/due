@@ -4,12 +4,12 @@ import (
 	"github.com/dobyte/due/v2/log/internal"
 )
 
-// Terminal 日志输出终端
+// Terminal is a log output terminal.
 type Terminal string
 
 const (
-	TerminalConsole Terminal = "console" // 控制台
-	TerminalFile    Terminal = "file"    // 文件
+	TerminalConsole Terminal = "console" // Console terminal
+	TerminalFile    Terminal = "file"    // File terminal
 )
 
 type (

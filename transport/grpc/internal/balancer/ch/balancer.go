@@ -12,13 +12,15 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-// virtualNodes 每个子连接在哈希环上的虚拟节点数
+// virtualNodes is the number of virtual nodes per sub-connection on the hash ring.
 const virtualNodes = 150
 
 var _ balancer.Balancer = &Balancer{}
 
-// Balancer 一致性哈希负载均衡器
-// 通过维护哈希环实现相同请求键固定路由到同一子连接
+// Balancer is a consistent hash load balancer.
+//
+// It maintains a hash ring so that requests with the same key are always routed to the same
+// sub-connection.
 type Balancer struct {
 	cc       balancer.ClientConn
 	opts     balancer.BuildOptions
@@ -29,10 +31,10 @@ type Balancer struct {
 	mu       sync.Mutex
 }
 
-// UpdateClientConnState 更新客户端连接状态
-// 同步解析器下发的地址列表，移除失效子连接并新建缺失子连接
-// @param s balancer.ClientConnState 客户端连接状态
-// @return @1 error 错误信息
+// UpdateClientConnState updates the client connection state.
+//
+// It synchronizes the address list pushed by the resolver, removes stale sub-connections and
+// creates missing ones.
 func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -160,7 +162,7 @@ func (b *Balancer) Close() {
 	b.picker = nil
 }
 
-// ExitIdle 退出空闲状态，触发全部空闲子连接建立连接
+// ExitIdle leaves the idle state and triggers a connection for every idle sub-connection.
 func (b *Balancer) ExitIdle() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -172,31 +174,32 @@ func (b *Balancer) ExitIdle() {
 	}
 }
 
-// hashSubConn 待哈希的子连接
+// hashSubConn is a sub-connection to be hashed.
 type hashSubConn struct {
 	sc  balancer.SubConn
-	key string // 哈希节点标识（服务地址）
+	key string // Hash node identifier (service address)
 }
 
-// ringNode 哈希环节点
+// ringNode is a node on the hash ring.
 type ringNode struct {
 	hash uint32
 	sc   balancer.SubConn
 }
 
-// consistentRing 一致性哈希环，按哈希值升序排列
+// consistentRing is a consistent hash ring sorted by hash value in ascending order.
 type consistentRing struct {
 	nodes []ringNode
 }
 
-// hashKey 计算字符串哈希值，FNV-1a 具有更好的分布特性
+// hashKey computes the hash of a string; FNV-1a offers better distribution.
 func hashKey(key string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))
 	return h.Sum32()
 }
 
-// newConsistentRing 构建哈希环，每个子连接生成若干虚拟节点以均衡分布
+// newConsistentRing builds a hash ring, generating several virtual nodes per sub-connection to
+// balance distribution.
 func newConsistentRing(subConns []*hashSubConn) *consistentRing {
 	nodes := make([]ringNode, 0, len(subConns)*virtualNodes)
 	for _, sc := range subConns {
@@ -211,7 +214,7 @@ func newConsistentRing(subConns []*hashSubConn) *consistentRing {
 	return &consistentRing{nodes: nodes}
 }
 
-// get 根据哈希键返回子连接
+// get returns the sub-connection for the given hash key.
 func (r *consistentRing) get(key string) (balancer.SubConn, bool) {
 	if len(r.nodes) == 0 {
 		return nil, false
@@ -225,10 +228,11 @@ func (r *consistentRing) get(key string) (balancer.SubConn, bool) {
 	return r.nodes[idx].sc, true
 }
 
-// hashKeyCtxKey 一致性哈希键上下文键
+// hashKeyCtxKey is the context key for the consistent hash key.
 type hashKeyCtxKey struct{}
 
-// WithHashKey 将一致性哈希键注入上下文，未设置时默认使用 RPC 方法名作为哈希键
+// WithHashKey injects the consistent hash key into the context; when unset, the RPC method name is
+// used as the hash key by default.
 func WithHashKey(ctx context.Context, key string) context.Context {
 	return context.WithValue(ctx, hashKeyCtxKey{}, key)
 }
@@ -245,7 +249,7 @@ func getHashKey(ctx context.Context) string {
 	return ""
 }
 
-// Picker 一致性哈希选择器，依据哈希环选取目标子连接
+// Picker is the consistent hash picker that selects a target sub-connection based on the hash ring.
 type Picker struct {
 	ring *consistentRing
 	err  error
@@ -253,11 +257,10 @@ type Picker struct {
 
 var _ balancer.Picker = &Picker{}
 
-// Pick 选择目标子连接
-// 以请求上下文的哈希键进行路由，未指定时回退使用 RPC 方法名
-// @param info balancer.PickInfo 请求信息
-// @return @1 balancer.PickResult 选择结果
-// @return @2 error 错误信息
+// Pick selects a target sub-connection.
+//
+// It routes by the hash key in the request context and falls back to the RPC method name when none
+// is specified.
 func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 	if p.err != nil {
 		return balancer.PickResult{}, p.err

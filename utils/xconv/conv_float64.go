@@ -8,11 +8,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Float64 将任意值转换为 float64
-// 支持所有基础数值类型（复数取实部）、bool、time.Time（Unix纳秒）及
-// 通过反射处理的字符串等类型；无法转换时返回 0
-// @param val any 待转换的值
-// @return @1 float64 转换后的 float64
+// Float64 converts val to a float64.
+//
+// It supports all basic numeric types (the real part is taken for complex numbers), bool,
+// time.Time (as Unix nanoseconds) and types handled through reflection such as strings; it
+// returns 0 when the conversion fails.
 func Float64(val any) float64 {
 	if val == nil {
 		return 0
@@ -165,9 +165,7 @@ func Float64(val any) float64 {
 	}
 }
 
-// Float64s 将任意值转换为 float64 切片
-// @param val any 待转换的值
-// @return @1 []float64 转换后的 float64 切片
+// Float64s converts val to a float64 slice.
 func Float64s(val any) (slice []float64) {
 	if val == nil {
 		return
@@ -416,17 +414,13 @@ func Float64s(val any) (slice []float64) {
 	return
 }
 
-// Float64Pointer 将任意值转换为 float64 指针
-// @param val any 待转换的值
-// @return @1 *float64 转换后的 float64 指针
+// Float64Pointer converts val to a pointer to float64.
 func Float64Pointer(any any) *float64 {
 	v := Float64(any)
 	return &v
 }
 
-// Float64sPointer 将任意值转换为 float64 切片指针
-// @param val any 待转换的值
-// @return @1 *[]float64 转换后的 float64 切片指针
+// Float64sPointer converts val to a pointer to a float64 slice.
 func Float64sPointer(any any) *[]float64 {
 	v := Float64s(any)
 	return &v

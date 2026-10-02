@@ -1,13 +1,13 @@
 package buffer
 
-// NocopyNode 零拷贝缓冲区节点
+// NocopyNode is a zero-copy buffer node.
 type NocopyNode struct {
 	prev  any
 	next  any
 	block any
 }
 
-// Len 获取字节长度
+// Len returns the byte length.
 func (n *NocopyNode) Len() int {
 	switch b := n.block.(type) {
 	case []byte:
@@ -21,12 +21,12 @@ func (n *NocopyNode) Len() int {
 	}
 }
 
-// Nodes 获取节点数
+// Nodes returns the number of nodes.
 func (n *NocopyNode) Nodes() int {
 	return 1
 }
 
-// Bytes 获取该节点的字节数据
+// Bytes returns the byte data of the node.
 func (n *NocopyNode) Bytes() []byte {
 	switch b := n.block.(type) {
 	case []byte:
@@ -40,7 +40,7 @@ func (n *NocopyNode) Bytes() []byte {
 	}
 }
 
-// Slide 消费指定字节数
+// Slide consumes the given number of bytes.
 func (n *NocopyNode) Slide(delta int) bool {
 	switch b := n.block.(type) {
 	case []byte:
@@ -58,7 +58,7 @@ func (n *NocopyNode) Slide(delta int) bool {
 	}
 }
 
-// Release 释放
+// Release releases the node.
 func (n *NocopyNode) Release() {
 	switch b := n.block.(type) {
 	case []byte:

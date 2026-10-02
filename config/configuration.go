@@ -2,19 +2,20 @@ package config
 
 import "github.com/dobyte/due/v2/errors"
 
-// Configuration 配置项
+// Configuration is a config item loaded from a config source.
 type Configuration struct {
-	decoder  Decoder // 解码器
-	scanner  Scanner // 扫描器
-	Path     string  // 文件路径
-	File     string  // 文件全称
-	Name     string  // 文件名称
-	Format   string  // 文件格式
-	Content  []byte  // 文件内容
-	FullPath string  // 文件全路径
+	decoder  Decoder // Decoder used to decode the config content
+	scanner  Scanner // Scanner used to scan the config content into a destination
+	Path     string  // Path of the config file relative to the source root
+	File     string  // File name including its extension
+	Name     string  // File name without its extension
+	Format   string  // File format
+	Content  []byte  // File content
+	FullPath string  // Full path of the config file
 }
 
-// Decode 解码
+// Decode decodes the config content, reporting [errors.ErrInvalidDecoder] when no decoder is
+// attached.
 func (c *Configuration) Decode() (any, error) {
 	if c.decoder == nil {
 		return nil, errors.ErrInvalidDecoder
@@ -23,7 +24,8 @@ func (c *Configuration) Decode() (any, error) {
 	return c.decoder(c.Format, c.Content)
 }
 
-// Scan 扫描
+// Scan scans the config content into dest, reporting [errors.ErrInvalidScanner] when no scanner is
+// attached.
 func (c *Configuration) Scan(dest any) error {
 	if c.scanner == nil {
 		return errors.ErrInvalidScanner

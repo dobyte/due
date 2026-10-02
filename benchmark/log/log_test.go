@@ -51,7 +51,7 @@ func init() {
 			Filename:   "./temp/s_zap.log",
 			MaxSize:    500, // MB
 			MaxBackups: 3,
-			MaxAge:     28, // 天
+			MaxAge:     28, // Days
 			Compress:   true,
 		}),
 		zap.DebugLevel,
@@ -63,7 +63,7 @@ func init() {
 			Filename:   "./temp/p_zap.log",
 			MaxSize:    500, // MB
 			MaxBackups: 3,
-			MaxAge:     28, // 天
+			MaxAge:     28, // Days
 			Compress:   true,
 		}),
 		zap.DebugLevel,
@@ -75,7 +75,7 @@ func init() {
 			Filename:   "./temp/s_zap_suger.log",
 			MaxSize:    500, // MB
 			MaxBackups: 3,
-			MaxAge:     28, // 天
+			MaxAge:     28, // Days
 			Compress:   true,
 		}),
 		zap.DebugLevel,
@@ -87,7 +87,7 @@ func init() {
 			Filename:   "./temp/p_zap_suger.log",
 			MaxSize:    500, // MB
 			MaxBackups: 3,
-			MaxAge:     28, // 天
+			MaxAge:     28, // Days
 			Compress:   true,
 		}),
 		zap.DebugLevel,

@@ -24,7 +24,7 @@ func NewEventbus() *Eventbus {
 	return eb
 }
 
-// Publish 发布事件
+// Publish publishes an event.
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	eb.rw.RLock()
 	c, ok := eb.consumers[topic]
@@ -43,7 +43,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	return nil
 }
 
-// Subscribe 订阅事件
+// Subscribe subscribes to an event.
 func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
@@ -64,7 +64,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	return sub, nil
 }
 
-// 取消订阅
+// unsubscribe cancels a subscription.
 func (eb *Eventbus) unsubscribe(topic string, sub *subscription) error {
 	eb.rw.Lock()
 	defer eb.rw.Unlock()
@@ -86,7 +86,7 @@ func (eb *Eventbus) unsubscribe(topic string, sub *subscription) error {
 	return nil
 }
 
-// Close 停止监听
+// Close stops listening.
 func (eb *Eventbus) Close() error {
 	return nil
 }

@@ -12,20 +12,19 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// Name 配置源名称
+// Name is the config source name.
 const Name = "etcd"
 
-// Source 配置源
+// Source is the etcd config source.
 type Source struct {
-	err     error    // 构建客户端错误信息
-	opts    *options // 配置项
-	builtin bool     // 是否为内建客户端
+	err     error    // Error returned when the client was built
+	opts    *options // Configuration options
+	builtin bool     // Whether the client is built in
 }
 
-// NewSource 创建配置源
-// 根据选项构建etcd配置中心客户端；未指定外部客户端时创建内建客户端
-// @param opts ...Option 配置选项
-// @return @1 config.Source 配置源
+// NewSource creates a config source. It builds an etcd config center client from
+// the given options, creating a built-in client when no external client is
+// specified.
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -35,7 +34,8 @@ func NewSource(opts ...Option) config.Source {
 	s := &Source{}
 	s.opts = o
 
-	// 归一化路径并强制追加尾部斜杠，避免WithPrefix误匹配兄弟命名空间的键（如/config2、/confighost）
+	// Normalize the path and force a trailing slash so that WithPrefix does not
+	// match keys of sibling namespaces (such as /config2 or /confighost).
 	path := strings.Trim(o.path, "/")
 	if path == "" {
 		log.Warnf("invalid config path, use default path: %s", defaultPath)
@@ -56,18 +56,14 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 获取配置源名称
-// @return @1 string 配置源名称
+// Name returns the config source name.
 func (s *Source) Name() string {
 	return Name
 }
 
-// Load 加载配置项
-// 传入file参数时仅加载指定的配置项；未传入file参数时，加载基础路径下所有配置项
-// @param ctx context.Context 上下文
-// @param file ...string 待加载的配置文件名称
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Load loads configuration items. When file is provided, only the specified
+// configuration item is loaded; otherwise every configuration item under the base
+// path is loaded.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -97,12 +93,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	return configs, nil
 }
 
-// Store 保存配置项
-// 仅支持write-only和read-write模式，其他模式返回无操作权限错误
-// @param ctx context.Context 上下文
-// @param file string 配置文件名称
-// @param content []byte 配置内容
-// @return @1 error 错误信息
+// Store stores a configuration item. Only the write-only and read-write modes are
+// supported; the other modes report an operation permission error.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -117,10 +109,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return err
 }
 
-// parseKV 解析etcd的键值对为统一的配置结构
-// @param key []byte 配置键名
-// @param value []byte 配置内容
-// @return @1 *config.Configuration 配置项
+// parseKV parses an etcd key-value pair into the unified configuration structure.
 func (s *Source) parseKV(key, value []byte) *config.Configuration {
 	fullPath := string(key)
 	path := strings.TrimPrefix(fullPath, s.opts.path)
@@ -137,17 +126,15 @@ func (s *Source) parseKV(key, value []byte) *config.Configuration {
 	}
 }
 
-// Watch 监听配置项
-// 先全量拉取一次配置作为初始快照，再创建监听器监听后续变更
-// @param ctx context.Context 上下文
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
+// Watch watches configuration items. It pulls the full configuration once as the
+// initial snapshot and then creates a watcher to observe subsequent changes.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
-	// 先全量拉取一次配置，作为监听初始快照，并记录监听起始版本号
+	// Pull the full configuration once to use as the initial watch snapshot and to
+	// record the starting revision of the watch.
 	res, err := s.opts.client.Get(ctx, s.opts.path, clientv3.WithPrefix())
 	if err != nil {
 		log.Warnf("etcd watch get failed: %v", err)
@@ -157,9 +144,8 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return newWatcher(ctx, s, res), nil
 }
 
-// Close 关闭资源
-// 内建客户端时关闭客户端连接，外部客户端由调用方负责关闭
-// @return @1 error 错误信息
+// Close closes the resources. It closes the client connection for a built-in
+// client; an external client is closed by the caller.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err

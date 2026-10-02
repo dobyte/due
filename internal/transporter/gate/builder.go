@@ -21,7 +21,7 @@ func NewBuilder(opts *ClientOptions) *Builder {
 	}
 }
 
-// Build 构建客户端
+// Build returns a client for addr, reusing a cached client when one already exists.
 func (b *Builder) Build(addr string) (*Client, error) {
 	if cli, ok := b.clients.Load(addr); ok {
 		return cli.(*Client), nil

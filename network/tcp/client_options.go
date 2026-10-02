@@ -35,18 +35,17 @@ const (
 type ClientOption func(o *clientOptions)
 
 type clientOptions struct {
-	addr              string        // 地址
-	tlsConfig         *tls.Config   // TLS配置
-	dialTimeout       time.Duration // 拨号超时时间，默认3s
-	readBufferSize    int           // 读取缓冲区大小，默认4096
-	writeTimeout      time.Duration // 写超时时间，默认无超时
-	writeQueueSize    int           // 写队列大小，默认1024
-	heartbeatInterval time.Duration // 心跳间隔时间，默认10s
-	closeTimeout      time.Duration // 优雅关闭超时时间，默认0s，不限制
+	addr              string        // Address
+	tlsConfig         *tls.Config   // TLS config
+	dialTimeout       time.Duration // Dial timeout, defaults to 3s
+	readBufferSize    int           // Read buffer size, defaults to 4096
+	writeTimeout      time.Duration // Write timeout, defaults to no timeout
+	writeQueueSize    int           // Write queue size, defaults to 1024
+	heartbeatInterval time.Duration // Heartbeat interval, defaults to 10s
+	closeTimeout      time.Duration // Graceful close timeout, defaults to 0s (no limit)
 }
 
-// defaultClientOptions 创建默认客户端配置
-// @return @1 *clientOptions 客户端配置
+// defaultClientOptions returns the default client options.
 func defaultClientOptions() *clientOptions {
 	opts := &clientOptions{}
 
@@ -106,9 +105,7 @@ func defaultClientOptions() *clientOptions {
 	return opts
 }
 
-// WithClientAddr 设置拨号地址
-// @param addr string 拨号地址
-// @return @1 ClientOption 客户端配置项
+// WithClientAddr sets the dial address.
 func WithClientAddr(addr string) ClientOption {
 	return func(o *clientOptions) {
 		if addr != "" {
@@ -119,10 +116,7 @@ func WithClientAddr(addr string) ClientOption {
 	}
 }
 
-// WithClientCredentials 设置CA证书和校验域名
-// @param caFile string CA证书文件
-// @param serverName string 服务器名称
-// @return @1 ClientOption 客户端配置项
+// WithClientCredentials sets the CA certificate and the server name to verify.
 func WithClientCredentials(caFile string, serverName string) ClientOption {
 	return func(o *clientOptions) {
 		if caFile != "" || serverName != "" {
@@ -137,18 +131,14 @@ func WithClientCredentials(caFile string, serverName string) ClientOption {
 	}
 }
 
-// WithClientTLSConfig 设置TLS配置
-// @param tlsConfig *tls.Config TLS配置
-// @return @1 ClientOption 客户端配置项
+// WithClientTLSConfig sets the TLS config.
 func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
 	return func(o *clientOptions) {
 		o.tlsConfig = tlsConfig
 	}
 }
 
-// WithClientDialTimeout 设置拨号超时时间
-// @param dialTimeout time.Duration 拨号超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientDialTimeout sets the dial timeout.
 func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if dialTimeout >= 0 {
@@ -159,9 +149,7 @@ func WithClientDialTimeout(dialTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientReadBufferSize 设置读取缓冲区大小
-// @param readBufferSize int 读取缓冲区大小
-// @return @1 ClientOption 客户端配置项
+// WithClientReadBufferSize sets the read buffer size.
 func WithClientReadBufferSize(readBufferSize int) ClientOption {
 	return func(o *clientOptions) {
 		if readBufferSize > 0 {
@@ -172,9 +160,7 @@ func WithClientReadBufferSize(readBufferSize int) ClientOption {
 	}
 }
 
-// WithClientWriteTimeout 设置写超时时间
-// @param writeTimeout time.Duration 写超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientWriteTimeout sets the write timeout.
 func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if writeTimeout >= 0 {
@@ -185,9 +171,7 @@ func WithClientWriteTimeout(writeTimeout time.Duration) ClientOption {
 	}
 }
 
-// WithClientWriteQueueSize 设置写队列大小
-// @param writeQueueSize int 写队列大小
-// @return @1 ClientOption 客户端配置项
+// WithClientWriteQueueSize sets the write queue size.
 func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	return func(o *clientOptions) {
 		if writeQueueSize > 0 {
@@ -198,9 +182,7 @@ func WithClientWriteQueueSize(writeQueueSize int) ClientOption {
 	}
 }
 
-// WithClientHeartbeatInterval 设置心跳间隔时间
-// @param heartbeatInterval time.Duration 心跳间隔时间
-// @return @1 ClientOption 客户端配置项
+// WithClientHeartbeatInterval sets the heartbeat interval.
 func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if heartbeatInterval >= 0 {
@@ -211,10 +193,10 @@ func WithClientHeartbeatInterval(heartbeatInterval time.Duration) ClientOption {
 	}
 }
 
-// WithClientCloseTimeout 设置优雅关闭超时时间
-// 超时后未排空的写队列将放弃等待并强制关闭连接，默认为0表示不限制
-// @param closeTimeout time.Duration 优雅关闭超时时间
-// @return @1 ClientOption 客户端配置项
+// WithClientCloseTimeout sets the graceful close timeout.
+//
+// When the write queue has not drained before the timeout elapses, the wait is abandoned and the
+// connection is closed forcibly. The default value of 0 means no limit.
 func WithClientCloseTimeout(closeTimeout time.Duration) ClientOption {
 	return func(o *clientOptions) {
 		if closeTimeout >= 0 {

@@ -37,53 +37,54 @@ const (
 type Option func(o *options)
 
 type options struct {
-	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:6379"}
+	// Client connection addresses.
+	// Built-in client configuration; defaults to []string{"127.0.0.1:6379"}.
 	addrs []string
 
-	// 数据库号
-	// 内建客户端配置，默认为0
+	// Database number.
+	// Built-in client configuration; defaults to 0.
 	db int
 
-	// 用户名
-	// 内建客户端配置，默认为空
+	// Username.
+	// Built-in client configuration; defaults to empty.
 	username string
 
-	// 密码
-	// 内建客户端配置，默认为空
+	// Password.
+	// Built-in client configuration; defaults to empty.
 	password string
 
-	// 客户端证书
+	// Client certificate file.
 	certFile string
 
-	// 客户端密钥
+	// Client private key file.
 	keyFile string
 
-	// CA证书
+	// CA certificate file.
 	caFile string
 
-	// 最大重试次数
-	// 内建客户端配置，默认为3次
+	// Maximum number of retries.
+	// Built-in client configuration; defaults to 3.
 	maxRetries int
 
-	// 客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// Client.
+	// External client configuration. When an external client is set, it takes precedence over the
+	// built-in one; defaults to nil.
 	client redis.UniversalClient
 
-	// 前缀
-	// key前缀，默认为due:cache
+	// Prefix.
+	// Key prefix; defaults to due:cache.
 	prefix string
 
-	// 空值，默认为cache@nil
+	// Nil value; defaults to cache@nil.
 	nilValue string
 
-	// 空值过期时间，默认为10s
+	// Nil value expiration time; defaults to 10s.
 	nilExpiration time.Duration
 
-	// 最小过期时间，默认为1h
+	// Minimum expiration time; defaults to 1h.
 	minExpiration time.Duration
 
-	// 最大过期时间，默认为24h
+	// Maximum expiration time; defaults to 24h.
 	maxExpiration time.Duration
 }
 
@@ -105,74 +106,53 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddrs 设置连接地址
-// @param addrs ...string 一个或多个 Redis 节点地址
-// @return @1 Option 配置项
+// WithAddrs sets the connection addresses. It accepts one or more Redis node addresses.
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
-// WithDB 设置数据库号
-// @param db int 数据库编号
-// @return @1 Option 配置项
+// WithDB sets the database number.
 func WithDB(db int) Option {
 	return func(o *options) { o.db = db }
 }
 
-// WithUsername 设置用户名
-// @param username string 认证用户名
-// @return @1 Option 配置项
+// WithUsername sets the username used for authentication.
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
-// WithPassword 设置密码
-// @param password string 认证密码
-// @return @1 Option 配置项
+// WithPassword sets the password used for authentication.
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
-// WithCredentials 设置证书、密钥、CA证书
-// @param certFile string 客户端证书文件路径
-// @param keyFile string 客户端私钥文件路径
-// @param caFile string CA 证书文件路径
-// @return @1 Option 配置项
+// WithCredentials sets the client certificate, the client private key and the CA certificate. Each
+// argument is a file path.
 func WithCredentials(certFile, keyFile, caFile string) Option {
 	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
-// WithMaxRetries 设置最大重试次数
-// @param maxRetries int 最大重试次数
-// @return @1 Option 配置项
+// WithMaxRetries sets the maximum number of retries.
 func WithMaxRetries(maxRetries int) Option {
 	return func(o *options) { o.maxRetries = maxRetries }
 }
 
-// WithClient 设置外部客户端
-// @param client redis.UniversalClient 外部客户端实例
-// @return @1 Option 配置项
+// WithClient sets an external client. The external client takes precedence over the built-in one.
 func WithClient(client redis.UniversalClient) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithPrefix 设置前缀
-// @param prefix string key 前缀
-// @return @1 Option 配置项
+// WithPrefix sets the key prefix.
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
-// WithNilValue 设置空值
-// @param nilValue string 空值占位字符串
-// @return @1 Option 配置项
+// WithNilValue sets the placeholder value that marks a cached nil.
 func WithNilValue(nilValue string) Option {
 	return func(o *options) { o.nilValue = nilValue }
 }
 
-// WithNilExpiration 设置空值过期时间
-// @param nilExpiration time.Duration 空值过期时间
-// @return @1 Option 配置项
+// WithNilExpiration sets the expiration time of a cached nil. Non-positive values are ignored.
 func WithNilExpiration(nilExpiration time.Duration) Option {
 	return func(o *options) {
 		if nilExpiration > 0 {
@@ -181,9 +161,7 @@ func WithNilExpiration(nilExpiration time.Duration) Option {
 	}
 }
 
-// WithMinExpiration 设置最小过期时间
-// @param minExpiration time.Duration 最小过期时间
-// @return @1 Option 配置项
+// WithMinExpiration sets the minimum expiration time. Non-positive values are ignored.
 func WithMinExpiration(minExpiration time.Duration) Option {
 	return func(o *options) {
 		if minExpiration > 0 {
@@ -192,9 +170,7 @@ func WithMinExpiration(minExpiration time.Duration) Option {
 	}
 }
 
-// WithMaxExpiration 设置最大过期时间
-// @param maxExpiration time.Duration 最大过期时间
-// @return @1 Option 配置项
+// WithMaxExpiration sets the maximum expiration time. Non-positive values are ignored.
 func WithMaxExpiration(maxExpiration time.Duration) Option {
 	return func(o *options) {
 		if maxExpiration > 0 {

@@ -1,9 +1,10 @@
 package packet
 
-// Message 消息
-// 用于在编解码之间传递普通数据消息
+// Message is a message.
+//
+// It is used to pass plain data messages between encoding and decoding.
 type Message struct {
-	Seq    int32  // 序列号
-	Route  int32  // 路由ID
-	Buffer []byte // 消息内容
+	Seq    int32  // Sequence number
+	Route  int32  // Route ID
+	Buffer []byte // Message content
 }

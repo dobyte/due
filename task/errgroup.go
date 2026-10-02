@@ -6,11 +6,11 @@ import (
 	"sync"
 )
 
-// token 信号量令牌，用于控制并发数
+// token is a semaphore token used to control concurrency.
 type token struct{}
 
-// Group 任务组
-// 聚合多个任务的错误，支持上下文取消与并发数限制
+// Group aggregates the errors of multiple tasks and supports context cancellation and a
+// concurrency limit.
 type Group struct {
 	cancel  func(error)
 	wg      sync.WaitGroup
@@ -19,19 +19,19 @@ type Group struct {
 	err     error
 }
 
-// WithContext 创建一个新的任务组，与上下文关联
-// 首个任务出错或 Wait 返回时，会以该错误作为原因取消上下文
-// @param ctx context.Context 父上下文
-// @return @1 *Group 任务组
-// @return @2 context.Context 派生上下文
+// WithContext returns a new Group and a context derived from ctx.
+//
+// The derived context is canceled with the first task error as its cause when the first task fails
+// or when Wait returns.
 func WithContext(ctx context.Context) (*Group, context.Context) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	return &Group{cancel: cancel}, ctx
 }
 
-// SetLimit 设置并发限制
-// 并发数需在任务启动前设置；设置为负数表示不限制并发；已有任务运行时修改会触发 panic
-// @param n int 最大并发数
+// SetLimit sets the concurrency limit to n.
+//
+// The limit must be set before any task is started. A negative n means no limit. Changing the
+// limit while tasks are running panics.
 func (g *Group) SetLimit(n int) {
 	if n < 0 {
 		g.sem = nil
@@ -43,9 +43,8 @@ func (g *Group) SetLimit(n int) {
 	g.sem = make(chan token, n)
 }
 
-// Wait 等待所有任务完成
-// 返回首个任务产生的错误，并取消派生上下文
-// @return @1 error 首个任务错误，无错误时返回 nil
+// Wait blocks until all tasks have finished and cancels the derived context. It returns the error
+// of the first failing task, or nil when no task failed.
 func (g *Group) Wait() error {
 	g.wg.Wait()
 	if g.cancel != nil {
@@ -54,9 +53,10 @@ func (g *Group) Wait() error {
 	return g.err
 }
 
-// Go 执行任务
-// 在全局任务池中执行，受并发数限制；任务出错时记录首个错误并取消上下文
-// @param f func() error 待执行的任务
+// Go runs f as a task.
+//
+// The task runs in the global task pool and is subject to the concurrency limit. When the task
+// fails, its error is recorded if it is the first one and the context is canceled.
 func (g *Group) Go(f func() error) {
 	if g.sem != nil {
 		g.sem <- token{}
@@ -65,10 +65,10 @@ func (g *Group) Go(f func() error) {
 	g.add(f)
 }
 
-// TryGo 尝试执行任务
-// 并发数未满时立即执行并返回 true，否则返回 false
-// @param f func() error 待执行的任务
-// @return @1 bool 是否成功启动任务
+// TryGo tries to run f as a task.
+//
+// It starts the task immediately and reports true when the concurrency limit has not been reached;
+// otherwise it reports false.
 func (g *Group) TryGo(f func() error) bool {
 	if g.sem != nil {
 		select {
@@ -84,8 +84,7 @@ func (g *Group) TryGo(f func() error) bool {
 	return true
 }
 
-// add 添加任务
-// @param f func() error 待执行的任务
+// add adds f as a task.
 func (g *Group) add(f func() error) {
 	g.wg.Add(1)
 	Add(func() {
@@ -102,8 +101,8 @@ func (g *Group) add(f func() error) {
 	})
 }
 
-// done 任务完成时调用
-// 释放并发令牌并递减等待计数
+// done is called when a task finishes. It releases the concurrency token and decrements the wait
+// count.
 func (g *Group) done() {
 	if g.sem != nil {
 		<-g.sem

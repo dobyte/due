@@ -12,21 +12,20 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-// Name 配置源名称
+// Name is the config source name.
 const Name = "consul"
 
-// Source 配置源
+// Source is the consul config source.
 type Source struct {
-	err       error           // 构建客户端错误信息
-	opts      *options        // 配置项
-	builtin   bool            // 是否为内建客户端
-	transport *http.Transport // 内建客户端的底层传输层
+	err       error           // Error returned when the client was built
+	opts      *options        // Configuration options
+	builtin   bool            // Whether the client is built in
+	transport *http.Transport // Underlying transport of the built-in client
 }
 
-// NewSource 创建配置源
-// 根据选项构建Consul配置中心客户端；未指定外部客户端时创建内建客户端
-// @param opts ...Option 配置选项
-// @return @1 config.Source 配置源
+// NewSource creates a config source. It builds a Consul config center client from
+// the given options, creating a built-in client when no external client is
+// specified.
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -36,8 +35,9 @@ func NewSource(opts ...Option) config.Source {
 	s := &Source{}
 	s.opts = o
 
-	// 归一化路径，去除首尾斜杠；路径为空时告警并回退默认值，
-	// 避免空路径导致List/监听覆盖Consul全量键
+	// Normalize the path by trimming the leading and trailing slashes. Warn and
+	// fall back to the default value when the path is empty, so that an empty path
+	// does not make List or the watch cover every Consul key.
 	path := strings.Trim(s.opts.path, "/")
 	if path == "" {
 		log.Warnf("invalid config path, use default path: %s", defaultPath)
@@ -59,24 +59,21 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 获取配置源名称
-// @return @1 string 配置源名称
+// Name returns the config source name.
 func (s *Source) Name() string {
 	return Name
 }
 
-// Load 加载配置项
-// 传入file参数时仅加载指定的配置项；未传入file参数时，加载基础路径下所有配置项
-// @param ctx context.Context 上下文
-// @param file ...string 待加载的配置文件名称
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Load loads configuration items. When file is provided, only the specified
+// configuration item is loaded; otherwise every configuration item under the base
+// path is loaded.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
-	// 传入file参数时按精确键查询，仅返回目标配置项
+	// When file is provided, query by the exact key and return only the target
+	// configuration item.
 	if len(file) > 0 && file[0] != "" {
 		key := s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
 
@@ -92,7 +89,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return []*config.Configuration{s.parseKV(kv.Key, kv.Value)}, nil
 	}
 
-	// 未传入file参数时，加载基础路径下所有配置项
+	// When file is not provided, load every configuration item under the base path.
 	kvs, _, err := s.opts.client.KV().List(s.opts.path+"/", (&api.QueryOptions{}).WithContext(ctx))
 	if err != nil {
 		return nil, err
@@ -106,12 +103,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	return configs, nil
 }
 
-// Store 保存配置项
-// 仅支持write-only和read-write模式，其他模式返回无操作权限错误
-// @param ctx context.Context 上下文
-// @param file string 配置文件名称
-// @param content []byte 配置内容
-// @return @1 error 错误信息
+// Store stores a configuration item. Only the write-only and read-write modes are
+// supported; the other modes report an operation permission error.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -131,10 +124,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return err
 }
 
-// parseKV 解析Consul的键值对为统一的配置结构
-// @param key string 配置键名
-// @param value []byte 配置内容
-// @return @1 *config.Configuration 配置项
+// parseKV parses a Consul key-value pair into the unified configuration structure.
 func (s *Source) parseKV(key string, value []byte) *config.Configuration {
 	fullPath := key
 	relPath := strings.TrimPrefix(fullPath, s.opts.path)
@@ -152,11 +142,8 @@ func (s *Source) parseKV(key string, value []byte) *config.Configuration {
 	}
 }
 
-// Watch 监听配置项
-// 创建监听器并监听基础路径下的配置变更
-// @param ctx context.Context 上下文
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
+// Watch watches configuration items. It creates a watcher that observes
+// configuration changes under the base path.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -165,9 +152,8 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return newWatcher(ctx, s)
 }
 
-// Close 关闭配置源
-// 内建客户端时关闭其底层传输层的空闲连接，外部客户端由调用方负责关闭
-// @return @1 error 错误信息
+// Close closes the config source. It closes the idle connections of the built-in
+// client's transport; an external client is closed by the caller.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err

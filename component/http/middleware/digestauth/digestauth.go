@@ -18,14 +18,13 @@ import (
 
 const (
 	digestScheme      = "Digest"
-	nonceMaxCount     = 10000            // nonce 最大缓存数量，防止未授权请求导致内存无限增长
-	nonceCleanupEvery = 10 * time.Minute // nonce 过期清理的最小间隔
+	nonceMaxCount     = 10000            // Maximum number of cached nonces, preventing unbounded memory growth from unauthorized requests
+	nonceCleanupEvery = 10 * time.Minute // Minimum interval between expired-nonce cleanups
 )
 
-// New 返回一个基于RFC 2617的HTTP Digest认证中间件
-// 用法: group := hp.Router().Group("/path", middleware.Digest(middleware.DigestConfig{...}))
-// @param config ...Config 中间件配置
-// @return @1 http.Handler 认证中间件
+// New returns an HTTP Digest authentication middleware based on RFC 2617.
+//
+// Usage: group := hp.Router().Group("/path", middleware.Digest(middleware.DigestConfig{...}))
 func New(config ...Config) http.Handler {
 	da := newDigestAuth(config...)
 
@@ -95,7 +94,7 @@ func New(config ...Config) http.Handler {
 		}
 
 		// Lookup user's HA1
-		// HA1 = MD5(username:realm:password)，由配置项直接提供
+		// HA1 = MD5(username:realm:password), provided directly by the configuration.
 		ha1, ok := da.config.Users[username]
 		if !ok {
 			if da.config.Authorizer != nil {
@@ -110,18 +109,18 @@ func New(config ...Config) http.Handler {
 		// HA2 = MD5(method:uri)
 		ha2 := xhash.MD5(ctx.Method() + ":" + uri)
 
-		// 服务器仅下发 qop="auth"，拒绝缺失 qop 或其它 qop 值的请求，
-		// 避免退化为无防重放能力的 legacy 摘要认证
+		// The server only advertises qop="auth" and rejects requests with a missing or different qop,
+		// avoiding a fallback to the legacy digest authentication without replay protection.
 		if qop != "auth" {
 			return da.badRequest(ctx)
 		}
 
-		// 使用qop时必须携带nc与cnonce
+		// nc and cnonce are required when qop is used.
 		if nc == "" || cnonce == "" {
 			return da.badRequest(ctx)
 		}
 
-		// nc必须为8位十六进制计数（RFC 2617）
+		// nc must be an 8-digit hexadecimal count (RFC 2617).
 		if len(nc) != 8 {
 			return da.badRequest(ctx)
 		}
@@ -131,15 +130,16 @@ func New(config ...Config) http.Handler {
 			return da.badRequest(ctx)
 		}
 
-		// 计算期望的response
+		// Compute the expected response.
 		expected := xhash.MD5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
 
-		// 恒时比较response，防止时序侧信道；hex值大小写等价，比较前统一转小写
+		// Compare the response in constant time to prevent timing side channels; hex values are
+		// case-insensitive, so normalize the received response to lower case before comparing.
 		if subtle.ConstantTimeCompare([]byte(strings.ToLower(response)), []byte(expected)) != 1 {
 			return da.unauthorized(ctx)
 		}
 
-		// 校验response通过后消费nonce计数，防止重放
+		// Consume the nonce count only after the response check passes, preventing replays.
 		if !da.consumeNonce(nonce, nonceCount) {
 			return da.unauthorized(ctx)
 		}
@@ -164,8 +164,10 @@ func containsInvalidHeaderChars(s string) bool {
 	return false
 }
 
-// parseDigestParams 解析Digest认证参数字符串为map
-// 按RFC 2617语法解析，正确处理带引号且内部含逗号或转义引号的值
+// parseDigestParams parses a Digest authentication parameter string into a map.
+//
+// It follows the RFC 2617 syntax and correctly handles quoted values that contain commas or
+// escaped quotes.
 func parseDigestParams(s string) map[string]string {
 	params := make(map[string]string)
 	for _, part := range splitDigestParams(s) {
@@ -183,7 +185,7 @@ func parseDigestParams(s string) map[string]string {
 	return params
 }
 
-// splitDigestParams 按逗号分割Digest参数字符串，忽略引号内的逗号
+// splitDigestParams splits a Digest parameter string on commas, ignoring commas inside quotes.
 func splitDigestParams(s string) []string {
 	var (
 		parts   []string
@@ -209,17 +211,17 @@ func splitDigestParams(s string) []string {
 	return append(parts, s[start:])
 }
 
-// nonceEntry nonce缓存条目
+// nonceEntry is a nonce cache entry.
 type nonceEntry struct {
-	createdAt time.Time // 创建时间
-	nc        uint64    // 已使用的最大nonce计数
+	createdAt time.Time // Creation time
+	nc        uint64    // Highest consumed nonce count
 }
 
 type digestAuth struct {
 	mu          sync.Mutex
 	nonces      map[string]*nonceEntry
-	nonceOrder  []string  // 记录nonce的生成顺序，用于容量超限时淘汰最旧条目
-	lastCleanup time.Time // 上次过期清理时间
+	nonceOrder  []string  // Records the nonce creation order, used to evict the oldest entries when the capacity is exceeded
+	lastCleanup time.Time // Time of the last expired-nonce cleanup
 	config      Config
 }
 
@@ -230,10 +232,9 @@ func newDigestAuth(config ...Config) *digestAuth {
 	}
 }
 
-// 未授权处理函数
-// 返回401响应并携带WWW-Authenticate头
-// @param ctx http.Context HTTP上下文
-// @return @1 error 处理失败时返回的错误
+// unauthorized writes an unauthorized response.
+//
+// It returns a 401 response with a WWW-Authenticate header.
 func (da *digestAuth) unauthorized(ctx http.Context) error {
 	if da.config.Unauthorized != nil {
 		return da.config.Unauthorized(ctx)
@@ -250,7 +251,7 @@ func (da *digestAuth) unauthorized(ctx http.Context) error {
 	}
 }
 
-// 错误请求
+// badRequest writes a bad request response.
 func (da *digestAuth) badRequest(ctx http.Context) error {
 	if da.config.BadRequest != nil {
 		return da.config.BadRequest(ctx)
@@ -262,8 +263,10 @@ func (da *digestAuth) badRequest(ctx http.Context) error {
 	}
 }
 
-// 生成并缓存nonce
-// 内部按需清理过期条目，并在容量超限时淘汰最旧的nonce
+// generateNonce generates and caches a nonce.
+//
+// It cleans up expired entries on demand and evicts the oldest nonces when the capacity is
+// exceeded.
 func (s *digestAuth) generateNonce() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
@@ -273,7 +276,7 @@ func (s *digestAuth) generateNonce() string {
 
 	now := time.Now()
 
-	// 按需清理过期nonce，避免常驻清理协程
+	// Clean up expired nonces on demand to avoid a dedicated cleanup goroutine.
 	if s.lastCleanup.IsZero() || now.Sub(s.lastCleanup) >= nonceCleanupEvery {
 		order := s.nonceOrder[:0]
 		for _, n := range s.nonceOrder {
@@ -293,7 +296,8 @@ func (s *digestAuth) generateNonce() string {
 		s.lastCleanup = now
 	}
 
-	// 容量超限时淘汰最旧的nonce，防止未授权请求导致内存无限增长
+	// Evict the oldest nonces when the capacity is exceeded, preventing unbounded memory growth
+	// from unauthorized requests.
 	for len(s.nonces) >= nonceMaxCount && len(s.nonceOrder) > 0 {
 		delete(s.nonces, s.nonceOrder[0])
 		s.nonceOrder = s.nonceOrder[1:]
@@ -306,9 +310,7 @@ func (s *digestAuth) generateNonce() string {
 	return nonce
 }
 
-// 校验nonce是否存在且未过期
-// @param nonce string 待校验的nonce值
-// @return @1 bool nonce有效返回true
+// validateNonce reports whether nonce exists and has not expired.
 func (s *digestAuth) validateNonce(nonce string) bool {
 	s.mu.Lock()
 
@@ -324,8 +326,11 @@ func (s *digestAuth) validateNonce(nonce string) bool {
 	return valid
 }
 
-// 消费nonce计数，要求nc单调递增，防止重放
-// @return @1 bool 计数有效并已更新返回true；nonce无效或计数未递增返回false
+// consumeNonce consumes the nonce count.
+//
+// It requires nc to increase monotonically in order to prevent replays. It reports whether the
+// count was valid and has been updated; it returns false when the nonce is invalid or the count
+// did not increase.
 func (s *digestAuth) consumeNonce(nonce string, nc uint64) bool {
 	s.mu.Lock()
 

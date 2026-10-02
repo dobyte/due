@@ -15,18 +15,18 @@ const (
 type EncryptorOption func(o *encryptorOptions)
 
 type encryptorOptions struct {
-	// 共享信息。加解密时必需一致
-	// 默认为空
+	// Shared information that must stay the same between encryption and decryption.
+	// It is empty by default.
 	s1 []byte
 
-	// 共享信息。加解密时必需一致
-	// 默认为空
+	// Shared information that must stay the same between encryption and decryption.
+	// It is empty by default.
 	s2 []byte
 
-	// 公钥。可设置文件路径或公钥串
+	// Public key. It may be a file path or a PEM-encoded key string.
 	publicKey string
 
-	// 私钥。可设置文件路径或私钥串
+	// Private key. It may be a file path or a PEM-encoded key string.
 	privateKey string
 }
 
@@ -39,17 +39,18 @@ func defaultEncryptorOptions() *encryptorOptions {
 	}
 }
 
-// WithEncryptorShareInfo 设置共享信息
+// WithEncryptorShareInfo sets the shared information used by encryption and decryption. Both
+// values must stay the same between encryption and decryption.
 func WithEncryptorShareInfo(s1, s2 string) EncryptorOption {
 	return func(o *encryptorOptions) { o.s1, o.s2 = xconv.StringToBytes(s1), xconv.StringToBytes(s2) }
 }
 
-// WithEncryptorPublicKey 设置加密公钥
+// WithEncryptorPublicKey sets the public key used for encryption.
 func WithEncryptorPublicKey(publicKey string) EncryptorOption {
 	return func(o *encryptorOptions) { o.publicKey = publicKey }
 }
 
-// WithEncryptorPrivateKey 设置解密私钥
+// WithEncryptorPrivateKey sets the private key used for decryption.
 func WithEncryptorPrivateKey(privateKey string) EncryptorOption {
 	return func(o *encryptorOptions) { o.privateKey = privateKey }
 }

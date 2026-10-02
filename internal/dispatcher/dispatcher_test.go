@@ -91,7 +91,7 @@ func TestDispatcher_ReplaceServices(t *testing.T) {
 
 func TestDispatcher_WeightRoundRobin(t *testing.T) {
 	var (
-		// 创建三个服务实例，权重分别为4、2、1
+		// Create three service instances with weights 4, 2 and 1.
 		instance1 = &registry.ServiceInstance{
 			ID:       "xa",
 			Name:     "node-1",
@@ -99,7 +99,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 			Alias:    "node-1",
 			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8001", false).String(),
-			Weight:   4, // 权重4
+			Weight:   4, // Weight 4
 			Routes: []registry.Route{{
 				ID:       1,
 				Stateful: false,
@@ -112,7 +112,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 			Alias:    "node-2",
 			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8002", false).String(),
-			Weight:   2, // 权重2
+			Weight:   2, // Weight 2
 			Routes: []registry.Route{{
 				ID:       1,
 				Stateful: false,
@@ -125,7 +125,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 			Alias:    "node-3",
 			State:    cluster.Work.String(),
 			Endpoint: endpoint.NewEndpoint("grpc", "127.0.0.1:8003", false).String(),
-			Weight:   1, // 权重1
+			Weight:   1, // Weight 1
 			Routes: []registry.Route{{
 				ID:       1,
 				Stateful: false,
@@ -133,15 +133,15 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 		}
 	)
 
-	// 创建加权轮询调度器
+	// Create a weighted round-robin dispatcher.
 	d := dispatcher.NewDispatcher(cluster.WeightedRoundRobin)
 	d.ReplaceServices(instance1, instance2, instance3)
 
-	// 统计每个实例被选中的次数
+	// Count how many times each instance is selected.
 	counts := make(map[string]int)
-	totalRounds := 200 // 选择一个能被所有权重和(7)整除的数
+	totalRounds := 200 // 200 is divisible by the sum of all weights (7)
 
-	// 执行多轮测试
+	// Run multiple rounds.
 	for i := 0; i < totalRounds; i++ {
 		route, err := d.FindRoute(1)
 		if err != nil {
@@ -155,7 +155,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 			return
 		}
 
-		// 从endpoint中解析实例ID并计数
+		// Parse the instance address from the endpoint and count it.
 		parsedEp, err := endpoint.ParseEndpoint(ep.String())
 		if err != nil {
 			t.Errorf("parse endpoint failed: %v", err)
@@ -165,11 +165,11 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 		counts[addr]++
 	}
 
-	// 验证分配结果
+	// Verify the distribution.
 	expectedRatios := map[string]float64{
-		"127.0.0.1:8001": 4.0 / 7.0, // 权重4
-		"127.0.0.1:8002": 2.0 / 7.0, // 权重2
-		"127.0.0.1:8003": 1.0 / 7.0, // 权重1
+		"127.0.0.1:8001": 4.0 / 7.0, // Weight 4
+		"127.0.0.1:8002": 2.0 / 7.0, // Weight 2
+		"127.0.0.1:8003": 1.0 / 7.0, // Weight 1
 	}
 
 	t.Log("Distribution results:")
@@ -179,14 +179,14 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 		t.Logf("Server %s: selected %d times, ratio=%.3f, expected=%.3f",
 			addr, count, ratio, expected)
 
-		// 验证分配比例是否符合权重比例（允许5%的误差）
+		// Verify that the ratio matches the weight ratio (allowing a 5% error).
 		if delta := math.Abs(ratio - expected); delta > 0.05 {
 			t.Errorf("distribution ratio for %s is %.3f, want %.3f (±0.05)",
 				addr, ratio, expected)
 		}
 	}
 
-	// 验证总次数
+	// Verify the total count.
 	total := 0
 	for _, count := range counts {
 		total += count
@@ -198,7 +198,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 
 func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 	var (
-		// 创建测试服务实例
+		// Create the test service instances.
 		instances = []*registry.ServiceInstance{
 			{
 				ID:       "xa",
@@ -242,11 +242,11 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 		}
 	)
 
-	// 运行不同规模的基准测试
+	// Run benchmarks at different scales.
 	benchmarks := []struct {
 		name          string
-		concurrency   int // 并发数
-		instanceCount int // 服务实例数量
+		concurrency   int // Number of concurrent goroutines
+		instanceCount int // Number of service instances
 	}{
 		{"Concurrency1_Instances3", 1, 3},
 		{"Concurrency10_Instances3", 10, 3},
@@ -258,13 +258,13 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
-			// 准备足够数量的实例
+			// Prepare enough instances.
 			testInstances := make([]*registry.ServiceInstance, bm.instanceCount)
 			for i := 0; i < bm.instanceCount; i++ {
 				if i < len(instances) {
 					testInstances[i] = instances[i]
 				} else {
-					// 复制最后一个实例并修改ID和端口
+					// Copy the last instance and change its ID and port.
 					last := instances[len(instances)-1]
 					testInstances[i] = &registry.ServiceInstance{
 						ID:       fmt.Sprintf("x%d", i),
@@ -279,14 +279,14 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 				}
 			}
 
-			// 创建调度器
+			// Create the dispatcher.
 			d := dispatcher.NewDispatcher(cluster.WeightedRoundRobin)
 			d.ReplaceServices(testInstances...)
 
-			// 重置计时器
+			// Reset the timer.
 			b.ResetTimer()
 
-			// 并发执行基准测试
+			// Run the benchmark concurrently.
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					route, err := d.FindRoute(1)
@@ -300,7 +300,7 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 				}
 			})
 
-			// 报告内存分配统计
+			// Report memory allocation statistics.
 			b.ReportAllocs()
 		})
 	}

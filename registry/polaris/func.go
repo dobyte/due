@@ -11,7 +11,7 @@ import (
 	"github.com/polarismesh/polaris-go/pkg/model"
 )
 
-// parseEndpoint 解析服务实例端点
+// parseEndpoint parses a service instance endpoint.
 func parseEndpoint(endpoint string) (host string, port int, protocol string, err error) {
 	raw, err := url.Parse(endpoint)
 	if err != nil {
@@ -31,7 +31,7 @@ func parseEndpoint(endpoint string) (host string, port int, protocol string, err
 	return host, port, raw.Scheme, nil
 }
 
-// parseInstances 解析服务实例列表
+// parseInstances parses a list of service instances.
 func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, error) {
 	services := make([]*registry.ServiceInstance, 0, len(instances))
 	for _, instance := range instances {

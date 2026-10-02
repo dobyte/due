@@ -14,30 +14,27 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// 监听状态
+// state is the watcher state.
 type state int32
 
 const (
-	stateInitial state = 0 // 初始状态
-	stateRunning state = 1 // 运行状态
-	stateStopped state = 2 // 停止状态
+	stateInitial state = 0 // Initial state
+	stateRunning state = 1 // Running state
+	stateStopped state = 2 // Stopped state
 )
 
-// 定位监听器
+// watcher is a locate watcher.
 type watcher struct {
-	idx        int64              // 监听器序号
-	ctx        context.Context    // 上下文
-	cancel     context.CancelFunc // 取消函数
-	watcherMgr *watcherMgr        // 监听管理器
-	rw         sync.RWMutex       // 读写锁
-	state      state              // 监听状态
-	chEvent    chan *locate.Event // 事件通道
+	idx        int64              // Watcher index
+	ctx        context.Context    // Context
+	cancel     context.CancelFunc // Cancel function
+	watcherMgr *watcherMgr        // Watch manager
+	rw         sync.RWMutex       // Read-write lock
+	state      state              // Watcher state
+	chEvent    chan *locate.Event // Event channel
 }
 
-// 创建定位监听器
-// @param wm *watcherMgr 监听管理器
-// @param idx int64 监听器序号
-// @return @1 *watcher 定位监听器
+// newWatcher creates a locate watcher.
 func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w := &watcher{}
 	w.idx = idx
@@ -48,9 +45,11 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	return w
 }
 
-// 通知监听器
-// 将变动事件发送给监听器，事件通道未满时直接发送，已满时丢弃最旧事件后发送最新事件，避免阻塞广播协程
-// @param event *locate.Event 变动事件
+// notify notifies the watcher.
+//
+// It sends a change event to the watcher: when the event channel is not full the event is sent
+// directly, and when it is full the oldest event is dropped before the newest one is sent, so that
+// the broadcast goroutine is never blocked.
 func (w *watcher) notify(event *locate.Event) {
 	w.rw.RLock()
 	defer w.rw.RUnlock()
@@ -59,29 +58,30 @@ func (w *watcher) notify(event *locate.Event) {
 		return
 	}
 
-	// 通道未满时直接发送
+	// Send directly when the channel is not full.
 	select {
 	case w.chEvent <- event:
 		return
 	default:
 	}
 
-	// 通道已满时丢弃最旧事件
+	// Drop the oldest event when the channel is full.
 	select {
 	case <-w.chEvent:
 	default:
 	}
 
-	// 发送最新事件
+	// Send the newest event.
 	select {
 	case w.chEvent <- event:
 	default:
 	}
 }
 
-// Next 返回变动事件列表
-// @return @1 []*locate.Event 变动事件列表
-// @return @2 error 监听停止或上下文取消时返回的错误
+// Next returns the list of change events.
+//
+// It returns the list of change events and an error when the watcher is stopped or the context is
+// canceled.
 func (w *watcher) Next() ([]*locate.Event, error) {
 	w.rw.Lock()
 	if w.state == stateInitial {
@@ -101,8 +101,9 @@ func (w *watcher) Next() ([]*locate.Event, error) {
 	}
 }
 
-// Stop 停止监听
-// @return @1 error 重复停止时返回的错误
+// Stop stops the watcher.
+//
+// It returns an error when the watcher is stopped repeatedly.
 func (w *watcher) Stop() error {
 	w.rw.Lock()
 	if w.state == stateStopped {
@@ -120,27 +121,26 @@ func (w *watcher) Stop() error {
 	return nil
 }
 
-// 定位监听管理器
+// watcherMgr is a locate watch manager.
 type watcherMgr struct {
-	ctx      context.Context    // 上下文
-	cancel   context.CancelFunc // 取消函数
-	locator  *Locator           // 定位器
-	key      string             // 唯一键
-	channels []string           // 订阅频道
-	rw       sync.RWMutex       // 读写锁
-	wg       sync.WaitGroup     // 接收协程等待组
-	idx      atomic.Int64       // 监听器序号
-	stopped  atomic.Bool        // 停止标志
-	watchers map[int64]*watcher // 监听器集合
+	ctx      context.Context    // Context
+	cancel   context.CancelFunc // Cancel function
+	locator  *Locator           // Locator
+	key      string             // Unique key
+	channels []string           // Subscribed channels
+	rw       sync.RWMutex       // Read-write lock
+	wg       sync.WaitGroup     // Wait group of the receiving goroutine
+	idx      atomic.Int64       // Watcher index
+	stopped  atomic.Bool        // Stopped flag
+	watchers map[int64]*watcher // Set of watchers
 }
 
-// 创建定位监听管理器
-// 订阅指定实例类型的事件通道，并启动协程消费发布订阅消息
-// @param l *Locator 定位器
-// @param key string 唯一键
-// @param kinds ...string 实例类型列表
-// @return @1 *watcherMgr 定位监听管理器
-// @return @2 error 订阅失败时返回的错误
+// newWatcherMgr creates a locate watch manager.
+//
+// It subscribes to the event channels of the given instance kinds and starts a goroutine that
+// consumes publish/subscribe messages.
+//
+// It returns the watch manager and an error when subscribing fails.
 func newWatcherMgr(l *Locator, key string, kinds ...string) (*watcherMgr, error) {
 	if len(kinds) == 0 {
 		return nil, errors.ErrInvalidArgument
@@ -170,10 +170,11 @@ func newWatcherMgr(l *Locator, key string, kinds ...string) (*watcherMgr, error)
 	return wm, nil
 }
 
-// 订阅事件频道
-// 创建Redis发布订阅并订阅全部事件频道
-// @return @1 *redis.PubSub Redis发布订阅
-// @return @2 error 订阅失败时返回的错误
+// subscribe subscribes to the event channels.
+//
+// It creates a redis publish/subscribe connection and subscribes to every event channel.
+//
+// It returns the redis publish/subscribe handle and an error when subscribing fails.
 func (wm *watcherMgr) subscribe() (*redis.PubSub, error) {
 	sub := wm.locator.opts.client.Subscribe(wm.ctx)
 
@@ -185,9 +186,10 @@ func (wm *watcherMgr) subscribe() (*redis.PubSub, error) {
 	return sub, nil
 }
 
-// 消费发布订阅消息
-// 持续接收并广播发布订阅消息，连接异常时退避重连并重新订阅
-// @param sub *redis.PubSub Redis发布订阅
+// watch consumes publish/subscribe messages.
+//
+// It keeps receiving and broadcasting publish/subscribe messages, and reconnects with backoff and
+// resubscribes when the connection fails.
 func (wm *watcherMgr) watch(sub *redis.PubSub) {
 	defer func() {
 		if sub != nil {
@@ -226,11 +228,12 @@ func (wm *watcherMgr) watch(sub *redis.PubSub) {
 	}
 }
 
-// 重连并重新订阅
-// 关闭旧订阅，以指数退避重试重新订阅事件频道
-// @param old *redis.PubSub 旧发布订阅
-// @return @1 *redis.PubSub 新发布订阅
-// @return @2 bool 是否重连成功
+// resubscribe reconnects and resubscribes.
+//
+// It closes the old subscription and retries subscribing to the event channels with exponential
+// backoff.
+//
+// It returns the new publish/subscribe handle and whether the reconnect succeeded.
 func (wm *watcherMgr) resubscribe(old *redis.PubSub) (*redis.PubSub, bool) {
 	_ = old.Close()
 
@@ -253,10 +256,11 @@ func (wm *watcherMgr) resubscribe(old *redis.PubSub) (*redis.PubSub, bool) {
 	return sub, true
 }
 
-// 派生监听器
-// 从监听管理器派生一个新的监听器
-// @return @1 locate.Watcher 定位监听器
-// @return @2 error 监听管理器已关闭时返回的错误
+// fork derives a watcher.
+//
+// It derives a new watcher from the watch manager.
+//
+// It returns the locate watcher and an error when the watch manager has been closed.
 func (wm *watcherMgr) fork() (locate.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
@@ -271,8 +275,10 @@ func (wm *watcherMgr) fork() (locate.Watcher, error) {
 	return w, nil
 }
 
-// 关闭监听管理器
-// 重连彻底失败时由接收协程调用，删除缓存、停止所有监听器并取消上下文
+// shutdown closes the watch manager.
+//
+// It is called by the receiving goroutine when the reconnect fails completely; it removes the
+// cache, stops every watcher and cancels the context.
 func (wm *watcherMgr) shutdown() {
 	wm.rw.Lock()
 	watchers := make([]*watcher, 0, len(wm.watchers))
@@ -295,9 +301,10 @@ func (wm *watcherMgr) shutdown() {
 	wm.cancel()
 }
 
-// 回收监听器
-// 从监听管理器中移除指定监听器，无监听器时关闭监听管理器
-// @param idx int64 监听器序号
+// recycle recycles a watcher.
+//
+// It removes the given watcher from the watch manager and closes the watch manager when no watcher
+// remains.
 func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
 	delete(wm.watchers, idx)
@@ -318,9 +325,9 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.wg.Wait()
 }
 
-// 广播事件
-// 将变动事件广播给所有监听器
-// @param event *locate.Event 变动事件
+// broadcast broadcasts an event.
+//
+// It broadcasts a change event to every watcher.
 func (wm *watcherMgr) broadcast(event *locate.Event) {
 	wm.rw.RLock()
 	watchers := make([]*watcher, 0, len(wm.watchers))

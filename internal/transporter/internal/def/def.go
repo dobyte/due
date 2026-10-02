@@ -8,21 +8,21 @@ const (
 )
 
 const (
-	SizeBytes   = B32 // 包长度字节数
-	HeaderBytes = B8  // 头信息字节数
-	SeqBytes    = B64 // 序列号字节数
-	RouteBytes  = B8  // 路由号字节数
-	CodeBytes   = B16 // 错误码字节数
+	SizeBytes   = B32 // Number of bytes in the packet length
+	HeaderBytes = B8  // Number of bytes in the header
+	SeqBytes    = B64 // Number of bytes in the sequence number
+	RouteBytes  = B8  // Number of bytes in the route number
+	CodeBytes   = B16 // Number of bytes in the error code
 )
 
-// MaxFrameSize 单帧最大长度（含4字节size字段）
+// MaxFrameSize is the maximum length of a single frame, including the 4-byte size field.
 const MaxFrameSize = 16 << 20 // 16MB
 
-// MinFrameSize 非心跳帧的最小长度（size字段 + header + route + seq）
+// MinFrameSize is the minimum length of a non-heartbeat frame: size field + header + route + seq.
 const MinFrameSize = SizeBytes + HeaderBytes + RouteBytes + SeqBytes
 
 const (
-	DataBit       uint8 = 0 << 7 // 数据标识位
-	HeartbeatBit  uint8 = 1 << 7 // 心跳标识位
-	DisconnectBit uint8 = 1 << 6 // 断连标识位
+	DataBit       uint8 = 0 << 7 // Data flag
+	HeartbeatBit  uint8 = 1 << 7 // Heartbeat flag
+	DisconnectBit uint8 = 1 << 6 // Disconnect flag
 )

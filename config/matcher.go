@@ -4,12 +4,13 @@ import (
 	"github.com/dobyte/due/v2/core/value"
 )
 
+// Matcher matches config values against an ordered list of patterns.
 type Matcher interface {
-	// Has 检测多个匹配规则中是否存在配置
+	// Has reports whether a config exists for any of the patterns.
 	Has() bool
-	// Get 获取配置值
+	// Get returns the value of the first pattern that resolves, falling back to def when none does.
 	Get(def ...any) value.Value
-	// Scan 扫描读取配置值
+	// Scan scans the value of the first pattern that resolves into dest.
 	Scan(dest any) error
 }
 
@@ -22,7 +23,7 @@ func newEmptyMatcher() Matcher {
 	return &defaultMatcher{}
 }
 
-// Has 是否存在配置
+// Has reports whether a config exists for any of the patterns.
 func (m *defaultMatcher) Has() bool {
 	if m.c == nil {
 		return false
@@ -37,7 +38,7 @@ func (m *defaultMatcher) Has() bool {
 	return false
 }
 
-// Get 获取配置值
+// Get returns the value of the first pattern that resolves, falling back to def when none does.
 func (m *defaultMatcher) Get(def ...any) value.Value {
 	if m.c != nil {
 		for _, pattern := range m.patterns {
@@ -50,7 +51,7 @@ func (m *defaultMatcher) Get(def ...any) value.Value {
 	return value.NewValue(def...)
 }
 
-// Scan 扫描读取配置值
+// Scan scans the value of the first pattern that resolves into dest.
 func (m *defaultMatcher) Scan(dest any) error {
 	if m.c != nil {
 		for _, pattern := range m.patterns {

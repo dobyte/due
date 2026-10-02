@@ -6,16 +6,12 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Int 将任意值转换为 int
-// @param val any 待转换的值
-// @return @1 int 转换后的 int
+// Int converts val to an int.
 func Int(val any) int {
 	return int(Int64(val))
 }
 
-// Ints 将任意值转换为 int 切片
-// @param val any 待转换的值
-// @return @1 []int 转换后的 int 切片
+// Ints converts val to an int slice.
 func Ints(val any) (slice []int) {
 	if val == nil {
 		return
@@ -264,17 +260,13 @@ func Ints(val any) (slice []int) {
 	return
 }
 
-// IntPointer 将任意值转换为 int 指针
-// @param val any 待转换的值
-// @return @1 *int 转换后的 int 指针
+// IntPointer converts val to a pointer to int.
 func IntPointer(any any) *int {
 	v := Int(any)
 	return &v
 }
 
-// IntsPointer 将任意值转换为 int 切片指针
-// @param val any 待转换的值
-// @return @1 *[]int 转换后的 int 切片指针
+// IntsPointer converts val to a pointer to an int slice.
 func IntsPointer(any any) *[]int {
 	v := Ints(any)
 	return &v

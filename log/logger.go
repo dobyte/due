@@ -19,37 +19,38 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Logger is a logging interface that extends [slog.Handler].
 type Logger interface {
 	slog.Handler
-	// Print 打印日志，不含堆栈信息
+	// Print writes a log record without stack information.
 	Print(level Level, a ...any)
-	// Printf 打印模板日志，不含堆栈信息
+	// Printf writes a formatted log record without stack information.
 	Printf(level Level, format string, a ...any)
-	// Debug 打印调试日志
+	// Debug writes a debug-level log record.
 	Debug(a ...any)
-	// Debugf 打印调试模板日志
+	// Debugf writes a formatted debug-level log record.
 	Debugf(format string, a ...any)
-	// Info 打印信息日志
+	// Info writes an info-level log record.
 	Info(a ...any)
-	// Infof 打印信息模板日志
+	// Infof writes a formatted info-level log record.
 	Infof(format string, a ...any)
-	// Warn 打印警告日志
+	// Warn writes a warn-level log record.
 	Warn(a ...any)
-	// Warnf 打印警告模板日志
+	// Warnf writes a formatted warn-level log record.
 	Warnf(format string, a ...any)
-	// Error 打印错误日志
+	// Error writes an error-level log record.
 	Error(a ...any)
-	// Errorf 打印错误模板日志
+	// Errorf writes a formatted error-level log record.
 	Errorf(format string, a ...any)
-	// Fatal 打印致命错误日志
+	// Fatal writes a fatal-level log record.
 	Fatal(a ...any)
-	// Fatalf 打印致命错误模板日志
+	// Fatalf writes a formatted fatal-level log record.
 	Fatalf(format string, a ...any)
-	// Panic 打印Panic日志
+	// Panic writes a panic-level log record.
 	Panic(a ...any)
-	// Panicf 打印Panic模板日志
+	// Panicf writes a formatted panic-level log record.
 	Panicf(format string, a ...any)
-	// Close 关闭日志
+	// Close closes the logger.
 	Close() error
 }
 
@@ -66,6 +67,7 @@ type defaultLogger struct {
 	terminals []*terminal
 }
 
+// NewLogger returns a new logger configured with the given options.
 func NewLogger(opts ...Option) *defaultLogger {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -136,79 +138,79 @@ func NewLogger(opts ...Option) *defaultLogger {
 	return l
 }
 
-// Print 打印日志，不含堆栈信息
+// Print writes a log record without stack information.
 func (l *defaultLogger) Print(level Level, a ...any) {
 	l.print(level, false, a...)
 }
 
-// Printf 打印模板日志，不含堆栈信息
+// Printf writes a formatted log record without stack information.
 func (l *defaultLogger) Printf(level Level, format string, a ...any) {
 	l.print(level, false, fmt.Sprintf(format, a...))
 }
 
-// Debug 打印调试日志
+// Debug writes a debug-level log record.
 func (l *defaultLogger) Debug(a ...any) {
 	l.print(LevelDebug, true, a...)
 }
 
-// Debugf 打印调试模板日志
+// Debugf writes a formatted debug-level log record.
 func (l *defaultLogger) Debugf(format string, a ...any) {
 	l.print(LevelDebug, true, fmt.Sprintf(format, a...))
 }
 
-// Info 打印信息日志
+// Info writes an info-level log record.
 func (l *defaultLogger) Info(a ...any) {
 	l.print(LevelInfo, true, a...)
 }
 
-// Infof 打印信息模板日志
+// Infof writes a formatted info-level log record.
 func (l *defaultLogger) Infof(format string, a ...any) {
 	l.print(LevelInfo, true, fmt.Sprintf(format, a...))
 }
 
-// Warn 打印警告日志
+// Warn writes a warn-level log record.
 func (l *defaultLogger) Warn(a ...any) {
 	l.print(LevelWarn, true, a...)
 }
 
-// Warnf 打印警告模板日志
+// Warnf writes a formatted warn-level log record.
 func (l *defaultLogger) Warnf(format string, a ...any) {
 	l.print(LevelWarn, true, fmt.Sprintf(format, a...))
 }
 
-// Error 打印错误日志
+// Error writes an error-level log record.
 func (l *defaultLogger) Error(a ...any) {
 	l.print(LevelError, true, a...)
 }
 
-// Errorf 打印错误模板日志
+// Errorf writes a formatted error-level log record.
 func (l *defaultLogger) Errorf(format string, a ...any) {
 	l.print(LevelError, true, fmt.Sprintf(format, a...))
 }
 
-// Fatal 打印致命错误日志
+// Fatal writes a fatal-level log record.
 func (l *defaultLogger) Fatal(a ...any) {
 	l.print(LevelFatal, true, a...)
 	os.Exit(1)
 }
 
-// Fatalf 打印致命错误模板日志
+// Fatalf writes a formatted fatal-level log record.
 func (l *defaultLogger) Fatalf(format string, a ...any) {
 	l.print(LevelFatal, true, fmt.Sprintf(format, a...))
 	os.Exit(1)
 }
 
-// Panic 打印Panic日志
+// Panic writes a panic-level log record.
 func (l *defaultLogger) Panic(a ...any) {
 	l.print(LevelPanic, true, a...)
 }
 
-// Panicf 打印Panic模板日志
+// Panicf writes a formatted panic-level log record.
 func (l *defaultLogger) Panicf(format string, a ...any) {
 	l.print(LevelPanic, true, fmt.Sprintf(format, a...))
 }
 
-// Close 关闭日志
+// Close closes the logger.
 func (l *defaultLogger) Close() error {
 	eg, _ := errgroup.WithContext(context.Background())
 
@@ -223,7 +225,7 @@ func (l *defaultLogger) Close() error {
 	return eg.Wait()
 }
 
-// 打印日志
+// print writes a log record at the given level, optionally including stack information.
 func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 	if len(l.terminals) == 0 {
 		return
@@ -254,7 +256,7 @@ func (l *defaultLogger) print(level Level, isOutStack bool, a ...any) {
 	}
 }
 
-// 释放实体
+// releaseEntity releases the entity back to the pool.
 func (l *defaultLogger) releaseEntity(e *Entity) {
 	e.Time = ""
 	e.Level = LevelNone
@@ -265,7 +267,7 @@ func (l *defaultLogger) releaseEntity(e *Entity) {
 	l.pool.Put(e)
 }
 
-// 构建实体信息
+// makeEntity builds a log entity.
 func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Entity {
 	e := l.pool.Get().(*Entity)
 	e.Now = xtime.Now()
@@ -282,7 +284,7 @@ func (l *defaultLogger) makeEntity(level Level, isOutStack bool, a ...any) *Enti
 	return e
 }
 
-// 构建日志消息
+// makeMessage builds the log message from the given arguments.
 func (l *defaultLogger) makeMessage(a ...any) (message string) {
 	for i, v := range a {
 		if i == len(a)-1 {
@@ -297,7 +299,7 @@ func (l *defaultLogger) makeMessage(a ...any) (message string) {
 	return
 }
 
-// 构建堆栈信息
+// makeStack builds the caller and stack frames at the given depth.
 func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 	st := stack.Callers(3+l.opts.callSkip, depth)
 	defer st.Free()
@@ -325,12 +327,12 @@ func (l *defaultLogger) makeStack(depth stack.Depth) (string, []runtime.Frame) {
 	}
 }
 
-// Enabled 是否启用日志
+// Enabled reports whether the logger emits records of the given level.
 func (l *defaultLogger) Enabled(ctx context.Context, level slog.Level) bool {
 	return l.convLevel(level).Priority() >= l.opts.level.Priority()
 }
 
-// Handle 处理日志记录
+// Handle processes a slog record.
 func (l *defaultLogger) Handle(ctx context.Context, record slog.Record) error {
 	var (
 		level  = l.convLevel(record.Level)
@@ -366,7 +368,7 @@ func (l *defaultLogger) WithGroup(name string) slog.Handler {
 	return l
 }
 
-// 转换成日志实体
+// convEntity converts a slog record into a log entity.
 func (l *defaultLogger) convEntity(record slog.Record) *Entity {
 	entity := l.pool.Get().(*Entity)
 	entity.Now = record.Time
@@ -383,7 +385,7 @@ func (l *defaultLogger) convEntity(record slog.Record) *Entity {
 	return entity
 }
 
-// 转换堆栈信息
+// convStack converts the program counter into a caller and stack frames.
 func (l *defaultLogger) convStack(pc uintptr, depth stack.Depth) (string, []runtime.Frame) {
 	st := stack.CallersFromPC(pc, stack.Full)
 	defer st.Free()
@@ -411,7 +413,7 @@ func (l *defaultLogger) convStack(pc uintptr, depth stack.Depth) (string, []runt
 	}
 }
 
-// 转换日志级别
+// convLevel converts a slog level into a log level.
 func (l *defaultLogger) convLevel(level slog.Level) Level {
 	var lv Level
 	switch level {

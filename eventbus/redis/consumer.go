@@ -18,7 +18,7 @@ func newConsumer(eb *Eventbus) *consumer {
 	return &consumer{eb: eb, subs: make([]*subscription, 0, 1)}
 }
 
-// addSubscription 添加订阅
+// addSubscription adds a subscription.
 func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription {
 	sub := &subscription{consumer: c, handler: handler}
 
@@ -29,7 +29,7 @@ func (c *consumer) addSubscription(handler eventbus.EventHandler) *subscription 
 	return sub
 }
 
-// delSubscription 移除订阅
+// delSubscription removes a subscription.
 func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -47,7 +47,7 @@ func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	return found, len(c.subs) == 0
 }
 
-// 分发数据
+// dispatch dispatches event data.
 func (c *consumer) dispatch(data []byte) {
 	event, err := c.eb.deserialize(data)
 	if err != nil {

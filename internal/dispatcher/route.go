@@ -11,14 +11,14 @@ import (
 )
 
 type Route struct {
-	eps1       []*serviceEndpoint                 // 所有端点（包含work状态的实例）
-	eps2       []*serviceEndpoint                 // 所有端点（包含busy状态的实例）
-	eps3       map[string]*serviceEndpoint        // 所有端点（包含work、busy、hang状态的实例）
-	route      registry.Route                     // 路由信息
-	group      string                             // 路由所属组
-	counter    atomic.Uint64                      // 轮询计数器
-	wrSeq      atomic.Pointer[[]*serviceEndpoint] // 加权轮询平滑序列（惰性构建）
-	dispatcher *Dispatcher                        // 分发器
+	eps1       []*serviceEndpoint                 // All endpoints, including instances in the work state
+	eps2       []*serviceEndpoint                 // All endpoints, including instances in the busy state
+	eps3       map[string]*serviceEndpoint        // All endpoints, including instances in the work, busy and hang states
+	route      registry.Route                     // Route information
+	group      string                             // Group the route belongs to
+	counter    atomic.Uint64                      // Round-robin counter
+	wrSeq      atomic.Pointer[[]*serviceEndpoint] // Precomputed smooth weighted round-robin sequence (built lazily)
+	dispatcher *Dispatcher                        // Dispatcher
 }
 
 func newRoute(dispatcher *Dispatcher, group string, route registry.Route) *Route {
@@ -34,32 +34,33 @@ func newRoute(dispatcher *Dispatcher, group string, route registry.Route) *Route
 	return r
 }
 
-// ID 获取路由ID
+// ID returns the route ID.
 func (r *Route) ID() int32 {
 	return r.route.ID
 }
 
-// Group 路由所属组
+// Group returns the group the route belongs to.
 func (r *Route) Group() string {
 	return r.group
 }
 
-// Internal 是否内部路由
+// Internal reports whether the route is internal.
 func (r *Route) Internal() bool {
 	return r.route.Internal
 }
 
-// Stateful 是否有状态路由
+// Stateful reports whether the route is stateful.
 func (r *Route) Stateful() bool {
 	return r.route.Stateful
 }
 
-// Authorized 是否授权路由
+// Authorized reports whether the route requires authorization.
 func (r *Route) Authorized() bool {
 	return r.route.Authorized
 }
 
-// FindEndpoint 查询路由服务端点
+// FindEndpoint returns a service endpoint of the route. When insID is provided and non-empty, the
+// endpoint is resolved directly; otherwise it is chosen according to the dispatcher's strategy.
 func (r *Route) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 	if len(insID) > 0 && insID[0] != "" {
 		return r.directDispatch(insID[0])
@@ -75,7 +76,7 @@ func (r *Route) FindEndpoint(insID ...string) (*endpoint.Endpoint, error) {
 	}
 }
 
-// 直接分配
+// directDispatch resolves the endpoint of the instance identified by insID.
 func (r *Route) directDispatch(insID string) (*endpoint.Endpoint, error) {
 	sep, ok := r.eps3[insID]
 	if !ok {
@@ -85,7 +86,7 @@ func (r *Route) directDispatch(insID string) (*endpoint.Endpoint, error) {
 	return sep.endpoint, nil
 }
 
-// 随机分配
+// randomDispatch picks an available endpoint at random.
 func (r *Route) randomDispatch() (*endpoint.Endpoint, error) {
 	if eps := r.loadAvailableEndpoints(); len(eps) == 0 {
 		return nil, errors.ErrNotFoundEndpoint
@@ -94,7 +95,7 @@ func (r *Route) randomDispatch() (*endpoint.Endpoint, error) {
 	}
 }
 
-// 轮询分配
+// roundRobinDispatch picks an available endpoint in round-robin order.
 func (r *Route) roundRobinDispatch() (*endpoint.Endpoint, error) {
 	if eps := r.loadAvailableEndpoints(); len(eps) == 0 {
 		return nil, errors.ErrNotFoundEndpoint
@@ -103,9 +104,11 @@ func (r *Route) roundRobinDispatch() (*endpoint.Endpoint, error) {
 	}
 }
 
-// 加权轮询分配
-// 基于预计算的平滑加权序列与原子游标选择端点，热路径无锁；
-// 平滑加权轮询（SWRR）的选择序列具有周期性，预计算与在线计算的分布完全等价
+// weightedRoundRobinDispatch picks an available endpoint using smooth weighted round-robin.
+//
+// It selects endpoints from a precomputed smooth sequence through an atomic cursor, leaving the hot
+// path lock-free. Because the selection sequence of smooth weighted round-robin (SWRR) is periodic,
+// the precomputed distribution is exactly equivalent to the online one.
 func (r *Route) weightedRoundRobinDispatch() (*endpoint.Endpoint, error) {
 	eps := r.loadAvailableEndpoints()
 	if len(eps) == 0 {
@@ -117,10 +120,10 @@ func (r *Route) weightedRoundRobinDispatch() (*endpoint.Endpoint, error) {
 	return seq[(r.counter.Add(1)-1)%uint64(len(seq))].endpoint, nil
 }
 
-// 加载加权轮询平滑序列
-// 序列惰性构建；并发构建产生的内容一致，CAS失败时直接复用已存储值
-// @param eps []*serviceEndpoint 可用端点
-// @return @1 []*serviceEndpoint 平滑加权序列
+// loadWRSequence returns the smooth weighted round-robin sequence built from eps.
+//
+// The sequence is built lazily. Concurrent builds produce identical content, so a failed
+// compare-and-swap simply reuses the stored value.
 func (r *Route) loadWRSequence(eps []*serviceEndpoint) []*serviceEndpoint {
 	if seq := r.wrSeq.Load(); seq != nil {
 		return *seq
@@ -135,11 +138,11 @@ func (r *Route) loadWRSequence(eps []*serviceEndpoint) []*serviceEndpoint {
 	return *r.wrSeq.Load()
 }
 
-// 构建平滑加权序列
-// 按平滑加权轮询算法离线生成选择序列，权重经GCD归约以控制序列长度；
-// 权重未设置（<=0）时兜底为默认权重1，与原在线算法行为一致
-// @param eps []*serviceEndpoint 可用端点
-// @return @1 []*serviceEndpoint 平滑加权序列
+// buildSmoothWRSequence builds the smooth weighted round-robin sequence from eps.
+//
+// The selection sequence is generated offline with the smooth weighted round-robin algorithm, and
+// the weights are reduced by their GCD to bound the sequence length. A weight that is unset (<= 0)
+// falls back to the default weight 1, matching the behavior of the original online algorithm.
 func buildSmoothWRSequence(eps []*serviceEndpoint) []*serviceEndpoint {
 	weights := make([]int, len(eps))
 
@@ -179,10 +182,7 @@ func buildSmoothWRSequence(eps []*serviceEndpoint) []*serviceEndpoint {
 	return seq
 }
 
-// 计算最大公约数
-// @param a int 整数a
-// @param b int 整数b
-// @return @1 int 最大公约数
+// gcd returns the greatest common divisor of a and b.
 func gcd(a, b int) int {
 	for b != 0 {
 		a, b = b, a%b
@@ -191,7 +191,7 @@ func gcd(a, b int) int {
 	return a
 }
 
-// 加载可用服务端点
+// loadAvailableEndpoints returns the endpoints currently eligible to serve traffic.
 func (r *Route) loadAvailableEndpoints() []*serviceEndpoint {
 	switch {
 	case len(r.eps1) > 0:
@@ -203,7 +203,7 @@ func (r *Route) loadAvailableEndpoints() []*serviceEndpoint {
 	}
 }
 
-// 添加服务端点
+// addServiceEndpoint adds a service endpoint to the route according to the instance state.
 func (r *Route) addServiceEndpoint(se *serviceEndpoint) {
 	switch se.state {
 	case cluster.Work.String():

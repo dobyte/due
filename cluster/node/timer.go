@@ -2,15 +2,16 @@ package node
 
 import "time"
 
-// Timer 定时器
+// Timer is a timer.
 type Timer struct {
 	node  *Node
 	timer *time.Timer
 }
 
-// Stop 停止定时器
-// 停止成功且节点非空时递减节点等待计数
-// @return @1 bool 是否成功停止定时器
+// Stop stops the timer.
+//
+// When the timer is stopped successfully and the node is not nil, it decrements the node's wait
+// count.
 func (t *Timer) Stop() (ok bool) {
 	if t == nil {
 		return

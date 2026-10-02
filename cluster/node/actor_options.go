@@ -2,24 +2,23 @@ package node
 
 import "time"
 
-// Actor配置项
+// actorOptions holds the options of an [Actor].
 type actorOptions struct {
-	id                  string        // Actor编号
-	kind                string        // Actor类型
-	args                []any         // 传递到Processor中的参数
-	wait                bool          // 是否需要等待
-	dispatch            bool          // 是否接受调度器调度
-	taskQueueSize       int32         // 任务队列大小
-	taskWriteTimeout    time.Duration // 任务入队超时时间
-	messageQueueSize    int32         // 消息队列大小
-	messageWriteTimeout time.Duration // 消息入队超时时间
+	id                  string        // Actor ID
+	kind                string        // Actor kind
+	args                []any         // Arguments passed to the Processor
+	wait                bool          // Whether the actor must be waited for
+	dispatch            bool          // Whether the actor accepts scheduling from the scheduler
+	taskQueueSize       int32         // Task queue capacity
+	taskWriteTimeout    time.Duration // Timeout for writing a task to the task queue
+	messageQueueSize    int32         // Message queue capacity
+	messageWriteTimeout time.Duration // Timeout for writing a message to the message queue
 }
 
-// ActorOption Actor配置函数
+// ActorOption is a configuration function of an [Actor].
 type ActorOption func(o *actorOptions)
 
-// 创建默认Actor配置项
-// @return @1 *actorOptions 默认Actor配置项
+// defaultActorOptions creates the default actor options.
 func defaultActorOptions() *actorOptions {
 	return &actorOptions{
 		wait:                true,
@@ -31,63 +30,48 @@ func defaultActorOptions() *actorOptions {
 	}
 }
 
-// WithActorID 设置Actor编号
-// @param id string Actor编号
-// @return @1 ActorOption Actor配置项
+// WithActorID sets the actor ID.
 func WithActorID(id string) ActorOption {
 	return func(o *actorOptions) { o.id = id }
 }
 
-// WithActorKind 设置Actor类型
-// @param kind string Actor类型
-// @return @1 ActorOption Actor配置项
+// WithActorKind sets the actor kind.
 func WithActorKind(kind string) ActorOption {
 	return func(o *actorOptions) { o.kind = kind }
 }
 
-// WithActorArgs 设置传递到Processor中的参数
-// @param args ...any Processor参数
-// @return @1 ActorOption Actor配置项
+// WithActorArgs sets the arguments passed to the Processor.
 func WithActorArgs(args ...any) ActorOption {
 	return func(o *actorOptions) { o.args = append(o.args, args...) }
 }
 
-// WithActorNonWait 设置Actor无需等待属性（Node组件关闭时无需等待此Actor结束）
-// @return @1 ActorOption Actor配置项
+// WithActorNonWait marks the actor as not needing to be waited for, so that the Node component does
+// not wait for this actor to finish when shutting down.
 func WithActorNonWait() ActorOption {
 	return func(o *actorOptions) { o.wait = false }
 }
 
-// WithActorNonDispatch 设置Actor不可调度
-// @return @1 ActorOption Actor配置项
+// WithActorNonDispatch makes the actor non-schedulable.
 func WithActorNonDispatch() ActorOption {
 	return func(o *actorOptions) { o.dispatch = false }
 }
 
-// WithActorTaskQueueSize 设置任务队列大小
-// @param size int32 任务队列大小
-// @return @1 ActorOption Actor配置项
+// WithActorTaskQueueSize sets the task queue capacity.
 func WithActorTaskQueueSize(size int32) ActorOption {
 	return func(o *actorOptions) { o.taskQueueSize = size }
 }
 
-// WithActorTaskWriteTimeout 设置任务入队超时时间
-// @param timeout time.Duration 任务入队超时时间
-// @return @1 ActorOption Actor配置项
+// WithActorTaskWriteTimeout sets the timeout for writing a task to the task queue.
 func WithActorTaskWriteTimeout(timeout time.Duration) ActorOption {
 	return func(o *actorOptions) { o.taskWriteTimeout = timeout }
 }
 
-// WithActorMessageQueueSize 设置消息队列大小
-// @param size int32 消息队列大小
-// @return @1 ActorOption Actor配置项
+// WithActorMessageQueueSize sets the message queue capacity.
 func WithActorMessageQueueSize(size int32) ActorOption {
 	return func(o *actorOptions) { o.messageQueueSize = size }
 }
 
-// WithActorMessageWriteTimeout 设置消息入队超时时间
-// @param timeout time.Duration 消息入队超时时间
-// @return @1 ActorOption Actor配置项
+// WithActorMessageWriteTimeout sets the timeout for writing a message to the message queue.
 func WithActorMessageWriteTimeout(timeout time.Duration) ActorOption {
 	return func(o *actorOptions) { o.messageWriteTimeout = timeout }
 }

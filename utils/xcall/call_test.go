@@ -59,6 +59,7 @@ func TestGoPanic(t *testing.T) {
 
 	<-entered
 
-	// panic 应被 Call 捕获而不致进程退出；此处等待 goroutine 完成 recover
+	// The panic should be recovered by Call so that the process does not exit; wait here for the
+	// goroutine to finish recovering.
 	time.Sleep(50 * time.Millisecond)
 }

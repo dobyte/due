@@ -8,27 +8,23 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// IPWHOISResolver 基于 ipwho.is 服务的 IP 地址解析器
+// IPWHOISResolver is an IP address resolver based on the ipwho.is service.
 type IPWHOISResolver struct {
 }
 
 var _ Resolver = (*IPWHOISResolver)(nil)
 
-// NewIPWHOISResolver 创建一个基于 ipwho.is 服务的 IP 地址解析器
+// NewIPWHOISResolver returns an IP address resolver based on the ipwho.is service.
 func NewIPWHOISResolver() *IPWHOISResolver {
 	return &IPWHOISResolver{}
 }
 
-// Name 获取解析器名称
+// Name returns the resolver name.
 func (i *IPWHOISResolver) Name() string {
 	return "ipwho.is"
 }
 
-// Resolve 解析 IP 地址
-// @param ctx context.Context 上下文，用于超时控制
-// @param ip string IP 地址
-// @return @1 *Result 解析结果
-// @return @2 error 错误信息
+// Resolve resolves the geolocation of ip.
 func (i *IPWHOISResolver) Resolve(ctx context.Context, ip string) (*Result, error) {
 	var resp struct {
 		Success    bool   `json:"success"`

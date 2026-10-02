@@ -1,6 +1,6 @@
 package kafka
 
-// data 事件总线内部数据格式
+// data is the internal data format of the eventbus.
 type data struct {
 	ID        string `json:"id"`
 	Topic     string `json:"topic"`

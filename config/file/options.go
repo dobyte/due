@@ -15,14 +15,15 @@ const (
 	defaultModeKey = "etc.config.file.mode"
 )
 
+// Option configures a [Source].
 type Option func(o *options)
 
 type options struct {
-	// 配置文件或配置目录路径
+	// Path of the config file or config directory.
 	path string
 
-	// 读写模式
-	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	// Read-write mode.
+	// It supports read-only, write-only and read-write; the default is read-only.
 	mode config.Mode
 }
 
@@ -33,12 +34,12 @@ func defaultOptions() *options {
 	}
 }
 
-// WithPath 设置配置文件或配置目录路径
+// WithPath sets the path of the config file or config directory.
 func WithPath(path string) Option {
 	return func(o *options) { o.path = path }
 }
 
-// WithMode 设置读写模式
+// WithMode sets the read-write mode.
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }

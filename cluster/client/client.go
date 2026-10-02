@@ -18,36 +18,36 @@ import (
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
-// HookHandler 客户端钩子处理函数
+// HookHandler is the hook handler of the client.
 type HookHandler func(proxy *Proxy)
 
-// RouteHandler 客户端路由处理函数
+// RouteHandler is the route handler of the client.
 type RouteHandler func(ctx *Context)
 
-// EventHandler 客户端事件处理函数
+// EventHandler is the event handler of the client.
 type EventHandler func(conn *Conn)
 
-// Client 客户端组件
-// 负责与服务端建立连接，并提供路由、事件、钩子的注册与消息收发能力
+// Client is the client component.
+//
+// It dials connections to the server and provides registration of routes, events and hooks as
+// well as message sending and receiving.
 type Client struct {
 	component.Base
-	opts                *options           // 配置项
-	ctx                 context.Context    // 上下文
-	cancel              context.CancelFunc // 取消函数
-	proxy               *Proxy             // 客户端代理
-	state               atomic.Int32       // 客户端状态
-	rw1                 sync.Mutex         // 注册锁，保护路由/事件/钩子的并发注册
-	hooks               atomic.Value       // 钩子处理器集合（map[cluster.Hook][]HookHandler）
-	routes              atomic.Value       // 路由处理器集合（map[int32][]RouteHandler）
-	events              atomic.Value       // 事件处理器集合（map[cluster.Event][]EventHandler）
-	defaultRouteHandler atomic.Value       // 默认路由处理器（RouteHandler）
-	rw2                 sync.RWMutex       // 连接锁，保护连接表的并发读写
-	conns               sync.Map           // 连接表（network.Conn -> *Conn）
+	opts                *options           // options
+	ctx                 context.Context    // context
+	cancel              context.CancelFunc // cancel function
+	proxy               *Proxy             // client proxy
+	state               atomic.Int32       // client state
+	rw1                 sync.Mutex         // registration lock, guards concurrent registration of routes, events and hooks
+	hooks               atomic.Value       // hook handlers (map[cluster.Hook][]HookHandler)
+	routes              atomic.Value       // route handlers (map[int32][]RouteHandler)
+	events              atomic.Value       // event handlers (map[cluster.Event][]EventHandler)
+	defaultRouteHandler atomic.Value       // default route handler (RouteHandler)
+	rw2                 sync.RWMutex       // connection lock, guards concurrent access to the connection table
+	conns               sync.Map           // connection table (network.Conn -> *Conn)
 }
 
-// NewClient 创建客户端组件
-// @param opts ...Option 客户端配置项
-// @return @1 *Client 客户端组件实例
+// NewClient returns a new client component configured by the given options.
 func NewClient(opts ...Option) *Client {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -67,14 +67,15 @@ func NewClient(opts ...Option) *Client {
 	return c
 }
 
-// Name 获取客户端名称
-// @return @1 string 客户端名称
+// Name returns the client name.
 func (c *Client) Name() string {
 	return c.opts.name
 }
 
-// Init 初始化客户端
-// 校验网络客户端与编解码器等必要配置，缺失时直接终止进程，并触发Init钩子
+// Init initializes the client.
+//
+// It validates required configuration such as the network client and codec, terminating the
+// process when they are missing, and then triggers the Init hook.
 func (c *Client) Init() {
 	if c.opts.client == nil {
 		log.Fatal("client plugin is not injected")
@@ -87,7 +88,7 @@ func (c *Client) Init() {
 	c.runHookFunc(cluster.Init)
 }
 
-// Start 启动组件
+// Start starts the component.
 func (c *Client) Start() {
 	c.rw1.Lock()
 
@@ -106,7 +107,7 @@ func (c *Client) Start() {
 	c.runHookFunc(cluster.Start)
 }
 
-// Close 关闭节点
+// Close closes the client.
 func (c *Client) Close() {
 	if !c.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
 		if !c.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
@@ -117,8 +118,9 @@ func (c *Client) Close() {
 	c.runHookFunc(cluster.Close)
 }
 
-// Destroy 销毁客户端
-// 将状态置为关闭，关闭全部连接并触发Destroy钩子
+// Destroy destroys the client.
+//
+// It marks the client as shut, closes every connection and triggers the Destroy hook.
 func (c *Client) Destroy() {
 	if !c.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
 		return
@@ -143,15 +145,13 @@ func (c *Client) Destroy() {
 	c.runHookFunc(cluster.Destroy)
 }
 
-// Proxy 获取客户端代理
-// @return @1 *Proxy 客户端代理
+// Proxy returns the client proxy.
 func (c *Client) Proxy() *Proxy {
 	return c.proxy
 }
 
-// 处理断开连接
-// 从连接表中移除连接并触发断开事件
-// @param conn network.Conn 已断开的网络连接
+// handleDisconnect handles a closed connection. It removes the connection from the connection
+// table and triggers the disconnect event.
 func (c *Client) handleDisconnect(conn network.Conn) {
 	val, ok := c.conns.Load(conn)
 	if !ok {
@@ -169,10 +169,9 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 	}
 }
 
-// 处理接收到的消息
-// 解包消息后分发给对应的路由处理器，未注册路由时走默认路由处理器
-// @param conn network.Conn 消息来源连接
-// @param data []byte 原始消息内容
+// handleReceive handles a received message. It unpacks the message and dispatches it to the
+// matching route handler, falling back to the default route handler when the route is not
+// registered.
 func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 	val, ok := c.conns.Load(conn)
 	if !ok {
@@ -216,7 +215,7 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
-// 拨号
+// dial dials a connection to the server.
 func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
 		return nil, errors.ErrClientShut
@@ -258,9 +257,7 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	return cc, nil
 }
 
-// 添加事件处理器
-// @param event cluster.Event 事件类型
-// @param handler EventHandler 事件处理函数
+// addEventListener adds an event handler for the given event.
 func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 	c.rw1.Lock()
 	defer c.rw1.Unlock()
@@ -277,9 +274,7 @@ func (c *Client) addEventListener(event cluster.Event, handler EventHandler) {
 	c.events.Store(newEvents)
 }
 
-// 添加路由处理器
-// @param route int32 路由号
-// @param handler RouteHandler 路由处理函数
+// addRouteHandler adds a route handler for the given route.
 func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 	c.rw1.Lock()
 	defer c.rw1.Unlock()
@@ -296,9 +291,8 @@ func (c *Client) addRouteHandler(route int32, handler RouteHandler) {
 	c.routes.Store(newRoutes)
 }
 
-// 默认路由处理器
-// 设置默认路由处理器，所有未注册的路由均走默认路由处理器；仅允许设置一次
-// @param handler RouteHandler 默认路由处理函数
+// setDefaultRouteHandler sets the default route handler that serves every unregistered route. It
+// may be set only once.
 func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 	c.rw1.Lock()
 	defer c.rw1.Unlock()
@@ -316,7 +310,7 @@ func (c *Client) setDefaultRouteHandler(handler RouteHandler) {
 	c.defaultRouteHandler.Store(handler)
 }
 
-// 添加钩子监听器
+// addHookListener adds a hook listener for the given hook.
 func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
 	c.rw1.Lock()
 	defer c.rw1.Unlock()
@@ -333,15 +327,12 @@ func (c *Client) addHookListener(hook cluster.Hook, handler HookHandler) {
 	c.hooks.Store(newHooks)
 }
 
-// 获取客户端状态
-// @return @1 cluster.State 客户端状态
+// getState returns the client state.
 func (c *Client) getState() cluster.State {
 	return cluster.State(c.state.Load())
 }
 
-// 执行钩子函数
-// 触发指定钩子对应的全部监听器，并等待所有监听器执行完成
-// @param hook cluster.Hook 钩子类型
+// runHookFunc runs every listener of the given hook and waits for all of them to finish.
 func (c *Client) runHookFunc(hook cluster.Hook) {
 	handlers, ok := c.hooks.Load().(map[cluster.Hook][]HookHandler)[hook]
 	if !ok {
@@ -362,8 +353,8 @@ func (c *Client) runHookFunc(hook cluster.Hook) {
 	wg.Wait()
 }
 
-// 打印组件信息
-// 输出客户端名称、编解码器、协议与加密器等基础信息
+// printInfo prints basic component information such as the client name, codec, protocol and
+// encryptor.
 func (c *Client) printInfo() {
 	rows := make([]string, 0, 4)
 	rows = append(rows, fmt.Sprintf("Name: %s", c.Name()))

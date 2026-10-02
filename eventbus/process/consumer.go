@@ -14,7 +14,7 @@ type consumer struct {
 	subscriptions []*subscription
 }
 
-// 添加订阅
+// addSubscription adds a subscription.
 func (c *consumer) addSubscription(topic string, handler eventbus.EventHandler) *subscription {
 	sub := &subscription{topic: topic, handler: handler}
 
@@ -25,7 +25,7 @@ func (c *consumer) addSubscription(topic string, handler eventbus.EventHandler) 
 	return sub
 }
 
-// 移除订阅
+// delSubscription removes a subscription.
 func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	c.rw.Lock()
 	defer c.rw.Unlock()
@@ -43,7 +43,7 @@ func (c *consumer) delSubscription(sub *subscription) (found bool, empty bool) {
 	return found, len(c.subscriptions) == 0
 }
 
-// 分发数据
+// dispatch dispatches an event.
 func (c *consumer) dispatch(event *eventbus.Event) {
 	c.rw.RLock()
 	defer c.rw.RUnlock()

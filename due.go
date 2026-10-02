@@ -1,6 +1,6 @@
 package due
 
-// Logo 框架logo
+// Logo is the framework logo.
 const Logo = `
                     ____  __  ________
                    / __ \/ / / / ____/	
@@ -9,8 +9,8 @@ const Logo = `
                 /_____/\____/_____/
 `
 
-// Version 框架版本
+// Version is the framework version.
 const Version = "v2.6.0"
 
-// Website 框架官网
+// Website is the framework website.
 const Website = "https://github.com/dobyte/due"

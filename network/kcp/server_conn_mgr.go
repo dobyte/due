@@ -16,17 +16,16 @@ import (
 )
 
 type serverConnMgr struct {
-	cid        atomic.Int64 // 连接ID
-	total      atomic.Int64 // 总连接数
-	server     *server      // 服务器
-	connPool   sync.Pool    // 连接池
-	partitions []*partition // 连接管理
+	cid        atomic.Int64 // Connection ID
+	total      atomic.Int64 // Total number of connections
+	server     *server      // Server
+	connPool   sync.Pool    // Connection pool
+	partitions []*partition // Connection partitions
 }
 
-// newServerConnMgr 创建连接管理器
-// 初始化连接池和按CPU数分片的分片管理器
-// @param server *server 服务器实例
-// @return @1 *serverConnMgr 连接管理器
+// newServerConnMgr returns a new connection manager.
+//
+// It initializes the connection pool and a set of partitions sized by the number of CPUs.
 func newServerConnMgr(server *server) *serverConnMgr {
 	cm := &serverConnMgr{}
 	cm.server = server
@@ -47,8 +46,10 @@ func newServerConnMgr(server *server) *serverConnMgr {
 	return cm
 }
 
-// close 关闭连接
-// 并行遍历所有分片，逐个关闭其中的连接并等待完成
+// close closes every connection.
+//
+// It walks all partitions in parallel and closes the connections in each of them, waiting for all
+// of them to finish.
 func (cm *serverConnMgr) close() {
 	wg, _ := taskpool.WithContext(context.Background())
 
@@ -61,8 +62,10 @@ func (cm *serverConnMgr) close() {
 	}
 }
 
-// open 开放连接接入
-// 清除所有分片的停止标志，服务器每次启动时调用以支持重启
+// open opens the manager for incoming connections.
+//
+// It clears the stop flag of every partition and is called on each server start so that the server
+// can be restarted.
 func (cm *serverConnMgr) open() {
 	for _, p := range cm.partitions {
 		p.rw.Lock()
@@ -71,10 +74,11 @@ func (cm *serverConnMgr) open() {
 	}
 }
 
-// allocateConn 分配连接
-// 自增总连接数并校验上限，超限则回退计数；从连接池取用连接对象初始化后存入分片
-// @param c *kcp.UDPSession KCP连接
-// @return @1 error 连接数已达上限或服务器已停止时返回的错误
+// allocateConn allocates a connection for c.
+//
+// It increments the total connection count and checks it against the limit, rolling the count back
+// when the limit is exceeded. It then takes a connection object from the pool, initializes it and
+// stores it in a partition.
 func (cm *serverConnMgr) allocateConn(c *kcp.UDPSession) error {
 	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
 		cm.total.Add(-1)
@@ -84,7 +88,8 @@ func (cm *serverConnMgr) allocateConn(c *kcp.UDPSession) error {
 	conn := cm.connPool.Get().(*serverConn)
 
 	if !conn.init(c) {
-		// 服务器关闭过程中分片拒绝存储，回退计数后归还连接对象，底层连接由调用方关闭
+		// A partition refuses storage while the server is shutting down; roll the count back,
+		// return the connection object and let the caller close the underlying connection.
 		cm.total.Add(-1)
 		cm.connPool.Put(conn)
 		return errors.ErrServerClosed
@@ -93,18 +98,17 @@ func (cm *serverConnMgr) allocateConn(c *kcp.UDPSession) error {
 	return nil
 }
 
-// storeConn 存储连接
-// 按连接指针哈希存入对应分片，分片已停止时拒绝存储
-// @param c *kcp.UDPSession KCP连接
-// @param conn *serverConn 服务器连接对象
-// @return @1 bool 是否存储成功，服务器关闭过程中返回false
+// storeConn stores a connection.
+//
+// It hashes the connection pointer to pick a partition, which refuses storage when it has stopped.
 func (cm *serverConnMgr) storeConn(c *kcp.UDPSession, conn *serverConn) bool {
 	return cm.partitions[cm.connHash(c)].store(c, conn)
 }
 
-// recycleConn 回收连接
-// 从分片中删除连接、重置并归还连接池，同时递减总连接数
-// @param c *kcp.UDPSession KCP连接
+// recycleConn recycles a connection.
+//
+// It removes the connection from its partition, resets it, returns it to the pool and decrements
+// the total connection count.
 func (cm *serverConnMgr) recycleConn(c *kcp.UDPSession) {
 	if conn, ok := cm.partitions[cm.connHash(c)].delete(c); ok {
 		conn.reset()
@@ -113,15 +117,16 @@ func (cm *serverConnMgr) recycleConn(c *kcp.UDPSession) {
 	}
 }
 
-// connHash 通过连接指针计算哈希
-// 对连接对象指针地址做位混合后取模，确定其所属分片索引，避免对象地址对齐导致分片分布不均
-// @param c *kcp.UDPSession KCP连接
-// @return @1 int 分片索引
+// connHash computes the partition index for a connection from its pointer.
+//
+// It bit-mixes the pointer address before taking the modulus so that low-order address alignment
+// does not make the partition distribution uneven.
 func (cm *serverConnMgr) connHash(c *kcp.UDPSession) int {
 	return int(cm.mixPointer(uintptr(unsafe.Pointer(c))) % uintptr(len(cm.partitions)))
 }
 
-// mixPointer 打散指针地址，避免对象地址低位对齐导致取模后分片分布不均
+// mixPointer scrambles a pointer address so that low-order address alignment cannot make the
+// modulus produce an uneven partition distribution.
 func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
 	x := uint64(p)
 	x ^= x >> 33
@@ -134,15 +139,14 @@ func (cm *serverConnMgr) mixPointer(p uintptr) uintptr {
 type partition struct {
 	rw          sync.RWMutex
 	connections map[*kcp.UDPSession]*serverConn
-	stopped     bool     // 是否已停止接入新连接，关闭分片时置位，服务器重启时复位
-	_           [31]byte // 填充至64字节缓存行，避免相邻分片伪共享
+	stopped     bool     // Whether new connections are refused; set when the partition closes and cleared on server restart
+	_           [31]byte // Padding to a 64-byte cache line to avoid false sharing between neighboring partitions
 }
 
-// store 存储连接
-// 将连接映射写入分片；分片已停止时拒绝写入，避免服务器关闭过程中的在途连接泄漏
-// @param c *kcp.UDPSession KCP连接
-// @param conn *serverConn 服务器连接对象
-// @return @1 bool 是否存储成功，分片已停止时返回false
+// store stores a connection.
+//
+// It writes the connection mapping into the partition. A stopped partition refuses the write so
+// that in-flight connections are not leaked while the server is shutting down.
 func (p *partition) store(c *kcp.UDPSession, conn *serverConn) bool {
 	p.rw.Lock()
 
@@ -157,10 +161,7 @@ func (p *partition) store(c *kcp.UDPSession, conn *serverConn) bool {
 	return true
 }
 
-// delete 删除连接
-// @param c *kcp.UDPSession KCP连接
-// @return @1 *serverConn 被删除的连接对象
-// @return @2 bool 是否存在对应的连接
+// delete removes a connection and returns it together with whether it existed.
 func (p *partition) delete(c *kcp.UDPSession) (*serverConn, bool) {
 	p.rw.Lock()
 	conn, ok := p.connections[c]
@@ -172,10 +173,13 @@ func (p *partition) delete(c *kcp.UDPSession) (*serverConn, bool) {
 	return conn, ok
 }
 
-// close 关闭该分片内的所有连接
-// 先置位停止标志阻断新连接写入，再串行关闭分片下所有连接，分片之间由外层并行驱动，
-// 避免向任务池瞬时提交海量阻塞任务；连接被其他路径并发关闭属正常竞态，不视为错误
-// @return @1 error 任一连接关闭失败时返回的首个错误
+// close closes every connection in the partition.
+//
+// It first sets the stop flag to block new connections, then closes the partition's connections
+// serially while the outer level drives the partitions in parallel; this avoids submitting a huge
+// number of blocking tasks to the task pool at once. A connection closed concurrently by another
+// path is a normal race and is not treated as an error. It returns the first error encountered
+// when closing a connection.
 func (p *partition) close() error {
 	p.rw.Lock()
 	p.stopped = true

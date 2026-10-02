@@ -12,14 +12,14 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
-// 监听器运行状态常量
+// Watcher running state constants.
 const (
 	stateInitial int32 = iota
 	stateRunning
 	stateStopped
 )
 
-// watcher 服务实例监听器
+// watcher watches service instances.
 type watcher struct {
 	idx     int64
 	wm      *watcherMgr
@@ -28,7 +28,7 @@ type watcher struct {
 	chWatch chan []*registry.ServiceInstance
 }
 
-// newWatcher 创建服务实例监听器
+// newWatcher returns a new service instance watcher owned by wm with the given index.
 func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w := &watcher{}
 	w.wm = wm
@@ -38,7 +38,7 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	return w
 }
 
-// 通知服务实例更新
+// notify tells the watcher that the service instances have been updated.
 func (w *watcher) notify(services []*registry.ServiceInstance) {
 	if w.state.Load() != stateRunning {
 		return
@@ -56,7 +56,7 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 	w.chWatch <- services
 }
 
-// 清空通道中的数据
+// flush drains every item from the notification channel.
 func (w *watcher) flush() {
 	for {
 		select {
@@ -67,7 +67,7 @@ func (w *watcher) flush() {
 	}
 }
 
-// latest 获取最新的服务实例
+// latest returns the latest service instances.
 func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	var (
 		exist     bool
@@ -96,7 +96,7 @@ func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	}
 }
 
-// Next 返回服务实例列表
+// Next returns the service instance list.
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	if w.state.CompareAndSwap(stateInitial, stateRunning) {
 		return w.latest()
@@ -110,7 +110,7 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	return services, nil
 }
 
-// Stop 停止监听服务实例更新
+// Stop stops watching service instance updates.
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
 		return errors.ErrIllegalOperation
@@ -125,7 +125,7 @@ func (w *watcher) Stop() error {
 	return nil
 }
 
-// watcherMgr 服务实例监听管理器
+// watcherMgr manages the watchers of one service.
 type watcherMgr struct {
 	registry         *Registry
 	serviceName      string
@@ -137,7 +137,7 @@ type watcherMgr struct {
 	param            *vo.SubscribeParam
 }
 
-// newWatcherMgr 创建服务实例监听管理器
+// newWatcherMgr returns a new watch manager for serviceName.
 func newWatcherMgr(registry *Registry, serviceName string, services []*registry.ServiceInstance) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = registry
@@ -148,7 +148,7 @@ func newWatcherMgr(registry *Registry, serviceName string, services []*registry.
 	return wm
 }
 
-// init 初始化服务实例监听
+// init initializes service instance watching.
 func (wm *watcherMgr) init() error {
 	wm.param = &vo.SubscribeParam{
 		ServiceName:       wm.serviceName,
@@ -173,7 +173,7 @@ func (wm *watcherMgr) subscribe() error {
 	return nil
 }
 
-// callback 处理服务实例更新回调
+// callback handles the service instance update callback.
 func (wm *watcherMgr) callback(instances []model.Instance, err error) {
 	if err != nil {
 		log.Warnf("%s subscribe callback failed: %v", wm.serviceName, err)
@@ -193,7 +193,7 @@ func (wm *watcherMgr) callback(instances []model.Instance, err error) {
 	wm.broadcast()
 }
 
-// 创建新的服务实例监听器
+// fork creates a new service instance watcher.
 func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
@@ -208,7 +208,7 @@ func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	return w, nil
 }
 
-// 回收服务实例监听器
+// recycle recycles the watcher with the given index.
 func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
 	delete(wm.watchers, idx)
@@ -228,13 +228,15 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.unsubscribe()
 }
 
-// 从注册表中移除本管理器
-// 使用 CompareAndDelete 原子地校验并移除，避免并发重建的新管理器被旧管理器的清理逻辑误删
+// removeFromRegistry removes this manager from the registry.
+//
+// It uses CompareAndDelete to validate and remove atomically, so that a concurrently rebuilt
+// manager is not deleted by the cleanup of an old one.
 func (wm *watcherMgr) removeFromRegistry() {
 	wm.registry.watchers.CompareAndDelete(wm.serviceName, wm)
 }
 
-// stop 停止监听服务实例更新
+// stop stops watching service instance updates.
 func (wm *watcherMgr) stop() {
 	wm.rw.Lock()
 	if !wm.stopped.CompareAndSwap(false, true) {
@@ -253,14 +255,14 @@ func (wm *watcherMgr) stop() {
 	wm.unsubscribe()
 }
 
-// unsubscribe 取消订阅服务实例更新
+// unsubscribe unsubscribes from service instance updates.
 func (wm *watcherMgr) unsubscribe() {
 	if err := wm.registry.opts.client.Unsubscribe(wm.param); err != nil {
 		log.Warnf("%s unsubscribe failed: %v", wm.serviceName, err)
 	}
 }
 
-// broadcast 广播服务实例更新
+// broadcast notifies the watchers of the service instance update.
 func (wm *watcherMgr) broadcast() {
 	wm.rw.RLock()
 	services := wm.loadServices()
@@ -272,7 +274,7 @@ func (wm *watcherMgr) broadcast() {
 	}
 }
 
-// loadWatchers 加载所有服务实例监听器
+// loadWatchers loads every service instance watcher.
 func (wm *watcherMgr) loadWatchers() []*watcher {
 	watchers := make([]*watcher, 0, len(wm.watchers))
 
@@ -283,7 +285,7 @@ func (wm *watcherMgr) loadWatchers() []*watcher {
 	return watchers
 }
 
-// loadServices 加载所有服务实例
+// loadServices loads every service instance.
 func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
@@ -313,7 +315,7 @@ func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	return services
 }
 
-// services 获取服务实例列表
+// services returns every service instance.
 func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 	wm.rw.RLock()
 	defer wm.rw.RUnlock()

@@ -15,9 +15,9 @@ const (
 	disconnectResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeDisconnectReq 编码断连请求
-// 注意：buf 包含全段协议
-// 协议：{size + header + route + seq} + 私有段：{session kind + target + force}
+// EncodeDisconnectReq encodes a disconnect request.
+// Note that buf contains the full protocol.
+// Protocol: {size + header + route + seq} + private section: {session kind + target + force}
 func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-def.SizeBytes))
@@ -31,9 +31,9 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeDisconnectReq 解码断连请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target + force}
+// DecodeDisconnectReq decodes a disconnect request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target + force}
 func DecodeDisconnectReq(buf buffer.Buffer) (kind session.Kind, target int64, force bool, err error) {
 	if buf.Len() != def.B8+def.B64+def.B8 {
 		err = errors.ErrInvalidMessage
@@ -48,9 +48,9 @@ func DecodeDisconnectReq(buf buffer.Buffer) (kind session.Kind, target int64, fo
 	return
 }
 
-// EncodeDisconnectRes 编码断连响应
-// 注意：buf 包含全段协议
-// 协议：{size + header + route + seq} + 私有段：{code}
+// EncodeDisconnectRes encodes a disconnect response.
+// Note that buf contains the full protocol.
+// Protocol: {size + header + route + seq} + private section: {code}
 func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectResBytes-def.SizeBytes))
@@ -62,9 +62,9 @@ func EncodeDisconnectRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeDisconnectRes 解码断连响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeDisconnectRes decodes a disconnect response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeDisconnectRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

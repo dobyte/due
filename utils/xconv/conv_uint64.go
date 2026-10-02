@@ -10,11 +10,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Uint64 将任意值转换为 uint64
-// 支持所有基础数值类型、bool、time.Time、[]byte（按大端序解析为64位整数，长度不超过8）及
-// 通过反射处理的字符串等类型；无法转换时返回 0
-// @param val any 待转换的值
-// @return @1 uint64 转换后的 uint64
+// Uint64 converts val to a uint64.
+//
+// It supports all basic numeric types, bool, time.Time, []byte (parsed as a big-endian 64-bit
+// integer and at most 8 bytes long) and types handled through reflection such as strings; it
+// returns 0 when the conversion fails.
 func Uint64(val any) uint64 {
 	if val == nil {
 		return 0
@@ -183,9 +183,7 @@ func Uint64(val any) uint64 {
 	}
 }
 
-// Uint64s 将任意值转换为 uint64 切片
-// @param val any 待转换的值
-// @return @1 []uint64 转换后的 uint64 切片
+// Uint64s converts val to a uint64 slice.
 func Uint64s(val any) (slice []uint64) {
 	if val == nil {
 		return
@@ -434,17 +432,13 @@ func Uint64s(val any) (slice []uint64) {
 	return
 }
 
-// Uint64Pointer 将任意值转换为 uint64 指针
-// @param val any 待转换的值
-// @return @1 *uint64 转换后的 uint64 指针
+// Uint64Pointer converts val to a pointer to uint64.
 func Uint64Pointer(val any) *uint64 {
 	v := Uint64(val)
 	return &v
 }
 
-// Uint64sPointer 将任意值转换为 uint64 切片指针
-// @param val any 待转换的值
-// @return @1 *[]uint64 转换后的 uint64 切片指针
+// Uint64sPointer converts val to a pointer to a uint64 slice.
 func Uint64sPointer(val any) *[]uint64 {
 	v := Uint64s(val)
 	return &v

@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/3/29 7:45 下午
- * @Desc: Websocket服务器
- */
-
 package ws
 
 import (
@@ -21,33 +14,35 @@ import (
 	"github.com/pires/go-proxyproto"
 )
 
+// UpgradeHandler is the handler invoked when an HTTP request is upgraded to the WebSocket protocol.
+//
+// It reports whether the upgrade is allowed.
 type UpgradeHandler func(w http.ResponseWriter, r *http.Request) (allowed bool)
 
+// Server is the WebSocket server interface.
 type Server interface {
 	network.Server
-	// OnUpgrade 监听HTTP请求升级
+	// OnUpgrade registers the handler invoked when an HTTP request is upgraded.
 	OnUpgrade(handler UpgradeHandler)
 }
 
 type server struct {
-	opts              *serverOptions            // 配置
-	mu                sync.Mutex                // 锁
-	listener          net.Listener              // 监听器
-	connMgr           *serverConnMgr            // 连接管理器
-	startHandler      network.StartHandler      // 服务器启动hook函数
-	stopHandler       network.CloseHandler      // 服务器关闭hook函数
-	connectHandler    network.ConnectHandler    // 连接打开hook函数
-	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
-	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
-	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
-	upgradeHandler    UpgradeHandler            // HTTP协议升级成WS协议hook函数
+	opts              *serverOptions            // Options
+	mu                sync.Mutex                // Lock
+	listener          net.Listener              // Listener
+	connMgr           *serverConnMgr            // Connection manager
+	startHandler      network.StartHandler      // Handler invoked when the server starts
+	stopHandler       network.CloseHandler      // Handler invoked when the server stops
+	connectHandler    network.ConnectHandler    // Handler invoked when a connection is opened
+	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
+	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
+	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
+	upgradeHandler    UpgradeHandler            // Handler invoked when an HTTP request is upgraded to the WS protocol
 }
 
 var _ Server = &server{}
 
-// NewServer 创建一个服务器
-// @param opts ...ServerOption 服务器配置项
-// @return @1 Server 服务器实例
+// NewServer returns a new server.
 func NewServer(opts ...ServerOption) Server {
 	o := defaultServerOptions()
 	for _, opt := range opts {
@@ -61,9 +56,10 @@ func NewServer(opts ...ServerOption) Server {
 	return s
 }
 
-// Addr 获取监听地址
-// 服务器启动后返回监听器的实际地址，未启动时返回配置地址
-// @return @1 string 监听地址
+// Addr returns the listen address.
+//
+// It returns the actual listener address after the server starts and the configured address before
+// that.
 func (s *server) Addr() string {
 	s.mu.Lock()
 
@@ -79,14 +75,12 @@ func (s *server) Addr() string {
 	return addr
 }
 
-// Protocol 获取协议名称
-// @return @1 string 协议名称
+// Protocol returns the protocol name.
 func (s *server) Protocol() string {
 	return protocol
 }
 
-// Start 启动服务器
-// @return @1 error 错误信息
+// Start starts the server.
 func (s *server) Start() error {
 	s.mu.Lock()
 
@@ -108,17 +102,16 @@ func (s *server) Start() error {
 	return nil
 }
 
-// Stop 关闭服务器
-// @return @1 error 错误信息
+// Stop stops the server.
 func (s *server) Stop() error {
 	return s.stop(nil)
 }
 
-// stop 关闭服务器
-// 关闭监听器并关闭所有连接；ln 非空时仅当其仍为当前监听器才执行关闭，
-// 避免旧的服务协程退出时误关重启后的新监听器
-// @param ln net.Listener 期望关闭的监听器，为nil时不做校验
-// @return @1 error 服务器已关闭或监听器不匹配时返回的错误
+// stop stops the server.
+//
+// It closes the listener and closes all connections. When ln is not nil the close is performed only
+// if it is still the current listener, which prevents an old serve goroutine from closing the new
+// listener after a restart by mistake.
 func (s *server) stop(ln net.Listener) error {
 	s.mu.Lock()
 
@@ -140,9 +133,9 @@ func (s *server) stop(ln net.Listener) error {
 	return nil
 }
 
-// init 初始化WS服务器
-// 解析TCP地址并创建TCP监听器；若任一环节失败则回滚启动状态
-// @return @1 error 已启动或监听地址不合法时返回的错误
+// init initializes the WS server.
+//
+// It resolves the TCP address and creates a TCP listener; any failure rolls back the start.
 func (s *server) init() error {
 	if s.listener != nil {
 		return errors.ErrServerStarted
@@ -169,9 +162,11 @@ func (s *server) init() error {
 	return nil
 }
 
-// serve 启动服务器
-// 注册Websocket升级处理器，按配置以HTTP或HTTPS方式启动服务：
-// 升级请求校验方法/升级头/自定义升级钩子后，分配连接对象，失败则关闭连接
+// serve starts the server.
+//
+// It registers the WebSocket upgrade handler and serves over HTTP or HTTPS according to the
+// options. After an upgrade request is validated against the method, the upgrade header and the
+// custom upgrade handler, it allocates a connection and closes it when allocation fails.
 func (s *server) serve(ln net.Listener) {
 	var (
 		err      error
@@ -236,52 +231,45 @@ func (s *server) serve(ln net.Listener) {
 	_ = s.stop(ln)
 }
 
-// OnStart 监听服务器启动
-// @param handler network.StartHandler 服务器启动处理函数
+// OnStart registers the handler invoked when the server starts.
 func (s *server) OnStart(handler network.StartHandler) {
 	s.startHandler = handler
 }
 
-// OnStop 监听服务器关闭
-// @param handler network.CloseHandler 服务器关闭处理函数
+// OnStop registers the handler invoked when the server stops.
 func (s *server) OnStop(handler network.CloseHandler) {
 	s.stopHandler = handler
 }
 
-// OnUpgrade 监听HTTP请求升级
-// @param handler UpgradeHandler HTTP请求升级处理函数
+// OnUpgrade registers the handler invoked when an HTTP request is upgraded.
 func (s *server) OnUpgrade(handler UpgradeHandler) {
 	s.upgradeHandler = handler
 }
 
-// OnConnect 监听连接打开
-// @param handler network.ConnectHandler 连接打开处理函数
+// OnConnect registers the handler invoked when a connection is opened.
 func (s *server) OnConnect(handler network.ConnectHandler) {
 	s.connectHandler = handler
 }
 
-// OnDisconnect 监听连接关闭
-// @param handler network.DisconnectHandler 连接关闭处理函数
+// OnDisconnect registers the handler invoked when a connection is closed.
 func (s *server) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnectHandler = handler
 }
 
-// OnHeartbeat 监听心跳
-// @param handler network.HeartbeatHandler 心跳处理函数
+// OnHeartbeat registers the handler invoked when a heartbeat is received.
 func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 	s.heartbeatHandler = handler
 }
 
-// OnReceive 监听接收到消息
-// @param handler network.ReceiveHandler 消息接收处理函数
+// OnReceive registers the handler invoked when a message is received.
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
 }
 
-// parseAddrFromHeader 从代理头解析客户端真实地址
-// 仅在应用层代理模式下，且请求来自受信任代理时，从代理头中提取客户端真实IP及端口。
-// @param r *http.Request HTTP请求
-// @return @1 net.Addr 客户端真实地址，无法解析时返回nil
+// parseAddrFromHeader parses the real client address from the proxy headers.
+//
+// It extracts the real client IP and port from the proxy headers only in the application proxy mode
+// and when the request comes from a trusted proxy.
 func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
 	if s.opts.proxyMode != ProxyModeApplication {
 		return nil
@@ -303,7 +291,7 @@ func (s *server) parseAddrFromHeader(r *http.Request) net.Addr {
 	return nil
 }
 
-// isTrustedProxy 是否受信任的代理
+// isTrustedProxy reports whether ip belongs to a trusted proxy.
 func (s *server) isTrustedProxy(ip net.IP) bool {
 	if ip == nil {
 		return false
@@ -334,12 +322,12 @@ func (s *server) isTrustedProxy(ip net.IP) bool {
 	return false
 }
 
-// extractAddrFromHeader 从代理头中提取客户端真实地址
-// 从右向左遍历代理头中的 IP 链（如 X-Forwarded-For），跳过受信任代理 IP，
-// 返回第一个非受信任 IP，并从 X-Forwarded-Port 头解析客户端端口；
-// 若整条链均为受信任代理或无法解析，则返回 nil。
-// @param r *http.Request HTTP请求
-// @return @1 *net.TCPAddr 客户端真实地址，无法确定时返回 nil
+// extractAddrFromHeader extracts the real client address from the proxy headers.
+//
+// It walks the IP chain in the proxy header (such as X-Forwarded-For) from right to left, skips
+// trusted proxy IPs and returns the first untrusted IP, resolving the client port from the
+// X-Forwarded-Port header. It returns nil when the whole chain consists of trusted proxies or
+// cannot be parsed.
 func (s *server) extractAddrFromHeader(r *http.Request) *net.TCPAddr {
 	proxyHeader := "X-Forwarded-For"
 	if s.opts.proxyOpts.ProxyHeader != "" {

@@ -90,9 +90,9 @@ func TestClient_Simple(t *testing.T) {
 
 func TestClient_Benchmark(t *testing.T) {
 	samples := []struct {
-		c    int // 并发数
-		n    int // 请求数
-		size int // 数据包大小
+		c    int // Concurrency
+		n    int // Number of requests
+		size int // Packet size
 	}{
 		{
 			c:    50,
@@ -143,7 +143,7 @@ func TestClient_Benchmark(t *testing.T) {
 	}
 }
 
-// 执行压力测试
+// doPressureTest runs a pressure test.
 func doPressureTest(c int, n int, size int) {
 	var (
 		wg        sync.WaitGroup

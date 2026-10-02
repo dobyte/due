@@ -14,9 +14,9 @@ const (
 	unbindResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeUnbindReq 编码解绑请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{uid}
+// EncodeUnbindReq encodes an unbind request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {uid}
 func EncodeUnbindReq(seq uint64, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindReqBytes-def.SizeBytes))
@@ -28,9 +28,9 @@ func EncodeUnbindReq(seq uint64, uid int64) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeUnbindReq 解码解绑请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{uid}
+// DecodeUnbindReq decodes an unbind request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {uid}
 func DecodeUnbindReq(buf buffer.Buffer) (uid int64, err error) {
 	if buf.Len() != def.B64 {
 		err = errors.ErrInvalidMessage
@@ -42,9 +42,9 @@ func DecodeUnbindReq(buf buffer.Buffer) (uid int64, err error) {
 	return
 }
 
-// EncodeUnbindRes 编码解绑响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeUnbindRes encodes an unbind response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeUnbindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(unbindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(unbindResBytes-def.SizeBytes))
@@ -56,9 +56,9 @@ func EncodeUnbindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeUnbindRes 解码解绑响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeUnbindRes decodes an unbind response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeUnbindRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

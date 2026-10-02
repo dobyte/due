@@ -25,12 +25,12 @@ var (
 	totalSent     int64
 	totalRecv     int64
 	message       string
-	sendTimes     []int64   // 按 Seq 索引存储发送时间戳 (UnixNano), Seq 从1开始
-	latencies     []float64 // 收集延迟值 (ms)
-	latencyIdx    int64     // latencies 切片的原子写入下标
-	dialErrors    int64     // 拨号失败次数
-	pushErrors    int64     // push 失败次数
-	connDurations []float64 // 每个连接的建立耗时 (ms)
+	sendTimes     []int64   // Send timestamps (UnixNano) indexed by Seq; Seq starts at 1
+	latencies     []float64 // Collected latency values (ms)
+	latencyIdx    int64     // Atomic write index into the latencies slice
+	dialErrors    int64     // Number of dial failures
+	pushErrors    int64     // Number of push failures
+	connDurations []float64 // Establishment time of each connection (ms)
 	connMu        sync.Mutex
 )
 
@@ -43,34 +43,34 @@ type greetRes struct {
 }
 
 func main() {
-	// 创建容器
+	// Create the container
 	container := due.NewContainer()
-	// 创建客户端组件
+	// Create the client component
 	component := client.NewClient(
 		client.WithClient(ws.NewClient()),
 	)
-	// 初始化监听
+	// Initialize the listeners
 	initListen(component.Proxy())
-	// 添加客户端组件
+	// Add the client component
 	container.Add(component)
-	// 启动容器
+	// Start the container
 	container.Serve(true)
 }
 
-// 初始化监听
+// initListen initializes the listeners.
 func initListen(proxy *client.Proxy) {
-	// 监听组件启动
+	// Listen for the component start event
 	proxy.AddHookListener(cluster.Start, startHandler)
-	// 监听消息回复
+	// Listen for message replies
 	proxy.AddRouteHandler(greet, greetHandler)
 }
 
-// 组件启动处理器
+// startHandler is the component start handler.
 func startHandler(proxy *client.Proxy) {
 	samples := []struct {
-		c    int // 并发数
-		n    int // 请求数
-		size int // 数据包大小
+		c    int // Number of concurrent connections
+		n    int // Number of requests
+		size int // Packet size
 	}{
 		{
 			c:    50,
@@ -119,7 +119,7 @@ func startHandler(proxy *client.Proxy) {
 	}
 }
 
-// 消息回复处理器
+// greetHandler is the message reply handler.
 func greetHandler(ctx *client.Context) {
 	res := &greetRes{}
 
@@ -128,7 +128,7 @@ func greetHandler(ctx *client.Context) {
 		return
 	}
 
-	// 利用 Seq 配对计算单次请求 RTT
+	// Pair the reply with its request by Seq to compute the RTT of a single request
 	seq := ctx.Seq()
 	sendTime := sendTimes[seq]
 	if sendTime > 0 {
@@ -142,7 +142,7 @@ func greetHandler(ctx *client.Context) {
 	wg.Done()
 }
 
-// 执行压力测试
+// doPressureTest runs the pressure test.
 func doPressureTest(proxy *client.Proxy, c, n, size int) {
 	wg = &sync.WaitGroup{}
 	message = xrand.Letters(size)
@@ -160,7 +160,7 @@ func doPressureTest(proxy *client.Proxy, c, n, size int) {
 
 	chSeq := make(chan int32, n)
 
-	// 建立连接，记录连接耗时
+	// Establish connections and record their setup time
 	for range c {
 		dialStart := time.Now()
 		conn, err := proxy.Dial()
@@ -218,7 +218,7 @@ func doPressureTest(proxy *client.Proxy, c, n, size int) {
 	dialErr := atomic.LoadInt64(&dialErrors)
 	pushErr := atomic.LoadInt64(&pushErrors)
 
-	// 延迟统计
+	// Latency statistics
 	latencies = latencies[:recv]
 	sort.Float64s(latencies)
 	latMin, latMax, latAvg, latStd := latencyStats(latencies)
@@ -229,20 +229,20 @@ func doPressureTest(proxy *client.Proxy, c, n, size int) {
 	latP99 := percentile(latencies, 0.99)
 	latP999 := percentile(latencies, 0.999)
 
-	// 连接耗时统计
+	// Connection setup time statistics
 	connMin, connAvg, connMax := connStats(connDurations)
 
-	// 吞吐量统计
+	// Throughput statistics
 	tps := int64(float64(recv) / duration)
-	bandwidth := float64(recv*int64(size)*2) / duration / (1024 * 1024) // MB/s (收发双向)
+	bandwidth := float64(recv*int64(size)*2) / duration / (1024 * 1024) // MB/s (send and receive combined)
 
-	// 成功率
+	// Success rate
 	successRate := float64(0)
 	if sent := atomic.LoadInt64(&totalSent); sent > 0 {
 		successRate = float64(recv) / float64(sent) * 100
 	}
 
-	// 输出结果
+	// Print the results
 	fmt.Printf("\n")
 	fmt.Printf("%s\n", sectionLineWith("WS BENCHMARK", '='))
 	fmt.Printf("  Concurrency: %-5d ｜ Requests: %-9d ｜ Size: %s\n",
@@ -281,12 +281,13 @@ func doPressureTest(proxy *client.Proxy, c, n, size int) {
 	fmt.Printf("%s\n\n", sectionLineWith("END", '='))
 }
 
-// sectionLine 生成中间带标题的分隔线，标题居中
+// sectionLine returns a separator line with title centered in the middle.
 func sectionLine(title string) string {
 	return sectionLineWith(title, '-')
 }
 
-// sectionLineWith 生成中间带标题的分隔线，可指定填充字符
+// sectionLineWith returns a separator line with title centered in the middle, using ch as the fill
+// character.
 func sectionLineWith(title string, ch byte) string {
 	const width = 64
 	label := " " + title + " "
@@ -296,7 +297,7 @@ func sectionLineWith(title string, ch byte) string {
 	return strings.Repeat(string(ch), left) + label + strings.Repeat(string(ch), right)
 }
 
-// latencyStats 计算延迟的最小/最大/平均/标准差
+// latencyStats computes the min, max, average and standard deviation of the latency values.
 func latencyStats(data []float64) (min, max, avg, std float64) {
 	if len(data) == 0 {
 		return 0, 0, 0, 0
@@ -325,7 +326,7 @@ func latencyStats(data []float64) (min, max, avg, std float64) {
 	return
 }
 
-// percentile 计算分位值，使用线性插值
+// percentile computes the p-th percentile using linear interpolation.
 func percentile(data []float64, p float64) float64 {
 	if len(data) == 0 {
 		return 0
@@ -348,7 +349,7 @@ func percentile(data []float64, p float64) float64 {
 	return data[lower]*(1-frac) + data[upper]*frac
 }
 
-// connStats 计算连接耗时的最小/平均/最大
+// connStats computes the min, average and max connection setup time.
 func connStats(durations []float64) (min, avg, max float64) {
 	if len(durations) == 0 {
 		return 0, 0, 0
@@ -369,7 +370,7 @@ func connStats(durations []float64) (min, avg, max float64) {
 	return min, sum / float64(len(durations)), max
 }
 
-// formatNum 格式化大数字，添加千分位分隔符
+// formatNum formats a large number with thousands separators.
 func formatNum(n int64) string {
 	if n < 1000 {
 		return fmt.Sprintf("%d", n)

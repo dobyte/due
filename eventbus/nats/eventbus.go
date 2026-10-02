@@ -39,7 +39,7 @@ func NewEventbus(opts ...Option) *Eventbus {
 	return eb
 }
 
-// Publish 发布事件
+// Publish publishes an event.
 func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) error {
 	if eb.err != nil {
 		return eb.err
@@ -53,7 +53,7 @@ func (eb *Eventbus) Publish(ctx context.Context, topic string, payload any) erro
 	return eb.opts.conn.Publish(eb.doMakeChannel(topic), buf)
 }
 
-// Subscribe 订阅事件
+// Subscribe subscribes to an event.
 func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbus.EventHandler, balance ...bool) (eventbus.Subscription, error) {
 	if eb.err != nil {
 		return nil, eb.err
@@ -77,7 +77,7 @@ func (eb *Eventbus) Subscribe(ctx context.Context, topic string, handler eventbu
 	return &subscription{sub: sub}, nil
 }
 
-// 订阅事件处理函数
+// subscribeHandler returns the handler that handles subscribed events.
 func (eb *Eventbus) subscribeHandler(handler eventbus.EventHandler) func(msg *nats.Msg) {
 	return func(msg *nats.Msg) {
 		event, err := eb.deserialize(msg.Data)
@@ -90,7 +90,7 @@ func (eb *Eventbus) subscribeHandler(handler eventbus.EventHandler) func(msg *na
 	}
 }
 
-// Close 停止监听
+// Close stops listening.
 func (eb *Eventbus) Close() error {
 	if eb.err != nil {
 		return eb.err
@@ -111,7 +111,7 @@ func (eb *Eventbus) doMakeChannel(topic string) string {
 	}
 }
 
-// 序列化
+// serialize serializes an event.
 func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)
@@ -124,7 +124,7 @@ func (eb *Eventbus) serialize(topic string, payload any) ([]byte, error) {
 	return json.Marshal(d)
 }
 
-// 反序列化
+// deserialize deserializes an event.
 func (eb *Eventbus) deserialize(v []byte) (*eventbus.Event, error) {
 	d := eb.pool.Get().(*data)
 	defer eb.pool.Put(d)

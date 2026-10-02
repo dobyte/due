@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-// Value 获取值的反射类型和值
+// Value returns the reflect kind and value of val, dereferencing any pointer it holds.
 func Value(val any) (reflect.Kind, reflect.Value) {
 	var (
 		rv = reflect.ValueOf(val)
@@ -19,7 +19,8 @@ func Value(val any) (reflect.Kind, reflect.Value) {
 	return rk, rv
 }
 
-// IsNil 检测值是否为nil
+// IsNil reports whether val is nil, including a nil chan, func, map, pointer, unsafe pointer,
+// interface or slice.
 func IsNil(val any) bool {
 	if val == nil {
 		return true

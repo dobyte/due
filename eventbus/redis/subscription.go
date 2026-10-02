@@ -16,7 +16,7 @@ type subscription struct {
 	group    string
 }
 
-// Unsubscribe 取消订阅
+// Unsubscribe cancels the subscription.
 func (s *subscription) Unsubscribe(ctx context.Context) error {
 	s.eb.unsubscribe(ctx, s)
 	return nil

@@ -14,9 +14,9 @@ const (
 	deliverResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeDeliverReq 编码投递消息请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid + <message packet>}
+// EncodeDeliverReq encodes a deliver request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {cid + uid + <message packet>}
 func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(deliverReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(deliverReqBytes-def.SizeBytes+buf.Len()))
@@ -28,9 +28,9 @@ func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buff
 	return buffer.NewNocopyBuffer(writer, buf)
 }
 
-// DecodeDeliverReq 解码投递消息请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid + <message packet>}
+// DecodeDeliverReq decodes a deliver request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {cid + uid + <message packet>}
 func DecodeDeliverReq(req *buffer.Bytes) (int64, int64, *buffer.Bytes, error) {
 	if req.Len() < def.B64*2 {
 		return 0, 0, nil, errors.ErrInvalidMessage
@@ -45,8 +45,8 @@ func DecodeDeliverReq(req *buffer.Bytes) (int64, int64, *buffer.Bytes, error) {
 	return cid, uid, req, nil
 }
 
-// EncodeDeliverRes 编码投递消息响应
-// 协议：size + header + route + seq + code
+// EncodeDeliverRes encodes a deliver response.
+// Protocol: size + header + route + seq + code
 func EncodeDeliverRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(deliverResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(deliverResBytes-def.SizeBytes))
@@ -58,9 +58,9 @@ func EncodeDeliverRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeDeliverRes 解码投递消息响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeDeliverRes decodes a deliver response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeDeliverRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

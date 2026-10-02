@@ -8,9 +8,10 @@ import (
 	"google.golang.org/grpc/balancer"
 )
 
-// TestConsistentHashDemo 使用 mock 集群数据本地演示一致性哈希路由效果
+// TestConsistentHashDemo locally demonstrates the routing effect of consistent hashing with mock
+// cluster data.
 func TestConsistentHashDemo(t *testing.T) {
-	// mock 集群：模拟服务发现返回的 5 个实例地址
+	// Mock cluster: simulate the 5 instance addresses returned by service discovery.
 	cluster := []*hashSubConn{
 		{sc: &mockSubConn{}, key: "192.168.1.10:8011"},
 		{sc: &mockSubConn{}, key: "192.168.1.11:8011"},
@@ -19,7 +20,7 @@ func TestConsistentHashDemo(t *testing.T) {
 		{sc: &mockSubConn{}, key: "192.168.1.14:8011"},
 	}
 
-	// mock 请求：1000 个用户 ID 访问同一 RPC 方法
+	// Mock requests: 1000 user IDs access the same RPC method.
 	const userCount = 1000
 	users := make([]string, 0, userCount)
 	for i := 0; i < userCount; i++ {
@@ -41,7 +42,7 @@ func TestConsistentHashDemo(t *testing.T) {
 			sticky[u] = res.SubConn
 		}
 
-		// 同一用户再次访问必须命中同一节点
+		// A repeated visit by the same user must hit the same node.
 		for i := 0; i < 200; i++ {
 			u := users[i]
 			ctx := WithHashKey(context.Background(), u)
@@ -89,7 +90,7 @@ func TestConsistentHashDemo(t *testing.T) {
 			initial[u] = res.SubConn
 		}
 
-		// 模拟 192.168.1.14:8011 宕机下线，环仅剩 4 个节点
+		// Simulate 192.168.1.14:8011 going down, leaving only 4 nodes on the ring.
 		p2 := &Picker{ring: newConsistentRing(cluster[:4])}
 		moved := 0
 		for _, u := range users {
@@ -105,14 +106,14 @@ func TestConsistentHashDemo(t *testing.T) {
 		pct := float64(moved) / float64(userCount) * 100
 		t.Logf("移除 1/5 节点(192.168.1.14)后，迁移键 %d/%d = %.1f%%（理论约 20%%）", moved, userCount, pct)
 
-		// 5 节点移除 1 个，迁移率应在 20% 附近
+		// Removing 1 of 5 nodes should give a migration ratio near 20%.
 		if moved < 120 || moved > 280 {
 			t.Errorf("迁移率异常: %d/%d (%.1f%%)", moved, userCount, pct)
 		}
 	})
 }
 
-// printDistribution 打印各节点的请求分布
+// printDistribution prints the request distribution of each node.
 func printDistribution(t *testing.T, title string, cluster []*hashSubConn, counts map[balancer.SubConn]int) {
 	t.Helper()
 	total := 0

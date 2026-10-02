@@ -16,9 +16,9 @@ const (
 	multicastResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B64
 )
 
-// EncodeMulticastReq 编码组播请求（最多组播65535个对象）
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + disconnect + <message packet>}
+// EncodeMulticastReq encodes a multicast request (at most 65535 targets).
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + disconnect + <message packet>}
 func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	size := multicastReqBytes + len(targets)*def.B64
 
@@ -35,9 +35,9 @@ func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, disconne
 	return buffer.NewNocopyBuffer(writer, message)
 }
 
-// DecodeMulticastReq 解码组播请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + disconnect + <message packet>}
+// DecodeMulticastReq decodes a multicast request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + disconnect + <message packet>}
 func DecodeMulticastReq(req *buffer.Bytes) (session.Kind, []int64, bool, *buffer.Bytes, error) {
 	if req.Len() < def.B8+def.B16+def.B8 {
 		return 0, nil, false, nil, errors.ErrInvalidMessage
@@ -65,9 +65,9 @@ func DecodeMulticastReq(req *buffer.Bytes) (session.Kind, []int64, bool, *buffer
 	return kind, targets, disconnect, req, nil
 }
 
-// EncodeMulticastRes 编码组播响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// EncodeMulticastRes encodes a multicast response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func EncodeMulticastRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := multicastResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
@@ -88,9 +88,9 @@ func EncodeMulticastRes(seq uint64, code uint16, total ...uint64) *buffer.Nocopy
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeMulticastRes 解码组播响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// DecodeMulticastRes decodes a multicast response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func DecodeMulticastRes(buf buffer.Buffer) (code uint16, total uint64, err error) {
 	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B64 {
 		err = errors.ErrInvalidMessage

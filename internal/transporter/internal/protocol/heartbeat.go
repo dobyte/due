@@ -7,7 +7,7 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 )
 
-// 只读心跳包
+// heartbeat is the shared read-only heartbeat packet.
 var heartbeat []byte
 
 func init() {

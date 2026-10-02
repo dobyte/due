@@ -2,27 +2,27 @@ package node
 
 import "github.com/dobyte/due/v2/utils/xcall"
 
-// MiddlewareHandler 中间件处理函数
+// MiddlewareHandler is the middleware handler.
 type MiddlewareHandler func(middleware *Middleware, ctx Context)
 
-// Middleware 中间件
-// 用于在路由处理器执行前后进行统一拦截处理
+// Middleware is a middleware.
+//
+// It is used to intercept and process messages uniformly before and after the route handlers run.
 type Middleware struct {
 	index        int
 	middlewares  []MiddlewareHandler
 	routeHandler RouteHandler
 }
 
-// Next 下一个中间件
-// @param ctx Context 消息上下文
+// Next runs the next middleware.
 func (m *Middleware) Next(ctx Context) {
 	m.Skip(ctx, 1)
 }
 
-// Skip 跳过N个中间件
-// 依次执行后续中间件，耗尽后执行最终的路由处理器
-// @param ctx Context 消息上下文
-// @param skip int 跳过的中间件数量
+// Skip skips the given number of middlewares.
+//
+// It runs the following middlewares in order and, once they are exhausted, runs the final route
+// handler.
 func (m *Middleware) Skip(ctx Context, skip int) {
 	if m.index >= len(m.middlewares) {
 		return

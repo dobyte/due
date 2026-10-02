@@ -13,7 +13,8 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// requireMemcache 探测本地 memcached 服务是否可用，不可用时跳过测试
+// requireMemcache probes whether a local memcached service is available and skips the test when it
+// is not.
 func requireMemcache(t *testing.T) {
 	t.Helper()
 
@@ -41,7 +42,7 @@ func TestLocker_Acquire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 锁被持有时，其他 Locker 无法获取
+	// While the lock is held, another Locker cannot acquire it.
 	if err := other.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
 		t.Fatalf("expect ErrIllegalOperation, got: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestLocker_Acquire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 释放后，其他 Locker 可以获取
+	// After the release, another Locker can acquire it.
 	if err := other.Acquire(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,8 @@ func TestLocker_Parallel_Acquire(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			// 每个竞争者持有独立的 Locker(独立version)竞争同一把锁
+			// Each contender holds an independent Locker (an independent version) competing for the
+			// same lock.
 			locker := maker.Make("lockName")
 
 			if err := locker.Acquire(ctx); err != nil {
@@ -90,7 +92,7 @@ func TestLocker_Parallel_Acquire(t *testing.T) {
 				}
 			}()
 
-			// 任意时刻只允许一个持有者进入临界区
+			// At most one holder is allowed to enter the critical section at any time.
 			if n := holders.Add(1); n != 1 {
 				t.Errorf("%d lock is not exclusive, concurrent holders: %d", i, n)
 			}
@@ -124,8 +126,9 @@ func TestLocker_Renewal(t *testing.T) {
 
 	defer locker.Release(ctx)
 
-	// 等待时长超过锁的自然过期时间；若后台续租未生效，锁早已过期、他人应能获取
-	// (memcached 按整秒记录过期时间，3s 的实际存活时长可能为2~3s)
+	// The wait exceeds the natural expiration of the lock; if the background renewal did not work,
+	// the lock would have expired long ago and another holder should be able to acquire it.
+	// (memcached records the expiration in whole seconds, so a 3s lifetime may actually be 2~3s.)
 	time.Sleep(4500 * time.Millisecond)
 
 	if err := other.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
@@ -144,13 +147,14 @@ func TestLocker_Expired_Release(t *testing.T) {
 
 	t.Cleanup(func() { _ = maker.Close() })
 
-	// 以固定过期时间获取锁，不开启后台续租
-	// (memcached 过期精度为秒，固定过期时间会被取整为1s)
+	// Acquire the lock with a fixed expiration and without background renewal.
+	// (memcached expiration has second granularity, so the fixed expiration is rounded to 1s.)
 	if err := locker.TryAcquire(ctx, time.Second); err != nil {
 		t.Fatal(err)
 	}
 
-	// 等待锁自然过期后再释放，应能感知锁已丢失
+	// Wait for the lock to expire naturally before releasing; the release should detect that the
+	// lock is lost.
 	time.Sleep(1600 * time.Millisecond)
 
 	if err := locker.Release(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
@@ -163,8 +167,10 @@ func TestMaker_Closed(t *testing.T) {
 
 	var (
 		ctx = context.Background()
-		// 外部客户端，生命周期不由 Maker 管理，用于验证 Close 后获取锁能快速失败
-		// (外部客户端在 Maker.Close 后仍可用，若未显式拦截将获取成功)
+		// An external client whose lifecycle is not managed by the Maker, used to verify that lock
+		// acquisition fails fast after Close.
+		// (The external client is still usable after Maker.Close, so the acquisition would succeed
+		// if it were not explicitly intercepted.)
 		client = gomemcache.New("127.0.0.1:11211")
 		maker  = memcache.NewMaker(memcache.WithClient(client))
 		locker = maker.Make("lockClosed")
@@ -176,7 +182,8 @@ func TestMaker_Closed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Close 后获取锁应快速失败，而非获取成功但后台续租因生命周期上下文取消而静默失效
+	// After Close, lock acquisition should fail fast rather than succeed with a background renewal
+	// that silently stops because the lifecycle context was canceled.
 	if err := locker.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
 		t.Fatalf("expect ErrIllegalOperation after maker closed, got: %v", err)
 	}

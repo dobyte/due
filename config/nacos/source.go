@@ -20,36 +20,36 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
-// Name 配置源名称
+// Name is the name of the config source.
 const Name = "nacos"
 
-// listenRequest 监听请求
-// 携带dataId及用于回传监听结果的通道
+// listenRequest is a listen request. It carries a dataId and the channel used to
+// report the listen result.
 type listenRequest struct {
-	dataId string     // 配置dataId
-	done   chan error // 监听结果回传通道
+	dataId string     // Config dataId
+	done   chan error // Channel reporting the listen result
 }
 
+// Source is a config source backed by Nacos.
 type Source struct {
-	err      error              // 构建客户端错误信息
-	opts     *options           // 配置项
-	ctx      context.Context    // 上下文
-	cancel   context.CancelFunc // 取消函数
-	builtin  bool               // 是否为内置客户端
-	version  uint64             // 当前搜索版本号
-	versions map[string]uint64  // 各dataId对应的搜索版本号
-	chListen chan listenRequest // 监听指令通道
-	chCancel chan string        // 取消监听指令通道
-	watchers sync.Map           // 监听器集合
-	once     sync.Once          // 保证关闭操作只执行一次
-	wg       sync.WaitGroup     // 协程退出等待组
+	err      error              // Error encountered while building the client
+	opts     *options           // Config options
+	ctx      context.Context    // Context
+	cancel   context.CancelFunc // Cancel function
+	builtin  bool               // Whether the client is built in
+	version  uint64             // Current search version
+	versions map[string]uint64  // Search version of each dataId
+	chListen chan listenRequest // Listen request channel
+	chCancel chan string        // Cancel-listen request channel
+	watchers sync.Map           // Watcher set
+	once     sync.Once          // Ensures the shutdown runs only once
+	wg       sync.WaitGroup     // Wait group for goroutine exit
 }
 
-// NewSource 创建配置源
-// 根据选项构建Nacos配置中心客户端，并启动配置监听与刷新协程；
-// 传入外部客户端时优先使用外部客户端，且该客户端由调用方负责关闭
-// @param opts ...Option 配置项
-// @return @1 config.Source 配置源
+// NewSource creates a config source. It builds a Nacos config center client from
+// the options and starts the config listen and refresh goroutines. When an
+// external client is supplied it takes precedence, and the caller is responsible
+// for closing it.
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -83,18 +83,15 @@ func NewSource(opts ...Option) config.Source {
 	return s
 }
 
-// Name 获取配置源名称
-// @return @1 string 配置源名称
+// Name returns the name of the config source.
 func (s *Source) Name() string {
 	return Name
 }
 
-// Load 加载配置项
-// 传入file参数时仅加载指定的配置项；未传入file参数时，分页查询群组下所有配置项并加载
-// @param ctx context.Context 上下文
-// @param file ...string 待加载的配置文件(dataId)
-// @return @1 []*config.Configuration 配置项列表
-// @return @2 error 错误信息
+// Load loads configuration items.
+//
+// When file is provided it loads only that item; otherwise it pages through and
+// loads every item under the group.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -174,12 +171,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 }
 
-// load 加载单个配置项
-// 通过dataId从Nacos服务端拉取配置内容，并转换为统一的配置结构
-// @param ctx context.Context 上下文
-// @param file string 配置文件(dataId)
-// @return @1 *config.Configuration 配置项
-// @return @2 error 错误信息
+// load loads a single configuration item. It fetches the content from the Nacos
+// server by dataId and converts it into the unified configuration structure.
 func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -198,12 +191,10 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	return configuration, nil
 }
 
-// Store 保存配置项
-// 仅支持write-only和read-write模式；发布成功后由服务端推送变更给已注册的监听器
-// @param ctx context.Context 上下文
-// @param file string 配置文件(dataId)
-// @param content []byte 配置内容
-// @return @1 error 错误信息
+// Store stores a configuration item.
+//
+// It supports only the write-only and read-write modes. After a successful
+// publish the server pushes the change to every registered watcher.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -238,11 +229,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return nil
 }
 
-// Watch 监听配置项
-// 创建新的监听器并注册到配置源中，配置变更时通过监听器通知
-// @param ctx context.Context 上下文
-// @return @1 config.Watcher 监听器
-// @return @2 error 错误信息
+// Watch watches configuration items. It creates a new watcher and registers it
+// with the config source; the watcher is notified when the configuration changes.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -254,19 +242,19 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return w, nil
 }
 
-// Close 关闭配置源
-// 取消上下文并关闭内置客户端，终止监听与刷新协程；保证关闭操作只执行一次
-// @return @1 error 错误信息
+// Close closes the config source. It cancels the context and closes the built-in
+// client, terminating the listen and refresh goroutines; Close performs the
+// shutdown only once.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
 	}
 
-	// 保证关闭操作只执行一次，避免重复关闭客户端导致panic
+	// Ensure the shutdown runs only once to avoid closing the client twice and panicking.
 	s.once.Do(func() {
 		s.cancel()
 
-		// 等待监听与刷新协程退出，避免并发关闭客户端
+		// Wait for the listen and refresh goroutines to exit so that the client is not closed concurrently.
 		s.wg.Wait()
 
 		if s.builtin {
@@ -277,8 +265,8 @@ func (s *Source) Close() error {
 	return nil
 }
 
-// listen 处理监听与取消监听指令
-// 消费search循环产生的dataId，分别执行配置监听注册与取消
+// listen handles listen and cancel-listen requests. It consumes the dataIds
+// produced by the search loop and registers or cancels config listening for each.
 func (s *Source) listen() {
 	if s.err != nil {
 		return
@@ -302,7 +290,7 @@ func (s *Source) listen() {
 				log.Warnf("%s %s listen failed: %v", s.opts.groupName, req.dataId, err)
 			}
 
-			// 非阻塞回传监听结果，避免请求方已退出时阻塞
+			// Report the listen result without blocking so that a requester that has already exited does not stall the loop.
 			select {
 			case req.done <- err:
 			default:
@@ -322,8 +310,8 @@ func (s *Source) listen() {
 	}
 }
 
-// refresh 定时刷新配置
-// 每隔3秒执行一次配置搜索，检测新增或删除的配置项
+// refresh refreshes the configuration periodically. It runs a config search every
+// 3 seconds to detect added or removed configuration items.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
@@ -344,8 +332,9 @@ func (s *Source) refresh() {
 	}
 }
 
-// search 搜索群组下的配置项
-// 分页查询配置列表，对新增的dataId发送监听指令，对已删除的dataId发送取消监听指令
+// search searches for configuration items under the group. It pages through the
+// config list, sends a listen request for each added dataId and a cancel request
+// for each removed dataId.
 func (s *Source) search() {
 	s.version++
 
@@ -367,14 +356,15 @@ func (s *Source) search() {
 		})
 		if err != nil {
 			log.Warnf("search config list failed: %v", err)
-			// 查询失败时直接返回，避免版本号已递增而配置未刷新，
-			// 导致下方取消循环误判所有配置均已失效而批量取消监听
+			// Return immediately when the query fails; otherwise the incremented version
+			// with an unrefreshed config list would make the cancel loop below treat every
+			// item as stale and cancel all listeners in bulk.
 			return
 		}
 
 		for _, item := range result.PageItems {
 			if _, ok := s.versions[item.DataId]; !ok {
-				// 监听失败时跳过版本标记，留待下次搜索重试
+				// Skip the version mark when listening fails so that the next search retries it.
 				if err := s.requestListen(item.DataId); err != nil {
 					continue
 				}
@@ -398,17 +388,15 @@ func (s *Source) search() {
 				return
 			}
 
-			// 取消监听后立即从版本表中移除，
-			// 避免重复发送取消指令，同时保证该配置被删除后重新创建时能够再次被监听
+			// Remove it from the version table right after cancelling so that no duplicate
+			// cancel request is sent and the item can be listened to again if it is recreated.
 			delete(s.versions, dataId)
 		}
 	}
 }
 
-// requestListen 请求监听配置
-// 向监听协程发送监听指令并等待监听结果返回
-// @param dataId string 配置dataId
-// @return @1 error 错误信息
+// requestListen requests config listening. It sends a listen request to the listen
+// goroutine and waits for the result.
 func (s *Source) requestListen(dataId string) error {
 	done := make(chan error, 1)
 	req := listenRequest{dataId: dataId, done: done}
@@ -427,10 +415,9 @@ func (s *Source) requestListen(dataId string) error {
 	}
 }
 
-// onChange 配置变更回调
-// Nacos服务端推送配置变更时触发，将变更后的配置通知给所有已注册的监听器
-// @param file string 配置文件(dataId)
-// @param content string 配置内容
+// onChange is the config change callback. It is triggered when the Nacos server
+// pushes a configuration change and notifies every registered watcher of the new
+// configuration.
 func (s *Source) onChange(_, _, file, content string) {
 	configuration := s.conv(file, content)
 
@@ -441,10 +428,9 @@ func (s *Source) onChange(_, _, file, content string) {
 	})
 }
 
-// buildClient 构建Nacos配置客户端
-// 解析服务器地址列表并构建Nacos配置中心客户端；地址支持可选的scheme，缺省时默认为http
-// @return @1 config_client.IConfigClient Nacos配置客户端
-// @return @2 error 错误信息
+// buildClient builds the Nacos config client. It parses the server address list
+// and builds a Nacos config center client; an address may carry an optional
+// scheme, defaulting to http.
 func (s *Source) buildClient() (config_client.IConfigClient, error) {
 	param := vo.NacosClientParam{
 		ServerConfigs: make([]constant.ServerConfig, 0, len(s.opts.urls)),
@@ -518,11 +504,9 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 	}
 }
 
-// parseFileType 转换配置类型
-// 将dataId的文件后缀转换为Nacos支持的配置类型，仅支持json、xml和yaml，
-// 其余格式统一转换为默认的text类型
-// @param file string 配置文件(dataId)
-// @return @1 string Nacos配置类型
+// parseFileType converts the configuration type. It maps the file extension of
+// the dataId to a Nacos config type supporting only json, xml and yaml; any other
+// format falls back to the default text type.
 func (s *Source) parseFileType(file string) string {
 	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(file), ".")) {
 	case "json":
@@ -536,11 +520,9 @@ func (s *Source) parseFileType(file string) string {
 	}
 }
 
-// conv 转换配置
-// 将dataId和内容转换为统一的配置结构，dataId的文件后缀作为配置格式
-// @param file string 配置文件(dataId)
-// @param content string 配置内容
-// @return @1 *config.Configuration 配置项
+// conv converts a configuration. It converts a dataId and its content into the
+// unified configuration structure, using the file extension of the dataId as the
+// config format.
 func (s *Source) conv(file, content string) *config.Configuration {
 	ext := filepath.Ext(file)
 

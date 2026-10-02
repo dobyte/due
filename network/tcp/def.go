@@ -7,17 +7,16 @@ import (
 	"github.com/pires/go-proxyproto"
 )
 
-// protocol 协议标识
+// protocol is the protocol identifier.
 const protocol = "tcp"
 
-// maxBatchWriteNum 单次批量写入的最大任务数
+// maxBatchWriteNum is the maximum number of tasks in a single batch write.
 const maxBatchWriteNum = 64
 
-// minWriteQueueSize 最小写入队列大小
+// minWriteQueueSize is the minimum write queue size.
 const minWriteQueueSize = 128
 
-// setNoDelay 设置Nagle算法
-// @param conn net.Conn TCP连接
+// setNoDelay enables the TCP_NODELAY option, which turns off the Nagle algorithm.
 func setNoDelay(conn net.Conn) {
 	switch ccc := conn.(type) {
 	case *proxyproto.Conn:

@@ -8,41 +8,43 @@ import (
 )
 
 type Server interface {
-	// Start 启动服务器
+	// Start starts the server.
 	Start() error
-	// Stop 停止服务器
+	// Stop stops the server.
 	Stop() error
-	// Addr 监听地址
+	// Addr returns the listening address.
 	Addr() string
-	// Scheme 协议
+	// Scheme returns the protocol scheme.
 	Scheme() string
-	// Endpoint 服务端口
+	// Endpoint returns the service endpoint.
 	Endpoint() *endpoint.Endpoint
-	// RegisterService 注册服务
+	// RegisterService registers a service.
 	RegisterService(desc, service any) error
 }
 
 type Client interface {
-	// Call 调用服务方法
+	// Call invokes a service method.
 	Call(ctx context.Context, service, method string, args any, reply any, opts ...any) error
-	// Client 获取内部客户端
+	// Client returns the underlying client.
 	Client() any
 }
 
 type Transporter interface {
-	// Name 获取传输器组件名
+	// Name returns the transporter component name.
 	Name() string
-	// NewServer 新建传输服务器
+	// NewServer creates a transport server.
 	NewServer() (Server, error)
-	// NewClient 新建传输务客户端
-	// target参数可分为三种模式:
-	// 服务直连模式: 	direct://127.0.0.1:8011
-	// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
-	// 服务发现模式: 	discovery://service_name
+	// NewClient creates a transport client.
+	//
+	// The target may take one of the following forms:
+	//
+	//	direct://127.0.0.1:8011                         direct connection by address
+	//	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070   direct connection by instance ID
+	//	discovery://service_name                        service discovery by service name
 	NewClient(target string) (Client, error)
-	// SetDefaultDiscovery 设置默认的服务发现组件
+	// SetDefaultDiscovery sets the default service discovery component.
 	SetDefaultDiscovery(discovery registry.Discovery)
-	// Close 关闭传输器，释放全部客户端连接与资源
+	// Close closes the transporter and releases all client connections and resources.
 	Close() error
 }
 

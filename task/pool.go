@@ -1,4 +1,7 @@
-// Package task 提供全局任务调度池与任务组，基于 ants 协程池实现并发控制、错误聚合与优雅降级
+// Package task provides a global task scheduling pool and a task group.
+//
+// It is built on the ants goroutine pool and supports concurrency control, error aggregation and
+// graceful degradation.
 package task
 
 import (
@@ -7,33 +10,31 @@ import (
 	"github.com/panjf2000/ants/v2"
 )
 
-// Pool 任务池接口
+// Pool is a task pool.
 type Pool interface {
-	// AddTask 添加任务
-	// @param task func() 待执行的任务
-	// @return @1 error 错误信息
+	// AddTask adds task to the pool and returns any error.
 	AddTask(task func()) error
-	// Release 释放任务池
+	// Release releases the task pool.
 	Release()
 }
 
-// globalPool 全局任务池
+// globalPool is the global task pool.
 var globalPool Pool
 
-// init 初始化全局任务池
+// init initializes the global task pool.
 func init() {
 	SetPool(NewPool())
 }
 
-// defaultPool 基于 ants 的默认任务池实现
+// defaultPool is the default task pool implementation based on ants.
 type defaultPool struct {
 	pool *ants.Pool
 }
 
-// NewPool 新建任务池
-// 根据配置创建 ants 协程池，支持设置池大小、非阻塞与禁用清理等特性
-// @param opts ...Option 可选配置项
-// @return @1 *defaultPool 任务池实例
+// NewPool returns a new task pool.
+//
+// It creates an ants goroutine pool from the configured options and supports features such as the
+// pool size, non-blocking mode and disabled purging.
 func NewPool(opts ...Option) *defaultPool {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -50,21 +51,17 @@ func NewPool(opts ...Option) *defaultPool {
 	return p
 }
 
-// AddTask 添加任务
-// @param task func() 待执行的任务
-// @return @1 error 错误信息
+// AddTask adds task to the pool and returns any error.
 func (p *defaultPool) AddTask(task func()) error {
 	return p.pool.Submit(task)
 }
 
-// Release 释放任务池
+// Release releases the task pool.
 func (p *defaultPool) Release() {
 	p.pool.Release()
 }
 
-// SetPool 设置全局任务池
-// 替换前会释放旧任务池
-// @param pool Pool 任务池
+// SetPool sets the global task pool, releasing the old pool first.
 func SetPool(pool Pool) {
 	if globalPool != nil {
 		globalPool.Release()
@@ -72,15 +69,14 @@ func SetPool(pool Pool) {
 	globalPool = pool
 }
 
-// GetPool 获取全局任务池
-// @return @1 Pool 任务池
+// GetPool returns the global task pool.
 func GetPool() Pool {
 	return globalPool
 }
 
-// AddTask 添加任务
+// AddTask adds task to the global task pool.
+//
 // Deprecated: As of due v2.6.0+, this function simply calls [Add].
-// @param task func() 待执行的任务
 func AddTask(task func()) {
 	if globalPool == nil {
 		xcall.Go(task)
@@ -94,9 +90,10 @@ func AddTask(task func()) {
 	}
 }
 
-// Add 执行任务
-// 任务优先提交至全局任务池，池满或不可用时降级为直接创建协程执行
-// @param task func() 待执行的任务
+// Add runs task.
+//
+// The task is submitted to the global task pool first; it degrades to running in a directly
+// created goroutine when the pool is full or unavailable.
 func Add(task func()) {
 	if globalPool == nil {
 		xcall.Go(task)
@@ -110,20 +107,18 @@ func Add(task func()) {
 	}
 }
 
-// Release 释放全局任务池
+// Release releases the global task pool.
 func Release() {
 	if globalPool != nil {
 		globalPool.Release()
 	}
 }
 
-// logger 任务池日志适配器，将 ants 日志桥接到 due 日志框架
+// logger is a task pool log adapter that bridges ants logs to the due log framework.
 type logger struct {
 }
 
-// Printf 记录格式化日志
-// @param format string 日志格式
-// @param args ...any 日志参数
+// Printf logs a formatted message.
 func (l *logger) Printf(format string, args ...any) {
 	log.Infof(format, args...)
 }

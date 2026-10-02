@@ -5,12 +5,12 @@ import (
 )
 
 const (
-	OK              uint16 = iota // 成功
-	NotFoundSession               // 未找到会话连接
-	InternalError                 // 内部错误
+	OK              uint16 = iota // Success
+	NotFoundSession               // Session connection not found
+	InternalError                 // Internal error
 )
 
-// ErrorToCode 错误转错误码
+// ErrorToCode converts an error to its error code.
 func ErrorToCode(err error) uint16 {
 	switch {
 	case err == nil:

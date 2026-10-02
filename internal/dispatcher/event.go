@@ -6,8 +6,8 @@ import (
 )
 
 type Event struct {
-	eps   map[string]*serviceEndpoint // 所有端点（包含work、busy、hang状态的实例）
-	event int                         // 事件ID
+	eps   map[string]*serviceEndpoint // All endpoints, including instances in the work, busy and hang states
+	event int                         // Event ID
 }
 
 func newEvent(event int) *Event {
@@ -17,12 +17,12 @@ func newEvent(event int) *Event {
 	}
 }
 
-// Event 获取事件
+// Event returns the event ID.
 func (e *Event) Event() int {
 	return e.event
 }
 
-// VisitEndpoints 迭代服务端口
+// VisitEndpoints iterates over the service endpoints, stopping early when fn returns false.
 func (e *Event) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint) bool) {
 	for insID, se := range e.eps {
 		if !fn(insID, se.endpoint) {
@@ -31,7 +31,7 @@ func (e *Event) VisitEndpoints(fn func(insID string, ep *endpoint.Endpoint) bool
 	}
 }
 
-// 添加服务端点
+// addServiceEndpoint adds a service endpoint unless the instance has been shut down.
 func (e *Event) addServiceEndpoint(se *serviceEndpoint) {
 	if se.state != cluster.Shut.String() {
 		e.eps[se.insID] = se

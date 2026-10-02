@@ -110,23 +110,23 @@ func TestTransformSecond(t *testing.T) {
 }
 
 func TestTransformCustomRule(t *testing.T) {
-	// 自定义规则真正生效
+	// A custom rule takes effect.
 	if got := xtime.Transform(time.Now().Add(-100*time.Second), []xtime.TransformRule{{Max: 0, PastTpl: "自定义"}}); got != "自定义" {
 		t.Errorf("Transform() = %q, want 自定义", got)
 	}
 
-	// 无 %d 占位符模板
+	// A template without a %d placeholder.
 	rule := []xtime.TransformRule{{Max: 60, PastTpl: "刚刚"}, {Max: 0, PastTpl: "%d秒前"}}
 	if got := xtime.Transform(time.Now().Add(-30*time.Second), rule); got != "刚刚" {
 		t.Errorf("Transform() = %q, want 刚刚", got)
 	}
 
-	// 空规则回退默认规则
+	// An empty rule set falls back to the default rules.
 	if got := xtime.Transform(time.Now().Add(-5*time.Minute), []xtime.TransformRule{}); got != "5分前" {
 		t.Errorf("Transform() = %q, want 5分前", got)
 	}
 
-	// 未来时间且自定义规则未设置 FutureTpl 时回退使用 PastTpl
+	// For a future time, fall back to PastTpl when the custom rule leaves FutureTpl unset.
 	if got := xtime.Transform(time.Now().Add(100*time.Second), []xtime.TransformRule{{Max: 0, PastTpl: "自定义"}}); got != "自定义" {
 		t.Errorf("Transform() = %q, want 自定义", got)
 	}

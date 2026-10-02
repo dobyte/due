@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/5/14 10:47 上午
- * @Desc: TODO
- */
-
 package proto
 
 import (
@@ -19,12 +12,12 @@ var DefaultCodec = &codec{}
 
 type codec struct{}
 
-// Name 编解码器名称
+// Name returns the codec name.
 func (codec) Name() string {
 	return Name
 }
 
-// Marshal 编码
+// Marshal encodes v.
 func (codec) Marshal(v any) ([]byte, error) {
 	msg, ok := v.(proto.Message)
 	if !ok {
@@ -34,7 +27,7 @@ func (codec) Marshal(v any) ([]byte, error) {
 	return proto.Marshal(msg)
 }
 
-// Unmarshal 解码
+// Unmarshal decodes data into v.
 func (codec) Unmarshal(data []byte, v any) error {
 	msg, ok := v.(proto.Message)
 	if !ok {
@@ -44,12 +37,12 @@ func (codec) Unmarshal(data []byte, v any) error {
 	return proto.Unmarshal(data, msg)
 }
 
-// Marshal 编码
+// Marshal encodes v using the default codec.
 func Marshal(v any) ([]byte, error) {
 	return DefaultCodec.Marshal(v)
 }
 
-// Unmarshal 解码
+// Unmarshal decodes data into v using the default codec.
 func Unmarshal(data []byte, v any) error {
 	return DefaultCodec.Unmarshal(data, v)
 }

@@ -13,8 +13,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xos"
 )
 
+// Name is the name of the file config source.
 const Name = "file"
 
+// Source is a file-based config source.
 type Source struct {
 	path string
 	mode config.Mode
@@ -22,16 +24,18 @@ type Source struct {
 
 var _ config.Source = &Source{}
 
+// NewSource returns a file-based config source rooted at path with the given mode.
 func NewSource(path string, mode config.Mode) *Source {
 	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode}
 }
 
-// Name 配置源名称
+// Name returns the name of the source.
 func (s *Source) Name() string {
 	return Name
 }
 
-// Load 加载配置
+// Load loads the configurations of the given files, or every file under the source path when file
+// is empty.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	path := s.path
 
@@ -69,7 +73,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	return []*config.Configuration{c}, nil
 }
 
-// Store 保存配置项
+// Store saves content as file under the source path.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.mode != config.WriteOnly && s.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
@@ -91,7 +95,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return xos.WriteFile(filepath.Join(s.path, file), content)
 }
 
-// 校验保存路径，拒绝绝对路径与包含 .. 的路径穿越
+// checkFilePath validates that file is a safe path under root; it rejects absolute paths and paths
+// containing "..".
 func checkFilePath(root, file string) error {
 	if file == "" {
 		return errors.New("invalid file path: empty")
@@ -125,16 +130,17 @@ func checkFilePath(root, file string) error {
 	return nil
 }
 
-// Watch 监听配置变化
+// Watch starts watching the source path and returns a [config.Watcher].
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	return newWatcher(ctx, s)
 }
 
+// Close closes the source.
 func (s *Source) Close() error {
 	return nil
 }
 
-// 加载文件配置
+// loadFile loads a single config file.
 func (s *Source) loadFile(path string) (*config.Configuration, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -169,7 +175,7 @@ func (s *Source) loadFile(path string) (*config.Configuration, error) {
 		return nil, err
 	}
 
-	// 单文件模式下相对路径为当前目录，使用文件名称作为路径
+	// In single-file mode the relative path is the current directory, so use the file name as the path.
 	fullPath := filepath.Join(s.path, rel)
 	if rel == "." {
 		rel = info.Name()
@@ -186,7 +192,7 @@ func (s *Source) loadFile(path string) (*config.Configuration, error) {
 	}, nil
 }
 
-// 加载目录配置
+// loadDir loads every config file under path.
 func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
 	err = filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

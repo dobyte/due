@@ -11,20 +11,20 @@ import (
 )
 
 type Options struct {
-	ID                  string            // 实例ID
-	Kind                cluster.Kind      // 实例类型
-	Codec               encoding.Codec    // 编解码器
-	Locator             locate.Locator    // 定位器
-	Registry            registry.Registry // 注册器
-	Encryptor           crypto.Encryptor  // 加密器
-	Dispatch            cluster.Dispatch  // 无状态路由消息分发策略
-	ConnNum             int               // 连接数
-	CallTimeout         time.Duration     // 调用超时时间
-	DialTimeout         time.Duration     // 拨号超时时间
-	DialRetryTimes      int               // 拨号重试次数
-	FaultRecoveryTime   time.Duration     // 故障恢复时间
-	CommandQueueSize    int32             // 命令队列大小
-	CommandWriteTimeout time.Duration     // 命令写入超时时间
-	WaitHandler         func() bool       // 等待处理
-	DoneHandler         func() bool       // 完成处理
+	ID                  string            // Instance ID
+	Kind                cluster.Kind      // Instance kind
+	Codec               encoding.Codec    // Codec
+	Locator             locate.Locator    // Locator
+	Registry            registry.Registry // Registry
+	Encryptor           crypto.Encryptor  // Encryptor
+	Dispatch            cluster.Dispatch  // Dispatch strategy for stateless routed messages
+	ConnNum             int               // Number of connections
+	CallTimeout         time.Duration     // Call timeout
+	DialTimeout         time.Duration     // Dial timeout
+	DialRetryTimes      int               // Number of dial retries
+	FaultRecoveryTime   time.Duration     // Fault recovery time
+	CommandQueueSize    int32             // Command queue size
+	CommandWriteTimeout time.Duration     // Command write timeout
+	WaitHandler         func() bool       // Wait handler
+	DoneHandler         func() bool       // Done handler
 }

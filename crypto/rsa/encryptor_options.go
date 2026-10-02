@@ -20,26 +20,27 @@ const (
 type EncryptorOption func(o *encryptorOptions)
 
 type encryptorOptions struct {
-	// hash算法。支持sha1、sha224、sha256、sha384、sha512
-	// 默认为sha256
+	// Hash algorithm. It supports sha1, sha224, sha256, sha384 and sha512.
+	// It defaults to sha256.
 	hash hash.Hash
 
-	// 填充规则。支持NORMAL和OAEP
-	// 默认为NORMAL
+	// Padding scheme. It supports NORMAL and OAEP.
+	// It defaults to NORMAL.
 	padding EncryptPadding
 
-	// 标签。加解密时必需一致
-	// 默认为空
+	// Label. It must stay the same between encryption and decryption.
+	// It is empty by default.
 	label []byte
 
-	// 加密数据块大小，单位字节。由于加密数据长度限制，需要对加密数据进行分块儿加密。
-	// 默认根据填充方式选择最大的长度进行切割
+	// Size of an encrypted data block in bytes. Because the length of the data that can be
+	// encrypted at once is limited, data is split into blocks before encryption.
+	// By default the largest block size allowed by the padding scheme is used.
 	blockSize int
 
-	// 公钥。可设置文件路径或公钥串
+	// Public key. It may be a file path or a PEM-encoded key string.
 	publicKey string
 
-	// 私钥。可设置文件路径或私钥串
+	// Private key. It may be a file path or a PEM-encoded key string.
 	privateKey string
 }
 
@@ -54,32 +55,32 @@ func defaultEncryptorOptions() *encryptorOptions {
 	}
 }
 
-// WithEncryptorHash 设置加密hash算法
+// WithEncryptorHash sets the hash algorithm used for encryption.
 func WithEncryptorHash(hash hash.Hash) EncryptorOption {
 	return func(o *encryptorOptions) { o.hash = hash }
 }
 
-// WithEncryptorPadding 设置加密填充规则
+// WithEncryptorPadding sets the padding scheme used for encryption.
 func WithEncryptorPadding(padding EncryptPadding) EncryptorOption {
 	return func(o *encryptorOptions) { o.padding = padding }
 }
 
-// WithEncryptorLabel 设置加密标签
+// WithEncryptorLabel sets the label used for encryption.
 func WithEncryptorLabel(label string) EncryptorOption {
 	return func(o *encryptorOptions) { o.label = xconv.StringToBytes(label) }
 }
 
-// WithEncryptorBlockSize 设置加密数据块大小
+// WithEncryptorBlockSize sets the size of an encrypted data block.
 func WithEncryptorBlockSize(blockSize int) EncryptorOption {
 	return func(o *encryptorOptions) { o.blockSize = blockSize }
 }
 
-// WithEncryptorPublicKey 设置加密公钥
+// WithEncryptorPublicKey sets the public key used for encryption.
 func WithEncryptorPublicKey(publicKey string) EncryptorOption {
 	return func(o *encryptorOptions) { o.publicKey = publicKey }
 }
 
-// WithEncryptorPrivateKey 设置解密私钥
+// WithEncryptorPrivateKey sets the private key used for decryption.
 func WithEncryptorPrivateKey(privateKey string) EncryptorOption {
 	return func(o *encryptorOptions) { o.privateKey = privateKey }
 }

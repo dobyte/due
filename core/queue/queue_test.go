@@ -9,10 +9,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// waitSignal 等待信号，超时则判定测试失败
-// @param t *testing.T 测试上下文
-// @param sig <-chan struct{} 待等待的信号通道
-// @param msg string 超时时的失败信息
+// waitSignal waits for sig and fails the test with msg when it does not arrive within a second.
 func waitSignal(t *testing.T, sig <-chan struct{}, msg string) {
 	t.Helper()
 
@@ -23,7 +20,7 @@ func waitSignal(t *testing.T, sig <-chan struct{}, msg string) {
 	}
 }
 
-// TestQueue_WriteAndRead 校验队列的写入、读取与数据处理确认
+// TestQueue_WriteAndRead verifies queue write, read and data acknowledgement.
 func TestQueue_WriteAndRead(t *testing.T) {
 	q := queue.NewQueue[int](4, 0)
 
@@ -57,7 +54,7 @@ func TestQueue_WriteAndRead(t *testing.T) {
 	waitSignal(t, sig, "wait did not return after the queue is closed")
 }
 
-// TestQueue_WriteWithExternalLock 校验复用调用方读写锁时的写入与关闭
+// TestQueue_WriteWithExternalLock verifies write and close when reusing the caller's read-write lock.
 func TestQueue_WriteWithExternalLock(t *testing.T) {
 	q := queue.NewQueue[int](2, 0, &sync.RWMutex{})
 
@@ -78,7 +75,7 @@ func TestQueue_WriteWithExternalLock(t *testing.T) {
 	q.Close()
 }
 
-// TestQueue_WriteTimeout 校验队列写满后非阻塞写入的超时行为
+// TestQueue_WriteTimeout verifies the timeout behavior of a non-blocking write when the queue is full.
 func TestQueue_WriteTimeout(t *testing.T) {
 	q := queue.NewQueue[int](1, 10*time.Millisecond)
 
@@ -93,7 +90,7 @@ func TestQueue_WriteTimeout(t *testing.T) {
 	q.Close()
 }
 
-// TestQueue_WriteBlock 校验阻塞写入不受超时限制，且会在消费方腾出空间后写入成功
+// TestQueue_WriteBlock verifies that a blocking write ignores the timeout and succeeds once the consumer frees space.
 func TestQueue_WriteBlock(t *testing.T) {
 	q := queue.NewQueue[int](1, 10*time.Millisecond)
 
@@ -133,7 +130,7 @@ func TestQueue_WriteBlock(t *testing.T) {
 	q.Close()
 }
 
-// TestQueue_Hang 校验消费到结束信号后队列挂起并释放等待
+// TestQueue_Hang verifies that the queue hangs and releases the wait after the end signal is consumed.
 func TestQueue_Hang(t *testing.T) {
 	q := queue.NewQueue[any](4, 0)
 
@@ -163,7 +160,7 @@ func TestQueue_Hang(t *testing.T) {
 	q.Close()
 }
 
-// TestQueue_Closed 校验队列关闭后的写入拦截、重复关闭与残留数据清理
+// TestQueue_Closed verifies write rejection, repeated close and residual data cleaning after the queue is closed.
 func TestQueue_Closed(t *testing.T) {
 	q := queue.NewQueue[int](2, 0)
 
@@ -187,7 +184,7 @@ func TestQueue_Closed(t *testing.T) {
 	}
 }
 
-// TestTasker_CommitAndHandle 校验任务的提交、处理与等待组释放
+// TestTasker_CommitAndHandle verifies task commit, handling and wait group release.
 func TestTasker_CommitAndHandle(t *testing.T) {
 	tk := queue.NewTasker(4, 0)
 
@@ -230,7 +227,7 @@ func TestTasker_CommitAndHandle(t *testing.T) {
 	tk.Close()
 }
 
-// TestTasker_Done 校验结束信号触发队列挂起并拦截后续任务提交
+// TestTasker_Done verifies that the end signal hangs the queue and rejects subsequent task commits.
 func TestTasker_Done(t *testing.T) {
 	tk := queue.NewTasker(4, 0)
 
@@ -255,7 +252,7 @@ func TestTasker_Done(t *testing.T) {
 	tk.Close()
 }
 
-// TestTasker_Clean 校验未完成的任务被清理后等待组同步释放
+// TestTasker_Clean verifies that the wait group is released after unfinished tasks are cleaned.
 func TestTasker_Clean(t *testing.T) {
 	tk := queue.NewTasker(4, 0)
 

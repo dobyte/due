@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/16 10:26 下午
- * @Desc: TODO
- */
-
 package etcd
 
 import (
@@ -29,35 +22,36 @@ const (
 )
 
 const (
-	// minRetryDelay 重试最小等待间隔
+	// minRetryDelay is the minimum retry delay.
 	minRetryDelay = 100 * time.Millisecond
 
-	// maxRetryDelay 重试最大等待间隔
+	// maxRetryDelay is the maximum retry delay.
 	maxRetryDelay = 10 * time.Second
 
-	// stableDuration 链路稳定判定时长：watch 流/保活流存活超过该时长，
-	// 才认为链路已恢复健康并重置重试间隔，防止流频繁短命断开时退避被反复重置而失效
+	// stableDuration is the link stability threshold: a watch or keepalive stream is considered
+	// healthy only after it has lived longer than this duration, at which point the retry delay is
+	// reset. This keeps the backoff from being reset repeatedly when streams frequently die early.
 	stableDuration = 30 * time.Second
 
-	// resyncInterval 周期全量对账间隔：watch 流长时间无任何响应时，
-	// 主动全量拉取对账并探测链路健康，避免静默断链后长期提供过期数据
+	// resyncInterval is the periodic full reconciliation interval. When a watch stream receives no
+	// response for a long time, a full pull is issued to reconcile and probe the link health, so
+	// that stale data is not served for long after a silent disconnect.
 	resyncInterval = 5 * time.Minute
 )
 
-// watcher 服务实例监听器
-// 通过容量为1的通道向调用方推送最新的服务实例列表，只保留最新数据
+// watcher watches service instances.
+//
+// It pushes the latest service instance list to the caller through a channel of capacity 1, so
+// that only the newest data is kept.
 type watcher struct {
-	idx     int64                            // 监听器序号
-	wm      *watcherMgr                      // 所属的监听管理器
-	state   atomic.Int32                     // 监听器状态
-	mu      sync.Mutex                       // 保护 chWatch 通道
-	chWatch chan []*registry.ServiceInstance // 服务实例列表通知通道
+	idx     int64                            // Watcher index
+	wm      *watcherMgr                      // Owning watch manager
+	state   atomic.Int32                     // Watcher state
+	mu      sync.Mutex                       // Guards chWatch
+	chWatch chan []*registry.ServiceInstance // Notification channel for the service instance list
 }
 
-// 构建服务实例监听器
-// @param wm *watcherMgr 所属的监听管理器
-// @param idx int64 监听器序号
-// @return @1 *watcher 服务实例监听器实例
+// newWatcher returns a new service instance watcher owned by wm with the given index.
 func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	w := &watcher{}
 	w.wm = wm
@@ -67,10 +61,11 @@ func newWatcher(wm *watcherMgr, idx int64) *watcher {
 	return w
 }
 
-// 通知监听器服务实例列表已更新
-// 采用"仅保留最新"语义：先丢弃通道中尚未被消费的旧数据再写入新数据；
-// 通道容量为1且写入前已排空，故写入永不阻塞，避免与 Stop 关闭通道形成竞态
-// @param services []*registry.ServiceInstance 最新的服务实例列表
+// notify tells the watcher that the service instance list has been updated.
+//
+// It keeps only the latest data: pending unconsumed data in the channel is discarded before the
+// new data is written. The channel has capacity 1 and is drained before writing, so the write
+// never blocks and cannot race with Stop closing the channel.
 func (w *watcher) notify(services []*registry.ServiceInstance) {
 	if w.state.Load() != stateRunning {
 		return
@@ -87,7 +82,7 @@ func (w *watcher) notify(services []*registry.ServiceInstance) {
 	w.chWatch <- services
 }
 
-// 清空所有旧数据
+// flush drains every stale item from the notification channel.
 func (w *watcher) flush() {
 	for {
 		select {
@@ -99,7 +94,7 @@ func (w *watcher) flush() {
 	}
 }
 
-// 获取最新的服务实例
+// latest returns the latest service instances.
 func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	var (
 		exist     bool
@@ -128,11 +123,11 @@ func (w *watcher) latest() ([]*registry.ServiceInstance, error) {
 	}
 }
 
-// Next 返回服务实例列表
-// 首次调用返回当前最新的服务实例快照（通道为空时回退管理器缓存）；
-// 后续调用阻塞等待，直至服务实例发生变更或监听被停止
-// @return @1 []*registry.ServiceInstance 服务实例列表
-// @return @2 error 监听停止时返回的错误
+// Next returns the service instance list.
+//
+// The first call returns the current snapshot of the service instances and falls back to the
+// manager cache when the channel is empty. Later calls block until the service instances change or
+// the watch is stopped.
 func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	if w.state.CompareAndSwap(stateInitial, stateRunning) {
 		return w.latest()
@@ -146,9 +141,10 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 	return services, nil
 }
 
-// Stop 停止监听
-// 关闭内部通知通道并回收所属管理器；幂等，重复调用返回非法操作错误
-// @return @1 error 重复停止时返回的错误
+// Stop stops watching.
+//
+// It closes the internal notification channel and recycles the owning manager. It is idempotent;
+// repeated calls return an illegal operation error.
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
 		return errors.ErrIllegalOperation
@@ -163,32 +159,32 @@ func (w *watcher) Stop() error {
 	return nil
 }
 
-// watcherMgr 服务监听管理器
-// 负责维护同一服务名下的 watch 流、本地服务实例缓存及派生监听器的生命周期
+// watcherMgr manages the watchers of one service.
+//
+// It maintains the watch stream, the local service instance cache and the lifecycle of the derived
+// watchers for a service name.
 type watcherMgr struct {
-	registry         *Registry                            // 服务注册中心
-	ctx              context.Context                      // 管理器上下文
-	cancel           context.CancelFunc                   // 管理器取消函数
-	serviceName      string                               // 服务名称
-	watcher          clientv3.Watcher                     // etcd watch 客户端
-	watchKey         string                               // 服务监听前缀键
-	watchChan        clientv3.WatchChan                   // watch 事件通道
-	idx              atomic.Int64                         // 监听器序号计数器
-	rw               sync.RWMutex                         // 保护 watchers/serviceInstances
-	watchers         map[int64]*watcher                   // 监听器注册表
-	wg               sync.WaitGroup                       // 等待 watch 事件协程退出
-	stopped          atomic.Bool                          // 是否已停止
-	health           atomic.Bool                          // watch 链路是否健康
-	serviceInstances map[string]*registry.ServiceInstance // 服务实例缓存
+	registry         *Registry                            // Service registry
+	ctx              context.Context                      // Manager context
+	cancel           context.CancelFunc                   // Manager cancel function
+	serviceName      string                               // Service name
+	watcher          clientv3.Watcher                     // etcd watch client
+	watchKey         string                               // Service watch prefix key
+	watchChan        clientv3.WatchChan                   // Watch event channel
+	idx              atomic.Int64                         // Watcher index counter
+	rw               sync.RWMutex                         // Guards watchers and serviceInstances
+	watchers         map[int64]*watcher                   // Watcher registry
+	wg               sync.WaitGroup                       // Waits for the watch event goroutine to exit
+	stopped          atomic.Bool                          // Whether the manager has stopped
+	health           atomic.Bool                          // Whether the watch link is healthy
+	serviceInstances map[string]*registry.ServiceInstance // Service instance cache
 }
 
-// 构建服务监听管理器
-// 从全量查询结果初始化本地缓存，并从其 revision+1 处建立 watch 流避免事件丢失；
-// 随后启动后台协程统一维护 watch 流的接收、周期对账与断线重建
-// @param r *Registry 服务注册中心
-// @param serviceName string 服务名称
-// @param res *clientv3.GetResponse 全量查询结果
-// @return @1 *watcherMgr 服务监听管理器实例
+// newWatcherMgr returns a new watch manager for serviceName.
+//
+// It initializes the local cache from the full query result and starts the watch stream from
+// revision+1 of that result so that no event is lost, then starts a background goroutine that
+// maintains event reception, periodic reconciliation and reconnection of the watch stream.
 func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = r
@@ -218,25 +214,29 @@ func newWatcherMgr(r *Registry, serviceName string, res *clientv3.GetResponse) *
 	return wm
 }
 
-// 初始化 初始化 watch 流事件协程
+// init initializes the watch stream event goroutine.
 func (wm *watcherMgr) init() {
 	wm.wg.Go(func() {
 		var (
 			ok bool
 
-			// 重连退避间隔（minRetryDelay ~ maxRetryDelay），由本协程统一维护：
-			// - watch 流稳定存活超过 stableDuration 后断开，视为瞬时抖动，重置退避快速恢复；
-			// - watch 流未稳定即断开（未收到响应或短命断开）或全量同步失败，
-			//   视为链路持续异常，指数退避防空转
+			// Reconnection backoff (minRetryDelay to maxRetryDelay), maintained by this goroutine:
+			// - A watch stream that lived longer than stableDuration before breaking is treated as
+			//   a transient hiccup, so the backoff is reset for a quick recovery.
+			// - A watch stream that broke before becoming stable (no response received or died
+			//   soon after being established) or a failed full sync is treated as a persistent
+			//   link failure, so exponential backoff avoids busy spinning.
 			delay = minRetryDelay
 		)
 
 		for {
 			if wm.watchLoop() {
-				// 本次 watch 流曾稳定运行，说明链路健康，重置退避间隔
+				// This watch stream once ran stably, which means the link is healthy; reset the
+				// backoff.
 				delay = minRetryDelay
 			} else if !wm.stopped.Load() {
-				// watch 流未稳定即断开（未收到响应或建立后短命断开），视为一次失败轮次
+				// The watch stream broke before becoming stable (no response received or died
+				// soon after being established), so count it as a failed round.
 				delay = min(delay*2, maxRetryDelay)
 			}
 
@@ -244,24 +244,25 @@ func (wm *watcherMgr) init() {
 				return
 			}
 
-			// watch 链路异常断开，标记为不健康并持续重连直至成功或 watcherMgr 停止
+			// The watch link broke abnormally; mark it unhealthy and keep reconnecting until it
+			// succeeds or the watcherMgr stops.
 			wm.health.Store(false)
 
-			// 重连 watch 流
+			// Reconnect the watch stream.
 			if ok, delay = wm.reconnect(delay); !ok {
 				return
 			}
 
-			// 重连成功，恢复健康状态
+			// Reconnection succeeded; restore the healthy state.
 			wm.health.Store(true)
 		}
 	})
 }
 
-// 创建新监听器
-// 从管理器派生一个监听器并注册；管理器已停止时返回错误
-// @return @1 registry.Watcher 服务实例监听器
-// @return @2 error 管理器已停止时返回的错误
+// fork creates a new watcher.
+//
+// It derives a watcher from the manager and registers it; it returns an error when the manager has
+// stopped.
 func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	wm.rw.Lock()
 	defer wm.rw.Unlock()
@@ -276,7 +277,7 @@ func (wm *watcherMgr) fork() (registry.Watcher, error) {
 	return w, nil
 }
 
-// 回收监听器
+// recycle recycles the watcher with the given index.
 func (wm *watcherMgr) recycle(idx int64) {
 	wm.rw.Lock()
 	delete(wm.watchers, idx)
@@ -298,8 +299,10 @@ func (wm *watcherMgr) recycle(idx int64) {
 	wm.wg.Wait()
 }
 
-// 从注册表中移除本管理器
-// 仅在注册表中仍指向本管理器时才移除，避免并发重建的新管理器被旧管理器的清理逻辑误删
+// removeFromRegistry removes this manager from the registry.
+//
+// It only removes the entry when the registry still points to this manager, so that the cleanup of
+// an old manager does not delete a concurrently rebuilt one.
 func (wm *watcherMgr) removeFromRegistry() {
 	reg := wm.registry
 
@@ -311,7 +314,7 @@ func (wm *watcherMgr) removeFromRegistry() {
 	}
 }
 
-// 停止监听
+// stop stops watching.
 func (wm *watcherMgr) stop() {
 	wm.rw.Lock()
 	if !wm.stopped.CompareAndSwap(false, true) {
@@ -332,12 +335,16 @@ func (wm *watcherMgr) stop() {
 	wm.wg.Wait()
 }
 
-// watch 事件循环
-// 除接收 watch 事件外，还按 resyncInterval 周期执行一次全量拉取对账：
-// - 对账成功：刷新本地缓存并广播，同时确认链路健康，继续监听；
-// - 对账失败：说明 watch 流可能已静默死亡（如半开连接未被及时感知），主动退出交由外层重建
-// @return 本次流是否"曾稳定运行"（收到过响应且存活时长 >= stableDuration）；
-// 用于外层循环决定是否重置重连退避间隔
+// watchLoop is the watch event loop.
+//
+// Besides receiving watch events, it performs a full pull reconciliation once per resyncInterval:
+//   - Reconciliation succeeds: the local cache is refreshed and broadcast, the link health is
+//     confirmed and watching continues.
+//   - Reconciliation fails: the watch stream may have died silently (for example a half-open
+//     connection was not detected in time), so the loop returns and lets the outer layer rebuild it.
+//
+// It reports whether this stream once ran stably (a response was received and it lived for at least
+// stableDuration); the outer loop uses it to decide whether to reset the reconnection backoff.
 func (wm *watcherMgr) watchLoop() bool {
 	var (
 		received bool
@@ -347,7 +354,7 @@ func (wm *watcherMgr) watchLoop() bool {
 
 	defer ticker.Stop()
 
-	// 判定本次流是否曾稳定运行
+	// Report whether this stream once ran stably.
 	stable := func() bool { return received && time.Since(start) >= stableDuration }
 
 	for {
@@ -374,7 +381,8 @@ func (wm *watcherMgr) watchLoop() bool {
 
 			received = true
 
-			// 先在锁外完成事件反序列化，缩短写锁持有时间，避免阻塞并发读操作
+			// Deserialize events outside the lock first to shorten the write-lock hold time and
+			// avoid blocking concurrent reads.
 			updates := make([]*registry.ServiceInstance, 0, len(res.Events))
 			deletes := make([]string, 0, len(res.Events))
 			for _, ev := range res.Events {
@@ -408,9 +416,8 @@ func (wm *watcherMgr) watchLoop() bool {
 	}
 }
 
-// 全量拉取服务数据并刷新本地缓存，成功后广播最新数据
-// @return @1 *clientv3.GetResponse etcd 全量拉取结果，失败时为 nil
-// @return @2 error 拉取失败原因（含上下文取消）
+// sync pulls the full service data and refreshes the local cache, then broadcasts the latest data
+// on success.
 func (wm *watcherMgr) sync() (*clientv3.GetResponse, error) {
 	tctx, tcancel := context.WithTimeout(wm.ctx, wm.registry.opts.timeout)
 	res, err := wm.registry.opts.client.Get(tctx, wm.watchKey, clientv3.WithPrefix())
@@ -430,19 +437,18 @@ func (wm *watcherMgr) sync() (*clientv3.GetResponse, error) {
 	}
 	wm.rw.Unlock()
 
-	// 同步成功后重播全量服务数据
+	// Replay the full service data after a successful sync.
 	wm.broadcast()
 
 	return res, nil
 }
 
-// 断线重连：全量拉取服务数据并重建 watch
-// 采用指数退避（minRetryDelay ~ maxRetryDelay 封顶）持续重试，不会因瞬时故障销毁 watcher；
-// 重连成功后重播全量服务数据，并从 Get 返回的 revision+1 处重建 watch 避免事件丢失；
-// 仅当 watcherMgr 已停止或上下文结束时返回 false
-// @param delay time.Duration 本次重试的等待间隔
-// @return @1 bool 是否重连成功
-// @return @2 time.Duration 后续重试应使用的等待间隔（全量同步连续失败时按指数增长，minRetryDelay ~ maxRetryDelay 封顶）
+// reconnect pulls the full service data and rebuilds the watch stream after a disconnect.
+//
+// It retries with exponential backoff capped at maxRetryDelay and does not destroy the watcher on a
+// transient failure. After a successful reconnection it replays the full service data and rebuilds
+// the watch from revision+1 of the Get response so that no event is lost. It returns false only
+// when the watcherMgr has stopped or the context is done.
 func (wm *watcherMgr) reconnect(delay time.Duration) (bool, time.Duration) {
 	for {
 		if wm.stopped.Load() {
@@ -465,7 +471,7 @@ func (wm *watcherMgr) reconnect(delay time.Duration) (bool, time.Duration) {
 			continue
 		}
 
-		// 从 Get 返回的 revision+1 开始重建 watch，避免事件丢失
+		// Rebuild the watch from revision+1 of the Get response so that no event is lost.
 		wm.watchChan = wm.watcher.Watch(
 			wm.ctx,
 			wm.watchKey,
@@ -477,7 +483,7 @@ func (wm *watcherMgr) reconnect(delay time.Duration) (bool, time.Duration) {
 	}
 }
 
-// 通知监听器服务实例更新
+// broadcast notifies the watchers of the service instance update.
 func (wm *watcherMgr) broadcast() {
 	wm.rw.RLock()
 	services := wm.loadServices()
@@ -489,7 +495,7 @@ func (wm *watcherMgr) broadcast() {
 	}
 }
 
-// 加载所有监听器
+// loadWatchers loads every watcher.
 func (wm *watcherMgr) loadWatchers() []*watcher {
 	watchers := make([]*watcher, 0, len(wm.watchers))
 
@@ -500,9 +506,10 @@ func (wm *watcherMgr) loadWatchers() []*watcher {
 	return watchers
 }
 
-// 加载所有服务实例
-// 对缓存的实例做深拷贝后返回，避免调用方修改污染缓存数据
-// @return @1 []*registry.ServiceInstance 服务实例列表
+// loadServices loads every service instance.
+//
+// It deep-copies the cached instances before returning them, so that caller modifications do not
+// pollute the cache.
 func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	services := make([]*registry.ServiceInstance, 0, len(wm.serviceInstances))
 
@@ -532,10 +539,9 @@ func (wm *watcherMgr) loadServices() []*registry.ServiceInstance {
 	return services
 }
 
-// 返回所有服务实例
-// 管理器已停止时返回错误
-// @return @1 []*registry.ServiceInstance 服务实例列表
-// @return @2 error 管理器已停止时返回的错误
+// services returns every service instance.
+//
+// It returns an error when the manager has stopped.
 func (wm *watcherMgr) services() ([]*registry.ServiceInstance, error) {
 	wm.rw.RLock()
 	defer wm.rw.RUnlock()

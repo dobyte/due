@@ -27,46 +27,46 @@ const (
 	defaultStaleDurationKey     = "etc.eventbus.kafka.staleDuration"
 )
 
-// Option 事件总线选项
+// Option configures the eventbus.
 type Option func(o *options)
 
-// options 事件总线配置
+// options holds the eventbus options.
 type options struct {
 	ctx context.Context
 
-	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:9092"}
+	// Client connection addresses.
+	// Built-in client configuration, defaults to []string{"127.0.0.1:9092"}.
 	addrs []string
 
-	// Kafka版本，默认为无版本
+	// Kafka version, defaults to no version.
 	version string
 
-	// 前缀
-	// key前缀，默认为due:eventbus
+	// Prefix.
+	// Key prefix, defaults to due:eventbus.
 	prefix string
 
-	// 客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// Client.
+	// External client configuration; when set, the external client is preferred. Defaults to nil.
 	client sarama.Client
 
-	// 自动创建topic
-	// 当为true时，若不存在该主题，会自动创建，默认为true
+	// Automatically create topic.
+	// When true, the topic is created automatically if it does not exist. Defaults to true.
 	autoCreateTopic bool
 
-	// 分区数量
-	// 自动创建topic时使用的分区数量，默认为1
+	// Number of partitions.
+	// Number of partitions used when creating a topic automatically. Defaults to 1.
 	partitions int32
 
-	// 复制因子
-	// 自动创建topic时使用的复制因子，默认为1
+	// Replication factor.
+	// Replication factor used when creating a topic automatically. Defaults to 1.
 	replicationFactor int16
 
-	// 过期时间
-	// 超过此时间的消息将被丢弃，默认为0表示不丢弃过期消息
+	// Stale duration.
+	// Messages older than this are dropped. Defaults to 0, which keeps stale messages.
 	staleDuration time.Duration
 }
 
-// defaultOptions 获取默认配置
+// defaultOptions returns the default options.
 func defaultOptions() *options {
 	return &options{
 		ctx:               context.Background(),
@@ -80,47 +80,47 @@ func defaultOptions() *options {
 	}
 }
 
-// WithContext 设置上下文
+// WithContext sets the context.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithAddrs 设置连接地址
+// WithAddrs sets the connection addresses.
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
-// WithPrefix 设置前缀
+// WithPrefix sets the prefix.
 func WithPrefix(prefix string) Option {
 	return func(o *options) { o.prefix = prefix }
 }
 
-// WithVersion 设置Kafka版本
+// WithVersion sets the Kafka version.
 func WithVersion(version string) Option {
 	return func(o *options) { o.version = version }
 }
 
-// WithClient 设置外部客户端
+// WithClient sets the external client.
 func WithClient(client sarama.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithAutoCreateTopic 设置自动创建topic
+// WithAutoCreateTopic sets whether to create topics automatically.
 func WithAutoCreateTopic(autoCreateTopic bool) Option {
 	return func(o *options) { o.autoCreateTopic = autoCreateTopic }
 }
 
-// WithStaleDuration 设置消息过期时间
+// WithStaleDuration sets the stale duration of messages.
 func WithStaleDuration(staleDuration time.Duration) Option {
 	return func(o *options) { o.staleDuration = staleDuration }
 }
 
-// WithPartitions 设置自动创建topic时的分区数量
+// WithPartitions sets the number of partitions used when creating a topic automatically.
 func WithPartitions(partitions int32) Option {
 	return func(o *options) { o.partitions = partitions }
 }
 
-// WithReplicationFactor 设置自动创建topic时的复制因子
+// WithReplicationFactor sets the replication factor used when creating a topic automatically.
 func WithReplicationFactor(replicationFactor int16) Option {
 	return func(o *options) { o.replicationFactor = replicationFactor }
 }

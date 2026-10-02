@@ -52,14 +52,14 @@ var (
 	}
 )
 
-// TransformRule 时间转换规则
+// TransformRule describes how a time difference is rendered into a human-readable string.
 type TransformRule struct {
-	Max       uint   // 时间上限（秒），0 表示无上限
-	PastTpl   string // 过去时间的显示模板
-	FutureTpl string // 未来时间的显示模板
+	Max       uint   // Upper time bound in seconds, 0 means no upper bound
+	PastTpl   string // Display template for a time in the past
+	FutureTpl string // Display template for a time in the future
 }
 
-// Time 标准时间类型别名
+// Time is an alias of [time.Time].
 type Time = time.Time
 
 func init() {
@@ -70,16 +70,14 @@ func init() {
 	}
 }
 
-// SetLocation 设置时间区域（线程安全）
-// @param loc *time.Location 待设置的时间区域
+// SetLocation sets the time zone. It is safe for concurrent use.
 func SetLocation(loc *time.Location) {
 	if loc != nil {
 		location.Store(loc)
 	}
 }
 
-// GetLocation 获取当前时间区域
-// @return @1 *time.Location 当前使用的时间区域
+// GetLocation returns the currently used time zone.
 func GetLocation() *time.Location {
 	if loc, ok := location.Load().(*time.Location); ok && loc != nil {
 		return loc
@@ -88,44 +86,33 @@ func GetLocation() *time.Location {
 	return time.Local
 }
 
-// Parse 解析日期时间字符串
-// 使用当前时区按指定布局解析日期时间
-// @param layout string 时间布局
-// @param value string 待解析的日期时间字符串
-// @return @1 Time 解析后的时间
-// @return @2 error 解析错误
+// Parse parses a date-time string with the given layout in the current time zone.
 func Parse(layout string, value string) (Time, error) {
 	return time.ParseInLocation(layout, value, GetLocation())
 }
 
-// Now 当前时间
-// @return @1 Time 当前时间（使用当前时区）
+// Now returns the current time in the current time zone.
 func Now() Time {
 	return time.Now().In(GetLocation())
 }
 
-// Today 今天
-// @return @1 Time 当前时间
+// Today returns the current time.
 func Today() Time {
 	return Now()
 }
 
-// Yesterday 昨天
-// @return @1 Time 昨天的当前时刻
+// Yesterday returns the same time of day yesterday.
 func Yesterday() Time {
 	return Day(-1)
 }
 
-// Tomorrow 明天
-// @return @1 Time 明天的当前时刻
+// Tomorrow returns the same time of day tomorrow.
 func Tomorrow() Time {
 	return Day(1)
 }
 
-// Transform 时间转换
-// @param t Time 目标时间
-// @param rule ...[]TransformRule 可选自定义转换规则
-// @return @1 string 转换后的时间描述
+// Transform renders t as a human-readable string relative to the current time. The optional rule
+// provides a custom set of [TransformRule] values in place of the default rules.
 func Transform(t Time, rule ...[]TransformRule) string {
 	var (
 		dur           = Now().Unix() - t.Unix()
@@ -163,10 +150,8 @@ func Transform(t Time, rule ...[]TransformRule) string {
 	return ""
 }
 
-// Unix 时间戳转标准时间
-// @param sec int64 秒级时间戳
-// @param nsec ...int64 可选，纳秒部分
-// @return @1 Time 转换后的标准时间
+// Unix returns the local time corresponding to the given Unix time in seconds. The optional nsec
+// is the nanosecond offset.
 func Unix(sec int64, nsec ...int64) Time {
 	if len(nsec) > 0 {
 		return time.Unix(sec, nsec[0]).In(GetLocation())
@@ -175,30 +160,23 @@ func Unix(sec int64, nsec ...int64) Time {
 	}
 }
 
-// UnixMilli 时间戳（毫秒）转标准时间
-// @param msec int64 毫秒级时间戳
-// @return @1 Time 转换后的标准时间
+// UnixMilli returns the local time corresponding to the given Unix time in milliseconds.
 func UnixMilli(msec int64) Time {
 	return time.Unix(msec/1e3, (msec%1e3)*1e6).In(GetLocation())
 }
 
-// UnixMicro 时间戳（微秒）转标准时间
-// @param usec int64 微秒级时间戳
-// @return @1 Time 转换后的标准时间
+// UnixMicro returns the local time corresponding to the given Unix time in microseconds.
 func UnixMicro(usec int64) Time {
 	return time.Unix(usec/1e6, (usec%1e6)*1e3).In(GetLocation())
 }
 
-// UnixNano 时间戳（纳秒）转标准时间
-// @param nsec int64 纳秒级时间戳
-// @return @1 Time 转换后的标准时间
+// UnixNano returns the local time corresponding to the given Unix time in nanoseconds.
 func UnixNano(nsec int64) Time {
 	return time.Unix(nsec/1e9, nsec%1e9).In(GetLocation())
 }
 
-// Day 获取某一天的当前时刻
-// @param offset ...int 偏移天数，例如：-1：前一天 0：当前 1：明天
-// @return @1 Time 偏移后的时间
+// Day returns the current time shifted by the given number of days. For example, -1 is the previous
+// day, 0 is the current day and 1 is the next day.
 func Day(offset ...int) Time {
 	now := Now()
 
@@ -209,27 +187,22 @@ func Day(offset ...int) Time {
 	return now
 }
 
-// DayHead 获取一天中的第一秒
-// @param offset ...int 偏移天数，例如：-1：前一天 0：当前 1：明天
-// @return @1 Time 当天第一秒
+// DayHead returns the first second of the day, shifted by offset days.
 func DayHead(offset ...int) Time {
 	date := Day(offset...)
 
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 }
 
-// DayTail 获取一天中的最后一秒
-// @param offset ...int 偏移天数，例如：-1：前一天 0：当前 1：明天
-// @return @1 Time 当天最后一秒
+// DayTail returns the last second of the day, shifted by offset days.
 func DayTail(offset ...int) Time {
 	date := Day(offset...)
 
 	return time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
 }
 
-// Week 获取一周中的当前时刻
-// @param offset ...int 偏移周数，例如：-1：上一周 0：本周 1：下一周
-// @return @1 Time 偏移后的时间
+// Week returns the current time shifted by the given number of weeks. For example, -1 is the
+// previous week, 0 is the current week and 1 is the next week.
 func Week(offset ...int) Time {
 	if len(offset) > 0 {
 		return Now().AddDate(0, 0, offset[0]*7)
@@ -238,9 +211,8 @@ func Week(offset ...int) Time {
 	}
 }
 
-// WeekHead 获取一周中的第一天的第一秒（以周一为一周第一天）
-// @param offset ...int 偏移周数，例如：-1：上一周 0：本周 1：下一周
-// @return @1 Time 目标周的周一第一秒
+// WeekHead returns the first second of the first day of the week, with Monday as the first day.
+// offset shifts the result by whole weeks.
 func WeekHead(offset ...int) Time {
 	var (
 		now        = Now()
@@ -260,9 +232,8 @@ func WeekHead(offset ...int) Time {
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 }
 
-// WeekTail 获取一周中的最后一天的最后一秒（以周日为一周最后一天）
-// @param offset ...int 偏移周数，例如：-1：上一周 0：本周 1：下一周
-// @return @1 Time 目标周的周日最后一秒
+// WeekTail returns the last second of the last day of the week, with Sunday as the last day. offset
+// shifts the result by whole weeks.
 func WeekTail(offset ...int) Time {
 	var (
 		now        = Now()
@@ -278,9 +249,8 @@ func WeekTail(offset ...int) Time {
 	return time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
 }
 
-// Month 获取某一月的当前时刻
-// @param offset ...int 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-// @return @1 Time 偏移后的时间
+// Month returns the current time shifted by the given number of months. For example, -1 is the
+// previous month, 0 is the current month and 1 is the next month.
 func Month(offset ...int) Time {
 	now := Now()
 
@@ -322,9 +292,7 @@ func Month(offset ...int) Time {
 	return time.Date(year, time.Month(month), day, now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), now.Location())
 }
 
-// MonthHead 获取一月中的第一天的第一秒
-// @param offset ...int 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-// @return @1 Time 目标月第一天第一秒
+// MonthHead returns the first second of the first day of the month, shifted by offset months.
 func MonthHead(offset ...int) Time {
 	now := Now()
 
@@ -348,9 +316,7 @@ func MonthHead(offset ...int) Time {
 	return time.Date(year, time.Month(month), 1, 0, 0, 0, 0, now.Location())
 }
 
-// MonthTail 获取一月中的最后一天的最后一秒
-// @param offset ...int 偏移月数，例如：-1：前一月 0：当前月 1：下一月
-// @return @1 Time 目标月最后一天最后一秒
+// MonthTail returns the last second of the last day of the month, shifted by offset months.
 func MonthTail(offset ...int) Time {
 	var (
 		now          = Now()
@@ -391,9 +357,7 @@ func MonthTail(offset ...int) Time {
 	return time.Date(year, time.Month(month), day, 23, 59, 59, 999999999, now.Location())
 }
 
-// IsLeapYear 是否是闰年
-// @param year int 年份
-// @return @1 bool 是否为闰年
+// IsLeapYear reports whether year is a leap year.
 func IsLeapYear(year int) bool {
 	return (year%4 == 0 && year%100 != 0) || year%400 == 0
 }

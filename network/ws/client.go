@@ -8,20 +8,18 @@ import (
 )
 
 type client struct {
-	opts              *clientOptions            // 配置
-	cid               atomic.Int64              // 连接ID
-	dialer            *websocket.Dialer         // 拨号器
-	connectHandler    network.ConnectHandler    // 连接打开hook函数
-	disconnectHandler network.DisconnectHandler // 连接关闭hook函数
-	heartbeatHandler  network.HeartbeatHandler  // 连接心跳hook函数
-	receiveHandler    network.ReceiveHandler    // 接收消息hook函数
+	opts              *clientOptions            // Options
+	cid               atomic.Int64              // Connection ID
+	dialer            *websocket.Dialer         // Dialer
+	connectHandler    network.ConnectHandler    // Handler invoked when a connection is opened
+	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
+	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
+	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
 }
 
 var _ network.Client = &client{}
 
-// NewClient 创建一个客户端
-// @param opts ...ClientOption 客户端配置项
-// @return @1 network.Client 客户端实例
+// NewClient returns a new client.
 func NewClient(opts ...ClientOption) network.Client {
 	o := defaultClientOptions()
 	for _, opt := range opts {
@@ -40,10 +38,9 @@ func NewClient(opts ...ClientOption) network.Client {
 	return c
 }
 
-// Dial 拨号连接
-// @param addr ...string 拨号地址
-// @return @1 network.Conn 连接对象
-// @return @2 error 错误信息
+// Dial dials a connection.
+//
+// When addr is empty the URL from the client options is used.
 func (c *client) Dial(addr ...string) (network.Conn, error) {
 	var url string
 
@@ -66,32 +63,27 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	return newClientConn(c, conn), nil
 }
 
-// Protocol 获取协议名称
-// @return @1 string 协议名称
+// Protocol returns the protocol name.
 func (c *client) Protocol() string {
 	return protocol
 }
 
-// OnConnect 监听连接打开
-// @param handler network.ConnectHandler 连接打开处理函数
+// OnConnect registers the handler invoked when a connection is opened.
 func (c *client) OnConnect(handler network.ConnectHandler) {
 	c.connectHandler = handler
 }
 
-// OnDisconnect 监听连接关闭
-// @param handler network.DisconnectHandler 连接关闭处理函数
+// OnDisconnect registers the handler invoked when a connection is closed.
 func (c *client) OnDisconnect(handler network.DisconnectHandler) {
 	c.disconnectHandler = handler
 }
 
-// OnHeartbeat 监听心跳
-// @param handler network.HeartbeatHandler 心跳处理函数
+// OnHeartbeat registers the handler invoked when a heartbeat is received.
 func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 	c.heartbeatHandler = handler
 }
 
-// OnReceive 监听接收到消息
-// @param handler network.ReceiveHandler 消息接收处理函数
+// OnReceive registers the handler invoked when a message is received.
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
 }

@@ -25,12 +25,12 @@ func NewEncryptor(opts ...EncryptorOption) *Encryptor {
 	return e
 }
 
-// Name 名称
+// Name returns the name of the encryptor.
 func (e *Encryptor) Name() string {
 	return Name
 }
 
-// Encrypt 加密
+// Encrypt encrypts data with the ECIES public key.
 func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 	if e.err != nil {
 		return nil, e.err
@@ -39,7 +39,7 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 	return ecies.Encrypt(rand.Reader, e.publicKey, data, e.opts.s1, e.opts.s2)
 }
 
-// Decrypt 解密
+// Decrypt decrypts ciphertext with the ECIES private key.
 func (e *Encryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 	if e.err != nil {
 		return nil, e.err

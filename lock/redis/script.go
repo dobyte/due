@@ -1,8 +1,9 @@
 package redis
 
-// 释放锁脚本
-// 仅当锁存在且版本标识与 ARGV[1] 匹配时删除锁；
-// 锁不存在或所有权已变更(版本标识不匹配)时返回0，使释放方能够感知锁已丢失，语义与 memcache 版一致
+// releaseScript releases a lock. It deletes the lock only when the lock exists and its version
+// identifier matches ARGV[1]. When the lock is missing or its ownership has changed (the version
+// identifier does not match), it returns 0 so that the releaser can detect the lost lock; this
+// matches the semantics of the memcache implementation.
 const releaseScript = `
 	local val = redis.call('GET', KEYS[1])
 
@@ -19,9 +20,10 @@ const releaseScript = `
 	return 1
 `
 
-// 续租锁脚本
-// 仅当锁存在且版本标识与 ARGV[1] 匹配时，将锁的过期时间刷新为 ARGV[2](毫秒)；
-// 锁不存在或所有权已变更(版本标识不匹配)时返回0，表示锁已丢失
+// renewalScript renews a lock. It refreshes the lock expiration to ARGV[2] milliseconds only when
+// the lock exists and its version identifier matches ARGV[1]. When the lock is missing or its
+// ownership has changed (the version identifier does not match), it returns 0, meaning the lock has
+// been lost.
 const renewalScript = `
 	local val = redis.call('GET', KEYS[1])
 

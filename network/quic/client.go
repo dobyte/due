@@ -25,10 +25,9 @@ type client struct {
 
 var _ network.Client = (*client)(nil)
 
-// NewClient 创建一个QUIC客户端
-// 须在拨号前注册各类hook函数
-// @param opts ...ClientOption 客户端配置项
-// @return @1 network.Client 客户端实例
+// NewClient returns a new QUIC client.
+//
+// Every hook must be registered before dialing.
 func NewClient(opts ...ClientOption) network.Client {
 	o := defaultClientOptions()
 	for _, opt := range opts {
@@ -43,12 +42,11 @@ func NewClient(opts ...ClientOption) network.Client {
 	return &client{opts: o}
 }
 
-// Dial 拨号连接
-// 建立一条双向流；拨号超时时间为0时不设置整体截止时间，QUIC传输层的握手超时仍然生效；
-// OnConnect 先于 OnReceive 触发，与 Dial 是否已返回无关
-// @param addr ...string 拨号地址
-// @return @1 network.Conn 连接对象
-// @return @2 error 错误信息
+// Dial dials the server and returns the resulting connection.
+//
+// It establishes a bidirectional stream. When the dial timeout is 0 no overall deadline is set, and
+// the handshake timeout of the QUIC transport layer still applies. The connect hook fires before
+// the receive hook, regardless of whether Dial has already returned.
 func (c *client) Dial(addr ...string) (network.Conn, error) {
 	if c.opts.tlsErr != nil {
 		return nil, c.opts.tlsErr
@@ -66,7 +64,7 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	config := transportConfig(c.opts.heartbeatInterval)
 	config.MaxIncomingStreams = -1
 	config.HandshakeIdleTimeout = c.opts.dialTimeout
-	// 保留主机名，以便 quic-go 推导 TLS ServerName
+	// Keep the host name so that quic-go can derive the TLS ServerName.
 	qc, err := quic.DialAddr(ctx, address, c.opts.tlsConfig, config)
 	if err != nil {
 		return nil, err
@@ -79,8 +77,8 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = stream.SetWriteDeadline(deadline)
 	}
-	// 仅打开流并不会向对端宣告QUIC流的存在；发送一次普通心跳后，
-	// 即使未开启周期心跳，服务器也能主动向客户端下发消息
+	// Merely opening a stream does not announce it to the peer. After one ordinary heartbeat is
+	// sent, the server can push messages to the client even when periodic heartbeats are disabled.
 	hb := packet.PackHeartbeat()
 	err = writeBuffer(stream, hb)
 	hb.Release()
@@ -92,28 +90,28 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 	return newClientConn(c, qc, stream), nil
 }
 
-// Protocol 获取协议名称
-// @return @1 string 协议名称
+// Protocol returns the protocol name.
 func (c *client) Protocol() string { return protocol }
 
-// OnConnect 监听连接打开
-// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
-// @param h network.ConnectHandler 连接打开处理函数
+// OnConnect registers h to be invoked when a connection is opened.
+//
+// It must be registered before Dial; registering it afterwards races with Dial.
 func (c *client) OnConnect(h network.ConnectHandler) { c.connectHandler = h }
 
-// OnDisconnect 监听连接关闭
-// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
-// @param h network.DisconnectHandler 连接关闭处理函数
+// OnDisconnect registers h to be invoked when a connection is closed.
+//
+// It must be registered before Dial; registering it afterwards races with Dial.
 func (c *client) OnDisconnect(h network.DisconnectHandler) { c.disconnectHandler = h }
 
-// OnReceive 监听接收到消息
-// 须在 Dial 之前注册，Dial 之后注册存在数据竞争；处理函数拥有每个接收缓冲的所有权
-// @param h network.ReceiveHandler 消息接收处理函数
+// OnReceive registers h to be invoked when a message is received.
+//
+// It must be registered before Dial; registering it afterwards races with Dial. The handler owns
+// every received buffer.
 func (c *client) OnReceive(h network.ReceiveHandler) { c.receiveHandler = h }
 
-// OnHeartbeat 监听心跳
-// 须在 Dial 之前注册，Dial 之后注册存在数据竞争
-// @param h network.HeartbeatHandler 心跳处理函数
+// OnHeartbeat registers h to be invoked on a connection heartbeat.
+//
+// It must be registered before Dial; registering it afterwards races with Dial.
 func (c *client) OnHeartbeat(h network.HeartbeatHandler) { c.heartbeatHandler = h }
 
 func makeClientTLSConfig(caFile, serverName string) (*tls.Config, error) {
@@ -138,8 +136,8 @@ func transportConfig(heartbeat time.Duration) *quic.Config {
 		config.MaxIdleTimeout = 3 * heartbeat
 		config.KeepAlivePeriod = heartbeat / 2
 	}
-	// 应用层心跳关闭时，保留 quic-go 默认空闲超时并发送传输层保活包，
-	// 使健康但空闲的会话得以存活
+	// When application-level heartbeats are disabled, keep the default quic-go idle timeout and
+	// send transport-level keepalive packets so that healthy but idle sessions stay alive.
 	if heartbeat == 0 {
 		config.KeepAlivePeriod = 10 * time.Second
 	}

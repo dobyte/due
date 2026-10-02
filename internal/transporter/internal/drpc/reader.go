@@ -19,9 +19,9 @@ func newReader(conn *net.TCPConn) *reader {
 	return &reader{reader: bufio.NewReaderSize(conn, 1<<16)}
 }
 
-// read 以buffer的形式读取消息
+// read reads a message into a buffer.
 func (r *reader) read() (bool, uint8, uint64, *buffer.Bytes, error) {
-	// 通过Peek零拷贝解析头部，避免每帧两次io.ReadFull调用
+	// Parse the header with a zero-copy Peek, avoiding two io.ReadFull calls per frame.
 	header, err := r.reader.Peek(def.SizeBytes + def.HeaderBytes)
 	if err != nil {
 		return false, 0, 0, nil, err

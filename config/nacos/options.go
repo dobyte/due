@@ -47,87 +47,72 @@ const (
 	defaultLogLevelKey    = "etc.config.nacos.logLevel"
 )
 
-// Option 配置项
+// Option is a config option.
 type Option func(o *options)
 
-// options 配置选项
+// options are the config options.
 type options struct {
-	// 上下文
-	// 默认context.Background
+	// Context, defaults to context.Background.
 	ctx context.Context
 
-	// 读写模式
-	// 支持read-only、write-only和read-write三种模式，默认为read-only模式
+	// Read-write mode; supports read-only, write-only and read-write modes,
+	// defaulting to read-only.
 	mode config.Mode
 
-	// 服务器地址 [scheme://]ip:port[/nacos]
-	// 默认为[]string{http://127.0.0.1:8848/nacos}
+	// Server addresses in the form [scheme://]ip:port[/nacos], defaulting to
+	// []string{"http://127.0.0.1:8848/nacos"}.
 	urls []string
 
-	// 外部客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// External client; when present it takes precedence, defaulting to nil.
 	client config_client.IConfigClient
 
-	// 集群名称
-	// 默认为DEFAULT
+	// Cluster name, defaulting to DEFAULT.
 	clusterName string
 
-	// 群组名称
-	// 默认为DEFAULT_GROUP
+	// Group name, defaulting to DEFAULT_GROUP.
 	groupName string
 
-	// 请求Nacos服务端超时时间
-	// 默认为3秒
+	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
 	timeout time.Duration
 
-	// ACM的命名空间Id
-	// 默认为空
+	// Namespace id of ACM, defaulting to empty.
 	namespaceId string
 
-	// 当使用ACM时，需要该配置. https://help.aliyun.com/document_detail/130146.html
-	// 默认为空
+	// Endpoint required when using ACM, see
+	// https://help.aliyun.com/document_detail/130146.html. Defaults to empty.
 	endpoint string
 
-	// ACM&KMS的regionId，用于配置中心的鉴权
-	// 默认为空
+	// regionId of ACM&KMS, used for config center authentication, defaulting to empty.
 	regionId string
 
-	// ACM&KMS的AccessKey，用于配置中心的鉴权
-	// 默认为空
+	// AccessKey of ACM&KMS, used for config center authentication, defaulting to empty.
 	accessKey string
 
-	// ACM&KMS的SecretKey，用于配置中心的鉴权
-	// 默认为空
+	// SecretKey of ACM&KMS, used for config center authentication, defaulting to empty.
 	secretKey string
 
-	// 是否开启kms，kms可以参考文档 https://help.aliyun.com/product/28933.html
-	// 同时DataId必须以"cipher-"作为前缀才会启动加解密逻辑
-	// 默认不开启
+	// Whether KMS is enabled, see https://help.aliyun.com/product/28933.html.
+	// The DataId must start with "cipher-" for the encryption and decryption
+	// logic to take effect. Defaults to disabled.
 	openKMS bool
 
-	// 缓存service信息的目录
-	// 默认为./run/nacos/config/cache
+	// Directory caching service information, defaulting to ./run/nacos/config/cache.
 	cacheDir string
 
-	// Nacos服务端的API鉴权Username
-	// 默认为空
+	// Username for Nacos server API authentication, defaulting to empty.
 	username string
 
-	// Nacos服务端的API鉴权Password
-	// 默认为空
+	// Password for Nacos server API authentication, defaulting to empty.
 	password string
 
-	// 日志存储路径
-	// 默认为./run/nacos/config/log
+	// Log storage path, defaulting to ./run/nacos/config/log.
 	logDir string
 
-	// 日志输出级别
-	// 默认为info
+	// Log output level, defaulting to info.
 	logLevel string
 }
 
-// defaultOptions 获取默认配置项
-// @return @1 *options 默认配置项
+// defaultOptions returns the default config options.
 func defaultOptions() *options {
 	return &options{
 		ctx:         context.Background(),
@@ -150,128 +135,92 @@ func defaultOptions() *options {
 	}
 }
 
-// WithContext 设置上下文
-// @param ctx context.Context 上下文
-// @return @1 Option 配置项
+// WithContext sets the context.
 func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithMode 设置读写模式
-// @param mode config.Mode 读写模式
-// @return @1 Option 配置项
+// WithMode sets the read-write mode.
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
 }
 
-// WithUrls 设置服务器地址
-// @param urls ...string 服务器地址列表
-// @return @1 Option 配置项
+// WithUrls sets the server addresses.
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
 }
 
-// WithClient 设置外部客户端
-// @param client config_client.IConfigClient 外部客户端
-// @return @1 Option 配置项
+// WithClient sets the external client.
 func WithClient(client config_client.IConfigClient) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithClusterName 设置集群名称
-// @param clusterName string 集群名称
-// @return @1 Option 配置项
+// WithClusterName sets the cluster name.
 func WithClusterName(clusterName string) Option {
 	return func(o *options) { o.clusterName = clusterName }
 }
 
-// WithGroupName 设置群组名称
-// @param groupName string 群组名称
-// @return @1 Option 配置项
+// WithGroupName sets the group name.
 func WithGroupName(groupName string) Option {
 	return func(o *options) { o.groupName = groupName }
 }
 
-// WithTimeout 设置请求Nacos服务端超时时间
-// @param timeout time.Duration 请求超时时间
-// @return @1 Option 配置项
+// WithTimeout sets the timeout for requests to the Nacos server.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithNamespaceId 设置ACM的命名空间Id
-// @param namespaceId string 命名空间Id
-// @return @1 Option 配置项
+// WithNamespaceId sets the namespace id of ACM.
 func WithNamespaceId(namespaceId string) Option {
 	return func(o *options) { o.namespaceId = namespaceId }
 }
 
-// WithEndpoint 设置ACM的服务端点
-// @param endpoint string 服务端点
-// @return @1 Option 配置项
+// WithEndpoint sets the endpoint of ACM.
 func WithEndpoint(endpoint string) Option {
 	return func(o *options) { o.endpoint = endpoint }
 }
 
-// WithRegionId 设置ACM&KMS的regionId
-// @param regionId string regionId
-// @return @1 Option 配置项
+// WithRegionId sets the regionId of ACM&KMS.
 func WithRegionId(regionId string) Option {
 	return func(o *options) { o.regionId = regionId }
 }
 
-// WithAccessKey 设置ACM&KMS的AccessKey
-// @param accessKey string AccessKey
-// @return @1 Option 配置项
+// WithAccessKey sets the AccessKey of ACM&KMS.
 func WithAccessKey(accessKey string) Option {
 	return func(o *options) { o.accessKey = accessKey }
 }
 
-// WithSecretKey 设置ACM&KMS的SecretKey
-// @param secretKey string SecretKey
-// @return @1 Option 配置项
+// WithSecretKey sets the SecretKey of ACM&KMS.
 func WithSecretKey(secretKey string) Option {
 	return func(o *options) { o.secretKey = secretKey }
 }
 
-// WithOpenKMS 设置是否开启KMS
-// @param openKMS bool 是否开启KMS
-// @return @1 Option 配置项
+// WithOpenKMS sets whether KMS is enabled.
 func WithOpenKMS(openKMS bool) Option {
 	return func(o *options) { o.openKMS = openKMS }
 }
 
-// WithCacheDir 设置service信息的缓存目录
-// @param cacheDir string 缓存目录
-// @return @1 Option 配置项
+// WithCacheDir sets the cache directory for service information.
 func WithCacheDir(cacheDir string) Option {
 	return func(o *options) { o.cacheDir = cacheDir }
 }
 
-// WithUsername 设置Nacos服务端的API鉴权Username
-// @param username string API鉴权用户名
-// @return @1 Option 配置项
+// WithUsername sets the username for Nacos server API authentication.
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
-// WithPassword 设置Nacos服务端的API鉴权Password
-// @param password string API鉴权密码
-// @return @1 Option 配置项
+// WithPassword sets the password for Nacos server API authentication.
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
-// WithLogDir 设置日志存储路径
-// @param logDir string 日志存储路径
-// @return @1 Option 配置项
+// WithLogDir sets the log storage path.
 func WithLogDir(logDir string) Option {
 	return func(o *options) { o.logDir = logDir }
 }
 
-// WithLogLevel 设置日志输出级别
-// @param logLevel string 日志输出级别
-// @return @1 Option 配置项
+// WithLogLevel sets the log output level.
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) { o.logLevel = logLevel }
 }

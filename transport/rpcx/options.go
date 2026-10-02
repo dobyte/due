@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	defaultServerAddr     = ":0"               // 默认服务器地址
-	defaultClientPoolSize = 10                 // 默认客户端连接池大小
-	defaultClientDispatch = cluster.RoundRobin // 默认客户端请求分发策略
-	defaultClientFailMode = cli.Failtry        // 默认客户端故障模式
+	defaultServerAddr     = ":0"               // Default server address
+	defaultClientPoolSize = 10                 // Default client connection pool size
+	defaultClientDispatch = cluster.RoundRobin // Default client request dispatch strategy
+	defaultClientFailMode = cli.Failtry        // Default client fail mode
 )
 
 const (
@@ -29,27 +29,26 @@ const (
 	defaultClientFailModeKey   = "etc.transport.rpcx.client.failMode"
 )
 
-// Dispatch 分发策略
+// Dispatch is the request dispatch strategy.
 type Dispatch = def.Dispatch
 
 const (
-	Random             = def.Random             // 随机
-	RoundRobin         = def.RoundRobin         // 轮询
-	WeightedRoundRobin = def.WeightedRoundRobin // 加权轮询
-	ConsistentHash     = def.ConsistentHash     // 一致性哈希分发
+	Random             = def.Random             // Random
+	RoundRobin         = def.RoundRobin         // Round-robin
+	WeightedRoundRobin = def.WeightedRoundRobin // Weighted round-robin
+	ConsistentHash     = def.ConsistentHash     // Consistent hash
 )
 
-// Option 传输器配置项
+// Option is a transporter option.
 type Option func(o *options)
 
-// options 传输器配置
+// options holds the transporter options.
 type options struct {
 	server server.Options
 	client client.Options
 }
 
-// defaultOptions 获取默认配置项，配置值优先从配置中心读取
-// @return @1 *options 默认配置项
+// defaultOptions returns the default options, reading values from the config center first.
 func defaultOptions() *options {
 	opts := &options{}
 	opts.server.Addr = etc.Get(defaultServerAddrKey, defaultServerAddr).String()
@@ -65,56 +64,42 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithServerAddr 设置服务器监听地址
-// @param addr string 服务器监听地址
-// @return @1 Option 配置项
+// WithServerAddr sets the server listening address.
 func WithServerAddr(addr string) Option {
 	return func(o *options) { o.server.Addr = addr }
 }
 
-// WithServerExpose 设置是否将内部通信地址暴露到公网
-// @param expose bool 是否暴露到公网
-// @return @1 Option 配置项
+// WithServerExpose sets whether to expose the internal communication address to the public network.
 func WithServerExpose(expose bool) Option {
 	return func(o *options) { o.server.Expose = expose }
 }
 
-// WithServerCredentials 设置服务器证书和秘钥
-// @param certFile string 证书文件路径
-// @param keyFile string 秘钥文件路径
-// @return @1 Option 配置项
+// WithServerCredentials sets the server certificate and key.
 func WithServerCredentials(certFile, keyFile string) Option {
 	return func(o *options) { o.server.CertFile, o.server.KeyFile = certFile, keyFile }
 }
 
-// WithClientPoolSize 设置客户端连接池大小
-// @param size int 连接池大小
-// @return @1 Option 配置项
+// WithClientPoolSize sets the client connection pool size.
 func WithClientPoolSize(size int) Option {
 	return func(o *options) { o.client.PoolSize = size }
 }
 
-// WithClientCredentials 设置客户端证书和校验域名
-// @param caFile string 证书文件路径
-// @param serverName string 服务器校验域名
-// @return @1 Option 配置项
+// WithClientCredentials sets the client certificate and the server name to verify.
 func WithClientCredentials(caFile string, serverName string) Option {
 	return func(o *options) { o.client.CAFile, o.client.ServerName = caFile, serverName }
 }
 
-// WithClientDiscovery 设置客户端服务发现组件
-// @param discovery registry.Discovery 服务发现组件
-// @return @1 Option 配置项
+// WithClientDiscovery sets the client service discovery component.
 func WithClientDiscovery(discovery registry.Discovery) Option {
 	return func(o *options) { o.client.Discovery = discovery }
 }
 
-// WithClientDispatch 设置客户端请求分发策略（负载均衡策略）
+// WithClientDispatch sets the client request dispatch (load balancing) strategy.
 func WithClientDispatch(dispatch Dispatch) Option {
 	return func(o *options) { o.client.Dispatch = dispatch }
 }
 
-// WithClientFailMode 设置客户端故障模式
+// WithClientFailMode sets the client fail mode.
 func WithClientFailMode(failMode cli.FailMode) Option {
 	return func(o *options) { o.client.FailMode = failMode }
 }

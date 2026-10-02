@@ -30,7 +30,7 @@ func TestLogger(t *testing.T) {
 	log.Error("welcome to due-framework")
 }
 
-// TestConsoleSyncerJSON 验证 console 同步器 JSON 输出合法且字段正确
+// TestConsoleSyncerJSON verifies that the console syncer emits valid JSON with the expected fields.
 func TestConsoleSyncerJSON(t *testing.T) {
 	entity := &log.Entity{
 		Time:    "2026/08/29 12:00:00.000000",
@@ -71,7 +71,7 @@ func TestConsoleSyncerJSON(t *testing.T) {
 	}
 }
 
-// TestConsoleSyncerText 验证 console 同步器文本输出包含级别、消息与调用位置
+// TestConsoleSyncerText verifies that the console syncer's text output contains the level, message and caller.
 func TestConsoleSyncerText(t *testing.T) {
 	entity := &log.Entity{
 		Time:    "2026/08/29 12:00:00.000000",
@@ -100,7 +100,7 @@ func TestConsoleSyncerText(t *testing.T) {
 	}
 }
 
-// TestConsoleSyncerTextNoColor 验证设置 NO_COLOR 后不输出 ANSI 颜色码
+// TestConsoleSyncerTextNoColor verifies that no ANSI color codes are emitted when NO_COLOR is set.
 func TestConsoleSyncerTextNoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
@@ -125,7 +125,7 @@ func TestConsoleSyncerTextNoColor(t *testing.T) {
 	}
 }
 
-// captureStdout 捕获 os.Stdout 输出
+// captureStdout captures the output written to os.Stdout.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

@@ -1,3 +1,5 @@
+// Package cluster defines the kinds, states, events, hooks and message arguments shared by the
+// gate, node and mesh components.
 package cluster
 
 import (
@@ -5,14 +7,15 @@ import (
 	"github.com/dobyte/due/v2/session"
 )
 
+// The kinds of a cluster instance.
 const (
-	Gate   Kind = iota + 1 // 网关服
-	Node                   // 节点服
-	Mesh                   // 微服务
-	Master                 // 管理服
+	Gate   Kind = iota + 1 // Gate is the gate server
+	Node                   // Node is the node server
+	Mesh                   // Mesh is the mesh service
+	Master                 // Master is the master server
 )
 
-// Kind 集群实例类型
+// Kind is the type of a cluster instance.
 type Kind int
 
 func (k Kind) String() string {
@@ -28,14 +31,15 @@ func (k Kind) String() string {
 	}
 }
 
+// The states of a cluster instance.
 const (
-	Shut State = iota // 关闭（节点已经关闭，无法正常访问该节点）
-	Work              // 工作（节点正常工作，可以分配更多玩家到该节点）
-	Busy              // 繁忙（节点资源紧张，不建议分配更多玩家到该节点上）
-	Hang              // 挂起（节点即将销毁，正处于资源回收中）
+	Shut State = iota // Shut means the node is shut down and cannot be accessed
+	Work              // Work means the node is healthy and more players may be assigned to it
+	Busy              // Busy means the node is low on resources and should not receive more players
+	Hang              // Hang means the node is about to be destroyed and is reclaiming resources
 )
 
-// State 集群实例状态
+// State is the state of a cluster instance.
 type State int
 
 func (s State) String() string {
@@ -51,13 +55,14 @@ func (s State) String() string {
 	}
 }
 
+// The events of a cluster instance.
 const (
-	Connect    Event = iota + 1 // 打开连接
-	Reconnect                   // 断线重连
-	Disconnect                  // 断开连接
+	Connect    Event = iota + 1 // Connect is emitted when a connection is opened
+	Reconnect                   // Reconnect is emitted when a connection reconnects after a break
+	Disconnect                  // Disconnect is emitted when a connection is closed
 )
 
-// Event 事件
+// Event is the event of a cluster instance.
 type Event int
 
 func (e Event) String() string {
@@ -73,14 +78,15 @@ func (e Event) String() string {
 	return ""
 }
 
+// The lifecycle hooks of a component.
 const (
-	Init    Hook = iota // 初始组件
-	Start               // 启动组件
-	Close               // 关闭组件
-	Destroy             // 销毁组件
+	Init    Hook = iota // Init initializes the component
+	Start               // Start starts the component
+	Close               // Close closes the component
+	Destroy             // Destroy destroys the component
 )
 
-// Hook 生命周期钩子
+// Hook is a lifecycle hook of a component.
 type Hook int
 
 func (h Hook) String() string {
@@ -96,94 +102,107 @@ func (h Hook) String() string {
 	}
 }
 
-// 无状态路由消息分发策略
+// Dispatch is the dispatch strategy of stateless route messages.
 type Dispatch = def.Dispatch
 
+// The dispatch strategies of stateless route messages.
 const (
-	Random             = def.Random             // 随机
-	RoundRobin         = def.RoundRobin         // 轮询
-	WeightedRoundRobin = def.WeightedRoundRobin // 加权轮询
+	Random             = def.Random             // Random dispatches messages randomly
+	RoundRobin         = def.RoundRobin         // RoundRobin dispatches messages in turn
+	WeightedRoundRobin = def.WeightedRoundRobin // WeightedRoundRobin dispatches messages in turn by weight
 )
 
+// GetIPArgs is the arguments of getting the client IP.
 type GetIPArgs struct {
-	GID    string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind   session.Kind // 会话类型，session.Conn 或 session.User
-	Target int64        // 会话目标，CID 或 UID
+	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
+	Target int64        // Target is the session target, either a CID or a UID
 }
 
+// Message is a cluster message.
 type Message struct {
-	Seq   int32 // 序列号
-	Route int32 // 路由ID
-	Data  any   // 消息数据，接收json、proto、[]byte
+	Seq   int32 // Seq is the sequence number
+	Route int32 // Route is the route ID
+	Data  any   // Data is the message payload, which accepts json, proto or []byte
 }
 
+// PushArgs is the arguments of pushing a message.
 type PushArgs struct {
-	GID        string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind       session.Kind // 会话类型，session.Conn 或 session.User
-	Target     int64        // 会话目标，CID 或 UID
-	Message    *Message     // 推送消息
-	Disconnect bool         // 是否在推送消息后优雅地断开连接
-	Ack        bool         // 是否需要响应推送结果
+	GID        string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
+	Target     int64        // Target is the session target, either a CID or a UID
+	Message    *Message     // Message is the message to push
+	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool         // Ack reports whether the push result should be acknowledged
 }
 
+// MulticastArgs is the arguments of multicasting a message.
 type MulticastArgs struct {
-	GID        string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind       session.Kind // 会话类型，session.Conn 或 session.User
-	Targets    []int64      // 会话目标，CID 或 UID
-	Message    *Message     // 组播消息
-	Disconnect bool         // 是否在推送消息后优雅地断开连接
-	Ack        bool         // 是否需要响应推送结果
+	GID        string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
+	Targets    []int64      // Targets are the session targets, either CIDs or UIDs
+	Message    *Message     // Message is the message to multicast
+	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool         // Ack reports whether the push result should be acknowledged
 }
 
+// BroadcastArgs is the arguments of broadcasting a message.
 type BroadcastArgs struct {
-	Kind       session.Kind // 会话类型，session.Conn 或 session.User
-	Message    *Message     // 消息
-	Disconnect bool         // 是否在推送消息后优雅地断开连接
-	Ack        bool         // 是否需要响应推送结果
+	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
+	Message    *Message     // Message is the message to broadcast
+	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool         // Ack reports whether the push result should be acknowledged
 }
 
+// SubscribeArgs is the arguments of subscribing to a channel.
 type SubscribeArgs struct {
-	GID     string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind    session.Kind // 会话类型，session.Conn 或 session.User
-	Targets []int64      // 会话目标，CID 或 UID
-	Channel string       // 频道
+	GID     string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind    session.Kind // Kind is the session kind, either session.Conn or session.User
+	Targets []int64      // Targets are the session targets, either CIDs or UIDs
+	Channel string       // Channel is the channel name
 }
 
+// UnsubscribeArgs is the arguments of unsubscribing from a channel.
 type UnsubscribeArgs struct {
-	GID     string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind    session.Kind // 会话类型，session.Conn 或 session.User
-	Targets []int64      // 会话目标，CID 或 UID
-	Channel string       // 频道
+	GID     string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind    session.Kind // Kind is the session kind, either session.Conn or session.User
+	Targets []int64      // Targets are the session targets, either CIDs or UIDs
+	Channel string       // Channel is the channel name
 }
 
+// PublishArgs is the arguments of publishing a message to a channel.
 type PublishArgs struct {
-	Channel    string   // 频道
-	Message    *Message // 消息
-	Disconnect bool     // 是否在推送消息后优雅地断开连接
-	Ack        bool     // 是否需要响应推送结果
+	Channel    string   // Channel is the channel name
+	Message    *Message // Message is the message to publish
+	Disconnect bool     // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool     // Ack reports whether the push result should be acknowledged
 }
 
+// TriggerArgs is the arguments of triggering an event.
 type TriggerArgs struct {
-	Event int   // 事件
-	CID   int64 // 连接ID
-	UID   int64 // 用户ID
+	Event int   // Event is the event type
+	CID   int64 // CID is the connection ID
+	UID   int64 // UID is the user ID
 }
 
+// IsOnlineArgs is the arguments of checking whether a session is online.
 type IsOnlineArgs struct {
-	GID    string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind   session.Kind // 会话类型，session.Conn 或 session.User
-	Target int64        // 会话目标，CID 或 UID
+	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
+	Target int64        // Target is the session target, either a CID or a UID
 }
 
+// DisconnectArgs is the arguments of disconnecting a session.
 type DisconnectArgs struct {
-	GID    string       // 网关ID，会话类型为用户时可忽略此参数
-	Kind   session.Kind // 会话类型，session.Conn 或 session.User
-	Target int64        // 会话目标，CID 或 UID
-	Force  bool         // 是否强制断开
+	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
+	Target int64        // Target is the session target, either a CID or a UID
+	Force  bool         // Force reports whether to force the disconnection
 }
 
+// DeliverArgs is the arguments of delivering a message.
 type DeliverArgs struct {
-	NID     string   // 接收节点。存在接收节点时，消息会直接投递给接收节点；不存在接收节点时，系统定位用户所在节点，然后投递。
-	UID     int64    // 用户ID
-	Message *Message // 消息
+	NID     string   // NID is the receiving node. When it is set, the message is delivered to that node directly; otherwise the system locates the node the user belongs to and delivers the message there
+	UID     int64    // UID is the user ID
+	Message *Message // Message is the message to deliver
 }

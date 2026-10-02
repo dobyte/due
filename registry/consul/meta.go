@@ -11,10 +11,10 @@ import (
 	"github.com/dobyte/due/v2/utils/xconv"
 )
 
-// metaValueSize 是 Consul Meta 单条 value 的最大长度限制
+// metaValueSize is the maximum length limit of a single Consul Meta value.
 const metaValueSize = 512
 
-// 服务实例元数据字段名
+// Service instance metadata field names.
 const (
 	metaFieldID           = "id"
 	metaFieldKind         = "kind"
@@ -28,15 +28,17 @@ const (
 	defaultMetadataPrefix = "_"
 )
 
-// 路由元数据标志位
+// Route metadata flag bits.
 const (
 	metaRouteInternal = 1 << iota
 	metaRouteStateful
 	metaRouteAuthorized
 )
 
-// 编码元数据路由
-// 路由列表以逗号分隔的字符串分块存储，避免 Consul Meta 单条 value 超长
+// marshalMetaRoutes encodes the route metadata.
+//
+// The route list is stored in chunks as comma-separated strings so that a single Consul Meta value
+// does not exceed its length limit.
 func marshalMetaRoutes(routes []registry.Route) map[string]string {
 	metas := make(map[string]string)
 
@@ -91,7 +93,7 @@ func marshalMetaRoutes(routes []registry.Route) map[string]string {
 	return metas
 }
 
-// 解码元数据路由
+// unmarshalMetaRoutes decodes the route metadata.
 func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 	routes := make([]registry.Route, 0)
 
@@ -107,12 +109,13 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 		indexes = append(indexes, xconv.Int(parts[1]))
 	}
 
-	// 按分块序号解码，保证多块时路由顺序稳定
+	// Decode by chunk index to keep the route order stable across multiple chunks.
 	sort.Ints(indexes)
 
 	for _, index := range indexes {
 		for _, item := range strings.Split(metas[fmt.Sprintf("%s-%d", metaFieldRoutes, index)], ",") {
-			// 从最后一个 "-" 处切分，兼容负数路由 ID（opts 恒为非负数，不会产生歧义）
+			// Split at the last "-" to support negative route IDs; opts is always non-negative, so
+			// there is no ambiguity.
 			idx := strings.LastIndex(item, "-")
 			if idx <= 0 {
 				continue
@@ -132,9 +135,10 @@ func unmarshalMetaRoutes(metas map[string]string) []registry.Route {
 	return routes
 }
 
-// marshalMetaList 编码元数据列表。
-// 由于 Consul Meta 单条 value 存在长度限制（metaValueSize），较大的列表需要分块存储，
-// 每块均为一个合法的 JSON 数组，meta key 形如 <field>-<index>。
+// marshalMetaList encodes a metadata list.
+//
+// Because a single Consul Meta value has a length limit ([metaValueSize]), large lists are stored
+// in chunks. Each chunk is a valid JSON array and its meta key has the form <field>-<index>.
 func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 	metas := make(map[string]string)
 
@@ -144,7 +148,7 @@ func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 
 	var (
 		chunk []T
-		size  int // 当前块 JSON 数组的精确字节长度
+		size  int // Exact byte length of the current chunk's JSON array
 	)
 
 	flush := func() {
@@ -166,7 +170,7 @@ func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 			return nil, err
 		}
 
-		// 单个元素即使独占一块也无法容纳时直接返回错误
+		// Return an error when a single element cannot fit even in a standalone chunk.
 		if len(data) > metaValueSize-2 {
 			return nil, errors.New("consul meta value size exceeded")
 		}
@@ -189,7 +193,8 @@ func marshalMetaList[T any](field string, list []T) (map[string]string, error) {
 	return metas, nil
 }
 
-// unmarshalMetaList 解码元数据列表，兼容旧版本未分块、直接以字段名作为 key 的存储格式。
+// unmarshalMetaList decodes a metadata list and stays compatible with the legacy storage format,
+// which was not chunked and used the field name directly as the key.
 func unmarshalMetaList[T any](field string, metas map[string]string) ([]T, error) {
 	list := make([]T, 0)
 
@@ -217,7 +222,7 @@ func unmarshalMetaList[T any](field string, metas map[string]string) ([]T, error
 		list = append(list, chunk...)
 	}
 
-	// 兼容旧版本未分块存储格式
+	// Stay compatible with the legacy, non-chunked storage format.
 	if v, ok := metas[field]; ok {
 		chunk := make([]T, 0)
 

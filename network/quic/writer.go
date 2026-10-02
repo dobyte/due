@@ -6,28 +6,29 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 )
 
-// bufferWriter 缓冲写入器
-// 复用visit回调，避免每个包都分配一次回调；仅供连接的写协程使用，无需加锁
+// bufferWriter is a buffered writer.
+//
+// It reuses the visit callback so that a callback is not allocated for every packet. It is used
+// only by the write goroutine of a connection and needs no locking.
 type bufferWriter struct {
 	writer io.Writer
 	err    error
 	visit  func([]byte) bool
 }
 
-// newBufferWriter 创建缓冲写入器
-// QUIC流仅暴露 Write([]byte) 方法，写入器在不打平复合缓冲的前提下将其冲刷到底层写入器
-// @param writer io.Writer 底层写入器
-// @return @1 *bufferWriter 缓冲写入器
+// newBufferWriter returns a new buffered writer.
+//
+// A QUIC stream only exposes the Write([]byte) method, so the writer flushes to the underlying
+// writer without flattening composite buffers.
 func newBufferWriter(writer io.Writer) *bufferWriter {
 	w := &bufferWriter{writer: writer}
 	w.visit = w.writePart
 	return w
 }
 
-// write 冲刷缓冲
-// 将 buf 的所有分片写入底层写入器
-// @param buf buffer.Buffer 消息缓冲
-// @return @1 error 错误信息
+// write flushes the buffer.
+//
+// It writes every fragment of buf to the underlying writer.
 func (w *bufferWriter) write(buf buffer.Buffer) error {
 	if buf.Nodes() == 1 {
 		return writeAll(w.writer, buf.Bytes())
@@ -42,11 +43,9 @@ func (w *bufferWriter) writePart(b []byte) bool {
 	return w.err == nil
 }
 
-// writeBuffer 写入缓冲
-// 在不打平复合缓冲的前提下写入数据，并透明处理短写
-// @param writer io.Writer 底层写入器
-// @param buf buffer.Buffer 消息缓冲
-// @return @1 error 错误信息
+// writeBuffer writes a buffer.
+//
+// It writes the data without flattening composite buffers and handles short writes transparently.
 func writeBuffer(writer io.Writer, buf buffer.Buffer) error {
 	if buf.Nodes() == 1 {
 		return writeAll(writer, buf.Bytes())

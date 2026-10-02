@@ -1,3 +1,7 @@
+// Package nacos provides a Nacos-backed implementation of service registry and discovery.
+//
+// It supports registering and deregistering service instances, watching the instance changes of a
+// service, and querying service instances.
 package nacos
 
 import (
@@ -19,7 +23,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// name 注册中心组件名称
+// name is the name of the registry component.
 const name = "nacos"
 
 const (
@@ -38,6 +42,7 @@ const (
 
 var _ registry.Registry = &Registry{}
 
+// Registry is a service registry and discovery component backed by Nacos.
 type Registry struct {
 	err      error
 	opts     *options
@@ -47,6 +52,7 @@ type Registry struct {
 	closed   atomic.Bool
 }
 
+// NewRegistry returns a new service registry and discovery component.
 func NewRegistry(opts ...Option) *Registry {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -111,12 +117,12 @@ func NewRegistry(opts ...Option) *Registry {
 	return r
 }
 
-// Name 服务注册发现组件名
+// Name returns the name of the service registry and discovery component.
 func (r *Registry) Name() string {
 	return name
 }
 
-// Register 注册服务实例
+// Register registers a service instance.
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -197,7 +203,7 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	return nil
 }
 
-// Deregister 解注册服务实例
+// Deregister deregisters a service instance.
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -235,7 +241,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
-// Watch 监听相同服务名的服务实例变化
+// Watch watches the instance changes of the service with the given name.
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -257,7 +263,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	return mgr.fork()
 }
 
-// 构建服务实例监听器
+// doBuildWatcherMgr returns the watch manager for serviceName.
 func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*watcherMgr, error) {
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
 		return mgr, nil
@@ -280,7 +286,8 @@ func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*wa
 
 		r.watchers.Store(serviceName, mgr)
 
-		// 防止 Close 与 Watch 并发时，Store 进一个已经关闭的监听管理器
+		// Store must not register an already closed watch manager when Close and Watch run
+		// concurrently.
 		if r.closed.Load() {
 			mgr.stop()
 			return nil, errors.ErrRegistryClosed
@@ -295,8 +302,10 @@ func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*wa
 	return v.(*watcherMgr), nil
 }
 
-// 加载服务监听管理器
-// 仅返回未停止的管理器，避免返回已停止但尚未从注册表移除的管理器
+// loadWatcherMgr loads the watch manager for serviceName.
+//
+// It only returns a manager that has not stopped, so that a stopped manager that has not yet been
+// removed from the registry is not returned.
 func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
@@ -307,7 +316,7 @@ func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	return nil
 }
 
-// Services 获取服务实例列表
+// Services returns the instances of the service with the given name.
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -328,7 +337,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	return r.services(ctx, serviceName)
 }
 
-// Close 关闭服务注册发现
+// Close closes service registry and discovery.
 func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
@@ -350,7 +359,7 @@ func (r *Registry) Close() error {
 	return nil
 }
 
-// services 获取服务实例列表
+// services returns the instances of the service with the given name.
 func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	instances, err := r.opts.client.SelectInstances(vo.SelectInstancesParam{
 		ServiceName: serviceName,

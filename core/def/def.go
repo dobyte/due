@@ -1,11 +1,11 @@
 package def
 
-// 无状态路由消息分发策略
+// Dispatch is the message dispatch strategy for stateless routing.
 type Dispatch string
 
 const (
-	Random             Dispatch = "random" // 随机
-	RoundRobin         Dispatch = "rr"     // 轮询
-	WeightedRoundRobin Dispatch = "wrr"    // 加权轮询
-	ConsistentHash     Dispatch = "ch"     // 一致性哈希分发
+	Random             Dispatch = "random" // Random dispatch
+	RoundRobin         Dispatch = "rr"     // Round-robin dispatch
+	WeightedRoundRobin Dispatch = "wrr"    // Weighted round-robin dispatch
+	ConsistentHash     Dispatch = "ch"     // Consistent-hash dispatch
 )

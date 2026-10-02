@@ -66,11 +66,11 @@ func TestStore(t *testing.T) {
 
 func TestFullChain(t *testing.T) {
 	ctx := context.Background()
-	// 使用唯一文件名，避免历史测试数据干扰
+	// Use a unique file name to avoid interference from historical test data.
 	file := fmt.Sprintf("config-%d.json", time.Now().UnixNano())
 	configName := strings.TrimSuffix(file, ".json")
 
-	// 1. 首次存储配置（创建并发布）
+	// 1. Store the configuration for the first time (create and publish).
 	err := config.Store(ctx, polaris.Name, file, map[string]any{
 		"timezone": "Local",
 		"pid":      "./run/gate.pid",
@@ -80,7 +80,7 @@ func TestFullChain(t *testing.T) {
 	}
 	t.Log("store ok")
 
-	// 2. 直接加载验证，同时完成对配置文件的订阅
+	// 2. Load it directly to verify, which also subscribes to the config file.
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		cs, err := config.Load(ctx, polaris.Name, file)
@@ -94,7 +94,7 @@ func TestFullChain(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// 3. 再次存储（更新并发布），触发服务端推送变更
+	// 3. Store it again (update and publish) to trigger a server push.
 	err = config.Store(ctx, polaris.Name, file, map[string]any{
 		"timezone": "UTC",
 		"pid":      "./run/gate.pid",
@@ -103,7 +103,7 @@ func TestFullChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 4. 等待变更通过监听链路传播并验证热更新
+	// 4. Wait for the change to propagate through the watch chain and verify the hot update.
 	deadline = time.Now().Add(30 * time.Second)
 	for {
 		if timezone := config.Get(configName + ".timezone").String(); timezone == "UTC" {

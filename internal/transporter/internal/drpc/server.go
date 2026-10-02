@@ -20,25 +20,23 @@ import (
 const scheme = "drpc"
 
 type Server struct {
-	opts       *ServerOptions     // 配置
-	listenAddr string             // 监听地址
-	exposeAddr string             // 暴露地址
-	endpoint   *endpoint.Endpoint // 暴露端点
-	mu         sync.Mutex         // 锁
-	ctx        context.Context    // 上下文
-	cancel     context.CancelFunc // 取消函数
-	listener   *net.TCPListener   // 监听器
-	handlers   [256]RouteHandler  // 路由处理器
-	conns      sync.Map           // 连接映射
-	ticker     *time.Ticker       // 心跳定时器
-	queues     sync.Map           // 已关闭队列
-	connSeq    atomic.Uint64      // 连接序号
-	workerWg   sync.WaitGroup     // 工作协程等待组
+	opts       *ServerOptions     // Options
+	listenAddr string             // Listen address
+	exposeAddr string             // Exposed address
+	endpoint   *endpoint.Endpoint // Exposed endpoint
+	mu         sync.Mutex         // Lock
+	ctx        context.Context    // Context
+	cancel     context.CancelFunc // Cancel function
+	listener   *net.TCPListener   // Listener
+	handlers   [256]RouteHandler  // Route handlers
+	conns      sync.Map           // Connection map
+	ticker     *time.Ticker       // Heartbeat ticker
+	queues     sync.Map           // Closed queues
+	connSeq    atomic.Uint64      // Connection sequence
+	workerWg   sync.WaitGroup     // Worker goroutine wait group
 }
 
-// NewServer 创建一个服务器
-// @param opts ...ServerOption 服务器配置项
-// @return @1 network.Server 服务器实例
+// NewServer creates a server with the given options.
 func NewServer(opts *ServerOptions) (*Server, error) {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(opts.Addr, opts.Expose)
 	if err != nil {
@@ -54,28 +52,27 @@ func NewServer(opts *ServerOptions) (*Server, error) {
 	return s, nil
 }
 
-// Scheme 协议
+// Scheme returns the protocol scheme.
 func (s *Server) Scheme() string {
 	return scheme
 }
 
-// ListenAddr 监听地址
+// ListenAddr returns the listen address.
 func (s *Server) ListenAddr() string {
 	return s.listenAddr
 }
 
-// ExposeAddr 暴露地址
+// ExposeAddr returns the exposed address.
 func (s *Server) ExposeAddr() string {
 	return s.exposeAddr
 }
 
-// Endpoint 暴露端点
+// Endpoint returns the exposed endpoint.
 func (s *Server) Endpoint() *endpoint.Endpoint {
 	return s.endpoint
 }
 
-// Start 启动服务器
-// @return @1 error 错误信息
+// Start starts the server.
 func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -90,8 +87,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop 关闭服务器
-// @return @1 error 错误信息
+// Stop stops the server.
 func (s *Server) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -113,7 +109,7 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// RegisterHandler 注册处理器
+// RegisterHandler registers a handler for the given route.
 func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,8 +127,10 @@ func (s *Server) RegisterHandler(route uint8, handler RouteHandler) {
 	s.handlers[route] = handler
 }
 
-// serve 等待连接
-// 循环接受TCP连接并分配到独立协程处理；对瞬时错误采用指数退避重试，服务器关闭时结束
+// serve accepts connections.
+//
+// It accepts TCP connections in a loop and handles each in its own goroutine. Transient errors are
+// retried with exponential backoff, and the loop ends when the server is closed.
 func (s *Server) serve(listener net.Listener) {
 	var delay time.Duration
 
@@ -165,7 +163,7 @@ func (s *Server) serve(listener net.Listener) {
 	_ = s.Stop()
 }
 
-// init 初始化服务器
+// init initializes the server.
 func (s *Server) init() error {
 	if s.listener != nil {
 		return errors.ErrServerStarted
@@ -186,7 +184,7 @@ func (s *Server) init() error {
 	return nil
 }
 
-// check 检查连接是否超时
+// check checks connections for heartbeat timeouts and cleans up expired queues.
 func (s *Server) check() {
 	for {
 		select {
@@ -197,7 +195,8 @@ func (s *Server) check() {
 				return
 			}
 
-			// 活性检查与过期队列清理均为周期性的轻量遍历，直接在check协程内联执行，免除任务池调度开销
+			// Liveness checks and expired queue cleanup are periodic lightweight traversals, so
+			// they run inline in the check goroutine to avoid task pool scheduling overhead.
 			s.conns.Range(func(_, cc any) bool {
 				cc.(*ServerConn).checkHeartbeat(&t)
 				return true
@@ -220,12 +219,7 @@ func (s *Server) check() {
 	}
 }
 
-// handleMessage 处理消息
-// @param conn 连接
-// @param route 路由
-// @param seq 序列号
-// @param buf 消息缓冲区
-// @return @1 error 错误信息
+// handleMessage dispatches a message to the handler registered for its route.
 func (s *Server) handleMessage(conn *ServerConn, rt uint8, seq uint64, buf *buffer.Bytes) error {
 	if handler := s.handlers[rt]; handler == nil {
 		buf.Release()
@@ -243,17 +237,17 @@ func (s *Server) handleMessage(conn *ServerConn, rt uint8, seq uint64, buf *buff
 	}
 }
 
-// 删除连接
+// deleteConn removes a connection.
 func (s *Server) deleteConn(conn *net.TCPConn) {
 	s.conns.Delete(conn)
 }
 
-// 分配连接
+// allocateConn stores a new server connection for conn.
 func (s *Server) allocateConn(conn *net.TCPConn) {
 	s.conns.Store(conn, newServerConn(s, conn))
 }
 
-// 关闭所有连接
+// closeAllConns force-closes all connections concurrently.
 func (s *Server) closeAllConns() {
 	wg, _ := taskpool.WithContext(context.Background())
 
@@ -265,7 +259,7 @@ func (s *Server) closeAllConns() {
 	wg.Wait()
 }
 
-// 清除所有已关闭队列
+// clearAllQueues drains and removes all cached closed queues.
 func (s *Server) clearAllQueues() {
 	wg, _ := taskpool.WithContext(context.Background())
 
@@ -287,7 +281,7 @@ func (s *Server) clearAllQueues() {
 	wg.Wait()
 }
 
-// 加载队列
+// doLoadQueue loads and removes the cached queue for key, reporting whether it is still valid.
 func (s *Server) doLoadQueue(key string) (*queue.Queue[buffer.Buffer], bool) {
 	if v, ok := s.queues.LoadAndDelete(key); ok {
 		q := v.(*closedQueue)
@@ -304,7 +298,7 @@ func (s *Server) doLoadQueue(key string) (*queue.Queue[buffer.Buffer], bool) {
 	return nil, false
 }
 
-// 缓存队列
+// doCacheQueue caches a closed queue under key for later replay, draining any previous queue.
 func (s *Server) doCacheQueue(key string, queue *queue.Queue[buffer.Buffer]) {
 	if v, ok := s.queues.Swap(key, &closedQueue{
 		queue: queue,

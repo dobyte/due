@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	defaultAddr = ":0" // 监听地址
+	defaultAddr = ":0" // Listen address
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 type Option func(o *options)
 
 type options struct {
-	addr string // 监听地址
+	addr string // Listen address
 }
 
 func defaultOptions() *options {
@@ -30,7 +30,7 @@ func defaultOptions() *options {
 	return opts
 }
 
-// WithAddr 设置连接地址
+// WithAddr sets the listen address.
 func WithAddr(addr string) Option {
 	return func(o *options) { o.addr = addr }
 }

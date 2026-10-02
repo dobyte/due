@@ -6,8 +6,10 @@ import (
 	"github.com/dobyte/due/v2/registry"
 )
 
-// 构建实例ID
-// 拼接 Name 与 ID，避免 ID 相同但服务名不同的实例相互覆盖
+// makeInsID builds the instance ID.
+//
+// It concatenates the instance name and ID so that instances with the same ID but different service
+// names do not overwrite each other.
 func makeInsID(ins *registry.ServiceInstance) string {
 	return fmt.Sprintf("%s-%s", ins.Name, ins.ID)
 }

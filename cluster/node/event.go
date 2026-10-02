@@ -13,70 +13,71 @@ import (
 	"github.com/dobyte/due/v2/transport"
 )
 
-// 事件上下文
+// event is an event context.
 type event struct {
-	node    *Node                 // 节点服务器
-	ctx     context.Context       // 上下文
-	gid     string                // 网关ID
-	cid     int64                 // 连接ID
-	uid     int64                 // 用户ID
-	event   cluster.Event         // 事件类型
-	version atomic.Int32          // 对象版本号
-	chain   *chains.Chain         // defer 调用链
-	actor   atomic.Pointer[Actor] // 当前Actor
+	node    *Node                 // Node server
+	ctx     context.Context       // Context
+	gid     string                // Gateway ID
+	cid     int64                 // Connection ID
+	uid     int64                 // User ID
+	event   cluster.Event         // Event type
+	version atomic.Int32          // Object version
+	chain   *chains.Chain         // Defer call chain
+	actor   atomic.Pointer[Actor] // Current actor
 }
 
-// GID 获取网关ID
+// GID returns the gateway ID.
 func (e *event) GID() string {
 	return e.gid
 }
 
-// NID 获取节点ID
+// NID returns the node ID.
 func (e *event) NID() string {
 	return ""
 }
 
-// CID 获取连接ID
+// CID returns the connection ID.
 func (e *event) CID() int64 {
 	return e.cid
 }
 
-// UID 获取用户ID
+// UID returns the user ID.
 func (e *event) UID() int64 {
 	return e.uid
 }
 
-// Seq 获取消息序列号
+// Seq returns the message sequence number.
 func (e *event) Seq() int32 {
 	return 0
 }
 
-// Route 获取消息路由号
+// Route returns the message route number.
 func (e *event) Route() int32 {
 	return 0
 }
 
-// Event 获取事件类型
+// Event returns the event type.
 func (e *event) Event() cluster.Event {
 	return e.event
 }
 
-// Kind 上下文消息类型
+// Kind returns the message kind.
 func (e *event) Kind() Kind {
 	return Event
 }
 
-// Parse 解析消息
+// Parse parses the message.
 func (e *event) Parse(v any) error {
 	return errors.NewError(errors.ErrIllegalOperation)
 }
 
-// Defer 添加defer延迟调用栈
-// 此方法功能与go defer一致，作用域也仅限于当前handler处理函数内，推荐使用Defer方法替代go defer使用
-// 区别在于使用Defer方法可以对调用栈进行取消操作
-// 同时，在调用Task和Next方法时会自动取消调用栈
-// 也可通过Cancel方法进行手动取消
-// bottom用于标识是否挂载到栈底部
+// Defer adds a deferred call to the call stack.
+//
+// This method behaves like the go defer statement and its scope is limited to the current handler
+// function, so it is recommended over go defer. The difference is that Defer allows the call stack
+// to be cancelled. The stack is cancelled automatically when Task or Next is called, and it can
+// also be cancelled manually with Cancel. The optional bottom controls whether fn is pushed to the
+// bottom of the stack.
 func (e *event) Defer(fn func(), bottom ...bool) {
 	if e.chain == nil {
 		e.chain = chains.NewChain()
@@ -89,19 +90,19 @@ func (e *event) Defer(fn func(), bottom ...bool) {
 	}
 }
 
-// Cancel 取消Defer调用栈
+// Cancel cancels the defer call stack.
 func (e *event) Cancel() {
 	e.releaseDefer()
 }
 
-// 执行defer调用栈
+// compareVersionExecDefer executes the defer call stack when the version matches.
 func (e *event) compareVersionExecDefer(version int32) {
 	if e.chain != nil && e.version.Load() == version {
 		e.chain.FireHead()
 	}
 }
 
-// Clone 克隆Context
+// Clone clones the context.
 func (e *event) Clone() Context {
 	c := e.node.evtPool.Get().(*event)
 	c.gid = e.gid
@@ -114,8 +115,9 @@ func (e *event) Clone() Context {
 	return c
 }
 
-// Task 投递任务
-// 调用此方法会自动取消Defer调用栈的所有执行函数
+// Task submits a task.
+//
+// It automatically cancels every function in the defer call stack.
 func (e *event) Task(fn func(ctx Context)) {
 	if !e.node.doAddWait() {
 		return
@@ -138,33 +140,34 @@ func (e *event) Task(fn func(ctx Context)) {
 	})
 }
 
-// Next 消息下放
-// 调用此方法会自动取消Defer调用栈的所有执行函数
+// Next dispatches the message down.
+//
+// It automatically cancels every function in the defer call stack.
 func (e *event) Next() error {
 	return e.node.scheduler.dispatch(e)
 }
 
-// Proxy 获取代理API
+// Proxy returns the node proxy.
 func (e *event) Proxy() *Proxy {
 	return e.node.proxy
 }
 
-// Context 获取上下文
+// Context returns the underlying standard context.
 func (e *event) Context() context.Context {
 	return e.ctx
 }
 
-// SetValue 为上下文设置值
+// SetValue sets a value on the context.
 func (e *event) SetValue(key, val any) {
 	e.ctx = context.WithValue(e.ctx, key, val)
 }
 
-// GetValue 获取上下文中的值
+// GetValue returns the value associated with key.
 func (e *event) GetValue(key any) any {
 	return e.ctx.Value(key)
 }
 
-// BindGate 绑定网关
+// BindGate binds the gateway.
 func (e *event) BindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -182,7 +185,7 @@ func (e *event) BindGate(uid ...int64) error {
 	}
 }
 
-// UnbindGate 解绑网关
+// UnbindGate unbinds the gateway.
 func (e *event) UnbindGate(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -194,7 +197,7 @@ func (e *event) UnbindGate(uid ...int64) error {
 	}
 }
 
-// BindNode 绑定节点
+// BindNode binds the node.
 func (e *event) BindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -206,7 +209,7 @@ func (e *event) BindNode(uid ...int64) error {
 	}
 }
 
-// UnbindNode 解绑节点
+// UnbindNode unbinds the node.
 func (e *event) UnbindNode(uid ...int64) error {
 	switch {
 	case len(uid) > 0:
@@ -218,7 +221,7 @@ func (e *event) UnbindNode(uid ...int64) error {
 	}
 }
 
-// Subscribe 订阅频道
+// Subscribe subscribes to a channel.
 func (e *event) Subscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return e.node.proxy.Subscribe(e.ctx, &cluster.SubscribeArgs{
@@ -240,7 +243,7 @@ func (e *event) Subscribe(channel string, uids ...int64) error {
 	}
 }
 
-// Unsubscribe 取消订阅
+// Unsubscribe unsubscribes from a channel.
 func (e *event) Unsubscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return e.node.proxy.Unsubscribe(e.ctx, &cluster.UnsubscribeArgs{
@@ -262,35 +265,35 @@ func (e *event) Unsubscribe(channel string, uids ...int64) error {
 	}
 }
 
-// BindActor 绑定Actor
+// BindActor binds an actor.
 func (e *event) BindActor(kind, id string) error {
 	return e.node.scheduler.bindActor(e.uid, kind, id)
 }
 
-// UnbindActor 解绑Actor
+// UnbindActor unbinds the actor.
 func (e *event) UnbindActor(kind string) {
 	e.node.scheduler.unbindActor(e.uid, kind)
 }
 
-// Spawn 衍生出一个新的Actor
+// Spawn derives a new actor.
 func (e *event) Spawn(creator Creator, opts ...ActorOption) (*Actor, error) {
 	return e.node.scheduler.spawn(creator, opts...)
 }
 
-// Kill 杀死存在的一个Actor
+// Kill kills an existing actor.
 func (e *event) Kill(kind, id string) bool {
 	return e.node.scheduler.kill(kind, id)
 }
 
-// Actor 获取Actor
+// Actor returns the actor with the given kind and ID.
 func (e *event) Actor(kind, id string) (*Actor, bool) {
 	return e.node.scheduler.load(kind, id)
 }
 
-// Invoke 调用函数（线程安全）
-// ctx在全局的处理器中，调用的就是proxy.Invoke
-// ctx在Actor的处理器中，调用的就是actor.Invoke
-// isBlock 表示是否阻塞调用，默认阻塞调用
+// Invoke calls a function in a thread-safe manner.
+//
+// Inside a global handler, it calls proxy.Invoke; inside an actor processor, it calls
+// actor.Invoke. isBlock controls whether the call is blocking; it is blocking by default.
 func (e *event) Invoke(fn func(), isBlock ...bool) error {
 	if actor := e.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)
@@ -299,9 +302,10 @@ func (e *event) Invoke(fn func(), isBlock ...bool) error {
 	}
 }
 
-// AfterFunc 延迟调用，与官方的time.AfterFunc用法一致
-// ctx在全局的处理器中，调用的就是proxy.AfterFunc
-// ctx在Actor的处理器中，调用的就是actor.AfterFunc
+// AfterFunc schedules f to run after d, matching the semantics of [time.AfterFunc].
+//
+// Inside a global handler, it calls proxy.AfterFunc; inside an actor processor, it calls
+// actor.AfterFunc.
 func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	if actor := e.actor.Load(); actor != nil {
 		return actor.AfterFunc(d, f)
@@ -310,9 +314,10 @@ func (e *event) AfterFunc(d time.Duration, f func()) (*Timer, error) {
 	}
 }
 
-// AfterInvoke 延迟调用（线程安全）
-// ctx在全局的处理器中，调用的就是proxy.AfterInvoke
-// ctx在Actor的处理器中，调用的就是actor.AfterInvoke
+// AfterInvoke schedules f to run after d in a thread-safe manner.
+//
+// Inside a global handler, it calls proxy.AfterInvoke; inside an actor processor, it calls
+// actor.AfterInvoke.
 func (e *event) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	if actor := e.actor.Load(); actor != nil {
 		return actor.AfterInvoke(d, f)
@@ -321,7 +326,7 @@ func (e *event) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	}
 }
 
-// GetIP 获取客户端IP
+// GetIP returns the client IP.
 func (e *event) GetIP() (string, error) {
 	if e.gid == "" {
 		return "", errors.ErrIllegalOperation
@@ -334,12 +339,12 @@ func (e *event) GetIP() (string, error) {
 	})
 }
 
-// Deliver 投递消息给节点处理
+// Deliver delivers a message to a node for processing.
 func (e *event) Deliver(args *cluster.DeliverArgs) error {
 	return e.node.proxy.Deliver(e.ctx, args)
 }
 
-// Reply 回复消息
+// Reply replies with a message.
 func (e *event) Reply(message *cluster.Message) error {
 	if e.uid != 0 {
 		return e.node.proxy.Push(e.ctx, &cluster.PushArgs{
@@ -358,12 +363,12 @@ func (e *event) Reply(message *cluster.Message) error {
 	}
 }
 
-// Response 响应消息
+// Response responds to the current route message.
 func (e *event) Response(message any) error {
 	return errors.NewError(errors.ErrIllegalOperation)
 }
 
-// Disconnect 关闭来自网关的连接
+// Disconnect closes the connection from the gateway.
 func (e *event) Disconnect(force ...bool) error {
 	return e.node.proxy.Disconnect(e.ctx, &cluster.DisconnectArgs{
 		GID:    e.gid,
@@ -373,69 +378,70 @@ func (e *event) Disconnect(force ...bool) error {
 	})
 }
 
-// NewMeshClient 新建微服务客户端
-// target参数可分为三种模式:
-// 服务直连模式: 	direct://127.0.0.1:8011
-// 服务直连模式: 	direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
-// 服务发现模式: 	discovery://service_name
+// NewMeshClient creates a new mesh service client.
+//
+// The target can be given in three forms:
+//   - direct connection: direct://127.0.0.1:8011
+//   - direct connection: direct://711baf8d-8a06-11ef-b7df-f4f19e1f0070
+//   - service discovery: discovery://service_name
 func (e *event) NewMeshClient(target string) (transport.Client, error) {
 	return e.node.proxy.NewMeshClient(target)
 }
 
-// 保存当前Actor
+// storeActor stores the current actor.
 func (e *event) storeActor(actor *Actor) {
 	e.actor.Store(actor)
 }
 
-// 删除当前Actor
+// deleteActor deletes the current actor.
 func (e *event) deleteActor() {
 	e.actor.Store(nil)
 }
 
-// 增长版本号
+// incrVersion increments the version.
 func (e *event) incrVersion() int32 {
 	return e.version.Add(1)
 }
 
-// 减少版本号
+// decrVersion decrements the version.
 func (e *event) decrVersion() int32 {
 	return e.version.Add(-1)
 }
 
-// 获取版本号
+// loadVersion returns the current version.
 func (e *event) loadVersion() int32 {
 	return e.version.Load()
 }
 
-// 取消Defer调用栈
+// cancelDefer cancels the defer call stack.
 func (e *event) cancelDefer() {
 	if e.chain != nil {
 		e.chain.Cancel()
 	}
 }
 
-// 恢复Defer调用栈
+// recoverDefer recovers the defer call stack.
 func (e *event) recoverDefer() {
 	if e.chain != nil {
 		e.chain.Recover()
 	}
 }
 
-// 释放Defer调用栈
+// releaseDefer releases the defer call stack.
 func (e *event) releaseDefer() {
 	if e.chain != nil {
 		e.chain.Release()
 	}
 }
 
-// 比对版本号后进行回收对象
+// compareVersionRecycle recycles the object when the version matches.
 func (e *event) compareVersionRecycle(version int32) {
 	if e.version.CompareAndSwap(version, 0) {
 		e.release()
 	}
 }
 
-// 释放事件对象
+// release releases the event object.
 func (e *event) release() {
 	e.ctx = context.Background()
 	e.gid = ""

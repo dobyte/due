@@ -1,10 +1,3 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/13 12:32 上午
- * @Desc: TODO
- */
-
 package etcd
 
 import (
@@ -32,38 +25,38 @@ const (
 	defaultLeaseTTLKey    = "etc.registry.etcd.leaseTTL"
 )
 
-// Option 服务注册发现配置项
+// Option is a service registry and discovery option.
 type Option func(o *options)
 
 type options struct {
-	// 客户端连接地址
-	// 内建客户端配置，默认为[]string{"127.0.0.1:2379"}
+	// Client addresses.
+	// Used by the built-in client and defaults to []string{"127.0.0.1:2379"}.
 	addrs []string
 
-	// 客户端拨号超时时间
-	// 内建客户端配置，默认为5秒
+	// Client dial timeout.
+	// Used by the built-in client and defaults to 5 seconds.
 	dialTimeout time.Duration
 
-	// 外部客户端
-	// 外部客户端配置，存在外部客户端时，优先使用外部客户端，默认为nil
+	// External client.
+	// When an external client is provided it takes precedence over the built-in client and defaults to nil.
 	client *clientv3.Client
 
-	// 命名空间
-	// 默认为services
+	// Namespace.
+	// Defaults to services.
 	namespace string
 
-	// 上下文超时时间
-	// 默认为3秒
+	// Context timeout.
+	// Defaults to 3 seconds.
 	timeout time.Duration
 
-	// 用户名
+	// Username.
 	username string
 
-	// 密码
+	// Password.
 	password string
 
-	// Lease存活时间
-	// 默认为15秒
+	// Lease TTL.
+	// Defaults to 15 seconds.
 	leaseTTL time.Duration
 }
 
@@ -79,58 +72,42 @@ func defaultOptions() *options {
 	}
 }
 
-// WithAddrs 设置客户端连接地址
-// @param addrs ...string 客户端连接地址
-// @return @1 Option 服务注册发现配置项
+// WithAddrs sets the client addresses.
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
 }
 
-// WithDialTimeout 设置客户端拨号超时时间
-// @param dialTimeout time.Duration 客户端拨号超时时间
-// @return @1 Option 服务注册发现配置项
+// WithDialTimeout sets the client dial timeout.
 func WithDialTimeout(dialTimeout time.Duration) Option {
 	return func(o *options) { o.dialTimeout = dialTimeout }
 }
 
-// WithClient 设置外部客户端
-// @param client *clientv3.Client 外部客户端
-// @return @1 Option 服务注册发现配置项
+// WithClient sets the external client.
 func WithClient(client *clientv3.Client) Option {
 	return func(o *options) { o.client = client }
 }
 
-// WithNamespace 设置命名空间
-// @param namespace string 命名空间
-// @return @1 Option 服务注册发现配置项
+// WithNamespace sets the namespace.
 func WithNamespace(namespace string) Option {
 	return func(o *options) { o.namespace = namespace }
 }
 
-// WithTimeout 设置上下文超时时间
-// @param timeout time.Duration 上下文超时时间
-// @return @1 Option 服务注册发现配置项
+// WithTimeout sets the context timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
 
-// WithUsername 设置用户名
-// @param username string 用户名
-// @return @1 Option 服务注册发现配置项
+// WithUsername sets the username.
 func WithUsername(username string) Option {
 	return func(o *options) { o.username = username }
 }
 
-// WithPassword 设置密码
-// @param password string 密码
-// @return @1 Option 服务注册发现配置项
+// WithPassword sets the password.
 func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
-// WithLeaseTTL 设置Lease存活时间
-// @param leaseTTL time.Duration Lease存活时间
-// @return @1 Option 服务注册发现配置项
+// WithLeaseTTL sets the lease TTL.
 func WithLeaseTTL(leaseTTL time.Duration) Option {
 	return func(o *options) { o.leaseTTL = leaseTTL }
 }

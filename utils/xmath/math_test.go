@@ -79,7 +79,7 @@ func TestRound(t *testing.T) {
 	}
 }
 
-// almostEqual 判断两个浮点数是否在可接受的误差范围内相等
+// almostEqual reports whether two floats are equal within an acceptable error range.
 func almostEqual(got, want float64) bool {
 	return math.Abs(got-want) < 1e-9
 }

@@ -17,17 +17,17 @@ const (
 type SignerOption func(o *signerOptions)
 
 type signerOptions struct {
-	// hash算法。支持sha1、sha224、sha256、sha384、sha512
-	// 默认为sha256
+	// Hash algorithm. It supports sha1, sha224, sha256, sha384 and sha512.
+	// It defaults to sha256.
 	hash hash.Hash
 
-	// 签名分隔符。
+	// Signature delimiter.
 	delimiter string
 
-	// 公钥。可设置文件路径或公钥串
+	// Public key. It may be a file path or a PEM-encoded key string.
 	publicKey string
 
-	// 私钥。可设置文件路径或私钥串
+	// Private key. It may be a file path or a PEM-encoded key string.
 	privateKey string
 }
 
@@ -40,22 +40,22 @@ func defaultSignerOptions() *signerOptions {
 	}
 }
 
-// WithSignerHash 设置签名hash算法
+// WithSignerHash sets the hash algorithm used for signing.
 func WithSignerHash(hash hash.Hash) SignerOption {
 	return func(o *signerOptions) { o.hash = hash }
 }
 
-// WithSignerDelimiter 设置签名分割符
+// WithSignerDelimiter sets the delimiter that separates the two parts of a signature.
 func WithSignerDelimiter(delimiter string) SignerOption {
 	return func(o *signerOptions) { o.delimiter = delimiter }
 }
 
-// WithSignerPublicKey 设置验签公钥
+// WithSignerPublicKey sets the public key used for verification.
 func WithSignerPublicKey(publicKey string) SignerOption {
 	return func(o *signerOptions) { o.publicKey = publicKey }
 }
 
-// WithSignerPrivateKey 设置签名私钥
+// WithSignerPrivateKey sets the private key used for signing.
 func WithSignerPrivateKey(privateKey string) SignerOption {
 	return func(o *signerOptions) { o.privateKey = privateKey }
 }

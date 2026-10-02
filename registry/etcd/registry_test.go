@@ -1,10 +1,6 @@
-/**
- * @Author: fuxiao
- * @Email: 576101059@qq.com
- * @Date: 2022/9/15 5:37 下午
- * @Desc: 手工验证脚本，需要本地 etcd 服务，运行方式：go test -tags=etcd ./...
- */
-
+// Package etcd_test contains manual verification scripts that require a local etcd service.
+//
+// Run the tests with: go test -tags=etcd ./...
 package etcd_test
 
 import (
@@ -21,15 +17,16 @@ import (
 )
 
 const (
-	port        = 3553   // 服务端口
-	serviceName = "node" // 测试服务名
+	port        = 3553   // Service port
+	serviceName = "node" // Test service name
 )
 
-// 共享的服务注册中心实例
+// Shared service registry instance.
 var reg = etcd.NewRegistry()
 
-// 周期性地重复注册同一服务实例，交替切换 Work/Busy 状态，
-// 用于验证重复注册与状态刷新的正确性（手工脚本，需中断运行）
+// TestRegistry_Register1 repeatedly registers the same service instance and toggles its state
+// between Work and Busy, verifying repeated registration and state refreshing. It is a manual
+// script that must be interrupted to stop.
 func TestRegistry_Register1(t *testing.T) {
 	host, err := net.PublicIP()
 	if err != nil {
@@ -205,7 +202,8 @@ func TestRegistry_WatchStopAndCleanup(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 }
 
-// 验证不同服务名的监听彼此独立，互不影响
+// TestRegistry_MultipleServiceWatch verifies that watchers of different services are independent
+// of each other.
 func TestRegistry_MultipleServiceWatch(t *testing.T) {
 	ctx := context.Background()
 
@@ -332,7 +330,8 @@ func TestRegistry_ConcurrentRegister(t *testing.T) {
 	t.Log("concurrent deregister done")
 }
 
-// 验证监听器在服务实例注册后能及时收到更新事件
+// TestRegistry_WatchAfterAllStop verifies that a watcher receives an update promptly after a
+// service instance is registered.
 func TestRegistry_WatchAfterAllStop(t *testing.T) {
 	host, err := net.PublicIP()
 	if err != nil {

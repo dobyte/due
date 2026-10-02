@@ -10,11 +10,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// Int64 将任意值转换为 int64
-// 支持所有基础数值类型、bool、time.Time、[]byte（按大端序解析为64位整数，长度不超过8）及
-// 通过反射处理的字符串等类型；无法转换时返回 0
-// @param val any 待转换的值
-// @return @1 int64 转换后的 int64
+// Int64 converts val to an int64.
+//
+// It supports all basic numeric types, bool, time.Time, []byte (parsed as a big-endian 64-bit
+// integer and at most 8 bytes long) and types handled through reflection such as strings; it
+// returns 0 when the conversion fails.
 func Int64(val any) int64 {
 	if val == nil {
 		return 0
@@ -180,9 +180,7 @@ func Int64(val any) int64 {
 	}
 }
 
-// Int64s 将任意值转换为 int64 切片
-// @param val any 待转换的值
-// @return @1 []int64 转换后的 int64 切片
+// Int64s converts val to an int64 slice.
 func Int64s(val any) (slice []int64) {
 	if val == nil {
 		return
@@ -431,17 +429,13 @@ func Int64s(val any) (slice []int64) {
 	return
 }
 
-// Int64Pointer 将任意值转换为 int64 指针
-// @param val any 待转换的值
-// @return @1 *int64 转换后的 int64 指针
+// Int64Pointer converts val to a pointer to int64.
 func Int64Pointer(any any) *int64 {
 	v := Int64(any)
 	return &v
 }
 
-// Int64sPointer 将任意值转换为 int64 切片指针
-// @param val any 待转换的值
-// @return @1 *[]int64 转换后的 int64 切片指针
+// Int64sPointer converts val to a pointer to an int64 slice.
 func Int64sPointer(any any) *[]int64 {
 	v := Int64s(any)
 	return &v

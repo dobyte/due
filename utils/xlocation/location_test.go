@@ -9,7 +9,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// mockResolver 用于测试的解析器实现
+// mockResolver is a resolver implementation used for testing.
 type mockResolver struct {
 	name   string
 	result *location.Result
@@ -17,7 +17,7 @@ type mockResolver struct {
 	delay  time.Duration
 }
 
-// Name 获取解析器名称
+// Name returns the resolver name.
 func (m *mockResolver) Name() string {
 	if m.name == "" {
 		return "mock"
@@ -25,7 +25,7 @@ func (m *mockResolver) Name() string {
 	return m.name
 }
 
-// Resolve 解析 IP 地址
+// Resolve resolves the given IP address.
 func (m *mockResolver) Resolve(ctx context.Context, ip string) (*location.Result, error) {
 	if m.delay > 0 {
 		select {

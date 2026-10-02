@@ -13,7 +13,8 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// requireRedis 探测本地 redis 服务是否可用，不可用时跳过测试
+// requireRedis probes whether the local redis service is available and skips the test when it is
+// not.
 func requireRedis(t *testing.T) {
 	t.Helper()
 
@@ -41,7 +42,7 @@ func TestLocker_Acquire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 锁被持有时，其他 Locker 无法获取
+	// While the lock is held, another Locker cannot acquire it.
 	if err := other.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
 		t.Fatalf("expect ErrIllegalOperation, got: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestLocker_Acquire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 释放后，其他 Locker 可以获取
+	// After the lock is released, another Locker can acquire it.
 	if err := other.Acquire(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestLocker_Parallel_Acquire(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			// 每个竞争者持有独立的 Locker(独立version)竞争同一把锁
+			// Every contender holds its own Locker (with its own version) and competes for the same lock.
 			locker := maker.Make("lockName")
 
 			if err := locker.Acquire(ctx); err != nil {
@@ -90,7 +91,7 @@ func TestLocker_Parallel_Acquire(t *testing.T) {
 				}
 			}()
 
-			// 任意时刻只允许一个持有者进入临界区
+			// At most one holder may enter the critical section at any time.
 			if n := holders.Add(1); n != 1 {
 				t.Errorf("%d lock is not exclusive, concurrent holders: %d", i, n)
 			}
@@ -124,7 +125,8 @@ func TestLocker_Renewal(t *testing.T) {
 
 	defer locker.Release(ctx)
 
-	// 等待时长超过默认过期时间；若后台续租未生效，锁早已过期、他人应能获取
+	// The wait exceeds the default expiration; if the background renewal did not work, the lock
+	// would have expired long ago and another Locker should be able to acquire it.
 	time.Sleep(1200 * time.Millisecond)
 
 	if err := other.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
@@ -143,12 +145,12 @@ func TestLocker_Expired_Release(t *testing.T) {
 
 	t.Cleanup(func() { _ = maker.Close() })
 
-	// 以固定过期时间获取锁，不开启后台续租
+	// Acquire the lock with a fixed expiration without starting the background renewal.
 	if err := locker.TryAcquire(ctx, 200*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 
-	// 等待锁自然过期后再释放，应能感知锁已丢失
+	// Wait for the lock to expire naturally and then release it; the lost lock should be detected.
 	time.Sleep(400 * time.Millisecond)
 
 	if err := locker.Release(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
@@ -161,8 +163,10 @@ func TestMaker_Closed(t *testing.T) {
 
 	var (
 		ctx = context.Background()
-		// 外部客户端，生命周期不由 Maker 管理，用于验证 Close 后获取锁能快速失败
-		// (内建客户端场景会因连接池关闭而报错，外部客户端需显式拦截)
+		// External client whose lifecycle is not managed by the Maker; it is used to verify that
+		// acquiring a lock fails fast after Close.
+		// (With a built-in client the closed connection pool already reports an error, whereas an
+		// external client needs an explicit check.)
 		client = goredis.NewUniversalClient(&goredis.UniversalOptions{Addrs: []string{"127.0.0.1:6379"}})
 		maker  = redis.NewMaker(redis.WithClient(client))
 		locker = maker.Make("lockClosed")
@@ -174,7 +178,8 @@ func TestMaker_Closed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Close 后获取锁应快速失败，而非获取成功但后台续租因生命周期上下文取消而静默失效
+	// Acquiring a lock after Close should fail fast instead of succeeding and then silently losing
+	// the background renewal because the lifecycle context was canceled.
 	if err := locker.TryAcquire(ctx); !errors.Is(err, errors.ErrIllegalOperation) {
 		t.Fatalf("expect ErrIllegalOperation after maker closed, got: %v", err)
 	}

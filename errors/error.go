@@ -86,11 +86,10 @@ var (
 	ErrIllegalInvoke           = New("illegal invoke")
 )
 
-// NewError 新建一个错误
-// 可传入一下参数：
-// text : 文本字符串
-// code : 错误码
-// error: 原生错误
+// NewError creates a new error.
+//
+// The following arguments are recognized: a string sets the text, a [*codes.Code] sets the code,
+// and an error sets the underlying error.
 func NewError(args ...any) *Error {
 	e := &Error{}
 
@@ -108,11 +107,10 @@ func NewError(args ...any) *Error {
 	return e
 }
 
-// NewErrorWithStack 新建一个带堆栈的错误
-// 可传入一下参数：
-// text : 文本字符串
-// code : 错误码
-// error: 原生错误
+// NewErrorWithStack creates a new error with a captured stack.
+//
+// The following arguments are recognized: a string sets the text, a [*codes.Code] sets the code,
+// and an error sets the underlying error.
 func NewErrorWithStack(args ...any) *Error {
 	e := &Error{stack: stack.Callers(1, stack.Full)}
 
@@ -130,7 +128,7 @@ func NewErrorWithStack(args ...any) *Error {
 	return e
 }
 
-// Code 返回错误码
+// Code returns the error code carried by err, or nil when it carries none.
 func Code(err error) *codes.Code {
 	if err != nil {
 		if e, ok := err.(interface{ Code() *codes.Code }); ok {
@@ -141,7 +139,7 @@ func Code(err error) *codes.Code {
 	return nil
 }
 
-// Next 返回下一个错误
+// Next returns the next error in the chain.
 func Next(err error) error {
 	if err == nil {
 		return nil
@@ -154,7 +152,7 @@ func Next(err error) error {
 	return nil
 }
 
-// Cause 返回根因错误
+// Cause returns the root cause of err.
 func Cause(err error) error {
 	if err == nil {
 		return nil
@@ -167,7 +165,7 @@ func Cause(err error) error {
 	return err
 }
 
-// Stack 返回堆栈
+// Stack returns the stack captured by err.
 func Stack(err error) *stack.Stack {
 	if err == nil {
 		return nil
@@ -180,7 +178,7 @@ func Stack(err error) *stack.Stack {
 	return nil
 }
 
-// Replace 替换文本
+// Replace replaces the text of err when it supports replacement and its code matches condition.
 func Replace(err error, text string, condition ...codes.Code) error {
 	if err == nil {
 		return nil
@@ -228,7 +226,7 @@ func (e *Error) Error() (text string) {
 	return
 }
 
-// Code 返回错误码
+// Code returns the error code.
 func (e *Error) Code() *codes.Code {
 	if e == nil {
 		return nil
@@ -237,7 +235,7 @@ func (e *Error) Code() *codes.Code {
 	return e.code
 }
 
-// Next 返回下一个错误
+// Next returns the next error.
 func (e *Error) Next() error {
 	if e == nil {
 		return nil
@@ -246,7 +244,7 @@ func (e *Error) Next() error {
 	return e.err
 }
 
-// Cause 返回根因错误
+// Cause returns the root cause error.
 func (e *Error) Cause() error {
 	if e == nil {
 		return nil
@@ -268,7 +266,7 @@ func (e *Error) Cause() error {
 	return cause
 }
 
-// Stack 返回堆栈
+// Stack returns the stack.
 func (e *Error) Stack() *stack.Stack {
 	if e == nil {
 		return nil
@@ -277,7 +275,7 @@ func (e *Error) Stack() *stack.Stack {
 	return e.stack
 }
 
-// Unwrap 解包错误
+// Unwrap returns the underlying error.
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -286,7 +284,7 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-// Replace 替换文本
+// Replace replaces the text when condition is empty or matches the error code.
 func (e *Error) Replace(text string, condition ...*codes.Code) error {
 	if e == nil {
 		return nil
@@ -299,11 +297,12 @@ func (e *Error) Replace(text string, condition ...*codes.Code) error {
 	return e
 }
 
-// String 格式化错误信息
+// String returns the formatted error information.
 func (e *Error) String() string {
 	return fmt.Sprintf("%+v", e)
 }
 
+// error returns the error text used for formatting.
 func (e *Error) error() (text string) {
 	if e == nil {
 		return
@@ -317,10 +316,10 @@ func (e *Error) error() (text string) {
 	return
 }
 
-// Format 格式化输出
-// %s : 打印本级错误信息
-// %v : 打印所有错误信息
-// %+v: 打印所有错误信息和堆栈信息
+// Format implements [fmt.Formatter].
+//
+// The %s verb prints the error at the current level, %v prints all error information, and %+v
+// prints all error information together with the stack.
 func (e *Error) Format(s fmt.State, verb rune) {
 	if e == nil {
 		return

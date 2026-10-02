@@ -15,9 +15,9 @@ const (
 	subscribeResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeSubscribeReq 编码订阅频道请求（单次最多订阅65535个对象）
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
+// EncodeSubscribeReq encodes a subscribe request (at most 65535 targets per call).
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
 func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := subscribeReqBytes + len(targets)*def.B64 + len([]byte(channel))
 
@@ -34,9 +34,9 @@ func EncodeSubscribeReq(seq uint64, kind session.Kind, targets []int64, channel 
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeSubscribeReq 解码订阅频道请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + count + targets + channel}
+// DecodeSubscribeReq decodes a subscribe request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
 func DecodeSubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64, channel string, err error) {
 	data := buf.Bytes()
 
@@ -65,9 +65,9 @@ func DecodeSubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64, 
 	return
 }
 
-// EncodeSubscribeRes 编码订阅频道响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeSubscribeRes encodes a subscribe response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeSubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(subscribeResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(subscribeResBytes-def.SizeBytes))
@@ -79,9 +79,9 @@ func EncodeSubscribeRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeSubscribeRes 解码订阅频道响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeSubscribeRes decodes a subscribe response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeSubscribeRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

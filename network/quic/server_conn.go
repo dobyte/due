@@ -18,47 +18,43 @@ import (
 )
 
 type serverConn struct {
-	id                int64                       // 连接ID
-	uid               atomic.Int64                // 用户ID
-	attr              *attr                       // 连接属性
-	state             atomic.Int32                // 连接状态
-	connMgr           *serverConnMgr              // 连接管理器
-	rw                sync.RWMutex                // 锁
-	wg1               *sync.WaitGroup             // 读等待组
-	wg2               *sync.WaitGroup             // 写等待组
-	qc                *quic.Conn                  // QUIC连接
-	stream            *quic.Stream                // 双向流
-	queue             *queue.Queue[buffer.Buffer] // 消息队列
-	output            *bufferWriter               // 写辅助对象
-	dueBuffers        []buffer.Buffer             // 待写入的消息缓冲对象集合
-	lastHeartbeatTime atomic.Int64                // 上次心跳时间
-	authorizeTimer    atomic.Value                // 授权定时器
+	id                int64                       // Connection ID
+	uid               atomic.Int64                // User ID
+	attr              *attr                       // Connection attributes
+	state             atomic.Int32                // Connection state
+	connMgr           *serverConnMgr              // Connection manager
+	rw                sync.RWMutex                // Lock
+	wg1               *sync.WaitGroup             // Read wait group
+	wg2               *sync.WaitGroup             // Write wait group
+	qc                *quic.Conn                  // QUIC connection
+	stream            *quic.Stream                // Bidirectional stream
+	queue             *queue.Queue[buffer.Buffer] // Message queue
+	output            *bufferWriter               // Write helper
+	dueBuffers        []buffer.Buffer             // Buffers pending write
+	lastHeartbeatTime atomic.Int64                // Time of the last heartbeat
+	authorizeTimer    atomic.Value                // Authorize timer
 }
 
 var _ network.Conn = &serverConn{}
 
-// ID 获取连接ID
-// @return @1 int64 连接ID
+// ID returns the connection ID.
 func (c *serverConn) ID() int64 {
 	return c.id
 }
 
-// UID 获取用户ID
-// @return @1 int64 用户ID，未绑定时为0
+// UID returns the user ID, or 0 when none is bound.
 func (c *serverConn) UID() int64 {
 	return c.uid.Load()
 }
 
-// Attr 获取属性接口
-// @return @1 network.Attr 属性接口
+// Attr returns the attribute interface.
 func (c *serverConn) Attr() network.Attr {
 	return c.attr
 }
 
-// Bind 绑定用户ID
-// 绑定成功后取消授权检查定时器
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// Bind binds uid to the connection.
+//
+// A successful bind cancels the authorize check timer.
 func (c *serverConn) Bind(uid int64) error {
 	c.rw.RLock()
 
@@ -75,9 +71,9 @@ func (c *serverConn) Bind(uid int64) error {
 	return nil
 }
 
-// Unbind 解绑用户ID
-// 解绑后重新开启授权检查定时器
-// @return @1 error 错误信息
+// Unbind removes the bound user ID.
+//
+// After unbinding, the authorize check timer is restarted.
 func (c *serverConn) Unbind() error {
 	c.rw.RLock()
 
@@ -94,10 +90,10 @@ func (c *serverConn) Unbind() error {
 	return nil
 }
 
-// Push 发送消息
-// 将消息写入发送队列；仅当返回nil时 buf 的所有权才转移给网络层
-// @param buf buffer.Buffer 消息内容，消息发送失败自行控制释放buffer
-// @return @1 error 错误信息
+// Push sends a message.
+//
+// The message is written to the send queue. Ownership of buf is transferred to the network layer
+// only when Push returns nil; otherwise releasing the buffer is left to the caller.
 func (c *serverConn) Push(buf buffer.Buffer) error {
 	if buf == nil || buf.Len() == 0 {
 		return errors.ErrInvalidMessage
@@ -117,16 +113,15 @@ func (c *serverConn) Push(buf buffer.Buffer) error {
 	return err
 }
 
-// State 获取连接状态
-// @return @1 network.ConnState 连接状态
+// State returns the connection state.
 func (c *serverConn) State() network.ConnState {
 	return network.ConnState(c.state.Load())
 }
 
-// Close 关闭连接
-// 连接关闭后连接对象将被回收复用，不应再使用其任何方法与属性（身份标识可能漂移）
-// @param force ...bool 是否强制关闭
-// @return @1 error 错误信息
+// Close closes the connection.
+//
+// After the connection is closed its object is recycled and reused, so none of its methods or
+// attributes may be used afterwards; the identity it carries may drift.
 func (c *serverConn) Close(force ...bool) error {
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
@@ -134,9 +129,7 @@ func (c *serverConn) Close(force ...bool) error {
 	return c.graceClose()
 }
 
-// LocalIP 获取本地IP
-// @return @1 string 本地IP地址
-// @return @2 error 错误信息
+// LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
 	if err != nil {
@@ -146,9 +139,7 @@ func (c *serverConn) LocalIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// LocalAddr 获取本地地址
-// @return @1 net.Addr 本地地址
-// @return @2 error 错误信息
+// LocalAddr returns the local address.
 func (c *serverConn) LocalAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -163,9 +154,7 @@ func (c *serverConn) LocalAddr() (net.Addr, error) {
 	return qc.LocalAddr(), nil
 }
 
-// RemoteIP 获取远端IP
-// @return @1 string 远端IP地址
-// @return @2 error 错误信息
+// RemoteIP returns the remote IP address.
 func (c *serverConn) RemoteIP() (string, error) {
 	addr, err := c.RemoteAddr()
 	if err != nil {
@@ -175,9 +164,7 @@ func (c *serverConn) RemoteIP() (string, error) {
 	return xnet.ExtractIP(addr)
 }
 
-// RemoteAddr 获取远端地址
-// @return @1 net.Addr 远端地址
-// @return @2 error 错误信息
+// RemoteAddr returns the remote address.
 func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	c.rw.RLock()
 
@@ -192,14 +179,14 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 	return qc.RemoteAddr(), nil
 }
 
-// init 初始化连接
-// 复用对象池中的连接对象，在写锁保护下完成状态重置、挂接分片与读写协程启动，
-// 关闭路径需获取同一把锁，将被阻塞至初始化完成；管理器已关闭时挂接被拒绝，
-// 初始化中止并复位状态，由调用方归还连接对象并关闭底层连接，避免服务器停止后残留幽灵连接
-// @param id int64 预留的连接ID
-// @param qc *quic.Conn QUIC连接
-// @param stream *quic.Stream 双向流
-// @return @1 bool 是否初始化成功，服务器关闭过程中返回false
+// init initializes the connection.
+//
+// It reuses a connection object from the pool, resetting its state, linking it into a partition and
+// starting its read and write goroutines under the write lock. The close path takes the same lock
+// and is therefore blocked until initialization completes. When the manager has been closed the
+// link is refused, initialization is aborted and the state is reset; the caller returns the
+// connection object and closes the underlying connection, which prevents ghost connections from
+// lingering after the server has stopped.
 func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) bool {
 	c.rw.Lock()
 
@@ -215,7 +202,8 @@ func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) bool {
 	c.authorizeTimer.Store((*time.Timer)(nil))
 
 	if !c.connMgr.linkConn(id, c) {
-		// 管理器已关闭或预留条目已被清理，复位状态并清理引用后中止初始化
+		// The manager has been closed or the reserved entry has already been cleaned up; reset
+		// the state, clear the references and abort initialization.
 		c.state.Store(int32(network.ConnClosed))
 		c.qc = nil
 		c.stream = nil
@@ -230,7 +218,9 @@ func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) bool {
 
 	c.wg2.Go(func() { c.write(stream) })
 	c.wg1.Go(func() {
-		// 初始化完成前连接可能已被并发关闭，仅在连接仍处于打开状态时执行授权检查与连接钩子
+		// The connection may already have been closed concurrently before initialization
+		// finished; run the authorize check and the connect hook only while the connection is
+		// still opened.
 		if c.State() == network.ConnOpened {
 			c.checkAuthorize(stream)
 
@@ -247,8 +237,10 @@ func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) bool {
 	return true
 }
 
-// reset 重置连接
-// 清空连接对象内的引用与状态，以便归还对象池后安全复用
+// reset resets the connection.
+//
+// It clears the references and state inside the connection object so that it can be safely reused
+// after being returned to the pool.
 func (c *serverConn) reset() {
 	c.wg1 = nil
 	c.wg2 = nil
@@ -259,9 +251,10 @@ func (c *serverConn) reset() {
 	c.uncheckAuthorize()
 }
 
-// checkState 检测连接状态
-// 依据挂起/关闭状态返回对应错误，正常时返回nil
-// @return @1 error 挂起返回ErrConnectionHanged，关闭返回ErrConnectionClosed，正常为nil
+// checkState checks the connection state.
+//
+// It returns the error matching the hanged or closed state, and nil when the connection is normal:
+// [errors.ErrConnectionHanged] when hanged and [errors.ErrConnectionClosed] when closed.
 func (c *serverConn) checkState() error {
 	switch c.State() {
 	case network.ConnHanged:
@@ -273,10 +266,11 @@ func (c *serverConn) checkState() error {
 	}
 }
 
-// checkAuthorize 授权检查
-// 开启授权超时定时器，超时且仍未绑定用户ID时关闭连接；定时器回调会比对连接ID与流指针，
-// 避免连接被回收复用后误关闭新连接
-// @param stream *quic.Stream 当前双向流
+// checkAuthorize checks authorization.
+//
+// It starts the authorize timeout timer, which closes the connection when it fires with no user ID
+// bound yet. The timer callback compares the connection ID and the stream pointer so that it does
+// not close a new connection by mistake after the connection object has been recycled.
 func (c *serverConn) checkAuthorize(stream *quic.Stream) {
 	if c.connMgr.server.opts.authorizeTimeout <= 0 {
 		return
@@ -297,8 +291,10 @@ func (c *serverConn) checkAuthorize(stream *quic.Stream) {
 	}
 }
 
-// uncheckAuthorize 取消授权检查
-// 停止并清空授权超时定时器，用于绑定用户ID或关闭连接时解除授权检测
+// uncheckAuthorize cancels the authorization check.
+//
+// It stops and clears the authorize timeout timer, which lifts the authorize check when a user ID
+// is bound or the connection is closed.
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout <= 0 {
 		return
@@ -311,10 +307,12 @@ func (c *serverConn) uncheckAuthorize() {
 	}
 }
 
-// graceClose 优雅关闭
-// 写入关闭信号等待写队列排空后关闭连接，便于尽量下发完已缓冲的消息；
-// 配置优雅关闭超时时间后，超时未排空将直接断开底层连接以强制结束等待
-// @return @1 error 连接非打开态或关闭过程中出错时返回的错误
+// graceClose closes the connection gracefully.
+//
+// It writes the close signal, waits for the write queue to drain and then closes the connection,
+// so that as many buffered messages as possible are delivered. When a graceful close timeout is
+// configured, a queue that has not drained in time disconnects the underlying connection directly
+// to end the wait forcibly.
 func (c *serverConn) graceClose() error {
 	if !c.state.CompareAndSwap(int32(network.ConnOpened), int32(network.ConnHanged)) {
 		return errors.ErrConnectionNotOpened
@@ -334,7 +332,8 @@ func (c *serverConn) graceClose() error {
 
 	if err == nil {
 		if closeTimeout := c.connMgr.server.opts.closeTimeout; closeTimeout > 0 {
-			// 排空超时后强制断开底层连接，打断写协程中可能阻塞的写操作
+			// A drain timeout disconnects the underlying connection, interrupting any write
+			// operation that may be blocking in the write goroutine.
 			timer := time.AfterFunc(closeTimeout, func() { _ = qc.CloseWithError(0, "close timeout") })
 			q.Wait()
 			timer.Stop()
@@ -350,9 +349,10 @@ func (c *serverConn) graceClose() error {
 	return c.doClose(true)
 }
 
-// forceClose 强制关闭
-// 立即切换状态为关闭并关闭连接，不等待写队列排空
-// @return @1 error 连接已处于关闭态时返回的错误
+// forceClose closes the connection forcibly.
+//
+// It switches the state to closed and closes the connection immediately without waiting for the
+// write queue to drain.
 func (c *serverConn) forceClose() error {
 	if c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
 		return errors.ErrConnectionClosed
@@ -363,11 +363,12 @@ func (c *serverConn) forceClose() error {
 	return c.doClose(false)
 }
 
-// recycleClose 若当前连接仍为指定连接则强制关闭
-// 读/写协程错误路径经 taskpool 异步关闭连接，闭包执行时连接对象可能已被回收复用，
-// 因此需同时比对连接ID与流指针，避免误关闭新连接
-// @param stream *quic.Stream 触发关闭时的双向流
-// @param id int64 触发关闭时的连接ID
+// recycleClose forcibly closes the connection if it is still the given one.
+//
+// The read and write goroutine error paths close the connection asynchronously through the task
+// pool. By the time the closure runs, the connection object may already have been recycled, so both
+// the connection ID and the stream pointer are compared to avoid closing a new connection by
+// mistake.
 func (c *serverConn) recycleClose(stream *quic.Stream, id int64) {
 	c.rw.RLock()
 	match := c.id == id && c.stream == stream
@@ -378,12 +379,14 @@ func (c *serverConn) recycleClose(stream *quic.Stream, id int64) {
 	}
 }
 
-// doClose 执行关闭操作
-// 关闭写队列，等待读写协程退出后关闭流与QUIC连接，触发断开hook，并将连接对象归还连接池；
-// graceful 为 true 时先等待写协程排空并发送FIN、驻留closeTimeout等待对端确认，
-// 为 false 时直接断开QUIC连接以打断写协程中可能阻塞的写操作，保证强制关闭语义
-// @param graceful bool 是否优雅关闭
-// @return @1 error 关闭QUIC连接时的错误
+// doClose performs the close operation.
+//
+// It closes the write queue, waits for the read and write goroutines to exit, closes the stream and
+// the QUIC connection, triggers the disconnect hook and returns the connection object to the pool.
+// When graceful is true it waits for the write goroutine to drain and sends FIN first, then dwells
+// for closeTimeout to let the peer acknowledge. When graceful is false it disconnects the QUIC
+// connection directly to interrupt any write operation that may be blocking in the write goroutine,
+// which guarantees forced-close semantics.
 func (c *serverConn) doClose(graceful bool) error {
 	c.rw.Lock()
 	if c.qc == nil {
@@ -399,12 +402,13 @@ func (c *serverConn) doClose(graceful bool) error {
 	c.rw.Unlock()
 
 	if graceful {
-		// 等待写协程排空所有已接收的消息后再发送FIN
+		// Wait for the write goroutine to drain every accepted message before sending FIN.
 		c.wg2.Wait()
 
 		_ = stream.Close()
 
-		// 在 closeTimeout 内保持传输层存活，使对端能够确认FIN并重传，随后再将其拆除
+		// Keep the transport alive for closeTimeout so that the peer can acknowledge FIN and
+		// retransmit, then tear it down.
 		select {
 		case <-qc.Context().Done():
 		case <-time.After(c.connMgr.server.opts.closeTimeout):
@@ -429,9 +433,11 @@ func (c *serverConn) doClose(graceful bool) error {
 	return err
 }
 
-// read 读取消息
-// 持续从流中读取消息，更新心跳时间、检测空包/心跳包并分发到接收hook；读取失败时触发回收式强制关闭
-// @param stream *quic.Stream 双向流
+// read reads messages.
+//
+// It keeps reading messages from the stream, updates the heartbeat time, detects empty and
+// heartbeat packets and dispatches them to the receive hook; a read failure triggers a
+// recycle-based forced close.
 func (c *serverConn) read(stream *quic.Stream) {
 	var (
 		index = 0
@@ -500,9 +506,10 @@ func (c *serverConn) read(stream *quic.Stream) {
 	}
 }
 
-// write 写入消息
-// 从写队列批量取出消息写入流，并按心跳间隔触发心跳检测与下发
-// @param stream *quic.Stream 双向流
+// write writes messages.
+//
+// It takes messages from the write queue in a batch and writes them to the stream, and triggers
+// heartbeat detection and dispatch at the heartbeat interval.
 func (c *serverConn) write(stream *quic.Stream) {
 	var tickerC <-chan time.Time
 
@@ -532,11 +539,11 @@ func (c *serverConn) write(stream *quic.Stream) {
 	}
 }
 
-// doBatchWrite 批量写入消息
-// 从写队列批量取出任务后逐条写入，减少队列通道操作次数；
-// QUIC流写入为用户态拷贝，无需像TCP那样聚合字节切片一次性下发
-// @param stream *quic.Stream 双向流
-// @param first buffer.Buffer 首个已取出的任务
+// doBatchWrite writes messages in a batch.
+//
+// It takes tasks from the write queue in a batch and writes them one by one to reduce the number of
+// queue channel operations. Writing to a QUIC stream copies in user space, so unlike TCP there is
+// no need to aggregate byte slices and dispatch them in one call.
 func (c *serverConn) doBatchWrite(stream *quic.Stream, first buffer.Buffer) {
 	closeSig := first.Len() == 0
 
@@ -592,11 +599,12 @@ OVER:
 	c.dueBuffers = c.dueBuffers[:0]
 }
 
-// doHandleHeartbeat 处理心跳
-// 检测上次收到消息的时间是否超时，超时则触发回收式强制关闭；主动定时心跳模式下额外下发心跳包
-// @param stream *quic.Stream 双向流
-// @param t time.Time 当前心跳触发的时间点
-// @return @1 bool 是否继续写入协程循环，心跳超时时返回false
+// doHandleHeartbeat handles heartbeats.
+//
+// It checks whether the time of the last received message has timed out and triggers a
+// recycle-based forced close when it has; in active periodic heartbeat mode it also dispatches a
+// heartbeat packet. It returns whether to keep the write goroutine looping, which is false on a
+// heartbeat timeout.
 func (c *serverConn) doHandleHeartbeat(stream *quic.Stream, t time.Time) bool {
 	if c.lastHeartbeatTime.Load() < t.Add(-2*c.connMgr.server.opts.heartbeatInterval).UnixNano() {
 		log.Debugf("connection heartbeat timeout, cid: %d", c.id)
@@ -625,8 +633,7 @@ func (c *serverConn) doHandleHeartbeat(stream *quic.Stream, t time.Time) bool {
 	return true
 }
 
-// isClosed 是否已关闭
-// @return @1 bool 连接状态是否为关闭
+// isClosed reports whether the connection state is closed.
 func (c *serverConn) isClosed() bool {
 	return c.State() == network.ConnClosed
 }

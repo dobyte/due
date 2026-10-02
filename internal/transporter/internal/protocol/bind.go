@@ -14,9 +14,9 @@ const (
 	bindResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes
 )
 
-// EncodeBindReq 编码绑定请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid}
+// EncodeBindReq encodes a bind request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {cid + uid}
 func EncodeBindReq(seq uint64, cid, uid int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(bindReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(bindReqBytes-def.SizeBytes))
@@ -28,9 +28,9 @@ func EncodeBindReq(seq uint64, cid, uid int64) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeBindReq 解码绑定请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{cid + uid}
+// DecodeBindReq decodes a bind request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {cid + uid}
 func DecodeBindReq(buf buffer.Buffer) (cid, uid int64, err error) {
 	if buf.Len() != def.B64*2 {
 		err = errors.ErrInvalidMessage
@@ -44,9 +44,9 @@ func DecodeBindReq(buf buffer.Buffer) (cid, uid int64, err error) {
 	return
 }
 
-// EncodeBindRes 编码绑定响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// EncodeBindRes encodes a bind response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func EncodeBindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(bindResBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(bindResBytes-def.SizeBytes))
@@ -58,9 +58,9 @@ func EncodeBindRes(seq uint64, code uint16) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeBindRes 解码绑定响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code}
+// DecodeBindRes decodes a bind response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code}
 func DecodeBindRes(buf buffer.Buffer) (uint16, error) {
 	if buf.Len() != def.CodeBytes {
 		return 0, errors.ErrInvalidMessage

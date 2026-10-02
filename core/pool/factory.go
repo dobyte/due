@@ -12,14 +12,14 @@ type Factory[T any] struct {
 	new func(name string) (T, error)
 }
 
-// NewFactory 创建单例工厂
+// NewFactory returns a singleton factory that creates objects with new.
 func NewFactory[T any](new func(name string) (T, error)) *Factory[T] {
 	return &Factory[T]{
 		new: new,
 	}
 }
 
-// Get 获取单例对象
+// Get returns the singleton object registered under name, creating it on first use.
 func (f *Factory[T]) Get(name string) (T, error) {
 	if val, ok := f.ins.Load(name); ok {
 		return val.(T), nil

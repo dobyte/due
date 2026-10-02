@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Limiter 令牌桶限流器实现
+// Limiter is a token-bucket rate limiter.
 type Limiter struct {
 	mu           sync.Mutex
 	cap          float64

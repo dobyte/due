@@ -14,17 +14,16 @@ import (
 	taskpool "github.com/dobyte/due/v2/task"
 )
 
-// proxy 网关代理
-// 负责与业务节点的内网通信、用户定位、事件触发与消息投递
+// proxy is the gate proxy.
+//
+// It handles internal communication with business nodes, user location, event triggering and
+// message delivery.
 type proxy struct {
-	gate       *Gate            // 网关服
-	nodeLinker *link.NodeLinker // 节点链接器
+	gate       *Gate            // gate
+	nodeLinker *link.NodeLinker // node linker
 }
 
-// 创建网关代理
-// 基于网关配置构造节点链接器
-// @param gate *Gate 网关组件
-// @return @1 *proxy 网关代理
+// newProxy creates a gate proxy and builds the node linker from the gate options.
 func newProxy(gate *Gate) *proxy {
 	return &proxy{gate: gate, nodeLinker: link.NewNodeLinker(gate.ctx, &link.Options{
 		ID:                  gate.opts.id,
@@ -42,12 +41,8 @@ func newProxy(gate *Gate) *proxy {
 	})}
 }
 
-// 绑定用户与网关间的关系
-// 将用户绑定到本网关并记录到定位器，绑定成功后触发重连事件
-// @param ctx context.Context 上下文
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// bindGate binds the user to this gate and records the binding in the locator, triggering the
+// reconnect event on success.
 func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 	if p.gate.isShut() {
 		return errors.ErrGateShutdown
@@ -62,11 +57,7 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 	return nil
 }
 
-// 解绑用户与网关间的关系
-// @param ctx context.Context 上下文
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @return @1 error 错误信息
+// unbindGate unbinds the user from the gate.
 func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	if p.gate.isShut() {
 		return errors.ErrGateShutdown
@@ -83,12 +74,9 @@ func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	}
 }
 
-// 触发事件
-// 将连接/断开/重连等事件投递到对应业务节点
-// @param ctx context.Context 上下文
-// @param event cluster.Event 事件类型
-// @param cid int64 连接ID
-// @param uid int64 用户ID
+// trigger triggers an event.
+//
+// It delivers connect, disconnect and reconnect events to the matching business node.
 func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
 	if p.gate.isShut() {
 		return
@@ -112,12 +100,10 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 	}
 }
 
-// 投递消息
-// 解包客户端消息并投递到对应业务节点的路由处理器
-// @param ctx context.Context 上下文
-// @param cid int64 连接ID
-// @param uid int64 用户ID
-// @param buf buffer.Buffer 消息内容
+// deliver delivers a message.
+//
+// It unpacks the client message and delivers it to the route handler of the matching business
+// node.
 func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffer) {
 	if p.gate.isShut() {
 		buf.Release()
@@ -152,8 +138,7 @@ func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffe
 	}
 }
 
-// 开始监听
-// 监听用户定位变化与集群实例变化
+// watch starts watching user location changes and cluster instance changes.
 func (p *proxy) watch() {
 	p.nodeLinker.WatchUserLocate()
 

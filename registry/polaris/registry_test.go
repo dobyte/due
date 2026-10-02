@@ -153,7 +153,7 @@ func TestMultipleNodeRegister(t *testing.T) {
 }
 
 const (
-	defaultTimeout = 3 * time.Second // 默认超时时间
+	defaultTimeout = 3 * time.Second // Default timeout
 )
 
 type node struct {
@@ -197,7 +197,7 @@ func (n *node) start() {
 
 }
 
-// register 执行注册操作
+// register performs the registration.
 func (n *node) register() error {
 	eg, ctx := errgroup.WithContext(n.ctx)
 

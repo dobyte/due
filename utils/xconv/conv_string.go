@@ -10,11 +10,11 @@ import (
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
 
-// String 将任意值转换为字符串
-// 数值类型使用十进制格式化，float32/float64 按最短表示格式化，bool 转为 true/false，
-// []byte 无拷贝转字符串，time.Time 零值返回空串，其他类型优先 JSON 序列化
-// @param val any 待转换的值
-// @return @1 string 转换后的字符串
+// String converts val to a string.
+//
+// Numeric types are formatted in decimal, float32 and float64 use the shortest representation,
+// bool becomes true or false, a []byte is converted without copying, a zero time.Time yields an
+// empty string, and other types are preferentially JSON-marshalled.
 func String(val any) string {
 	if val == nil {
 		return ""
@@ -176,9 +176,7 @@ func String(val any) string {
 	}
 }
 
-// Strings 将任意值转换为字符串切片
-// @param val any 待转换的值
-// @return @1 []string 转换后的字符串切片
+// Strings converts val to a string slice.
 func Strings(val any) (slice []string) {
 	if val == nil {
 		return
@@ -427,17 +425,13 @@ func Strings(val any) (slice []string) {
 	return
 }
 
-// StringPointer 将任意值转换为字符串指针
-// @param val any 待转换的值
-// @return @1 *string 转换后的字符串指针
+// StringPointer converts val to a pointer to string.
 func StringPointer(val any) *string {
 	v := String(val)
 	return &v
 }
 
-// StringsPointer 将任意值转换为字符串切片指针
-// @param val any 待转换的值
-// @return @1 *[]string 转换后的字符串切片指针
+// StringsPointer converts val to a pointer to a string slice.
 func StringsPointer(val any) *[]string {
 	v := Strings(val)
 	return &v

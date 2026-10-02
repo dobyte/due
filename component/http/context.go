@@ -15,39 +15,37 @@ import (
 )
 
 type Resp struct {
-	Code    int    `json:"code"`              // 响应码
-	Message string `json:"message"`           // 响应消息
-	Details string `json:"details,omitempty"` // 响应详情
-	Data    any    `json:"data,omitempty"`    // 响应数据
+	Code    int    `json:"code"`              // Response code
+	Message string `json:"message"`           // Response message
+	Details string `json:"details,omitempty"` // Response details
+	Data    any    `json:"data,omitempty"`    // Response data
 }
 
-// Context HTTP上下文接口
-// 扩展fiber.Ctx，提供代理API、响应处理及标准请求等能力
+// Context is the HTTP context interface.
+//
+// It extends [fiber.Ctx] with a proxy API, response handling and a standard request.
 type Context interface {
 	fiber.Ctx
-	// CTX 获取fiber.Ctx
+	// CTX returns the underlying [fiber.Ctx].
 	CTX() fiber.Ctx
-	// Proxy 获取代理API
+	// Proxy returns the proxy API.
 	Proxy() *Proxy
-	// Failure 失败响应
+	// Failure writes a failure response.
 	Failure(rst any) error
-	// Success 成功响应
+	// Success writes a success response.
 	Success(data ...any) error
-	// StdRequest 获取标准请求（net/http）
+	// StdRequest returns the equivalent [http.Request] (net/http).
 	StdRequest() *http.Request
 }
 
-// HTTP上下文
+// context is the HTTP context.
 type context struct {
 	*fiber.DefaultCtx
 	proxy      *Proxy
 	stdRequest *http.Request
 }
 
-// 创建HTTP上下文
-// @param ctx *fiber.DefaultCtx fiber默认上下文
-// @param proxy *Proxy HTTP代理
-// @return @1 *context HTTP上下文
+// newContext creates an HTTP context from the fiber context ctx and the proxy.
 func newContext(ctx *fiber.DefaultCtx, proxy *Proxy) *context {
 	return &context{
 		DefaultCtx: ctx,
@@ -55,20 +53,20 @@ func newContext(ctx *fiber.DefaultCtx, proxy *Proxy) *context {
 	}
 }
 
-// CTX 获取fiber.Ctx
+// CTX returns the underlying [fiber.Ctx].
 func (c *context) CTX() fiber.Ctx {
 	return c
 }
 
-// Proxy 代理API
+// Proxy returns the proxy API.
 func (c *context) Proxy() *Proxy {
 	return c.proxy
 }
 
-// Failure 失败响应
-// 根据响应内容的类型转换为对应的HTTP错误响应
-// @param rst any 响应内容，支持error、codes.Code及*codes.Code
-// @return @1 error 写入响应失败时返回的错误
+// Failure writes a failure response.
+//
+// It converts rst, which may be an error, a [codes.Code] or a *[codes.Code], into the matching
+// HTTP error response. It returns an error when writing the response fails.
 func (c *context) Failure(rst any) error {
 	switch v := rst.(type) {
 	case error:
@@ -97,7 +95,7 @@ func (c *context) Failure(rst any) error {
 	return c.JSON(&Resp{Code: codes.Unknown.Code(), Message: codes.Unknown.Message()})
 }
 
-// Success 成功响应
+// Success writes a success response.
 func (c *context) Success(data ...any) error {
 	if len(data) > 0 {
 		return c.JSON(&Resp{Code: codes.OK.Code(), Message: codes.OK.Message(), Data: data[0]})
@@ -106,15 +104,16 @@ func (c *context) Success(data ...any) error {
 	}
 }
 
-// Reset 重置上下文
+// Reset resets the context.
 func (c *context) Reset(fctx *fasthttp.RequestCtx) {
 	c.DefaultCtx.Reset(fctx)
 	c.stdRequest = nil
 }
 
-// StdRequest 获取标准请求（net/http）
-// 注意：返回的请求体已拷贝为独立内存，可在处理器返回后安全使用
-// @return @1 *http.Request 标准请求
+// StdRequest returns the equivalent [http.Request] (net/http).
+//
+// Note that the returned request body is copied into an independent buffer, so it stays safe to
+// use after the handler returns.
 func (c *context) StdRequest() *http.Request {
 	if c.stdRequest != nil {
 		return c.stdRequest
@@ -126,7 +125,8 @@ func (c *context) StdRequest() *http.Request {
 		log.Errorf("convert request failed: %v", err)
 	}
 
-	// 拷贝请求体，避免引用fasthttp请求池内存（连接复用后会被覆盖）
+	// Copy the request body to avoid referencing fasthttp's pooled memory, which is overwritten
+	// once the connection is reused.
 	if c.stdRequest.Body != nil {
 		if body, err := io.ReadAll(c.stdRequest.Body); err != nil {
 			log.Errorf("copy request body failed: %v", err)

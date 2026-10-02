@@ -11,8 +11,9 @@ import (
 
 var _ balancer.Balancer = &Balancer{}
 
-// Balancer 随机负载均衡器
-// 从就绪子连接中随机选取一个处理请求
+// Balancer is a random load balancer.
+//
+// It picks a ready sub-connection at random to handle a request.
 type Balancer struct {
 	cc       balancer.ClientConn
 	opts     balancer.BuildOptions
@@ -23,10 +24,10 @@ type Balancer struct {
 	mu       sync.Mutex
 }
 
-// UpdateClientConnState 更新客户端连接状态
-// 同步解析器下发的地址列表，移除失效子连接并新建缺失子连接
-// @param s balancer.ClientConnState 客户端连接状态
-// @return @1 error 错误信息
+// UpdateClientConnState updates the client connection state.
+//
+// It synchronizes the address list pushed by the resolver, removes stale sub-connections and
+// creates missing ones.
 func (b *Balancer) UpdateClientConnState(s balancer.ClientConnState) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -99,9 +100,9 @@ func (b *Balancer) updatePicker() {
 	b.picker = &Picker{subConns: readyConns}
 }
 
-// ResolverError 处理解析器错误
-// 将错误透传给选择器并更新连接状态为瞬态失败
-// @param err error 解析器错误
+// ResolverError handles a resolver error.
+//
+// It passes the error to the picker and updates the connection state to transient failure.
 func (b *Balancer) ResolverError(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -113,10 +114,10 @@ func (b *Balancer) ResolverError(err error) {
 	})
 }
 
-// UpdateSubConnState 更新子连接状态
-// 空闲连接触发重新连接，关闭连接从映射中移除，并同步更新选择器
-// @param sc balancer.SubConn 子连接
-// @param state balancer.SubConnState 子连接状态
+// UpdateSubConnState updates the sub-connection state.
+//
+// An idle connection triggers a reconnect, a shutdown connection is removed from the map, and the
+// picker is updated accordingly.
 func (b *Balancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -148,7 +149,7 @@ func (b *Balancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubCon
 	})
 }
 
-// Close 关闭负载均衡器，关闭全部子连接并清空状态
+// Close closes the load balancer, shuts down all sub-connections and clears its state.
 func (b *Balancer) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -162,7 +163,7 @@ func (b *Balancer) Close() {
 	b.picker = nil
 }
 
-// ExitIdle 退出空闲状态，触发全部空闲子连接建立连接
+// ExitIdle leaves the idle state and triggers a connection for every idle sub-connection.
 func (b *Balancer) ExitIdle() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -174,7 +175,7 @@ func (b *Balancer) ExitIdle() {
 	}
 }
 
-// Picker 随机选择器，从子连接列表中随机选取一个
+// Picker is the random picker that selects one sub-connection from the list at random.
 type Picker struct {
 	subConns []balancer.SubConn
 	err      error
@@ -182,11 +183,9 @@ type Picker struct {
 
 var _ balancer.Picker = &Picker{}
 
-// Pick 选择目标子连接
-// 单个子连接时直接返回，多个子连接时随机选取
-// @param info balancer.PickInfo 请求信息
-// @return @1 balancer.PickResult 选择结果
-// @return @2 error 错误信息
+// Pick selects a target sub-connection.
+//
+// It returns the only sub-connection directly when there is one, and picks at random otherwise.
 func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 	if p.err != nil {
 		return balancer.PickResult{}, p.err

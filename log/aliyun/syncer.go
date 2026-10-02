@@ -18,25 +18,23 @@ const (
 	fieldKeyStack = "stack"
 )
 
-// Name 同步器名称
+// Name is the syncer name.
 const Name = "aliyun"
 
-// Syncer 阿里云SLS日志同步器
+// Syncer is an Aliyun SLS log syncer.
 type Syncer struct {
 	opts     *options
 	producer *producer.Producer
 	rawPool  sync.Pool
 }
 
-// stackFrame 堆栈帧
+// stackFrame is a stack frame.
 type stackFrame struct {
 	Func string `json:"func"`
 	File string `json:"file"`
 }
 
-// NewSyncer 创建一个阿里云SLS日志同步器实例
-// @param opts ...Option 可选配置项
-// @return @1 *Syncer 同步器实例
+// NewSyncer returns a new Aliyun SLS log syncer. The optional opts configure the syncer.
 func NewSyncer(opts ...Option) *Syncer {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -63,26 +61,22 @@ func NewSyncer(opts ...Option) *Syncer {
 	return s
 }
 
-// Name 同步器名称
-// @return @1 string 同步器名称
+// Name returns the syncer name.
 func (s *Syncer) Name() string {
 	return Name
 }
 
-// Write 写入日志
-// @param entity *log.Entity 日志实体
-// @return @1 error 写入过程中产生的错误
+// Write writes the given entity to Aliyun SLS. It returns any error encountered while writing.
 func (s *Syncer) Write(entity *log.Entity) error {
 	return s.producer.SendLog(s.opts.project, s.opts.logstore, s.opts.topic, s.opts.source, s.makeLog(entity))
 }
 
-// Close 关闭同步器
-// @return @1 error 关闭过程中产生的错误
+// Close closes the Aliyun SLS producer.
 func (s *Syncer) Close() error {
 	return s.producer.Close(5000)
 }
 
-// 构建日志
+// makeLog converts an entity into an SLS log.
 func (s *Syncer) makeLog(entity *log.Entity) *sls.Log {
 	raw := s.rawPool.Get().(map[string]string)
 	defer func() {

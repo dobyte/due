@@ -19,8 +19,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
-// Server HTTP服务器
-// 基于fiber框架实现的HTTP服务组件，支持路由注册、中间件、跨域、Swagger等能力
+// Server is the HTTP server component.
+//
+// It is built on top of the fiber framework and supports route registration, middleware, CORS,
+// Swagger and more.
 type Server struct {
 	component.Base
 	opts  *options
@@ -119,20 +121,20 @@ func NewServer(opts ...Option) *Server {
 	return s
 }
 
-// Name 组件名称
+// Name returns the component name.
 func (s *Server) Name() string {
 	return s.opts.name
 }
 
-// Init 初始化组件
+// Init initializes the component.
 func (s *Server) Init() {}
 
-// Proxy 获取HTTP代理API
+// Proxy returns the HTTP proxy API.
 func (s *Server) Proxy() *Proxy {
 	return s.proxy
 }
 
-// Start 启动组件
+// Start starts the component.
 func (s *Server) Start() {
 	listenAddr, exposeAddr, err := xnet.ParseAddr(s.opts.addr)
 	if err != nil {
@@ -156,7 +158,7 @@ func (s *Server) Start() {
 	s.printInfo(exposeAddr)
 }
 
-// Destroy 销毁组件
+// Destroy destroys the component.
 func (s *Server) Destroy() {
 	if s.app != nil {
 		ctx, cancel := stctx.WithTimeout(stctx.Background(), 10*time.Second)
@@ -169,8 +171,9 @@ func (s *Server) Destroy() {
 	}
 }
 
-// 打印服务启动信息
-// @param addr string 对外暴露的服务地址
+// printInfo prints the server startup information.
+//
+// addr is the externally exposed address of the server.
 func (s *Server) printInfo(addr string) {
 	rows := make([]string, 0, 5)
 	rows = append(rows, fmt.Sprintf("Name: %s", s.Name()))

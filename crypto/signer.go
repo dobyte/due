@@ -5,17 +5,18 @@ import (
 )
 
 type Signer interface {
-	// Name 名称
+	// Name returns the name of the signer.
 	Name() string
-	// Sign 签名
+	// Sign signs data.
 	Sign(data []byte) ([]byte, error)
-	// Verify 验签
+	// Verify verifies the signature of data.
 	Verify(data []byte, signature []byte) (bool, error)
 }
 
 var signers = make(map[string]Signer)
 
-// RegisterSigner 注册签名器
+// RegisterSigner registers a signer. It panics when the signer is nil or has an empty name, and
+// overwrites the signer registered under the same name.
 func RegisterSigner(signer Signer) {
 	if signer == nil {
 		log.Fatal("can't register a invalid signer")
@@ -34,7 +35,8 @@ func RegisterSigner(signer Signer) {
 	signers[name] = signer
 }
 
-// InvokeSigner 调用签名器
+// InvokeSigner returns the signer registered under name. It panics when no signer is registered
+// under that name.
 func InvokeSigner(name string) Signer {
 	signer, ok := signers[name]
 	if !ok {

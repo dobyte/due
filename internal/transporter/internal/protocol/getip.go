@@ -17,9 +17,9 @@ const (
 	getIPResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B32
 )
 
-// EncodeGetIPReq 编码获取IP请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
+// EncodeGetIPReq encodes a get-IP request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
 func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getIPReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-def.SizeBytes))
@@ -32,9 +32,9 @@ func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyB
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeGetIPReq 解码获取IP请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind + target}
+// DecodeGetIPReq decodes a get-IP request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
 func DecodeGetIPReq(buf buffer.Buffer) (kind session.Kind, target int64, err error) {
 	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
@@ -48,9 +48,9 @@ func DecodeGetIPReq(buf buffer.Buffer) (kind session.Kind, target int64, err err
 	return
 }
 
-// EncodeGetIPRes 编码获取IP响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [ip]}
+// EncodeGetIPRes encodes a get-IP response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer {
 	size := getIPResBytes - def.SizeBytes
 	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
@@ -71,9 +71,9 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeGetIPRes 解码获取IP响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [ip]}
+// DecodeGetIPRes decodes a get-IP response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
 	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B32 {
 		err = errors.ErrInvalidMessage

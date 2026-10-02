@@ -7,21 +7,17 @@ import (
 	"github.com/dobyte/due/v2/config"
 )
 
-// watcher 监听器
+// watcher watches configuration changes.
 type watcher struct {
-	ctx     context.Context                  // 上下文
-	cancel  context.CancelFunc               // 取消函数
-	source  *Source                          // 配置源
-	chWatch chan struct{}                    // 配置变更通知信号
-	mu      sync.Mutex                       // 待投递配置互斥锁
-	pending map[string]*config.Configuration // 待投递配置，以文件名为键合并最新配置
+	ctx     context.Context                  // Context
+	cancel  context.CancelFunc               // Cancel function
+	source  *Source                          // Config source
+	chWatch chan struct{}                    // Config change notification signal
+	mu      sync.Mutex                       // Mutex guarding the pending configurations
+	pending map[string]*config.Configuration // Pending configurations, keyed by file name to merge the latest one
 }
 
-// newWatcher 创建监听器
-// @param ctx context.Context 上下文
-// @param s *Source 配置源
-// @return @1 *watcher 监听器
-// @return @2 error 错误信息
+// newWatcher creates a watcher.
 func newWatcher(ctx context.Context, s *Source) (*watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
@@ -32,26 +28,25 @@ func newWatcher(ctx context.Context, s *Source) (*watcher, error) {
 	return w, nil
 }
 
-// notice 通知配置变更
-// 按文件名合并待投递配置，保证每个文件的最新配置都会被送达，
-// 并以非阻塞方式发送信号，避免阻塞通知流程
-// @param configuration *config.Configuration 变更后的配置项
+// notice notifies a configuration change. It merges pending configurations by
+// file name so that the latest configuration of every file is delivered, and sends
+// the signal without blocking so that the notification flow is not stalled.
 func (w *watcher) notice(configuration *config.Configuration) {
 	w.mu.Lock()
 	w.pending[configuration.File] = configuration
 	w.mu.Unlock()
 
-	// 非阻塞发送信号，避免消费缓慢或已停止的监听器阻塞通知流程
+	// Send the signal without blocking so that a slow or stopped watcher does not stall notification.
 	select {
 	case w.chWatch <- struct{}{}:
 	default:
 	}
 }
 
-// Next 获取变更后的配置列表
-// 阻塞等待配置变更通知，上下文取消时返回错误
-// @return @1 []*config.Configuration 配置列表
-// @return @2 error 错误信息
+// Next returns the changed configuration list.
+//
+// It blocks until a configuration change notification arrives and returns every
+// latest pending configuration; it returns an error when the context is cancelled.
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
@@ -75,10 +70,11 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	return configs, nil
 }
 
-// Stop 停止监听
-// 监听由Source统一管理，停止单个watcher时无需取消配置监听，
-// 配置的监听与取消由Source内部的search与listen循环负责
-// @return @1 error 错误信息
+// Stop stops watching.
+//
+// Watching is managed by [Source], so stopping a single watcher does not need to
+// cancel config listening; the [Source]'s internal search and listen loops are
+// responsible for registering and cancelling listening.
 func (w *watcher) Stop() error {
 	w.cancel()
 	w.source.watchers.Delete(w)

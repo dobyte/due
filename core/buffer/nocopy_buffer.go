@@ -4,21 +4,21 @@ import (
 	"sync/atomic"
 )
 
-// NocopyBuffer 零拷贝缓冲区
+// NocopyBuffer is a zero-copy buffer.
 type NocopyBuffer struct {
-	len      int          // 字节数
-	num      int          // 节点数
-	head     any          // 头节点
-	tail     any          // 尾节点
-	prev     any          // 上一个节点
-	next     any          // 下一个节点
-	delay    atomic.Int32 // 延迟释放点
-	released atomic.Bool  // 已释放
+	len      int          // Byte count
+	num      int          // Node count
+	head     any          // Head node
+	tail     any          // Tail node
+	prev     any          // Previous node
+	next     any          // Next node
+	delay    atomic.Int32 // Delayed release point
+	released atomic.Bool  // Released
 }
 
 var _ Buffer = &NocopyBuffer{}
 
-// NewNocopyBuffer 创建零拷贝缓冲区
+// NewNocopyBuffer creates a zero-copy buffer mounting the given blocks.
 func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
 	buf := &NocopyBuffer{len: -1}
 
@@ -29,7 +29,7 @@ func NewNocopyBuffer(blocks ...any) *NocopyBuffer {
 	return buf
 }
 
-// Len 获取字节长度
+// Len returns the byte length.
 func (b *NocopyBuffer) Len() int {
 	if b.len >= 0 {
 		return b.len
@@ -55,7 +55,7 @@ func (b *NocopyBuffer) Len() int {
 	return size
 }
 
-// Mount 挂载块到Buffer上
+// Mount mounts block onto the buffer, at the head or tail according to whence.
 func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	switch v := block.(type) {
 	case []byte:
@@ -97,7 +97,7 @@ func (b *NocopyBuffer) Mount(block any, whence ...Whence) {
 	}
 }
 
-// MallocBytes 分配一块内存给Bytes
+// MallocBytes allocates a Bytes with the given capacity and mounts it.
 func (b *NocopyBuffer) MallocBytes(cap int, whence ...Whence) *Bytes {
 	block := MallocBytes(cap)
 
@@ -108,7 +108,7 @@ func (b *NocopyBuffer) MallocBytes(cap int, whence ...Whence) *Bytes {
 	return block
 }
 
-// MallocWriter 分配一块内存给Writer
+// MallocWriter allocates a Writer with the given capacity and mounts it.
 func (b *NocopyBuffer) MallocWriter(cap int, whence ...Whence) *Writer {
 	block := MallocWriter(cap)
 
@@ -119,12 +119,12 @@ func (b *NocopyBuffer) MallocWriter(cap int, whence ...Whence) *Writer {
 	return block
 }
 
-// Nodes 获取节点数
+// Nodes returns the number of nodes.
 func (b *NocopyBuffer) Nodes() int {
 	return b.num
 }
 
-// VisitNodes 迭代所有节点
+// VisitNodes iterates over all nodes.
 func (b *NocopyBuffer) VisitNodes(fn func(node *NocopyNode) bool) bool {
 	for node := b.head; node != nil; {
 		switch n := node.(type) {
@@ -152,7 +152,7 @@ func (b *NocopyBuffer) VisitNodes(fn func(node *NocopyNode) bool) bool {
 	return true
 }
 
-// Bytes 获取字节
+// Bytes returns all bytes.
 func (b *NocopyBuffer) Bytes() []byte {
 	if b == nil {
 		return nil
@@ -190,7 +190,7 @@ func (b *NocopyBuffer) Bytes() []byte {
 	}
 }
 
-// VisitBytes 迭代所有字节
+// VisitBytes iterates over all bytes.
 func (b *NocopyBuffer) VisitBytes(fn func(bytes []byte) bool) bool {
 	for node := b.head; node != nil; {
 		switch n := node.(type) {
@@ -218,12 +218,12 @@ func (b *NocopyBuffer) VisitBytes(fn func(bytes []byte) bool) bool {
 	return true
 }
 
-// Delay 设置延迟释放点
+// Delay sets the delayed release point.
 func (b *NocopyBuffer) Delay(delay int) {
 	b.delay.Store(int32(delay))
 }
 
-// Release 释放
+// Release releases the buffer.
 func (b *NocopyBuffer) Release() {
 	if b.delay.Add(-1) > 0 {
 		return
@@ -257,7 +257,7 @@ OVER:
 	b.next = nil
 }
 
-// Slide 滑动lower索引
+// Slide slides the lower index.
 func (b *NocopyBuffer) Slide(delta int) bool {
 	if delta < 0 {
 		return false
@@ -301,7 +301,7 @@ func (b *NocopyBuffer) Slide(delta int) bool {
 	return true
 }
 
-// 添加到头部
+// addToHead adds node to the head.
 func (b *NocopyBuffer) addToHead(node any) {
 	switch n := node.(type) {
 	case *NocopyNode:
@@ -355,7 +355,7 @@ func (b *NocopyBuffer) addToHead(node any) {
 	}
 }
 
-// 添加到尾部
+// addToTail adds node to the tail.
 func (b *NocopyBuffer) addToTail(node any) {
 	switch n := node.(type) {
 	case *NocopyNode:
@@ -409,7 +409,7 @@ func (b *NocopyBuffer) addToTail(node any) {
 	}
 }
 
-// removeHead 摘除头节点
+// removeHead removes the head node.
 func (b *NocopyBuffer) removeHead() {
 	switch n := b.head.(type) {
 	case *NocopyNode:

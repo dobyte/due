@@ -14,11 +14,11 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// name 注册中心组件名称
+// name is the name of the registry component.
 const name = "polaris"
 
-// maxWeight 服务实例权重上限
-// polaris 服务实例权重的合法范围为 [0, 10000]
+// maxWeight is the upper limit of a service instance weight.
+// The valid range of a polaris service instance weight is [0, 10000].
 const maxWeight = 10000
 
 const (
@@ -70,12 +70,12 @@ func NewRegistry(opts ...Option) *Registry {
 	return r
 }
 
-// Name 服务注册发现组件名
+// Name returns the name of the service registry and discovery component.
 func (r *Registry) Name() string {
 	return name
 }
 
-// Register 注册服务实例
+// Register registers a service instance.
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -150,8 +150,9 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		return err
 	}
 
-	// Existed 表示实例在注册前是否已存在；由于注册是幂等的，
-	// 重复注册（如更新实例状态）时 Existed 为 true，仍视为注册成功
+	// Existed reports whether the instance already existed before registration. Because
+	// registration is idempotent, Existed is true on a repeated registration (for example when
+	// updating the instance state), which is still treated as a successful registration.
 	if resp.Existed {
 		log.Debugf("instance %s re-registered", ins.ID)
 	}
@@ -159,7 +160,7 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	return nil
 }
 
-// Deregister 解注册服务实例
+// Deregister deregisters a service instance.
 func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
@@ -191,7 +192,7 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 	return nil
 }
 
-// Watch 监听相同服务名的服务实例变化
+// Watch watches for changes to the service instances with the same service name.
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -213,7 +214,7 @@ func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watc
 	return mgr.fork()
 }
 
-// 构建服务实例监听器
+// doBuildWatcherMgr builds a service instance watcher manager.
 func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*watcherMgr, error) {
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
 		return mgr, nil
@@ -231,7 +232,8 @@ func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*wa
 
 		r.watchers.Store(serviceName, mgr)
 
-		// 防止 Close 与 Watch 并发时，Store 进一个已经关闭的监听管理器
+		// Prevent storing an already closed watcher manager when Close and Watch run
+		// concurrently.
 		if r.closed.Load() {
 			mgr.stop()
 			return nil, errors.ErrRegistryClosed
@@ -246,8 +248,10 @@ func (r *Registry) doBuildWatcherMgr(_ context.Context, serviceName string) (*wa
 	return v.(*watcherMgr), nil
 }
 
-// 加载服务监听管理器
-// 仅返回未停止的管理器，避免返回已停止但尚未从注册表移除的管理器
+// loadWatcherMgr loads the service watcher manager.
+//
+// It returns only a manager that has not stopped, avoiding returning one that has stopped but has
+// not yet been removed from the registry.
 func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	if v, ok := r.watchers.Load(serviceName); ok {
 		if mgr, ok := v.(*watcherMgr); ok && !mgr.stopped.Load() {
@@ -258,7 +262,7 @@ func (r *Registry) loadWatcherMgr(serviceName string) *watcherMgr {
 	return nil
 }
 
-// Services 获取服务实例列表
+// Services returns the list of service instances.
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
@@ -279,7 +283,7 @@ func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registr
 	return r.services(ctx, serviceName)
 }
 
-// Close 关闭服务注册发现
+// Close closes the service registry and discovery component.
 func (r *Registry) Close() error {
 	if r.err != nil {
 		return r.err
@@ -301,7 +305,7 @@ func (r *Registry) Close() error {
 	return nil
 }
 
-// services 获取服务实例列表
+// services returns the list of service instances.
 func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	req := &api.GetAllInstancesRequest{}
 	req.Service = serviceName
@@ -315,7 +319,7 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 	return parseInstances(resp.GetInstances())
 }
 
-// buildClient 构建Polaris SDK上下文
+// buildClient builds the Polaris SDK context.
 func (r *Registry) buildClient() (api.SDKContext, error) {
 	cfg := api.NewConfiguration()
 

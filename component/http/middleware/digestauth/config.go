@@ -6,65 +6,67 @@ import (
 	"github.com/dobyte/due/component/http/v2"
 )
 
-// Config Digest认证中间件配置
+// Config is the Digest authentication middleware configuration.
 type Config struct {
-	// Next 定义跳过中间件的判断函数，返回true时跳过本中间件
+	// Next is the predicate that decides whether to skip the middleware; the middleware is
+	// skipped when it returns true.
 	//
-	// 可选。默认: nil
+	// Optional. Default: nil
 	Next func(ctx http.Context) bool
 
-	// Users 允许的凭据列表
-	// key为用户名，value为预计算的HA1:
-	// HA1 = MD5(username:realm:password)
+	// Users is the list of allowed credentials, keyed by username with the precomputed HA1 as
+	// value:
 	//
-	// 若Users为空，则必须设置Authorizer
+	//	HA1 = MD5(username:realm:password)
 	//
-	// 可选。默认: map[string]string{}
+	// When Users is empty, Authorizer must be set.
+	//
+	// Optional. Default: map[string]string{}
 	Users map[string]string
 
-	// Authorizer 自定义凭据校验函数
-	// 使用用户名校验凭据，返回对应的HA1字符串及是否通过
-	// 用户不存在时返回"", false
+	// Authorizer is a custom credential verification function. It verifies the credentials by
+	// username and reports the matching HA1 string and whether the check passed. It returns
+	// "", false when the user does not exist.
 	//
-	// 可选。默认: nil
+	// Optional. Default: nil
 	Authorizer func(username string) (ha1 string, ok bool)
 
-	// Unauthorized 未授权响应处理函数
-	// 默认返回401 Unauthorized并携带正确的WWW-Authenticate头
+	// Unauthorized handles an unauthorized response. By default it returns 401 Unauthorized with
+	// a correct WWW-Authenticate header.
 	//
-	// 可选。默认: nil
+	// Optional. Default: nil
 	Unauthorized http.Handler
 
-	// BadRequest 错误Authorization头响应处理函数
-	// 默认返回400 Bad Request且不携带WWW-Authenticate头
+	// BadRequest handles the response for a malformed Authorization header. By default it
+	// returns 400 Bad Request without a WWW-Authenticate header.
 	//
-	// 可选。默认: nil
+	// Optional. Default: nil
 	BadRequest http.Handler
 
-	// Realm 定义DigestAuth的realm属性，用于标识认证系统
+	// Realm sets the DigestAuth realm attribute that identifies the authentication system.
 	//
-	// 可选。默认: "Restricted"
+	// Optional. Default: "Restricted"
 	Realm string
 
-	// HeaderLimit Authorization头的最大长度限制
-	// 超过该长度的请求将被拒绝
+	// HeaderLimit is the maximum allowed length of the Authorization header. Requests exceeding
+	// it are rejected.
 	//
-	// 可选。默认: 8192
+	// Optional. Default: 8192
 	HeaderLimit int
 
-	// NonceTTL nonce值的有效期
-	// 在该窗口内，每个请求必须携带单调递增的nonce计数(nc)，否则将被视为重放而拒绝
+	// NonceTTL is the lifetime of a nonce value. Within this window every request must carry a
+	// monotonically increasing nonce count (nc), otherwise it is rejected as a replay.
 	//
-	// 可选。默认: 5 * time.Minute
+	// Optional. Default: 5 * time.Minute
 	NonceTTL time.Duration
 
-	// ContextUsernameKey 用户名在上下文中的存储key
+	// ContextUsernameKey is the context key under which the username is stored.
 	//
-	// 可选。默认: "username"
+	// Optional. Default: "username"
 	ContextUsernameKey string
 }
 
-// ConfigDefault 默认配置
+// ConfigDefault is the default configuration.
 var ConfigDefault = Config{
 	Next:               nil,
 	Users:              map[string]string{},
@@ -77,10 +79,7 @@ var ConfigDefault = Config{
 	ContextUsernameKey: "username",
 }
 
-// 填充配置默认值
-// 未提供的配置项使用默认值补齐
-// @param config ...Config 待处理的配置
-// @return @1 Config 填充默认值后的配置
+// configDefault returns config with the unset fields filled in from [ConfigDefault].
 func configDefault(config ...Config) Config {
 	// Return default config if nothing provided
 	if len(config) < 1 {

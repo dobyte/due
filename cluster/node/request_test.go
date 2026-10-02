@@ -8,8 +8,7 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 )
 
-// newTestRequestNode 创建仅初始化请求对象池的测试节点
-// @return @1 *Node 测试节点实例
+// newTestRequestNode creates a test node that only initializes the request object pool.
 func newTestRequestNode() *Node {
 	n := &Node{}
 	n.reqPool = &sync.Pool{New: func() any { return &request{node: n} }}
@@ -30,7 +29,7 @@ func TestRequestCloneBytes(t *testing.T) {
 		t.Fatalf("expect cloned message %q, got %q", "hello", string(msg))
 	}
 
-	// 克隆体必须持有独立切片，修改互不影响
+	// The clone must own an independent slice so that modifications do not affect each other.
 	msg[0] = 'x'
 	if r.message.([]byte)[0] == 'x' {
 		t.Fatal("clone should own an independent slice")
@@ -55,7 +54,7 @@ func TestRequestCloneBuffer(t *testing.T) {
 	}
 }
 
-// countJSONMarshaler 统计序列化次数的测试消息类型
+// countJSONMarshaler is a test message type that counts the number of marshals.
 type countJSONMarshaler struct {
 	n *atomic.Int32
 }
@@ -74,7 +73,8 @@ func TestRequestCloneMarshalOnce(t *testing.T) {
 	c1 := r.Clone().(*request)
 	c2 := r.Clone().(*request)
 
-	// 底层sonic库单次Marshal可能多次调用MarshalJSON，此处断言第二次克隆命中缓存、序列化次数不再增长
+	// The underlying sonic library may call MarshalJSON multiple times for a single Marshal; here
+	// we assert that the second clone hits the cache and that the marshal count stops growing.
 	if got := count.Load(); got == 0 {
 		t.Fatal("expect marshal at least once")
 	}
@@ -93,7 +93,7 @@ func TestRequestCloneMarshalOnce(t *testing.T) {
 		t.Fatalf("unexpected cloned message: %v", c2.message)
 	}
 
-	// 克隆体之间持有独立切片，修改互不影响
+	// The clones own independent slices so that modifications do not affect each other.
 	m1[0] = 'x'
 	if m2[0] == 'x' {
 		t.Fatal("clones should own independent slices")

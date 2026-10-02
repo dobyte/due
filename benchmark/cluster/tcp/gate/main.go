@@ -10,24 +10,24 @@ import (
 )
 
 func main() {
-	// 创建容器
+	// Create the container
 	container := due.NewContainer()
-	// 创建服务器
+	// Create the server
 	server := tcp.NewServer()
-	// 创建用户定位器
+	// Create the user locator
 	locator := redis.NewLocator()
-	// 创建服务发现
+	// Create the service registry
 	registry := nacos.NewRegistry()
-	// 创建网关组件
+	// Create the gate component
 	component1 := gate.NewGate(
 		gate.WithServer(server),
 		gate.WithLocator(locator),
 		gate.WithRegistry(registry),
 	)
-	// 创建PProf组件
+	// Create the pprof component
 	component2 := pprof.NewPProf()
-	// 添加网关组件
+	// Add the gate component
 	container.Add(component1, component2)
-	// 启动容器
+	// Start the container
 	container.Serve()
 }

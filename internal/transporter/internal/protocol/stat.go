@@ -16,9 +16,9 @@ const (
 	statResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B64
 )
 
-// EncodeStatReq 编码统计在线人数请求
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind}
+// EncodeStatReq encodes a stat request.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind}
 func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(statReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-def.SizeBytes))
@@ -30,9 +30,9 @@ func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeStatReq 解码统计在线人数请求
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{session kind}
+// DecodeStatReq decodes a stat request.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {session kind}
 func DecodeStatReq(buf buffer.Buffer) (kind session.Kind, err error) {
 	if buf.Len() != def.B8 {
 		err = errors.ErrInvalidMessage
@@ -44,9 +44,9 @@ func DecodeStatReq(buf buffer.Buffer) (kind session.Kind, err error) {
 	return
 }
 
-// EncodeStatRes 编码统计在线人数响应
-// 注意：buf 包含全段协议
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// EncodeStatRes encodes a stat response.
+// Note that buf contains the full protocol.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffer {
 	size := statResBytes - def.SizeBytes
 	if code != codes.OK || len(total) == 0 || total[0] == 0 {
@@ -67,9 +67,9 @@ func EncodeStatRes(seq uint64, code uint16, total ...uint64) *buffer.NocopyBuffe
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeStatRes 解码统计在线人数响应
-// 注意：buf 仅包含私有段
-// 协议：公共段：{size + header + route + seq} + 私有段：{code + [total]}
+// DecodeStatRes decodes a stat response.
+// Note that buf contains only the private section.
+// Protocol: public section: {size + header + route + seq} + private section: {code + [total]}
 func DecodeStatRes(buf buffer.Buffer) (code uint16, total uint64, err error) {
 	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B64 {
 		err = errors.ErrInvalidMessage
