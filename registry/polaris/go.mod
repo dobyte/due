@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/polaris/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.0
+	github.com/dobyte/due/v2 v2.6.1
 	github.com/polarismesh/polaris-go v1.7.1
 	golang.org/x/sync v0.22.0
 )

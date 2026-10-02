@@ -3,7 +3,7 @@ module github.com/dobyte/due/network/quic/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.0
+	github.com/dobyte/due/v2 v2.6.1
 	github.com/quic-go/quic-go v0.61.0
 )
 
