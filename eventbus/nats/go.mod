@@ -3,7 +3,7 @@ module github.com/dobyte/due/eventbus/nats/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.1
+	github.com/dobyte/due/v2 v2.6.2
 	github.com/nats-io/nats.go v1.54.0
 )
 
@@ -18,6 +18,7 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/nats-io/nkeys v0.4.16 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

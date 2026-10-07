@@ -10,7 +10,7 @@ require (
 	github.com/dobyte/due/network/tcp/v2 v2.0.0-20260602055605-806892f51b0b
 	github.com/dobyte/due/network/ws/v2 v2.0.0-20260602055605-806892f51b0b
 	github.com/dobyte/due/registry/nacos/v2 v2.0.0-20260602055605-806892f51b0b
-	github.com/dobyte/due/v2 v2.6.1
+	github.com/dobyte/due/v2 v2.6.2
 	github.com/donnie4w/go-logger v0.27.0
 	github.com/gorilla/websocket v1.5.3
 	go.uber.org/zap v1.27.0

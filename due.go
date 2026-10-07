@@ -1,7 +1,7 @@
 package due
 
 // Logo is the framework logo.
-const Logo = `
+const logo = `
                     ____  __  ________
                    / __ \/ / / / ____/	
                   / / / / / / / __/
@@ -10,7 +10,7 @@ const Logo = `
 `
 
 // Version is the framework version.
-const Version = "v2.6.1"
+const Version = "v2.6.2"
 
 // Website is the framework website.
 const Website = "https://github.com/dobyte/due"

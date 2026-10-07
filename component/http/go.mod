@@ -3,7 +3,7 @@ module github.com/dobyte/due/component/http/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.1
+	github.com/dobyte/due/v2 v2.6.2
 	github.com/go-openapi/runtime v0.33.1
 	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/valyala/fasthttp v1.73.0
