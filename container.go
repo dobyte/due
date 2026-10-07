@@ -184,7 +184,7 @@ func (c *Container) deletePidFile() {
 
 // printFrameworkInfo prints the framework information.
 func (c *Container) printFrameworkInfo() {
-	fmt.Println(strings.TrimSuffix(strings.TrimPrefix(Logo, "\n"), "\n"))
+	fmt.Println(strings.TrimSuffix(strings.TrimPrefix(logo, "\n"), "\n"))
 
 	info.Print("",
 		fmt.Sprintf("[Website] %s", Website),

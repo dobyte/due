@@ -47,6 +47,7 @@ type Node struct {
 	proxy        *Proxy
 	services     []*serviceEntity
 	instances    []*registry.ServiceInstance
+	instancesMu  sync.Mutex // Serializes the refresh of the service instance states
 	linker       *node.Server
 	scheduler    *Scheduler
 	transporter  transport.Server
@@ -445,7 +446,12 @@ func (n *Node) doRegisterServiceInstances() error {
 //
 // The optional state is the new state of the service instances; when it is omitted the instances
 // are only re-registered without updating the state. It reports an error when registration fails.
+// The mutex serializes concurrent refreshes, so that the instance states are never written while
+// another refresh is reading them for registration.
 func (n *Node) doRefreshServiceInstances(state ...cluster.State) error {
+	n.instancesMu.Lock()
+	defer n.instancesMu.Unlock()
+
 	if len(state) > 0 {
 		for _, instance := range n.instances {
 			instance.State = state[0].String()
@@ -465,7 +471,7 @@ func (n *Node) getState() cluster.State {
 // On success it refreshes the state of the service instances to the registry. It reports an error
 // when the state is illegal, the switch fails or refreshing the instances fails.
 func (n *Node) setState(state cluster.State) error {
-	if state > cluster.Busy {
+	if state < cluster.Work || state > cluster.Busy {
 		return errors.ErrIllegalOperation
 	}
 

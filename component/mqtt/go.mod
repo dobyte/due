@@ -3,7 +3,7 @@ module github.com/dobyte/due/component/mqtt/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.1
+	github.com/dobyte/due/v2 v2.6.2
 	github.com/mochi-mqtt/server/v2 v2.7.9
 )
 

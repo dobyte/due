@@ -25,7 +25,7 @@ func defaultActorOptions() *actorOptions {
 		dispatch:            true,
 		taskQueueSize:       1024,
 		taskWriteTimeout:    3 * time.Second,
-		messageQueueSize:    2048,
+		messageQueueSize:    1024,
 		messageWriteTimeout: 3 * time.Second,
 	}
 }

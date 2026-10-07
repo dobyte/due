@@ -3,7 +3,7 @@ module github.com/dobyte/due/network/kcp/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.1
+	github.com/dobyte/due/v2 v2.6.2
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/xtaci/kcp-go/v5 v5.6.72
 )
@@ -19,6 +19,7 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/klauspost/reedsolomon v1.12.4 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/panjf2000/ants/v2 v2.12.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect

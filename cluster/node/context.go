@@ -53,6 +53,10 @@ type Context interface {
 	//
 	// It is recommended over task.Add and go func; calling it automatically cancels every function
 	// in the defer call stack.
+	//
+	// Task must be called at most once per context and must not be combined with Next. The task
+	// shares the context object, which is recycled and has its fields cleared once the latest
+	// stage finishes; overlapping stages would otherwise observe a cleared context.
 	Task(fn func(ctx Context))
 	// Proxy returns the node proxy.
 	Proxy() *Proxy

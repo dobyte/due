@@ -869,7 +869,7 @@ func (l *GateLinker) WatchClusterInstance() {
 			default:
 				services, err := watcher.Next()
 				if err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) || errors.Is(err, errors.ErrWatcherStopped) {
 						return
 					} else {
 						continue
