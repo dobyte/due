@@ -296,7 +296,7 @@ func (g *Gate) getState() cluster.State {
 // setState updates the state, which may only switch between Work and Busy. On success it refreshes
 // the service instance with the new state.
 func (g *Gate) setState(state cluster.State) error {
-	if state > cluster.Busy {
+	if state < cluster.Work || state > cluster.Busy {
 		return errors.ErrIllegalOperation
 	}
 

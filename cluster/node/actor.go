@@ -18,10 +18,12 @@ import (
 type Creator func(actor *Actor, args ...any) Processor
 
 // The states of an [Actor].
+//
+// An actor is stored as [started] at creation time (see [Scheduler.spawn]), so there is no
+// unstarted state; the zero value merely reports "not started" for a bare Actor value.
 const (
-	unstart   int32 = iota // unstart: the actor has not been started
-	started                // started: the actor is running
-	destroyed              // destroyed: the actor has been destroyed
+	started   int32 = iota + 1 // started: the actor is running
+	destroyed                  // destroyed: the actor has been destroyed
 )
 
 // Actor is an actor model.
@@ -155,68 +157,71 @@ func (a *Actor) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 }
 
 // SetDefaultRouteHandler sets the default route handler, which handles every route that has not
-// been registered.
+// been registered. It does nothing when the actor is not started.
 func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
-	switch a.state.Load() {
-	case unstart:
-		a.defaultRouteHandler = handler
-	case started:
-		if _, err := a.taskQueue.Commit(func() {
-			if a.started() {
-				a.defaultRouteHandler = handler
-			}
-		}); err != nil {
-			log.Warnf("set default route handler failed, err: %v", err)
+	if a.state.Load() != started {
+		return
+	}
+
+	if _, err := a.taskQueue.Commit(func() {
+		if a.started() {
+			a.defaultRouteHandler = handler
 		}
+	}); err != nil {
+		log.Warnf("set default route handler failed, err: %v", err)
 	}
 }
 
-// AddRouteHandler registers handler for the given route.
+// AddRouteHandler registers handler for the given route. It does nothing when the actor is not
+// started.
 func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
-	switch a.state.Load() {
-	case unstart:
-		a.routes[route] = handler
-	case started:
-		if _, err := a.taskQueue.Commit(func() {
-			if a.started() {
-				a.routes[route] = handler
+	if a.state.Load() != started {
+		return
+	}
 
-				if a.opts.dispatch {
+	if _, err := a.taskQueue.Commit(func() {
+		if a.started() {
+			a.routes[route] = handler
+
+			if a.opts.dispatch {
+				// Serialized against releaseKind by the scheduler's read lock; when the kind
+				// entity is gone (the actor is being destroyed as the last of its kind), the
+				// registration is skipped so that no dangling route mapping is left behind.
+				a.scheduler.rw.RLock()
+				if val, ok := a.scheduler.kinds.Load(a.Kind()); ok {
 					a.scheduler.routes.Store(route, a.Kind())
-
-					if val, ok := a.scheduler.kinds.Load(a.Kind()); ok {
-						val.(*kindEntity).routes.Store(route, struct{}{})
-					}
+					val.(*kindEntity).routes.Store(route, struct{}{})
 				}
+				a.scheduler.rw.RUnlock()
 			}
-		}); err != nil {
-			log.Warnf("add route handler %d failed, err: %v", route, err)
 		}
+	}); err != nil {
+		log.Warnf("add route handler %d failed, err: %v", route, err)
 	}
 }
 
-// AddEventHandler registers handler for the given event.
+// AddEventHandler registers handler for the given event. It does nothing when the actor is not
+// started.
 func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
-	switch a.state.Load() {
-	case unstart:
-		a.events.Store(event, handler)
-	case started:
-		if _, err := a.taskQueue.Commit(func() {
-			if a.started() {
-				a.events.Store(event, handler)
-			}
-		}); err != nil {
-			log.Warnf("add event handler %s failed, err: %v", event, err)
+	if a.state.Load() != started {
+		return
+	}
+
+	if _, err := a.taskQueue.Commit(func() {
+		if a.started() {
+			a.events.Store(event, handler)
 		}
+	}); err != nil {
+		log.Warnf("add event handler %s failed, err: %v", event, err)
 	}
 }
 
@@ -293,13 +298,12 @@ func (a *Actor) Push(uid int64, message *cluster.Message) error {
 
 // Destroy destroys the actor. It reports false when the actor does not exist or has already been
 // destroyed.
-func (a *Actor) Destroy() (ok bool) {
-	if ok = a.destroy(); !ok {
-		return
-	}
-
-	_, ok = a.scheduler.remove(a.Kind(), a.ID())
-	return
+//
+// It shares the implementation of [Scheduler.kill]: the actor is removed from the scheduler
+// before being destroyed, so that exactly one of the concurrent Destroy/kill callers reports
+// success.
+func (a *Actor) Destroy() bool {
+	return a.scheduler.kill(a.Kind(), a.ID())
 }
 
 // destroy destroys the actor.

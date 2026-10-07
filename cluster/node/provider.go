@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/packet"
 )
 
@@ -42,6 +43,7 @@ func (p *provider) Deliver(ctx context.Context, gid, nid string, cid, uid int64,
 	stateful, ok := p.node.router.CheckRouteStateful(route)
 	if !ok && !p.node.router.HasDefaultRouteHandler() {
 		buf.Release()
+		log.Warnf("message routing does not register handler function, route: %v", route)
 		return nil
 	}
 

@@ -314,7 +314,7 @@ func (m *Mesh) getState() cluster.State {
 // the service instance state in the registry. Only Work and Busy are supported; an error is
 // returned when the state is illegal, the switch fails or the refresh fails.
 func (m *Mesh) setState(state cluster.State) error {
-	if state > cluster.Busy {
+	if state < cluster.Work || state > cluster.Busy {
 		return errors.ErrIllegalOperation
 	}
 

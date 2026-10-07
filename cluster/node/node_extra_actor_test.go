@@ -10,18 +10,15 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// newUnstartActor creates an actor that has not been started, used to exercise the unstart
-// branches of the actor configuration methods.
+// newUnstartActor creates an actor that has not been started, used to exercise the behavior of
+// the actor methods on a non-started actor.
 func newUnstartActor() *Actor {
-	act := &Actor{
+	return &Actor{
 		opts:   &actorOptions{kind: "room", id: "1"},
 		pid:    "room/1",
 		rw:     &sync.RWMutex{},
 		routes: make(map[int32]RouteHandler),
 	}
-	act.state.Store(unstart)
-
-	return act
 }
 
 // waitActorReady waits until fn reports true or the timeout elapses.
@@ -51,23 +48,24 @@ func TestActorAccessors(t *testing.T) {
 	}
 }
 
-// TestActorUnstartMethods verifies the configuration methods on a non-started actor.
+// TestActorUnstartMethods verifies that the configuration methods are no-ops on a non-started
+// actor.
 func TestActorUnstartMethods(t *testing.T) {
 	act := newUnstartActor()
 
 	act.SetDefaultRouteHandler(func(ctx Context) {})
-	if act.defaultRouteHandler == nil {
-		t.Fatal("the default route handler should be set")
+	if act.defaultRouteHandler != nil {
+		t.Fatal("the default route handler should not be set on a non-started actor")
 	}
 
 	act.AddRouteHandler(1, func(ctx Context) {})
-	if _, ok := act.routes[1]; !ok {
-		t.Fatal("route 1 should be registered")
+	if _, ok := act.routes[1]; ok {
+		t.Fatal("route 1 should not be registered on a non-started actor")
 	}
 
 	act.AddEventHandler(cluster.Connect, func(ctx Context) {})
-	if _, ok := act.events.Load(cluster.Connect); !ok {
-		t.Fatal("the event handler should be registered")
+	if _, ok := act.events.Load(cluster.Connect); ok {
+		t.Fatal("the event handler should not be registered on a non-started actor")
 	}
 
 	if err := act.Invoke(func() {}); !errors.Is(err, errors.ErrActorNotStarted) {
