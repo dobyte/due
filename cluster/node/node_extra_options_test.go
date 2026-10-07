@@ -551,8 +551,8 @@ func TestDefaultActorOptions(t *testing.T) {
 	if o.taskQueueSize != 1024 {
 		t.Fatalf("expect task queue size 1024, got %d", o.taskQueueSize)
 	}
-	if o.messageQueueSize != 2048 {
-		t.Fatalf("expect message queue size 2048, got %d", o.messageQueueSize)
+	if o.messageQueueSize != 1024 {
+		t.Fatalf("expect message queue size 1024, got %d", o.messageQueueSize)
 	}
 	if o.taskWriteTimeout != 3*time.Second {
 		t.Fatalf("expect task write timeout 3s, got %v", o.taskWriteTimeout)
