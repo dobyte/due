@@ -248,6 +248,8 @@ func (a *Actor) Next(ctx Context) error {
 
 // Deliver delivers message to the current actor for the given user.
 //
+// The delivered message originates from the local node and has no source actor.
+//
 // It reports an error when packing the message or delivering it fails.
 func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 	buf, err := a.scheduler.node.proxy.PackBuffer(message.Data)
@@ -257,7 +259,7 @@ func (a *Actor) Deliver(uid int64, message *cluster.Message) error {
 
 	req := a.scheduler.node.reqPool.Get().(*request)
 	req.nid = a.scheduler.node.opts.id
-	req.pid = a.PID()
+	req.pid = ""
 	req.uid = uid
 	req.seq = message.Seq
 	req.route = message.Route
@@ -365,6 +367,8 @@ func (a *Actor) dispatch() {
 			if !ok {
 				return
 			}
+
+			a.messageQueue.Done(false)
 
 			version := ctx.loadVersion()
 

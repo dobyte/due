@@ -267,17 +267,12 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 		eg.Go(func() error {
 			client, err := l.builder.Build(ep.Address())
 			if err != nil {
-				log.Errorf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v", insID, ep.Address(), args.Event, args.CID, args.UID, err)
+				log.Warnf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v", insID, ep.Address(), args.Event, args.CID, args.UID, err)
 				return nil
 			}
 
 			if err = client.Trigger(ctx, args.Event, args.CID, args.UID); err != nil {
-				switch {
-				case errors.Is(err, errors.ErrConnectionClosed), errors.Is(err, errors.ErrConnectionHanged):
-					log.Warnf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v", insID, args.Event, args.CID, args.UID, err)
-				default:
-					log.Errorf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v", insID, args.Event, args.CID, args.UID, err)
-				}
+				log.Warnf("trigger event failed, nid: %s, event: %v, cid: %d, uid: %d, err: %v", insID, args.Event, args.CID, args.UID, err)
 			}
 
 			return nil
@@ -583,7 +578,7 @@ func (l *NodeLinker) WatchClusterInstance() {
 			default:
 				services, err := watcher.Next()
 				if err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) || errors.Is(err, errors.ErrWatcherStopped) {
 						return
 					} else {
 						continue
