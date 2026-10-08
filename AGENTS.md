@@ -4,5 +4,6 @@
 
 ## 必读索引
 
+- [架构设计](.harness/notes/architecture.md)
 - [提交代码](.harness/workflows/autosubmit.md)
 - [发布版本](.harness/workflows/autorelease.md)
