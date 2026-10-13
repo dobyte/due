@@ -3,7 +3,7 @@ module github.com/dobyte/due/transport/grpc/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.2
+	github.com/dobyte/due/v2 v2.6.3
 	golang.org/x/sync v0.22.0
 	google.golang.org/grpc v1.83.1
 )

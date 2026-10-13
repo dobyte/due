@@ -64,6 +64,17 @@ func (a *Actor) Kind() string {
 	return a.opts.kind
 }
 
+// Processor returns the processor of the actor.
+//
+// It reports nil when the actor has been destroyed.
+func (a *Actor) Processor() Processor {
+	a.rw.RLock()
+	processor := a.processor
+	a.rw.RUnlock()
+
+	return processor
+}
+
 // Spawn derives a new actor from the actor.
 //
 // creator creates the processor of the new actor and opts configures it. It reports an error when
