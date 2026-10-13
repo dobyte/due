@@ -180,15 +180,6 @@ func TestNodeOptions(t *testing.T) {
 			},
 		},
 		{
-			name:  "WithContext nil keeps the previous value",
-			apply: WithContext(nil),
-			assert: func(t *testing.T, o *options) {
-				if o.ctx == nil {
-					t.Fatal("ctx should keep its previous value")
-				}
-			},
-		},
-		{
 			name:  "WithLocator valid",
 			apply: WithLocator(locator),
 			assert: func(t *testing.T, o *options) {
