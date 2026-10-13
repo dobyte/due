@@ -89,10 +89,10 @@ shutdownMaxWaitTime = "0s"
         id = ""
         # 实例名称
         name = "mesh"
-        # 是否将内部通信地址暴露到公网。默认为false
-        expose = false
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
+        # 实例权重，用于实例无状态路由消息的加权轮询策略，权重值必需大于0才生效。默认为1
+        weight = 1
         # 实例元数据
         [cluster.mesh.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -179,8 +179,6 @@ shutdownMaxWaitTime = "0s"
     disablePreParseMultipartForm = false
     # 是否减少内存占用，默认为false
     reduceMemoryUsage = false
-    # 是否信任代理，默认为false
-    trustProxy = false
     # 是否启用IP验证，默认为false
     enableIPValidation = false
     # 是否启用在解析器上拆分请求体，默认为false
@@ -285,6 +283,8 @@ shutdownMaxWaitTime = "0s"
             poolSize = 10
             # 分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）、一致性哈希（ch）。默认为rr
             dispatch = "rr"
+            # 失败处理模式。可选：0 Failover（故障转移）| 1 Failfast（快速失败）| 2 Failtry（失败重试）| 3 Failbackup（备份调用），默认为2
+            failMode = 2
 
 # 框架默认打包器统一采用以下的打包格式，自定义打包器可自行定义打包规则
 # 心跳包
@@ -333,8 +333,6 @@ shutdownMaxWaitTime = "0s"
     # 是否启用调用文件全路径
     callFullPath = true
     # 日志输出终端（数组和对象两种配置形式任选其一）
-    terminals = ["console", "file"]
-    # 日志输出终端（数组和对象两种配置形式任选其一）
     [log.terminals]
         # 控制台 -> 日志级别
         console = ["debug", "info", "warn", "error", "fatal", "panic"]
@@ -356,14 +354,16 @@ shutdownMaxWaitTime = "0s"
         format = "text"
         # 文件最大留存时间，d:天、h:时、m:分、s:秒
         maxAge = "7d"
-        # 文件最大尺寸限制，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为100M
-        maxSize = "100M"
+        # 文件最大尺寸限制，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为500M
+        maxSize = "500M"
         # 缓冲区大小，支持单位： B | K | KB | M | MB | G | GB | T | TB | P | PB | E | EB | Z | ZB，默认为32K
         bufferSize = "32K"
         # 文件翻转方式，可选：none | year | month | week | day | hour，默认为none
         rotate = "none"
         # 文件翻转时是否对文件进行压缩
         compress = false
+        # 缓冲区刷新间隔，<=0时每条日志立即刷盘，>0时批量写入并定期刷盘，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1s
+        flushInterval = "1s"
     # 阿里云SLS日志同步器配置
     [log.aliyun]
         # 服务域名，公网使用公网域名，内网使用私网域名
@@ -409,8 +409,6 @@ shutdownMaxWaitTime = "0s"
         timeout = "3s"
         # 租约存活时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为15s
         leaseTTL = "15s"
-        # 心跳重试次数，默认为3
-        retryTimes = 3
     # consule注册中心
     [registry.consul]
         # 客户端连接地址，默认为127.0.0.1:8500
@@ -439,8 +437,10 @@ shutdownMaxWaitTime = "0s"
         clusterName = "DEFAULT"
         # 群组名称。默认为DEFAULT_GROUP
         groupName = "DEFAULT_GROUP"
-        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3秒
-        timeout = "3s"
+        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10秒
+        timeout = "10s"
+        # Nacos客户端心跳间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5秒
+        heartbeat = "5s"
         # ACM的命名空间Id。默认为空
         namespaceId = ""
         # 当使用ACM时，需要该配置，默认为空。详见：https://help.aliyun.com/document_detail/130146.html
@@ -486,6 +486,8 @@ shutdownMaxWaitTime = "0s"
         path = "/config"
         # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-only"
+        # 上下文超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+        timeout = "3s"
     # consul配置中心
     [config.consul]
         # 客户端连接地址
@@ -504,10 +506,8 @@ shutdownMaxWaitTime = "0s"
         clusterName = "DEFAULT"
         # 群组名称。默认为DEFAULT_GROUP
         groupName = "DEFAULT_GROUP"
-        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10秒
-        timeout = "10s"
-        # Nacos客户端心跳间隔，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5秒
-        heartbeat = "5s"
+        # 请求Nacos服务端超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3秒
+        timeout = "3s"
         # ACM的命名空间Id。默认为空
         namespaceId = ""
         # 当使用ACM时，需要该配置，默认为空。详见：https://help.aliyun.com/document_detail/130146.html
@@ -549,6 +549,10 @@ shutdownMaxWaitTime = "0s"
             origins = ["*"]
             # 服务器最大连接数
             maxConnNum = 5000
+            # 读取缓冲区大小，默认为4096
+            readBufferSize = 4096
+            # 写入缓冲区大小，默认为4096
+            writeBufferSize = 4096
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024
@@ -559,16 +563,22 @@ shutdownMaxWaitTime = "0s"
             heartbeatMechanism = "resp"
             # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
             authorizeTimeout = "0s"
+            # 关闭连接超时时间，（等待写队列排空的上限时间，超时后强制断开连接；0表示不限制）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
+            closeTimeout = "0s"
             # 是否开启压缩，默认为false
             enableCompression = false
             # 压缩等级，范围1~9，等级越高压缩率越高，CPU消耗越大，默认1
             compressionLevel = 1
-            # 信任代理配置
-            [network.ws.server.proxy]
+            # 代理模式，默认为0。可选：0 不使用代理 | 1 传输代理（四层代理，服务器启用Proxy Protocol）| 2 应用代理（七层代理）
+            proxyMode = 0
+            # 代理配置，仅在代理模式不为0时生效
+            [network.ws.server.proxyOptions]
                 # 代理头部
                 proxyHeader = "X-Forwarded-For"
+                # 客户端端口头部，默认为X-Forwarded-Port
+                portHeader = "X-Forwarded-Port"
                 # 信任代理配置
-                [network.ws.server.proxy.trustProxy]
+                [network.ws.server.proxyOptions.trustProxy]
                     # 是否信任代理，默认为false
                     enable = true
                     # 代理是受信任代理 IP 地址或 CIDR 范围的列表
@@ -583,20 +593,78 @@ shutdownMaxWaitTime = "0s"
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
+            # CA证书文件
+            caFile = ""
+            # 证书域名
+            serverName = ""
             # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
             dialTimeout = "3s"
+            # 读取缓冲区大小，默认为4096
+            readBufferSize = 4096
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024
             writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
+            # 关闭连接超时时间，（等待写队列排空的上限时间，超时后强制断开连接；0表示不限制）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
+            closeTimeout = "0s"
             # 是否开启压缩，默认为false
-            compression = false
+            enableCompression = false
+            # 压缩等级，范围1~9，等级越高压缩率越高，CPU消耗越大，默认1
+            compressionLevel = 1
     # tcp网络模块
     [network.tcp]
         # tcp网络服务器
         [network.tcp.server]
+            # 服务器监听地址
+            addr = ":3553"
+            # 私钥文件
+            keyFile = ""
+            # 证书文件
+            certFile = ""
+            # 服务器最大连接数
+            maxConnNum = 5000
+            # 读取缓冲区大小，默认为4096
+            readBufferSize = 4096
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
+            # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
+            # 心跳机制，默认resp
+            heartbeatMechanism = "resp"
+            # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
+            authorizeTimeout = "0s"
+            # 关闭连接超时时间，（等待写队列排空的上限时间，超时后强制断开连接；0表示不限制）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
+            closeTimeout = "0s"
+            # 是否启用Proxy Protocol协议，默认为false
+            enableProxyProtocol = false
+        # tcp网络客户端
+        [network.tcp.client]
+            # 拨号地址
+            addr = "127.0.0.1:3553"
+            # CA证书文件
+            caFile = ""
+            # 证书域名
+            serverName = ""
+            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
+            dialTimeout = "3s"
+            # 读取缓冲区大小，默认为4096
+            readBufferSize = 4096
+            # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
+            writeTimeout = "0s"
+            # 写入队列大小，默认1024
+            writeQueueSize = 1024
+            # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
+            heartbeatInterval = "10s"
+            # 关闭连接超时时间，（等待写队列排空的上限时间，超时后强制断开连接；0表示不限制）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s
+            closeTimeout = "0s"
+    # quic网络模块
+    [network.quic]
+        # quic网络服务器
+        [network.quic.server]
             # 服务器监听地址
             addr = ":3553"
             # 私钥文件
@@ -611,26 +679,32 @@ shutdownMaxWaitTime = "0s"
             writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
-            # 心跳机制，默认resp
+            # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
             heartbeatMechanism = "resp"
             # 授权超时时间，（在客户端建立连接后，如果在授权超时时间内未进行绑定用户操作，则被认定为未授权连接，服务器会强制断开连接）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为0s，不进行授权检测
             authorizeTimeout = "0s"
-        # tcp网络客户端
-        [network.tcp.client]
+            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            handshakeTimeout = "5s"
+            # 关闭连接超时时间，（等待写队列排空及对端确认的驻留时间，0或负值将被忽略）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            closeTimeout = "5s"
+        # quic网络客户端
+        [network.quic.client]
             # 拨号地址
             addr = "127.0.0.1:3553"
             # CA证书文件
             caFile = ""
             # 证书域名
             serverName = ""
-            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为3s
-            dialTimeout = "3s"
+            # 拨号超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            dialTimeout = "5s"
             # 写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认无限制
             writeTimeout = "0s"
             # 写入队列大小，默认1024
             writeQueueSize = 1024
             # 心跳间隔时间；设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             heartbeatInterval = "10s"
+            # 关闭连接超时时间，（等待写队列排空及对端确认的驻留时间，0或负值将被忽略）支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5s
+            closeTimeout = "5s"
 
 # 用户定位器模块
 [locate]
@@ -675,7 +749,7 @@ shutdownMaxWaitTime = "0s"
         caFile = ""
         # 最大重试次数
         maxRetries = 3
-        # key前缀，默认为cache
+        # key前缀，默认为due:cache
         prefix = "due:cache"
         # 空值，默认为cache@nil
         nilValue = "cache@nil"
@@ -689,7 +763,7 @@ shutdownMaxWaitTime = "0s"
     [cache.memcache]
         # 客户端连接地址
         addrs = ["127.0.0.1:11211"]
-        # key前缀，默认为cache
+        # key前缀，默认为due:cache
         prefix = "due:cache"
         # 空值，默认为cache@nil
         nilValue = "cache@nil"
@@ -756,29 +830,17 @@ shutdownMaxWaitTime = "0s"
             blockSize = 0
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
-        [crypto.rsa.decryptor]
-            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
-            hash = "SHA256"
-            # 填充规则，不区分大小写。可选：NORMAL | OAEP
-            padding = "NORMAL"
-            # 标签。加解密时必需一致
-            label = ""
-            # 私钥。可设置文件路径或私钥串
+            # 私钥，可设置文件路径或私钥串
             privateKey = ""
         [crypto.rsa.signer]
             # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
             hash = "SHA256"
             # 填充规则，不区分大小写。可选：PKCS | PSS
             padding = "PSS"
-            # 私钥。可设置文件路径或私钥串
-            privateKey = ""
-        [crypto.rsa.verifier]
-            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
-            hash = "SHA256"
-            # 填充规则，不区分大小写。可选：PKCS | PSS
-            padding = "PSS"
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
+            # 私钥，可设置文件路径或私钥串
+            privateKey = ""
     # ECC加密模块
     [crypto.ecc]
         [crypto.ecc.encryptor]
@@ -788,27 +850,17 @@ shutdownMaxWaitTime = "0s"
             s2 = ""
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
-        [crypto.ecc.decryptor]
-            # 共享信息。加解密时必需一致
-            s1 = ""
-            # 共享信息。加解密时必需一致
-            s2 = ""
-            # 私钥。可设置文件路径或私钥串
+            # 私钥，可设置文件路径或私钥串
             privateKey = ""
         [crypto.ecc.signer]
             # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
             hash = "SHA256"
             # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
             delimiter = " "
-            # 私钥。可设置文件路径或私钥串
-            privateKey = ""
-        [crypto.ecc.verifier]
-            # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
-            hash = "SHA256"
-            # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
-            delimiter = " "
             # 公钥，可设置文件路径或公钥串
             publicKey = ""
+            # 私钥，可设置文件路径或私钥串
+            privateKey = ""
 
 # 事件总线模块
 [eventbus]
@@ -840,6 +892,8 @@ shutdownMaxWaitTime = "0s"
         maxRetries = 3
         # key前缀
         prefix = "due:eventbus"
+        # 消息留存时长，超时未消费的消息将被自动丢弃。默认为0，即不保留消息，未消费的消息会被立即丢弃
+        staleDuration = 0
     # kafka事件总线模块
     [eventbus.kafka]
         # 客户端连接地址
@@ -848,5 +902,11 @@ shutdownMaxWaitTime = "0s"
         version = ""
         # key前缀
         prefix = "due:eventbus"
-        # 是否自动创建topic，默认为false
-        autoCreateTopic = false
+        # 是否自动创建topic，默认为true
+        autoCreateTopic = true
+        # 自动创建topic时的分区数，默认为1
+        partitions = 1
+        # 自动创建topic时的副本因子（副本数），默认为1
+        replicationFactor = 1
+        # 消息过期丢弃时长，超过该时长的消息将被丢弃。默认为0，即保留过期消息
+        staleDuration = 0
