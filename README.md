@@ -20,9 +20,8 @@ English | [简体中文](README-ZH.md)
 
 ### 1. Introduction
 
-[due](https://dobyte.github.io/) is a lightweight, high-performance distributed game server framework developed in Go.
+[due](https://dobyte.github.io/) is an out-of-the-box, lightweight and high-performance distributed game server framework developed in Go, built on a complete native cluster solution that easily delivers 430K TPS on a single thread — battle-proven in multiple enterprise-level game projects, with stability fully guaranteed.
 Its module design draws on the modular design philosophy of [kratos](https://github.com/go-kratos/kratos), aiming to provide a complete, efficient, elegant, and standardized solution for game server development.
-Since its creation, the framework has been deployed and battle-tested in multiple enterprise-level game projects, with stability fully guaranteed.
 
 ![Architecture](architecture.jpg)
 
