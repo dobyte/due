@@ -237,6 +237,12 @@ func TestExtraReadHeartbeatWithTime(t *testing.T) {
 	hb := p.PackHeartbeat(true)
 	defer hb.Release()
 
+	// The timestamp flag bit is reserved for the extended opcode, so the header must only carry
+	// the heartbeat flag; the timestamp is distinguished by the size field.
+	if got := hb.Bytes()[4]; got != 0x80 {
+		t.Errorf("PackHeartbeat() header = %#x, want 0x80", got)
+	}
+
 	for _, rf := range readerFactories {
 		t.Run(rf.name, func(t *testing.T) {
 			isHeartbeat, heartbeatTime, body, err := p.Read(rf.make(hb.Bytes()))
@@ -295,8 +301,8 @@ func TestExtraReadErrors(t *testing.T) {
 		wantErr error
 	}{
 		{"short header", []byte{0, 0, 0}, nil},
-		{"heartbeat time wrong size", frame(5, 0xC0), errors.ErrInvalidMessage},
-		{"heartbeat time short body", frame(9, 0xC0), nil},
+		{"heartbeat invalid size", frame(5, 0x80), errors.ErrInvalidMessage},
+		{"heartbeat time short body", frame(9, 0x80), nil},
 		{"zero size", frame(0, 0x00), errors.ErrInvalidMessage},
 		{"data too large", frame(2000, 0x00), errors.ErrMessageTooLarge},
 		{"short data body", frame(10, 0x00), nil},
