@@ -1149,6 +1149,7 @@ CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 1
 * [due-client-shape](https://github.com/dobyte/due-client-shape)
 * [due-client-unity](https://github.com/dobyte/due-client-unity)
 * [due-client-cocos](https://github.com/dobyte/due-client-cocos)
+* [due-client-godot](https://github.com/dobyte/due-client-godot)
 
 ### 16.详细示例
 
