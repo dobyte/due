@@ -1151,6 +1151,7 @@ These test results are for reference only. For the detailed test case code, see 
 * [due-client-unity](https://github.com/dobyte/due-client-unity)
 * [due-client-cocos](https://github.com/dobyte/due-client-cocos)
 * [due-client-godot](https://github.com/dobyte/due-client-godot)
+* [due-client-laya](https://github.com/dobyte/due-client-laya)
 
 ### 16. Detailed Examples
 
