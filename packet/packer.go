@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	dataBit          = 0 << 7 // Data flag
-	heartbeatBit     = 1 << 7 // Heartbeat flag
-	heartbeatTimeBit = 1 << 6 // Heartbeat timestamp flag
+	dataBit      = 0 << 7 // Data flag
+	heartbeatBit = 1 << 7 // Heartbeat flag
 )
 
 // Packer defines the encoding and decoding capabilities of messages.
@@ -93,32 +92,27 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffe
 		return false, 0, nil, err
 	}
 
-	var (
-		header              = head[defaultSizeBytes]
-		isHeartbeat         = header&heartbeatBit == heartbeatBit
-		isWithHeartbeatTime = header&heartbeatTimeBit == heartbeatTimeBit
-	)
+	header := head[defaultSizeBytes]
 
-	if isHeartbeat {
-		if !isWithHeartbeatTime {
+	if header&heartbeatBit == heartbeatBit {
+		switch size := p.opts.byteOrder.Uint32(head[:defaultSizeBytes]); size {
+		case defaultHeaderBytes:
 			_, _ = r.Discard(defaultSizeBytes + defaultHeaderBytes)
 			return true, 0, nil, nil
-		}
+		case defaultHeaderBytes + defaultHeartbeatTimeBytes:
+			data, err := r.Peek(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
+			if err != nil {
+				return false, 0, nil, err
+			}
 
-		if size := p.opts.byteOrder.Uint32(head[:defaultSizeBytes]); size != defaultHeaderBytes+defaultHeartbeatTimeBytes {
+			heartbeatTime := int64(p.opts.byteOrder.Uint64(data[defaultSizeBytes+defaultHeaderBytes:]))
+
+			_, _ = r.Discard(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
+
+			return true, heartbeatTime, nil, nil
+		default:
 			return false, 0, nil, errors.ErrInvalidMessage
 		}
-
-		data, err := r.Peek(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
-		if err != nil {
-			return false, 0, nil, err
-		}
-
-		heartbeatTime := int64(p.opts.byteOrder.Uint64(data[defaultSizeBytes+defaultHeaderBytes:]))
-
-		_, _ = r.Discard(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
-
-		return true, heartbeatTime, nil, nil
 	}
 
 	size := int64(p.opts.byteOrder.Uint32(head[:defaultSizeBytes]))
@@ -171,35 +165,30 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 		return false, 0, nil, err
 	}
 
-	var (
-		header              = data1[defaultSizeBytes]
-		isHeartbeat         = header&heartbeatBit == heartbeatBit
-		isWithHeartbeatTime = header&heartbeatTimeBit == heartbeatTimeBit
-	)
+	header := data1[defaultSizeBytes]
 
-	if isHeartbeat {
-		if !isWithHeartbeatTime {
+	if header&heartbeatBit == heartbeatBit {
+		switch size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes]); size {
+		case defaultHeaderBytes:
 			buf1.Release()
 			return true, 0, nil, nil
-		}
+		case defaultHeaderBytes + defaultHeartbeatTimeBytes:
+			var data [defaultHeartbeatTimeBytes]byte
 
-		if size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes]); size != defaultHeaderBytes+defaultHeartbeatTimeBytes {
+			if _, err := io.ReadFull(reader, data[:]); err != nil {
+				buf1.Release()
+				return false, 0, nil, err
+			}
+
+			heartbeatTime := int64(p.opts.byteOrder.Uint64(data[:]))
+
+			buf1.Release()
+
+			return true, heartbeatTime, nil, nil
+		default:
 			buf1.Release()
 			return false, 0, nil, errors.ErrInvalidMessage
 		}
-
-		var data [defaultHeartbeatTimeBytes]byte
-
-		if _, err := io.ReadFull(reader, data[:]); err != nil {
-			buf1.Release()
-			return false, 0, nil, err
-		}
-
-		heartbeatTime := int64(p.opts.byteOrder.Uint64(data[:]))
-
-		buf1.Release()
-
-		return true, heartbeatTime, nil, nil
 	}
 
 	size := int64(p.opts.byteOrder.Uint32(data1[:defaultSizeBytes]))
@@ -407,7 +396,7 @@ func (p *defaultPacker) PackHeartbeat(server ...bool) buffer.Buffer {
 	if p.opts.heartbeatTime && len(server) > 0 && server[0] {
 		writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
 		writer.WriteUint32s(p.opts.byteOrder, uint32(defaultHeaderBytes+defaultHeartbeatTimeBytes))
-		writer.WriteUint8s(uint8(heartbeatBit | heartbeatTimeBit))
+		writer.WriteUint8s(uint8(heartbeatBit))
 		writer.WriteUint64s(p.opts.byteOrder, uint64(time.Now().UnixNano()))
 
 		return writer

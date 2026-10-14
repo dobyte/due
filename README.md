@@ -20,9 +20,8 @@ English | [简体中文](README-ZH.md)
 
 ### 1. Introduction
 
-[due](https://dobyte.github.io/) is a lightweight, high-performance distributed game server framework developed in Go.
+[due](https://dobyte.github.io/) is an out-of-the-box, lightweight and high-performance distributed game server framework developed in Go, built on a complete native cluster solution that easily delivers 430K TPS on a single thread — battle-proven in multiple enterprise-level game projects, with stability fully guaranteed.
 Its module design draws on the modular design philosophy of [kratos](https://github.com/go-kratos/kratos), aiming to provide a complete, efficient, elegant, and standardized solution for game server development.
-Since its creation, the framework has been deployed and battle-tested in multiple enterprise-level game projects, with stability fully guaranteed.
 
 ![Architecture](architecture.jpg)
 
@@ -538,7 +537,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27159                                           |
@@ -637,7 +636,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27390                                           |
@@ -768,7 +767,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27801                                           |
@@ -807,7 +806,7 @@ CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 1
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.6.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | Go: v1.27.1                                          |
@@ -1149,6 +1148,8 @@ These test results are for reference only. For the detailed test case code, see 
 
 * [due-client-ts](https://github.com/dobyte/due-client-ts)
 * [due-client-shape](https://github.com/dobyte/due-client-shape)
+* [due-client-unity](https://github.com/dobyte/due-client-unity)
+* [due-client-cocos](https://github.com/dobyte/due-client-cocos)
 
 ### 16. Detailed Examples
 
@@ -1183,18 +1184,18 @@ These test results are for reference only. For the detailed test case code, see 
 
    Reason: Because the framework uses a modular design, each module has its own version number, and the main module's version number is the basis for all submodule version numbers. Therefore, when using the framework, you need to make sure that the main module and submodule versions are consistent; otherwise, unexpected problems may occur.
 
-   For example: the due main module version is v2.3.2, while the lock/redis submodule version is v2.0.0-20250902100831-0402c3a6689f, which causes a version inconsistency.
+   For example: the due main module version is v2.6.2, while the lock/redis submodule version is v2.0.0-20250902100831-0402c3a6689f, which causes a version inconsistency.
 
    ```text
-   github.com/dobyte/due/v2 v2.3.2
+   github.com/dobyte/due/v2 v2.6.2
    github.com/dobyte/due/lock/redis/v2 v2.0.0-20250902100831-0402c3a6689f
    ```
 
    Solution:
 
-   1. Go to the [release](https://github.com/dobyte/due/releases) page and find the commit corresponding to the framework's released version: 93262b5.
+   1. Go to the [release](https://github.com/dobyte/due/releases) page and find the commit corresponding to the framework's released version: 4c547b1.
 
-   2. Run `go get github.com/dobyte/due/lock/redis/v2@93262b5` to fetch the submodule corresponding to the current main module version.
+   2. Run `go get github.com/dobyte/due/lock/redis/v2@4c547b1` to fetch the submodule corresponding to the current main module version.
 
    3. The problem is now resolved.
 
