@@ -537,7 +537,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27159                                           |
@@ -636,7 +636,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27390                                           |
@@ -767,7 +767,7 @@ $ go run main.go
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.1.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | PID: 27801                                           |
@@ -805,7 +805,7 @@ CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 1
                 /_____/\____/_____/
 ┌──────────────────────────────────────────────────────┐
 | [Website] https://github.com/dobyte/due              |
-| [Version] v2.6.0                                     |
+| [Version] v2.6.2                                     |
 └──────────────────────────────────────────────────────┘
 ┌────────────────────────Global────────────────────────┐
 | Go: v1.27.1                                          |
@@ -1147,6 +1147,8 @@ CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 1
 
 * [due-client-ts](https://github.com/dobyte/due-client-ts)
 * [due-client-shape](https://github.com/dobyte/due-client-shape)
+* [due-client-unity](https://github.com/dobyte/due-client-unity)
+* [due-client-cocos](https://github.com/dobyte/due-client-cocos)
 
 ### 16.详细示例
 
@@ -1181,18 +1183,18 @@ CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 1
 
    原因：由于框架采用的是模块化设计，每个模块都有自己的版本号，而主模块的版本号是所有子模块版本号的基础。因此，在使用框架时，需要注意主模块与子模块的版本号是否一致，否则可能会导致一些不可预料的问题。
 
-   例如：due主模块版本为v2.3.2，而子模块lock/redis版本为v2.0.0-20250902100831-0402c3a6689f，这就会导致版本不一致的问题。
+   例如：due主模块版本为v2.6.2，而子模块lock/redis版本为v2.0.0-20250902100831-0402c3a6689f，这就会导致版本不一致的问题。
 
    ```text
-   github.com/dobyte/due/v2 v2.3.2
+   github.com/dobyte/due/v2 v2.6.2
    github.com/dobyte/due/lock/redis/v2 v2.0.0-20250902100831-0402c3a6689f
    ```
 
    解决：
 
-   1.进入到[release](https://github.com/dobyte/due/releases)页面，找到框架发布的版本号对应的commit号：93262b5。
+   1.进入到[release](https://github.com/dobyte/due/releases)页面，找到框架发布的版本号对应的commit号：4c547b1。
 
-   2.执行go get github.com/dobyte/due/lock/redis/v2@93262b5拉取与主模块本版对应的子模块。
+   2.执行go get github.com/dobyte/due/lock/redis/v2@4c547b1拉取与主模块本版对应的子模块。
 
    3.至此，问题解决。
 
