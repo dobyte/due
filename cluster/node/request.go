@@ -85,7 +85,14 @@ func (r *request) Kind() Kind {
 }
 
 // Parse parses the message into v.
+//
+// An empty payload is rejected with [errors.ErrInvalidMessage], and the cached plaintext is reused
+// so that a repeated parse does not decrypt the message again.
 func (r *request) Parse(v any) error {
+	if r.plaintext != nil {
+		return r.node.opts.codec.Unmarshal(r.plaintext, v)
+	}
+
 	var msg []byte
 
 	switch m := r.message.(type) {
@@ -100,13 +107,7 @@ func (r *request) Parse(v any) error {
 	}
 
 	if len(msg) == 0 {
-		// A tamper-protected payload always bundles the route and the sequence number, so an empty
-		// payload can not be verified and is rejected instead of being accepted silently.
-		if r.gid != "" && r.node.opts.encryptor != nil && r.node.opts.enableTamperProtection {
-			return errors.ErrInvalidMessage
-		}
-
-		return nil
+		return errors.ErrInvalidMessage
 	}
 
 	if r.gid != "" && r.node.opts.encryptor != nil {
@@ -120,8 +121,7 @@ func (r *request) Parse(v any) error {
 	return r.node.opts.codec.Unmarshal(msg, v)
 }
 
-// decrypt decrypts a message delivered by a gateway and caches the plaintext on the request, so
-// that repeated parses do not decrypt the message again.
+// decrypt decrypts a message delivered by a gateway and caches the plaintext on the request.
 //
 // When anti-tampering protection is enabled the client bundles the route and the sequence number
 // into the payload as a nested packet and encrypts it, so the values carried by the message header
@@ -134,10 +134,6 @@ func (r *request) Parse(v any) error {
 // Only the uplink is covered: the values carried by the messages pushed to the clients are not
 // validated.
 func (r *request) decrypt(msg []byte) error {
-	if r.plaintext != nil {
-		return nil
-	}
-
 	data, err := r.node.opts.encryptor.Decrypt(msg)
 	if err != nil {
 		return err
