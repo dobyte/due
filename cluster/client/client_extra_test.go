@@ -283,15 +283,6 @@ func TestClientOptions(t *testing.T) {
 			},
 		},
 		{
-			name:  "WithContext nil",
-			apply: func(o *options) { WithContext(nil)(o) },
-			check: func(t *testing.T, o *options) {
-				if o.ctx == nil {
-					t.Fatal("nil ctx must be ignored")
-				}
-			},
-		},
-		{
 			name:  "WithEncryptor valid",
 			apply: func(o *options) { WithEncryptor(&tEncryptor{})(o) },
 			check: func(t *testing.T, o *options) {

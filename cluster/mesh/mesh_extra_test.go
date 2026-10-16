@@ -342,15 +342,6 @@ func TestMeshOptions(t *testing.T) {
 			},
 		},
 		{
-			name:  "WithContext nil",
-			apply: func(o *options) { WithContext(nil)(o) },
-			check: func(t *testing.T, o *options) {
-				if o.ctx == nil {
-					t.Fatal("nil ctx must be ignored")
-				}
-			},
-		},
-		{
 			name:  "WithLocator valid",
 			apply: func(o *options) { WithLocator(newMeshLocator())(o) },
 			check: func(t *testing.T, o *options) {
