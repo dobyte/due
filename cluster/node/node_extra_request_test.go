@@ -120,15 +120,15 @@ func TestRequestParse(t *testing.T) {
 		if v.A != 4 {
 			t.Fatalf("expect a=4, got %d", v.A)
 		}
-		if string(r.decrypted) != `{"a":4}` {
-			t.Fatalf("expect the decrypted payload to be cached, got %q", r.decrypted)
+		if string(r.plaintext) != `{"a":4}` {
+			t.Fatalf("expect the plaintext to be cached, got %q", r.plaintext)
 		}
 
-		// A repeated parse reuses the cached payload instead of decrypting the message again.
+		// A repeated parse reuses the cached plaintext instead of decrypting the message again.
 		r.message = []byte("corrupted")
 		v = payload{}
 		if err := r.Parse(&v); err != nil {
-			t.Fatalf("parse with the cached payload failed: %v", err)
+			t.Fatalf("parse with the cached plaintext failed: %v", err)
 		}
 		if v.A != 4 {
 			t.Fatalf("expect a=4 from the cached payload, got %d", v.A)
@@ -173,23 +173,23 @@ func TestRequestParse(t *testing.T) {
 		if v.A != 7 {
 			t.Fatalf("expect a=7, got %d", v.A)
 		}
-		if string(r.decrypted) != `{"a":7}` {
-			t.Fatalf("expect the decrypted payload to be cached, got %q", r.decrypted)
+		if string(r.plaintext) != `{"a":7}` {
+			t.Fatalf("expect the plaintext to be cached, got %q", r.plaintext)
 		}
 
-		// A repeated parse reuses the cached payload instead of decrypting the message again.
+		// A repeated parse reuses the cached plaintext instead of decrypting the message again.
 		r.message = []byte("corrupted")
 		v = payload{}
 		if err := r.Parse(&v); err != nil {
-			t.Fatalf("parse with the cached payload failed: %v", err)
+			t.Fatalf("parse with the cached plaintext failed: %v", err)
 		}
 		if v.A != 7 {
-			t.Fatalf("expect a=7 from the cached payload, got %d", v.A)
+			t.Fatalf("expect a=7 from the cached plaintext, got %d", v.A)
 		}
 
 		r.release()
-		if r.decrypted != nil {
-			t.Fatal("expect the cached payload to be cleared on release")
+		if r.plaintext != nil {
+			t.Fatal("expect the cached plaintext to be cleared on release")
 		}
 	})
 
@@ -204,8 +204,8 @@ func TestRequestParse(t *testing.T) {
 		if err := r.Parse(&v); !errors.Is(err, errors.ErrTamperedMessage) {
 			t.Fatalf("expect the tampered message error, got %v", err)
 		}
-		if r.decrypted != nil {
-			t.Fatal("expect no payload to be cached for a tampered message")
+		if r.plaintext != nil {
+			t.Fatal("expect no plaintext to be cached for a tampered message")
 		}
 	})
 
@@ -236,8 +236,8 @@ func TestRequestParse(t *testing.T) {
 	})
 }
 
-// packNestedMessage packs a message that bundles the route and the sequence number into its payload,
-// as the sender does when anti-tampering protection is enabled.
+// packNestedMessage packs a message that bundles the route and the sequence number into its
+// payload, as the sender does when anti-tampering protection is enabled.
 func packNestedMessage(t *testing.T, route, seq int32, payload []byte) []byte {
 	t.Helper()
 
@@ -293,7 +293,7 @@ func TestRequestCloneBasic(t *testing.T) {
 	r.seq = 7
 	r.route = 8
 	r.message = []byte("hello")
-	r.decrypted = []byte("plain")
+	r.plaintext = []byte("plain")
 
 	act := &Actor{}
 	r.actor.Store(act)
@@ -311,15 +311,15 @@ func TestRequestCloneBasic(t *testing.T) {
 	if string(c.message.([]byte)) != "hello" {
 		t.Fatalf("unexpected clone message: %v", c.message)
 	}
-	if string(c.decrypted) != "plain" {
-		t.Fatalf("unexpected clone decrypted payload: %q", c.decrypted)
+	if string(c.plaintext) != "plain" {
+		t.Fatalf("unexpected clone plaintext: %q", c.plaintext)
 	}
 
-	// The clone holds an independent copy of the decrypted payload, so mutating it leaves the
-	// original request untouched.
-	c.decrypted[0] = 'P'
-	if string(r.decrypted) != "plain" {
-		t.Fatalf("the original decrypted payload should not be shared with the clone: %q", r.decrypted)
+	// The clone holds an independent copy of the plaintext, so mutating it leaves the original
+	// request untouched.
+	c.plaintext[0] = 'P'
+	if string(r.plaintext) != "plain" {
+		t.Fatalf("the original plaintext should not be shared with the clone: %q", r.plaintext)
 	}
 
 	_ = n

@@ -63,6 +63,8 @@ shutdownMaxWaitTime = "0s"
         messageQueueSize = 10240
         # 消息写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
         messageWriteTimeout = "0s"
+        # 是否启用防篡改保护。仅保护上行（即网关送达的请求），需与消息加密器配合使用。默认为false
+        enableTamperProtection = false
         # 实例元数据
         [cluster.node.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -121,6 +123,8 @@ shutdownMaxWaitTime = "0s"
         name = "client"
         # 编解码器。可选：json | proto。默认为proto
         codec = "proto"
+        # 是否启用防篡改保护。仅保护上行（即发往服务端的消息），需与消息加密器配合使用。默认为false
+        enableTamperProtection = false
 
 # 任务池模块
 [task]
