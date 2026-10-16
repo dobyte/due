@@ -17,9 +17,10 @@ const (
 )
 
 const (
-	defaultIDKey    = "etc.cluster.client.id"
-	defaultNameKey  = "etc.cluster.client.name"
-	defaultCodecKey = "etc.cluster.client.codec"
+	defaultIDKey                     = "etc.cluster.client.id"
+	defaultNameKey                   = "etc.cluster.client.name"
+	defaultCodecKey                  = "etc.cluster.client.codec"
+	defaultEnableTamperProtectionKey = "etc.cluster.client.enableTamperProtection"
 )
 
 // Option is a client option.
@@ -27,12 +28,13 @@ type Option func(o *options)
 
 // options are the client options.
 type options struct {
-	id        string           // instance ID
-	name      string           // instance name
-	ctx       context.Context  // context
-	codec     encoding.Codec   // codec
-	client    network.Client   // network client
-	encryptor crypto.Encryptor // message encryptor
+	id                     string           // instance ID
+	name                   string           // instance name
+	ctx                    context.Context  // context
+	codec                  encoding.Codec   // codec
+	client                 network.Client   // network client
+	encryptor              crypto.Encryptor // message encryptor
+	enableTamperProtection bool             // whether the uplink messages are protected
 }
 
 // defaultOptions returns the default options. Options are read from the configuration center,
@@ -40,6 +42,7 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{}
 	opts.ctx = context.Background()
+	opts.enableTamperProtection = etc.Get(defaultEnableTamperProtectionKey).Bool()
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -126,6 +129,16 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 			log.Warnf("the specified encryptor is nil and will be automatically ignored")
 		}
 	}
+}
+
+// WithEnableTamperProtection sets whether the anti-tampering protection is enabled.
+//
+// It takes effect together with [WithEncryptor] and protects the uplink only: the route and the
+// sequence number are packed into the payload before it is encrypted, so that the server can
+// verify the values carried by the message header after decrypting the payload. The messages
+// received from the server are not validated.
+func WithEnableTamperProtection(enableTamperProtection bool) Option {
+	return func(o *options) { o.enableTamperProtection = enableTamperProtection }
 }
 
 // DialOption is a dial option.

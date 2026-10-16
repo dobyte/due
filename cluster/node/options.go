@@ -46,6 +46,7 @@ const (
 	defaultTaskWriteTimeoutKey          = "etc.cluster.node.taskWriteTimeout"
 	defaultMessageQueueSizeKey          = "etc.cluster.node.messageQueueSize"
 	defaultMessageWriteTimeoutKey       = "etc.cluster.node.messageWriteTimeout"
+	defaultEnableTamperProtectionKey    = "etc.cluster.node.enableTamperProtection"
 	defaultLinkerConnNumKey             = "etc.cluster.node.linker.connNum"
 	defaultLinkerCallTimeoutKey         = "etc.cluster.node.linker.callTimeout"
 	defaultLinkerDialTimeoutKey         = "etc.cluster.node.linker.dialTimeout"
@@ -71,24 +72,139 @@ type linkerOptions struct {
 
 // options holds the node options.
 type options struct {
-	ctx                 context.Context        // Startup context
-	id                  string                 // Instance ID
-	name                string                 // Instance name; for nodes with the same instance name, a user can only bind to one of them
-	codec               encoding.Codec         // Codec
-	weight              int                    // Server weight
-	locator             locate.Locator         // User locator
-	registry            registry.Registry      // Service registry
-	encryptor           crypto.Encryptor       // Message encryptor
-	transporter         transport.Transporter  // Message transporter
-	metadata            map[string]string      // Metadata
-	ctxFunc             func() context.Context // Custom context generator
-	addr                string                 // Internal RPC listen address
-	expose              bool                   // Whether the internal RPC is exposed to the public network
-	taskQueueSize       int32                  // Task queue capacity
-	taskWriteTimeout    time.Duration          // Task write timeout
-	messageQueueSize    int32                  // Message queue capacity
-	messageWriteTimeout time.Duration          // Message write timeout
-	linker              *linkerOptions         // Internal RPC options
+	// Startup context.
+	//
+	// It is the parent context of the node lifecycle context and of the internal linker contexts,
+	// and is provided by WithContext. It defaults to context.Background() when it is not specified.
+	ctx context.Context
+
+	// Instance ID.
+	//
+	// It uniquely identifies the running instance, and is used as the ID of the node and mesh
+	// service instances registered to the registry. It can be configured through
+	// etc.cluster.node.id; a UUID is generated when the configuration is empty.
+	id string
+
+	// Instance name.
+	//
+	// It is registered as the alias of the service instances and returned by Node.Name. For nodes
+	// with the same instance name, a user can only bind to one of them. It can be configured
+	// through etc.cluster.node.name, and defaults to "node".
+	name string
+
+	// Codec.
+	//
+	// It marshals and unmarshals the payload of the internal RPC between the node and the
+	// gateways or the other nodes. It can be configured through etc.cluster.node.codec, and
+	// defaults to "proto". The node terminates at startup when it is not injected.
+	codec encoding.Codec
+
+	// Server weight.
+	//
+	// It is written to the registered service instances, and is used as the weight when a route
+	// or event message is dispatched to pick the target node. It must be positive, can be
+	// configured through etc.cluster.node.weight, and defaults to 1.
+	weight int
+
+	// User locator.
+	//
+	// It locates the gateway or the stateful node the user resides on, so that the node can bind,
+	// unbind and push messages to the user. The node terminates at startup when it is not
+	// injected.
+	locator locate.Locator
+
+	// Service registry.
+	//
+	// It registers the node and mesh service instances, discovers the gateways and the other
+	// nodes in the same cluster, and serves as the default service discovery of the transporter.
+	// The node terminates at startup when it is not injected.
+	registry registry.Registry
+
+	// Message encryptor.
+	//
+	// It decrypts the payload of the requests delivered by the gateways, and encrypts the payload
+	// of the messages sent to the gateways or the other nodes through the internal linkers. It is
+	// optional; the payloads are passed through as they are when it is nil.
+	encryptor crypto.Encryptor
+
+	// Message transporter.
+	//
+	// It creates the internal transport server and clients of the mesh, which expose and call the
+	// services provided by the instances. It is optional; the node provides no mesh services and
+	// registers no mesh service instance when it is nil.
+	transporter transport.Transporter
+
+	// Metadata.
+	//
+	// It is attached to the registered node and mesh service instances, and is visible to the
+	// instances that discover them. It can be configured through etc.cluster.node.metadata.
+	metadata map[string]string
+
+	// Custom context generator.
+	//
+	// It generates the context of the requests and events received from the gateways and of the
+	// actor requests. A background context is used when it is not specified.
+	ctxFunc func() context.Context
+
+	// Internal RPC listen address.
+	//
+	// The linker server listens on it to receive the requests and events delivered by the
+	// gateways. A random available port is assigned when the port is empty or 0. It can be
+	// configured through etc.cluster.node.addr, and defaults to ":0".
+	addr string
+
+	// Whether the internal RPC is exposed to the public network.
+	//
+	// When the listen host is empty or a wildcard address, it determines whether the address
+	// registered to the registry is resolved to the public IP or to the private IP. It can be
+	// configured through etc.cluster.node.expose, and is disabled by default.
+	expose bool
+
+	// Task queue capacity.
+	//
+	// It is the capacity of the node task queue, which serially executes the tasks committed
+	// through Proxy.Invoke and Proxy.AfterInvoke. It can be configured through
+	// etc.cluster.node.taskQueueSize, and defaults to 4096.
+	taskQueueSize int32
+
+	// Task write timeout.
+	//
+	// It bounds how long a non-blocking write waits when the task queue is full, and reports a
+	// write timeout error once it expires. A value of 0 or less disables the bound and makes the
+	// write block until it succeeds. It can be configured through
+	// etc.cluster.node.taskWriteTimeout, and defaults to 0s.
+	taskWriteTimeout time.Duration
+
+	// Message queue capacity.
+	//
+	// It is the capacity of the queues that buffer the requests handled by the router and the
+	// events handled by the trigger before they are processed. It can be configured through
+	// etc.cluster.node.messageQueueSize, and defaults to 10240.
+	messageQueueSize int32
+
+	// Message write timeout.
+	//
+	// It bounds how long a non-blocking write waits when the message queue is full, and reports a
+	// write timeout error once it expires. A value of 0 or less disables the bound and makes the
+	// write block until it succeeds. It can be configured through
+	// etc.cluster.node.messageWriteTimeout, and defaults to 0s.
+	messageWriteTimeout time.Duration
+
+	// Determines whether to enable anti-tampering protection.
+	// This feature must be used in conjunction with `crypto.Encryptor`
+	// and only takes effect when both are enabled. Once activated,
+	// the `route` and `seq` fields are bundled into the payload and encrypted.
+	// It protects the uplink only, that is, the requests delivered by the gateways;
+	// the messages pushed to the clients are not protected.
+	// This feature is disabled by default.
+	enableTamperProtection bool
+
+	// Internal RPC options.
+	//
+	// It holds the options of the internal RPC between the node and the gateways or the other
+	// nodes, such as the connection number, the timeouts and the queue sizes, and is shared by the
+	// gate linker and the node linker created by the proxy.
+	linker *linkerOptions
 }
 
 // defaultOptions creates the default node options.
@@ -101,6 +217,7 @@ func defaultOptions() *options {
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
 	opts.metadata = make(map[string]string)
+	opts.enableTamperProtection = etc.Get(defaultEnableTamperProtectionKey).Bool()
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -387,6 +504,16 @@ func WithMessageQueueSize(messageQueueSize int32) Option {
 		} else {
 			log.Warnf("the specified messageQueueSize is less than zero and will be ignored")
 		}
+	}
+}
+
+// WithEnableTamperProtection sets whether the anti-tampering protection is enabled.
+//
+// It takes effect together with [WithEncryptor] and protects the uplink only, that is, the
+// requests delivered by the gateways; the messages pushed to the clients are not protected.
+func WithEnableTamperProtection(enableTamperProtection bool) Option {
+	return func(o *options) {
+		o.enableTamperProtection = enableTamperProtection
 	}
 }
 

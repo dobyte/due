@@ -7,6 +7,7 @@ package node
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
@@ -25,20 +27,21 @@ import (
 
 // request is a request context.
 type request struct {
-	node    *Node
-	ctx     context.Context       // Context
-	gid     string                // Source gateway ID
-	nid     string                // Source node ID
-	pid     string                // Source actor ID
-	cid     int64                 // Connection ID
-	uid     int64                 // User ID
-	seq     int32                 // Message sequence number
-	route   int32                 // Message route number
-	message any                   // Message data
-	cache   []byte                // Serialized message cache, reused across clones to avoid re-serializing
-	version atomic.Int32          // Version number
-	chain   *chains.Chain         // Call chain
-	actor   atomic.Pointer[Actor] // Current actor
+	node      *Node
+	ctx       context.Context       // Context
+	gid       string                // Source gateway ID
+	nid       string                // Source node ID
+	pid       string                // Source actor ID
+	cid       int64                 // Connection ID
+	uid       int64                 // User ID
+	seq       int32                 // Message sequence number
+	route     int32                 // Message route number
+	message   any                   // Message data
+	decrypted []byte                // Message decrypted data
+	cache     []byte                // Serialized message cache, reused across clones to avoid re-serializing
+	version   atomic.Int32          // Version number
+	chain     *chains.Chain         // Call chain
+	actor     atomic.Pointer[Actor] // Current actor
 }
 
 // GID returns the gateway ID.
@@ -97,19 +100,62 @@ func (r *request) Parse(v any) error {
 	}
 
 	if len(msg) == 0 {
+		// A tamper-protected payload always bundles the route and the sequence number, so an empty
+		// payload can not be verified and is rejected instead of being accepted silently.
+		if r.gid != "" && r.node.opts.encryptor != nil && r.node.opts.enableTamperProtection {
+			return errors.ErrInvalidMessage
+		}
+
 		return nil
 	}
 
 	if r.gid != "" && r.node.opts.encryptor != nil {
-		data, err := r.node.opts.encryptor.Decrypt(msg)
+		if err := r.decrypt(msg); err != nil {
+			return err
+		}
+
+		return r.node.opts.codec.Unmarshal(r.decrypted, v)
+	}
+
+	return r.node.opts.codec.Unmarshal(msg, v)
+}
+
+// decrypt decrypts a message delivered by a gateway and caches the decrypted payload on the request,
+// so that repeated parses do not decrypt the message again.
+//
+// When anti-tampering protection is enabled the client bundles the route and the sequence number
+// into the payload as a nested packet and encrypts it, so the values carried by the message header
+// are no longer trusted. The bundled values are validated against the header ones, and a mismatch
+// means the message has been tampered with and is rejected with [errors.ErrTamperedMessage].
+//
+// Only the uplink is covered: the values carried by the messages pushed to the clients are not
+// validated.
+func (r *request) decrypt(msg []byte) error {
+	if r.decrypted != nil {
+		return nil
+	}
+
+	data, err := r.node.opts.encryptor.Decrypt(msg)
+	if err != nil {
+		return err
+	}
+
+	if r.node.opts.enableTamperProtection {
+		route, seq, buf, err := packet.UnpackMessage(buffer.NewBytes(data))
 		if err != nil {
 			return err
 		}
 
-		return r.node.opts.codec.Unmarshal(data, v)
+		if route != r.route || seq != r.seq {
+			return errors.ErrTamperedMessage
+		}
+
+		data = buf.Bytes()
 	}
 
-	return r.node.opts.codec.Unmarshal(msg, v)
+	r.decrypted = data
+
+	return nil
 }
 
 // Defer adds a deferred call to the defer call chain.
@@ -188,6 +234,10 @@ func (r *request) Clone() Context {
 			c.message = message
 		}
 	}
+
+	// The decrypted payload may share its backing array with the message of this request, and the
+	// message is released once the request is recycled; copy it to keep the clone independent.
+	c.decrypted = slices.Clone(r.decrypted)
 
 	return c
 }
@@ -563,6 +613,7 @@ func (r *request) release() {
 	r.seq = 0
 	r.route = 0
 	r.message = nil
+	r.decrypted = nil
 	r.cache = nil
 	r.version.Store(0)
 	r.actor.Store(nil)

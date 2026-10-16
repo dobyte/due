@@ -10,6 +10,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/packet"
 )
 
 // newWorkingRequest creates a node in the work state together with a request context bound to it.
@@ -119,6 +120,19 @@ func TestRequestParse(t *testing.T) {
 		if v.A != 4 {
 			t.Fatalf("expect a=4, got %d", v.A)
 		}
+		if string(r.decrypted) != `{"a":4}` {
+			t.Fatalf("expect the decrypted payload to be cached, got %q", r.decrypted)
+		}
+
+		// A repeated parse reuses the cached payload instead of decrypting the message again.
+		r.message = []byte("corrupted")
+		v = payload{}
+		if err := r.Parse(&v); err != nil {
+			t.Fatalf("parse with the cached payload failed: %v", err)
+		}
+		if v.A != 4 {
+			t.Fatalf("expect a=4 from the cached payload, got %d", v.A)
+		}
 	})
 
 	t.Run("decrypt error", func(t *testing.T) {
@@ -144,6 +158,95 @@ func TestRequestParse(t *testing.T) {
 			t.Fatalf("expect the unmarshal error, got %v", err)
 		}
 	})
+
+	t.Run("tamper protection passed", func(t *testing.T) {
+		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
+		r.gid = "gate-1"
+		r.route = 3
+		r.seq = 5
+		r.message = packNestedMessage(t, 3, 5, []byte(`{"a":7}`))
+
+		var v payload
+		if err := r.Parse(&v); err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		if v.A != 7 {
+			t.Fatalf("expect a=7, got %d", v.A)
+		}
+		if string(r.decrypted) != `{"a":7}` {
+			t.Fatalf("expect the decrypted payload to be cached, got %q", r.decrypted)
+		}
+
+		// A repeated parse reuses the cached payload instead of decrypting the message again.
+		r.message = []byte("corrupted")
+		v = payload{}
+		if err := r.Parse(&v); err != nil {
+			t.Fatalf("parse with the cached payload failed: %v", err)
+		}
+		if v.A != 7 {
+			t.Fatalf("expect a=7 from the cached payload, got %d", v.A)
+		}
+
+		r.release()
+		if r.decrypted != nil {
+			t.Fatal("expect the cached payload to be cleared on release")
+		}
+	})
+
+	t.Run("tamper protection rejected", func(t *testing.T) {
+		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
+		r.gid = "gate-1"
+		r.route = 3
+		r.seq = 5
+		r.message = packNestedMessage(t, 4, 6, []byte(`{"a":7}`))
+
+		var v payload
+		if err := r.Parse(&v); !errors.Is(err, errors.ErrTamperedMessage) {
+			t.Fatalf("expect the tampered message error, got %v", err)
+		}
+		if r.decrypted != nil {
+			t.Fatal("expect no payload to be cached for a tampered message")
+		}
+	})
+
+	t.Run("tamper protection invalid payload", func(t *testing.T) {
+		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
+		r.gid = "gate-1"
+		r.route = 3
+		r.seq = 5
+		r.message = []byte(`{"a":7}`)
+
+		var v payload
+		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
+			t.Fatalf("expect the invalid message error, got %v", err)
+		}
+	})
+
+	t.Run("tamper protection empty payload", func(t *testing.T) {
+		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
+		r.gid = "gate-1"
+		r.route = 3
+		r.seq = 5
+		r.message = []byte{}
+
+		var v payload
+		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
+			t.Fatalf("expect the invalid message error, got %v", err)
+		}
+	})
+}
+
+// packNestedMessage packs a message that bundles the route and the sequence number into its payload,
+// as the sender does when anti-tampering protection is enabled.
+func packNestedMessage(t *testing.T, route, seq int32, payload []byte) []byte {
+	t.Helper()
+
+	buf, err := packet.PackMessage(&packet.Message{Route: route, Seq: seq, Buffer: payload})
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+
+	return buf.Bytes()
 }
 
 // errStub is a sentinel error used to verify error propagation.
@@ -190,6 +293,7 @@ func TestRequestCloneBasic(t *testing.T) {
 	r.seq = 7
 	r.route = 8
 	r.message = []byte("hello")
+	r.decrypted = []byte("plain")
 
 	act := &Actor{}
 	r.actor.Store(act)
@@ -206,6 +310,16 @@ func TestRequestCloneBasic(t *testing.T) {
 	}
 	if string(c.message.([]byte)) != "hello" {
 		t.Fatalf("unexpected clone message: %v", c.message)
+	}
+	if string(c.decrypted) != "plain" {
+		t.Fatalf("unexpected clone decrypted payload: %q", c.decrypted)
+	}
+
+	// The clone holds an independent copy of the decrypted payload, so mutating it leaves the
+	// original request untouched.
+	c.decrypted[0] = 'P'
+	if string(r.decrypted) != "plain" {
+		t.Fatalf("the original decrypted payload should not be shared with the clone: %q", r.decrypted)
 	}
 
 	_ = n

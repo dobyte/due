@@ -78,32 +78,49 @@ func (c *Conn) RemoteAddr() (net.Addr, error) {
 }
 
 // Push pushes message to the server after encoding and encrypting its data.
+//
+// When the anti-tampering protection is enabled, the route and the sequence number are packed into
+// the payload before it is encrypted, so that the server can verify the values carried by the
+// message header after decrypting the payload.
 func (c *Conn) Push(message *cluster.Message) error {
 	var (
-		err    error
-		buffer []byte
+		err  error
+		data []byte
 	)
 
 	if message.Data != nil {
 		if v, ok := message.Data.([]byte); ok {
-			buffer = v
+			data = v
 		} else {
-			if buffer, err = c.client.opts.codec.Marshal(message.Data); err != nil {
+			if data, err = c.client.opts.codec.Marshal(message.Data); err != nil {
 				return err
 			}
 		}
+	}
 
-		if c.client.opts.encryptor != nil {
-			if buffer, err = c.client.opts.encryptor.Encrypt(buffer); err != nil {
-				return err
-			}
+	if c.client.opts.enableTamperProtection {
+		buf, err := packet.PackMessage(&packet.Message{
+			Seq:    message.Seq,
+			Route:  message.Route,
+			Buffer: data,
+		})
+		if err != nil {
+			return err
+		}
+
+		data = buf.Bytes()
+	}
+
+	if len(data) != 0 && c.client.opts.encryptor != nil {
+		if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
+			return err
 		}
 	}
 
 	buf, err := packet.PackMessage(&packet.Message{
 		Seq:    message.Seq,
 		Route:  message.Route,
-		Buffer: buffer,
+		Buffer: data,
 	})
 	if err != nil {
 		return err
