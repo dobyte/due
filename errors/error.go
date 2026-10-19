@@ -13,7 +13,6 @@ var (
 	ErrInvalidGID              = New("invalid gate id")
 	ErrInvalidNID              = New("invalid node id")
 	ErrInvalidMessage          = New("invalid message")
-	ErrTamperedMessage         = New("tampered message")
 	ErrInvalidReader           = New("invalid reader")
 	ErrNotFoundSession         = New("not found session")
 	ErrInvalidSessionKind      = New("invalid session kind")

@@ -192,9 +192,6 @@ func TestClientDefaultOptions(t *testing.T) {
 	if o.id == "" {
 		t.Fatal("default id must not be empty")
 	}
-	if o.enableTamperProtection {
-		t.Fatal("tamper protection must be disabled by default")
-	}
 }
 
 func TestClientOptions(t *testing.T) {
@@ -299,15 +296,6 @@ func TestClientOptions(t *testing.T) {
 			check: func(t *testing.T, o *options) {
 				if o.encryptor != nil {
 					t.Fatal("nil encryptor must be ignored")
-				}
-			},
-		},
-		{
-			name:  "WithEnableTamperProtection",
-			apply: func(o *options) { WithEnableTamperProtection(true)(o) },
-			check: func(t *testing.T, o *options) {
-				if !o.enableTamperProtection {
-					t.Fatal("tamper protection must be enabled")
 				}
 			},
 		},
@@ -699,66 +687,6 @@ func TestClientConnPush(t *testing.T) {
 		t.Fatalf("push failed: %v", err)
 	}
 	<-f.conn.pushed
-}
-
-func TestClientConnPushTamperProtection(t *testing.T) {
-	f := newClientFixture(t)
-	f.client.opts.encryptor = &tEncryptor{}
-	f.client.opts.enableTamperProtection = true
-
-	cc := &Conn{conn: f.conn, client: f.client}
-
-	// The outer packet keeps the route and the sequence number in its header, while the encrypted
-	// payload is a nested packet that bundles the same values for the server to verify.
-	if err := cc.Push(&cluster.Message{Seq: 5, Route: 6, Data: []byte("payload")}); err != nil {
-		t.Fatalf("push failed: %v", err)
-	}
-
-	outer := <-f.conn.pushed
-	route, seq, body, err := packet.UnpackMessage(outer)
-	if err != nil {
-		t.Fatalf("unpack the outer message failed: %v", err)
-	}
-	if route != 6 || seq != 5 {
-		t.Fatalf("unexpected outer route/seq: %d/%d", route, seq)
-	}
-
-	innerRoute, innerSeq, payload, err := packet.UnpackMessage(buffer.NewBytes(body.Bytes()))
-	if err != nil {
-		t.Fatalf("unpack the inner message failed: %v", err)
-	}
-	if innerRoute != 6 || innerSeq != 5 {
-		t.Fatalf("unexpected inner route/seq: %d/%d", innerRoute, innerSeq)
-	}
-	if string(payload.Bytes()) != "payload" {
-		t.Fatalf("unexpected inner payload: %q", payload.Bytes())
-	}
-
-	outer.Release()
-
-	// The route and the sequence number are bundled even when the payload is absent.
-	if err := cc.Push(&cluster.Message{Seq: 8, Route: 9}); err != nil {
-		t.Fatalf("push failed: %v", err)
-	}
-
-	outer = <-f.conn.pushed
-	_, _, body, err = packet.UnpackMessage(outer)
-	if err != nil {
-		t.Fatalf("unpack the outer message failed: %v", err)
-	}
-
-	innerRoute, innerSeq, payload, err = packet.UnpackMessage(buffer.NewBytes(body.Bytes()))
-	if err != nil {
-		t.Fatalf("unpack the inner message failed: %v", err)
-	}
-	if innerRoute != 9 || innerSeq != 8 {
-		t.Fatalf("unexpected inner route/seq: %d/%d", innerRoute, innerSeq)
-	}
-	if payload.Len() != 0 {
-		t.Fatalf("expect an empty inner payload, got %q", payload.Bytes())
-	}
-
-	outer.Release()
 }
 
 func TestClientConnPushErrors(t *testing.T) {

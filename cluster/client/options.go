@@ -18,10 +18,9 @@ const (
 )
 
 const (
-	defaultIDKey                     = "etc.cluster.client.id"
-	defaultNameKey                   = "etc.cluster.client.name"
-	defaultCodecKey                  = "etc.cluster.client.codec"
-	defaultEnableTamperProtectionKey = "etc.cluster.client.enableTamperProtection"
+	defaultIDKey    = "etc.cluster.client.id"
+	defaultNameKey  = "etc.cluster.client.name"
+	defaultCodecKey = "etc.cluster.client.codec"
 )
 
 // Option is a client option.
@@ -29,14 +28,13 @@ type Option func(o *options)
 
 // options are the client options.
 type options struct {
-	id                     string           // instance ID
-	name                   string           // instance name
-	ctx                    context.Context  // context
-	codec                  encoding.Codec   // codec
-	client                 network.Client   // network client
-	encryptor              crypto.Encryptor // message encryptor
-	enableTamperProtection bool             // whether the uplink messages are protected
-	security               *securityOptions // session security options
+	id        string           // instance ID
+	name      string           // instance name
+	ctx       context.Context  // context
+	codec     encoding.Codec   // codec
+	client    network.Client   // network client
+	encryptor crypto.Encryptor // message encryptor
+	security  *securityOptions // session security options
 }
 
 // defaultOptions returns the default options. Options are read from the configuration center,
@@ -44,7 +42,6 @@ type options struct {
 func defaultOptions() *options {
 	opts := &options{}
 	opts.ctx = context.Background()
-	opts.enableTamperProtection = etc.Get(defaultEnableTamperProtectionKey).Bool()
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -133,22 +130,11 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 	}
 }
 
-// WithEnableTamperProtection sets whether the anti-tampering protection is enabled.
-//
-// It takes effect together with [WithEncryptor] and protects the uplink only: the route and the
-// sequence number are packed into the payload before it is encrypted, so that the server can
-// verify the values carried by the message header after decrypting the payload. The messages
-// received from the server are not validated.
-func WithEnableTamperProtection(enableTamperProtection bool) Option {
-	return func(o *options) { o.enableTamperProtection = enableTamperProtection }
-}
-
 // WithSessionSecurity enables the session security between the client and the gate.
 //
 // verifier verifies the signature of the gate, and it is usually built from the pinned gate public
 // key. When no suite is given, the handshake defaults are used. When enabled, the payload is sealed
-// with the negotiated session key, so the static encryptor and the anti-tampering protection are
-// not applied.
+// with the negotiated session key, so the static encryptor is not applied.
 func WithSessionSecurity(verifier crypto.Verifier, suites ...aead.Suite) Option {
 	return func(o *options) {
 		if verifier == nil {

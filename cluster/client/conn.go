@@ -86,10 +86,7 @@ func (c *Conn) RemoteAddr() (net.Addr, error) {
 // Push pushes message to the server after encoding and protecting its data.
 //
 // When session security is enabled, the payload is sealed with the negotiated session key and the
-// route and the sequence number are bound by the additional authenticated data. When the
-// anti-tampering protection is enabled instead, the route and the sequence number are packed into
-// the payload before it is encrypted, so that the server can verify the values carried by the
-// message header after decrypting the payload.
+// route and the sequence number are bound by the additional authenticated data.
 func (c *Conn) Push(message *cluster.Message) error {
 	var (
 		err  error
@@ -116,19 +113,6 @@ func (c *Conn) Push(message *cluster.Message) error {
 			return err
 		}
 	} else {
-		if c.client.opts.enableTamperProtection {
-			buf, err := packet.PackMessage(&packet.Message{
-				Seq:    message.Seq,
-				Route:  message.Route,
-				Buffer: data,
-			})
-			if err != nil {
-				return err
-			}
-
-			data = buf.Bytes()
-		}
-
 		if len(data) != 0 && c.client.opts.encryptor != nil {
 			if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
 				return err

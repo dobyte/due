@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/packet"
 )
 
 // newWorkingRequest creates a node in the work state together with a request context bound to it.
@@ -158,95 +157,6 @@ func TestRequestParse(t *testing.T) {
 			t.Fatalf("expect the unmarshal error, got %v", err)
 		}
 	})
-
-	t.Run("tamper protection passed", func(t *testing.T) {
-		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
-		r.gid = "gate-1"
-		r.route = 3
-		r.seq = 5
-		r.message = packNestedMessage(t, 3, 5, []byte(`{"a":7}`))
-
-		var v payload
-		if err := r.Parse(&v); err != nil {
-			t.Fatalf("parse failed: %v", err)
-		}
-		if v.A != 7 {
-			t.Fatalf("expect a=7, got %d", v.A)
-		}
-		if string(r.plaintext) != `{"a":7}` {
-			t.Fatalf("expect the plaintext to be cached, got %q", r.plaintext)
-		}
-
-		// A repeated parse reuses the cached plaintext instead of decrypting the message again.
-		r.message = []byte("corrupted")
-		v = payload{}
-		if err := r.Parse(&v); err != nil {
-			t.Fatalf("parse with the cached plaintext failed: %v", err)
-		}
-		if v.A != 7 {
-			t.Fatalf("expect a=7 from the cached plaintext, got %d", v.A)
-		}
-
-		r.release()
-		if r.plaintext != nil {
-			t.Fatal("expect the cached plaintext to be cleared on release")
-		}
-	})
-
-	t.Run("tamper protection rejected", func(t *testing.T) {
-		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
-		r.gid = "gate-1"
-		r.route = 3
-		r.seq = 5
-		r.message = packNestedMessage(t, 4, 6, []byte(`{"a":7}`))
-
-		var v payload
-		if err := r.Parse(&v); !errors.Is(err, errors.ErrTamperedMessage) {
-			t.Fatalf("expect the tampered message error, got %v", err)
-		}
-		if r.plaintext != nil {
-			t.Fatal("expect no plaintext to be cached for a tampered message")
-		}
-	})
-
-	t.Run("tamper protection invalid payload", func(t *testing.T) {
-		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
-		r.gid = "gate-1"
-		r.route = 3
-		r.seq = 5
-		r.message = []byte(`{"a":7}`)
-
-		var v payload
-		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
-			t.Fatalf("expect the invalid message error, got %v", err)
-		}
-	})
-
-	t.Run("tamper protection empty payload", func(t *testing.T) {
-		_, r := newWorkingRequest(t, WithEncryptor(&stubEncryptor{}), WithEnableTamperProtection(true))
-		r.gid = "gate-1"
-		r.route = 3
-		r.seq = 5
-		r.message = []byte{}
-
-		var v payload
-		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
-			t.Fatalf("expect the invalid message error, got %v", err)
-		}
-	})
-}
-
-// packNestedMessage packs a message that bundles the route and the sequence number into its
-// payload, as the sender does when anti-tampering protection is enabled.
-func packNestedMessage(t *testing.T, route, seq int32, payload []byte) []byte {
-	t.Helper()
-
-	buf, err := packet.PackMessage(&packet.Message{Route: route, Seq: seq, Buffer: payload})
-	if err != nil {
-		t.Fatalf("pack message failed: %v", err)
-	}
-
-	return buf.Bytes()
 }
 
 // errStub is a sentinel error used to verify error propagation.

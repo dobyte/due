@@ -46,7 +46,6 @@ const (
 	defaultTaskWriteTimeoutKey          = "etc.cluster.node.taskWriteTimeout"
 	defaultMessageQueueSizeKey          = "etc.cluster.node.messageQueueSize"
 	defaultMessageWriteTimeoutKey       = "etc.cluster.node.messageWriteTimeout"
-	defaultEnableTamperProtectionKey    = "etc.cluster.node.enableTamperProtection"
 	defaultLinkerConnNumKey             = "etc.cluster.node.linker.connNum"
 	defaultLinkerCallTimeoutKey         = "etc.cluster.node.linker.callTimeout"
 	defaultLinkerDialTimeoutKey         = "etc.cluster.node.linker.dialTimeout"
@@ -190,15 +189,6 @@ type options struct {
 	// etc.cluster.node.messageWriteTimeout, and defaults to 0s.
 	messageWriteTimeout time.Duration
 
-	// Determines whether to enable anti-tampering protection.
-	// This feature must be used in conjunction with `crypto.Encryptor`
-	// and only takes effect when both are enabled. Once activated,
-	// the `route` and `seq` fields are bundled into the payload and encrypted.
-	// It protects the uplink only, that is, the requests delivered by the gateways;
-	// the messages pushed to the clients are not protected.
-	// This feature is disabled by default.
-	enableTamperProtection bool
-
 	// Internal RPC options.
 	//
 	// It holds the options of the internal RPC between the node and the gateways or the other
@@ -217,7 +207,6 @@ func defaultOptions() *options {
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
 	opts.metadata = make(map[string]string)
-	opts.enableTamperProtection = etc.Get(defaultEnableTamperProtectionKey).Bool()
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -504,16 +493,6 @@ func WithMessageQueueSize(messageQueueSize int32) Option {
 		} else {
 			log.Warnf("the specified messageQueueSize is less than zero and will be ignored")
 		}
-	}
-}
-
-// WithEnableTamperProtection sets whether the anti-tampering protection is enabled.
-//
-// It takes effect together with [WithEncryptor] and protects the uplink only, that is, the
-// requests delivered by the gateways; the messages pushed to the clients are not protected.
-func WithEnableTamperProtection(enableTamperProtection bool) Option {
-	return func(o *options) {
-		o.enableTamperProtection = enableTamperProtection
 	}
 }
 

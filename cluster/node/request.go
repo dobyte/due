@@ -17,7 +17,6 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
@@ -122,34 +121,10 @@ func (r *request) Parse(v any) error {
 }
 
 // decrypt decrypts a message delivered by a gateway and caches the plaintext on the request.
-//
-// When anti-tampering protection is enabled the client bundles the route and the sequence number
-// into the payload as a nested packet and encrypts it, so the values carried by the message header
-// are no longer trusted. The bundled values are validated against the header ones, and a mismatch
-// means the message has been tampered with and is rejected with [errors.ErrTamperedMessage].
-//
-// The cached plaintext holds the decrypted payload, or the business data carried by the nested
-// packet when the protection is enabled.
-//
-// Only the uplink is covered: the values carried by the messages pushed to the clients are not
-// validated.
 func (r *request) decrypt(msg []byte) error {
 	data, err := r.node.opts.encryptor.Decrypt(msg)
 	if err != nil {
 		return err
-	}
-
-	if r.node.opts.enableTamperProtection {
-		route, seq, buf, err := packet.UnpackMessage(buffer.NewBytes(data))
-		if err != nil {
-			return err
-		}
-
-		if route != r.route || seq != r.seq {
-			return errors.ErrTamperedMessage
-		}
-
-		data = buf.Bytes()
 	}
 
 	r.plaintext = data
