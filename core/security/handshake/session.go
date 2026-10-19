@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/core/security/aead"
 	"github.com/dobyte/due/v2/errors"
 )
 
@@ -25,7 +25,7 @@ const (
 	// envelopeHeaderSize is the size of the epoch and counter carried in front of the ciphertext.
 	envelopeHeaderSize = 9
 	// aadSize is the size of the additional authenticated data built by MakeAAD.
-	aadSize = 10
+	aadSize = 11
 	// nonceSize is the nonce size required by the supported AEAD suites.
 	nonceSize = 12
 	// saltSize is the size of the nonce salt derived by the handshake.
@@ -42,14 +42,16 @@ const (
 // MakeAAD builds the additional authenticated data bound to the message header.
 //
 // The encoding is canonical and independent of the packet configuration: version (1 byte),
-// direction (1 byte), route (4 bytes, big endian) and seq (4 bytes, big endian). Both peers must
-// build it from the same values, so a modified header fails authentication.
-func MakeAAD(direction Direction, route, seq int32) []byte {
+// direction (1 byte), epoch (1 byte), route (4 bytes, big endian) and seq (4 bytes, big endian).
+// Both peers must build it from the same values, so a modified header fails authentication and the
+// epoch cannot be rewritten to downgrade the session.
+func MakeAAD(direction Direction, epoch uint8, route, seq int32) []byte {
 	aad := make([]byte, aadSize)
 	aad[0] = Version
 	aad[1] = byte(direction)
-	binary.BigEndian.PutUint32(aad[2:6], uint32(route))
-	binary.BigEndian.PutUint32(aad[6:10], uint32(seq))
+	aad[2] = epoch
+	binary.BigEndian.PutUint32(aad[3:7], uint32(route))
+	binary.BigEndian.PutUint32(aad[7:11], uint32(seq))
 
 	return aad
 }
@@ -60,7 +62,7 @@ func MakeAAD(direction Direction, route, seq int32) []byte {
 // session salt followed by the 8-byte counter, so it is never reused as long as the counter does
 // not wrap. The epoch byte allows a future key rotation to keep both keys alive.
 type Session struct {
-	suite   *crypto.AEADSuite
+	suite   aead.Suite
 	send    cipher.AEAD
 	recv    cipher.AEAD
 	epoch   uint8
@@ -70,7 +72,7 @@ type Session struct {
 }
 
 // newSession builds a session from the negotiated suite and the derived key material.
-func newSession(suite *crypto.AEADSuite, material *keyMaterial, r role) (*Session, error) {
+func newSession(suite aead.Suite, material *keyMaterial, r role) (*Session, error) {
 	var sendKey, recvKey []byte
 
 	if r == clientRole {
@@ -102,9 +104,9 @@ func newSession(suite *crypto.AEADSuite, material *keyMaterial, r role) (*Sessio
 	}, nil
 }
 
-// Name returns the name of the negotiated AEAD suite.
-func (s *Session) Name() string {
-	return s.suite.Name
+// Suite returns the negotiated suite.
+func (s *Session) Suite() aead.Suite {
+	return s.suite
 }
 
 // Epoch returns the key epoch carried by the sealed payload.

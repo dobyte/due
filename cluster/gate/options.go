@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/security/aead"
 	"github.com/dobyte/due/v2/crypto"
-	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -255,15 +255,17 @@ func WithExpose(expose bool) Option {
 // WithSessionSecurity enables the session security between the client and the gate.
 //
 // signer signs the ServerHello so that the client can verify the gate with the pinned public key.
-// When enabled, the payload of client messages is decrypted by the gate and re-encrypted for the
-// downlink, so the node-side static encryptor must stay unconfigured.
-func WithSessionSecurity(signer crypto.Signer, opts ...handshake.Option) Option {
+// When no suite is given, the handshake defaults are used. When enabled, the payload of client
+// messages is decrypted by the gate and re-encrypted for the downlink, so the node-side static
+// encryptor must stay unconfigured.
+func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 	return func(o *options) {
-		if signer != nil {
-			o.security = &securityOptions{signer: signer, opts: opts}
-		} else {
+		if signer == nil {
 			log.Warnf("the specified signer is nil and will be automatically ignored")
+			return
 		}
+
+		o.security = &securityOptions{signer: signer, suites: suites}
 	}
 }
 

@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
 	"github.com/dobyte/due/v2/crypto"
-	"github.com/dobyte/due/v2/crypto/aesgcm"
-	"github.com/dobyte/due/v2/crypto/chacha20poly1305"
 	"github.com/dobyte/due/v2/errors"
 )
 
@@ -44,13 +45,13 @@ func newTestSignerPair() (crypto.Signer, crypto.Verifier) {
 }
 
 // establishSession performs a full handshake and returns the client and server sessions.
-func establishSession(t *testing.T, suite *crypto.AEADSuite) (*Session, *Session) {
+func establishSession(t *testing.T, suite aead.Suite) (*Session, *Session) {
 	t.Helper()
 
 	signer, verifier := newTestSignerPair()
 
-	server := NewServer(signer, WithSuites(suite))
-	client := NewClient(verifier, WithSuites(suite))
+	server := NewServer(signer, suite)
+	client := NewClient(verifier, suite)
 
 	hello, err := client.Hello()
 	if err != nil {
@@ -72,8 +73,8 @@ func establishSession(t *testing.T, suite *crypto.AEADSuite) (*Session, *Session
 		t.Fatalf("server confirm failed: %v", err)
 	}
 
-	if clientSession.Name() != suite.Name || serverSession.Name() != suite.Name {
-		t.Fatalf("unexpected suite: client=%s server=%s want=%s", clientSession.Name(), serverSession.Name(), suite.Name)
+	if clientSession.Suite() != suite || serverSession.Suite() != suite {
+		t.Fatalf("unexpected suite: client=%s server=%s want=%s", clientSession.Suite(), serverSession.Suite(), suite)
 	}
 
 	return clientSession, serverSession
@@ -81,11 +82,11 @@ func establishSession(t *testing.T, suite *crypto.AEADSuite) (*Session, *Session
 
 // TestHandshake verifies the handshake and both traffic directions for every supported suite.
 func TestHandshake(t *testing.T) {
-	for _, suite := range []*crypto.AEADSuite{aesgcm.Suite, chacha20poly1305.Suite} {
-		t.Run(suite.Name, func(t *testing.T) {
+	for _, suite := range []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite} {
+		t.Run(suite.Name(), func(t *testing.T) {
 			clientSession, serverSession := establishSession(t, suite)
 
-			uplink := MakeAAD(ClientToServer, 1001, 1)
+			uplink := MakeAAD(ClientToServer, clientSession.Epoch(), 1001, 1)
 			sealed, err := clientSession.Seal([]byte("hello"), uplink)
 			if err != nil {
 				t.Fatalf("seal failed: %v", err)
@@ -104,7 +105,7 @@ func TestHandshake(t *testing.T) {
 				t.Fatalf("unexpected plaintext: %s", plaintext)
 			}
 
-			downlink := MakeAAD(ServerToClient, 1001, 1)
+			downlink := MakeAAD(ServerToClient, serverSession.Epoch(), 1001, 1)
 			sealed, err = serverSession.Seal([]byte("world"), downlink)
 			if err != nil {
 				t.Fatalf("seal failed: %v", err)
@@ -127,8 +128,8 @@ func TestHandshake(t *testing.T) {
 func TestHandshakeRejectsUnknownSigner(t *testing.T) {
 	signer, _ := newTestSignerPair()
 
-	server := NewServer(signer)
-	client := NewClient(&testSigner{key: []byte("another-key")}, WithSuites(aesgcm.Suite))
+	server := NewServer(signer, aesgcm.Suite)
+	client := NewClient(&testSigner{key: []byte("another-key")}, aesgcm.Suite)
 
 	hello, err := client.Hello()
 	if err != nil {
@@ -149,8 +150,8 @@ func TestHandshakeRejectsUnknownSigner(t *testing.T) {
 func TestHandshakeRejectsNoCommonSuite(t *testing.T) {
 	signer, verifier := newTestSignerPair()
 
-	server := NewServer(signer, WithSuites(aesgcm.Suite))
-	client := NewClient(verifier, WithSuites(chacha20poly1305.Suite))
+	server := NewServer(signer, aesgcm.Suite)
+	client := NewClient(verifier, chacha20poly1305.Suite)
 
 	hello, err := client.Hello()
 	if err != nil {
@@ -162,12 +163,40 @@ func TestHandshakeRejectsNoCommonSuite(t *testing.T) {
 	}
 }
 
+// TestHandshakeDefaultSuites verifies that a peer without an explicit suite uses the defaults.
+func TestHandshakeDefaultSuites(t *testing.T) {
+	_, verifier := newTestSignerPair()
+
+	if _, err := NewClient(verifier).Hello(); err != nil {
+		t.Fatalf("client hello failed: %v", err)
+	}
+}
+
+// TestHandshakeRejectsInvalidSuites verifies the suite configuration validation.
+func TestHandshakeRejectsInvalidSuites(t *testing.T) {
+	signer, verifier := newTestSignerPair()
+
+	if _, err := NewClient(verifier, nil).Hello(); err == nil {
+		t.Fatal("expect an error for a nil suite")
+	}
+
+	suites := make([]aead.Suite, 256)
+	for i := range suites {
+		suites[i] = aesgcm.Suite
+	}
+
+	if _, _, err := NewServer(signer, suites...).Accept(nil); err == nil {
+		t.Fatal("expect an error for too many suites")
+	}
+}
+
 // TestSessionRejectsTamperedPayload verifies that a modified ciphertext is rejected.
 func TestSessionRejectsTamperedPayload(t *testing.T) {
 	clientSession, serverSession := establishSession(t, aesgcm.Suite)
 
-	aad := MakeAAD(ClientToServer, 1, 1)
+	aad := MakeAAD(ClientToServer, clientSession.Epoch(), 1, 1)
 	sealed, err := clientSession.Seal([]byte("payload"), aad)
+
 	if err != nil {
 		t.Fatalf("seal failed: %v", err)
 	}
@@ -183,12 +212,12 @@ func TestSessionRejectsTamperedPayload(t *testing.T) {
 func TestSessionRejectsWrongAAD(t *testing.T) {
 	clientSession, serverSession := establishSession(t, aesgcm.Suite)
 
-	sealed, err := clientSession.Seal([]byte("payload"), MakeAAD(ClientToServer, 1, 1))
+	sealed, err := clientSession.Seal([]byte("payload"), MakeAAD(ClientToServer, clientSession.Epoch(), 1, 1))
 	if err != nil {
 		t.Fatalf("seal failed: %v", err)
 	}
 
-	if _, err = serverSession.Open(sealed, MakeAAD(ClientToServer, 2, 1)); !errors.Is(err, errors.ErrInvalidMessage) {
+	if _, err = serverSession.Open(sealed, MakeAAD(ClientToServer, clientSession.Epoch(), 2, 1)); !errors.Is(err, errors.ErrInvalidMessage) {
 		t.Fatalf("expect the invalid message error, got %v", err)
 	}
 }
@@ -197,8 +226,9 @@ func TestSessionRejectsWrongAAD(t *testing.T) {
 func TestSessionRejectsReplay(t *testing.T) {
 	clientSession, serverSession := establishSession(t, aesgcm.Suite)
 
-	aad := MakeAAD(ClientToServer, 1, 1)
+	aad := MakeAAD(ClientToServer, clientSession.Epoch(), 1, 1)
 	sealed, err := clientSession.Seal([]byte("payload"), aad)
+
 	if err != nil {
 		t.Fatalf("seal failed: %v", err)
 	}
@@ -217,7 +247,7 @@ func TestSessionRejectsReplay(t *testing.T) {
 func TestSessionAcceptsOutOfOrder(t *testing.T) {
 	clientSession, serverSession := establishSession(t, aesgcm.Suite)
 
-	aad := MakeAAD(ClientToServer, 1, 1)
+	aad := MakeAAD(ClientToServer, clientSession.Epoch(), 1, 1)
 	sealed := make([][]byte, 0, 70)
 
 	for i := 0; i < 70; i++ {

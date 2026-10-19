@@ -4,8 +4,9 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/crypto"
-	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -14,8 +15,8 @@ import (
 
 // securityOptions configures the session security between the client and the gate.
 type securityOptions struct {
-	signer crypto.Signer      // signer used to authenticate the gate
-	opts   []handshake.Option // handshake options
+	signer crypto.Signer // signer used to authenticate the gate
+	suites []aead.Suite  // negotiable AEAD suites, empty means the handshake defaults
 }
 
 // securityManager holds the per-connection security state and the shared handshake server.
@@ -49,7 +50,7 @@ func (c *securedConn) Push(buf buffer.Buffer) error {
 func newSecurityManager(gate *Gate, opts *securityOptions) *securityManager {
 	return &securityManager{
 		gate:   gate,
-		server: handshake.NewServer(opts.signer, opts.opts...),
+		server: handshake.NewServer(opts.signer, opts.suites...),
 	}
 }
 
@@ -82,6 +83,7 @@ func (m *securityManager) receiveHandshake(conn network.Conn, buf buffer.Buffer)
 	if err != nil {
 		buf.Release()
 		log.Warnf("extract handshake frame failed, cid: %d, err: %v", conn.ID(), err)
+		_ = conn.Close()
 		return
 	}
 
@@ -122,7 +124,7 @@ func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
 		return true
 	}
 
-	plaintext, err := session.Open(payload, handshake.MakeAAD(handshake.ClientToServer, route, seq))
+	plaintext, err := session.Open(payload, handshake.MakeAAD(handshake.ClientToServer, session.Epoch(), route, seq))
 	buf.Release()
 
 	if err != nil {
@@ -216,7 +218,7 @@ func (m *securityManager) push(conn network.Conn, buf buffer.Buffer) error {
 		return err
 	}
 
-	sealed, err := session.Seal(payload, handshake.MakeAAD(handshake.ServerToClient, route, seq))
+	sealed, err := session.Seal(payload, handshake.MakeAAD(handshake.ServerToClient, session.Epoch(), route, seq))
 	if err != nil {
 		return err
 	}

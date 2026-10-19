@@ -11,7 +11,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/info"
-	"github.com/dobyte/due/v2/crypto/handshake"
+	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -191,14 +191,14 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 	// Decrypt once when session security is enabled, so that Parse is idempotent and every
 	// handler registered for the route shares the same plaintext.
 	if c.opts.security != nil {
-		state := val.(*Conn).security.Load()
-		if state == nil {
+		session := val.(*Conn).security.Load()
+		if session == nil {
 			buf.Release()
 			log.Errorf("session security is not established")
 			return
 		}
 
-		plaintext, err := state.session.Open(data.Bytes(), handshake.MakeAAD(handshake.ServerToClient, route, seq))
+		plaintext, err := session.Open(data.Bytes(), handshake.MakeAAD(handshake.ServerToClient, session.Epoch(), route, seq))
 		if err != nil {
 			buf.Release()
 			log.Errorf("open secure message failed, route: %d, seq: %d, err: %v", route, seq, err)

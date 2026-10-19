@@ -7,7 +7,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"math"
 
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/errors"
 )
@@ -27,6 +31,28 @@ const (
 	keyMaterialSize = 32*4 + saltSize
 )
 
+// DefaultSuites returns the AEAD suites offered when none is configured, ordered by local
+// preference.
+func DefaultSuites() []aead.Suite {
+	return []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
+}
+
+// validSuites reports whether suites can be carried by the handshake: at most 255 entries, which
+// is the limit of the suite count field, and no nil suite.
+func validSuites(suites []aead.Suite) bool {
+	if len(suites) > math.MaxUint8 {
+		return false
+	}
+
+	for _, suite := range suites {
+		if suite == nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 // keyMaterial holds the derived traffic keys.
 type keyMaterial struct {
 	c2sKey    []byte
@@ -44,30 +70,29 @@ type keyMaterial struct {
 type Client struct {
 	err      error
 	verifier crypto.Verifier
-	opts     *options
 	random   []byte
 	priv     *ecdh.PrivateKey
 	hello    []byte
 	state    uint8
+	suites   []aead.Suite
 }
 
 // NewClient returns a client side handshake bound to a single connection.
 //
 // verifier verifies the signature of the server, and it is usually built from the pinned server
 // public key.
-func NewClient(verifier crypto.Verifier, opts ...Option) *Client {
-	o := defaultOptions()
-	for _, opt := range opts {
-		opt(o)
+func NewClient(verifier crypto.Verifier, suites ...aead.Suite) *Client {
+	if len(suites) == 0 {
+		suites = DefaultSuites()
 	}
 
-	c := &Client{verifier: verifier, opts: o}
+	c := &Client{verifier: verifier, suites: suites}
 
 	switch {
 	case verifier == nil:
 		c.err = errors.New("handshake: verifier must not be nil")
-	case len(o.suites) == 0:
-		c.err = errors.New("handshake: no aead suite")
+	case !validSuites(suites):
+		c.err = errors.New("handshake: invalid aead suites")
 	}
 
 	return c
@@ -93,9 +118,9 @@ func (c *Client) Hello() ([]byte, error) {
 		return nil, err
 	}
 
-	suites := make([]uint8, 0, len(c.opts.suites))
-	for _, suite := range c.opts.suites {
-		suites = append(suites, suite.ID)
+	suites := make([]uint8, 0, len(c.suites))
+	for _, suite := range c.suites {
+		suites = append(suites, suite.ID())
 	}
 
 	c.priv = priv
@@ -186,9 +211,9 @@ func (c *Client) Handle(frame []byte) (*Session, []byte, error) {
 }
 
 // findSuite returns the offered suite with the given wire identifier.
-func (c *Client) findSuite(id uint8) *crypto.AEADSuite {
-	for _, suite := range c.opts.suites {
-		if suite.ID == id {
+func (c *Client) findSuite(id uint8) aead.Suite {
+	for _, suite := range c.suites {
+		if suite.ID() == id {
 			return suite
 		}
 	}
@@ -201,26 +226,25 @@ func (c *Client) findSuite(id uint8) *crypto.AEADSuite {
 type Server struct {
 	err    error
 	signer crypto.Signer
-	opts   *options
+	suites []aead.Suite
 }
 
 // NewServer returns a server side handshake.
 //
 // signer signs the ServerHello so that the client can verify it with the pinned server public
 // key.
-func NewServer(signer crypto.Signer, opts ...Option) *Server {
-	o := defaultOptions()
-	for _, opt := range opts {
-		opt(o)
+func NewServer(signer crypto.Signer, suites ...aead.Suite) *Server {
+	if len(suites) == 0 {
+		suites = DefaultSuites()
 	}
 
-	s := &Server{signer: signer, opts: o}
+	s := &Server{signer: signer, suites: suites}
 
 	switch {
 	case signer == nil:
 		s.err = errors.New("handshake: signer must not be nil")
-	case len(o.suites) == 0:
-		s.err = errors.New("handshake: no aead suite")
+	case !validSuites(suites):
+		s.err = errors.New("handshake: invalid aead suites")
 	}
 
 	return s
@@ -274,7 +298,7 @@ func (s *Server) Accept(frame []byte) (*Pending, []byte, error) {
 	publicKey := priv.PublicKey().Bytes()
 
 	prefix := make([]byte, 0, serverHelloPrefixSize)
-	prefix = append(prefix, suite.ID)
+	prefix = append(prefix, suite.ID())
 	prefix = append(prefix, random...)
 	prefix = append(prefix, publicKey...)
 
@@ -309,7 +333,7 @@ func (s *Server) Accept(frame []byte) (*Pending, []byte, error) {
 		return nil, nil, err
 	}
 
-	reply, err := encodeServerHelloBody(suite.ID, random, publicKey, signature, finishMAC(material.s2cFinish, transcript))
+	reply, err := encodeServerHelloBody(suite.ID(), random, publicKey, signature, finishMAC(material.s2cFinish, transcript))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -348,10 +372,10 @@ func (s *Server) Confirm(pending *Pending, frame []byte) (*Session, error) {
 }
 
 // selectSuite returns the first local suite that the client also offers.
-func (s *Server) selectSuite(offered []uint8) *crypto.AEADSuite {
-	for _, suite := range s.opts.suites {
+func (s *Server) selectSuite(offered []uint8) aead.Suite {
+	for _, suite := range s.suites {
 		for _, id := range offered {
-			if suite.ID == id {
+			if suite.ID() == id {
 				return suite
 			}
 		}

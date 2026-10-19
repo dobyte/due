@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/crypto/handshake"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -115,7 +116,7 @@ func TestSessionSecurity(t *testing.T) {
 	conn := &securityConn{pushed: make(chan []byte, 4)}
 	wrapped := g.security.wrap(conn)
 
-	client := handshake.NewClient(signer)
+	client := handshake.NewClient(signer, aesgcm.Suite)
 	hello, err := client.Hello()
 	if err != nil {
 		t.Fatalf("client hello failed: %v", err)
@@ -146,7 +147,7 @@ func TestSessionSecurity(t *testing.T) {
 		t.Fatalf("extract message failed: %v", err)
 	}
 
-	plaintext, err := session.Open(payload, handshake.MakeAAD(handshake.ServerToClient, route, seq))
+	plaintext, err := session.Open(payload, handshake.MakeAAD(handshake.ServerToClient, session.Epoch(), route, seq))
 	if err != nil {
 		t.Fatalf("open downlink failed: %v", err)
 	}
@@ -155,15 +156,27 @@ func TestSessionSecurity(t *testing.T) {
 		t.Fatalf("unexpected downlink plaintext: %s", plaintext)
 	}
 
+	// A valid uplink must be authenticated and accepted without closing the connection.
+	sealed, err := session.Seal([]byte("uplink"), handshake.MakeAAD(handshake.ClientToServer, session.Epoch(), 10, 2))
+	if err != nil {
+		t.Fatalf("seal failed: %v", err)
+	}
+
+	injectMessage(t, g, conn, 10, 2, sealed)
+
+	if conn.closed.Load() {
+		t.Fatal("the connection must stay open after a valid uplink")
+	}
+
 	// A tampered uplink must close the connection.
-	sealed, err := session.Seal([]byte("uplink"), handshake.MakeAAD(handshake.ClientToServer, 10, 2))
+	sealed, err = session.Seal([]byte("uplink"), handshake.MakeAAD(handshake.ClientToServer, session.Epoch(), 10, 3))
 	if err != nil {
 		t.Fatalf("seal failed: %v", err)
 	}
 
 	sealed[len(sealed)-1] ^= 0xff
 
-	injectMessage(t, g, conn, 10, 2, sealed)
+	injectMessage(t, g, conn, 10, 3, sealed)
 
 	if !conn.closed.Load() {
 		t.Fatal("the connection must be closed after a tampered uplink")
