@@ -11,25 +11,45 @@ import (
 )
 
 const (
-	dataBit      = 0 << 7 // Data flag
-	heartbeatBit = 1 << 7 // Heartbeat flag
+	dataBit      = 0 << 7 // Data frame flag
+	handshakeBit = 1 << 0 // Handshake frame flag
+	heartbeatBit = 1 << 7 // Heartbeat frame flag
+)
+
+// FrameType is the type of a frame read from the wire.
+type FrameType uint8
+
+const (
+	// FrameData is a business data frame.
+	FrameData FrameType = iota
+	// FrameHeartbeat is a heartbeat frame.
+	FrameHeartbeat
+	// FrameHandshake is a handshake frame.
+	FrameHandshake
 )
 
 // Packer defines the encoding and decoding capabilities of messages.
 type Packer interface {
-	// Read reads a message as a buffer. It reports whether the message is a heartbeat, the
-	// server-side timestamp in nanoseconds, the message buffer and any read error.
-	Read(reader io.Reader) (bool, int64, buffer.Buffer, error)
+	// Read reads a frame as a buffer. It reports the frame type, the server-side timestamp in
+	// nanoseconds, the frame buffer and any read error. The timestamp is meaningful only for
+	// heartbeat frames.
+	Read(reader io.Reader) (FrameType, int64, buffer.Buffer, error)
+	// PackHandshake packs a handshake frame. A handshake frame carries neither a route nor a
+	// sequence number, and it is marked by a reserved header bit.
+	PackHandshake(payload []byte) (buffer.Buffer, error)
+	// PackHeartbeat packs a heartbeat. Pass server as true to pack a server-side heartbeat.
+	PackHeartbeat(server ...bool) buffer.Buffer
 	// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 	PackMessage(message *Message) (buffer.Buffer, error)
-	// ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It
-	// returns the route, the sequence number and any unpacking error.
-	ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number,
 	// the message buffer and any unpacking error.
 	UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error)
-	// PackHeartbeat packs a heartbeat. Pass server as true to pack a server-side heartbeat.
-	PackHeartbeat(server ...bool) buffer.Buffer
+	// ExtractHandshake extracts the payload of a handshake frame. It reports
+	// [errors.ErrInvalidMessage] when buf is not a handshake frame.
+	ExtractHandshake(buf buffer.Buffer) ([]byte, error)
+	// ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It
+	// returns the route, the sequence number and any unpacking error.
+	ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 }
 
 // defaultPacker is the default packer.
@@ -69,11 +89,11 @@ func NewPacker(opts ...Option) *defaultPacker {
 	return p
 }
 
-// Read reads a message as a buffer.
+// Read reads a frame as a buffer.
 //
 // It takes the zero-allocation fast path for *bufio.Reader and falls back to pooled header-buffer
 // reading for other sources.
-func (p *defaultPacker) Read(reader io.Reader) (bool, int64, buffer.Buffer, error) {
+func (p *defaultPacker) Read(reader io.Reader) (FrameType, int64, buffer.Buffer, error) {
 	if r, ok := reader.(*bufio.Reader); ok {
 		return p.readBuffered(r)
 	}
@@ -86,10 +106,10 @@ func (p *defaultPacker) Read(reader io.Reader) (bool, int64, buffer.Buffer, erro
 // It parses the message header directly from the read buffer through Peek/Discard, performs a
 // single pooled allocation of the message body for data messages, and allocates nothing for
 // heartbeat messages.
-func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffer, error) {
+func (p *defaultPacker) readBuffered(r *bufio.Reader) (FrameType, int64, buffer.Buffer, error) {
 	head, err := r.Peek(defaultSizeBytes + defaultHeaderBytes)
 	if err != nil {
-		return false, 0, nil, err
+		return FrameData, 0, nil, err
 	}
 
 	header := head[defaultSizeBytes]
@@ -98,31 +118,31 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffe
 		switch size := p.opts.byteOrder.Uint32(head[:defaultSizeBytes]); size {
 		case defaultHeaderBytes:
 			_, _ = r.Discard(defaultSizeBytes + defaultHeaderBytes)
-			return true, 0, nil, nil
+			return FrameHeartbeat, 0, nil, nil
 		case defaultHeaderBytes + defaultHeartbeatTimeBytes:
 			data, err := r.Peek(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
 			if err != nil {
-				return false, 0, nil, err
+				return FrameData, 0, nil, err
 			}
 
 			heartbeatTime := int64(p.opts.byteOrder.Uint64(data[defaultSizeBytes+defaultHeaderBytes:]))
 
 			_, _ = r.Discard(defaultSizeBytes + defaultHeaderBytes + defaultHeartbeatTimeBytes)
 
-			return true, heartbeatTime, nil, nil
+			return FrameHeartbeat, heartbeatTime, nil, nil
 		default:
-			return false, 0, nil, errors.ErrInvalidMessage
+			return FrameData, 0, nil, errors.ErrInvalidMessage
 		}
 	}
 
 	size := int64(p.opts.byteOrder.Uint32(head[:defaultSizeBytes]))
 
 	if size <= 0 {
-		return false, 0, nil, errors.ErrInvalidMessage
+		return FrameData, 0, nil, errors.ErrInvalidMessage
 	}
 
 	if size > int64(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+p.opts.bufferBytes) {
-		return false, 0, nil, errors.ErrMessageTooLarge
+		return FrameData, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	size -= defaultHeaderBytes
@@ -130,7 +150,7 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffe
 	buf := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
 
 	if buf == nil {
-		return false, 0, nil, errors.ErrMessageTooLarge
+		return FrameData, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	data := buf.Bytes()
@@ -141,28 +161,28 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (bool, int64, buffer.Buffe
 
 	if _, err = io.ReadFull(r, data[defaultSizeBytes+defaultHeaderBytes:]); err != nil {
 		buf.Release()
-		return false, 0, nil, err
+		return FrameData, 0, nil, err
 	}
 
-	return false, 0, buf, nil
+	return frameType(header), 0, buf, nil
 }
 
 // readPooled reads through a pooled header buffer.
 //
 // The header is read from the byte pool and explicitly released; data messages additionally
 // perform one pooled allocation of the message body and a header copy.
-func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer, error) {
+func (p *defaultPacker) readPooled(reader io.Reader) (FrameType, int64, buffer.Buffer, error) {
 	buf1 := buffer.MallocBytes(defaultSizeBytes + defaultHeaderBytes)
 
 	if buf1 == nil {
-		return false, 0, nil, errors.ErrMessageTooLarge
+		return FrameData, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	data1 := buf1.Bytes()
 
 	if _, err := io.ReadFull(reader, data1); err != nil {
 		buf1.Release()
-		return false, 0, nil, err
+		return FrameData, 0, nil, err
 	}
 
 	header := data1[defaultSizeBytes]
@@ -171,23 +191,23 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 		switch size := p.opts.byteOrder.Uint32(data1[:defaultSizeBytes]); size {
 		case defaultHeaderBytes:
 			buf1.Release()
-			return true, 0, nil, nil
+			return FrameHeartbeat, 0, nil, nil
 		case defaultHeaderBytes + defaultHeartbeatTimeBytes:
 			var data [defaultHeartbeatTimeBytes]byte
 
 			if _, err := io.ReadFull(reader, data[:]); err != nil {
 				buf1.Release()
-				return false, 0, nil, err
+				return FrameData, 0, nil, err
 			}
 
 			heartbeatTime := int64(p.opts.byteOrder.Uint64(data[:]))
 
 			buf1.Release()
 
-			return true, heartbeatTime, nil, nil
+			return FrameHeartbeat, heartbeatTime, nil, nil
 		default:
 			buf1.Release()
-			return false, 0, nil, errors.ErrInvalidMessage
+			return FrameData, 0, nil, errors.ErrInvalidMessage
 		}
 	}
 
@@ -195,12 +215,12 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 
 	if size <= 0 {
 		buf1.Release()
-		return false, 0, nil, errors.ErrInvalidMessage
+		return FrameData, 0, nil, errors.ErrInvalidMessage
 	}
 
 	if size > int64(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+p.opts.bufferBytes) {
 		buf1.Release()
-		return false, 0, nil, errors.ErrMessageTooLarge
+		return FrameData, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	size -= defaultHeaderBytes
@@ -209,7 +229,7 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 
 	if buf2 == nil {
 		buf1.Release()
-		return false, 0, nil, errors.ErrMessageTooLarge
+		return FrameData, 0, nil, errors.ErrMessageTooLarge
 	}
 
 	data2 := buf2.Bytes()
@@ -220,10 +240,19 @@ func (p *defaultPacker) readPooled(reader io.Reader) (bool, int64, buffer.Buffer
 
 	if _, err := io.ReadFull(reader, data2[defaultSizeBytes+defaultHeaderBytes:]); err != nil {
 		buf2.Release()
-		return false, 0, nil, err
+		return FrameData, 0, nil, err
 	}
 
-	return false, 0, buf2, nil
+	return frameType(header), 0, buf2, nil
+}
+
+// frameType maps the header byte to the frame type. The heartbeat flag takes precedence.
+func frameType(header byte) FrameType {
+	if header&handshakeBit == handshakeBit {
+		return FrameHandshake
+	}
+
+	return FrameData
 }
 
 // PackMessage packs message as a buffer and returns the packed buffer or a packing error.
@@ -275,6 +304,40 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	return buffer.NewNocopyBuffer(writer, message.Buffer), nil
 }
 
+// PackHandshake packs a handshake frame.
+//
+// The frame layout is the header followed by the handshake data, so it carries neither a route nor
+// a sequence number and does not consume a route.
+func (p *defaultPacker) PackHandshake(payload []byte) (buffer.Buffer, error) {
+	if len(payload) > p.opts.bufferBytes {
+		return nil, errors.ErrMessageTooLarge
+	}
+
+	writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes)
+	writer.WriteInt32s(p.opts.byteOrder, int32(defaultHeaderBytes+len(payload)))
+	writer.WriteInt8s(int8(handshakeBit))
+
+	return buffer.NewNocopyBuffer(writer, payload), nil
+}
+
+// ExtractHandshake extracts the payload of a handshake frame.
+func (p *defaultPacker) ExtractHandshake(buf buffer.Buffer) ([]byte, error) {
+	data := buf.Bytes()
+	if len(data) < defaultSizeBytes+defaultHeaderBytes {
+		return nil, errors.ErrInvalidMessage
+	}
+
+	if data[defaultSizeBytes]&handshakeBit != handshakeBit {
+		return nil, errors.ErrInvalidMessage
+	}
+
+	if uint64(len(data))-defaultSizeBytes != uint64(p.opts.byteOrder.Uint32(data[:defaultSizeBytes])) {
+		return nil, errors.ErrInvalidMessage
+	}
+
+	return data[defaultSizeBytes+defaultHeaderBytes:], nil
+}
+
 // ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It returns
 // the route, the sequence number and any unpacking error.
 func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
@@ -295,7 +358,7 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 
 	header := data[defaultSizeBytes]
 
-	if header&heartbeatBit == heartbeatBit {
+	if header&heartbeatBit == heartbeatBit || header&handshakeBit == handshakeBit {
 		return 0, 0, errors.ErrInvalidMessage
 	}
 
@@ -303,9 +366,9 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 
 	switch p.opts.routeBytes {
 	case 1:
-		route = int32(data[defaultSizeBytes+defaultHeaderBytes])
+		route = int32(int8(data[defaultSizeBytes+defaultHeaderBytes]))
 	case 2:
-		route = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+		route = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])))
 	case 4:
 		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	default:
@@ -318,9 +381,9 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	case 0:
 		// ignore seq
 	case 1:
-		seq = int32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])
+		seq = int32(int8(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	case 2:
-		seq = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
+		seq = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes])))
 	case 4:
 		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
 	default:
@@ -330,8 +393,61 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 	return route, seq, nil
 }
 
-// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number, the
-// message buffer and any unpacking error.
+// ExtractMessage returns the route, the sequence number and the payload of buf without modifying
+// the buffer.
+func (p *defaultPacker) ExtractMessage(buf buffer.Buffer) (int32, int32, []byte, error) {
+	var (
+		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
+		data = buf.Bytes()
+	)
+
+	if len(data) < ln {
+		return 0, 0, nil, errors.ErrInvalidMessage
+	}
+
+	size := p.opts.byteOrder.Uint32(data[:defaultSizeBytes])
+
+	if uint64(len(data))-defaultSizeBytes != uint64(size) {
+		return 0, 0, nil, errors.ErrInvalidMessage
+	}
+
+	if header := data[defaultSizeBytes]; header&heartbeatBit == heartbeatBit || header&handshakeBit == handshakeBit {
+		return 0, 0, nil, errors.ErrInvalidMessage
+	}
+
+	var route int32
+
+	switch p.opts.routeBytes {
+	case 1:
+		route = int32(int8(data[defaultSizeBytes+defaultHeaderBytes]))
+	case 2:
+		route = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])))
+	case 4:
+		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+	default:
+		return 0, 0, nil, errors.ErrInvalidMessage
+	}
+
+	var seq int32
+
+	switch p.opts.seqBytes {
+	case 0:
+		// ignore seq
+	case 1:
+		seq = int32(int8(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+	case 2:
+		seq = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes])))
+	case 4:
+		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
+	default:
+		return 0, 0, nil, errors.ErrInvalidMessage
+	}
+
+	return route, seq, data[ln:], nil
+}
+
+// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number,
+// the message buffer and any unpacking error.
 func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	var (
 		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
@@ -350,7 +466,7 @@ func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.B
 
 	header := data[defaultSizeBytes]
 
-	if header&heartbeatBit == heartbeatBit {
+	if header&heartbeatBit == heartbeatBit || header&handshakeBit == handshakeBit {
 		return 0, 0, nil, errors.ErrInvalidMessage
 	}
 
@@ -358,9 +474,9 @@ func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.B
 
 	switch p.opts.routeBytes {
 	case 1:
-		route = int32(data[defaultSizeBytes+defaultHeaderBytes])
+		route = int32(int8(data[defaultSizeBytes+defaultHeaderBytes]))
 	case 2:
-		route = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
+		route = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])))
 	case 4:
 		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	default:
@@ -373,9 +489,9 @@ func (p *defaultPacker) UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.B
 	case 0:
 		// ignore seq
 	case 1:
-		seq = int32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])
+		seq = int32(int8(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
 	case 2:
-		seq = int32(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
+		seq = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes])))
 	case 4:
 		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
 	default:

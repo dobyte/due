@@ -20,6 +20,7 @@ type client struct {
 	connectHandler    network.ConnectHandler
 	disconnectHandler network.DisconnectHandler
 	receiveHandler    network.ReceiveHandler
+	handshakeHandler  network.HandshakeHandler
 	heartbeatHandler  network.HeartbeatHandler
 }
 
@@ -108,6 +109,11 @@ func (c *client) OnDisconnect(h network.DisconnectHandler) { c.disconnectHandler
 // It must be registered before Dial; registering it afterwards races with Dial. The handler owns
 // every received buffer.
 func (c *client) OnReceive(h network.ReceiveHandler) { c.receiveHandler = h }
+
+// OnHandshake registers h to be invoked when a handshake frame is received.
+//
+// It must be registered before Dial; registering it afterwards races with Dial.
+func (c *client) OnHandshake(h network.HandshakeHandler) { c.handshakeHandler = h }
 
 // OnHeartbeat registers h to be invoked on a connection heartbeat.
 //

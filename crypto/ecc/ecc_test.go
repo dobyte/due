@@ -89,6 +89,58 @@ func Test_Sign_Verify(t *testing.T) {
 	t.Log(ok)
 }
 
+func Test_Verify_WithPublicKeyOnly(t *testing.T) {
+	key, err := ecc.GenerateKey(ecc.P256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pub, err := key.MarshalPublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prv, err := key.MarshalPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	localSigner := ecc.NewSigner(
+		ecc.WithSignerHash(hash.SHA256),
+		ecc.WithSignerPublicKey(string(pub)),
+		ecc.WithSignerPrivateKey(string(prv)),
+	)
+	verifier := ecc.NewVerifier(
+		string(pub),
+		ecc.WithSignerHash(hash.SHA256),
+	)
+
+	bytes := []byte(xrand.Letters(1024))
+
+	signature, err := localSigner.Sign(bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := verifier.Verify(bytes, signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ok {
+		t.Fatal("signature verification failed")
+	}
+
+	ok, err = verifier.Verify([]byte("tampered"), signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ok {
+		t.Fatal("tampered data must not be verified")
+	}
+}
+
 func Benchmark_Sign(b *testing.B) {
 	bytes := []byte(xrand.Letters(20000))
 

@@ -8,6 +8,13 @@ import (
 
 var globalPacker Packer
 
+// MessageExtractor is implemented by packers that can extract the payload of a packed message
+// without modifying the buffer.
+type MessageExtractor interface {
+	// ExtractMessage returns the route, the sequence number and the payload of buf.
+	ExtractMessage(buf buffer.Buffer) (int32, int32, []byte, error)
+}
+
 // init initializes the global packer.
 func init() {
 	globalPacker = NewPacker()
@@ -25,15 +32,28 @@ func GetPacker() Packer {
 	return globalPacker
 }
 
-// Read reads a message as a buffer. It reports whether the message is a heartbeat, the server-side
-// timestamp in nanoseconds, the message buffer and any read error.
-func Read(reader io.Reader) (bool, int64, buffer.Buffer, error) {
+// Read reads a frame as a buffer. It reports the frame type, the server-side timestamp in
+// nanoseconds, the frame buffer and any read error.
+func Read(reader io.Reader) (FrameType, int64, buffer.Buffer, error) {
 	return globalPacker.Read(reader)
 }
 
 // PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 func PackMessage(message *Message) (buffer.Buffer, error) {
 	return globalPacker.PackMessage(message)
+}
+
+// PackHandshake packs a handshake frame.
+//
+// Handshake frames carry neither a route nor a sequence number, and they are marked by a reserved
+// header bit, so they do not consume a route number.
+func PackHandshake(payload []byte) (buffer.Buffer, error) {
+	return globalPacker.PackHandshake(payload)
+}
+
+// ExtractHandshake extracts the payload of a handshake frame.
+func ExtractHandshake(buf buffer.Buffer) ([]byte, error) {
+	return globalPacker.ExtractHandshake(buf)
 }
 
 // ExtractRouteSeq extracts the route and sequence number from the message buffer buf. It returns
@@ -46,6 +66,23 @@ func ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
 // message buffer and any unpacking error.
 func UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error) {
 	return globalPacker.UnpackMessage(buf)
+}
+
+// ExtractMessage returns the route, the sequence number and the payload of buf without modifying
+// the buffer, so it is safe to call on a shared buffer.
+func ExtractMessage(buf buffer.Buffer) (int32, int32, []byte, error) {
+	if extractor, ok := globalPacker.(MessageExtractor); ok {
+		return extractor.ExtractMessage(buf)
+	}
+
+	clone := buffer.NewBytes(append([]byte(nil), buf.Bytes()...), true)
+
+	route, seq, data, err := globalPacker.UnpackMessage(clone)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	return route, seq, append([]byte(nil), data.Bytes()...), nil
 }
 
 // PackHeartbeat packs a heartbeat.

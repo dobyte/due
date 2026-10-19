@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/log"
@@ -35,6 +36,7 @@ type options struct {
 	client                 network.Client   // network client
 	encryptor              crypto.Encryptor // message encryptor
 	enableTamperProtection bool             // whether the uplink messages are protected
+	security               *securityOptions // session security options
 }
 
 // defaultOptions returns the default options. Options are read from the configuration center,
@@ -139,6 +141,21 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 // received from the server are not validated.
 func WithEnableTamperProtection(enableTamperProtection bool) Option {
 	return func(o *options) { o.enableTamperProtection = enableTamperProtection }
+}
+
+// WithSessionSecurity enables the session security between the client and the gate.
+//
+// verifier verifies the signature of the gate, and it is usually built from the pinned gate public
+// key. When enabled, the payload is sealed with the negotiated session key, so the static encryptor
+// and the anti-tampering protection are not applied.
+func WithSessionSecurity(verifier crypto.Verifier, opts ...handshake.Option) Option {
+	return func(o *options) {
+		if verifier != nil {
+			o.security = &securityOptions{verifier: verifier, opts: opts}
+		} else {
+			log.Warnf("the specified verifier is nil and will be automatically ignored")
+		}
+	}
 }
 
 // DialOption is a dial option.

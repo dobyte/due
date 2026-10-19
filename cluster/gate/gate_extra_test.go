@@ -70,6 +70,7 @@ type gateServer struct {
 	connect     network.ConnectHandler
 	disconnect  network.DisconnectHandler
 	receive     network.ReceiveHandler
+	handshake   network.HandshakeHandler
 	onStart     network.StartHandler
 	onStop      network.CloseHandler
 	onHeartbeat network.HeartbeatHandler
@@ -87,6 +88,7 @@ func (s *gateServer) OnStop(handler network.CloseHandler)          { s.onStop = 
 func (s *gateServer) OnConnect(handler network.ConnectHandler)     { s.connect = handler }
 func (s *gateServer) OnHeartbeat(handler network.HeartbeatHandler) { s.onHeartbeat = handler }
 func (s *gateServer) OnReceive(handler network.ReceiveHandler)     { s.receive = handler }
+func (s *gateServer) OnHandshake(handler network.HandshakeHandler) { s.handshake = handler }
 func (s *gateServer) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnect = handler
 }

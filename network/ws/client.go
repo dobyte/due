@@ -15,6 +15,7 @@ type client struct {
 	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
 	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
 	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
+	handshakeHandler  network.HandshakeHandler  // Handler invoked when a handshake frame is received
 }
 
 var _ network.Client = &client{}
@@ -86,4 +87,9 @@ func (c *client) OnHeartbeat(handler network.HeartbeatHandler) {
 // OnReceive registers the handler invoked when a message is received.
 func (c *client) OnReceive(handler network.ReceiveHandler) {
 	c.receiveHandler = handler
+}
+
+// OnHandshake registers the handler invoked when a handshake frame is received.
+func (c *client) OnHandshake(handler network.HandshakeHandler) {
+	c.handshakeHandler = handler
 }

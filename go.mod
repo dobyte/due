@@ -12,6 +12,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261
 	github.com/shamaton/msgpack/v2 v2.4.1
+	golang.org/x/crypto v0.31.0
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1

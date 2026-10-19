@@ -320,7 +320,7 @@ func (c *clientConn) read(conn *websocket.Conn) {
 			continue
 		}
 
-		isHeartbeat, heartbeatTime, buf, err := packet.Read(r)
+		frameType, heartbeatTime, buf, err := packet.Read(r)
 		if err != nil {
 			taskpool.Add(func() { c.forceClose() })
 			return
@@ -328,18 +328,18 @@ func (c *clientConn) read(conn *websocket.Conn) {
 
 		switch c.State() {
 		case network.ConnClosed:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 			}
 			return
 		case network.ConnHanged:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 				return
 			}
 		}
 
-		if isHeartbeat {
+		if frameType == packet.FrameHeartbeat {
 			// update heartbeat time
 			if c.cli.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
@@ -364,7 +364,9 @@ func (c *clientConn) read(conn *websocket.Conn) {
 				continue
 			}
 
-			if c.cli.receiveHandler != nil {
+			if frameType == packet.FrameHandshake && c.cli.handshakeHandler != nil {
+				c.cli.handshakeHandler(c, buf)
+			} else if c.cli.receiveHandler != nil {
 				c.cli.receiveHandler(c, buf)
 			} else {
 				buf.Release()

@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/component"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/info"
+	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -99,6 +100,7 @@ func (c *Client) Start() {
 
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
+	c.opts.client.OnHandshake(c.handleHandshake)
 
 	c.rw1.Unlock()
 
@@ -186,6 +188,28 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 		return
 	}
 
+	// Decrypt once when session security is enabled, so that Parse is idempotent and every
+	// handler registered for the route shares the same plaintext.
+	if c.opts.security != nil {
+		state := val.(*Conn).security.Load()
+		if state == nil {
+			buf.Release()
+			log.Errorf("session security is not established")
+			return
+		}
+
+		plaintext, err := state.session.Open(data.Bytes(), handshake.MakeAAD(handshake.ServerToClient, route, seq))
+		if err != nil {
+			buf.Release()
+			log.Errorf("open secure message failed, route: %d, seq: %d, err: %v", route, seq, err)
+			return
+		}
+
+		buf.Release()
+		buf = buffer.NewBytes(plaintext, true)
+		data = buf
+	}
+
 	if handlers, ok := c.routes.Load().(map[int32][]RouteHandler)[route]; ok {
 		for _, handler := range handlers {
 			xcall.Call(func() {
@@ -215,6 +239,26 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
+// handleHandshake handles a received handshake frame and hands it to the pending handshake of the
+// connection.
+func (c *Client) handleHandshake(conn network.Conn, buf buffer.Buffer) {
+	val, ok := c.conns.Load(conn)
+	if !ok {
+		buf.Release()
+		return
+	}
+
+	payload, err := packet.ExtractHandshake(buf)
+	if err != nil {
+		buf.Release()
+		log.Errorf("extract handshake frame failed: %v", err)
+		return
+	}
+
+	val.(*Conn).deliverHandshake(payload)
+	buf.Release()
+}
+
 // dial dials a connection to the server.
 func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
@@ -233,6 +277,10 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 
 	cc := &Conn{conn: conn, client: c}
 
+	if c.opts.security != nil {
+		cc.handshakeCh = make(chan []byte, 1)
+	}
+
 	for key, value := range o.attrs {
 		cc.SetAttr(key, value)
 	}
@@ -245,6 +293,16 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	}
 	c.conns.Store(conn, cc)
 	c.rw2.Unlock()
+
+	if c.opts.security != nil {
+		if err = cc.handshake(); err != nil {
+			c.rw2.Lock()
+			c.conns.Delete(conn)
+			c.rw2.Unlock()
+			_ = conn.Close()
+			return nil, err
+		}
+	}
 
 	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Connect]; ok {
 		for _, handler := range handlers {
@@ -361,7 +419,9 @@ func (c *Client) printInfo() {
 	rows = append(rows, fmt.Sprintf("Codec: %s", c.opts.codec.Name()))
 	rows = append(rows, fmt.Sprintf("Protocol: %s", c.opts.client.Protocol()))
 
-	if c.opts.encryptor != nil {
+	if c.opts.security != nil {
+		rows = append(rows, "Security: session")
+	} else if c.opts.encryptor != nil {
 		rows = append(rows, fmt.Sprintf("Encryptor: %s", c.opts.encryptor.Name()))
 	} else {
 		rows = append(rows, "Encryptor: -")

@@ -1,10 +1,13 @@
 package client
 
 import (
+	"errors"
 	"net"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/value"
+	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -14,8 +17,10 @@ import (
 // It exposes message pushing, attribute management and basic information querying on top of the
 // underlying network connection.
 type Conn struct {
-	conn   network.Conn // underlying network connection
-	client *Client      // owning client
+	conn        network.Conn                  // underlying network connection
+	client      *Client                       // owning client
+	security    atomic.Pointer[securityState] // session security state
+	handshakeCh chan []byte                   // received handshake frames
 }
 
 // ID returns the connection ID.
@@ -98,22 +103,35 @@ func (c *Conn) Push(message *cluster.Message) error {
 		}
 	}
 
-	if c.client.opts.enableTamperProtection {
-		buf, err := packet.PackMessage(&packet.Message{
-			Seq:    message.Seq,
-			Route:  message.Route,
-			Buffer: data,
-		})
-		if err != nil {
-			return err
+	if c.client.opts.security != nil {
+		state := c.security.Load()
+		if state == nil {
+			return errors.New("session security is not established")
 		}
 
-		data = buf.Bytes()
-	}
+		if len(data) != 0 {
+			if data, err = state.session.Seal(data, handshake.MakeAAD(handshake.ClientToServer, message.Route, message.Seq)); err != nil {
+				return err
+			}
+		}
+	} else {
+		if c.client.opts.enableTamperProtection {
+			buf, err := packet.PackMessage(&packet.Message{
+				Seq:    message.Seq,
+				Route:  message.Route,
+				Buffer: data,
+			})
+			if err != nil {
+				return err
+			}
 
-	if len(data) != 0 && c.client.opts.encryptor != nil {
-		if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
-			return err
+			data = buf.Bytes()
+		}
+
+		if len(data) != 0 && c.client.opts.encryptor != nil {
+			if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
+				return err
+			}
 		}
 	}
 

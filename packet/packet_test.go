@@ -24,7 +24,7 @@ func TestDefaultPacker_Read(t *testing.T) {
 
 	defer buf1.Release()
 
-	isHeartbeat, heartbeatTime, buf2, err := packer.Read(bytes.NewReader(buf1.Bytes()))
+	frameType, heartbeatTime, buf2, err := packer.Read(bytes.NewReader(buf1.Bytes()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestDefaultPacker_Read(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Logf("isHeartbeat: %v", isHeartbeat)
+	t.Logf("frameType: %v", frameType)
 	t.Logf("heartbeatTime: %d", heartbeatTime)
 	t.Logf("route: %d", route)
 	t.Logf("seq: %d", seq)

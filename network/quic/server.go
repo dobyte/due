@@ -31,6 +31,7 @@ type server struct {
 	connectHandler    network.ConnectHandler
 	disconnectHandler network.DisconnectHandler
 	receiveHandler    network.ReceiveHandler
+	handshakeHandler  network.HandshakeHandler
 	heartbeatHandler  network.HeartbeatHandler
 }
 
@@ -197,6 +198,11 @@ func (s *server) OnDisconnect(h network.DisconnectHandler) { s.disconnectHandler
 // It must be registered before Start; registering it afterwards races with Start. The handler owns
 // every received buffer.
 func (s *server) OnReceive(h network.ReceiveHandler) { s.receiveHandler = h }
+
+// OnHandshake registers h to be invoked when a handshake frame is received.
+//
+// It must be registered before Start; registering it afterwards races with Start.
+func (s *server) OnHandshake(h network.HandshakeHandler) { s.handshakeHandler = h }
 
 // OnHeartbeat registers h to be invoked on a connection heartbeat.
 //

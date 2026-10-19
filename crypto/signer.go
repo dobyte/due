@@ -13,6 +13,15 @@ type Signer interface {
 	Verify(data []byte, signature []byte) (bool, error)
 }
 
+// Verifier verifies the signature of data.
+//
+// It covers the verification-only side, so that a peer that only holds a public key does not need
+// to configure a private key.
+type Verifier interface {
+	// Verify verifies the signature of data.
+	Verify(data []byte, signature []byte) (bool, error)
+}
+
 var signers = make(map[string]Signer)
 
 // RegisterSigner registers a signer. It panics when the signer is nil or has an empty name, and

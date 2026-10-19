@@ -80,6 +80,7 @@ type tNetwork struct {
 
 	connect    network.ConnectHandler
 	receive    network.ReceiveHandler
+	handshake  network.HandshakeHandler
 	disconnect network.DisconnectHandler
 	heartbeat  network.HeartbeatHandler
 }
@@ -96,6 +97,7 @@ func (c *tNetwork) Protocol() string                               { return "tes
 func (c *tNetwork) OnConnect(handler network.ConnectHandler)       { c.connect = handler }
 func (c *tNetwork) OnHeartbeat(handler network.HeartbeatHandler)   { c.heartbeat = handler }
 func (c *tNetwork) OnReceive(handler network.ReceiveHandler)       { c.receive = handler }
+func (c *tNetwork) OnHandshake(handler network.HandshakeHandler)   { c.handshake = handler }
 func (c *tNetwork) OnDisconnect(handler network.DisconnectHandler) { c.disconnect = handler }
 
 // tEncryptor is an encryptor implementation for tests.

@@ -23,6 +23,7 @@ type server struct {
 	disconnectHandler network.DisconnectHandler // Hook invoked when a connection is closed
 	heartbeatHandler  network.HeartbeatHandler  // Hook invoked on connection heartbeat
 	receiveHandler    network.ReceiveHandler    // Hook invoked when a message is received
+	handshakeHandler  network.HandshakeHandler  // Hook invoked when a handshake frame is received
 }
 
 var _ network.Server = &server{}
@@ -153,6 +154,11 @@ func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 // OnReceive registers handler to be invoked when a message is received.
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
+}
+
+// OnHandshake registers handler to be invoked when a handshake frame is received.
+func (s *server) OnHandshake(handler network.HandshakeHandler) {
+	s.handshakeHandler = handler
 }
 
 // init initializes the server.

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/crypto/handshake"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -71,6 +73,7 @@ type options struct {
 	addr     string            // internal RPC listen address
 	expose   bool              // whether the internal RPC address is exposed to the public network
 	linker   *linkerOptions    // linker options
+	security *securityOptions  // session security options
 }
 
 // defaultOptions returns the default options.
@@ -247,6 +250,21 @@ func WithAddr(addr string) Option {
 // WithExpose sets whether the internal communication address is exposed to the public network.
 func WithExpose(expose bool) Option {
 	return func(o *options) { o.expose = expose }
+}
+
+// WithSessionSecurity enables the session security between the client and the gate.
+//
+// signer signs the ServerHello so that the client can verify the gate with the pinned public key.
+// When enabled, the payload of client messages is decrypted by the gate and re-encrypted for the
+// downlink, so the node-side static encryptor must stay unconfigured.
+func WithSessionSecurity(signer crypto.Signer, opts ...handshake.Option) Option {
+	return func(o *options) {
+		if signer != nil {
+			o.security = &securityOptions{signer: signer, opts: opts}
+		} else {
+			log.Warnf("the specified signer is nil and will be automatically ignored")
+		}
+	}
 }
 
 // WithLinkerConnNum sets the number of connections.
