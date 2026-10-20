@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	defaultAddr = ":0" // Listen address
+	defaultAddr = "127.0.0.1:0" // Listen address
 )
 
 const (

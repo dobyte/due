@@ -758,7 +758,7 @@ Stateful 路由以 UID 定位，Room Actor 以本地 Kind/ID 组织状态，两�
 | --- | --- |
 | HTTP | Fiber v3、路由/中间件、Swagger、TLS、可信代理；可创建 Mesh client，不自行注册为集群实例；Destroy 有单独 Shutdown 期限 |
 | MQTT | mochi-mqtt，TCP/WS、TLS、hooks；独立协议服务，不自动成为 Due packet Gate |
-| pprof | 标准 pprof HTTP 路由；当前继承空 Close/Destroy，没有内建鉴权和 server Shutdown |
+| pprof | 标准 pprof HTTP 路由，默认仅监听 loopback；当前继承空 Close/Destroy，没有内建鉴权和 server Shutdown |
 
 当前源码没有统一内建的 Prometheus/OpenTelemetry 业务观测链路。可沿 Node middleware、组件 hooks、gRPC interceptors、网络回调和业务状态机接入。
 

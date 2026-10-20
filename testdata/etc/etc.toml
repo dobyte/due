@@ -237,7 +237,7 @@ shutdownMaxWaitTime = "0s"
 # pprof模块
 [pprof]
     # pprof服务器监听地址
-    addr = ":0"
+    addr = "127.0.0.1:0"
 
 # 传输模块
 [transport]
@@ -836,7 +836,7 @@ shutdownMaxWaitTime = "0s"
             # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
             hash = "SHA256"
             # 填充规则，不区分大小写。可选：NORMAL | OAEP
-            padding = "NORMAL"
+            padding = "OAEP"
             # 标签，加解密时必需一致
             label = ""
             # 加密数据块大小，单位字节。由于加密数据长度限制，需要对加密数据进行分块儿加密

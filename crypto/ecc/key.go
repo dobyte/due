@@ -93,7 +93,7 @@ func (k *Key) marshalPrivateKey(out io.Writer) error {
 // SaveKeyPair saves the key pair under dir with the given file name.
 func (k *Key) SaveKeyPair(dir string, file string) (err error) {
 	if !xos.IsDir(dir) {
-		err = os.MkdirAll(dir, os.ModePerm)
+		err = os.MkdirAll(dir, 0o700)
 		if err != nil {
 			return
 		}
@@ -120,11 +120,15 @@ func (k *Key) savePrivateKey(dir string, file string) (err error) {
 		}
 	}()
 
-	f, err := os.Create(filepath)
+	f, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+
+	if err = f.Chmod(0o600); err != nil {
+		return
+	}
 
 	return k.marshalPrivateKey(f)
 }
