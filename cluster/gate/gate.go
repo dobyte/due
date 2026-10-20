@@ -52,7 +52,7 @@ func NewGate(opts ...Option) *Gate {
 	g.wg = &sync.WaitGroup{}
 
 	if o.security != nil {
-		g.security = newSecurityManager(g, o.security)
+		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
 	}
 
 	return g
@@ -176,9 +176,8 @@ func (g *Gate) handleConnect(conn network.Conn) {
 			g.session.AddConn(g.security.wrap(conn))
 		} else {
 			g.session.AddConn(conn)
+			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 		}
-
-		g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 	} else {
 		if err := conn.Close(); err != nil {
 			log.Warnf("close conn failed: %v", err)
@@ -198,6 +197,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 	if g.security != nil {
 		conn = g.security.unwrap(conn)
+		g.security.remove(cid)
 	}
 
 	if g.session.RemConn(conn) {
@@ -214,9 +214,6 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 		g.wg.Done()
 	}
 
-	if g.security != nil {
-		g.security.remove(cid)
-	}
 }
 
 // handleReceive handles a received message and delivers the client message to the matching

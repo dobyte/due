@@ -58,6 +58,43 @@ func nextHandshakeFrame(conn *tConn) ([]byte, error) {
 	}
 }
 
+func TestClientHandshakeStopsOnDisconnect(t *testing.T) {
+	signer := &clientSecuritySigner{key: []byte("client-security-disconnect-test")}
+	conn := newTConn(1)
+	c := NewClient(
+		WithClient(&tNetwork{conn: conn}),
+		WithCodec(json.DefaultCodec),
+		WithSessionSecurity(signer),
+	)
+	c.Init()
+	c.Start()
+	t.Cleanup(func() {
+		c.Close()
+		c.conns.Clear()
+		c.Destroy()
+	})
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := c.Proxy().Dial()
+		result <- err
+	}()
+
+	if _, err := nextHandshakeFrame(conn); err != nil {
+		t.Fatalf("wait client hello failed: %v", err)
+	}
+	c.handleDisconnect(conn)
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, errors.ErrConnectionClosed) {
+			t.Fatalf("unexpected dial error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("dial did not stop after disconnect")
+	}
+}
+
 // TestClientSessionSecurity verifies the client side handshake, the uplink sealing and the
 // downlink decryption.
 func TestClientSessionSecurity(t *testing.T) {

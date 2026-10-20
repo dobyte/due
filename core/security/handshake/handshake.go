@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"math"
+	"slices"
 
 	"github.com/dobyte/due/v2/core/security/aead"
 	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
@@ -86,7 +87,7 @@ func NewClient(verifier crypto.Signer, suites ...aead.Suite) *Client {
 		suites = DefaultSuites()
 	}
 
-	c := &Client{verifier: verifier, suites: suites}
+	c := &Client{verifier: verifier, suites: slices.Clone(suites)}
 
 	switch {
 	case verifier == nil:
@@ -238,7 +239,7 @@ func NewServer(signer crypto.Signer, suites ...aead.Suite) *Server {
 		suites = DefaultSuites()
 	}
 
-	s := &Server{signer: signer, suites: suites}
+	s := &Server{signer: signer, suites: slices.Clone(suites)}
 
 	switch {
 	case signer == nil:

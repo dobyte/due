@@ -160,12 +160,14 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 		return
 	}
 
+	cc := val.(*Conn)
+	connected := cc.signalClosed()
 	c.conns.Delete(conn)
 
-	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; ok {
+	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; connected && ok {
 		for _, handler := range handlers {
 			xcall.Call(func() {
-				handler(val.(*Conn))
+				handler(cc)
 			})
 		}
 	}
@@ -279,7 +281,7 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 		return nil, err
 	}
 
-	cc := &Conn{conn: conn, client: c}
+	cc := &Conn{conn: conn, client: c, closedCh: make(chan struct{})}
 
 	if c.opts.security != nil {
 		cc.handshakeCh = make(chan []byte, 1)
@@ -314,6 +316,16 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 				handler(cc)
 			})
 		}
+	}
+	if !cc.markConnected() {
+		if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; ok {
+			for _, handler := range handlers {
+				xcall.Call(func() {
+					handler(cc)
+				})
+			}
+		}
+		return nil, errors.ErrConnectionClosed
 	}
 
 	return cc, nil

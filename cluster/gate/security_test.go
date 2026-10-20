@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
@@ -111,6 +112,30 @@ func (c *securityConn) next(t *testing.T) []byte {
 	default:
 		t.Fatal("expect a pushed message")
 		return nil
+	}
+}
+
+func TestSecurityHandshakeTimeout(t *testing.T) {
+	signer := &securitySigner{key: []byte("gate-security-timeout-test")}
+	g := NewGate(
+		WithSessionSecurity(signer),
+		WithSessionSecurityHandshakeTimeout(10*time.Millisecond),
+	)
+	conn := &securityConn{pushed: make(chan []byte, 1)}
+	g.security.wrap(conn)
+	t.Cleanup(func() { g.security.remove(conn.ID()) })
+
+	deadline := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+
+	for !conn.closed.Load() {
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("connection was not closed after the handshake timeout")
+		}
 	}
 }
 

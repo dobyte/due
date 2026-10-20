@@ -2,6 +2,7 @@ package client
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,6 +24,11 @@ type Conn struct {
 	client      *Client                           // owning client
 	security    atomic.Pointer[handshake.Session] // session security state
 	handshakeCh chan []byte                       // received handshake frames
+	closedCh    chan struct{}                     // closed when the underlying connection disconnects
+	pushMu      sync.Mutex                        // preserves secure counter and network queue order
+	lifecycleMu sync.Mutex                        // guards closed and connected
+	closed      bool                              // underlying connection has disconnected
+	connected   bool                              // Connect event has completed
 }
 
 // ID returns the connection ID.
@@ -90,9 +96,8 @@ func (c *Conn) RemoteAddr() (net.Addr, error) {
 // route and the sequence number are bound by the additional authenticated data.
 func (c *Conn) Push(message *cluster.Message) error {
 	var (
-		err    error
-		data   []byte
-		output *buffer.Bytes
+		err  error
+		data []byte
 	)
 
 	if message.Data != nil {
@@ -106,43 +111,57 @@ func (c *Conn) Push(message *cluster.Message) error {
 	}
 
 	if c.client.opts.security != nil {
-		session := c.security.Load()
-		if session == nil {
-			return errors.New("session security is not established")
-		}
+		c.pushMu.Lock()
+		err = c.pushSecure(message.Route, message.Seq, data)
+		c.pushMu.Unlock()
 
-		output = buffer.MallocBytesWithHeadroom(
-			packet.MessageBufferHeadroom(),
-			len(data)+session.Overhead(),
-		)
-		if output == nil {
-			output = buffer.MallocBytes(len(data) + session.Overhead())
-			if output == nil {
-				return errors.ErrMessageTooLarge
-			}
-		}
-		if _, err = session.SealMessage(output.Bytes()[:0], data, handshake.ClientToServer, message.Route, message.Seq); err != nil {
-			output.Release()
+		return err
+	}
+
+	if len(data) != 0 && c.client.opts.encryptor != nil {
+		if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
 			return err
 		}
-	} else {
-		if len(data) != 0 && c.client.opts.encryptor != nil {
-			if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
-				return err
-			}
-		}
 	}
 
-	var buf buffer.Buffer
-	if output != nil {
-		buf, err = packet.PackMessageBuffer(message.Route, message.Seq, output)
-	} else {
-		buf, err = packet.PackMessage(&packet.Message{Seq: message.Seq, Route: message.Route, Buffer: data})
-	}
+	buf, err := packet.PackMessage(&packet.Message{Seq: message.Seq, Route: message.Route, Buffer: data})
 	if err != nil {
-		if output != nil {
-			output.Release()
+		return err
+	}
+
+	if err = c.conn.Push(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
+}
+
+// pushSecure seals and queues one message while the caller holds pushMu.
+func (c *Conn) pushSecure(route, seq int32, data []byte) error {
+	session := c.security.Load()
+	if session == nil {
+		return errors.New("session security is not established")
+	}
+
+	output := buffer.MallocBytesWithHeadroom(
+		packet.MessageBufferHeadroom(),
+		len(data)+session.Overhead(),
+	)
+	if output == nil {
+		output = buffer.MallocBytes(len(data) + session.Overhead())
+		if output == nil {
+			return errors.ErrMessageTooLarge
 		}
+	}
+	if _, err := session.SealMessage(output.Bytes()[:0], data, handshake.ClientToServer, route, seq); err != nil {
+		output.Release()
+		return err
+	}
+
+	buf, err := packet.PackMessageBuffer(route, seq, output)
+	if err != nil {
+		output.Release()
 		return err
 	}
 
@@ -192,13 +211,57 @@ func (c *Conn) handshake() error {
 		if err = c.pushHandshake(reply); err != nil {
 			return err
 		}
+		if c.isClosed() {
+			return errors.ErrConnectionClosed
+		}
 
 		return nil
 	case <-timer.C:
 		return errors.ErrDeadlineExceeded
+	case <-c.closedCh:
+		return errors.ErrConnectionClosed
 	case <-c.client.ctx.Done():
 		return c.client.ctx.Err()
 	}
+}
+
+// signalClosed wakes operations waiting on this connection and reports whether its Connect event
+// has completed.
+func (c *Conn) signalClosed() bool {
+	c.lifecycleMu.Lock()
+	if !c.closed {
+		c.closed = true
+		if c.closedCh != nil {
+			close(c.closedCh)
+		}
+	}
+	connected := c.connected
+	c.lifecycleMu.Unlock()
+
+	return connected
+}
+
+// markConnected records that the Connect event has completed. It reports false when the
+// connection closed before that point.
+func (c *Conn) markConnected() bool {
+	c.lifecycleMu.Lock()
+	if c.closed {
+		c.lifecycleMu.Unlock()
+		return false
+	}
+	c.connected = true
+	c.lifecycleMu.Unlock()
+
+	return true
+}
+
+// isClosed reports whether the underlying connection has disconnected.
+func (c *Conn) isClosed() bool {
+	c.lifecycleMu.Lock()
+	closed := c.closed
+	c.lifecycleMu.Unlock()
+
+	return closed
 }
 
 // pushHandshake pushes a plaintext handshake frame to the server.

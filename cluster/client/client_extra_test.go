@@ -542,7 +542,7 @@ func TestClientHandleDisconnect(t *testing.T) {
 	f.client.Proxy().AddEventListener(cluster.Disconnect, func(conn *Conn) { ch <- conn.ID() })
 	f.start(t)
 
-	cc := &Conn{conn: f.conn, client: f.client}
+	cc := &Conn{conn: f.conn, client: f.client, connected: true}
 	f.client.conns.Store(f.conn, cc)
 
 	f.client.handleDisconnect(f.conn)

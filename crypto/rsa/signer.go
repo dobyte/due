@@ -33,12 +33,12 @@ func (s *Signer) Name() string {
 
 // Sign signs data with the RSA private key.
 func (s *Signer) Sign(data []byte) ([]byte, error) {
-	if s.privateKey == nil {
-		return nil, errors.New("signer: private key is not set")
-	}
-
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.privateKey == nil {
+		return nil, errors.New("signer: private key is not set")
 	}
 
 	hash := s.opts.hash.Hash()
@@ -57,12 +57,12 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 
 // Verify verifies the signature of data with the RSA public key.
 func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
-	if s.publicKey == nil {
-		return false, errors.New("signer: public key is not set")
-	}
-
 	if s.err != nil {
 		return false, s.err
+	}
+
+	if s.publicKey == nil {
+		return false, errors.New("signer: public key is not set")
 	}
 
 	var (

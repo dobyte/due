@@ -3,7 +3,9 @@ package gate
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/aead"
 	"github.com/dobyte/due/v2/core/security/handshake"
@@ -22,10 +24,11 @@ type securityOptions struct {
 
 // securityManager holds the per-connection security state and the shared handshake server.
 type securityManager struct {
-	gate   *Gate
-	server *handshake.Server
-	states sync.Map // connection ID -> *securityState
-	conns  sync.Map // connection ID -> *securedConn
+	gate    *Gate
+	server  *handshake.Server
+	timeout time.Duration
+	states  sync.Map // connection ID -> *securityState
+	conns   sync.Map // connection ID -> *securedConn
 }
 
 // securityState is the security state of a single connection.
@@ -33,7 +36,8 @@ type securityState struct {
 	mu      sync.Mutex
 	pending *handshake.Pending
 	session atomic.Pointer[handshake.Session]
-	closed  bool // protected by mu
+	closed  bool        // protected by mu
+	timer   *time.Timer // protected by mu
 }
 
 // securedConn decorates a connection so that every pushed message is sealed with the session key
@@ -42,26 +46,41 @@ type securedConn struct {
 	network.Conn
 	manager *securityManager
 	state   *securityState
+	pushMu  sync.Mutex
 }
 
 // Push seals the payload of buf with the session key and pushes the result.
 func (c *securedConn) Push(buf buffer.Buffer) error {
-	return c.manager.push(c.Conn, c.state, buf)
+	c.pushMu.Lock()
+	err := c.manager.push(c.Conn, c.state, buf)
+	c.pushMu.Unlock()
+
+	return err
 }
 
 // newSecurityManager creates a security manager from the gate options.
-func newSecurityManager(gate *Gate, opts *securityOptions) *securityManager {
+func newSecurityManager(gate *Gate, opts *securityOptions, timeout time.Duration) *securityManager {
 	return &securityManager{
-		gate:   gate,
-		server: handshake.NewServer(opts.signer, opts.suites...),
+		gate:    gate,
+		server:  handshake.NewServer(opts.signer, opts.suites...),
+		timeout: timeout,
 	}
 }
 
 // wrap decorates conn and records the mapping so that the teardown path can find the wrapper.
 func (m *securityManager) wrap(conn network.Conn) network.Conn {
-	value, _ := m.states.LoadOrStore(conn.ID(), &securityState{})
-	wrapped := &securedConn{Conn: conn, manager: m, state: value.(*securityState)}
+	state := &securityState{}
+	value, loaded := m.states.LoadOrStore(conn.ID(), state)
+	state = value.(*securityState)
+	wrapped := &securedConn{Conn: conn, manager: m, state: state}
 	m.conns.Store(conn.ID(), wrapped)
+	if !loaded && m.timeout > 0 {
+		state.mu.Lock()
+		if !state.closed && state.session.Load() == nil {
+			state.timer = time.AfterFunc(m.timeout, func() { m.expire(conn.ID()) })
+		}
+		state.mu.Unlock()
+	}
 
 	return wrapped
 }
@@ -81,11 +100,38 @@ func (m *securityManager) remove(cid int64) {
 		state := value.(*securityState)
 		state.mu.Lock()
 		state.closed = true
+		if state.timer != nil {
+			state.timer.Stop()
+			state.timer = nil
+		}
 		state.pending = nil
 		state.session.Store(nil)
 		state.mu.Unlock()
 	}
 	m.conns.Delete(cid)
+}
+
+// expire closes a connection that did not complete the security handshake in time.
+func (m *securityManager) expire(cid int64) {
+	value, ok := m.states.Load(cid)
+	if !ok {
+		return
+	}
+
+	state := value.(*securityState)
+	state.mu.Lock()
+	if state.closed || state.session.Load() != nil {
+		state.mu.Unlock()
+		return
+	}
+	state.closed = true
+	state.pending = nil
+	state.timer = nil
+	state.mu.Unlock()
+
+	if value, ok = m.conns.Load(cid); ok {
+		_ = value.(*securedConn).Conn.Close()
+	}
 }
 
 // receiveHandshake handles a handshake frame received from a client.
@@ -199,6 +245,11 @@ func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
 
 	state.pending = nil
 	state.session.Store(session)
+	if state.timer != nil {
+		state.timer.Stop()
+		state.timer = nil
+	}
+	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
 	state.mu.Unlock()
 }
 
