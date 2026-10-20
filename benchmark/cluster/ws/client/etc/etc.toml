@@ -69,3 +69,11 @@
             timeout = "5s"
             # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
             heartbeatInterval = 0
+
+[crypto.ecc.signer]
+    # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+    hash = "SHA256"
+    # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
+    delimiter = " "
+    # 公钥，可设置文件路径或公钥串
+    publicKey = "resource/key.pub.pem"
