@@ -40,13 +40,19 @@ func (s *securitySigner) Verify(data []byte, signature []byte) (bool, error) {
 
 // securityConn is a network connection stub that captures pushed messages.
 type securityConn struct {
+	id     int64
 	uid    atomic.Int64
 	closed atomic.Bool
 	pushed chan []byte
 }
 
 // ID returns the connection ID.
-func (c *securityConn) ID() int64 { return 1 }
+func (c *securityConn) ID() int64 {
+	if c.id != 0 {
+		return c.id
+	}
+	return 1
+}
 
 // UID returns the user ID.
 func (c *securityConn) UID() int64 { return c.uid.Load() }

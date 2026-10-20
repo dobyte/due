@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/arthurkiller/rollingwriter v1.1.3
+	github.com/dobyte/due/crypto/ecc/v2 v2.0.0
 	github.com/dobyte/due/locate/redis/v2 v2.0.0-20260602055605-806892f51b0b
 	github.com/dobyte/due/network/kcp/v2 v2.0.0-20260602055605-806892f51b0b
 	github.com/dobyte/due/network/quic/v2 v2.0.0-20260602055605-806892f51b0b
@@ -99,6 +100,7 @@ require (
 )
 
 replace (
+	github.com/dobyte/due/crypto/ecc/v2 => ../crypto/ecc
 	github.com/dobyte/due/locate/redis/v2 => ../locate/redis
 	github.com/dobyte/due/network/kcp/v2 => ../network/kcp
 	github.com/dobyte/due/network/quic/v2 => ../network/quic

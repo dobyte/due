@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/errors"
@@ -89,8 +90,9 @@ func (c *Conn) RemoteAddr() (net.Addr, error) {
 // route and the sequence number are bound by the additional authenticated data.
 func (c *Conn) Push(message *cluster.Message) error {
 	var (
-		err  error
-		data []byte
+		err    error
+		data   []byte
+		output *buffer.Bytes
 	)
 
 	if message.Data != nil {
@@ -109,7 +111,9 @@ func (c *Conn) Push(message *cluster.Message) error {
 			return errors.New("session security is not established")
 		}
 
-		if data, err = session.Seal(data, handshake.MakeAAD(handshake.ClientToServer, session.Epoch(), message.Route, message.Seq)); err != nil {
+		output = buffer.MallocBytes(len(data) + session.Overhead())
+		if _, err = session.SealMessage(output.Bytes()[:0], data, handshake.ClientToServer, message.Route, message.Seq); err != nil {
+			output.Release()
 			return err
 		}
 	} else {
@@ -120,12 +124,16 @@ func (c *Conn) Push(message *cluster.Message) error {
 		}
 	}
 
-	buf, err := packet.PackMessage(&packet.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: data,
-	})
+	var buf buffer.Buffer
+	if output != nil {
+		buf, err = packet.PackMessageBuffer(message.Route, message.Seq, output)
+	} else {
+		buf, err = packet.PackMessage(&packet.Message{Seq: message.Seq, Route: message.Route, Buffer: data})
+	}
 	if err != nil {
+		if output != nil {
+			output.Release()
+		}
 		return err
 	}
 

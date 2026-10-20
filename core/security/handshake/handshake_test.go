@@ -45,7 +45,7 @@ func newTestSignerPair() (crypto.Signer, crypto.Verifier) {
 }
 
 // establishSession performs a full handshake and returns the client and server sessions.
-func establishSession(t *testing.T, suite aead.Suite) (*Session, *Session) {
+func establishSession(t testing.TB, suite aead.Suite) (*Session, *Session) {
 	t.Helper()
 
 	signer, verifier := newTestSignerPair()

@@ -1,0 +1,19 @@
+timezone = "Local"
+
+[cluster.node]
+name = "ws-security-node"
+timeout = "3s"
+codec = "json"
+
+[locate.redis]
+addrs = ["127.0.0.1:6379"]
+db = 0
+prefix = "due:benchmark:ws-security"
+
+[registry.nacos]
+urls = ["http://127.0.0.1:8848/nacos"]
+groupName = "due-benchmark-ws-security"
+
+[log]
+level = "error"
+terminals = ["console"]

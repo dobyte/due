@@ -198,15 +198,19 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 			return
 		}
 
-		plaintext, err := session.Open(data.Bytes(), handshake.MakeAAD(handshake.ServerToClient, session.Epoch(), route, seq))
+		payload := data.Bytes()
+		output := buffer.MallocBytes(max(1, len(payload)))
+		plaintext, err := session.OpenMessage(output.Bytes()[:0], payload, handshake.ServerToClient, route, seq)
 		if err != nil {
+			output.Release()
 			buf.Release()
 			log.Errorf("open secure message failed, route: %d, seq: %d, err: %v", route, seq, err)
 			return
 		}
 
 		buf.Release()
-		buf = buffer.NewBytes(plaintext, true)
+		output.Truncate(len(plaintext))
+		buf = output
 		data = buf
 	}
 

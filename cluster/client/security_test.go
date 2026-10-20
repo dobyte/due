@@ -229,6 +229,14 @@ func TestClientSessionSecurity(t *testing.T) {
 
 	c.handleReceive(conn, buf)
 
+	// A plaintext empty frame is malformed when security is enabled, and must be dropped
+	// without dereferencing a nil result from the zero-size buffer pool.
+	buf, err = packet.PackMessage(&packet.Message{Route: 11, Seq: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.handleReceive(conn, buf)
+
 	select {
 	case data := <-received:
 		t.Fatalf("a tampered downlink must be dropped, got %q", data)

@@ -47,14 +47,27 @@ const (
 // epoch cannot be rewritten to downgrade the session.
 func MakeAAD(direction Direction, epoch uint8, route, seq int32) []byte {
 	aad := make([]byte, aadSize)
+	writeAAD(aad, direction, epoch, route, seq)
+	return aad
+}
+
+// writeAAD encodes canonical metadata into an operation-owned scratch buffer.
+func writeAAD(aad []byte, direction Direction, epoch uint8, route, seq int32) {
 	aad[0] = Version
 	aad[1] = byte(direction)
 	aad[2] = epoch
 	binary.BigEndian.PutUint32(aad[3:7], uint32(route))
 	binary.BigEndian.PutUint32(aad[7:11], uint32(seq))
-
-	return aad
 }
+
+// messageScratch is borrowed for one AEAD call, including concurrent calls on the same session.
+// Pooling keeps the slices passed through cipher.AEAD from allocating on every message.
+type messageScratch struct {
+	nonce [nonceSize]byte
+	aad   [aadSize]byte
+}
+
+var _messageScratchPool = sync.Pool{New: func() any { return new(messageScratch) }}
 
 // Session is the AEAD session established by the handshake.
 //
@@ -121,21 +134,44 @@ func (s *Session) Overhead() int {
 
 // Seal encrypts plaintext and binds it to aad.
 func (s *Session) Seal(plaintext, aad []byte) ([]byte, error) {
+	scratch := _messageScratchPool.Get().(*messageScratch)
+	sealed, err := s.seal(nil, plaintext, aad, scratch.nonce[:])
+	_messageScratchPool.Put(scratch)
+	return sealed, err
+}
+
+// SealMessage appends an encrypted message to dst, binding its direction, route and sequence
+// number using MakeAAD's encoding. dst must not overlap plaintext. The caller owns the output.
+func (s *Session) SealMessage(dst, plaintext []byte, direction Direction, route, seq int32) ([]byte, error) {
+	scratch := _messageScratchPool.Get().(*messageScratch)
+	writeAAD(scratch.aad[:], direction, s.epoch, route, seq)
+	sealed, err := s.seal(dst, plaintext, scratch.aad[:], scratch.nonce[:])
+	_messageScratchPool.Put(scratch)
+	return sealed, err
+}
+
+// seal encrypts with operation-owned nonce storage and appends the envelope to dst.
+func (s *Session) seal(dst, plaintext, aad, nonce []byte) ([]byte, error) {
 	counter, err := s.nextCounter()
 	if err != nil {
 		return nil, err
 	}
 
-	var nonce [nonceSize]byte
 	copy(nonce[:saltSize], s.salt[:])
 	binary.BigEndian.PutUint64(nonce[saltSize:], counter)
 
-	sealed := make([]byte, envelopeHeaderSize+len(plaintext)+s.send.Overhead())
-	sealed[0] = s.epoch
-	binary.BigEndian.PutUint64(sealed[1:envelopeHeaderSize], counter)
-	s.send.Seal(sealed[envelopeHeaderSize:envelopeHeaderSize], nonce[:], plaintext, aad)
-
-	return sealed, nil
+	start := len(dst)
+	// Reserve the whole envelope at once so nil dst also needs only one output allocation.
+	size := start + envelopeHeaderSize + len(plaintext) + s.send.Overhead()
+	if cap(dst) < size {
+		grown := make([]byte, start, size)
+		copy(grown, dst)
+		dst = grown
+	}
+	sealed := dst[:start+envelopeHeaderSize]
+	sealed[start] = s.epoch
+	binary.BigEndian.PutUint64(sealed[start+1:], counter)
+	return s.send.Seal(sealed, nonce, plaintext, aad), nil
 }
 
 // Open authenticates and decrypts a sealed payload.
@@ -143,6 +179,26 @@ func (s *Session) Seal(plaintext, aad []byte) ([]byte, error) {
 // The replay window is advanced only after the payload is authenticated, so forged packets cannot
 // consume window slots.
 func (s *Session) Open(sealed, aad []byte) ([]byte, error) {
+	scratch := _messageScratchPool.Get().(*messageScratch)
+	plaintext, err := s.open(nil, sealed, aad, scratch.nonce[:])
+	_messageScratchPool.Put(scratch)
+	return plaintext, err
+}
+
+// OpenMessage authenticates a message and appends its plaintext to dst, binding its metadata
+// using MakeAAD's encoding. dst must not overlap sealed, except that sealed[9:9] may be used for
+// in-place decryption. On error no plaintext is returned and dst's backing memory may be modified.
+// Replay state advances only after authentication succeeds, as in Open.
+func (s *Session) OpenMessage(dst, sealed []byte, direction Direction, route, seq int32) ([]byte, error) {
+	scratch := _messageScratchPool.Get().(*messageScratch)
+	writeAAD(scratch.aad[:], direction, s.epoch, route, seq)
+	plaintext, err := s.open(dst, sealed, scratch.aad[:], scratch.nonce[:])
+	_messageScratchPool.Put(scratch)
+	return plaintext, err
+}
+
+// open decrypts with operation-owned nonce storage and preserves the replay window ordering.
+func (s *Session) open(dst, sealed, aad, nonce []byte) ([]byte, error) {
 	if len(sealed) < envelopeHeaderSize+s.recv.Overhead() {
 		return nil, errors.ErrInvalidMessage
 	}
@@ -153,11 +209,10 @@ func (s *Session) Open(sealed, aad []byte) ([]byte, error) {
 
 	counter := binary.BigEndian.Uint64(sealed[1:envelopeHeaderSize])
 
-	var nonce [nonceSize]byte
 	copy(nonce[:saltSize], s.salt[:])
 	binary.BigEndian.PutUint64(nonce[saltSize:], counter)
 
-	plaintext, err := s.recv.Open(nil, nonce[:], sealed[envelopeHeaderSize:], aad)
+	plaintext, err := s.recv.Open(dst, nonce, sealed[envelopeHeaderSize:], aad)
 	if err != nil {
 		return nil, errors.ErrInvalidMessage
 	}

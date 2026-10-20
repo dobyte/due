@@ -367,7 +367,7 @@ Actor Init/Start/Destroy 生命周期回调不是全部在 Actor dispatcher 中�
 | --- | --- |
 | size | 不包含自身 4 字节，包含其余头部和 payload |
 | byte order | 默认大端，可统一配置为小端 |
-| header | bit7 为 heartbeat，bit6 表示心跳时间；普通数据为 0 |
+| header | bit7 为 heartbeat，bit6 表示心跳时间，bit0 为 security handshake；普通数据为 0 |
 | route | 支持 1、2、4 字节，默认 2 |
 | seq | 支持 0、1、2、4 字节，默认 2；0 表示不编码序号 |
 | payload | `etc.packet.bufferBytes` / `WithBufferBytes` 限制编码、加密后的正文，默认 5000 字节 |
@@ -412,6 +412,16 @@ TCP 默认最大连接数 5000、写队列 1024、心跳间隔 10 秒、resp 心
 Buffer 的计数原子性不代表支持并发 `Slide/Mount` 等结构修改；挂载裸 slice 不复制，也不替调用者冻结内容。池化连接对象关闭后可能复用，应保留 CID/UID 等值，不长期持有旧连接指针并在关闭后继续操作。
 
 源码：[network/conn.go](../../network/conn.go)、[network/server.go](../../network/server.go)、[core/buffer/buffer.go](../../core/buffer/buffer.go)、[core/buffer/bytes.go](../../core/buffer/bytes.go)、[core/buffer/nocopy_buffer.go](../../core/buffer/nocopy_buffer.go)、[network/quic/writer.go](../../network/quic/writer.go)。
+
+### 8.4 会话安全与消息缓冲区（2026-10-19 补充）
+
+Gate 与 Client 可通过 `WithSessionSecurity` 启用会话安全。握手建立 AEAD Session 后，业务 payload 使用 `epoch:1 | counter:8 | ciphertext | tag` 格式；AAD 绑定 version、direction、epoch、route 和 seq，发送 counter 保持原子递增，接收重放窗口仅在认证成功后推进，并继续使用互斥锁保护。
+
+`Session.SealMessage` / `OpenMessage` 接受调用方的目标切片，复用每次调用独占的 nonce/AAD 工作区；原有 `Seal` / `Open` 保留独立输出的语义。Gate 和 Client 使用池化 Bytes 保存输出。广播明文可以共享，每个连接必须生成独立密文；密文 buffer 成功入队后由网络写出路径释放，失败时释放新密文，原明文仍按调用方的所有权规则处理。
+
+默认 Packer 的 `ExtractRouteSeq` 和 `ExtractMessage` 使用 `NocopyBuffer.Slice` 读取指定范围；范围位于单个连续块内时直接引用，跨块时仅复制所需范围。`packet.PackMessageBuffer` 成功后接管池化 payload，失败时由调用方释放；自定义 Packer 可实现可选的 `MessageBufferPacker` 接口，否则经复制兼容原接口。Client 接收 handler 返回后释放池化明文，异步保存数据应复制内容或显式延长 buffer 生命周期。
+
+源码：[Session](../../core/security/handshake/session.go)、[Gate](../../cluster/gate/security.go)、[Client](../../cluster/client/client.go)、[Packer](../../packet/packet.go)。测量方法和基准记录见 [security 性能优化](security-performance.md)。
 
 ## 9. 内建集群链路与 DRPC
 

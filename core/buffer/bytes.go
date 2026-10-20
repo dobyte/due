@@ -54,6 +54,15 @@ func (b *Bytes) Slide(delta int) bool {
 	return false
 }
 
+// Truncate keeps the first size unread bytes. It returns false when size is out of range.
+func (b *Bytes) Truncate(size int) bool {
+	if size < 0 || size > b.Len() {
+		return false
+	}
+	b.upper = b.lower + size
+	return true
+}
+
 // Nodes returns the number of nodes.
 func (b *Bytes) Nodes() int {
 	return 1

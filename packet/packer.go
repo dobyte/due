@@ -257,31 +257,49 @@ func frameType(header byte) FrameType {
 
 // PackMessage packs message as a buffer and returns the packed buffer or a packing error.
 func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
-	if message.Route > int32(1<<(8*p.opts.routeBytes-1)-1) || message.Route < int32(-1<<(8*p.opts.routeBytes-1)) {
+	header, err := p.packMessageHeader(message.Route, message.Seq, len(message.Buffer))
+	if err != nil {
+		return nil, err
+	}
+	return buffer.NewNocopyBuffer(header, message.Buffer), nil
+}
+
+// PackMessageBuffer packs a pooled payload and transfers ownership on success.
+func (p *defaultPacker) PackMessageBuffer(route, seq int32, payload *buffer.Bytes) (buffer.Buffer, error) {
+	header, err := p.packMessageHeader(route, seq, payload.Len())
+	if err != nil {
+		return nil, err
+	}
+	return buffer.NewNocopyBuffer(header, payload), nil
+}
+
+// packMessageHeader validates a message and builds its header independently of payload ownership.
+func (p *defaultPacker) packMessageHeader(route, seq int32, size int) (*buffer.Writer, error) {
+	if route > int32(1<<(8*p.opts.routeBytes-1)-1) || route < int32(-1<<(8*p.opts.routeBytes-1)) {
 		return nil, errors.ErrRouteOverflow
 	}
 
 	if p.opts.seqBytes > 0 {
-		if message.Seq > int32(1<<(8*p.opts.seqBytes-1)-1) || message.Seq < int32(-1<<(8*p.opts.seqBytes-1)) {
+		if seq > int32(1<<(8*p.opts.seqBytes-1)-1) || seq < int32(-1<<(8*p.opts.seqBytes-1)) {
 			return nil, errors.ErrSeqOverflow
 		}
 	}
 
-	if len(message.Buffer) > p.opts.bufferBytes {
+	if size > p.opts.bufferBytes {
 		return nil, errors.ErrMessageTooLarge
 	}
 
 	writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)
-	writer.WriteInt32s(p.opts.byteOrder, int32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+len(message.Buffer)))
+	writer.WriteInt32s(p.opts.byteOrder, int32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+size))
 	writer.WriteInt8s(int8(dataBit))
 
 	switch p.opts.routeBytes {
 	case 1:
-		writer.WriteInt8s(int8(message.Route))
+		writer.WriteInt8s(int8(route))
 	case 2:
-		writer.WriteInt16s(p.opts.byteOrder, int16(message.Route))
+		writer.WriteInt16s(p.opts.byteOrder, int16(route))
 	case 4:
-		writer.WriteInt32s(p.opts.byteOrder, message.Route)
+		writer.WriteInt32s(p.opts.byteOrder, route)
 	default:
 		writer.Release()
 		return nil, errors.ErrInvalidMessage
@@ -291,17 +309,17 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 	case 0:
 		// ignore seq
 	case 1:
-		writer.WriteInt8s(int8(message.Seq))
+		writer.WriteInt8s(int8(seq))
 	case 2:
-		writer.WriteInt16s(p.opts.byteOrder, int16(message.Seq))
+		writer.WriteInt16s(p.opts.byteOrder, int16(seq))
 	case 4:
-		writer.WriteInt32s(p.opts.byteOrder, message.Seq)
+		writer.WriteInt32s(p.opts.byteOrder, seq)
 	default:
 		writer.Release()
 		return nil, errors.ErrInvalidMessage
 	}
 
-	return buffer.NewNocopyBuffer(writer, message.Buffer), nil
+	return writer, nil
 }
 
 // PackHandshake packs a handshake frame.
@@ -343,16 +361,26 @@ func (p *defaultPacker) ExtractHandshake(buf buffer.Buffer) ([]byte, error) {
 func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error) {
 	var (
 		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
-		data = buf.Bytes()
+		data []byte
 	)
+	if segmented, ok := buf.(*buffer.NocopyBuffer); ok {
+		data = segmented.Slice(0, ln)
+	} else {
+		data = buf.Bytes()
+	}
+	return p.extractMessageHeader(data, buf.Len())
+}
 
+// extractMessageHeader validates the frame size and decodes the canonical business header.
+func (p *defaultPacker) extractMessageHeader(data []byte, total int) (int32, int32, error) {
+	ln := defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
 	if len(data) < ln {
 		return 0, 0, errors.ErrInvalidMessage
 	}
 
 	size := p.opts.byteOrder.Uint32(data[:defaultSizeBytes])
 
-	if uint64(len(data))-defaultSizeBytes != uint64(size) {
+	if uint64(total)-defaultSizeBytes != uint64(size) {
 		return 0, 0, errors.ErrInvalidMessage
 	}
 
@@ -396,53 +424,19 @@ func (p *defaultPacker) ExtractRouteSeq(buf buffer.Buffer) (int32, int32, error)
 // ExtractMessage returns the route, the sequence number and the payload of buf without modifying
 // the buffer.
 func (p *defaultPacker) ExtractMessage(buf buffer.Buffer) (int32, int32, []byte, error) {
-	var (
-		ln   = defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
-		data = buf.Bytes()
-	)
-
-	if len(data) < ln {
-		return 0, 0, nil, errors.ErrInvalidMessage
+	ln := defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
+	if segmented, ok := buf.(*buffer.NocopyBuffer); ok {
+		route, seq, err := p.ExtractRouteSeq(buf)
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		return route, seq, segmented.Slice(ln, buf.Len()), nil
 	}
-
-	size := p.opts.byteOrder.Uint32(data[:defaultSizeBytes])
-
-	if uint64(len(data))-defaultSizeBytes != uint64(size) {
-		return 0, 0, nil, errors.ErrInvalidMessage
+	data := buf.Bytes()
+	route, seq, err := p.extractMessageHeader(data, len(data))
+	if err != nil {
+		return 0, 0, nil, err
 	}
-
-	if header := data[defaultSizeBytes]; header&heartbeatBit == heartbeatBit || header&handshakeBit == handshakeBit {
-		return 0, 0, nil, errors.ErrInvalidMessage
-	}
-
-	var route int32
-
-	switch p.opts.routeBytes {
-	case 1:
-		route = int32(int8(data[defaultSizeBytes+defaultHeaderBytes]))
-	case 2:
-		route = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes])))
-	case 4:
-		route = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
-	default:
-		return 0, 0, nil, errors.ErrInvalidMessage
-	}
-
-	var seq int32
-
-	switch p.opts.seqBytes {
-	case 0:
-		// ignore seq
-	case 1:
-		seq = int32(int8(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes]))
-	case 2:
-		seq = int32(int16(p.opts.byteOrder.Uint16(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes])))
-	case 4:
-		seq = int32(p.opts.byteOrder.Uint32(data[defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes : defaultSizeBytes+defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes]))
-	default:
-		return 0, 0, nil, errors.ErrInvalidMessage
-	}
-
 	return route, seq, data[ln:], nil
 }
 
