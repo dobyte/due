@@ -163,7 +163,7 @@ func (c *Conn) Close() error {
 func (c *Conn) handshake() error {
 	opts := c.client.opts.security
 
-	client := handshake.NewClient(opts.verifier, opts.suites...)
+	client := handshake.NewClient(opts.signer, opts.suites...)
 
 	hello, err := client.Hello()
 	if err != nil {

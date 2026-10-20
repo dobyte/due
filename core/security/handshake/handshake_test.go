@@ -38,7 +38,7 @@ func (s *testSigner) Verify(data []byte, signature []byte) (bool, error) {
 }
 
 // newTestSignerPair returns a test signer and the verifier holding the same key.
-func newTestSignerPair() (crypto.Signer, crypto.Verifier) {
+func newTestSignerPair() (crypto.Signer, crypto.Signer) {
 	signer := &testSigner{key: []byte("due-handshake-test-key")}
 
 	return signer, signer

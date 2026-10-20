@@ -69,7 +69,7 @@ type keyMaterial struct {
 // connection-scoped.
 type Client struct {
 	err      error
-	verifier crypto.Verifier
+	verifier crypto.Signer
 	random   []byte
 	priv     *ecdh.PrivateKey
 	hello    []byte
@@ -81,7 +81,7 @@ type Client struct {
 //
 // verifier verifies the signature of the server, and it is usually built from the pinned server
 // public key.
-func NewClient(verifier crypto.Verifier, suites ...aead.Suite) *Client {
+func NewClient(verifier crypto.Signer, suites ...aead.Suite) *Client {
 	if len(suites) == 0 {
 		suites = DefaultSuites()
 	}

@@ -35,6 +35,10 @@ func (s *Signer) Name() string {
 
 // Sign signs data with the ECDSA private key.
 func (s *Signer) Sign(data []byte) ([]byte, error) {
+	if s.privateKey == nil {
+		return nil, errors.New("signer: private key is not set")
+	}
+
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -68,13 +72,15 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 
 // Verify verifies the signature of data with the ECDSA public key.
 func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
+	if s.publicKey == nil {
+		return false, errors.New("signer: public key is not set")
+	}
+
 	if s.err != nil {
 		return false, s.err
 	}
 
-	delimiter := []byte(s.opts.delimiter)
-	segments := bytes.Split(signature, delimiter)
-
+	segments := bytes.Split(signature, []byte(s.opts.delimiter))
 	if len(segments) != 2 {
 		return false, errors.ErrInvalidSignature
 	}
@@ -90,9 +96,7 @@ func (s *Signer) Verify(data []byte, signature []byte) (bool, error) {
 		return false, err
 	}
 
-	hashed := s.opts.hash.Sum(data)
-
-	return ecdsa.Verify(s.publicKey, hashed[:], rs, ss), nil
+	return ecdsa.Verify(s.publicKey, s.opts.hash.Sum(data), rs, ss), nil
 }
 
 func (s *Signer) init() {
@@ -101,10 +105,14 @@ func (s *Signer) init() {
 		return
 	}
 
-	s.publicKey, s.err = parseECDSAPublicKey(s.opts.publicKey)
-	if s.err != nil {
-		return
+	if s.opts.publicKey != "" {
+		s.publicKey, s.err = parseECDSAPublicKey(s.opts.publicKey)
+		if s.err != nil {
+			return
+		}
 	}
 
-	s.privateKey, s.err = parseECDSAPrivateKey(s.opts.privateKey)
+	if s.opts.privateKey != "" {
+		s.privateKey, s.err = parseECDSAPrivateKey(s.opts.privateKey)
+	}
 }

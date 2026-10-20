@@ -142,3 +142,13 @@ timezone = "Local"
         rotate = "day"
         # 文件翻转时是否对文件进行压缩
         compress = false
+
+[crypto.ecc.signer]
+    # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512
+    hash = "SHA256"
+    # 签名分隔符。由于ECDSA签名算法会产生两段签名串，因此需要通过分隔符将其拼接为一个签名
+    delimiter = " "
+    # 公钥，可设置文件路径或公钥串
+    publicKey = "resource/key.pub.pem"
+    # 私钥，可设置文件路径或私钥串
+    privateKey = "resource/key.pem"

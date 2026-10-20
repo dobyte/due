@@ -137,10 +137,10 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 // verifier verifies the signature of the gate, and it is usually built from the pinned gate public
 // key. When no suite is given, the handshake defaults are used. When enabled, the payload is sealed
 // with the negotiated session key, so the static encryptor is not applied.
-func WithSessionSecurity(verifier crypto.Verifier, suites ...aead.Suite) Option {
+func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 	return func(o *options) {
-		if verifier == nil {
-			log.Warnf("the specified verifier is nil and will be automatically ignored")
+		if signer == nil {
+			log.Warnf("the specified signer is nil and will be automatically ignored")
 			return
 		}
 
@@ -148,7 +148,7 @@ func WithSessionSecurity(verifier crypto.Verifier, suites ...aead.Suite) Option 
 			suites = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
 		}
 
-		o.security = &securityOptions{verifier: verifier, suites: suites}
+		o.security = &securityOptions{signer: signer, suites: suites}
 	}
 }
 

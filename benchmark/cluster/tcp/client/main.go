@@ -9,10 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/crypto/ecc/v2"
 	"github.com/dobyte/due/network/tcp/v2"
 	"github.com/dobyte/due/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/cluster/client"
+	"github.com/dobyte/due/v2/flag"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xrand"
 )
@@ -43,14 +45,22 @@ type greetRes struct {
 }
 
 func main() {
-	// Create the container
-	container := due.NewContainer()
+	// Enable security
+	security := flag.Bool("security", false)
+	// Create the client options
+	opts := make([]client.Option, 0, 2)
+	// Add the client option
+	opts = append(opts, client.WithClient(tcp.NewClient()))
+	// Add the session security option
+	if security {
+		opts = append(opts, client.WithSessionSecurity(ecc.NewSigner()))
+	}
 	// Create the client component
-	component := client.NewClient(
-		client.WithClient(tcp.NewClient()),
-	)
+	component := client.NewClient(opts...)
 	// Initialize the listeners
 	initListen(component.Proxy())
+	// Create the container
+	container := due.NewContainer()
 	// Add the client component
 	container.Add(component)
 	// Start the container

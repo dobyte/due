@@ -117,10 +117,10 @@ func Test_Verify_WithPublicKeyOnly(t *testing.T) {
 		rsa.WithSignerPublicKey(string(pub)),
 		rsa.WithSignerPrivateKey(string(prv)),
 	)
-	verifier := rsa.NewVerifier(
-		string(pub),
+	verifier := rsa.NewSigner(
 		rsa.WithSignerHash(hash.SHA256),
 		rsa.WithSignerPadding(rsa.PKCS),
+		rsa.WithSignerPublicKey(string(pub)),
 	)
 
 	bytes := []byte(xrand.Letters(1024))

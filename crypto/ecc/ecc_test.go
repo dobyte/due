@@ -110,10 +110,6 @@ func Test_Verify_WithPublicKeyOnly(t *testing.T) {
 		ecc.WithSignerPublicKey(string(pub)),
 		ecc.WithSignerPrivateKey(string(prv)),
 	)
-	verifier := ecc.NewVerifier(
-		string(pub),
-		ecc.WithSignerHash(hash.SHA256),
-	)
 
 	bytes := []byte(xrand.Letters(1024))
 
@@ -122,7 +118,7 @@ func Test_Verify_WithPublicKeyOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ok, err := verifier.Verify(bytes, signature)
+	ok, err := localSigner.Verify(bytes, signature)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +127,7 @@ func Test_Verify_WithPublicKeyOnly(t *testing.T) {
 		t.Fatal("signature verification failed")
 	}
 
-	ok, err = verifier.Verify([]byte("tampered"), signature)
+	ok, err = localSigner.Verify([]byte("tampered"), signature)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,6 @@ const defaultHandshakeTimeout = 5 * time.Second
 
 // securityOptions configures the session security between the client and the gate.
 type securityOptions struct {
-	verifier crypto.Verifier // verifier of the gate signature
-	suites   []aead.Suite    // negotiable AEAD suites, empty means the handshake defaults
+	signer crypto.Signer // verifier of the gate signature
+	suites []aead.Suite  // negotiable AEAD suites, empty means the handshake defaults
 }
