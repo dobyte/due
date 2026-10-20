@@ -132,11 +132,7 @@ func doPressureTest(c int, n int, size int) {
 				seq := atomic.AddInt32(&totalSent, 1)
 				sendTimes[seq] = time.Now().UnixNano()
 
-				msg, err := packet.PackMessage(&packet.Message{
-					Seq:    seq,
-					Route:  1,
-					Buffer: buffer,
-				})
+				msg, err := packet.PackMessage(1, seq, buffer)
 				if err != nil {
 					log.Errorf("pack message failed: %v", err)
 					atomic.AddInt64(&pushErrors, 1)

@@ -41,8 +41,8 @@ type Packer interface {
 	PackHandshake(payload []byte) (buffer.Buffer, error)
 	// PackHeartbeat packs a heartbeat. Pass server as true to pack a server-side heartbeat.
 	PackHeartbeat(server ...bool) buffer.Buffer
-	// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
-	PackMessage(message *Message) (buffer.Buffer, error)
+	// PackMessage packs a message payload and returns the packed buffer or a packing error.
+	PackMessage(route, seq int32, data []byte) (buffer.Buffer, error)
 	// UnpackMessage unpacks the message buffer buf. It returns the route, the sequence number,
 	// the message buffer and any unpacking error.
 	UnpackMessage(buf buffer.Buffer) (int32, int32, buffer.Buffer, error)
@@ -257,13 +257,13 @@ func frameType(header byte) FrameType {
 	return FrameData
 }
 
-// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
-func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
-	header, err := p.packMessageHeader(message.Route, message.Seq, len(message.Buffer))
+// PackMessage packs a message payload and returns the packed buffer or a packing error.
+func (p *defaultPacker) PackMessage(route, seq int32, data []byte) (buffer.Buffer, error) {
+	header, err := p.packMessageHeader(route, seq, len(data))
 	if err != nil {
 		return nil, err
 	}
-	return buffer.NewNocopyBuffer(header, message.Buffer), nil
+	return buffer.NewNocopyBuffer(header, data), nil
 }
 
 // PackMessageBuffer packs a pooled payload and transfers ownership on success.

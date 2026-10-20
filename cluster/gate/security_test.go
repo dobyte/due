@@ -163,7 +163,7 @@ func TestSessionSecurity(t *testing.T) {
 	injectHandshake(t, g, conn, finished)
 
 	// The downlink payload must be sealed and openable by the client session.
-	packed, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: []byte("downlink")})
+	packed, err := packet.PackMessage(10, 1, []byte("downlink"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -242,7 +242,7 @@ func injectHandshake(t *testing.T, g *Gate, conn network.Conn, frame []byte) {
 func injectMessage(t *testing.T, g *Gate, conn network.Conn, route, seq int32, payload []byte) {
 	t.Helper()
 
-	buf, err := packet.PackMessage(&packet.Message{Route: route, Seq: seq, Buffer: payload})
+	buf, err := packet.PackMessage(route, seq, payload)
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

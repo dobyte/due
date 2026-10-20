@@ -30,11 +30,7 @@ func main() {
 			return
 		}
 
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    seq,
-			Route:  route,
-			Buffer: message.Bytes(),
-		})
+		msg, err := packet.PackMessage(route, seq, message.Bytes())
 		if err != nil {
 			log.Errorf("pack message failed: %v", err)
 			return

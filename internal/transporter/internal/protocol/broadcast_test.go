@@ -12,11 +12,7 @@ import (
 )
 
 func TestEncodeBroadcastReq(t *testing.T) {
-	message, err := packet.PackMessage(&packet.Message{
-		Route:  1,
-		Seq:    2,
-		Buffer: []byte("hello world"),
-	})
+	message, err := packet.PackMessage(1, 2, []byte("hello world"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,11 +23,7 @@ func TestEncodeBroadcastReq(t *testing.T) {
 }
 
 func TestDecodeBroadcastReq(t *testing.T) {
-	message, err := packet.PackMessage(&packet.Message{
-		Route:  1,
-		Seq:    2,
-		Buffer: []byte("hello world"),
-	})
+	message, err := packet.PackMessage(1, 2, []byte("hello world"))
 	if err != nil {
 		t.Fatal(err)
 	}

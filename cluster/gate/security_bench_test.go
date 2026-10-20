@@ -60,7 +60,7 @@ func BenchmarkSecurityPush(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					buf, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: data})
+					buf, err := packet.PackMessage(10, 1, data)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -92,7 +92,7 @@ func BenchmarkSecurityReceive(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				buf, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: sealed})
+				buf, err := packet.PackMessage(10, 1, sealed)
 				if err != nil {
 					b.Fatal(err)
 				}

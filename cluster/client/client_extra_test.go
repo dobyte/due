@@ -480,7 +480,7 @@ func TestClientHandleReceiveRoute(t *testing.T) {
 	cc := &Conn{conn: f.conn, client: f.client}
 	f.client.conns.Store(f.conn, cc)
 
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 7, Buffer: []byte(`{"n":42}`)})
+	buf, err := packet.PackMessage(1, 7, []byte(`{"n":42}`))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -506,7 +506,7 @@ func TestClientHandleReceiveDefaultRoute(t *testing.T) {
 	cc := &Conn{conn: f.conn, client: f.client}
 	f.client.conns.Store(f.conn, cc)
 
-	buf, err := packet.PackMessage(&packet.Message{Route: 99, Seq: 1, Buffer: []byte(`{}`)})
+	buf, err := packet.PackMessage(99, 1, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

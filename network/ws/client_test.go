@@ -45,11 +45,7 @@ func TestClientServerEcho(t *testing.T) {
 	}
 	defer conn.Close(true)
 
-	buf, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  2,
-		Buffer: []byte("hello websocket"),
-	})
+	buf, err := packet.PackMessage(2, 1, []byte("hello websocket"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

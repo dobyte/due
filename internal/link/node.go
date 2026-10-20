@@ -384,11 +384,7 @@ func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer,
 		return nil, err
 	}
 
-	return packet.PackMessage(&packet.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: buffer,
-	})
+	return packet.PackMessage(message.Route, message.Seq, buffer)
 }
 
 // doPackBuffer encodes message, encrypting the encoded bytes when encrypt is true.

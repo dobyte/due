@@ -757,7 +757,7 @@ func TestGateHandleReceive(t *testing.T) {
 	f.gate.handleReceive(conn, buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	// A well-formed message without any route must be handled gracefully.
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("payload")})
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -1136,7 +1136,7 @@ func TestGateProxyTriggerAndDeliver(t *testing.T) {
 	f.gate.proxy.deliver(ctx, newGateConn(1, 1), buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	// A well-formed message without a route is dropped.
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("payload")})
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

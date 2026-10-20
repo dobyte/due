@@ -243,7 +243,7 @@ func TestClientSessionSecurity(t *testing.T) {
 		t.Fatalf("seal failed: %v", err)
 	}
 
-	buf, err := packet.PackMessage(&packet.Message{Route: 11, Seq: 1, Buffer: sealed})
+	buf, err := packet.PackMessage(11, 1, sealed)
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestClientSessionSecurity(t *testing.T) {
 
 	sealed[len(sealed)-1] ^= 0xff
 
-	buf, err = packet.PackMessage(&packet.Message{Route: 11, Seq: 2, Buffer: sealed})
+	buf, err = packet.PackMessage(11, 2, sealed)
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestClientSessionSecurity(t *testing.T) {
 
 	// A plaintext empty frame is malformed when security is enabled, and must be dropped
 	// without dereferencing a nil result from the zero-size buffer pool.
-	buf, err = packet.PackMessage(&packet.Message{Route: 11, Seq: 3})
+	buf, err = packet.PackMessage(11, 3, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

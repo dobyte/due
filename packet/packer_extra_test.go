@@ -31,7 +31,7 @@ func (p *stubPacker) Read(io.Reader) (packet.FrameType, int64, buffer.Buffer, er
 }
 
 // PackMessage implements Packer.
-func (p *stubPacker) PackMessage(*packet.Message) (buffer.Buffer, error) {
+func (p *stubPacker) PackMessage(int32, int32, []byte) (buffer.Buffer, error) {
 	p.packCalls++
 	return nil, errors.ErrInvalidMessage
 }
@@ -103,7 +103,7 @@ func TestExtraGlobalPacker(t *testing.T) {
 		t.Fatalf("GetPacker() = nil, want non-nil")
 	}
 
-	packed, err := packet.PackMessage(&packet.Message{Seq: 1, Route: 1, Buffer: []byte("hello")})
+	packed, err := packet.PackMessage(1, 1, []byte("hello"))
 	if err != nil {
 		t.Fatalf("PackMessage() error = %v", err)
 	}
@@ -151,7 +151,7 @@ func TestExtraGlobalPacker(t *testing.T) {
 	}
 
 	packet.Read(nil)
-	packet.PackMessage(nil)
+	packet.PackMessage(1, 1, nil)
 	packet.PackHandshake(nil)
 	packet.ExtractHandshake(nil)
 	packet.ExtractRouteSeq(nil)
@@ -180,7 +180,7 @@ func TestExtraPackerRoundTrip(t *testing.T) {
 					packet.WithHeartbeatTime(false),
 				)
 
-				packed, err := p.PackMessage(&packet.Message{Seq: 100, Route: 100, Buffer: []byte("payload")})
+				packed, err := p.PackMessage(100, 100, []byte("payload"))
 				if err != nil {
 					t.Fatalf("PackMessage() error = %v", err)
 				}
@@ -285,7 +285,7 @@ func TestExtraReadHeartbeatWithTime(t *testing.T) {
 func TestExtraReadBufferedData(t *testing.T) {
 	p := packet.NewPacker()
 
-	packed, err := p.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("body")})
+	packed, err := p.PackMessage(1, 1, []byte("body"))
 	if err != nil {
 		t.Fatalf("PackMessage() error = %v", err)
 	}
@@ -348,21 +348,23 @@ func TestExtraReadErrors(t *testing.T) {
 // TestExtraPackMessageErrors verifies the validation branches of PackMessage.
 func TestExtraPackMessageErrors(t *testing.T) {
 	cases := []struct {
-		name string
-		opts []packet.Option
-		msg  *packet.Message
-		want error
+		name  string
+		opts  []packet.Option
+		route int32
+		seq   int32
+		data  []byte
+		want  error
 	}{
-		{"route overflow", []packet.Option{packet.WithRouteBytes(1)}, &packet.Message{Route: 128}, errors.ErrRouteOverflow},
-		{"seq overflow", []packet.Option{packet.WithSeqBytes(1)}, &packet.Message{Route: 1, Seq: 128}, errors.ErrSeqOverflow},
-		{"message too large", []packet.Option{packet.WithBufferBytes(4)}, &packet.Message{Route: 1, Buffer: []byte("12345")}, errors.ErrMessageTooLarge},
+		{"route overflow", []packet.Option{packet.WithRouteBytes(1)}, 128, 0, nil, errors.ErrRouteOverflow},
+		{"seq overflow", []packet.Option{packet.WithSeqBytes(1)}, 1, 128, nil, errors.ErrSeqOverflow},
+		{"message too large", []packet.Option{packet.WithBufferBytes(4)}, 1, 0, []byte("12345"), errors.ErrMessageTooLarge},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := packet.NewPacker(c.opts...)
 
-			buf, err := p.PackMessage(c.msg)
+			buf, err := p.PackMessage(c.route, c.seq, c.data)
 			if buf != nil {
 				buf.Release()
 				t.Errorf("PackMessage() buffer = %v, want nil", buf)

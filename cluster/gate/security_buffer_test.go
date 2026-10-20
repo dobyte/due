@@ -63,7 +63,7 @@ func newSecurityTestPeer(t testing.TB, id int64) (*Gate, *queuedSecurityConn, ne
 func TestSecuritySharedPush(t *testing.T) {
 	const recipients = 8
 	payload := []byte("shared plaintext")
-	packed, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: payload})
+	packed, err := packet.PackMessage(10, 1, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestSecuritySharedPush(t *testing.T) {
 // retry remains possible, and an old wrapper cannot send after security state is removed.
 func TestSecurityPushFailure(t *testing.T) {
 	g, conn, wrapped, client := newSecurityTestPeer(t, 1)
-	buf, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: []byte("retry")})
+	buf, err := packet.PackMessage(10, 1, []byte("retry"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestSecurityPushFailure(t *testing.T) {
 	}
 	queued.Release()
 	g.security.remove(conn.ID())
-	buf, err = packet.PackMessage(&packet.Message{Route: 10, Seq: 1})
+	buf, err = packet.PackMessage(10, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestSecurityPushFailure(t *testing.T) {
 // TestSecurityEmptyCiphertext rejects a plaintext empty business frame without a pool panic.
 func TestSecurityEmptyCiphertext(t *testing.T) {
 	g, conn, _, _ := newSecurityTestPeer(t, 1)
-	buf, err := packet.PackMessage(&packet.Message{Route: 10, Seq: 1})
+	buf, err := packet.PackMessage(10, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

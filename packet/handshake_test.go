@@ -41,7 +41,7 @@ func TestPackHandshake(t *testing.T) {
 		t.Fatal("a handshake frame must not be unpacked as a data message")
 	}
 
-	msg, err := packet.PackMessage(&packet.Message{Route: 100, Seq: 1, Buffer: []byte("data")})
+	msg, err := packet.PackMessage(100, 1, []byte("data"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

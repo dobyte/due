@@ -50,9 +50,10 @@ func Read(reader io.Reader) (FrameType, int64, buffer.Buffer, error) {
 	return globalPacker.Read(reader)
 }
 
-// PackMessage packs message as a buffer and returns the packed buffer or a packing error.
-func PackMessage(message *Message) (buffer.Buffer, error) {
-	return globalPacker.PackMessage(message)
+// PackMessage packs a message payload as a buffer and returns the packed buffer or a packing
+// error.
+func PackMessage(route, seq int32, data []byte) (buffer.Buffer, error) {
+	return globalPacker.PackMessage(route, seq, data)
 }
 
 // PackMessageBuffer packs a pooled payload, transferring ownership only on success. Packers
@@ -61,9 +62,7 @@ func PackMessageBuffer(route, seq int32, payload *buffer.Bytes) (buffer.Buffer, 
 	if packer, ok := globalPacker.(MessageBufferPacker); ok {
 		return packer.PackMessageBuffer(route, seq, payload)
 	}
-	packed, err := globalPacker.PackMessage(&Message{
-		Route: route, Seq: seq, Buffer: append([]byte(nil), payload.Bytes()...),
-	})
+	packed, err := globalPacker.PackMessage(route, seq, append([]byte(nil), payload.Bytes()...))
 	if err == nil {
 		payload.Release()
 	}

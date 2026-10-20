@@ -15,11 +15,7 @@ import (
 func packTestMessage(t *testing.T, route int32) buffer.Buffer {
 	t.Helper()
 
-	buf, err := packet.PackMessage(&packet.Message{
-		Seq:    1,
-		Route:  route,
-		Buffer: []byte("payload"),
-	})
+	buf, err := packet.PackMessage(route, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

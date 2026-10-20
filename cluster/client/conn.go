@@ -124,7 +124,7 @@ func (c *Conn) Push(message *cluster.Message) error {
 		}
 	}
 
-	buf, err := packet.PackMessage(&packet.Message{Seq: message.Seq, Route: message.Route, Buffer: data})
+	buf, err := packet.PackMessage(message.Route, message.Seq, data)
 	if err != nil {
 		return err
 	}

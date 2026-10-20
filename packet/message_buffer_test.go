@@ -170,7 +170,7 @@ func TestExtractSegmentedMessage(t *testing.T) {
 			for _, seqSize := range []int{0, 1, 2, 4} {
 				p := packet.NewPacker(packet.WithByteOrder(order), packet.WithRouteBytes(routeSize), packet.WithSeqBytes(seqSize))
 				for _, payload := range [][]byte{nil, []byte("payload")} {
-					packed, err := p.PackMessage(&packet.Message{Route: -10, Seq: -20, Buffer: payload})
+					packed, err := p.PackMessage(-10, -20, payload)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -205,7 +205,7 @@ func TestExtractSegmentedMessage(t *testing.T) {
 func TestExtractSegmentedMessageAliasesPayload(t *testing.T) {
 	p := packet.NewPacker()
 	payload := []byte("payload")
-	packed, err := p.PackMessage(&packet.Message{Route: 10, Seq: 1, Buffer: payload})
+	packed, err := p.PackMessage(10, 1, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
