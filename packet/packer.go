@@ -11,11 +11,10 @@ import (
 )
 
 const (
-	dataBit      = 0 << 7 // Data frame flag
-	handshakeBit = 1 << 0 // Handshake frame flag
-	heartbeatBit = 1 << 7 // Heartbeat frame flag
-
-	_messageBufferAlignment = 16
+	dataBit                = 0 << 7 // Data frame flag
+	handshakeBit           = 1 << 0 // Handshake frame flag
+	heartbeatBit           = 1 << 7 // Heartbeat frame flag
+	messageBufferAlignment = 16     // Alignment of message buffers
 )
 
 // FrameType is the type of a frame read from the wire.
@@ -288,7 +287,7 @@ func (p *defaultPacker) PackMessageBuffer(route, seq int32, payload *buffer.Byte
 // the canonical message header is prepended.
 func (p *defaultPacker) MessageBufferHeadroom() int {
 	size := p.messageHeaderSize()
-	return (size + _messageBufferAlignment - 1) &^ (_messageBufferAlignment - 1)
+	return (size + messageBufferAlignment - 1) &^ (messageBufferAlignment - 1)
 }
 
 // messageHeaderSize returns the canonical message header size.
