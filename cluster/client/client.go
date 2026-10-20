@@ -436,8 +436,12 @@ func (c *Client) printInfo() {
 	rows = append(rows, fmt.Sprintf("Protocol: %s", c.opts.client.Protocol()))
 
 	if c.opts.security != nil {
-		rows = append(rows, "Security: session")
-	} else if c.opts.encryptor != nil {
+		rows = append(rows, "Security: enabled")
+	} else {
+		rows = append(rows, "Security: disabled")
+	}
+
+	if c.opts.encryptor != nil {
 		rows = append(rows, fmt.Sprintf("Encryptor: %s", c.opts.encryptor.Name()))
 	} else {
 		rows = append(rows, "Encryptor: -")

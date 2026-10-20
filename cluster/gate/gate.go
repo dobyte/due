@@ -355,5 +355,11 @@ func (g *Gate) printInfo() {
 	rows = append(rows, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
 	rows = append(rows, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
 
+	if g.security != nil {
+		rows = append(rows, "Security: enabled")
+	} else {
+		rows = append(rows, "Security: disabled")
+	}
+
 	info.Print("Gate", rows...)
 }

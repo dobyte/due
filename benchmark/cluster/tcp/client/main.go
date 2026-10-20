@@ -13,8 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/dobyte/due/crypto/ecc/v2"
 	"github.com/dobyte/due/network/tcp/v2"
@@ -30,8 +31,7 @@ import (
 const greet = 1
 
 const (
-	// modeThroughput pushes as fast as possible and reports capacity only. Requests are queued in
-	// the client write path, so any latency measured here would be queueing time, not RTT.
+	// modeThroughput reports completed responses within the measurement window.
 	modeThroughput = "throughput"
 	// modeLatency keeps a bounded per-connection window (closed loop) and reports RTT percentiles.
 	modeLatency = "latency"
@@ -78,6 +78,7 @@ type greetRes struct {
 }
 
 type config struct {
+	unbounded  bool
 	mode       string        // load model
 	addr       string        // gate address
 	conns      []int         // connection counts
@@ -94,35 +95,40 @@ type config struct {
 }
 
 // connState is the per-connection benchmark state. The reply handler runs on the connection read
-// goroutine, so the response buffer and the latency samples are only touched by a single goroutine
-// and need no locking.
+// goroutine, so response parsing is serialized per connection. The sample mutex also protects collection
+// when a failed round overlaps a disconnect callback.
 type connState struct {
 	conn    *client.Conn
 	req     greetReq
 	res     greetRes
 	window  chan struct{} // in-flight window; nil means unbounded
-	samples []float64     // reservoir-sampled latency values (ms)
-	seen    int64         // total latency observations
-	limit   int           // reservoir capacity
+	mu      sync.Mutex
+	samples []float64 // reservoir-sampled latency values (ms)
+	seen    int64     // total latency observations
+	limit   int       // reservoir capacity
 }
 
 // record samples a latency value with reservoir sampling, so memory stays bounded while the
-// percentiles remain unbiased.
+// per-connection samples remain unbiased; merging preserves their observation weights.
 func (st *connState) record(latency float64) {
+	st.mu.Lock()
 	st.seen++
 
 	if st.limit <= 0 {
+		st.mu.Unlock()
 		return
 	}
 
 	if len(st.samples) < st.limit {
 		st.samples = append(st.samples, latency)
+		st.mu.Unlock()
 		return
 	}
 
 	if idx := rand.Int64N(st.seen); idx < int64(st.limit) {
 		st.samples[idx] = latency
 	}
+	st.mu.Unlock()
 }
 
 // release returns an in-flight window slot.
@@ -143,6 +149,7 @@ type point struct {
 
 // round holds the shared state of one benchmark round.
 type round struct {
+	origin  time.Time
 	message string
 	window  int
 	planned int64
@@ -162,36 +169,40 @@ type round struct {
 	warmupErrs int64
 
 	startAt atomic.Int64
-	endAt   atomic.Int64
 
 	states map[*client.Conn]*connState
 	setup  []float64
 	series []point
 }
 
+type weightedSample struct{ value, weight float64 }
+
 type result struct {
-	mode       string
-	conns      int
-	size       int
-	window     int
-	run        int
-	repeats    int
-	planned    int64
-	duration   time.Duration
-	sent       int64
-	recv       int64
-	pushErrs   int64
-	parseErrs  int64
-	mismatches int64
-	warmupErrs int64
-	drained    bool
-	samples    int64
-	latencies  []float64
-	setup      []float64
-	series     []point
-	seriesPath string
-	gcCycles   uint32
-	allocBytes uint64
+	windowRecv    int64
+	drainDuration time.Duration
+	failure       string
+	weighted      []weightedSample
+	mode          string
+	conns         int
+	size          int
+	window        int
+	run           int
+	repeats       int
+	planned       int64
+	duration      time.Duration
+	sent          int64
+	recv          int64
+	pushErrs      int64
+	parseErrs     int64
+	mismatches    int64
+	warmupErrs    int64
+	drained       bool
+	samples       int64
+	setup         []float64
+	series        []point
+	seriesPath    string
+	gcCycles      uint32
+	allocBytes    uint64
 }
 
 type runner struct {
@@ -207,7 +218,7 @@ func main() {
 	}
 
 	opts := make([]client.Option, 0, 2)
-	opts = append(opts, client.WithClient(tcp.NewClient()))
+	opts = append(opts, client.WithClient(tcp.NewClient(tcp.WithClientWriteTimeout(time.Second), tcp.WithClientCloseTimeout(time.Second))))
 	if cfg.security {
 		opts = append(opts, client.WithSessionSecurity(ecc.NewSigner()))
 	}
@@ -245,6 +256,7 @@ func loadConfig() (config, error) {
 		warmup:     flag.Duration("warmup", 3*time.Second),
 		requests:   flag.Int("requests", 100_000),
 		window:     flag.Int("window", 0),
+		unbounded:  flag.Bool("unbounded", false),
 		rate:       flag.Int("rate", 100_000),
 		repeat:     flag.Int("repeat", 1),
 		security:   flag.Bool("security", false),
@@ -259,6 +271,12 @@ func loadConfig() (config, error) {
 			cfg.mode, modeThroughput, modeLatency, modeRate)
 	}
 
+	if cfg.duration <= 0 || cfg.warmup < 0 {
+		return config{}, fmt.Errorf("duration must be positive and warmup must not be negative")
+	}
+	if cfg.unbounded && (cfg.mode != modeThroughput || cfg.window != 0) {
+		return config{}, fmt.Errorf("unbounded requires throughput mode without window")
+	}
 	if cfg.requests <= 0 {
 		return config{}, fmt.Errorf("requests must be positive: %d", cfg.requests)
 	}
@@ -277,6 +295,9 @@ func loadConfig() (config, error) {
 
 // window returns the effective per-connection in-flight window of the current mode.
 func (r *runner) window() int {
+	if r.cfg.unbounded {
+		return 0
+	}
 	if r.cfg.window > 0 {
 		return r.cfg.window
 	}
@@ -284,10 +305,8 @@ func (r *runner) window() int {
 	switch r.cfg.mode {
 	case modeLatency:
 		return 1
-	case modeRate:
-		return 32
 	default:
-		return 0
+		return 32
 	}
 }
 
@@ -317,12 +336,16 @@ func (r *runner) start(_ *client.Proxy) {
 				}
 
 				printReport(res, r.cfg)
-				results = append(results, res)
+				if res.failure == "" {
+					results = append(results, res)
+				}
 			}
 		}
 	}
 
 	printSummary(results)
+	total := len(r.cfg.sizes) * len(r.cfg.conns) * r.cfg.repeat
+	fmt.Printf("Rounds: %d valid / %d failed / %d total\n", len(results), total-len(results), total)
 }
 
 func (r *runner) startProfile() func() {
@@ -355,6 +378,7 @@ func (r *runner) runRound(conns, size, run int) (*result, error) {
 	window := r.window()
 
 	rd := &round{
+		origin:  time.Now(),
 		message: xrand.Letters(size),
 		window:  window,
 		track:   mode != modeThroughput,
@@ -388,25 +412,29 @@ func (r *runner) runRound(conns, size, run int) (*result, error) {
 	// the map after loading the pointer, and the map is never mutated afterwards.
 	r.current.Store(rd)
 
-	quota, rate := 0, 0
+	quota := 0
 	switch mode {
 	case modeLatency:
 		quota = (r.cfg.requests + conns - 1) / conns
 		rd.planned = int64(quota) * int64(conns)
-	case modeRate:
-		rate = max(1, r.cfg.rate/conns)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var senders sync.WaitGroup
+	index := 0
 	for _, st := range rd.states {
+		rate := -1
+		if mode == modeRate {
+			rate = connectionRate(r.cfg.rate, conns, index)
+		}
+		index++
 		senders.Add(1)
-		go func(st *connState) {
+		go func(st *connState, rate int) {
 			defer senders.Done()
 			r.sendLoop(ctx, rd, st, quota, rate)
-		}(st)
+		}(st, rate)
 	}
 
 	if r.cfg.warmup > 0 {
@@ -441,21 +469,23 @@ func (r *runner) runRound(conns, size, run int) (*result, error) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 
-	rd.startAt.Store(time.Now().UnixNano())
+	measureStart := time.Now()
+	rd.startAt.Store(measureStart.UnixNano())
 	stopSampler := r.startSampler(rd)
 
 	rd.phase.Store(phaseMeasure)
 	close(rd.resume)
 
+	measurementCompleted := true
 	switch mode {
 	// The timestamp of a latency round is pushed by the client, so the round is bounded by the
 	// hard cap instead of a fixed duration.
 	case modeLatency:
-		waitCond(measureGuard, func() bool {
-			return rd.sent.Load() >= rd.planned || rd.aborted.Load()
+		measurementCompleted = waitCond(measureGuard, func() bool {
+			return (rd.sent.Load() >= rd.planned && rd.pending.Load() == 0) || rd.aborted.Load()
 		})
 	default:
-		deadline := time.Now().Add(r.cfg.duration)
+		deadline := measureStart.Add(r.cfg.duration)
 		for time.Now().Before(deadline) && !rd.aborted.Load() {
 			time.Sleep(pollInterval)
 		}
@@ -463,49 +493,62 @@ func (r *runner) runRound(conns, size, run int) (*result, error) {
 
 	rd.phase.Store(phaseStop)
 	stopAt := time.Now()
+	windowRecv := rd.recv.Load()
+	stopSampler()
 	cancel()
-	waitSenders(&senders, drainTimeout)
+	sendersStopped := waitSenders(&senders, drainTimeout)
 
 	drained := waitCond(drainTimeout, func() bool { return rd.pending.Load() == 0 })
 
-	if drained {
-		rd.endAt.Store(time.Now().UnixNano())
-	} else {
-		// A timed out drain means the remaining requests are lost; counting the drain wait as
-		// measurement time would dilute the throughput of an already invalid round.
-		rd.endAt.Store(stopAt.UnixNano())
+	failure := ""
+	switch {
+	case !measurementCompleted:
+		failure = "measurement deadline exceeded"
+	case !sendersStopped:
+		failure = "senders did not stop before deadline"
+	case rd.aborted.Load():
+		failure = "push failed during measurement"
+	case !drained:
+		failure = "responses did not drain"
+	case rd.parseErrs.Load()+rd.mismatches.Load() > 0:
+		failure = "invalid responses"
+	case rd.planned > 0 && rd.sent.Load() < rd.planned:
+		failure = "request quota not completed"
 	}
-	stopSampler()
+	drainDuration := time.Since(stopAt)
 
 	runtime.ReadMemStats(&after)
 
 	r.current.Store(nil)
 	rd.closeConns()
+	senders.Wait()
 	time.Sleep(interRoundPause)
 
 	res := &result{
-		mode:       mode,
-		conns:      conns,
-		size:       size,
-		window:     window,
-		run:        run,
-		repeats:    r.cfg.repeat,
-		planned:    rd.planned,
-		duration:   time.Duration(rd.endAt.Load() - rd.startAt.Load()),
-		sent:       rd.sent.Load(),
-		recv:       rd.recv.Load(),
-		pushErrs:   rd.pushErrs.Load(),
-		parseErrs:  rd.parseErrs.Load(),
-		mismatches: rd.mismatches.Load(),
-		warmupErrs: rd.warmupErrs,
-		drained:    drained,
-		setup:      rd.setup,
-		series:     rd.series,
-		gcCycles:   after.NumGC - before.NumGC,
-		allocBytes: after.TotalAlloc - before.TotalAlloc,
+		windowRecv:    windowRecv,
+		drainDuration: drainDuration,
+		failure:       failure,
+		mode:          mode,
+		conns:         conns,
+		size:          size,
+		window:        window,
+		run:           run,
+		repeats:       r.cfg.repeat,
+		planned:       rd.planned,
+		duration:      stopAt.Sub(measureStart),
+		sent:          rd.sent.Load(),
+		recv:          rd.recv.Load(),
+		pushErrs:      rd.pushErrs.Load(),
+		parseErrs:     rd.parseErrs.Load(),
+		mismatches:    rd.mismatches.Load(),
+		warmupErrs:    rd.warmupErrs,
+		drained:       drained,
+		setup:         rd.setup,
+		series:        rd.series,
+		gcCycles:      after.NumGC - before.NumGC,
+		allocBytes:    after.TotalAlloc - before.TotalAlloc,
 	}
-	res.latencies, res.samples = rd.mergeLatencies()
-	sort.Float64s(res.latencies)
+	res.weighted, res.samples = rd.mergeLatencies()
 
 	if r.cfg.out != "" {
 		path, err := writeSeries(r.cfg.out, res)
@@ -521,19 +564,41 @@ func (r *runner) runRound(conns, size, run int) (*result, error) {
 
 // abortRound stops the senders of an invalid round and releases its connections.
 func (r *runner) abortRound(rd *round, cancel context.CancelFunc, senders *sync.WaitGroup, reason string) error {
+	pending := rd.pending.Load()
 	rd.phase.Store(phaseStop)
 	cancel()
-	waitSenders(senders, drainTimeout)
 
 	r.current.Store(nil)
 	rd.closeConns()
+	senders.Wait()
 	time.Sleep(interRoundPause)
-
-	return fmt.Errorf("%s, pending: %d", reason, rd.pending.Load())
+	return fmt.Errorf("%s, pending at failure: %d, push/parse/bad: %d/%d/%d", reason, pending, rd.pushErrs.Load(), rd.parseErrs.Load(), rd.mismatches.Load())
 }
 
-// sendLoop pushes requests of one connection until the round stops or its quota is reached.
+// connectionRate distributes the exact total, including targets below the connection count.
+func connectionRate(total, conns, index int) int {
+	rate := total / conns
+	if index < total%conns {
+		rate++
+	}
+	return rate
+}
+
+// sendLoop pushes requests until cancellation or the measurement quota is reached.
 func (r *runner) sendLoop(ctx context.Context, rd *round, st *connState, quota, rate int) {
+	if rate == 0 {
+		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+		for waitReady(ctx, rd) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+		return
+	}
+
 	var (
 		seq      int32
 		measured int
@@ -584,7 +649,7 @@ func (r *runner) sendLoop(ctx context.Context, rd *round, st *connState, quota, 
 			}
 
 			seq++
-			st.req.SentAt = time.Now().UnixNano()
+			st.req.SentAt = rd.origin.UnixNano() + time.Since(rd.origin).Nanoseconds()
 			rd.pending.Add(1)
 
 			if err := st.conn.Push(&cluster.Message{Route: greet, Seq: seq, Data: &st.req}); err != nil {
@@ -626,7 +691,7 @@ func waitReady(ctx context.Context, rd *round) bool {
 	for {
 		switch rd.phase.Load() {
 		case phaseWarmup, phaseMeasure:
-			return true
+			return ctx.Err() == nil
 		case phaseFence:
 			rd.parked.Add(1)
 			select {
@@ -671,7 +736,7 @@ func (r *runner) handleReply(ctx *client.Context) {
 	}
 
 	if rd.track {
-		st.record(float64(time.Now().UnixNano()-st.res.SentAt) / 1e6)
+		st.record(float64(rd.origin.UnixNano()+time.Since(rd.origin).Nanoseconds()-st.res.SentAt) / 1e6)
 	}
 
 	rd.recv.Add(1)
@@ -692,38 +757,42 @@ func (rd *round) reset() {
 	rd.series = rd.series[:0]
 
 	for _, st := range rd.states {
+		st.mu.Lock()
 		st.samples = st.samples[:0]
 		st.seen = 0
+		st.mu.Unlock()
 	}
 }
 
-func (rd *round) mergeLatencies() ([]float64, int64) {
+// Each reservoir entry represents seen/kept observations from its connection.
+func (rd *round) mergeLatencies() ([]weightedSample, int64) {
 	if !rd.track {
 		return nil, 0
 	}
-
-	var (
-		total int
-		seen  int64
-	)
-
+	var merged []weightedSample
+	var seen int64
 	for _, st := range rd.states {
-		total += len(st.samples)
+		st.mu.Lock()
 		seen += st.seen
+		if len(st.samples) > 0 {
+			weight := float64(st.seen) / float64(len(st.samples))
+			for _, value := range st.samples {
+				merged = append(merged, weightedSample{value, weight})
+			}
+		}
+		st.mu.Unlock()
 	}
-
-	merged := make([]float64, 0, total)
-	for _, st := range rd.states {
-		merged = append(merged, st.samples...)
-	}
-
+	sort.Slice(merged, func(i, j int) bool { return merged[i].value < merged[j].value })
 	return merged, seen
 }
 
 func (rd *round) closeConns() {
+	var closers sync.WaitGroup
 	for conn := range rd.states {
-		_ = conn.Close()
+		closers.Add(1)
+		go func() { defer closers.Done(); _ = conn.Close() }()
 	}
+	closers.Wait()
 }
 
 // startSampler records a per-second series of the measurement window. Collection is only enabled
@@ -863,7 +932,7 @@ func printReport(res *result, cfg config) {
 	tps := res.tps()
 	bandwidth := 0.0
 	if seconds := res.duration.Seconds(); seconds > 0 {
-		bandwidth = float64(res.recv*int64(res.size)*2) / seconds / (1024 * 1024)
+		bandwidth = float64(res.windowRecv*int64(res.size)*2) / seconds / (1024 * 1024)
 	}
 	lost := res.lost()
 
@@ -873,6 +942,9 @@ func printReport(res *result, cfg config) {
 	fmt.Printf("  Window:              %s\n", window)
 	fmt.Printf("  Payload:             %s (business data, echoed with a timestamp field)\n", convBytes(res.size))
 	fmt.Printf("  Target:              %s\n", cfg.addr)
+	if res.mode == modeRate {
+		fmt.Printf("  Target QPS:          %d\n", cfg.rate)
+	}
 	fmt.Printf("  Security:            %t\n", cfg.security)
 	fmt.Printf("  Duration:            %.3fs\n", res.duration.Seconds())
 	if res.planned > 0 {
@@ -880,18 +952,22 @@ func printReport(res *result, cfg config) {
 	} else {
 		fmt.Printf("  Requests:            %s sent\n", formatNum(res.sent))
 	}
+	fmt.Printf("  Drain Duration:      %.3fs\n", res.drainDuration.Seconds())
+	if res.failure != "" {
+		fmt.Printf("  FAILED:              %s (excluded from summary)\n", res.failure)
+	}
 	if !res.drained {
 		fmt.Printf("  Warning:             incomplete drain, the round is invalid and the duration\n")
 		fmt.Printf("                       stops at the measurement deadline\n")
 	}
 	fmt.Printf("%s\n", sectionLine("Throughput"))
-	fmt.Printf("  TPS:                 %s resp/s\n", formatNum(tps))
-	fmt.Printf("  Bandwidth:           %.2f MB/s (payload, send+recv)\n", bandwidth)
+	fmt.Printf("  Window TPS:          %s resp/s\n", formatNum(tps))
+	fmt.Printf("  Bandwidth:           %.2f MiB/s (completed payload, send+recv)\n", bandwidth)
 
 	if res.mode == modeThroughput {
 		fmt.Printf("%s\n", sectionLine("Latency"))
-		fmt.Printf("  n/a                  open-loop mode queues requests, so the delay would be\n")
-		fmt.Printf("                       queueing time instead of RTT\n")
+		fmt.Printf("  n/a                  throughput mode does not collect latency samples;\n")
+		fmt.Printf("                       use latency or rate mode for latency measurements\n")
 	} else {
 		printLatency(res)
 	}
@@ -920,24 +996,24 @@ func printReport(res *result, cfg config) {
 func printLatency(res *result) {
 	fmt.Printf("%s\n", sectionLine("Latency (ms, client-side RTT)"))
 
-	if len(res.latencies) == 0 {
+	if len(res.weighted) == 0 {
 		fmt.Printf("  no samples\n")
 		return
 	}
 
-	min, max, avg, std := latencyStats(res.latencies)
+	min, max, avg, std := weightedStats(res.weighted)
 
-	fmt.Printf("  Samples:             %s kept / %s observed\n", formatNum(int64(len(res.latencies))), formatNum(res.samples))
-	fmt.Printf("  Min:                 %.3f\n", min)
-	fmt.Printf("  Max:                 %.3f\n", max)
+	fmt.Printf("  Samples:             %s kept / %s observed\n", formatNum(int64(len(res.weighted))), formatNum(res.samples))
+	fmt.Printf("  Sample Min:          %.3f\n", min)
+	fmt.Printf("  Sample Max:          %.3f\n", max)
 	fmt.Printf("  Avg:                 %.3f\n", avg)
 	fmt.Printf("  StdDev:              %.3f\n", std)
-	fmt.Printf("  P50:                 %.3f\n", percentile(res.latencies, 0.50))
-	fmt.Printf("  P75:                 %.3f\n", percentile(res.latencies, 0.75))
-	fmt.Printf("  P90:                 %.3f\n", percentile(res.latencies, 0.90))
-	fmt.Printf("  P95:                 %.3f\n", percentile(res.latencies, 0.95))
-	fmt.Printf("  P99:                 %.3f\n", percentile(res.latencies, 0.99))
-	fmt.Printf("  P999:                %.3f\n", percentile(res.latencies, 0.999))
+	fmt.Printf("  P50:                 %.3f\n", weightedPercentile(res.weighted, 0.50))
+	fmt.Printf("  P75:                 %.3f\n", weightedPercentile(res.weighted, 0.75))
+	fmt.Printf("  P90:                 %.3f\n", weightedPercentile(res.weighted, 0.90))
+	fmt.Printf("  P95:                 %.3f\n", weightedPercentile(res.weighted, 0.95))
+	fmt.Printf("  P99:                 %.3f\n", weightedPercentile(res.weighted, 0.99))
+	fmt.Printf("  P999:                %.3f\n", weightedPercentile(res.weighted, 0.999))
 }
 
 func printSummary(results []*result) {
@@ -975,9 +1051,11 @@ func printSummary(results []*result) {
 		group := groups[k]
 
 		for _, res := range group {
-			fmt.Printf("  %-10s %-6d %-8s %-4d %-12s %-9.3f %-9.3f %-8.2f%%\n",
-				res.mode, res.conns, convBytes(res.size), res.run,
-				formatNum(res.tps()), res.p50(), res.p99(), res.successRate())
+			p50, p99 := "n/a", "n/a"
+			if len(res.weighted) > 0 {
+				p50, p99 = fmt.Sprintf("%.3f", res.p50()), fmt.Sprintf("%.3f", res.p99())
+			}
+			fmt.Printf("  %-10s %-6d %-8s %-4d %-12s %-9s %-9s %-8.2f%%\n", res.mode, res.conns, convBytes(res.size), res.run, formatNum(res.tps()), p50, p99, res.successRate())
 		}
 
 		if len(group) < 2 {
@@ -993,9 +1071,11 @@ func printSummary(results []*result) {
 			p99Values = append(p99Values, res.p99())
 		}
 
-		fmt.Printf("  %-10s %-6d %-8s %-4s %-12s %-9.3f %-9.3f %-8s\n",
-			k.mode, k.conns, convBytes(k.size), "med",
-			formatNum(int64(median(tpsValues))), median(p50Values), median(p99Values), "-")
+		p50, p99 := "n/a", "n/a"
+		if k.mode != modeThroughput {
+			p50, p99 = fmt.Sprintf("%.3f", median(p50Values)), fmt.Sprintf("%.3f", median(p99Values))
+		}
+		fmt.Printf("  %-10s %-6d %-8s %-4s %-12s %-9s %-9s %-8s\n", k.mode, k.conns, convBytes(k.size), "med", formatNum(int64(median(tpsValues))), p50, p99, "-")
 	}
 
 	fmt.Printf("%s\n\n", sectionLineWith("END", '='))
@@ -1007,15 +1087,15 @@ func (res *result) tps() int64 {
 		return 0
 	}
 
-	return int64(float64(res.recv) / seconds)
+	return int64(float64(res.windowRecv) / seconds)
 }
 
 func (res *result) successRate() float64 {
-	if res.sent == 0 {
+	if res.sent+res.pushErrs == 0 {
 		return 0
 	}
 
-	return float64(res.recv) / float64(res.sent) * 100
+	return float64(res.recv) / float64(res.sent+res.pushErrs) * 100
 }
 
 func (res *result) lost() int64 {
@@ -1023,11 +1103,11 @@ func (res *result) lost() int64 {
 }
 
 func (res *result) p50() float64 {
-	return percentile(res.latencies, 0.50)
+	return weightedPercentile(res.weighted, 0.50)
 }
 
 func (res *result) p99() float64 {
-	return percentile(res.latencies, 0.99)
+	return weightedPercentile(res.weighted, 0.99)
 }
 
 // sectionLine returns a separator line with title centered in the middle.
@@ -1044,58 +1124,6 @@ func sectionLineWith(title string, ch byte) string {
 	left := n / 2
 	right := n - left
 	return strings.Repeat(string(ch), left) + label + strings.Repeat(string(ch), right)
-}
-
-// latencyStats computes the min, max, average and standard deviation of the latency values.
-func latencyStats(data []float64) (min, max, avg, std float64) {
-	if len(data) == 0 {
-		return 0, 0, 0, 0
-	}
-
-	min, max = data[0], data[0]
-	sum := 0.0
-	for _, v := range data {
-		sum += v
-		if v < min {
-			min = v
-		}
-		if v > max {
-			max = v
-		}
-	}
-
-	avg = sum / float64(len(data))
-
-	sumSq := 0.0
-	for _, v := range data {
-		sumSq += (v - avg) * (v - avg)
-	}
-	std = math.Sqrt(sumSq / float64(len(data)))
-
-	return
-}
-
-// percentile computes the p-th percentile using linear interpolation.
-func percentile(data []float64, p float64) float64 {
-	if len(data) == 0 {
-		return 0
-	}
-	if p <= 0 {
-		return data[0]
-	}
-	if p >= 1 {
-		return data[len(data)-1]
-	}
-
-	pos := p * float64(len(data)-1)
-	lower := int(math.Floor(pos))
-	upper := int(math.Ceil(pos))
-	if lower == upper {
-		return data[lower]
-	}
-
-	frac := pos - float64(lower)
-	return data[lower]*(1-frac) + data[upper]*frac
 }
 
 // median returns the median of the given values without mutating the input.
@@ -1201,4 +1229,41 @@ func parseInts(value string) ([]int, error) {
 	}
 
 	return values, nil
+}
+
+// weightedPercentile preserves connection traffic weights when estimating request percentiles.
+func weightedPercentile(data []weightedSample, p float64) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	total := 0.0
+	for _, sample := range data {
+		total += sample.weight
+	}
+	target := p * total
+	cumulative := 0.0
+	for _, sample := range data {
+		cumulative += sample.weight
+		if cumulative >= target {
+			return sample.value
+		}
+	}
+	return data[len(data)-1].value
+}
+func weightedStats(data []weightedSample) (min, max, avg, std float64) {
+	if len(data) == 0 {
+		return
+	}
+	min, max = data[0].value, data[len(data)-1].value
+	total := 0.0
+	for _, sample := range data {
+		total += sample.weight
+		avg += sample.value * sample.weight
+	}
+	avg /= total
+	for _, sample := range data {
+		std += (sample.value - avg) * (sample.value - avg) * sample.weight
+	}
+	std = math.Sqrt(std / total)
+	return
 }
