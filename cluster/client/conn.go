@@ -111,7 +111,16 @@ func (c *Conn) Push(message *cluster.Message) error {
 			return errors.New("session security is not established")
 		}
 
-		output = buffer.MallocBytes(len(data) + session.Overhead())
+		output = buffer.MallocBytesWithHeadroom(
+			packet.MessageBufferHeadroom(),
+			len(data)+session.Overhead(),
+		)
+		if output == nil {
+			output = buffer.MallocBytes(len(data) + session.Overhead())
+			if output == nil {
+				return errors.ErrMessageTooLarge
+			}
+		}
 		if _, err = session.SealMessage(output.Bytes()[:0], data, handshake.ClientToServer, message.Route, message.Seq); err != nil {
 			output.Release()
 			return err

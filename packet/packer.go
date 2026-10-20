@@ -14,6 +14,8 @@ const (
 	dataBit      = 0 << 7 // Data frame flag
 	handshakeBit = 1 << 0 // Handshake frame flag
 	heartbeatBit = 1 << 7 // Heartbeat frame flag
+
+	_messageBufferAlignment = 16
 )
 
 // FrameType is the type of a frame read from the wire.
@@ -266,6 +268,15 @@ func (p *defaultPacker) PackMessage(message *Message) (buffer.Buffer, error) {
 
 // PackMessageBuffer packs a pooled payload and transfers ownership on success.
 func (p *defaultPacker) PackMessageBuffer(route, seq int32, payload *buffer.Bytes) (buffer.Buffer, error) {
+	if err := p.validateMessage(route, seq, payload.Len()); err != nil {
+		return nil, err
+	}
+
+	if header := payload.Prepend(p.messageHeaderSize()); header != nil {
+		p.writeMessageHeader(header, route, seq, payload.Len()-len(header))
+		return payload, nil
+	}
+
 	header, err := p.packMessageHeader(route, seq, payload.Len())
 	if err != nil {
 		return nil, err
@@ -273,24 +284,29 @@ func (p *defaultPacker) PackMessageBuffer(route, seq int32, payload *buffer.Byte
 	return buffer.NewNocopyBuffer(header, payload), nil
 }
 
+// MessageBufferHeadroom returns enough reserved space to keep the payload suitably aligned after
+// the canonical message header is prepended.
+func (p *defaultPacker) MessageBufferHeadroom() int {
+	size := p.messageHeaderSize()
+	return (size + _messageBufferAlignment - 1) &^ (_messageBufferAlignment - 1)
+}
+
+// messageHeaderSize returns the canonical message header size.
+func (p *defaultPacker) messageHeaderSize() int {
+	return defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes
+}
+
 // packMessageHeader validates a message and builds its header independently of payload ownership.
 func (p *defaultPacker) packMessageHeader(route, seq int32, size int) (*buffer.Writer, error) {
-	if route > int32(1<<(8*p.opts.routeBytes-1)-1) || route < int32(-1<<(8*p.opts.routeBytes-1)) {
-		return nil, errors.ErrRouteOverflow
+	if err := p.validateMessage(route, seq, size); err != nil {
+		return nil, err
 	}
 
-	if p.opts.seqBytes > 0 {
-		if seq > int32(1<<(8*p.opts.seqBytes-1)-1) || seq < int32(-1<<(8*p.opts.seqBytes-1)) {
-			return nil, errors.ErrSeqOverflow
-		}
-	}
-
-	if size > p.opts.bufferBytes {
-		return nil, errors.ErrMessageTooLarge
-	}
-
-	writer := buffer.MallocWriter(defaultSizeBytes + defaultHeaderBytes + p.opts.routeBytes + p.opts.seqBytes)
-	writer.WriteInt32s(p.opts.byteOrder, int32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+size))
+	writer := buffer.MallocWriter(p.messageHeaderSize())
+	writer.WriteInt32s(
+		p.opts.byteOrder,
+		int32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+size),
+	)
 	writer.WriteInt8s(int8(dataBit))
 
 	switch p.opts.routeBytes {
@@ -300,9 +316,6 @@ func (p *defaultPacker) packMessageHeader(route, seq int32, size int) (*buffer.W
 		writer.WriteInt16s(p.opts.byteOrder, int16(route))
 	case 4:
 		writer.WriteInt32s(p.opts.byteOrder, route)
-	default:
-		writer.Release()
-		return nil, errors.ErrInvalidMessage
 	}
 
 	switch p.opts.seqBytes {
@@ -314,12 +327,58 @@ func (p *defaultPacker) packMessageHeader(route, seq int32, size int) (*buffer.W
 		writer.WriteInt16s(p.opts.byteOrder, int16(seq))
 	case 4:
 		writer.WriteInt32s(p.opts.byteOrder, seq)
-	default:
-		writer.Release()
-		return nil, errors.ErrInvalidMessage
 	}
 
 	return writer, nil
+}
+
+// validateMessage validates route, sequence number and payload size.
+func (p *defaultPacker) validateMessage(route, seq int32, size int) error {
+	if route > int32(1<<(8*p.opts.routeBytes-1)-1) || route < int32(-1<<(8*p.opts.routeBytes-1)) {
+		return errors.ErrRouteOverflow
+	}
+
+	if p.opts.seqBytes > 0 {
+		if seq > int32(1<<(8*p.opts.seqBytes-1)-1) || seq < int32(-1<<(8*p.opts.seqBytes-1)) {
+			return errors.ErrSeqOverflow
+		}
+	}
+
+	if size > p.opts.bufferBytes {
+		return errors.ErrMessageTooLarge
+	}
+	return nil
+}
+
+// writeMessageHeader writes a validated canonical message header into dst.
+func (p *defaultPacker) writeMessageHeader(dst []byte, route, seq int32, size int) {
+	p.opts.byteOrder.PutUint32(
+		dst[:defaultSizeBytes],
+		uint32(defaultHeaderBytes+p.opts.routeBytes+p.opts.seqBytes+size),
+	)
+	dst[defaultSizeBytes] = byte(dataBit)
+	offset := defaultSizeBytes + defaultHeaderBytes
+
+	switch p.opts.routeBytes {
+	case 1:
+		dst[offset] = byte(route)
+	case 2:
+		p.opts.byteOrder.PutUint16(dst[offset:offset+2], uint16(route))
+	case 4:
+		p.opts.byteOrder.PutUint32(dst[offset:offset+4], uint32(route))
+	}
+	offset += p.opts.routeBytes
+
+	switch p.opts.seqBytes {
+	case 0:
+		// ignore seq
+	case 1:
+		dst[offset] = byte(seq)
+	case 2:
+		p.opts.byteOrder.PutUint16(dst[offset:offset+2], uint16(seq))
+	case 4:
+		p.opts.byteOrder.PutUint32(dst[offset:offset+4], uint32(seq))
+	}
 }
 
 // PackHandshake packs a handshake frame.

@@ -551,7 +551,7 @@ func (c *serverConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 		_ = conn.SetWriteDeadline(time.Now().Add(c.connMgr.server.opts.writeTimeout))
 	}
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
+	if err := writeBuffer(conn, buf); err != nil {
 		if _, ok := err.(*websocket.CloseError); !ok {
 			if !errors.Is(err, net.ErrClosed) {
 				log.Warnf("write message error: %v", err)

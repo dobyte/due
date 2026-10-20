@@ -151,6 +151,10 @@ func TestClientSessionSecurity(t *testing.T) {
 	}
 
 	raw := <-conn.pushed
+	if nodes := raw.Nodes(); nodes != 1 {
+		raw.Release()
+		t.Fatalf("empty encrypted uplink has %d buffer nodes, want 1", nodes)
+	}
 	route, seq, payload, err := packet.ExtractMessage(raw)
 	if err != nil {
 		raw.Release()
@@ -176,6 +180,10 @@ func TestClientSessionSecurity(t *testing.T) {
 	}
 
 	raw = <-conn.pushed
+	if nodes := raw.Nodes(); nodes != 1 {
+		raw.Release()
+		t.Fatalf("encrypted uplink has %d buffer nodes, want 1", nodes)
+	}
 	route, seq, payload, err = packet.ExtractMessage(raw)
 	if err != nil {
 		raw.Release()

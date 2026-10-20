@@ -101,6 +101,9 @@ func TestSecuritySharedPush(t *testing.T) {
 			t.Fatalf("recipient %d has %d queued frames", i, len(conn.queued))
 		}
 		buf := conn.queued[0]
+		if buf.Nodes() != 1 {
+			t.Fatalf("recipient %d has %d frame nodes, want 1", i, buf.Nodes())
+		}
 		route, seq, sealed, err := packet.ExtractMessage(buf)
 		if err != nil {
 			t.Fatal(err)

@@ -49,7 +49,7 @@ func benchmarkSecurityConn(b *testing.B) network.Conn {
 // BenchmarkSecurityPush includes extraction, encryption, packing and buffer release.
 func BenchmarkSecurityPush(b *testing.B) {
 	for _, size := range []int{64, 1024, 4096} {
-		for _, recipients := range []int{1, 8} {
+		for _, recipients := range []int{1, 8, 64, 1000} {
 			b.Run(strconv.Itoa(size)+"/recipients="+strconv.Itoa(recipients), func(b *testing.B) {
 				conns := make([]network.Conn, recipients)
 				for i := range conns {

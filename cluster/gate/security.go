@@ -133,7 +133,7 @@ func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
 		return true
 	}
 
-	output := buffer.MallocBytes(max(1, len(payload)))
+	output := buffer.MallocBytesWithHeadroom(packet.MessageBufferHeadroom(), max(1, len(payload)))
 	plaintext, err := session.OpenMessage(output.Bytes()[:0], payload, handshake.ClientToServer, route, seq)
 	buf.Release()
 
@@ -230,7 +230,10 @@ func (m *securityManager) push(conn network.Conn, state *securityState, buf buff
 		return err
 	}
 
-	output := buffer.MallocBytes(len(payload) + session.Overhead())
+	output := buffer.MallocBytesWithHeadroom(
+		packet.MessageBufferHeadroom(),
+		len(payload)+session.Overhead(),
+	)
 	_, err = session.SealMessage(output.Bytes()[:0], payload, handshake.ServerToClient, route, seq)
 	if err != nil {
 		output.Release()

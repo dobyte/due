@@ -21,6 +21,12 @@ type MessageBufferPacker interface {
 	PackMessageBuffer(route, seq int32, payload *buffer.Bytes) (buffer.Buffer, error)
 }
 
+// MessageBufferHeadroomPacker reports how much space a pooled payload can reserve so that
+// PackMessageBuffer can prepend the message header without wrapping the payload in another buffer.
+type MessageBufferHeadroomPacker interface {
+	MessageBufferHeadroom() int
+}
+
 // init initializes the global packer.
 func init() {
 	globalPacker = NewPacker()
@@ -62,6 +68,15 @@ func PackMessageBuffer(route, seq int32, payload *buffer.Bytes) (buffer.Buffer, 
 		payload.Release()
 	}
 	return packed, err
+}
+
+// MessageBufferHeadroom returns the space that the global packer can use before a pooled payload.
+// It returns zero when the packer does not support in-place header prepending.
+func MessageBufferHeadroom() int {
+	if packer, ok := globalPacker.(MessageBufferHeadroomPacker); ok {
+		return max(0, packer.MessageBufferHeadroom())
+	}
+	return 0
 }
 
 // PackHandshake packs a handshake frame.

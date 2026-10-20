@@ -12,6 +12,11 @@ func MallocBytes(cap int) *Bytes {
 	return defaultBytesPool.Get(cap)
 }
 
+// MallocBytesWithHeadroom allocates size readable bytes with reserved space before them.
+func MallocBytesWithHeadroom(headroom, size int) *Bytes {
+	return defaultBytesPool.GetWithHeadroom(headroom, size)
+}
+
 // BytesPool is a byte buffer pool.
 type BytesPool struct {
 	pools []*sync.Pool
@@ -48,8 +53,32 @@ func (p *BytesPool) Get(cap int) *Bytes {
 	b := pool.Get().(*Bytes)
 	b.lower = 0
 	b.upper = cap
+	b.headroom = 0
 	b.delay.Store(0)
 	b.released.Store(false)
+
+	return b
+}
+
+// GetWithHeadroom returns size readable bytes preceded by headroom reserved bytes, or nil when the
+// arguments are invalid or no matching pool exists.
+func (p *BytesPool) GetWithHeadroom(headroom, size int) *Bytes {
+	if headroom < 0 || size < 0 {
+		return nil
+	}
+
+	total := headroom + size
+	if total < headroom {
+		return nil
+	}
+
+	b := p.Get(total)
+	if b == nil {
+		return nil
+	}
+
+	b.lower = headroom
+	b.headroom = headroom
 
 	return b
 }

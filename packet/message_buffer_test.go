@@ -55,6 +55,114 @@ func TestPooledMessageOwnership(t *testing.T) {
 	}
 }
 
+func TestPooledMessageHeadroom(t *testing.T) {
+	original := packet.GetPacker()
+	t.Cleanup(func() { packet.SetPacker(original) })
+
+	for _, order := range []binary.ByteOrder{binary.BigEndian, binary.LittleEndian} {
+		for _, routeSize := range []int{1, 2, 4} {
+			for _, seqSize := range []int{0, 1, 2, 4} {
+				packer := packet.NewPacker(
+					packet.WithByteOrder(order),
+					packet.WithRouteBytes(routeSize),
+					packet.WithSeqBytes(seqSize),
+				)
+				packet.SetPacker(packer)
+				headroom := packet.MessageBufferHeadroom()
+				payload := buffer.MallocBytesWithHeadroom(headroom, len("payload"))
+				copy(payload.Bytes(), "payload")
+				packed, err := packet.PackMessageBuffer(-10, -20, payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if packed != payload || packed.Nodes() != 1 {
+					t.Fatal("headroom payload was wrapped instead of prepended in place")
+				}
+				route, seq, data, err := packet.ExtractMessage(packed)
+				wantSeq := int32(-20)
+				if seqSize == 0 {
+					wantSeq = 0
+				}
+				if err != nil || route != -10 || seq != wantSeq || string(data) != "payload" {
+					t.Fatalf("route=%d seq=%d data=%q err=%v", route, seq, data, err)
+				}
+				packed.Release()
+			}
+		}
+	}
+}
+
+func TestPooledMessageSharedHeadroom(t *testing.T) {
+	packer := packet.NewPacker(packet.WithRouteBytes(1), packet.WithSeqBytes(0))
+	payload := buffer.MallocBytesWithHeadroom(packer.MessageBufferHeadroom(), len("payload"))
+	copy(payload.Bytes(), "payload")
+	payload.Delay(2)
+
+	first, err := packer.PackMessageBuffer(1, 0, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Nodes() != 2 {
+		t.Fatalf("first shared message has %d nodes, want 2", first.Nodes())
+	}
+	firstBytes := bytes.Clone(first.Bytes())
+
+	second, err := packer.PackMessageBuffer(2, 0, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Nodes() != 2 {
+		t.Fatalf("second shared message has %d nodes, want 2", second.Nodes())
+	}
+	if !bytes.Equal(first.Bytes(), firstBytes) {
+		t.Fatal("second pack changed the first shared message")
+	}
+	for _, tc := range []struct {
+		name   string
+		packed buffer.Buffer
+		route  int32
+	}{
+		{name: "first", packed: first, route: 1},
+		{name: "second", packed: second, route: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			route, seq, data, err := packer.ExtractMessage(tc.packed)
+			if err != nil || route != tc.route || seq != 0 || string(data) != "payload" {
+				t.Fatalf("route=%d seq=%d data=%q err=%v", route, seq, data, err)
+			}
+		})
+	}
+	first.Release()
+	if got := string(payload.Bytes()); got != "payload" {
+		t.Fatalf("payload after first release = %q", got)
+	}
+	second.Release()
+	if payload.Len() != 0 {
+		t.Fatal("shared payload was not released after both messages")
+	}
+}
+
+func TestPooledMessageSlidHeadroom(t *testing.T) {
+	packer := packet.NewPacker()
+	payload := buffer.MallocBytesWithHeadroom(packer.MessageBufferHeadroom(), len("payload"))
+	copy(payload.Bytes(), "payload")
+	if !payload.Slide(1) {
+		t.Fatal("Slide(1) failed")
+	}
+	packed, err := packer.PackMessageBuffer(1, 2, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packed.Nodes() != 2 {
+		t.Fatalf("slid payload has %d nodes, want 2", packed.Nodes())
+	}
+	route, seq, data, err := packer.ExtractMessage(packed)
+	if err != nil || route != 1 || seq != 2 || string(data) != "ayload" {
+		t.Fatalf("route=%d seq=%d data=%q err=%v", route, seq, data, err)
+	}
+	packed.Release()
+}
+
 // TestExtractSegmentedMessage covers every split position, nesting and packet configuration.
 func TestExtractSegmentedMessage(t *testing.T) {
 	for _, order := range []binary.ByteOrder{binary.BigEndian, binary.LittleEndian} {
