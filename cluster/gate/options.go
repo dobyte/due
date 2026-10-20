@@ -7,6 +7,8 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
@@ -263,6 +265,10 @@ func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 		if signer == nil {
 			log.Warnf("the specified signer is nil and will be automatically ignored")
 			return
+		}
+
+		if len(suites) == 0 {
+			suites = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
 		}
 
 		o.security = &securityOptions{signer: signer, suites: suites}

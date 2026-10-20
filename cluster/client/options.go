@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
@@ -140,6 +142,10 @@ func WithSessionSecurity(verifier crypto.Verifier, suites ...aead.Suite) Option 
 		if verifier == nil {
 			log.Warnf("the specified verifier is nil and will be automatically ignored")
 			return
+		}
+
+		if len(suites) == 0 {
+			suites = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
 		}
 
 		o.security = &securityOptions{verifier: verifier, suites: suites}
