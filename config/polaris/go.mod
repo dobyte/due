@@ -42,7 +42,7 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/net v0.24.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto v0.0.0-20221014213838-99cd37c6964a // indirect

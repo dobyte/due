@@ -13,6 +13,7 @@ import (
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/petermattis/goid"
+	"golang.org/x/exp/constraints"
 )
 
 // Proxy is a proxy.
@@ -103,7 +104,7 @@ func (p *Proxy) Trigger() *Trigger {
 }
 
 // AddRouteHandler adds a route handler.
-func (p *Proxy) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
+func (p *Proxy) AddRouteHandler[T constraints.Integer](route T, handler RouteHandler, opts ...RouteOptions) {
 	p.node.router.AddRouteHandler(route, handler, opts...)
 }
 

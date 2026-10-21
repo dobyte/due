@@ -30,3 +30,30 @@ go vet ./cluster/ws/...
 测试包含真实 WebSocket 回环回显，可独立于 Redis/Nacos 验证客户端三种负载模式；它不替代完整 Gate → Node 链路的容量测试。
 
 `-addr` 使用完整的 `ws://` 或 `wss://` URL，包含服务器配置的路径。示例客户端和 Gate 均关闭心跳以便与 TCP 比较。WS 帧头、掩码与 TLS 开销不计入业务载荷带宽。客户端与 Node 需一起更新，以确保 Node 回传 `sentAt`。
+
+## security 参数
+
+客户端和 Gate 均支持 `-security=true|false`，默认 `false`。双方必须使用相同设置。Node 无需传入此参数，加解密由 Client 和 Gate 完成。
+
+分别在对应目录的独立终端中启动：
+
+```sh
+# gate 目录：开启会话加密
+go run . -security=true
+
+# node 目录：正常启动
+go run .
+
+# client 目录：开启会话加密并执行压测
+go run . -security=true -addr=ws://127.0.0.1:3553/ -bench=throughput -conns=50,100,200,500,1000 -window=32 -duration=30s -warmup=3s -repeat=3 -out=./results-security
+```
+
+Gate 从 `etc/etc.toml` 的 `[crypto.ecc.signer]` 读取签名私钥，客户端读取对应公钥。报告中的 `Security: true` 表示客户端已开启此模式。比较明文与加密性能时，双方均改为 `-security=false`，保持其他负载参数一致。
+
+仓库中的密钥仅用于示例和本地压测，生产环境需替换为独立密钥。
+
+明文与加密回归测试使用压测程序相同的客户端创建入口，覆盖三种负载模式及真实 ECC 签名、X25519 握手和双向消息加解密。在 `benchmark` 模块目录运行：
+
+```sh
+go test -race ./cluster/ws/client -run TestSecurityFlag -count=1
+```

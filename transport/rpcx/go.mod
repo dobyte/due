@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/dobyte/due/v2 v2.6.3
 	github.com/smallnest/rpcx v1.9.4
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.24.0
 )
 
 require (

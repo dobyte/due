@@ -12,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/petermattis/goid"
+	"golang.org/x/exp/constraints"
 )
 
 // Creator is the function that creates an actor processor.
@@ -188,7 +189,7 @@ func (a *Actor) SetDefaultRouteHandler(handler RouteHandler) {
 
 // AddRouteHandler registers handler for the given route. It does nothing when the actor is not
 // started.
-func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
+func (a *Actor) AddRouteHandler[T constraints.Integer](route T, handler RouteHandler) {
 	a.rw.RLock()
 	defer a.rw.RUnlock()
 
@@ -198,7 +199,8 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 
 	if _, err := a.taskQueue.Commit(func() {
 		if a.started() {
-			a.routes[route] = handler
+			rt := int32(route)
+			a.routes[rt] = handler
 
 			if a.opts.dispatch {
 				// Serialized against releaseKind by the scheduler's read lock; when the kind
@@ -206,8 +208,8 @@ func (a *Actor) AddRouteHandler(route int32, handler RouteHandler) {
 				// registration is skipped so that no dangling route mapping is left behind.
 				a.scheduler.rw.RLock()
 				if val, ok := a.scheduler.kinds.Load(a.Kind()); ok {
-					a.scheduler.routes.Store(route, a.Kind())
-					val.(*kindEntity).routes.Store(route, struct{}{})
+					a.scheduler.routes.Store(rt, a.Kind())
+					val.(*kindEntity).routes.Store(rt, struct{}{})
 				}
 				a.scheduler.rw.RUnlock()
 			}

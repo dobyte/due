@@ -22,6 +22,7 @@ import (
 	"github.com/dobyte/due/v2"
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/cluster/client"
+	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/flag"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xrand"
@@ -216,13 +217,11 @@ func main() {
 		log.Fatalf("invalid benchmark config: %v", err)
 	}
 
-	opts := make([]client.Option, 0, 2)
-	opts = append(opts, client.WithClient(ws.NewClient(ws.WithClientWriteTimeout(time.Second), ws.WithClientCloseTimeout(time.Second))))
+	var signer crypto.Signer
 	if cfg.security {
-		opts = append(opts, client.WithSessionSecurity(ecc.NewSigner()))
+		signer = ecc.NewSigner()
 	}
-
-	component := client.NewClient(opts...)
+	component := newBenchmarkClient(cfg, signer)
 
 	r := &runner{cfg: cfg, proxy: component.Proxy()}
 	component.Proxy().AddHookListener(cluster.Start, r.start)
@@ -231,6 +230,18 @@ func main() {
 	container := due.NewContainer()
 	container.Add(component)
 	container.Serve(true)
+}
+
+// newBenchmarkClient applies the benchmark security flag to the actual transport client.
+func newBenchmarkClient(cfg config, signer crypto.Signer, extra ...client.Option) *client.Client {
+	opts := make([]client.Option, 0, 2+len(extra))
+	opts = append(opts, client.WithClient(ws.NewClient(ws.WithClientWriteTimeout(time.Second), ws.WithClientCloseTimeout(time.Second))))
+	if cfg.security {
+		opts = append(opts, client.WithSessionSecurity(signer))
+	}
+
+	opts = append(opts, extra...)
+	return client.NewClient(opts...)
 }
 
 func loadConfig() (config, error) {

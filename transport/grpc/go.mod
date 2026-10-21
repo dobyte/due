@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/dobyte/due/v2 v2.6.3
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.24.0
 	google.golang.org/grpc v1.83.1
 )
 

@@ -12,5 +12,5 @@ import (
 func (fs *fileStat) CreateTime() time.Time {
 	stat := fs.fi.Sys().(*syscall.Stat_t)
 
-	return time.Unix(int64(stat.Ctimespec.Sec), int64(stat.Ctimespec.Nsec))
+	return time.Unix(int64(stat.Birthtimespec.Sec), int64(stat.Birthtimespec.Nsec))
 }

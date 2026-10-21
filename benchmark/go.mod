@@ -14,6 +14,7 @@ require (
 	github.com/dobyte/due/v2 v2.6.3
 	github.com/donnie4w/go-logger v0.27.0
 	github.com/gorilla/websocket v1.5.3
+	go.uber.org/atomic v1.11.0
 	go.uber.org/zap v1.27.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
@@ -83,12 +84,12 @@ require (
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/xtaci/kcp-go/v5 v5.6.72 // indirect
-	go.uber.org/atomic v1.11.0
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.14.0 // indirect

@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/utils/xcall"
+	"golang.org/x/exp/constraints"
 )
 
 // RouteHandler is a route handler function.
@@ -76,17 +77,19 @@ func newRouter(node *Node) *Router {
 }
 
 // AddRouteHandler adds a route handler.
-func (r *Router) AddRouteHandler(route int32, handler RouteHandler, opts ...RouteOptions) {
+func (r *Router) AddRouteHandler[T constraints.Integer](route T, handler RouteHandler, opts ...RouteOptions) {
 	if r.node.isShut() {
+		rt := int32(route)
+
 		if len(opts) > 0 {
-			r.routes[route] = &routeEntity{
-				route:   route,
+			r.routes[rt] = &routeEntity{
+				route:   rt,
 				handler: handler,
 				options: opts[0],
 			}
 		} else {
-			r.routes[route] = &routeEntity{
-				route:   route,
+			r.routes[rt] = &routeEntity{
+				route:   rt,
 				handler: handler,
 			}
 		}
