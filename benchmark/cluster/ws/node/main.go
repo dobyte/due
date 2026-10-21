@@ -42,10 +42,12 @@ func initListen(proxy *node.Proxy) {
 
 type greetReq struct {
 	Message string `json:"message"`
+	SentAt  int64  `json:"sentAt"`
 }
 
 type greetRes struct {
 	Message string `json:"message"`
+	SentAt  int64  `json:"sentAt"`
 }
 
 var reqPool = sync.Pool{New: func() any {
@@ -72,4 +74,7 @@ func greetHandler(ctx node.Context) {
 	}
 
 	res.Message = req.Message
+	// Echo the client send timestamp so the client can compute the RTT without sharing state
+	// between connection goroutines.
+	res.SentAt = req.SentAt
 }

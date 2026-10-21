@@ -57,18 +57,10 @@
         [network.ws.client]
             # 拨号地址
             url = "ws://127.0.0.1:3553"
-            # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-            handshakeTimeout = "10s"
+            # 拨号与 WebSocket 握手超时时间，默认为3s
+            dialTimeout = "3s"
             # 心跳间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-            heartbeatInterval = "10s"
-    [network.tcp]
-        [network.tcp.client]
-            # 拨号地址
-            addr = "127.0.0.1:3553"
-            # 拨号超时时间，默认5s
-            timeout = "5s"
-            # 心跳间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 0
+            heartbeatInterval = "0s"
 
 [crypto.ecc.signer]
     # hash算法，不区分大小写。可选：SHA1 | SHA224 | SHA256 | SHA384 | SHA512

@@ -32,40 +32,29 @@ timezone = "Local"
         prefix = "due"
 
 [registry]
-    [registry.consul]
-        # 客户端连接地址，默认为127.0.0.1:8500
-        addr = "127.0.0.1:8500"
-        # 是否启用健康检查，默认为true
-        healthCheck = true
-        # 健康检查时间间隔（秒），仅在启用健康检查后生效，默认为10
-        healthCheckInterval = 10
-        # 健康检查超时时间（秒），仅在启用健康检查后生效，默认为5
-        healthCheckTimeout = 5
-        # 是否启用心跳检查，默认为true
-        heartbeatCheck = true
-        # 心跳检查时间间隔（秒），仅在启用心跳检查后生效，默认为10
-        heartbeatCheckInterval = 10
-        # 健康检测失败后自动注销服务时间（秒），默认为30
-        deregisterCriticalServiceAfter = 30
-
-[transport]
-    [transport.rpcx]
-        # RPCX服务器相关配置
-        [transport.rpcx.server]
-            # 服务器监听地址，空或:0时系统将会随机端口号
-            addr = ":0"
-            # 秘钥文件
-            keyFile = ""
-            # 证书文件
-            certFile = ""
-        # RPCX服务器相关配置
-        [transport.rpcx.client]
-            # 证书文件
-            certFile = ""
-            # 证书域名
-            serverName = ""
-            # 连接池大小，默认为10
-            poolSize = 10
+    [registry.nacos]
+        # 服务端地址，默认为 http://127.0.0.1:8848/nacos，支持配置多个
+        urls = ["http://127.0.0.1:8848/nacos"]
+        # 命名空间ID，默认为空
+        namespaceId = ""
+        # 分组名称，默认为 DEFAULT_GROUP
+        groupName = "DEFAULT_GROUP"
+        # 集群名称，默认为 DEFAULT
+        clusterName = "DEFAULT"
+        # 请求超时时间，默认为10s
+        timeout = "10s"
+        # 心跳间隔时间，默认为5s
+        heartbeat = "5s"
+        # 用户名，默认为空
+        username = ""
+        # 密码，默认为空
+        password = ""
+        # 服务实例缓存目录
+        cacheDir = "./run/nacos/naming/cache"
+        # 日志目录
+        logDir = "./run/nacos/naming/log"
+        # 日志级别，可选：debug | info | warn | error，默认为 info
+        logLevel = "info"
 
 [network]
     [network.ws]
@@ -85,18 +74,8 @@ timezone = "Local"
             # 握手超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
             handshakeTimeout = "10s"
             # 心跳检测间隔时间。设置为0则不启用心跳检测，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为10s
-            heartbeatInterval = "10s"
+            heartbeatInterval = "0s"
             # 心跳机制，默认为resp响应式心跳。可选：resp 响应式心跳 | tick 定时主推心跳
-            heartbeatMechanism = "resp"
-    [network.tcp]
-        [network.tcp.server]
-            # 服务器监听地址
-            addr = ":3553"
-            # 服务器最大连接数
-            maxConnNum = 5000
-            # 心跳检测间隔时间（秒），默认为10秒。设置为0则不启用心跳检测
-            heartbeatInterval = 0
-            # 心跳机制，默认resp
             heartbeatMechanism = "resp"
 
 [packet]
