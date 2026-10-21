@@ -911,8 +911,8 @@ The charts cover all payload and connection combinations. Each point is the medi
 
 - [due-examples](https://github.com/dobyte/due-examples)
 - [due-chat](https://github.com/dobyte/due-chat)
-- [due-doudizhu](https://github.com/dobyte/due-doudizhu-desc) A high-performance distributed game server commercial case study — the Doudizhu (Fight the Landlord) server (a paid project; contact the framework author to purchase)
-- [due-fishing](https://github.com/dobyte/due-fishing-desc) A high-performance distributed game server commercial case study — the Bu Yu Da Shen (Fishing Master) server (a paid project; contact the framework author to purchase)
+- [due-doudizhu](https://github.com/dobyte/due-doudizhu-desc) A high-performance distributed game server commercial case study — the Doudizhu (Fight the Landlord) server
+- [due-fishing](https://github.com/dobyte/due-fishing-desc) A high-performance distributed game server commercial case study — the Bu Yu Da Shen (Fishing Master) server
 
 ### 17. Third-party Examples
 
