@@ -1,9 +1,5 @@
 package json
 
-import (
-	"github.com/bytedance/sonic"
-)
-
 const Name = "json"
 
 var DefaultCodec = &codec{}
@@ -17,12 +13,12 @@ func (codec) Name() string {
 
 // Marshal encodes v.
 func (codec) Marshal(v any) ([]byte, error) {
-	return sonic.Marshal(v)
+	return marshal(v)
 }
 
 // Unmarshal decodes data into v.
 func (codec) Unmarshal(data []byte, v any) error {
-	return sonic.Unmarshal(data, v)
+	return unmarshal(data, v)
 }
 
 // Marshal encodes v using the default codec.
