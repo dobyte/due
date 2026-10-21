@@ -80,6 +80,7 @@ type tNetwork struct {
 
 	connect    network.ConnectHandler
 	receive    network.ReceiveHandler
+	handshake  network.HandshakeHandler
 	disconnect network.DisconnectHandler
 	heartbeat  network.HeartbeatHandler
 }
@@ -96,6 +97,7 @@ func (c *tNetwork) Protocol() string                               { return "tes
 func (c *tNetwork) OnConnect(handler network.ConnectHandler)       { c.connect = handler }
 func (c *tNetwork) OnHeartbeat(handler network.HeartbeatHandler)   { c.heartbeat = handler }
 func (c *tNetwork) OnReceive(handler network.ReceiveHandler)       { c.receive = handler }
+func (c *tNetwork) OnHandshake(handler network.HandshakeHandler)   { c.handshake = handler }
 func (c *tNetwork) OnDisconnect(handler network.DisconnectHandler) { c.disconnect = handler }
 
 // tEncryptor is an encryptor implementation for tests.
@@ -276,15 +278,6 @@ func TestClientOptions(t *testing.T) {
 			check: func(t *testing.T, o *options) {
 				if o.ctx == nil {
 					t.Fatal("ctx must be set")
-				}
-			},
-		},
-		{
-			name:  "WithContext nil",
-			apply: func(o *options) { WithContext(nil)(o) },
-			check: func(t *testing.T, o *options) {
-				if o.ctx == nil {
-					t.Fatal("nil ctx must be ignored")
 				}
 			},
 		},
@@ -487,7 +480,7 @@ func TestClientHandleReceiveRoute(t *testing.T) {
 	cc := &Conn{conn: f.conn, client: f.client}
 	f.client.conns.Store(f.conn, cc)
 
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 7, Buffer: []byte(`{"n":42}`)})
+	buf, err := packet.PackMessage(1, 7, []byte(`{"n":42}`))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -513,7 +506,7 @@ func TestClientHandleReceiveDefaultRoute(t *testing.T) {
 	cc := &Conn{conn: f.conn, client: f.client}
 	f.client.conns.Store(f.conn, cc)
 
-	buf, err := packet.PackMessage(&packet.Message{Route: 99, Seq: 1, Buffer: []byte(`{}`)})
+	buf, err := packet.PackMessage(99, 1, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -549,7 +542,7 @@ func TestClientHandleDisconnect(t *testing.T) {
 	f.client.Proxy().AddEventListener(cluster.Disconnect, func(conn *Conn) { ch <- conn.ID() })
 	f.start(t)
 
-	cc := &Conn{conn: f.conn, client: f.client}
+	cc := &Conn{conn: f.conn, client: f.client, connected: true}
 	f.client.conns.Store(f.conn, cc)
 
 	f.client.handleDisconnect(f.conn)

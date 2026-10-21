@@ -49,16 +49,18 @@ func (c *Context) Route() int32 {
 
 // Data returns the message data.
 //
-// It returns the raw, undecrypted message content; use [Context.Parse] when the plaintext is
-// needed.
+// When session security is enabled the payload has already been decrypted by the receive path.
 func (c *Context) Data() any {
 	return c.buf
 }
 
-// Parse decrypts the message data and unmarshals it into v. It returns an error when decryption
-// or unmarshalling fails.
+// Parse unmarshals the message data into v. It returns an error when unmarshalling fails.
+//
+// Session security decryption happens once in the receive path, so Parse is idempotent.
 func (c *Context) Parse(v any) (err error) {
-	if c.conn.client.opts.encryptor != nil {
+	if c.conn.client.opts.security != nil {
+		return c.conn.client.opts.codec.Unmarshal(c.buf.Bytes(), v)
+	} else if c.conn.client.opts.encryptor != nil {
 		data, err := c.conn.client.opts.encryptor.Decrypt(c.buf.Bytes())
 		if err != nil {
 			return err

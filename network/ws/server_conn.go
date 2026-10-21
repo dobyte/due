@@ -434,7 +434,7 @@ func (c *serverConn) read(conn *websocket.Conn) {
 			continue
 		}
 
-		isHeartbeat, heartbeatTime, buf, err := packet.Read(r)
+		frameType, heartbeatTime, buf, err := packet.Read(r)
 		if err != nil {
 			taskpool.Add(func() { c.recycleClose(conn, id) })
 			return
@@ -442,18 +442,18 @@ func (c *serverConn) read(conn *websocket.Conn) {
 
 		switch c.State() {
 		case network.ConnClosed:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 			}
 			return
 		case network.ConnHanged:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 				return
 			}
 		}
 
-		if isHeartbeat {
+		if frameType == packet.FrameHeartbeat {
 			// update heartbeat time
 			if c.connMgr.server.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
@@ -492,7 +492,9 @@ func (c *serverConn) read(conn *websocket.Conn) {
 				continue
 			}
 
-			if c.connMgr.server.receiveHandler != nil {
+			if frameType == packet.FrameHandshake && c.connMgr.server.handshakeHandler != nil {
+				c.connMgr.server.handshakeHandler(c, buf)
+			} else if c.connMgr.server.receiveHandler != nil {
 				c.connMgr.server.receiveHandler(c, buf)
 			} else {
 				buf.Release()
@@ -549,7 +551,7 @@ func (c *serverConn) doWrite(conn *websocket.Conn, buf buffer.Buffer) {
 		_ = conn.SetWriteDeadline(time.Now().Add(c.connMgr.server.opts.writeTimeout))
 	}
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes()); err != nil {
+	if err := writeBuffer(conn, buf); err != nil {
 		if _, ok := err.(*websocket.CloseError); !ok {
 			if !errors.Is(err, net.ErrClosed) {
 				log.Warnf("write message error: %v", err)

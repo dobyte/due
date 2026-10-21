@@ -37,6 +37,7 @@ type server struct {
 	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
 	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
 	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
+	handshakeHandler  network.HandshakeHandler  // Handler invoked when a handshake frame is received
 	upgradeHandler    UpgradeHandler            // Handler invoked when an HTTP request is upgraded to the WS protocol
 }
 
@@ -264,6 +265,11 @@ func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 // OnReceive registers the handler invoked when a message is received.
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
+}
+
+// OnHandshake registers the handler invoked when a handshake frame is received.
+func (s *server) OnHandshake(handler network.HandshakeHandler) {
+	s.handshakeHandler = handler
 }
 
 // parseAddrFromHeader parses the real client address from the proxy headers.

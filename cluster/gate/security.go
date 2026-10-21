@@ -1,0 +1,308 @@
+package gate
+
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/handshake"
+	"github.com/dobyte/due/v2/crypto"
+	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
+)
+
+// securityOptions configures the session security between the client and the gate.
+type securityOptions struct {
+	signer crypto.Signer // signer used to authenticate the gate
+	suites []aead.Suite  // negotiable AEAD suites, empty means the handshake defaults
+}
+
+// securityManager holds the per-connection security state and the shared handshake server.
+type securityManager struct {
+	gate    *Gate
+	server  *handshake.Server
+	timeout time.Duration
+	states  sync.Map // connection ID -> *securityState
+	conns   sync.Map // connection ID -> *securedConn
+}
+
+// securityState is the security state of a single connection.
+type securityState struct {
+	mu      sync.Mutex
+	pending *handshake.Pending
+	session atomic.Pointer[handshake.Session]
+	closed  bool        // protected by mu
+	timer   *time.Timer // protected by mu
+}
+
+// securedConn decorates a connection so that every pushed message is sealed with the session key
+// of that connection.
+type securedConn struct {
+	network.Conn
+	manager *securityManager
+	state   *securityState
+	pushMu  sync.Mutex
+}
+
+// Push seals the payload of buf with the session key and pushes the result.
+func (c *securedConn) Push(buf buffer.Buffer) error {
+	c.pushMu.Lock()
+	err := c.manager.push(c.Conn, c.state, buf)
+	c.pushMu.Unlock()
+
+	return err
+}
+
+// newSecurityManager creates a security manager from the gate options.
+func newSecurityManager(gate *Gate, opts *securityOptions, timeout time.Duration) *securityManager {
+	return &securityManager{
+		gate:    gate,
+		server:  handshake.NewServer(opts.signer, opts.suites...),
+		timeout: timeout,
+	}
+}
+
+// wrap decorates conn and records the mapping so that the teardown path can find the wrapper.
+func (m *securityManager) wrap(conn network.Conn) network.Conn {
+	state := &securityState{}
+	value, loaded := m.states.LoadOrStore(conn.ID(), state)
+	state = value.(*securityState)
+	wrapped := &securedConn{Conn: conn, manager: m, state: state}
+	m.conns.Store(conn.ID(), wrapped)
+	if !loaded && m.timeout > 0 {
+		state.mu.Lock()
+		if !state.closed && state.session.Load() == nil {
+			state.timer = time.AfterFunc(m.timeout, func() { m.expire(conn.ID()) })
+		}
+		state.mu.Unlock()
+	}
+
+	return wrapped
+}
+
+// unwrap returns the recorded wrapper of conn, or conn itself when security is disabled for it.
+func (m *securityManager) unwrap(conn network.Conn) network.Conn {
+	if wrapped, ok := m.conns.Load(conn.ID()); ok {
+		return wrapped.(network.Conn)
+	}
+
+	return conn
+}
+
+// remove releases the state of the given connection.
+func (m *securityManager) remove(cid int64) {
+	if value, ok := m.states.LoadAndDelete(cid); ok {
+		state := value.(*securityState)
+		state.mu.Lock()
+		state.closed = true
+		if state.timer != nil {
+			state.timer.Stop()
+			state.timer = nil
+		}
+		state.pending = nil
+		state.session.Store(nil)
+		state.mu.Unlock()
+	}
+	m.conns.Delete(cid)
+}
+
+// expire closes a connection that did not complete the security handshake in time.
+func (m *securityManager) expire(cid int64) {
+	value, ok := m.states.Load(cid)
+	if !ok {
+		return
+	}
+
+	state := value.(*securityState)
+	state.mu.Lock()
+	if state.closed || state.session.Load() != nil {
+		state.mu.Unlock()
+		return
+	}
+	state.closed = true
+	state.pending = nil
+	state.timer = nil
+	state.mu.Unlock()
+
+	if value, ok = m.conns.Load(cid); ok {
+		_ = value.(*securedConn).Conn.Close()
+	}
+}
+
+// receiveHandshake handles a handshake frame received from a client.
+func (m *securityManager) receiveHandshake(conn network.Conn, buf buffer.Buffer) {
+	payload, err := packet.ExtractHandshake(buf)
+	if err != nil {
+		buf.Release()
+		log.Warnf("extract handshake frame failed, cid: %d, err: %v", conn.ID(), err)
+		_ = conn.Close()
+		return
+	}
+
+	frame := append([]byte(nil), payload...)
+	buf.Release()
+
+	m.advanceHandshake(conn, frame)
+}
+
+// decrypt decrypts a business message received from a client and delivers the plaintext to the
+// node. It reports whether the message was consumed.
+func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
+	route, seq, payload, err := packet.ExtractMessage(buf)
+	if err != nil {
+		buf.Release()
+		log.Warnf("extract message failed, cid: %d, err: %v", conn.ID(), err)
+		return true
+	}
+
+	value, ok := m.states.Load(conn.ID())
+	if !ok {
+		buf.Release()
+		log.Warnf("session is not established, cid: %d", conn.ID())
+		_ = conn.Close()
+		return true
+	}
+
+	state := value.(*securityState)
+
+	session := state.session.Load()
+
+	if session == nil {
+		buf.Release()
+		log.Warnf("session is not confirmed, cid: %d", conn.ID())
+		_ = conn.Close()
+		return true
+	}
+
+	output := buffer.MallocBytesWithHeadroom(packet.MessageBufferHeadroom(), max(1, len(payload)))
+	plaintext, err := session.OpenMessage(output.Bytes()[:0], payload, handshake.ClientToServer, route, seq)
+	buf.Release()
+
+	if err != nil {
+		output.Release()
+		log.Warnf("open secure message failed, cid: %d, route: %d, seq: %d, err: %v", conn.ID(), route, seq, err)
+		_ = conn.Close()
+		return true
+	}
+
+	output.Truncate(len(plaintext))
+	packed, err := packet.PackMessageBuffer(route, seq, output)
+	if err != nil {
+		output.Release()
+		log.Errorf("pack message failed, cid: %d, err: %v", conn.ID(), err)
+		return true
+	}
+
+	m.gate.proxy.deliver(m.gate.ctx, conn, packed)
+
+	return true
+}
+
+// advanceHandshake advances the handshake state machine of the given connection.
+func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
+	value, ok := m.states.Load(conn.ID())
+	if !ok {
+		_ = conn.Close()
+		return
+	}
+	state := value.(*securityState)
+
+	state.mu.Lock()
+
+	if state.closed || state.session.Load() != nil {
+		state.mu.Unlock()
+		return
+	}
+
+	if state.pending == nil {
+		pending, reply, err := m.server.Accept(frame)
+		if err != nil {
+			state.mu.Unlock()
+			log.Warnf("accept handshake failed, cid: %d, err: %v", conn.ID(), err)
+			_ = conn.Close()
+			return
+		}
+
+		state.pending = pending
+		state.mu.Unlock()
+		m.pushFrame(conn, reply)
+
+		return
+	}
+
+	session, err := m.server.Confirm(state.pending, frame)
+	if err != nil {
+		state.mu.Unlock()
+		log.Warnf("confirm handshake failed, cid: %d, err: %v", conn.ID(), err)
+		_ = conn.Close()
+		return
+	}
+
+	state.pending = nil
+	state.session.Store(session)
+	if state.timer != nil {
+		state.timer.Stop()
+		state.timer = nil
+	}
+	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
+	state.mu.Unlock()
+}
+
+// pushFrame pushes a plaintext handshake frame to the client.
+func (m *securityManager) pushFrame(conn network.Conn, frame []byte) {
+	buf, err := packet.PackHandshake(frame)
+	if err != nil {
+		return
+	}
+
+	if err = conn.Push(buf); err != nil {
+		buf.Release()
+	}
+}
+
+// push seals the payload of buf with the session key of the connection and pushes the result.
+//
+// The original buffer is released only after the encrypted frame is pushed successfully. On any
+// failure it is left to the caller, which owns it until the push succeeds.
+func (m *securityManager) push(conn network.Conn, state *securityState, buf buffer.Buffer) error {
+	session := state.session.Load()
+
+	if session == nil {
+		return errors.New("session is not confirmed")
+	}
+
+	route, seq, payload, err := packet.ExtractMessage(buf)
+	if err != nil {
+		return err
+	}
+
+	output := buffer.MallocBytesWithHeadroom(
+		packet.MessageBufferHeadroom(),
+		len(payload)+session.Overhead(),
+	)
+	_, err = session.SealMessage(output.Bytes()[:0], payload, handshake.ServerToClient, route, seq)
+	if err != nil {
+		output.Release()
+		return err
+	}
+
+	packed, err := packet.PackMessageBuffer(route, seq, output)
+	if err != nil {
+		output.Release()
+		return err
+	}
+
+	if err = conn.Push(packed); err != nil {
+		packed.Release()
+		return err
+	}
+
+	buf.Release()
+
+	return nil
+}

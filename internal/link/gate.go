@@ -778,11 +778,7 @@ func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer,
 		return nil, err
 	}
 
-	return packet.PackMessage(&packet.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: buf,
-	})
+	return packet.PackMessage(message.Route, message.Seq, buf)
 }
 
 // PackBuffer encodes message, encrypting the encoded bytes when encrypt is true.

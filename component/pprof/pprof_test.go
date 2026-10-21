@@ -28,7 +28,7 @@ func TestNewPProf(t *testing.T) {
 		opts []Option
 		want string
 	}{
-		{name: "default addr", opts: nil, want: defaultAddr},
+		{name: "default addr", opts: nil, want: "127.0.0.1:0"},
 		{name: "custom addr", opts: []Option{WithAddr("127.0.0.1:6060")}, want: "127.0.0.1:6060"},
 	}
 

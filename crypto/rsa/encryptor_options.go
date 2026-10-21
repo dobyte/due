@@ -25,7 +25,7 @@ type encryptorOptions struct {
 	hash hash.Hash
 
 	// Padding scheme. It supports NORMAL and OAEP.
-	// It defaults to NORMAL.
+	// It defaults to OAEP.
 	padding EncryptPadding
 
 	// Label. It must stay the same between encryption and decryption.
@@ -47,7 +47,7 @@ type encryptorOptions struct {
 func defaultEncryptorOptions() *encryptorOptions {
 	return &encryptorOptions{
 		hash:       hash.Hash(strings.ToLower(etc.Get(defaultEncryptorHashKey).String())),
-		padding:    EncryptPadding(strings.ToUpper(etc.Get(defaultEncryptorPaddingKey).String())),
+		padding:    EncryptPadding(strings.ToUpper(etc.Get(defaultEncryptorPaddingKey, OAEP).String())),
 		label:      etc.Get(defaultEncryptorLabelKey).Bytes(),
 		blockSize:  etc.Get(defaultEncryptorBlockSizeKey).Int(),
 		publicKey:  etc.Get(defaultEncryptorPublicKeyKey).String(),

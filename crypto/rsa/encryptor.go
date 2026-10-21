@@ -56,10 +56,10 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 		}
 
 		switch e.opts.padding {
-		case OAEP:
-			block, err = rsa.EncryptOAEP(h, rand.Reader, e.publicKey, data[start:end], e.opts.label)
-		default:
+		case NORMAL:
 			block, err = rsa.EncryptPKCS1v15(rand.Reader, e.publicKey, data[start:end])
+		default:
+			block, err = rsa.EncryptOAEP(h, rand.Reader, e.publicKey, data[start:end], e.opts.label)
 		}
 		if err != nil {
 			return nil, err
@@ -94,10 +94,10 @@ func (e *Encryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 		}
 
 		switch e.opts.padding {
-		case OAEP:
-			block, err = rsa.DecryptOAEP(h, rand.Reader, e.privateKey, ciphertext[start:end], e.opts.label)
-		default:
+		case NORMAL:
 			block, err = rsa.DecryptPKCS1v15(rand.Reader, e.privateKey, ciphertext[start:end])
+		default:
+			block, err = rsa.DecryptOAEP(h, rand.Reader, e.privateKey, ciphertext[start:end], e.opts.label)
 		}
 		if err != nil {
 			return nil, err
@@ -121,10 +121,10 @@ func (e *Encryptor) init() {
 
 	var blockSize int
 	switch e.opts.padding {
-	case OAEP:
-		blockSize = e.publicKey.Size() - 2*e.opts.hash.Size() - 2
-	default:
+	case NORMAL:
 		blockSize = e.publicKey.Size() - 11
+	default:
+		blockSize = e.publicKey.Size() - 2*e.opts.hash.Size() - 2
 	}
 
 	if e.opts.blockSize <= 0 {

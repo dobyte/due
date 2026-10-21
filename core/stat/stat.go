@@ -25,7 +25,8 @@ type FileInfo interface {
 }
 
 type fileStat struct {
-	fi os.FileInfo
+	path string
+	fi   os.FileInfo
 }
 
 func Stat(filePath string) (FileInfo, error) {
@@ -34,7 +35,7 @@ func Stat(filePath string) (FileInfo, error) {
 		return nil, err
 	}
 
-	return &fileStat{fi: fi}, nil
+	return &fileStat{path: filePath, fi: fi}, nil
 }
 
 // Name returns the file name.
@@ -64,7 +65,7 @@ func (fs *fileStat) IsDir() bool {
 
 // IsFile reports whether the file is a regular file.
 func (fs *fileStat) IsFile() bool {
-	return !fs.IsDir()
+	return fs.fi.Mode().IsRegular()
 }
 
 // Sys returns the underlying system data.

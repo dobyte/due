@@ -7,6 +7,7 @@ package node
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -25,20 +26,21 @@ import (
 
 // request is a request context.
 type request struct {
-	node    *Node
-	ctx     context.Context       // Context
-	gid     string                // Source gateway ID
-	nid     string                // Source node ID
-	pid     string                // Source actor ID
-	cid     int64                 // Connection ID
-	uid     int64                 // User ID
-	seq     int32                 // Message sequence number
-	route   int32                 // Message route number
-	message any                   // Message data
-	cache   []byte                // Serialized message cache, reused across clones to avoid re-serializing
-	version atomic.Int32          // Version number
-	chain   *chains.Chain         // Call chain
-	actor   atomic.Pointer[Actor] // Current actor
+	node      *Node
+	ctx       context.Context       // Context
+	gid       string                // Source gateway ID
+	nid       string                // Source node ID
+	pid       string                // Source actor ID
+	cid       int64                 // Connection ID
+	uid       int64                 // User ID
+	seq       int32                 // Message sequence number
+	route     int32                 // Message route number
+	message   any                   // Message data
+	plaintext []byte                // Message plaintext
+	cache     []byte                // Serialized message cache, reused across clones to avoid re-serializing
+	version   atomic.Int32          // Version number
+	chain     *chains.Chain         // Call chain
+	actor     atomic.Pointer[Actor] // Current actor
 }
 
 // GID returns the gateway ID.
@@ -82,7 +84,14 @@ func (r *request) Kind() Kind {
 }
 
 // Parse parses the message into v.
+//
+// An empty payload is rejected with [errors.ErrInvalidMessage], and the cached plaintext is reused
+// so that a repeated parse does not decrypt the message again.
 func (r *request) Parse(v any) error {
+	if r.plaintext != nil {
+		return r.node.opts.codec.Unmarshal(r.plaintext, v)
+	}
+
 	var msg []byte
 
 	switch m := r.message.(type) {
@@ -97,19 +106,30 @@ func (r *request) Parse(v any) error {
 	}
 
 	if len(msg) == 0 {
-		return nil
+		return errors.ErrInvalidMessage
 	}
 
 	if r.gid != "" && r.node.opts.encryptor != nil {
-		data, err := r.node.opts.encryptor.Decrypt(msg)
-		if err != nil {
+		if err := r.decrypt(msg); err != nil {
 			return err
 		}
 
-		return r.node.opts.codec.Unmarshal(data, v)
+		return r.node.opts.codec.Unmarshal(r.plaintext, v)
 	}
 
 	return r.node.opts.codec.Unmarshal(msg, v)
+}
+
+// decrypt decrypts a message delivered by a gateway and caches the plaintext on the request.
+func (r *request) decrypt(msg []byte) error {
+	data, err := r.node.opts.encryptor.Decrypt(msg)
+	if err != nil {
+		return err
+	}
+
+	r.plaintext = data
+
+	return nil
 }
 
 // Defer adds a deferred call to the defer call chain.
@@ -188,6 +208,10 @@ func (r *request) Clone() Context {
 			c.message = message
 		}
 	}
+
+	// The plaintext may share its backing array with the message of this request, and the message is
+	// released once the request is recycled; copy it to keep the clone independent.
+	c.plaintext = slices.Clone(r.plaintext)
 
 	return c
 }
@@ -563,6 +587,7 @@ func (r *request) release() {
 	r.seq = 0
 	r.route = 0
 	r.message = nil
+	r.plaintext = nil
 	r.cache = nil
 	r.version.Store(0)
 	r.actor.Store(nil)

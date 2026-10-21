@@ -58,11 +58,7 @@ func TestClient_Simple(t *testing.T) {
 
 		buffer := fmt.Appendf([]byte{}, "%s: hello server~~", t.Format(time.DateTime))
 
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: buffer,
-		})
+		msg, err := packet.PackMessage(1, 1, buffer)
 		if err != nil {
 			log.Errorf("pack message failed: %v", err)
 			continue
@@ -176,11 +172,7 @@ func doPressureTest(c int, n int, size int) {
 					return
 				}
 
-				msg, err := packet.PackMessage(&packet.Message{
-					Seq:    1,
-					Route:  1,
-					Buffer: buffer,
-				})
+				msg, err := packet.PackMessage(1, 1, buffer)
 				if err != nil {
 					log.Errorf("pack message failed: %v", err)
 					return

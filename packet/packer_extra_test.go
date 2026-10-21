@@ -15,22 +15,36 @@ import (
 
 // stubPacker records the calls made through the package-level helpers.
 type stubPacker struct {
-	readCalls      int
-	packCalls      int
-	extractCalls   int
-	unpackCalls    int
-	heartbeatCalls int
+	readCalls             int
+	packCalls             int
+	handshakeCalls        int
+	extractHandshakeCalls int
+	extractCalls          int
+	unpackCalls           int
+	heartbeatCalls        int
 }
 
 // Read implements Packer.
-func (p *stubPacker) Read(io.Reader) (bool, int64, buffer.Buffer, error) {
+func (p *stubPacker) Read(io.Reader) (packet.FrameType, int64, buffer.Buffer, error) {
 	p.readCalls++
-	return true, 1, nil, errors.ErrInvalidMessage
+	return packet.FrameData, 1, nil, errors.ErrInvalidMessage
 }
 
 // PackMessage implements Packer.
-func (p *stubPacker) PackMessage(*packet.Message) (buffer.Buffer, error) {
+func (p *stubPacker) PackMessage(int32, int32, []byte) (buffer.Buffer, error) {
 	p.packCalls++
+	return nil, errors.ErrInvalidMessage
+}
+
+// PackHandshake implements Packer.
+func (p *stubPacker) PackHandshake([]byte) (buffer.Buffer, error) {
+	p.handshakeCalls++
+	return nil, errors.ErrInvalidMessage
+}
+
+// ExtractHandshake implements Packer.
+func (p *stubPacker) ExtractHandshake(buffer.Buffer) ([]byte, error) {
+	p.extractHandshakeCalls++
 	return nil, errors.ErrInvalidMessage
 }
 
@@ -89,7 +103,7 @@ func TestExtraGlobalPacker(t *testing.T) {
 		t.Fatalf("GetPacker() = nil, want non-nil")
 	}
 
-	packed, err := packet.PackMessage(&packet.Message{Seq: 1, Route: 1, Buffer: []byte("hello")})
+	packed, err := packet.PackMessage(1, 1, []byte("hello"))
 	if err != nil {
 		t.Fatalf("PackMessage() error = %v", err)
 	}
@@ -103,12 +117,12 @@ func TestExtraGlobalPacker(t *testing.T) {
 		t.Errorf("ExtractRouteSeq() = (%d, %d), want (1, 1)", route, seq)
 	}
 
-	isHeartbeat, heartbeatTime, body, err := packet.Read(bytes.NewReader(packed.Bytes()))
+	frameType, heartbeatTime, body, err := packet.Read(bytes.NewReader(packed.Bytes()))
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
-	if isHeartbeat {
-		t.Errorf("Read() isHeartbeat = true, want false")
+	if frameType != packet.FrameData {
+		t.Errorf("Read() frameType = %v, want data", frameType)
 	}
 	if heartbeatTime != 0 {
 		t.Errorf("Read() heartbeatTime = %d, want 0", heartbeatTime)
@@ -137,14 +151,18 @@ func TestExtraGlobalPacker(t *testing.T) {
 	}
 
 	packet.Read(nil)
-	packet.PackMessage(nil)
+	packet.PackMessage(1, 1, nil)
+	packet.PackHandshake(nil)
+	packet.ExtractHandshake(nil)
 	packet.ExtractRouteSeq(nil)
 	packet.UnpackMessage(nil)
 	packet.PackHeartbeat()
 
-	if stub.readCalls != 1 || stub.packCalls != 1 || stub.extractCalls != 1 || stub.unpackCalls != 1 || stub.heartbeatCalls != 1 {
-		t.Errorf("wrapper calls = (%d, %d, %d, %d, %d), want all 1",
-			stub.readCalls, stub.packCalls, stub.extractCalls, stub.unpackCalls, stub.heartbeatCalls)
+	if stub.readCalls != 1 || stub.packCalls != 1 || stub.handshakeCalls != 1 || stub.extractHandshakeCalls != 1 ||
+		stub.extractCalls != 1 || stub.unpackCalls != 1 || stub.heartbeatCalls != 1 {
+		t.Errorf("wrapper calls = (%d, %d, %d, %d, %d, %d, %d), want all 1",
+			stub.readCalls, stub.packCalls, stub.handshakeCalls, stub.extractHandshakeCalls,
+			stub.extractCalls, stub.unpackCalls, stub.heartbeatCalls)
 	}
 }
 
@@ -162,7 +180,7 @@ func TestExtraPackerRoundTrip(t *testing.T) {
 					packet.WithHeartbeatTime(false),
 				)
 
-				packed, err := p.PackMessage(&packet.Message{Seq: 100, Route: 100, Buffer: []byte("payload")})
+				packed, err := p.PackMessage(100, 100, []byte("payload"))
 				if err != nil {
 					t.Fatalf("PackMessage() error = %v", err)
 				}
@@ -179,12 +197,12 @@ func TestExtraPackerRoundTrip(t *testing.T) {
 					t.Errorf("ExtractRouteSeq() seq = %d, want 100", seq)
 				}
 
-				isHeartbeat, _, body, err := p.Read(bytes.NewReader(packed.Bytes()))
+				frameType, _, body, err := p.Read(bytes.NewReader(packed.Bytes()))
 				if err != nil {
 					t.Fatalf("Read() error = %v", err)
 				}
-				if isHeartbeat {
-					t.Errorf("Read() isHeartbeat = true, want false")
+				if frameType != packet.FrameData {
+					t.Errorf("Read() frameType = %v, want data", frameType)
 				}
 				defer body.Release()
 
@@ -213,12 +231,12 @@ func TestExtraReadHeartbeat(t *testing.T) {
 
 	for _, rf := range readerFactories {
 		t.Run(rf.name, func(t *testing.T) {
-			isHeartbeat, heartbeatTime, body, err := p.Read(rf.make(hb.Bytes()))
+			frameType, heartbeatTime, body, err := p.Read(rf.make(hb.Bytes()))
 			if err != nil {
 				t.Fatalf("Read() error = %v", err)
 			}
-			if !isHeartbeat {
-				t.Errorf("Read() isHeartbeat = false, want true")
+			if frameType != packet.FrameHeartbeat {
+				t.Errorf("Read() frameType = %v, want heartbeat", frameType)
 			}
 			if heartbeatTime != 0 {
 				t.Errorf("Read() heartbeatTime = %d, want 0", heartbeatTime)
@@ -245,12 +263,12 @@ func TestExtraReadHeartbeatWithTime(t *testing.T) {
 
 	for _, rf := range readerFactories {
 		t.Run(rf.name, func(t *testing.T) {
-			isHeartbeat, heartbeatTime, body, err := p.Read(rf.make(hb.Bytes()))
+			frameType, heartbeatTime, body, err := p.Read(rf.make(hb.Bytes()))
 			if err != nil {
 				t.Fatalf("Read() error = %v", err)
 			}
-			if !isHeartbeat {
-				t.Errorf("Read() isHeartbeat = false, want true")
+			if frameType != packet.FrameHeartbeat {
+				t.Errorf("Read() frameType = %v, want heartbeat", frameType)
 			}
 			if heartbeatTime == 0 {
 				t.Errorf("Read() heartbeatTime = 0, want non-zero")
@@ -267,18 +285,18 @@ func TestExtraReadHeartbeatWithTime(t *testing.T) {
 func TestExtraReadBufferedData(t *testing.T) {
 	p := packet.NewPacker()
 
-	packed, err := p.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("body")})
+	packed, err := p.PackMessage(1, 1, []byte("body"))
 	if err != nil {
 		t.Fatalf("PackMessage() error = %v", err)
 	}
 	defer packed.Release()
 
-	isHeartbeat, _, body, err := p.Read(bufio.NewReader(bytes.NewReader(packed.Bytes())))
+	frameType, _, body, err := p.Read(bufio.NewReader(bytes.NewReader(packed.Bytes())))
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
-	if isHeartbeat {
-		t.Errorf("Read() isHeartbeat = true, want false")
+	if frameType != packet.FrameData {
+		t.Errorf("Read() frameType = %v, want data", frameType)
 	}
 	defer body.Release()
 
@@ -330,21 +348,23 @@ func TestExtraReadErrors(t *testing.T) {
 // TestExtraPackMessageErrors verifies the validation branches of PackMessage.
 func TestExtraPackMessageErrors(t *testing.T) {
 	cases := []struct {
-		name string
-		opts []packet.Option
-		msg  *packet.Message
-		want error
+		name  string
+		opts  []packet.Option
+		route int32
+		seq   int32
+		data  []byte
+		want  error
 	}{
-		{"route overflow", []packet.Option{packet.WithRouteBytes(1)}, &packet.Message{Route: 128}, errors.ErrRouteOverflow},
-		{"seq overflow", []packet.Option{packet.WithSeqBytes(1)}, &packet.Message{Route: 1, Seq: 128}, errors.ErrSeqOverflow},
-		{"message too large", []packet.Option{packet.WithBufferBytes(4)}, &packet.Message{Route: 1, Buffer: []byte("12345")}, errors.ErrMessageTooLarge},
+		{"route overflow", []packet.Option{packet.WithRouteBytes(1)}, 128, 0, nil, errors.ErrRouteOverflow},
+		{"seq overflow", []packet.Option{packet.WithSeqBytes(1)}, 1, 128, nil, errors.ErrSeqOverflow},
+		{"message too large", []packet.Option{packet.WithBufferBytes(4)}, 1, 0, []byte("12345"), errors.ErrMessageTooLarge},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := packet.NewPacker(c.opts...)
 
-			buf, err := p.PackMessage(c.msg)
+			buf, err := p.PackMessage(c.route, c.seq, c.data)
 			if buf != nil {
 				buf.Release()
 				t.Errorf("PackMessage() buffer = %v, want nil", buf)
@@ -432,12 +452,12 @@ func TestExtraPackHeartbeat(t *testing.T) {
 				defer hb.Release()
 			}
 
-			isHeartbeat, heartbeatTime, body, err := p.Read(bytes.NewReader(hb.Bytes()))
+			frameType, heartbeatTime, body, err := p.Read(bytes.NewReader(hb.Bytes()))
 			if err != nil {
 				t.Fatalf("Read() error = %v", err)
 			}
-			if !isHeartbeat {
-				t.Errorf("Read() isHeartbeat = false, want true")
+			if frameType != packet.FrameHeartbeat {
+				t.Errorf("Read() frameType = %v, want heartbeat", frameType)
 			}
 			if got := heartbeatTime != 0; got != c.wantHeartbeatTime {
 				t.Errorf("Read() heartbeatTime = %d, want non-zero = %v", heartbeatTime, c.wantHeartbeatTime)

@@ -19,6 +19,12 @@ type (
 	//
 	// The user layer controls when buf is released to avoid a memory leak.
 	ReceiveHandler func(conn Conn, buf buffer.Buffer)
+	// HandshakeHandler is the handler invoked when a handshake frame is received.
+	//
+	// Handshake frames are marked by a reserved bit of the packet header instead of a route, and
+	// they are dispatched before the receive handler. The user layer controls when buf is
+	// released to avoid a memory leak.
+	HandshakeHandler func(conn Conn, buf buffer.Buffer)
 )
 
 // Server is the server interface.
@@ -41,6 +47,8 @@ type Server interface {
 	OnHeartbeat(handler HeartbeatHandler)
 	// OnReceive registers the handler invoked when a message is received.
 	OnReceive(handler ReceiveHandler)
+	// OnHandshake registers the handler invoked when a handshake frame is received.
+	OnHandshake(handler HandshakeHandler)
 	// OnDisconnect registers the handler invoked when a connection is closed.
 	OnDisconnect(handler DisconnectHandler)
 }

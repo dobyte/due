@@ -70,6 +70,7 @@ type gateServer struct {
 	connect     network.ConnectHandler
 	disconnect  network.DisconnectHandler
 	receive     network.ReceiveHandler
+	handshake   network.HandshakeHandler
 	onStart     network.StartHandler
 	onStop      network.CloseHandler
 	onHeartbeat network.HeartbeatHandler
@@ -87,6 +88,7 @@ func (s *gateServer) OnStop(handler network.CloseHandler)          { s.onStop = 
 func (s *gateServer) OnConnect(handler network.ConnectHandler)     { s.connect = handler }
 func (s *gateServer) OnHeartbeat(handler network.HeartbeatHandler) { s.onHeartbeat = handler }
 func (s *gateServer) OnReceive(handler network.ReceiveHandler)     { s.receive = handler }
+func (s *gateServer) OnHandshake(handler network.HandshakeHandler) { s.handshake = handler }
 func (s *gateServer) OnDisconnect(handler network.DisconnectHandler) {
 	s.disconnect = handler
 }
@@ -362,15 +364,6 @@ func TestGateOptions(t *testing.T) {
 			check: func(t *testing.T, o *options) {
 				if o.ctx == nil {
 					t.Fatal("ctx must be set")
-				}
-			},
-		},
-		{
-			name:  "WithContext nil",
-			apply: func(o *options) { WithContext(nil)(o) },
-			check: func(t *testing.T, o *options) {
-				if o.ctx == nil {
-					t.Fatal("nil ctx must be ignored")
 				}
 			},
 		},
@@ -764,7 +757,7 @@ func TestGateHandleReceive(t *testing.T) {
 	f.gate.handleReceive(conn, buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	// A well-formed message without any route must be handled gracefully.
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("payload")})
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
@@ -1143,7 +1136,7 @@ func TestGateProxyTriggerAndDeliver(t *testing.T) {
 	f.gate.proxy.deliver(ctx, newGateConn(1, 1), buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	// A well-formed message without a route is dropped.
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Seq: 1, Buffer: []byte("payload")})
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}

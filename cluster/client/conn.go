@@ -2,9 +2,15 @@ package client
 
 import (
 	"net"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/core/value"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -14,8 +20,15 @@ import (
 // It exposes message pushing, attribute management and basic information querying on top of the
 // underlying network connection.
 type Conn struct {
-	conn   network.Conn // underlying network connection
-	client *Client      // owning client
+	conn        network.Conn                      // underlying network connection
+	client      *Client                           // owning client
+	security    atomic.Pointer[handshake.Session] // session security state
+	handshakeCh chan []byte                       // received handshake frames
+	closedCh    chan struct{}                     // closed when the underlying connection disconnects
+	pushMu      sync.Mutex                        // preserves secure counter and network queue order
+	lifecycleMu sync.Mutex                        // guards closed and connected
+	closed      bool                              // underlying connection has disconnected
+	connected   bool                              // Connect event has completed
 }
 
 // ID returns the connection ID.
@@ -77,35 +90,78 @@ func (c *Conn) RemoteAddr() (net.Addr, error) {
 	return c.conn.RemoteAddr()
 }
 
-// Push pushes message to the server after encoding and encrypting its data.
+// Push pushes message to the server after encoding and protecting its data.
+//
+// When session security is enabled, the payload is sealed with the negotiated session key and the
+// route and the sequence number are bound by the additional authenticated data.
 func (c *Conn) Push(message *cluster.Message) error {
 	var (
-		err    error
-		buffer []byte
+		err  error
+		data []byte
 	)
 
 	if message.Data != nil {
 		if v, ok := message.Data.([]byte); ok {
-			buffer = v
+			data = v
 		} else {
-			if buffer, err = c.client.opts.codec.Marshal(message.Data); err != nil {
-				return err
-			}
-		}
-
-		if c.client.opts.encryptor != nil {
-			if buffer, err = c.client.opts.encryptor.Encrypt(buffer); err != nil {
+			if data, err = c.client.opts.codec.Marshal(message.Data); err != nil {
 				return err
 			}
 		}
 	}
 
-	buf, err := packet.PackMessage(&packet.Message{
-		Seq:    message.Seq,
-		Route:  message.Route,
-		Buffer: buffer,
-	})
+	if c.client.opts.security != nil {
+		c.pushMu.Lock()
+		err = c.pushSecure(message.Route, message.Seq, data)
+		c.pushMu.Unlock()
+
+		return err
+	}
+
+	if len(data) != 0 && c.client.opts.encryptor != nil {
+		if data, err = c.client.opts.encryptor.Encrypt(data); err != nil {
+			return err
+		}
+	}
+
+	buf, err := packet.PackMessage(message.Route, message.Seq, data)
 	if err != nil {
+		return err
+	}
+
+	if err = c.conn.Push(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
+}
+
+// pushSecure seals and queues one message while the caller holds pushMu.
+func (c *Conn) pushSecure(route, seq int32, data []byte) error {
+	session := c.security.Load()
+	if session == nil {
+		return errors.New("session security is not established")
+	}
+
+	output := buffer.MallocBytesWithHeadroom(
+		packet.MessageBufferHeadroom(),
+		len(data)+session.Overhead(),
+	)
+	if output == nil {
+		output = buffer.MallocBytes(len(data) + session.Overhead())
+		if output == nil {
+			return errors.ErrMessageTooLarge
+		}
+	}
+	if _, err := session.SealMessage(output.Bytes()[:0], data, handshake.ClientToServer, route, seq); err != nil {
+		output.Release()
+		return err
+	}
+
+	buf, err := packet.PackMessageBuffer(route, seq, output)
+	if err != nil {
+		output.Release()
 		return err
 	}
 
@@ -120,4 +176,117 @@ func (c *Conn) Push(message *cluster.Message) error {
 // Close closes the connection.
 func (c *Conn) Close() error {
 	return c.conn.Close()
+}
+
+// handshake performs the client side handshake on the connection.
+func (c *Conn) handshake() error {
+	opts := c.client.opts.security
+
+	client := handshake.NewClient(opts.signer, opts.suites...)
+
+	hello, err := client.Hello()
+	if err != nil {
+		return err
+	}
+
+	if err = c.pushHandshake(hello); err != nil {
+		return err
+	}
+
+	timer := time.NewTimer(defaultHandshakeTimeout)
+	defer timer.Stop()
+
+	select {
+	case frame := <-c.handshakeCh:
+		session, reply, err := client.Handle(frame)
+		if err != nil {
+			return err
+		}
+
+		// Publish the session before the Finished frame is sent: the gate may push a downlink
+		// immediately after confirming, and handleReceive would drop it while the session is
+		// still invisible.
+		c.security.Store(session)
+
+		if err = c.pushHandshake(reply); err != nil {
+			return err
+		}
+		if c.isClosed() {
+			return errors.ErrConnectionClosed
+		}
+
+		return nil
+	case <-timer.C:
+		return errors.ErrDeadlineExceeded
+	case <-c.closedCh:
+		return errors.ErrConnectionClosed
+	case <-c.client.ctx.Done():
+		return c.client.ctx.Err()
+	}
+}
+
+// signalClosed wakes operations waiting on this connection and reports whether its Connect event
+// has completed.
+func (c *Conn) signalClosed() bool {
+	c.lifecycleMu.Lock()
+	if !c.closed {
+		c.closed = true
+		if c.closedCh != nil {
+			close(c.closedCh)
+		}
+	}
+	connected := c.connected
+	c.lifecycleMu.Unlock()
+
+	return connected
+}
+
+// markConnected records that the Connect event has completed. It reports false when the
+// connection closed before that point.
+func (c *Conn) markConnected() bool {
+	c.lifecycleMu.Lock()
+	if c.closed {
+		c.lifecycleMu.Unlock()
+		return false
+	}
+	c.connected = true
+	c.lifecycleMu.Unlock()
+
+	return true
+}
+
+// isClosed reports whether the underlying connection has disconnected.
+func (c *Conn) isClosed() bool {
+	c.lifecycleMu.Lock()
+	closed := c.closed
+	c.lifecycleMu.Unlock()
+
+	return closed
+}
+
+// pushHandshake pushes a plaintext handshake frame to the server.
+func (c *Conn) pushHandshake(frame []byte) error {
+	buf, err := packet.PackHandshake(frame)
+	if err != nil {
+		return err
+	}
+
+	if err = c.conn.Push(buf); err != nil {
+		buf.Release()
+		return err
+	}
+
+	return nil
+}
+
+// deliverHandshake hands a received handshake frame to the pending handshake.
+func (c *Conn) deliverHandshake(frame []byte) {
+	if c.handshakeCh == nil {
+		return
+	}
+
+	select {
+	case c.handshakeCh <- append([]byte(nil), frame...):
+	default:
+	}
 }

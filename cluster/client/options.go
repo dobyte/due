@@ -2,7 +2,11 @@ package client
 
 import (
 	"context"
+	"slices"
 
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
 	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/etc"
@@ -33,6 +37,7 @@ type options struct {
 	codec     encoding.Codec   // codec
 	client    network.Client   // network client
 	encryptor crypto.Encryptor // message encryptor
+	security  *securityOptions // session security options
 }
 
 // defaultOptions returns the default options. Options are read from the configuration center,
@@ -125,6 +130,29 @@ func WithEncryptor(encryptor crypto.Encryptor) Option {
 		} else {
 			log.Warnf("the specified encryptor is nil and will be automatically ignored")
 		}
+	}
+}
+
+// WithSessionSecurity enables the session security between the client and the gate.
+//
+// verifier verifies the signature of the gate, and it is usually built from the pinned gate public
+// key. When no suite is given, the handshake defaults are used. When enabled, the payload is sealed
+// with the negotiated session key, so the static encryptor is not applied.
+func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
+	suites = slices.Clone(suites)
+
+	return func(o *options) {
+		if signer == nil {
+			log.Warnf("the specified signer is nil and will be automatically ignored")
+			return
+		}
+
+		configured := suites
+		if len(configured) == 0 {
+			configured = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
+		}
+
+		o.security = &securityOptions{signer: signer, suites: slices.Clone(configured)}
 	}
 }
 

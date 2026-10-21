@@ -14,6 +14,8 @@ type Client interface {
 	OnHeartbeat(handler HeartbeatHandler)
 	// OnReceive registers the handler invoked when a message is received.
 	OnReceive(handler ReceiveHandler)
+	// OnHandshake registers the handler invoked when a handshake frame is received.
+	OnHandshake(handler HandshakeHandler)
 	// OnDisconnect registers the handler invoked when a connection is closed.
 	OnDisconnect(handler DisconnectHandler)
 }

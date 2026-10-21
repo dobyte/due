@@ -83,6 +83,12 @@ func New(config ...Config) http.Handler {
 			return da.badRequest(ctx)
 		}
 
+		// The digest-uri is part of the signed request. It must match the actual request target;
+		// otherwise a valid authorization header for one resource can be replayed against another.
+		if uri != ctx.OriginalURL() {
+			return da.badRequest(ctx)
+		}
+
 		// Validate realm
 		if realm != da.config.Realm {
 			return da.unauthorized(ctx)
@@ -223,12 +229,14 @@ type digestAuth struct {
 	nonceOrder  []string  // Records the nonce creation order, used to evict the oldest entries when the capacity is exceeded
 	lastCleanup time.Time // Time of the last expired-nonce cleanup
 	config      Config
+	readRandom  func([]byte) (int, error)
 }
 
 func newDigestAuth(config ...Config) *digestAuth {
 	return &digestAuth{
-		nonces: make(map[string]*nonceEntry),
-		config: configDefault(config...),
+		nonces:     make(map[string]*nonceEntry),
+		config:     configDefault(config...),
+		readRandom: rand.Read,
 	}
 }
 
@@ -238,17 +246,20 @@ func newDigestAuth(config ...Config) *digestAuth {
 func (da *digestAuth) unauthorized(ctx http.Context) error {
 	if da.config.Unauthorized != nil {
 		return da.config.Unauthorized(ctx)
-	} else {
-		nonce := da.generateNonce()
-
-		ctx.Set("WWW-Authenticate",
-			fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=MD5, qop="auth"`, da.config.Realm, nonce))
-
-		return ctx.Status(fiber.StatusUnauthorized).JSON(&http.Resp{
-			Code:    codes.Unauthorized.Code(),
-			Message: codes.Unauthorized.Message(),
-		})
 	}
+
+	nonce, err := da.generateNonce()
+	if err != nil {
+		return err
+	}
+
+	ctx.Set("WWW-Authenticate",
+		fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=MD5, qop="auth"`, da.config.Realm, nonce))
+
+	return ctx.Status(fiber.StatusUnauthorized).JSON(&http.Resp{
+		Code:    codes.Unauthorized.Code(),
+		Message: codes.Unauthorized.Message(),
+	})
 }
 
 // badRequest writes a bad request response.
@@ -267,9 +278,11 @@ func (da *digestAuth) badRequest(ctx http.Context) error {
 //
 // It cleans up expired entries on demand and evicts the oldest nonces when the capacity is
 // exceeded.
-func (s *digestAuth) generateNonce() string {
+func (s *digestAuth) generateNonce() (string, error) {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := s.readRandom(b); err != nil {
+		return "", err
+	}
 	nonce := base64.RawStdEncoding.EncodeToString(b)
 
 	s.mu.Lock()
@@ -307,7 +320,7 @@ func (s *digestAuth) generateNonce() string {
 	s.nonceOrder = append(s.nonceOrder, nonce)
 	s.mu.Unlock()
 
-	return nonce
+	return nonce, nil
 }
 
 // validateNonce reports whether nonce exists and has not expired.

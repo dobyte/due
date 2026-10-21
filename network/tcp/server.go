@@ -23,6 +23,7 @@ type server struct {
 	disconnectHandler network.DisconnectHandler // Handler invoked when a connection is closed
 	heartbeatHandler  network.HeartbeatHandler  // Handler invoked when a heartbeat is received
 	receiveHandler    network.ReceiveHandler    // Handler invoked when a message is received
+	handshakeHandler  network.HandshakeHandler  // Handler invoked when a handshake frame is received
 }
 
 var _ network.Server = &server{}
@@ -158,6 +159,13 @@ func (s *server) OnHeartbeat(handler network.HeartbeatHandler) {
 // It must be registered before Start; registering it after Start causes a data race.
 func (s *server) OnReceive(handler network.ReceiveHandler) {
 	s.receiveHandler = handler
+}
+
+// OnHandshake registers the handler invoked when a handshake frame is received.
+//
+// It must be registered before Start; registering it after Start causes a data race.
+func (s *server) OnHandshake(handler network.HandshakeHandler) {
+	s.handshakeHandler = handler
 }
 
 // init initializes the TCP server.

@@ -145,11 +145,15 @@ func (k *Key) savePrivateKey(format Format, dir string, file string) (err error)
 		}
 	}()
 
-	f, err := os.Create(filepath)
+	f, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+
+	if err = f.Chmod(0o600); err != nil {
+		return
+	}
 
 	return k.marshalPrivateKey(format, f)
 }

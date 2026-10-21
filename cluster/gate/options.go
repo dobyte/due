@@ -3,9 +3,14 @@ package gate
 import (
 	"context"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/security/aead"
+	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
+	"github.com/dobyte/due/v2/core/security/aead/chacha20poly1305"
+	"github.com/dobyte/due/v2/crypto"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
@@ -16,16 +21,17 @@ import (
 )
 
 const (
-	defaultName                      = "gate"         // default name
-	defaultDispatch                  = cluster.Random // default dispatch strategy of stateless route messages
-	defaultAddr                      = ":0"           // connector listen address
-	defaultLinkerConnNum             = 5              // default number of connections
-	defaultLinkerCallTimeout         = "3s"           // default call timeout
-	defaultLinkerDialTimeout         = "3s"           // default dial timeout
-	defaultLinkerDialRetryTimes      = 3              // default number of dial retries
-	defaultLinkerFaultRecoveryTime   = "5s"           // default fault recovery time
-	defaultLinkerCommandQueueSize    = 4096           // default message queue size
-	defaultLinkerCommandWriteTimeout = "0s"           // default write timeout
+	defaultName                      = "gate"          // default name
+	defaultDispatch                  = cluster.Random  // default dispatch strategy of stateless route messages
+	defaultAddr                      = ":0"            // connector listen address
+	defaultLinkerConnNum             = 5               // default number of connections
+	defaultLinkerCallTimeout         = "3s"            // default call timeout
+	defaultLinkerDialTimeout         = "3s"            // default dial timeout
+	defaultLinkerDialRetryTimes      = 3               // default number of dial retries
+	defaultLinkerFaultRecoveryTime   = "5s"            // default fault recovery time
+	defaultLinkerCommandQueueSize    = 4096            // default message queue size
+	defaultLinkerCommandWriteTimeout = "0s"            // default write timeout
+	defaultSecurityHandshakeTimeout  = 5 * time.Second // default session security handshake timeout
 )
 
 const (
@@ -60,17 +66,19 @@ type linkerOptions struct {
 
 // options are the gate options.
 type options struct {
-	ctx      context.Context   // context
-	id       string            // instance ID
-	name     string            // instance name
-	server   network.Server    // gate server
-	locator  locate.Locator    // user locator
-	registry registry.Registry // service registry
-	dispatch cluster.Dispatch  // dispatch strategy of stateless route messages
-	metadata map[string]string // metadata
-	addr     string            // internal RPC listen address
-	expose   bool              // whether the internal RPC address is exposed to the public network
-	linker   *linkerOptions    // linker options
+	ctx                      context.Context   // context
+	id                       string            // instance ID
+	name                     string            // instance name
+	server                   network.Server    // gate server
+	locator                  locate.Locator    // user locator
+	registry                 registry.Registry // service registry
+	dispatch                 cluster.Dispatch  // dispatch strategy of stateless route messages
+	metadata                 map[string]string // metadata
+	addr                     string            // internal RPC listen address
+	expose                   bool              // whether the internal RPC address is exposed to the public network
+	linker                   *linkerOptions    // linker options
+	security                 *securityOptions  // session security options
+	securityHandshakeTimeout time.Duration     // session security handshake timeout
 }
 
 // defaultOptions returns the default options.
@@ -82,6 +90,7 @@ func defaultOptions() *options {
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
 	opts.metadata = make(map[string]string)
+	opts.securityHandshakeTimeout = defaultSecurityHandshakeTimeout
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -247,6 +256,42 @@ func WithAddr(addr string) Option {
 // WithExpose sets whether the internal communication address is exposed to the public network.
 func WithExpose(expose bool) Option {
 	return func(o *options) { o.expose = expose }
+}
+
+// WithSessionSecurity enables the session security between the client and the gate.
+//
+// signer signs the ServerHello so that the client can verify the gate with the pinned public key.
+// When no suite is given, the handshake defaults are used. When enabled, the payload of client
+// messages is decrypted by the gate and re-encrypted for the downlink, so the node-side static
+// encryptor must stay unconfigured.
+func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
+	suites = slices.Clone(suites)
+
+	return func(o *options) {
+		if signer == nil {
+			log.Warnf("the specified signer is nil and will be automatically ignored")
+			return
+		}
+
+		configured := suites
+		if len(configured) == 0 {
+			configured = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
+		}
+
+		o.security = &securityOptions{signer: signer, suites: slices.Clone(configured)}
+	}
+}
+
+// WithSessionSecurityHandshakeTimeout sets how long the gate waits for a client to complete the
+// session security handshake. A zero duration disables the timeout.
+func WithSessionSecurityHandshakeTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		if timeout >= 0 {
+			o.securityHandshakeTimeout = timeout
+		} else {
+			log.Warnf("the specified session security handshake timeout is less than zero and will be ignored")
+		}
+	}
 }
 
 // WithLinkerConnNum sets the number of connections.

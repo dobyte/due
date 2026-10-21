@@ -32,6 +32,7 @@ type Gate struct {
 	instance *registry.ServiceInstance
 	session  *session.Session
 	linker   *gate.Server
+	security *securityManager
 	wg       *sync.WaitGroup
 }
 
@@ -49,6 +50,10 @@ func NewGate(opts ...Option) *Gate {
 	g.session = session.NewSession()
 	g.state.Store(int32(cluster.Shut))
 	g.wg = &sync.WaitGroup{}
+
+	if o.security != nil {
+		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
+	}
 
 	return g
 }
@@ -143,6 +148,10 @@ func (g *Gate) startNetworkServer() {
 	g.opts.server.OnDisconnect(g.handleDisconnect)
 	g.opts.server.OnReceive(g.handleReceive)
 
+	if g.security != nil {
+		g.opts.server.OnHandshake(g.security.receiveHandshake)
+	}
+
 	if err := g.opts.server.Start(); err != nil {
 		log.Fatalf("network server start failed: %v", err)
 	}
@@ -162,8 +171,13 @@ func (g *Gate) stopNetworkServer() {
 func (g *Gate) handleConnect(conn network.Conn) {
 	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
-		g.session.AddConn(conn)
-		g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
+
+		if g.security != nil {
+			g.session.AddConn(g.security.wrap(conn))
+		} else {
+			g.session.AddConn(conn)
+			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
+		}
 	} else {
 		if err := conn.Close(); err != nil {
 			log.Warnf("close conn failed: %v", err)
@@ -181,6 +195,11 @@ func (g *Gate) handleConnect(conn network.Conn) {
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	cid := conn.ID()
 
+	if g.security != nil {
+		conn = g.security.unwrap(conn)
+		g.security.remove(cid)
+	}
+
 	if g.session.RemConn(conn) {
 		uid := conn.UID()
 
@@ -194,11 +213,16 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 		g.wg.Done()
 	}
+
 }
 
 // handleReceive handles a received message and delivers the client message to the matching
 // business node.
 func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
+	if g.security != nil && g.security.decrypt(conn, buf) {
+		return
+	}
+
 	g.proxy.deliver(g.ctx, conn, buf)
 }
 
@@ -330,6 +354,12 @@ func (g *Gate) printInfo() {
 	rows = append(rows, fmt.Sprintf("Server: [%s] %s", g.opts.server.Protocol(), net.FulfillAddr(g.opts.server.Addr())))
 	rows = append(rows, fmt.Sprintf("Locator: %s", g.opts.locator.Name()))
 	rows = append(rows, fmt.Sprintf("Registry: %s", g.opts.registry.Name()))
+
+	if g.security != nil {
+		rows = append(rows, "Security: enabled")
+	} else {
+		rows = append(rows, "Security: disabled")
+	}
 
 	info.Print("Gate", rows...)
 }

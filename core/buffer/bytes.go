@@ -10,6 +10,7 @@ type Bytes struct {
 	buf      []byte
 	lower    int
 	upper    int
+	headroom int
 	static   bool
 	delay    atomic.Int32
 	pool     *sync.Pool
@@ -44,6 +45,19 @@ func (b *Bytes) Available() int {
 	return b.Cap() - b.upper
 }
 
+// Prepend exposes size bytes of reserved headroom and returns that prefix. It returns nil when the
+// buffer is shared, its view has moved, or it does not have enough headroom.
+func (b *Bytes) Prepend(size int) []byte {
+	if size < 0 || size > b.headroom || b.lower != b.headroom || b.delay.Load() > 1 {
+		return nil
+	}
+
+	b.lower -= size
+	b.headroom -= size
+
+	return b.buf[b.lower : b.lower+size]
+}
+
 // Slide slides the lower index.
 func (b *Bytes) Slide(delta int) bool {
 	if delta >= 0 && delta+b.lower <= b.upper {
@@ -52,6 +66,15 @@ func (b *Bytes) Slide(delta int) bool {
 	}
 
 	return false
+}
+
+// Truncate keeps the first size unread bytes. It returns false when size is out of range.
+func (b *Bytes) Truncate(size int) bool {
+	if size < 0 || size > b.Len() {
+		return false
+	}
+	b.upper = b.lower + size
+	return true
 }
 
 // Nodes returns the number of nodes.
@@ -90,6 +113,7 @@ func (b *Bytes) Release() {
 
 	b.lower = 0
 	b.upper = 0
+	b.headroom = 0
 	b.delay.Store(0)
 
 	if b.pool != nil {

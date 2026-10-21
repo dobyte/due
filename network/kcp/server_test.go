@@ -42,11 +42,7 @@ func TestServer_Simple(t *testing.T) {
 
 		log.Infof("receive message from client, cid: %d, seq: %d, route: %d, msg: %s", conn.ID(), seq, route, string(data.Bytes()))
 
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    1,
-			Route:  1,
-			Buffer: []byte("I'm fine~~"),
-		})
+		msg, err := packet.PackMessage(1, 1, []byte("I'm fine~~"))
 		if err != nil {
 			log.Errorf("pack message failed: %v", err)
 			return
@@ -82,11 +78,7 @@ func TestServer_Benchmark(t *testing.T) {
 			return
 		}
 
-		msg, err := packet.PackMessage(&packet.Message{
-			Seq:    seq,
-			Route:  route,
-			Buffer: data.Bytes(),
-		})
+		msg, err := packet.PackMessage(route, seq, data.Bytes())
 		if err != nil {
 			log.Errorf("pack message failed: %v", err)
 			return

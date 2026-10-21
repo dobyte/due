@@ -95,6 +95,60 @@ func Test_Sign_Verify(t *testing.T) {
 	}
 }
 
+func Test_Verify_WithPublicKeyOnly(t *testing.T) {
+	key, err := rsa.GenerateKey(2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pub, err := key.MarshalPublicKey(rsa.PKCS8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prv, err := key.MarshalPrivateKey(rsa.PKCS8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	localSigner := rsa.NewSigner(
+		rsa.WithSignerHash(hash.SHA256),
+		rsa.WithSignerPadding(rsa.PKCS),
+		rsa.WithSignerPublicKey(string(pub)),
+		rsa.WithSignerPrivateKey(string(prv)),
+	)
+	verifier := rsa.NewSigner(
+		rsa.WithSignerHash(hash.SHA256),
+		rsa.WithSignerPadding(rsa.PKCS),
+		rsa.WithSignerPublicKey(string(pub)),
+	)
+
+	bytes := []byte(xrand.Letters(1024))
+
+	signature, err := localSigner.Sign(bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := verifier.Verify(bytes, signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ok {
+		t.Fatal("signature verification failed")
+	}
+
+	ok, err = verifier.Verify([]byte("tampered"), signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ok {
+		t.Fatal("tampered data must not be verified")
+	}
+}
+
 func Benchmark_Sign(b *testing.B) {
 	bytes := []byte(xrand.Letters(20000))
 

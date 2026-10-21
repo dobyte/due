@@ -112,7 +112,7 @@ func waitClosed(t testing.TB, c network.Conn) {
 
 func message(t testing.TB, data []byte) buffer.Buffer {
 	t.Helper()
-	buf, err := packet.PackMessage(&packet.Message{Route: 1, Buffer: data})
+	buf, err := packet.PackMessage(1, 0, data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func BenchmarkQUICEcho(b *testing.B) {
 	b.SetBytes(1024)
 	b.ResetTimer()
 	for b.Loop() {
-		buf, err := packet.PackMessage(&packet.Message{Route: 1, Buffer: data})
+		buf, err := packet.PackMessage(1, 0, data)
 		if err != nil {
 			b.Fatal(err)
 		}

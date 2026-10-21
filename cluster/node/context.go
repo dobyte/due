@@ -33,7 +33,7 @@ type Context interface {
 	//
 	// By default it deserializes into the target value; when an encryptor is present and the
 	// message comes from a gateway, it decrypts the message before deserializing. It reports an
-	// error when decryption or deserialization fails.
+	// error when the payload is empty, or when decryption or deserialization fails.
 	Parse(v any) error
 	// Defer adds a deferred call to the call stack.
 	//

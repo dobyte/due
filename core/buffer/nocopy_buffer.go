@@ -190,6 +190,56 @@ func (b *NocopyBuffer) Bytes() []byte {
 	}
 }
 
+// Slice returns bytes in [lower, upper) without modifying the buffer. A range contained in one
+// block aliases that block; a range spanning blocks is copied. Invalid ranges return nil.
+func (b *NocopyBuffer) Slice(lower, upper int) []byte {
+	if b == nil || lower < 0 || upper < lower || upper > b.Len() || lower == upper {
+		return nil
+	}
+
+	var data []byte
+	for node := b.head; node != nil; {
+		var size int
+		switch n := node.(type) {
+		case *NocopyNode:
+			size = n.Len()
+		case *NocopyBuffer:
+			size = n.Len()
+		default:
+			return nil
+		}
+
+		if lower < size {
+			var part []byte
+			switch n := node.(type) {
+			case *NocopyNode:
+				part = n.Bytes()[lower:min(upper, size)]
+			case *NocopyBuffer:
+				part = n.Slice(lower, min(upper, size))
+			}
+			if data == nil {
+				if upper <= size {
+					return part
+				}
+				data = make([]byte, 0, upper-lower)
+			}
+			data = append(data, part...)
+		}
+		if upper <= size {
+			return data
+		}
+		lower = max(0, lower-size)
+		upper -= size
+		switch n := node.(type) {
+		case *NocopyNode:
+			node = n.next
+		case *NocopyBuffer:
+			node = n.next
+		}
+	}
+	return data
+}
+
 // VisitBytes iterates over all bytes.
 func (b *NocopyBuffer) VisitBytes(fn func(bytes []byte) bool) bool {
 	for node := b.head; node != nil; {

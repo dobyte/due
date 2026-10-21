@@ -445,7 +445,7 @@ func (c *serverConn) read(stream *quic.Stream) {
 	)
 
 	for {
-		isHeartbeat, heartbeatTime, buf, err := packet.Read(stream)
+		frameType, heartbeatTime, buf, err := packet.Read(stream)
 		if err != nil {
 			taskpool.Add(func() { c.recycleClose(stream, id) })
 			return
@@ -453,18 +453,18 @@ func (c *serverConn) read(stream *quic.Stream) {
 
 		switch c.State() {
 		case network.ConnClosed:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 			}
 			return
 		case network.ConnHanged:
-			if !isHeartbeat {
+			if frameType != packet.FrameHeartbeat {
 				buf.Release()
 				return
 			}
 		}
 
-		if isHeartbeat {
+		if frameType == packet.FrameHeartbeat {
 			if c.connMgr.server.opts.heartbeatInterval > 0 {
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 			}
@@ -497,7 +497,9 @@ func (c *serverConn) read(stream *quic.Stream) {
 				continue
 			}
 
-			if c.connMgr.server.receiveHandler != nil {
+			if frameType == packet.FrameHandshake && c.connMgr.server.handshakeHandler != nil {
+				c.connMgr.server.handshakeHandler(c, buf)
+			} else if c.connMgr.server.receiveHandler != nil {
 				c.connMgr.server.receiveHandler(c, buf)
 			} else {
 				buf.Release()

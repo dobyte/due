@@ -23,7 +23,7 @@ English | [简体中文](README-ZH.md)
 [due](https://dobyte.github.io/) is an out-of-the-box, lightweight and high-performance distributed game server framework developed in Go, built on a complete native cluster solution that easily delivers 430K TPS on a single thread — battle-proven in multiple enterprise-level game projects, with stability fully guaranteed.
 Its module design draws on the modular design philosophy of [kratos](https://github.com/go-kratos/kratos), aiming to provide a complete, efficient, elegant, and standardized solution for game server development.
 
-![Architecture](architecture.jpg)
+![Architecture](assets/architecture.jpg)
 
 ### 2. Advantages
 
@@ -789,311 +789,65 @@ INFO[2024/07/03 14:53:13.995049] main.go:72 [I'm server, and the current time is
 
 ### 13. Stress Test
 
-1. Test machine
+1. Test scenario
 
-```text
-CentOS Linux release 7.9.2009 (Core) Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz 16GB
-```
+The load generator calls the TCP entry of Skynet, Pitaya, KBEngine and Due. Each framework serves the request through a gateway process and a business process, and the business operation echoes the payload unchanged. The measurement covers network I/O, protocol handling, routing and inter-process dispatch, without database work or artificial delays.
 
-2. Test results
+2. Test setup
 
-```shell
-[root@localhost client]# go run main.go
-                    ____  __  ________
-                   / __ \/ / / / ____/
-                  / / / / / / / __/
-                 / /_/ / /_/ / /___
-                /_____/\____/_____/
-┌──────────────────────────────────────────────────────┐
-| [Website] https://github.com/dobyte/due              |
-| [Version] v2.6.2                                     |
-└──────────────────────────────────────────────────────┘
-┌────────────────────────Global────────────────────────┐
-| Go: v1.27.1                                          |
-| PID: 8633                                            |
-| Mode: debug                                          |
-| Time: 2026-09-29 15:54:21.971024326 +0800 CST        |
-└──────────────────────────────────────────────────────┘
-┌────────────────────────Client────────────────────────┐
-| Name: client                                         |
-| Codec: json                                          |
-| Protocol: tcp                                        |
-| Encryptor: -                                         |
-└──────────────────────────────────────────────────────┘
+| Item | Configuration |
+|---|---|
+| Payload | 64 B, 1 KB and 4 KB |
+| Connections | 32, 128 and 512 persistent TCP connections |
+| Request model | Closed loop, at most one outstanding request per connection |
+| Warm-up | 10,000 requests per case, excluded from the measurement |
+| Measured requests | 100,000 per case |
+| Rounds | 3 per combination |
+| Matrix | 4 frameworks × 3 payloads × 3 connection counts × 3 rounds = 108 cases |
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 50    ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.291s
--------------------------- Throughput --------------------------
-  TPS:                 436,539 req/s
-  Bandwidth:           852.62 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 1.498
-  Max:                 1396.541
-  Avg:                 650.975
-  StdDev:              305.887
-  P50:                 627.583
-  P75:                 884.668
-  P90:                 1082.049
-  P95:                 1154.118
-  P99:                 1264.693
-  P999:                1366.872
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         50
-  Conn Avg (ms):       0.046
-  Conn Max (ms):       0.173
-  Conn Min (ms):       0.032
-============================= END ==============================
+3. Test environment
 
+| Item | Configuration |
+|---|---|
+| CPU | Intel Core i5-10400F @ 2.90GHz, 6 physical cores / 12 logical threads |
+| Memory | 32 GB |
+| OS | CentOS 7, Linux 3.10, x86_64 |
+| Go | 1.27.1 |
+| Deployment | Single machine loopback, frameworks run one after another |
+| Frameworks | Skynet `64391f732e76`, Pitaya `f3d0af570f76`, KBEngine `7d379b9f943d`, Due snapshot based on `8f44429a84ce` |
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 100   ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.283s
--------------------------- Throughput --------------------------
-  TPS:                 437,939 req/s
-  Bandwidth:           855.35 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 5.969
-  Max:                 1770.038
-  Avg:                 811.930
-  StdDev:              351.658
-  P50:                 763.519
-  P75:                 1102.115
-  P90:                 1300.236
-  P95:                 1371.283
-  P99:                 1585.904
-  P999:                1759.603
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         100
-  Conn Avg (ms):       0.090
-  Conn Max (ms):       4.691
-  Conn Min (ms):       0.031
-============================= END ==============================
+Go processes run with `GOMAXPROCS=2` and the two Skynet processes with `thread=2`. CPU affinity is bound per role: gateway on logical CPUs `0,6`, business on `1,7`, load generator on `2,3,8,9`, infrastructure on `4,10`. Affinity limits the range of the test processes, it does not reserve the whole machine.
 
+4. Test results (1 KB payload, 128 connections)
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 200   ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.339s
--------------------------- Throughput --------------------------
-  TPS:                 427,598 req/s
-  Bandwidth:           835.15 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 9.657
-  Max:                 1981.886
-  Avg:                 886.721
-  StdDev:              301.629
-  P50:                 855.687
-  P75:                 1071.851
-  P90:                 1324.838
-  P95:                 1426.373
-  P99:                 1572.181
-  P999:                1705.806
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         200
-  Conn Avg (ms):       0.063
-  Conn Max (ms):       5.115
-  Conn Min (ms):       0.030
-============================= END ==============================
+All values are medians of three rounds; the range in parentheses is the minimum and maximum QPS.
 
+| Framework | QPS (min-max) | P99 (ms) | P99.9 (ms) | Server CPU (%) | Server RSS (MiB) |
+|---|---:|---:|---:|---:|---:|
+| Skynet | 21,410 (21,133-21,642) | 8.330 | 19.655 | 184.1 | 152.0 |
+| Pitaya | 16,625 (16,529-16,625) | 11.166 | 12.478 | 349.1 | 52.6 |
+| KBEngine | 47,669 (47,441-47,902) | 2.893 | 3.391 | 152.8 | 33.5 |
+| Due | 97,005 (95,935-97,234) | 3.381 | 5.068 | 325.0 | 54.4 |
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 300   ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.323s
--------------------------- Throughput --------------------------
-  TPS:                 430,426 req/s
-  Bandwidth:           840.68 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 2.273
-  Max:                 1850.397
-  Avg:                 921.112
-  StdDev:              404.675
-  P50:                 813.360
-  P75:                 1246.872
-  P90:                 1529.042
-  P95:                 1619.543
-  P99:                 1755.219
-  P999:                1796.587
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         300
-  Conn Avg (ms):       0.068
-  Conn Max (ms):       8.204
-  Conn Min (ms):       0.030
-============================= END ==============================
+Due reaches the highest throughput under this load. KBEngine keeps lower P99 and P99.9 latency with this adapter, and Due consumes more CPU, so the throughput gap cannot be read as a per-CPU efficiency comparison.
 
+These results describe the cross-process echo path of the listed versions and CPU allocation only. They are not a general ranking of the frameworks, do not include coordinated-omission correction, and do not cover idle connections, connection multiplexing, login storms or multi-machine deployments. See [due-benchmark](https://github.com/dobyte/due-benchmark) for the remaining payload and connection combinations, the full report and the raw data.
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 400   ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.377s
--------------------------- Throughput --------------------------
-  TPS:                 420,635 req/s
-  Bandwidth:           821.55 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 0.090
-  Max:                 1984.112
-  Avg:                 955.078
-  StdDev:              401.069
-  P50:                 831.472
-  P75:                 1272.140
-  P90:                 1566.748
-  P95:                 1695.086
-  P99:                 1795.673
-  P999:                1868.726
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         400
-  Conn Avg (ms):       0.038
-  Conn Max (ms):       0.089
-  Conn Min (ms):       0.028
-============================= END ==============================
+5. Charts
 
+The charts cover all payload and connection combinations. Each point is the median of three rounds and the error bars span the minimum to the maximum of the three rounds.
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 500   ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.361s
--------------------------- Throughput --------------------------
-  TPS:                 423,609 req/s
-  Bandwidth:           827.36 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 0.734
-  Max:                 1944.819
-  Avg:                 924.394
-  StdDev:              390.023
-  P50:                 839.361
-  P75:                 1260.052
-  P90:                 1460.320
-  P95:                 1542.330
-  P99:                 1763.011
-  P999:                1864.589
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         500
-  Conn Avg (ms):       0.040
-  Conn Max (ms):       0.178
-  Conn Min (ms):       0.030
-============================= END ==============================
+![Four-framework throughput](assets/benchmark/qps.png)
 
+![Four-framework P99 latency](assets/benchmark/p99_us.png)
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 1000  ｜ Requests: 1000000   ｜ Size: 1.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            2.416s
--------------------------- Throughput --------------------------
-  TPS:                 413,840 req/s
-  Bandwidth:           808.28 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 22.929
-  Max:                 1972.892
-  Avg:                 1016.835
-  StdDev:              389.471
-  P50:                 947.336
-  P75:                 1355.980
-  P90:                 1579.272
-  P95:                 1653.502
-  P99:                 1791.817
-  P999:                1893.650
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         1000
-  Conn Avg (ms):       0.045
-  Conn Max (ms):       6.264
-  Conn Min (ms):       0.028
-============================= END ==============================
+![Four-framework P99.9 latency](assets/benchmark/p999_us.png)
 
+![Gateway and business process CPU usage](assets/benchmark/server_cpu_pct.png)
 
-======================== TCP BENCHMARK =========================
-  Concurrency: 1000  ｜ Requests: 1000000   ｜ Size: 2.00KB
-================================================================
-  Protocol:            tcp
-  Target:              127.0.0.1:3553
-  Duration:            3.433s
--------------------------- Throughput --------------------------
-  TPS:                 291,295 req/s
-  Bandwidth:           1137.87 MB/s
-------------------------- Latency (ms) -------------------------
-  Min:                 11.012
-  Max:                 3285.505
-  Avg:                 1401.591
-  StdDev:              602.899
-  P50:                 1300.200
-  P75:                 1898.127
-  P90:                 2265.678
-  P95:                 2373.526
-  P99:                 2689.950
-  P999:                2963.444
-------------------------- Reliability --------------------------
-  Success Rate:        100.00%
-  Sent:                1,000,000
-  Recv:                1,000,000
-  Dial Errors:         0
-  Push Errors:         0
--------------------------- Connection --------------------------
-  Connections:         1000
-  Conn Avg (ms):       0.038
-  Conn Max (ms):       0.350
-  Conn Min (ms):       0.029
-============================= END ==============================
-```
+![Gateway and business process RSS](assets/benchmark/server_peak_rss_mib.png)
 
-These test results are for reference only. For the detailed test case code, see [due-benchmark](https://github.com/dobyte/due/benchmark).
+![Load generator CPU usage](assets/benchmark/loadgen_cpu_pct.png)
 
 ### 14. Other Components
 
@@ -1157,7 +911,8 @@ These test results are for reference only. For the detailed test case code, see 
 
 - [due-examples](https://github.com/dobyte/due-examples)
 - [due-chat](https://github.com/dobyte/due-chat)
-- [due-doudizhu-server](https://github.com/dobyte/due-doudizhu-desc) A high-performance distributed game server commercial case study — the Doudizhu (Fight the Landlord) server (a paid project; contact the framework author to purchase)
+- [due-doudizhu](https://github.com/dobyte/due-doudizhu-desc) A high-performance distributed game server commercial case study — the Doudizhu (Fight the Landlord) server
+- [due-fishing](https://github.com/dobyte/due-fishing-desc) A high-performance distributed game server commercial case study — the Bu Yu Da Shen (Fishing Master) server
 
 ### 17. Third-party Examples
 
@@ -1226,6 +981,6 @@ These test results are for reference only. For the detailed test case code, see 
 
 ### 19. Communication and Discussion
 
-<img title="" src="group_qrcode.jpeg" alt="Discussion Group" width="175"><img title="" src="personal_qrcode.jpeg" alt="Personal QR Code" width="177">
+<img title="" src="assets/group_qrcode.jpeg" alt="Discussion Group" width="175"><img title="" src="assets/personal_qrcode.jpeg" alt="Personal QR Code" width="177">
 
 Personal WeChat: yuebanfuxiao

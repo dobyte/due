@@ -70,13 +70,13 @@ func TestRequestParse(t *testing.T) {
 		}
 	})
 
-	t.Run("empty bytes", func(t *testing.T) {
+	t.Run("empty bytes rejected", func(t *testing.T) {
 		_, r := newWorkingRequest(t)
 		r.message = []byte{}
 
 		var v payload
-		if err := r.Parse(&v); err != nil {
-			t.Fatalf("parse failed: %v", err)
+		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
+			t.Fatalf("expect the invalid message error, got %v", err)
 		}
 	})
 
@@ -118,6 +118,19 @@ func TestRequestParse(t *testing.T) {
 		}
 		if v.A != 4 {
 			t.Fatalf("expect a=4, got %d", v.A)
+		}
+		if string(r.plaintext) != `{"a":4}` {
+			t.Fatalf("expect the plaintext to be cached, got %q", r.plaintext)
+		}
+
+		// A repeated parse reuses the cached plaintext instead of decrypting the message again.
+		r.message = []byte("corrupted")
+		v = payload{}
+		if err := r.Parse(&v); err != nil {
+			t.Fatalf("parse with the cached plaintext failed: %v", err)
+		}
+		if v.A != 4 {
+			t.Fatalf("expect a=4 from the cached payload, got %d", v.A)
 		}
 	})
 
@@ -190,6 +203,7 @@ func TestRequestCloneBasic(t *testing.T) {
 	r.seq = 7
 	r.route = 8
 	r.message = []byte("hello")
+	r.plaintext = []byte("plain")
 
 	act := &Actor{}
 	r.actor.Store(act)
@@ -206,6 +220,16 @@ func TestRequestCloneBasic(t *testing.T) {
 	}
 	if string(c.message.([]byte)) != "hello" {
 		t.Fatalf("unexpected clone message: %v", c.message)
+	}
+	if string(c.plaintext) != "plain" {
+		t.Fatalf("unexpected clone plaintext: %q", c.plaintext)
+	}
+
+	// The clone holds an independent copy of the plaintext, so mutating it leaves the original
+	// request untouched.
+	c.plaintext[0] = 'P'
+	if string(r.plaintext) != "plain" {
+		t.Fatalf("the original plaintext should not be shared with the clone: %q", r.plaintext)
 	}
 
 	_ = n
