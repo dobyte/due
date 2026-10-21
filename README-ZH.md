@@ -910,7 +910,8 @@ Go 进程设置 `GOMAXPROCS=2`，两个 Skynet 进程设置 `thread=2`。CPU 按
 
 - [due-examples](https://github.com/dobyte/due-examples)
 - [due-chat](https://github.com/dobyte/due-chat)
-- [due-doudizhu-server](https://github.com/dobyte/due-doudizhu-desc) 高性能分布式游戏服务器商业实战案例-斗地主服务器 (付费项目，购买请联系框架作者)
+- [due-doudizhu](https://github.com/dobyte/due-doudizhu-desc) 高性能分布式游戏服务器商业实战案例-斗地主服务器 (付费项目，购买请联系框架作者)
+- [due-fishing](https://github.com/dobyte/due-fishing-desc) 高性能分布式游戏服务器商业实战案例-捕鱼大神 (付费项目，购买请联系框架作者)
 
 ### 17.三方示例
 
