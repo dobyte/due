@@ -900,7 +900,7 @@ Go 进程设置 `GOMAXPROCS=2`，两个 Skynet 进程设置 `thread=2`。CPU 按
 ### 15.其他客户端
 
 * [due-client-ts](https://github.com/dobyte/due-client-ts)
-* [due-client-shape](https://github.com/dobyte/due-client-shape)
+* [due-client-csharp](https://github.com/dobyte/due-client-csharp)
 * [due-client-unity](https://github.com/dobyte/due-client-unity)
 * [due-client-cocos](https://github.com/dobyte/due-client-cocos)
 * [due-client-godot](https://github.com/dobyte/due-client-godot)
