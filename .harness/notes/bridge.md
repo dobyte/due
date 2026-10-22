@@ -134,4 +134,6 @@ go test -run '^$' -bench '^BenchmarkBridgeRoundTrip$' -benchtime=1s -count=3
 
 这组结果显示本地路径减少了平均往返时间，但边界复制仍增加内存分配字节。宿主机计时出现 P50=0 的量化现象，因此原始 P50/P95/P99 不作为可靠尾延迟结论。此结果不能外推生产吞吐，也没有验证高并发、多包长下的容量、CPU 曲线或跨机器性能；这些应在部署目标环境进行负载测试。
 
+上表记录第一版 Bridge。后续优化为常见复制缓冲增加分级复用，缓存不可变 Endpoint 字符串，并仅在写队列需要等待时创建写超时 Context。新增基准覆盖 64B/256B/1KiB/16KiB 和 1/8/32 个连接；256B 单连接本地往返的分配从约 2170 B/op、33 allocs/op 降到约 1169 B/op、25 allocs/op。当前 Windows 耗时波动较大，尚未得到稳定的延迟或吞吐提升结论。实现边界、完整测量及重现方式见 [Bridge 性能优化记录](bridge-performance.md)。
+
 根模块 `go vet ./...` 仍报告既有 `core/buffer/reader.go` 的 `ReadRune` 签名告警，已核对 HEAD 中同样存在。本次修改涉及的包定向 vet 通过。网络 KCP/WS/QUIC、gRPC/RPCX、四种 Registry 和 Redis Locator 的独立模块构建及 vet 通过；未启动外部服务执行这些插件的服务集成测试。

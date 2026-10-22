@@ -25,7 +25,11 @@ type Directory struct {
 	entries map[string]*Endpoint
 }
 
-var _default = NewDirectory()
+var (
+	_default = NewDirectory()
+	// Retain common packet sizes without pooling unusually large payloads.
+	_copyPool = buffer.NewBytesPoolWithCapacity(64 << 10)
+)
 
 func NewDirectory() *Directory {
 	return &Directory{entries: make(map[string]*Endpoint)}
@@ -157,10 +161,21 @@ func (d *Directory) Resolve(target, kind string, disabled bool) (*Endpoint, stri
 
 // CopyBuffer consumes one reference and returns an independent mutable view.
 func CopyBuffer(src buffer.Buffer) buffer.Buffer {
-	dst := make([]byte, 0, src.Len())
-	src.VisitBytes(func(part []byte) bool { dst = append(dst, part...); return true })
+	dst := _copyPool.Get(src.Len())
+	if dst == nil {
+		dst = buffer.NewBytesWithCapacity(src.Len())
+	}
+	if src.Nodes() == 1 {
+		copy(dst.Bytes(), src.Bytes())
+	} else {
+		remaining := dst.Bytes()
+		src.VisitBytes(func(part []byte) bool {
+			remaining = remaining[copy(remaining, part):]
+			return true
+		})
+	}
 	src.Release()
-	return buffer.NewBytes(dst)
+	return dst
 }
 
 // Submit consumes release on rejection; run owns the payload after acceptance.
@@ -192,35 +207,7 @@ func (e *Endpoint) submit(ctx context.Context, key uint64, writeTimeout time.Dur
 		}
 		return nil, err
 	}
-	e.mu.RLock()
-	if e.closed || e.ctx.Err() != nil {
-		e.mu.RUnlock()
-		if release != nil {
-			release()
-		}
-		return nil, errors.ErrServerClosed
-	}
-	admission := ctx
-	var cancel context.CancelFunc
-	if writeTimeout > 0 {
-		admission, cancel = context.WithTimeout(ctx, writeTimeout)
-	}
-	var err error
-	select {
-	case e.queues[key%uint64(len(e.queues))] <- c:
-	case <-admission.Done():
-		err = ctx.Err()
-		if err == nil {
-			err = errors.ErrWriteTimeout
-		}
-	case <-e.stop:
-		err = errors.ErrServerClosed
-	}
-	e.mu.RUnlock()
-	if cancel != nil {
-		cancel()
-	}
-	if err != nil {
+	if err := e.enqueue(ctx, key, writeTimeout, c); err != nil {
 		if release != nil {
 			release()
 		}
@@ -235,6 +222,50 @@ func (e *Endpoint) submit(ctx context.Context, key uint64, writeTimeout time.Dur
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (e *Endpoint) enqueue(ctx context.Context, key uint64, writeTimeout time.Duration,
+	c command) error {
+	e.mu.RLock()
+	if e.closed || e.ctx.Err() != nil {
+		e.mu.RUnlock()
+		return errors.ErrServerClosed
+	}
+	q := e.queues[key%uint64(len(e.queues))]
+	// A timer is needed only when admission actually waits for queue capacity.
+	select {
+	case q <- c:
+		e.mu.RUnlock()
+		return nil
+	case <-ctx.Done():
+		e.mu.RUnlock()
+		return ctx.Err()
+	case <-e.stop:
+		e.mu.RUnlock()
+		return errors.ErrServerClosed
+	default:
+	}
+	admission := ctx
+	var cancel context.CancelFunc
+	if writeTimeout > 0 {
+		admission, cancel = context.WithTimeout(ctx, writeTimeout)
+	}
+	var err error
+	select {
+	case q <- c:
+	case <-admission.Done():
+		err = ctx.Err()
+		if err == nil {
+			err = errors.ErrWriteTimeout
+		}
+	case <-e.stop:
+		err = errors.ErrServerClosed
+	}
+	e.mu.RUnlock()
+	if cancel != nil {
+		cancel()
+	}
+	return err
 }
 
 func (e *Endpoint) serve(q <-chan command) {

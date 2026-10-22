@@ -1,0 +1,296 @@
+Bridge optimization benchmark evidence
+Date: 2026-10-22; Windows amd64; Go 1.27.1; Intel Core i5-13400F; GOMAXPROCS=16
+Baseline: 33c4a581, with only the identical new benchmark harness copied into an isolated git archive.
+Optimized: working tree based on 33c4a581.
+Benchmark processes were run serially. Server startup/shutdown logs are omitted.
+Each result preserves the original ns/op, B/op and allocs/op row with its benchmark name.
+ns/op with concurrent clients is inverse aggregate throughput, not per-request latency.
+No stable latency improvement is established; see bridge-performance.md for limits.
+
+BASELINE micro: -p=1 ./internal/bridge ./core/endpoint -run ^$ -bench . -benchmem -benchtime=500ms -count=3
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 2774006	       195.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 2982453	       199.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 3929751	       187.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 5233536	       127.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 3501908	       157.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 3122000	       185.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	  561565	       977.5 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	  598598	       948.9 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	  716152	       998.0 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 1000000	       536.8 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 1397380	       478.2 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 1243344	       433.7 ns/op	     384 B/op	       5 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  274065	      1847 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  389119	      1860 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  396843	      1834 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  746797	       816.3 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  722577	       799.7 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  798721	       775.9 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  175903	      3101 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  188990	      3167 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  180928	      3117 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  449296	      1230 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  457404	      1195 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  515122	      1237 ns/op	    1167 B/op	      13 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 4647483	       152.7 ns/op	     120 B/op	       3 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 4591399	       152.7 ns/op	     120 B/op	       3 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 4227679	       125.8 ns/op	     120 B/op	       3 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 3789277	       173.6 ns/op	 368.59 MB/s	     184 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 3490579	       171.1 ns/op	 374.02 MB/s	     184 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 4050645	       168.6 ns/op	 379.62 MB/s	     184 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 2323978	       240.9 ns/op	1062.85 MB/s	     376 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 2285659	       249.9 ns/op	1024.24 MB/s	     376 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 2353293	       263.3 ns/op	 972.13 MB/s	     376 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 1000000	       552.2 ns/op	1854.36 MB/s	    1144 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 1000000	       591.9 ns/op	1730.02 MB/s	    1144 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 1000000	       680.3 ns/op	1505.29 MB/s	    1144 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	  112726	      5799 ns/op	2825.52 MB/s	   16504 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	  114429	      6370 ns/op	2572.05 MB/s	   16504 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	  117038	      7552 ns/op	2169.46 MB/s	   16504 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   12090	     51175 ns/op	2561.25 MB/s	  131192 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   16804	     34343 ns/op	3816.58 MB/s	  131192 B/op	       4 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   17184	     30935 ns/op	4237.06 MB/s	  131192 B/op	       4 allocs/op
+BenchmarkEndpointString-16    	11291757	        51.63 ns/op	      80 B/op	       1 allocs/op
+BenchmarkEndpointString-16    	11871196	        53.56 ns/op	      80 B/op	       1 allocs/op
+BenchmarkEndpointString-16    	11685586	        50.71 ns/op	      80 B/op	       1 allocs/op
+Result rows: 45
+
+OPTIMIZED micro: same command
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 3019923	       193.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 3271996	       178.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=false-16         	 2740766	       229.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 5376984	       136.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 3988572	       162.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=0s/parallel=true-16          	 3012997	       194.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	 1916878	       274.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	 1874211	       289.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=false-16         	 2603877	       289.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 4057906	       185.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 3068950	       190.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=false/write=1s/parallel=true-16          	 3147436	       197.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  350514	      1917 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  321146	      2151 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=false-16          	  258990	      2179 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  741921	       901.9 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  779767	       796.9 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=0s/parallel=true-16           	  823237	       798.5 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  359871	      1754 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  411018	      1768 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=false-16          	  334455	      1896 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  707438	       825.8 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  651472	       800.3 ns/op	     528 B/op	       7 allocs/op
+BenchmarkSubmit/ack=true/write=1s/parallel=true-16           	  792800	       843.0 ns/op	     528 B/op	       7 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 6539451	       100.0 ns/op	      80 B/op	       1 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 5435456	       103.0 ns/op	      80 B/op	       1 allocs/op
+BenchmarkCopyBuffer/bytes=0-16                               	 5828302	       104.6 ns/op	      80 B/op	       1 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 9768900	        66.29 ns/op	 965.39 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 8297905	        69.61 ns/op	 919.43 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=64-16                              	 8531342	        68.57 ns/op	 933.42 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 8543210	        74.68 ns/op	3428.00 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 8426220	        71.32 ns/op	3589.59 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=256-16                             	 8002827	        68.27 ns/op	3750.00 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 7426063	        82.06 ns/op	12479.25 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 7169100	        83.00 ns/op	12337.46 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=1024-16                            	 6556444	        86.71 ns/op	11809.61 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	 1401711	       410.6 ns/op	39904.15 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	 1312281	       439.4 ns/op	37285.45 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=16384-16                           	 1409132	       475.1 ns/op	34486.85 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   17248	     32963 ns/op	3976.35 MB/s	  131152 B/op	       2 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   18063	     33666 ns/op	3893.31 MB/s	  131152 B/op	       2 allocs/op
+BenchmarkCopyBuffer/bytes=131072-16                          	   17176	     33523 ns/op	3909.86 MB/s	  131152 B/op	       2 allocs/op
+BenchmarkEndpointString-16    	1000000000	         0.2531 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEndpointString-16    	1000000000	         0.2550 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEndpointString-16    	1000000000	         0.2618 ns/op	       0 B/op	       0 allocs/op
+Result rows: 45
+
+BASELINE TCP: -run ^$ -bench ^BenchmarkBridgeLoad$ -benchmem -benchtime=300ms -count=3
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	7695	     46965 ns/op	   1.36 MB/s	    1550 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	6512	     48386 ns/op	   1.32 MB/s	    1547 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	7816	     45910 ns/op	   1.39 MB/s	    1544 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	34828	     10900 ns/op	   5.87 MB/s	    1555 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	33552	     11027 ns/op	   5.80 MB/s	    1547 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	33291	     11162 ns/op	   5.73 MB/s	    1548 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	12468	     28495 ns/op	   2.25 MB/s	    1550 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	9264	     34112 ns/op	   1.88 MB/s	    1543 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	14242	     25391 ns/op	   2.52 MB/s	    1544 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	3556	     91718 ns/op	   2.79 MB/s	    2178 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	4080	     96038 ns/op	   2.67 MB/s	    2170 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	3561	     96380 ns/op	   2.66 MB/s	    2172 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	13634	     25551 ns/op	  10.02 MB/s	    2180 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	13936	     26172 ns/op	   9.78 MB/s	    2175 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	14302	     26716 ns/op	   9.58 MB/s	    2175 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	12091	     26403 ns/op	   9.70 MB/s	    2175 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	10000	     30475 ns/op	   8.40 MB/s	    2171 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	12067	     26292 ns/op	   9.74 MB/s	    2173 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	2611	    121327 ns/op	   8.44 MB/s	    4808 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	2805	    118809 ns/op	   8.62 MB/s	    4784 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	3224	    104822 ns/op	   9.77 MB/s	    4786 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	11947	     27255 ns/op	  37.57 MB/s	    4781 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	13224	     30540 ns/op	  33.53 MB/s	    4776 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	10000	     33729 ns/op	  30.36 MB/s	    4781 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	10000	     33880 ns/op	  30.22 MB/s	    4808 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	8318	     36781 ns/op	  27.84 MB/s	    4780 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	11012	     32275 ns/op	  31.73 MB/s	    4781 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	1815	    187239 ns/op	  87.50 MB/s	   58671 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	2038	    168488 ns/op	  97.24 MB/s	   58245 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	2119	    163876 ns/op	  99.98 MB/s	   58461 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	4528	     68698 ns/op	 238.49 MB/s	   58649 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	6075	     58491 ns/op	 280.11 MB/s	   58321 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	5908	     63338 ns/op	 258.68 MB/s	   58876 B/op	      34 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	5940	     58542 ns/op	 279.87 MB/s	   58557 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	5726	     60367 ns/op	 271.40 MB/s	   58182 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	6423	     56344 ns/op	 290.79 MB/s	   58009 B/op	      33 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	1389	    242847 ns/op	   0.26 MB/s	    1561 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	1425	    230984 ns/op	   0.28 MB/s	    1562 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	1987	    166661 ns/op	   0.38 MB/s	    1576 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	6986	     51825 ns/op	   1.23 MB/s	    1577 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	6627	     49685 ns/op	   1.29 MB/s	    1574 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	6969	     52010 ns/op	   1.23 MB/s	    1578 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	6642	     49055 ns/op	   1.30 MB/s	    1583 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	6828	     44634 ns/op	   1.43 MB/s	    1581 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	5498	     55619 ns/op	   1.15 MB/s	    1585 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	1447	    215334 ns/op	   1.19 MB/s	    1770 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	2041	    181431 ns/op	   1.41 MB/s	    1781 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	1684	    189549 ns/op	   1.35 MB/s	    1770 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	7527	     47559 ns/op	   5.38 MB/s	    1787 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	6667	     47518 ns/op	   5.39 MB/s	    1789 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	6292	     51683 ns/op	   4.95 MB/s	    1790 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	7641	     46673 ns/op	   5.48 MB/s	    1796 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	8113	     58680 ns/op	   4.36 MB/s	    1798 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	7238	     42043 ns/op	   6.09 MB/s	    1798 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	1525	    210947 ns/op	   4.85 MB/s	    2659 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	1572	    217322 ns/op	   4.71 MB/s	    2657 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	1720	    205746 ns/op	   4.98 MB/s	    2660 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	6804	     53488 ns/op	  19.14 MB/s	    2667 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	6362	     49527 ns/op	  20.68 MB/s	    2662 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	6583	     54428 ns/op	  18.81 MB/s	    2667 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	6655	     47140 ns/op	  21.72 MB/s	    2688 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	7086	     47549 ns/op	  21.54 MB/s	    2682 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	5608	     56597 ns/op	  18.09 MB/s	    2684 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	1618	    216113 ns/op	  75.81 MB/s	   20466 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	1675	    212695 ns/op	  77.03 MB/s	   20287 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	1720	    207917 ns/op	  78.80 MB/s	   20316 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	5226	     66826 ns/op	 245.18 MB/s	   20828 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	5017	     73314 ns/op	 223.48 MB/s	   20663 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	5419	     72781 ns/op	 225.11 MB/s	   20447 B/op	      32 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	5346	     63906 ns/op	 256.38 MB/s	   20969 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	4676	     72440 ns/op	 226.17 MB/s	   20877 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	5535	     65186 ns/op	 251.34 MB/s	   20870 B/op	      30 allocs/op
+Result rows: 72
+
+OPTIMIZED TCP: same command
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	8274	     43815 ns/op	   1.46 MB/s	     961 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	7828	     48113 ns/op	   1.33 MB/s	     958 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=1-16	7695	     42912 ns/op	   1.49 MB/s	     958 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	36015	     10070 ns/op	   6.36 MB/s	     966 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	35962	     10231 ns/op	   6.26 MB/s	     961 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=8-16	33952	     10738 ns/op	   5.96 MB/s	     962 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	21747	     28668 ns/op	   2.23 MB/s	     961 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	14923	     25374 ns/op	   2.52 MB/s	     960 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=64/clients=32-16	12416	     26686 ns/op	   2.40 MB/s	     958 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	3685	     95957 ns/op	   2.67 MB/s	    1174 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	3597	     95028 ns/op	   2.69 MB/s	    1169 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	4287	     82608 ns/op	   3.10 MB/s	    1166 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	13950	     25454 ns/op	  10.06 MB/s	    1174 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	12459	     29164 ns/op	   8.78 MB/s	    1167 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	15176	     25269 ns/op	  10.13 MB/s	    1172 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	14052	     24644 ns/op	  10.39 MB/s	    1170 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	12433	     29370 ns/op	   8.72 MB/s	    1169 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	10000	     30714 ns/op	   8.33 MB/s	    1171 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	3496	     86801 ns/op	  11.80 MB/s	    2049 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	4280	     83323 ns/op	  12.29 MB/s	    2046 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=1-16	3928	     84171 ns/op	  12.17 MB/s	    2050 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	14452	     26051 ns/op	  39.31 MB/s	    2053 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	14574	     24863 ns/op	  41.19 MB/s	    2049 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=8-16	13936	     25268 ns/op	  40.53 MB/s	    2046 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	13359	     28760 ns/op	  35.60 MB/s	    2051 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	12802	     26996 ns/op	  37.93 MB/s	    2045 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=1024/clients=32-16	10000	     30747 ns/op	  33.30 MB/s	    2052 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	3154	    105257 ns/op	 155.66 MB/s	   20663 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	4980	     72614 ns/op	 225.63 MB/s	   20656 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=1-16	5280	     69646 ns/op	 235.25 MB/s	   20539 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	20625	     17708 ns/op	 925.23 MB/s	   21042 B/op	      26 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	21680	     17073 ns/op	 959.65 MB/s	   20541 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=8-16	21570	     16024 ns/op	1022.46 MB/s	   20528 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	25753	     16773 ns/op	 976.82 MB/s	   20698 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	27103	     15197 ns/op	1078.14 MB/s	   20278 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=16384/clients=32-16	23647	     12784 ns/op	1281.59 MB/s	   20178 B/op	      25 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	3592	    102301 ns/op	   0.63 MB/s	    1483 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	3290	     96414 ns/op	   0.66 MB/s	    1478 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=1-16	4154	     87983 ns/op	   0.73 MB/s	    1478 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	17306	     20198 ns/op	   3.17 MB/s	    1478 B/op	      29 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	16286	     21487 ns/op	   2.98 MB/s	    1476 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=8-16	17068	     21853 ns/op	   2.93 MB/s	    1476 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	29852	     16000 ns/op	   4.00 MB/s	    1490 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	32200	     15262 ns/op	   4.19 MB/s	    1489 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=64/clients=32-16	32851	     15867 ns/op	   4.03 MB/s	    1487 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	3468	     98235 ns/op	   2.61 MB/s	    1696 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	3524	     99277 ns/op	   2.58 MB/s	    1690 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=1-16	3496	     98594 ns/op	   2.60 MB/s	    1695 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	16382	     20293 ns/op	  12.62 MB/s	    1687 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	15838	     23687 ns/op	  10.81 MB/s	    1688 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=8-16	16656	     21708 ns/op	  11.79 MB/s	    1688 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	29714	     15716 ns/op	  16.29 MB/s	    1698 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	30686	     15934 ns/op	  16.07 MB/s	    1698 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=256/clients=32-16	29514	     16891 ns/op	  15.16 MB/s	    1698 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	2907	    122893 ns/op	   8.33 MB/s	    2561 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	3580	     92791 ns/op	  11.04 MB/s	    2556 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=1-16	4046	     98688 ns/op	  10.38 MB/s	    2558 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	17434	     21573 ns/op	  47.47 MB/s	    2564 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	13731	     22262 ns/op	  46.00 MB/s	    2569 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=8-16	16305	     22792 ns/op	  44.93 MB/s	    2564 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	30394	     16631 ns/op	  61.57 MB/s	    2580 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	30612	     11225 ns/op	  91.23 MB/s	    2574 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=1024/clients=32-16	31483	     16444 ns/op	  62.27 MB/s	    2574 B/op	      28 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	2694	    124676 ns/op	 131.41 MB/s	   20431 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	3316	    123216 ns/op	 132.97 MB/s	   20361 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=1-16	2910	    119750 ns/op	 136.82 MB/s	   20279 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	12830	     29694 ns/op	 551.76 MB/s	   20667 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	12349	     29062 ns/op	 563.77 MB/s	   20609 B/op	      31 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=8-16	11378	     28523 ns/op	 574.42 MB/s	   20551 B/op	      30 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	14932	     28653 ns/op	 571.80 MB/s	   20616 B/op	      29 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	14396	     30636 ns/op	 534.79 MB/s	   20492 B/op	      29 allocs/op
+BenchmarkBridgeLoad/drpc/bytes=16384/clients=32-16	18547	     22299 ns/op	 734.74 MB/s	   20464 B/op	      29 allocs/op
+Result rows: 72
+
+BASELINE alternating 256B, 1/8/32 clients: 1s x 3 per phase, total 6 samples
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	26898	     44962 ns/op	   5.69 MB/s	    2181 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	26661	     56484 ns/op	   4.53 MB/s	    2174 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	14016	     81820 ns/op	   3.13 MB/s	    2172 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	46778	     25240 ns/op	  10.14 MB/s	    2178 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	43333	     25335 ns/op	  10.10 MB/s	    2173 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	47565	     25092 ns/op	  10.20 MB/s	    2173 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	44734	     25367 ns/op	  10.09 MB/s	    2183 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	43873	     27121 ns/op	   9.44 MB/s	    2175 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	43323	     25862 ns/op	   9.90 MB/s	    2174 B/op	      32 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	25155	     49084 ns/op	   5.22 MB/s	    2181 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	26019	     49973 ns/op	   5.12 MB/s	    2175 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	21612	     53799 ns/op	   4.76 MB/s	    2175 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	108712	     11471 ns/op	  22.32 MB/s	    2186 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	98205	     11365 ns/op	  22.53 MB/s	    2177 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	99883	     11030 ns/op	  23.21 MB/s	    2177 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	136258	      8802 ns/op	  29.08 MB/s	    2184 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	143506	      7188 ns/op	  35.62 MB/s	    2178 B/op	      33 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	146455	      7133 ns/op	  35.89 MB/s	    2177 B/op	      33 allocs/op
+Result rows: 18
+
+OPTIMIZED alternating 256B: same command; phase order baseline, optimized, optimized, baseline
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	18994	     63959 ns/op	   4.00 MB/s	    1173 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	20726	     94829 ns/op	   2.70 MB/s	    1169 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	14392	     89904 ns/op	   2.85 MB/s	    1167 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	48314	     23916 ns/op	  10.70 MB/s	    1175 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	48540	     23938 ns/op	  10.69 MB/s	    1171 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	45384	     24162 ns/op	  10.60 MB/s	    1170 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	44695	     26004 ns/op	   9.84 MB/s	    1175 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	49101	     24245 ns/op	  10.56 MB/s	    1170 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	44676	     28326 ns/op	   9.04 MB/s	    1172 B/op	      24 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	26401	     49223 ns/op	   5.20 MB/s	    1172 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	24919	     47914 ns/op	   5.34 MB/s	    1169 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=1-16	22634	     72975 ns/op	   3.51 MB/s	    1170 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	113614	     10668 ns/op	  24.00 MB/s	    1178 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	114879	     10723 ns/op	  23.87 MB/s	    1171 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=8-16	110815	     10556 ns/op	  24.25 MB/s	    1172 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	119716	      8598 ns/op	  29.77 MB/s	    1175 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	161168	      7169 ns/op	  35.71 MB/s	    1172 B/op	      25 allocs/op
+BenchmarkBridgeLoad/local/bytes=256/clients=32-16	183313	      6348 ns/op	  40.33 MB/s	    1171 B/op	      25 allocs/op
+Result rows: 18
