@@ -209,6 +209,8 @@ func (n *Node) Destroy() {
 	n.runHookFunc(cluster.Destroy)
 
 	n.cancel()
+	n.proxy.nodeLinker.Close()
+	n.proxy.gateLinker.Close()
 }
 
 // Proxy returns the node proxy.
@@ -263,8 +265,11 @@ func (n *Node) dispatch() {
 // gateways and starts the service in a goroutine.
 func (n *Node) startLinkerServer() {
 	linker, err := node.NewServer(&provider{node: n}, &node.ServerOptions{
-		Addr:   n.opts.addr,
-		Expose: n.opts.expose,
+		Addr:           n.opts.addr,
+		Expose:         n.opts.expose,
+		DisableLocal:   n.opts.disableLocal,
+		DisableRemote:  n.opts.disableRemote,
+		WriteQueueSize: n.opts.linker.commandQueueSize,
 	})
 	if err != nil {
 		log.Fatalf("linker server create failed: %v", err)
@@ -365,7 +370,7 @@ func (n *Node) registerServiceInstances() {
 		Events:   events,
 		Endpoint: n.linker.Endpoint().String(),
 		Weight:   n.opts.weight,
-		Metadata: n.opts.metadata,
+		Metadata: n.linker.Metadata(n.opts.metadata),
 	})
 
 	if n.transporter != nil {

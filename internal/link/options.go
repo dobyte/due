@@ -11,6 +11,7 @@ import (
 )
 
 type Options struct {
+	DisableLocal        bool
 	ID                  string            // Instance ID
 	Kind                cluster.Kind      // Instance kind
 	Codec               encoding.Codec    // Codec

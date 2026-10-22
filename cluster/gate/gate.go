@@ -137,6 +137,7 @@ func (g *Gate) Destroy() {
 	g.stopLinkerServer()
 
 	g.cancel()
+	g.proxy.nodeLinker.Close()
 }
 
 // startNetworkServer starts the network server.
@@ -231,8 +232,11 @@ func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
 // It creates and asynchronously starts the internal RPC link server.
 func (g *Gate) startLinkerServer() {
 	linker, err := gate.NewServer(&provider{gate: g}, &gate.ServerOptions{
-		Addr:   g.opts.addr,
-		Expose: g.opts.expose,
+		Addr:           g.opts.addr,
+		Expose:         g.opts.expose,
+		DisableLocal:   g.opts.disableLocal,
+		DisableRemote:  g.opts.disableRemote,
+		WriteQueueSize: g.opts.linker.commandQueueSize,
 	})
 	if err != nil {
 		log.Fatalf("linker server create failed: %v", err)
@@ -267,7 +271,7 @@ func (g *Gate) registerServiceInstance() {
 		Alias:    g.opts.name,
 		State:    g.getState().String(),
 		Endpoint: g.linker.Endpoint().String(),
-		Metadata: g.opts.metadata,
+		Metadata: g.linker.Metadata(g.opts.metadata),
 	}
 
 	if err := g.doRegisterServiceInstance(); err != nil {

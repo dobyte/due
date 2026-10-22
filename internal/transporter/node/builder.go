@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"golang.org/x/sync/singleflight"
 )
@@ -11,6 +12,9 @@ import (
 type ClientOptions = drpc.ClientOptions
 
 type Builder struct {
+	locals  map[string]*localClient
+	mu      sync.RWMutex
+	closed  bool
 	sfg     singleflight.Group
 	opts    *ClientOptions
 	clients sync.Map
@@ -18,7 +22,8 @@ type Builder struct {
 
 func NewBuilder(opts *ClientOptions) *Builder {
 	return &Builder{
-		opts: opts,
+		opts:   opts,
+		locals: make(map[string]*localClient),
 	}
 }
 
@@ -27,6 +32,11 @@ func NewBuilder(opts *ClientOptions) *Builder {
 // Dialing is bounded by the dial timeout so that an unreachable endpoint does not trigger
 // indefinite retries.
 func (b *Builder) Build(addr string) (*Client, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if b.closed {
+		return nil, errors.ErrClientClosed
+	}
 	if cli, ok := b.clients.Load(addr); ok {
 		return cli.(*Client), nil
 	}
@@ -61,4 +71,22 @@ func (b *Builder) Build(addr string) (*Client, error) {
 	}
 
 	return cli.(*Client), nil
+}
+
+// Close prevents new connections and closes every cached remote client.
+func (b *Builder) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return
+	}
+	b.closed = true
+	clear(b.locals)
+	b.clients.Range(func(key, value any) bool {
+		if c, ok := value.(*Client); ok {
+			_ = c.cli.Close()
+		}
+		b.clients.Delete(key)
+		return true
+	})
 }

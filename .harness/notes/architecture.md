@@ -66,17 +66,17 @@ flowchart TB
     F -.可选基础设施.-> M
 ```
 
-图表示逻辑关系，不要求所有项目都部署 Mesh，也不要求每种基础设施都启用。Gate、Node、Mesh 可以在一个进程内组合，也可以作为独立进程部署；同进程组合仍使用各自的组件边界和通信实现，不能据此假定自动切换为函数直调。
+图表示逻辑关系，不要求所有项目都部署 Mesh，也不要求每种基础设施都启用。Gate、Node、Mesh 可以在一个进程内组合，也可以作为独立进程部署。2026-10-22 的 Bridge 改造在集群 Linker 确定目标后，自动为匹配的同进程 Gate/Node 选择有界内存投递，跨进程继续使用 DRPC；不会直接执行业务 handler。部署选项、生命周期与验证边界见 [自动本地通信](bridge.md)。
 
 ### 3.2 三条通信平面
 
 | 平面 | 实现 | 主要负载 | 关键边界 |
 | --- | --- | --- | --- |
 | 玩家连接平面 | `network` + `packet` | 玩家请求、回包、心跳 | 维护真实连接，受网络写队列与协议大小约束 |
-| 集群消息平面 | `internal/link` + `internal/transporter` + DRPC | Gate→Node、Node→Node、Node/Mesh→Gate | 路由与 UID 定位驱动；部分操作是单向入队 |
+| 集群消息平面 | `internal/link` + `internal/transporter` + Bridge / DRPC | Gate→Node、Node→Node、Node/Mesh→Gate | 路由与 UID 定位驱动；同进程可本地投递，部分操作是单向入队 |
 | 微服务 RPC 平面 | `transport` + gRPC/RPCX | Node/Mesh 等调用注册的服务 | 基于服务描述与服务发现，使用插件的调用/停服语义 |
 
-注册中心和定位器属于控制与寻址基础设施，不承担正常业务消息体转发。`transport/grpc`、`transport/rpcx` 不能直接理解为 Gate→Node 游戏消息通道的可插拔替代品：这条热路径在当前实现中走内建 DRPC。
+注册中心和定位器属于控制与寻址基础设施，不承担正常业务消息体转发。`transport/grpc`、`transport/rpcx` 不能直接理解为 Gate→Node 游戏消息通道的可插拔替代品：这条热路径使用内部 Bridge / DRPC。纯单体可显式注入共享的 `registry/memory` 和 `locate/memory`，混合部署仍须使用共享外部控制平面；传输自动选择不会替换这些组件。
 
 ### 3.3 角色与状态归属
 
@@ -276,7 +276,7 @@ sequenceDiagram
 | 操作 | 成功表示 |
 | --- | --- |
 | 裸 `network.Conn.Push` | 本连接写队列已接纳 Buffer |
-| 内部 Node Deliver/Trigger | DRPC 发送队列接纳命令；默认内部 seq=0，不等待 Node ACK |
+| 内部 Node Deliver/Trigger | DRPC 发送队列或本地 Bridge 队列接纳命令；远端默认内部 seq=0，不等待 Node ACK |
 | Gate 推送 `Ack=false` | 内部发送队列接纳命令 |
 | Gate 推送 `Ack=true` | Gate provider 已执行对应会话操作；正常推送是外网写队列接纳 |
 | 跨 Gate 多播/广播 `Ack=true` 返回的数量 | 成功接纳推送的会话数量；`Ack=false` 正常返回 0，不提供成功数量，0 不代表未推送 |

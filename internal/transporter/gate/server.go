@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
@@ -13,17 +14,25 @@ import (
 type Server struct {
 	*drpc.Server
 	provider Provider
+	options  *ServerOptions
+	local    localServer
 }
 
 type ServerOptions = drpc.ServerOptions
 
 func NewServer(provider Provider, opts *ServerOptions) (*Server, error) {
+	if opts == nil || (opts.DisableRemote && opts.DisableLocal) {
+		return nil, errors.ErrInvalidArgument
+	}
+	if opts.DisableRemote {
+		return &Server{provider: provider, options: opts}, nil
+	}
 	serv, err := drpc.NewServer(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &Server{Server: serv, provider: provider}
+	s := &Server{Server: serv, provider: provider, options: opts}
 	s.init()
 
 	return s, nil

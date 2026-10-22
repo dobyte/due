@@ -26,6 +26,7 @@ type proxy struct {
 // newProxy creates a gate proxy and builds the node linker from the gate options.
 func newProxy(gate *Gate) *proxy {
 	return &proxy{gate: gate, nodeLinker: link.NewNodeLinker(gate.ctx, &link.Options{
+		DisableLocal:        gate.opts.disableLocal,
 		ID:                  gate.opts.id,
 		Kind:                cluster.Gate,
 		Locator:             gate.opts.locator,

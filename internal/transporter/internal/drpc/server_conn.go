@@ -123,11 +123,8 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 				// after the client suppresses idle heartbeats.
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 
-				// ignore empty packet
-				if buf.Len() == 0 {
-					buf.Release()
-					continue
-				}
+				// A decoded frame may have an empty private body (for example GetState).
+				// Its route handler validates the body; length alone cannot reject it.
 
 				if rt == route.Handshake {
 					if state == connAlived {

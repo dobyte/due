@@ -581,7 +581,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 	t.Run("route not found", func(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), baseLinkOptions())
 
-		if _, err := linker.doRPC(context.Background(), 99, 1, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 99, 1, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrNotFoundRoute) {
 			t.Errorf("expect ErrNotFoundRoute, got %v", err)
@@ -592,7 +592,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(nodeService("node-1", "127.0.0.1:1", registry.Route{ID: 2, Stateful: true}))
 
-		if _, err := linker.doRPC(context.Background(), 2, 0, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 2, 0, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrIllegalRequest) {
 			t.Errorf("expect ErrIllegalRequest, got %v", err)
@@ -603,7 +603,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(nodeService("node-1", "127.0.0.1:1", registry.Route{ID: 3, Authorized: true}))
 
-		if _, err := linker.doRPC(context.Background(), 3, 0, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 3, 0, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrIllegalRequest) {
 			t.Errorf("expect ErrIllegalRequest, got %v", err)
@@ -614,7 +614,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(nodeService("node-1", "127.0.0.1:1", registry.Route{ID: 4, Internal: true}))
 
-		if _, err := linker.doRPC(context.Background(), 4, 1, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 4, 1, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrIllegalRequest) {
 			t.Errorf("expect ErrIllegalRequest, got %v", err)
@@ -630,7 +630,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), opts)
 		linker.dispatcher.ReplaceServices(nodeService("node-1", "127.0.0.1:1", registry.Route{ID: 2, Stateful: true}))
 
-		if _, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrNotFoundUserLocation) {
 			t.Errorf("expect ErrNotFoundUserLocation, got %v", err)
@@ -646,7 +646,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), opts)
 		linker.dispatcher.ReplaceServices(nodeService("node-1", "127.0.0.1:1", registry.Route{ID: 2, Stateful: true}))
 
-		if _, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); !errors.Is(err, errors.ErrNotFoundEndpoint) {
 			t.Errorf("expect ErrNotFoundEndpoint, got %v", err)
@@ -670,7 +670,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		// The first invocation asks for a retry; the second locate resolves to the same node, so
 		// doRPC returns without invoking fn again.
 		var invoked int
-		_, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, *node.Client) (bool, any, error) {
+		_, err := linker.doRPC(context.Background(), 2, 1, func(context.Context, node.Peer) (bool, any, error) {
 			invoked++
 			return true, "reply", nil
 		})
@@ -689,7 +689,7 @@ func TestNodeLinkerDoRPC(t *testing.T) {
 		linker := NewNodeLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(nodeService("bad", "127.0.0.1:99999", registry.Route{ID: 1}))
 
-		if _, err := linker.doRPC(context.Background(), 1, 1, func(context.Context, *node.Client) (bool, any, error) {
+		if _, err := linker.doRPC(context.Background(), 1, 1, func(context.Context, node.Peer) (bool, any, error) {
 			return false, nil, nil
 		}); err == nil {
 			t.Errorf("expect a build error for an invalid port")

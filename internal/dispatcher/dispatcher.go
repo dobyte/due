@@ -6,6 +6,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/endpoint"
 	"github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/internal/bridge"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 )
@@ -89,7 +90,7 @@ func (d *Dispatcher) ReplaceServices(services ...*registry.ServiceInstance) {
 	endpoints := make(map[string]*endpoint.Endpoint)
 
 	for _, service := range services {
-		ep, err := endpoint.ParseEndpoint(service.Endpoint)
+		ep, err := endpoint.ParseEndpoint(bridge.Target(service.Endpoint, service.Metadata[bridge.MetadataKey]))
 		if err != nil {
 			log.Errorf("service endpoint parse failed, insID: %s kind: %s name: %s alias: %s endpoint: %s err: %v",
 				service.ID, service.Kind, service.Name, service.Alias, service.Endpoint, err)

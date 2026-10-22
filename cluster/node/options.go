@@ -71,6 +71,8 @@ type linkerOptions struct {
 
 // options holds the node options.
 type options struct {
+	disableLocal  bool
+	disableRemote bool
 	// Startup context.
 	//
 	// It is the parent context of the node lifecycle context and of the internal linker contexts,
@@ -203,6 +205,8 @@ type options struct {
 // default implementations for the unspecified parameters.
 func defaultOptions() *options {
 	opts := &options{}
+	opts.disableLocal = etc.Get("etc.cluster.node.linker.disableLocal").Bool()
+	opts.disableRemote = etc.Get("etc.cluster.node.linker.disableRemote").Bool()
 	opts.ctx = context.Background()
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
@@ -572,3 +576,9 @@ func WithLinkerCommandWriteTimeout(commandWriteTimeout time.Duration) Option {
 		}
 	}
 }
+
+// WithLocalBridge enables automatic process-local communication.
+func WithLocalBridge(enabled bool) Option { return func(o *options) { o.disableLocal = !enabled } }
+
+// WithLinkerListen enables the internal DRPC listener. Disable only for local-only deployment.
+func WithLinkerListen(enabled bool) Option { return func(o *options) { o.disableRemote = !enabled } }

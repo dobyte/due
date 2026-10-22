@@ -66,6 +66,8 @@ type linkerOptions struct {
 
 // options are the gate options.
 type options struct {
+	disableLocal             bool
+	disableRemote            bool
 	ctx                      context.Context   // context
 	id                       string            // instance ID
 	name                     string            // instance name
@@ -86,6 +88,8 @@ type options struct {
 // It reads each default value from the configuration center and builds the default options.
 func defaultOptions() *options {
 	opts := &options{}
+	opts.disableLocal = etc.Get("etc.cluster.gate.linker.disableLocal").Bool()
+	opts.disableRemote = etc.Get("etc.cluster.gate.linker.disableRemote").Bool()
 	opts.ctx = context.Background()
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
@@ -385,3 +389,9 @@ func WithMetadata(metadata map[string]string) Option {
 		}
 	}
 }
+
+// WithLocalBridge enables automatic process-local communication.
+func WithLocalBridge(enabled bool) Option { return func(o *options) { o.disableLocal = !enabled } }
+
+// WithLinkerListen enables the internal DRPC listener. Disable only for local-only deployment.
+func WithLinkerListen(enabled bool) Option { return func(o *options) { o.disableRemote = !enabled } }

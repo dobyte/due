@@ -1,0 +1,573 @@
+2026/10/22 11:18:56 load configure failed: GetFileAttributesEx ./etc: The system cannot find the file specified.
+2026/10/22 11:18:56 watching configure change failed: GetFileAttributesEx ./etc: The system cannot find the file specified.
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:58345                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:58347                                |
+| Server: [tcp] 127.0.0.1:58346                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:56.056726] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:56.057789] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+goos: windows
+goarch: amd64
+pkg: github.com/dobyte/due/network/tcp/v2
+cpu: 13th Gen Intel(R) Core(TM) i5-13400F
+BenchmarkBridgeRoundTrip/local-16         	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:58349                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:58351                                |
+| Server: [tcp] 127.0.0.1:58350                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:56.059921] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:56.064051] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:58353                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:58355                                |
+| Server: [tcp] 127.0.0.1:58354                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:56.065553] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:56.533687] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:50129                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:50131                                |
+| Server: [tcp] 127.0.0.1:50130                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:56.535734] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:57.729250] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   25648	     46516 ns/op	         0 p50-us	       515.0 p95-us	       999.5 p99-us	    2179 B/op	      33 allocs/op
+BenchmarkBridgeRoundTrip/local-16         	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:51917                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:51919                                |
+| Server: [tcp] 127.0.0.1:51918                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:57.731972] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:57.731972] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:51921                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:51923                                |
+| Server: [tcp] 127.0.0.1:51922                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:57.733554] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:57.738700] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:51925                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:51927                                |
+| Server: [tcp] 127.0.0.1:51926                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:57.740763] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:58.197942] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:51929                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:51931                                |
+| Server: [tcp] 127.0.0.1:51930                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:58.198944] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:59.392794] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   26259	     45417 ns/op	         0 p50-us	       514.8 p95-us	      1000 p99-us	    2174 B/op	      33 allocs/op
+BenchmarkBridgeRoundTrip/local-16         	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59479                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59481                                |
+| Server: [tcp] 127.0.0.1:59480                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:59.394359] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:59.394867] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59483                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59485                                |
+| Server: [tcp] 127.0.0.1:59484                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:59.395899] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:59.400553] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59487                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59489                                |
+| Server: [tcp] 127.0.0.1:59488                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:59.402095] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:18:59.865966] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59492                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59494                                |
+| Server: [tcp] 127.0.0.1:59493                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:18:59.867530] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:01.066762] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   25899	     46276 ns/op	         0 p50-us	       514.8 p95-us	       995.0 p99-us	    2174 B/op	      33 allocs/op
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59498                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59500                                |
+| Server: [tcp] 127.0.0.1:59499                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:01.067315] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:01.070728] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+BenchmarkBridgeRoundTrip/drpc-16          	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59517                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59519                                |
+| Server: [tcp] 127.0.0.1:59518                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:01.072801] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:01.076487] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.076487] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.076487] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.076487] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.077006] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.084016] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59536                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59538                                |
+| Server: [tcp] 127.0.0.1:59537                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:01.087110] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:01.089723] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.089723] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.089723] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.089723] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.089723] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:01.996013] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59555                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59557                                |
+| Server: [tcp] 127.0.0.1:59556                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:02.001911] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:02.002423] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:02.002423] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:02.002423] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:02.002423] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:02.002423] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.159973] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   13228	     87365 ns/op	         0 p50-us	       526.6 p95-us	      1007 p99-us	    1781 B/op	      32 allocs/op
+BenchmarkBridgeRoundTrip/drpc-16          	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59575                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59577                                |
+| Server: [tcp] 127.0.0.1:59576                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:03.161989] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:03.162996] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+WARN[2026/10/22 11:19:03.165013] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.165013] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.165013] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.165013] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.165013] client_conn.go:455 retry dial failed: client is closed
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59594                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59596                                |
+| Server: [tcp] 127.0.0.1:59595                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:03.165528] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:03.169637] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.169637] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.169637] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.169637] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.169637] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.176903] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59613                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59615                                |
+| Server: [tcp] 127.0.0.1:59614                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:03.179419] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:03.183519] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.183519] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.183519] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.183519] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:03.183519] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:04.100931] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59634                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59636                                |
+| Server: [tcp] 127.0.0.1:59635                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:04.103197] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:04.106936] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:04.106936] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:04.106936] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:04.106936] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:04.106936] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.223781] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   13051	     85688 ns/op	         0 p50-us	       538.5 p95-us	      1209 p99-us	    1783 B/op	      32 allocs/op
+BenchmarkBridgeRoundTrip/drpc-16          	┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59657                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59659                                |
+| Server: [tcp] 127.0.0.1:59658                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:05.225363] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:05.227528] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59676                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59678                                |
+| Server: [tcp] 127.0.0.1:59677                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:05.229075] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:05.229662] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.229662] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.229662] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.229662] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.229662] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.232848] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.232848] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.232848] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.232848] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.232848] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.239254] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:59695                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:59697                                |
+| Server: [tcp] 127.0.0.1:59696                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:05.241326] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:05.245127] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.245127] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.245127] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.245127] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:05.245653] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:06.221841] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+┌─────────────────────────Node─────────────────────────┐
+| ID: bridge-node                                      |
+| Name: node                                           |
+| Link: 127.0.0.1:56358                                |
+| Codec: json                                          |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Encryptor: -                                         |
+| Transporter: -                                       |
+└──────────────────────────────────────────────────────┘
+┌─────────────────────────Gate─────────────────────────┐
+| ID: bridge-gate                                      |
+| Name: gate                                           |
+| Link: 127.0.0.1:56360                                |
+| Server: [tcp] 127.0.0.1:56359                        |
+| Locator: memory                                      |
+| Registry: memory                                     |
+| Security: disabled                                   |
+└──────────────────────────────────────────────────────┘
+WARN[2026/10/22 11:19:06.223969] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: connect, err: not found event
+WARN[2026/10/22 11:19:06.227870] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:06.227870] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:06.227870] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:06.227870] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:06.227870] client_conn.go:455 retry dial failed: client is closed
+WARN[2026/10/22 11:19:07.466043] proxy.go:97 trigger event failed, cid: 1, uid: 0, event: disconnect, err: not found event
+   12264	    101110 ns/op	         0 p50-us	       536.1 p95-us	      1022 p99-us	    1781 B/op	      32 allocs/op
+PASS
+ok  	github.com/dobyte/due/network/tcp/v2	12.996s

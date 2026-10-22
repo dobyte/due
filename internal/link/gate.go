@@ -35,6 +35,7 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		builder: gate.NewBuilder(&gate.ClientOptions{
 			ID:                opts.ID,
+			DisableLocal:      opts.DisableLocal,
 			Kind:              opts.Kind,
 			ConnNum:           opts.ConnNum,
 			CallTimeout:       opts.CallTimeout,
@@ -109,7 +110,7 @@ func (l *GateLinker) BindGate(ctx context.Context, gid string, cid, uid int64) e
 
 // UnbindGate unbinds the user from its gate.
 func (l *GateLinker) UnbindGate(ctx context.Context, uid int64) error {
-	if _, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
+	if _, err := l.doRPC(ctx, uid, func(client gate.Peer, index, total int) (bool, any, error) {
 		if err := client.Unbind(ctx, uid); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), nil, err
 		} else {
@@ -198,7 +199,7 @@ func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session
 
 // doIndirectGetIP locates the user's gate and gets the IP from it.
 func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, error) {
-	v, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
+	v, err := l.doRPC(ctx, uid, func(client gate.Peer, index, total int) (bool, any, error) {
 		if ip, err := client.GetIP(ctx, session.User, uid); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), ip, err
 		} else {
@@ -218,7 +219,7 @@ func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (total int64, 
 
 	l.dispatcher.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
-			client, err := l.builder.Build(ep.Address())
+			client, err := l.builder.Resolve(ep.String())
 			if err != nil {
 				return err
 			}
@@ -272,7 +273,7 @@ func (l *GateLinker) doDirectIsOnline(ctx context.Context, args *IsOnlineArgs) (
 
 // doIndirectIsOnline locates the user's gate and checks whether the user is online there.
 func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
-	v, err := l.doRPC(ctx, args.Target, func(client *gate.Client, index, total int) (bool, any, error) {
+	v, err := l.doRPC(ctx, args.Target, func(client gate.Peer, index, total int) (bool, any, error) {
 		if isOnline, err := client.IsOnline(ctx, args.Kind, args.Target); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), isOnline, err
 		} else {
@@ -314,7 +315,7 @@ func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArg
 
 // doIndirectDisconnect locates the user's gate and disconnects the user there.
 func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
-	_, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
+	_, err := l.doRPC(ctx, uid, func(client gate.Peer, index, total int) (bool, any, error) {
 		if err := client.Disconnect(ctx, session.User, uid, force); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), nil, err
 		} else {
@@ -340,7 +341,7 @@ func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
 
 // doPush pushes a message to a single target through the gate that owns it.
 func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, disconnect bool, message buffer.Buffer, ack bool) error {
-	_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
+	_, err := l.doRPC(ctx, target, func(client gate.Peer, index, total int) (bool, any, error) {
 		if err := client.Push(ctx, kind, target, disconnect, message, ack); ack {
 			if errors.Is(err, errors.ErrNotFoundSession) {
 				return true, nil, err
@@ -497,7 +498,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doBroadcast(ctx, ep.Address(), args.Kind, args.Disconnect, message, args.Ack)
+			return l.doBroadcast(ctx, ep.String(), args.Kind, args.Disconnect, message, args.Ack)
 		}
 
 		return 0, nil
@@ -510,7 +511,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 		message.Delay(n)
 
 		for _, ep := range endpoints {
-			addr := ep.Address()
+			addr := ep.String()
 
 			eg.Go(func() error {
 				if v, err := l.doBroadcast(ctx, addr, args.Kind, args.Disconnect, message, args.Ack); err != nil {
@@ -533,7 +534,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 
 // doBroadcast pushes a broadcast message to the gate at addr.
 func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
-	if client, err := l.builder.Build(addr); err != nil {
+	if client, err := l.builder.Resolve(addr); err != nil {
 		message.Release()
 
 		return 0, err
@@ -560,7 +561,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 
 	if n == 1 {
 		for _, ep := range endpoints {
-			return l.doPublish(ctx, ep.Address(), args.Channel, args.Disconnect, message, args.Ack)
+			return l.doPublish(ctx, ep.String(), args.Channel, args.Disconnect, message, args.Ack)
 		}
 
 		return 0, nil
@@ -573,7 +574,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 		message.Delay(n)
 
 		for _, ep := range endpoints {
-			addr := ep.Address()
+			addr := ep.String()
 
 			eg.Go(func() error {
 				if v, err := l.doPublish(ctx, addr, args.Channel, args.Disconnect, message, args.Ack); err != nil {
@@ -596,7 +597,7 @@ func (l *GateLinker) Publish(ctx context.Context, args *PublishArgs) (int64, err
 
 // doPublish publishes a channel message to the gate at addr.
 func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
-	if client, err := l.builder.Build(addr); err != nil {
+	if client, err := l.builder.Resolve(addr); err != nil {
 		message.Release()
 
 		return 0, err
@@ -646,7 +647,7 @@ func (l *GateLinker) doIndirectSubscribe(ctx context.Context, args *SubscribeArg
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
+				_, err := l.doRPC(ctx, target, func(client gate.Peer, index, total int) (bool, any, error) {
 					return false, nil, client.Subscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -698,7 +699,7 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 	for _, target := range args.Targets {
 		func(target int64) {
 			eg.Go(func() error {
-				_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
+				_, err := l.doRPC(ctx, target, func(client gate.Peer, index, total int) (bool, any, error) {
 					return false, nil, client.Unsubscribe(ctx, args.Kind, []int64{target}, args.Channel)
 				})
 				return err
@@ -712,12 +713,12 @@ func (l *GateLinker) doIndirectUnsubscribe(ctx context.Context, args *Unsubscrib
 // doRPC locates the user's gate and invokes successHandler on it. It retries once when the
 // located gate changes. failedHandler, when provided, is called before the call returns on every
 // attempt that fails.
-func (l *GateLinker) doRPC(ctx context.Context, uid int64, successHandler func(client *gate.Client, index int, total int) (bool, any, error), failedHandler ...func(index int, total int)) (any, error) {
+func (l *GateLinker) doRPC(ctx context.Context, uid int64, successHandler func(client gate.Peer, index int, total int) (bool, any, error), failedHandler ...func(index int, total int)) (any, error) {
 	var (
 		err       error
 		gid       string
 		prev      string
-		client    *gate.Client
+		client    gate.Peer
 		continued bool
 		reply     any
 		total     = 2
@@ -758,7 +759,7 @@ func (l *GateLinker) doRPC(ctx context.Context, uid int64, successHandler func(c
 }
 
 // doBuildClient builds a gate client for the given instance ID.
-func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
+func (l *GateLinker) doBuildClient(gid string) (gate.Peer, error) {
 	if gid == "" {
 		return nil, errors.ErrInvalidGID
 	}
@@ -768,7 +769,7 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 		return nil, err
 	}
 
-	return l.builder.Build(ep.Address())
+	return l.builder.Resolve(ep.String())
 }
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
@@ -816,7 +817,9 @@ func (l *GateLinker) WatchUserLocate() {
 		log.Fatalf("user locate event watch failed: %v", err)
 	}
 
+	stopWatch := context.AfterFunc(l.ctx, func() { _ = watcher.Stop() })
 	go func() {
+		defer stopWatch()
 		defer watcher.Stop()
 		for {
 			select {
@@ -856,7 +859,9 @@ func (l *GateLinker) WatchClusterInstance() {
 		log.Fatalf("the dispatcher instance watch failed: %v", err)
 	}
 
+	stopWatch := context.AfterFunc(l.ctx, func() { _ = watcher.Stop() })
 	go func() {
+		defer stopWatch()
 		defer watcher.Stop()
 		for {
 			select {
@@ -877,3 +882,6 @@ func (l *GateLinker) WatchClusterInstance() {
 		}
 	}()
 }
+
+// Close releases the cached remote connections owned by this linker.
+func (l *GateLinker) Close() { l.builder.Close() }

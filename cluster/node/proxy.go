@@ -33,6 +33,7 @@ func newProxy(node *Node) *Proxy {
 	return &Proxy{
 		node: node,
 		gateLinker: link.NewGateLinker(node.ctx, &link.Options{
+			DisableLocal:        node.opts.disableLocal,
 			ID:                  node.opts.id,
 			Kind:                cluster.Node,
 			Codec:               node.opts.codec,
@@ -48,6 +49,7 @@ func newProxy(node *Node) *Proxy {
 			CommandWriteTimeout: node.opts.linker.commandWriteTimeout,
 		}),
 		nodeLinker: link.NewNodeLinker(node.ctx, &link.Options{
+			DisableLocal:        node.opts.disableLocal,
 			ID:                  node.opts.id,
 			Kind:                cluster.Node,
 			Codec:               node.opts.codec,

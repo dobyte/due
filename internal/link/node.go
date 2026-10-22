@@ -48,6 +48,7 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 		dispatcher: dispatcher.NewDispatcher(opts.Dispatch),
 		builder: node.NewBuilder(&node.ClientOptions{
 			ID:                opts.ID,
+			DisableLocal:      opts.DisableLocal,
 			Kind:              opts.Kind,
 			ConnNum:           opts.ConnNum,
 			CallTimeout:       opts.CallTimeout,
@@ -230,7 +231,7 @@ func (l *NodeLinker) Deliver(ctx context.Context, args *DeliverArgs) error {
 			return client.Deliver(ctx, args.CID, args.UID, buf)
 		}
 	} else {
-		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client *node.Client) (bool, any, error) {
+		if _, err = l.doRPC(ctx, args.Route, args.UID, func(ctx context.Context, client node.Peer) (bool, any, error) {
 			isDeliver = true
 
 			return false, nil, client.Deliver(ctx, args.CID, args.UID, buf)
@@ -265,9 +266,9 @@ func (l *NodeLinker) Trigger(ctx context.Context, args *TriggerArgs) error {
 
 	event.VisitEndpoints(func(insID string, ep *endpoint.Endpoint) bool {
 		eg.Go(func() error {
-			client, err := l.builder.Build(ep.Address())
+			client, err := l.builder.Resolve(ep.String())
 			if err != nil {
-				log.Warnf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v", insID, ep.Address(), args.Event, args.CID, args.UID, err)
+				log.Warnf("build node client failed, nid: %s, addr: %s, event: %v, cid: %d, uid: %d, err: %v", insID, ep.String(), args.Event, args.CID, args.UID, err)
 				return nil
 			}
 
@@ -305,13 +306,13 @@ func (l *NodeLinker) SetState(ctx context.Context, nid string, state cluster.Sta
 }
 
 // doRPC performs an RPC call against a node selected by the given route.
-func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn func(ctx context.Context, client *node.Client) (bool, any, error)) (any, error) {
+func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn func(ctx context.Context, client node.Peer) (bool, any, error)) (any, error) {
 	var (
 		err       error
 		nid       string
 		prev      string
 		route     *dispatcher.Route
-		client    *node.Client
+		client    node.Peer
 		ep        *endpoint.Endpoint
 		continued bool
 		reply     any
@@ -346,7 +347,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 			return nil, err
 		}
 
-		if client, err = l.builder.Build(ep.Address()); err != nil {
+		if client, err = l.builder.Resolve(ep.String()); err != nil {
 			return nil, err
 		}
 
@@ -364,7 +365,7 @@ func (l *NodeLinker) doRPC(ctx context.Context, routeID int32, uid int64, fn fun
 }
 
 // doBuildClient builds a node client for the given instance ID.
-func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
+func (l *NodeLinker) doBuildClient(nid string) (node.Peer, error) {
 	if nid == "" {
 		return nil, errors.ErrInvalidNID
 	}
@@ -374,7 +375,7 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 		return nil, err
 	}
 
-	return l.builder.Build(ep.Address())
+	return l.builder.Resolve(ep.String())
 }
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
@@ -525,7 +526,9 @@ func (l *NodeLinker) WatchUserLocate() {
 		log.Fatalf("user locate event watch failed: %v", err)
 	}
 
+	stopWatch := context.AfterFunc(l.ctx, func() { _ = watcher.Stop() })
 	go func() {
+		defer stopWatch()
 		defer watcher.Stop()
 		for {
 			select {
@@ -565,7 +568,9 @@ func (l *NodeLinker) WatchClusterInstance() {
 		log.Fatalf("the cluster instance watch failed: %v", err)
 	}
 
+	stopWatch := context.AfterFunc(l.ctx, func() { _ = watcher.Stop() })
 	go func() {
+		defer stopWatch()
 		defer watcher.Stop()
 		for {
 			select {
@@ -586,3 +591,6 @@ func (l *NodeLinker) WatchClusterInstance() {
 		}
 	}()
 }
+
+// Close releases the cached remote connections owned by this linker.
+func (l *NodeLinker) Close() { l.builder.Close() }

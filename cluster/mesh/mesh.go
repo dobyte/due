@@ -136,6 +136,8 @@ func (m *Mesh) Destroy() {
 	m.stopTransportServer()
 
 	m.cancel()
+	m.proxy.nodeLinker.Close()
+	m.proxy.gateLinker.Close()
 
 	m.runHookFunc(cluster.Destroy)
 }
