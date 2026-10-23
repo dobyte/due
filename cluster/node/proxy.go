@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
+	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/petermattis/goid"
@@ -314,15 +316,11 @@ func (p *Proxy) UnbindActor(uid int64, kind string) error {
 	}
 }
 
-// PackMessage packs a message. It returns the packed bytes and the error reported when packing
+// PackMessage packs a message. It returns the packed buffer, whose ownership is transferred to the
+// caller and must be released with [buffer.Buffer.Release], and the error reported when packing
 // fails.
-func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
-	buf, err := p.gateLinker.PackMessage(message, true)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
+func (p *Proxy) PackMessage(message *cluster.Message) (buffer.Buffer, error) {
+	return p.gateLinker.PackMessage(message, true)
 }
 
 // PackBuffer packs the given message content. It returns the packed bytes and the error reported
@@ -546,6 +544,30 @@ func (p *Proxy) AfterInvoke(d time.Duration, f func()) (*Timer, error) {
 	})
 
 	return &Timer{node: p.node, timer: timer}, nil
+}
+
+// Task schedules a task on the global task pool.
+//
+// Unlike [Proxy.Invoke] and [Proxy.AfterInvoke], the function is not serialized by the node task
+// queue; it runs concurrently with the other tasks and with the dispatcher goroutine, so access to
+// shared state must be synchronized by the caller. The task is tracked by the node wait count, so
+// Close waits for it to finish. It returns the error reported when the node is shut down.
+func (p *Proxy) Task(f func()) error {
+	if p.node.isShut() {
+		return errors.ErrNodeShutdown
+	}
+
+	if !p.node.doAddWait() {
+		return errors.ErrNodeShutdown
+	}
+
+	taskpool.Add(func() {
+		defer p.node.doDoneWait()
+
+		f()
+	})
+
+	return nil
 }
 
 // Spawn creates a new actor. It returns the error reported when the node is shut down or the actor

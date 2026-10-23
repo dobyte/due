@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
@@ -170,7 +171,7 @@ func TestSecurityEmptyCiphertext(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.security.decrypt(conn, buf)
-	if !conn.closed.Load() {
+	if !waitClosed(conn.securityConn, time.Second) {
 		t.Fatal("empty ciphertext must close the connection")
 	}
 }

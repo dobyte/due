@@ -134,6 +134,10 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
+	if g.security != nil {
+		g.security.shutdown()
+	}
+
 	g.stopLinkerServer()
 
 	g.cancel()
@@ -189,14 +193,19 @@ func (g *Gate) handleConnect(conn network.Conn) {
 //
 // For a connection whose session is registered, it unbinds the user, triggers the Disconnect event
 // and completes the WaitGroup counter; a connection that is not registered (rejected during the
-// closing phase) is ignored. RemConn atomically performs the existence check and removal, so when
-// concurrent duplicate disconnects happen only the first call takes effect, keeping the WaitGroup's
-// Add/Done balanced.
+// closing phase) is ignored. When session security is enabled, the Disconnect event is triggered
+// only for a connection whose handshake was confirmed, so that it stays paired with the Connect
+// event, which is deferred until the handshake is confirmed. RemConn atomically performs the
+// existence check and removal, so when concurrent duplicate disconnects happen only the first call
+// takes effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	cid := conn.ID()
 
+	confirmed := true
+
 	if g.security != nil {
 		conn = g.security.unwrap(conn)
+		confirmed = g.security.confirmed(cid)
 		g.security.remove(cid)
 	}
 
@@ -209,11 +218,12 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 			cancel()
 		}
 
-		g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+		if confirmed {
+			g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+		}
 
 		g.wg.Done()
 	}
-
 }
 
 // handleReceive handles a received message and delivers the client message to the matching

@@ -870,9 +870,14 @@ func TestMeshProxyWorking(t *testing.T) {
 	}
 
 	// Message packing delegates to the gate linker.
-	if buf, err := p.PackMessage(&cluster.Message{Route: 1, Data: map[string]string{"k": "v"}}); err != nil || len(buf) == 0 {
-		t.Fatalf("unexpected PackMessage: %d, err: %v", len(buf), err)
+	packed, err := p.PackMessage(&cluster.Message{Route: 1, Data: map[string]string{"k": "v"}})
+	if err != nil {
+		t.Fatalf("unexpected PackMessage err: %v", err)
 	}
+	if packed == nil || packed.Len() == 0 {
+		t.Fatalf("unexpected PackMessage: %v", packed)
+	}
+	packed.Release()
 	if buf, err := p.PackBuffer(map[string]string{"k": "v"}); err != nil || len(buf) == 0 {
 		t.Fatalf("unexpected PackBuffer: %d, err: %v", len(buf), err)
 	}

@@ -284,9 +284,10 @@ func TestProxyPackMessage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pack message failed: %v", err)
 		}
-		if len(buf) == 0 {
-			t.Fatal("expect non-empty bytes")
+		if buf == nil || buf.Len() == 0 {
+			t.Fatal("expect a non-empty buffer")
 		}
+		buf.Release()
 	})
 
 	t.Run("pack message error", func(t *testing.T) {

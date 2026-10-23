@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
@@ -237,15 +238,11 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	}
 }
 
-// PackMessage packs the given message and returns the packed message bytes, or an error when
+// PackMessage packs the given message and returns the packed buffer, whose ownership is
+// transferred to the caller and must be released with [buffer.Buffer.Release], or an error when
 // packing fails.
-func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
-	buf, err := p.gateLinker.PackMessage(message, true)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
+func (p *Proxy) PackMessage(message *cluster.Message) (buffer.Buffer, error) {
+	return p.gateLinker.PackMessage(message, true)
 }
 
 // PackBuffer packs the given message content and returns the packed message bytes, or an error
