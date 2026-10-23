@@ -24,16 +24,19 @@ import (
 // Gate is the gate server component.
 type Gate struct {
 	component.Base
-	opts     *options
-	ctx      context.Context
-	cancel   context.CancelFunc
-	state    atomic.Int32
-	proxy    *proxy
-	instance *registry.ServiceInstance
-	session  *session.Session
-	linker   *gate.Server
-	security *securityManager
-	wg       *sync.WaitGroup
+	opts         *options
+	ctx          context.Context
+	cancel       context.CancelFunc
+	state        atomic.Int32
+	proxy        *proxy
+	instance     *registry.ServiceInstance
+	session      *session.Session
+	linker       *gate.Server
+	security     *securityManager
+	bindings     bindingLocks
+	connBindings bindingLocks
+	connMu       sync.Mutex // serializes connection admission with the transition to Hang or Shut
+	wg           *sync.WaitGroup
 }
 
 // NewGate returns a new gate server component configured by the given options.
@@ -110,11 +113,14 @@ func (g *Gate) Start() {
 // It switches the state to Hang and refreshes the service instance state, then waits for all
 // online client sessions to exit naturally (graceful shutdown semantics).
 func (g *Gate) Close() {
+	g.connMu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
 		if !g.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
+			g.connMu.Unlock()
 			return
 		}
 	}
+	g.connMu.Unlock()
 
 	g.refreshServiceInstance()
 
@@ -126,9 +132,12 @@ func (g *Gate) Close() {
 // It deregisters the service instance, stops the network server and the link server in turn, and
 // cancels the component context.
 func (g *Gate) Destroy() {
+	g.connMu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+		g.connMu.Unlock()
 		return
 	}
+	g.connMu.Unlock()
 
 	g.deregisterServiceInstance()
 
@@ -137,6 +146,9 @@ func (g *Gate) Destroy() {
 	if g.security != nil {
 		g.security.shutdown()
 	}
+	// Stop may skip connections already being closed by the transport. Their callbacks still
+	// need the locator, the node linker and the component context to finish cleanup.
+	g.wg.Wait()
 
 	g.stopLinkerServer()
 
@@ -173,16 +185,20 @@ func (g *Gate) stopNetworkServer() {
 // It accepts the connection and registers the session only when the server is in the Work or Busy
 // state; in any other state (Hang or Shut) it closes the connection and rejects it.
 func (g *Gate) handleConnect(conn network.Conn) {
+	g.connMu.Lock()
 	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
 
 		if g.security != nil {
 			g.session.AddConn(g.security.wrap(conn))
+			g.connMu.Unlock()
 		} else {
 			g.session.AddConn(conn)
+			g.connMu.Unlock()
 			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 		}
 	} else {
+		g.connMu.Unlock()
 		if err := conn.Close(); err != nil {
 			log.Warnf("close conn failed: %v", err)
 		}
@@ -211,18 +227,27 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 	if g.session.RemConn(conn) {
 		uid := conn.UID()
+		var unlock func()
 
 		if uid != 0 {
-			ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-			_ = g.proxy.unbindGate(ctx, cid, uid)
-			cancel()
+			// Remove the local connection before waiting for a pending location write. Bind
+			// either observes the removal before writing, or this cleanup follows its write.
+			unlock = g.bindings.lock(uid)
+			if online, _ := g.session.Has(session.User, uid); !online {
+				ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+				_ = g.proxy.cleanupGate(ctx, cid, uid)
+				cancel()
+			}
 		}
 
 		if confirmed {
-			g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+			g.proxy.triggerDisconnect(g.ctx, cid, uid)
 		}
 
 		g.wg.Done()
+		if unlock != nil {
+			unlock()
+		}
 	}
 }
 

@@ -107,6 +107,28 @@ func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
 	return
 }
 
+// UserID returns the user ID currently attached to cid, or zero if it is unbound.
+func (s *Session) UserID(cid int64) (int64, error) {
+	s.rw.RLock()
+	conn, err := s.conn(Conn, cid)
+	if err != nil {
+		s.rw.RUnlock()
+		return 0, err
+	}
+	uid := conn.UID()
+	s.rw.RUnlock()
+	return uid, nil
+}
+
+// IsBound reports whether cid is registered and is the current connection bound to uid.
+func (s *Session) IsBound(cid, uid int64) bool {
+	s.rw.RLock()
+	conn := s.conns[cid]
+	bound := conn != nil && conn.UID() == uid && s.users[uid] == conn
+	s.rw.RUnlock()
+	return bound
+}
+
 // Bind binds the user ID uid to the connection identified by cid. When uid is already bound to
 // another connection, that connection is closed and replaced.
 func (s *Session) Bind(cid, uid int64) error {
@@ -162,11 +184,31 @@ func (s *Session) bind(cid, uid int64) (network.Conn, error) {
 // Unbind unbinds the user ID uid and returns the ID of the connection it was bound to.
 func (s *Session) Unbind(uid int64) (int64, error) {
 	s.rw.Lock()
-	defer s.rw.Unlock()
+	cid, err := s.unbind(uid, 0)
+	s.rw.Unlock()
+	return cid, err
+}
 
+// UnbindConn unbinds uid only if its current connection is cid. A removed or replaced binding
+// returns ErrNotFoundSession without changing the current user connection.
+func (s *Session) UnbindConn(cid, uid int64) error {
+	if cid == 0 {
+		return errors.ErrNotFoundSession
+	}
+	s.rw.Lock()
+	_, err := s.unbind(uid, cid)
+	s.rw.Unlock()
+	return err
+}
+
+// unbind removes a user binding while the caller holds rw. A zero cid accepts any connection.
+func (s *Session) unbind(uid, cid int64) (int64, error) {
 	conn, err := s.conn(User, uid)
 	if err != nil {
 		return 0, err
+	}
+	if cid != 0 && conn.ID() != cid {
+		return 0, errors.ErrNotFoundSession
 	}
 
 	if err := conn.Unbind(); err != nil {

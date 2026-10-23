@@ -52,9 +52,19 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	taskpool.Add(func() { p.trigger(ctx, cluster.Reconnect, cid, uid) })
+	taskpool.Add(func() { p.reconnect(ctx, cid, uid) })
 
 	return nil
+}
+
+// reconnect drops a queued event if the connection was removed before it could be published.
+// Sharing the user lock with disconnect keeps a valid Reconnect ahead of its Disconnect.
+func (p *proxy) reconnect(ctx context.Context, cid, uid int64) {
+	unlock := p.gate.bindings.lock(uid)
+	if p.gate.session.IsBound(cid, uid) {
+		p.trigger(ctx, cluster.Reconnect, cid, uid)
+	}
+	unlock()
 }
 
 // unbindGate unbinds the user from the gate.
@@ -62,7 +72,11 @@ func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	if p.gate.isShut() {
 		return errors.ErrGateShutdown
 	}
+	return p.cleanupGate(ctx, cid, uid)
+}
 
+// cleanupGate is also used by disconnect callbacks while Destroy rejects new business requests.
+func (p *proxy) cleanupGate(ctx context.Context, cid, uid int64) error {
 	if err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id); err != nil {
 		if mode.IsDebugMode() {
 			log.Debugf("user unbind failed, gid: %s, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
@@ -81,7 +95,17 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 	if p.gate.isShut() {
 		return
 	}
+	p.doTrigger(ctx, event, cid, uid)
+}
 
+// triggerDisconnect keeps teardown notifications available until Destroy cancels the context.
+func (p *proxy) triggerDisconnect(ctx context.Context, cid, uid int64) {
+	if ctx.Err() == nil {
+		p.doTrigger(ctx, cluster.Disconnect, cid, uid)
+	}
+}
+
+func (p *proxy) doTrigger(ctx context.Context, event cluster.Event, cid, uid int64) {
 	if mode.IsDebugMode() {
 		log.Debugf("trigger event, event: %v cid: %d uid: %d", event.String(), cid, uid)
 	}

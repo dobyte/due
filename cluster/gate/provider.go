@@ -28,15 +28,72 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 		return errors.ErrInvalidArgument
 	}
 
+	// Serialize requests for the same connection, including UID changes, so an older failure
+	// cannot roll back a newer request for that CID. Disconnect never takes this lock.
+	unlockConn := p.gate.connBindings.lock(cid)
+	err := p.bindConn(ctx, cid, uid)
+	unlockConn()
+	return err
+}
+
+// bindConn updates a connection's identity while the caller holds its connection binding lock.
+func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
+	previousUID, err := p.gate.session.UserID(cid)
+	if err != nil {
+		return err
+	}
+	if previousUID != 0 && previousUID != uid {
+		if err := p.unbindPrevious(ctx, cid, previousUID); err != nil {
+			return err
+		}
+	}
+	if p.gate.isShut() {
+		return errors.ErrGateShutdown
+	}
+
 	if err := p.gate.session.Bind(cid, uid); err != nil {
 		return err
 	}
 
-	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
-		_, _ = p.gate.session.Unbind(uid)
-		return err
+	// Session.Bind may synchronously close an older connection. Acquire the user lock only
+	// afterwards so that the old connection's disconnect callback can finish its own cleanup.
+	unlock := p.gate.bindings.lock(uid)
+	if !p.gate.session.IsBound(cid, uid) {
+		unlock()
+		return errors.ErrNotFoundSession
 	}
 
+	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
+		_ = p.gate.session.UnbindConn(cid, uid)
+		unlock()
+		return err
+	}
+	bound := p.gate.session.IsBound(cid, uid)
+	unlock()
+	if !bound {
+		return errors.ErrNotFoundSession
+	}
+
+	return nil
+}
+
+// unbindPrevious finishes the old identity's location cleanup before a connection changes UID.
+// Only one user lock is held at a time, so concurrent UID swaps cannot reverse the lock order.
+func (p *provider) unbindPrevious(ctx context.Context, cid, uid int64) error {
+	unlock := p.gate.bindings.lock(uid)
+	if !p.gate.session.IsBound(cid, uid) {
+		unlock()
+		return nil
+	}
+	if err := p.gate.proxy.unbindGate(ctx, cid, uid); err != nil {
+		unlock()
+		return err
+	}
+	err := p.gate.session.UnbindConn(cid, uid)
+	unlock()
+	if err != nil && !errors.Is(err, errors.ErrNotFoundSession) {
+		return err
+	}
 	return nil
 }
 
@@ -50,12 +107,17 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return errors.ErrInvalidArgument
 	}
 
+	unlock := p.gate.bindings.lock(uid)
+
 	cid, err := p.gate.session.Unbind(uid)
 	if err != nil {
+		unlock()
 		return err
 	}
 
-	return p.gate.proxy.unbindGate(ctx, cid, uid)
+	err = p.gate.proxy.unbindGate(ctx, cid, uid)
+	unlock()
+	return err
 }
 
 // GetIP returns the client IP address.
