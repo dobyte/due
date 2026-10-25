@@ -768,8 +768,8 @@ func TestSubscribeExtra(t *testing.T) {
 		if err := s.subscribe(cluster.Conn, []int64{99}, "chat"); err != nil {
 			t.Errorf("Subscribe() error = %v, want nil", err)
 		}
-		if len(s.channels) != 0 {
-			t.Errorf("channel count = %d, want 0", len(s.channels))
+		if channelCount(s) != 0 {
+			t.Errorf("channel count = %d, want 0", channelCount(s))
 		}
 	})
 
@@ -785,8 +785,8 @@ func TestSubscribeExtra(t *testing.T) {
 		if err := s.subscribe(cluster.Conn, []int64{2}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
-		if len(s.channels["chat"]) != 2 {
-			t.Errorf("subscriber count = %d, want 2", len(s.channels["chat"]))
+		if channelSubscriberCount(s, "chat") != 2 {
+			t.Errorf("subscriber count = %d, want 2", channelSubscriberCount(s, "chat"))
 		}
 		if _, ok := c1.Attr().Get("chat"); !ok {
 			t.Error("the subscription must be recorded as a conn attribute")
@@ -799,8 +799,8 @@ func TestSubscribeExtra(t *testing.T) {
 		if err := s.subscribe(cluster.User, []int64{100}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
-		if len(s.channels["chat"]) != 1 {
-			t.Errorf("subscriber count = %d, want 1", len(s.channels["chat"]))
+		if channelSubscriberCount(s, "chat") != 1 {
+			t.Errorf("subscriber count = %d, want 1", channelSubscriberCount(s, "chat"))
 		}
 	})
 }
@@ -835,8 +835,8 @@ func TestUnsubscribeExtra(t *testing.T) {
 		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Errorf("Unsubscribe() error = %v, want nil", err)
 		}
-		if len(s.channels) != 0 {
-			t.Errorf("channel count = %d, want 0", len(s.channels))
+		if channelCount(s) != 0 {
+			t.Errorf("channel count = %d, want 0", channelCount(s))
 		}
 	})
 
@@ -849,8 +849,8 @@ func TestUnsubscribeExtra(t *testing.T) {
 		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
-		if len(s.channels) != 0 {
-			t.Errorf("channel count = %d, want 0", len(s.channels))
+		if channelCount(s) != 0 {
+			t.Errorf("channel count = %d, want 0", channelCount(s))
 		}
 		if _, ok := conn.Attr().Get("chat"); ok {
 			t.Error("the subscription attribute must be removed")
@@ -866,8 +866,8 @@ func TestUnsubscribeExtra(t *testing.T) {
 		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
-		if len(s.channels["chat"]) != 1 {
-			t.Errorf("subscriber count = %d, want 1", len(s.channels["chat"]))
+		if channelSubscriberCount(s, "chat") != 1 {
+			t.Errorf("subscriber count = %d, want 1", channelSubscriberCount(s, "chat"))
 		}
 	})
 
@@ -878,8 +878,8 @@ func TestUnsubscribeExtra(t *testing.T) {
 		if err := s.unsubscribe(cluster.User, []int64{100}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
-		if len(s.channels) != 0 {
-			t.Errorf("channel count = %d, want 0", len(s.channels))
+		if channelCount(s) != 0 {
+			t.Errorf("channel count = %d, want 0", channelCount(s))
 		}
 	})
 }
@@ -952,4 +952,40 @@ func TestRemConnExtra(t *testing.T) {
 			t.Error("the connection attributes must be cleared")
 		}
 	})
+}
+
+// TestPublishSnapshotInvalidatesOnSubscriptionChange verifies that publish observes subscription
+// changes made after a previous snapshot was built.
+func TestPublishSnapshotInvalidatesOnSubscriptionChange(t *testing.T) {
+	s := newSession()
+	first, second := newStubConn(1), newStubConn(2)
+	s.addConn(first)
+	s.addConn(second)
+
+	if err := s.subscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
+		t.Fatalf("Subscribe() error = %v, want nil", err)
+	}
+	if n, err := s.publish("chat", false, buffer.NewBytes([]byte("data"))); err != nil || n != 1 {
+		t.Fatalf("Publish() = (%d, %v), want (1, nil)", n, err)
+	}
+
+	if err := s.subscribe(cluster.Conn, []int64{2}, "chat"); err != nil {
+		t.Fatalf("Subscribe() error = %v, want nil", err)
+	}
+	if n, err := s.publish("chat", false, buffer.NewBytes([]byte("data"))); err != nil || n != 2 {
+		t.Fatalf("Publish() = (%d, %v), want (2, nil)", n, err)
+	}
+
+	if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
+		t.Fatalf("Unsubscribe() error = %v, want nil", err)
+	}
+	if n, err := s.publish("chat", false, buffer.NewBytes([]byte("data"))); err != nil || n != 1 {
+		t.Fatalf("Publish() = (%d, %v), want (1, nil)", n, err)
+	}
+	if channelSubscriberCount(s, "chat") != 1 {
+		t.Fatalf("subscriber count = %d, want 1", channelSubscriberCount(s, "chat"))
+	}
+	if first.pushes != 2 || second.pushes != 2 {
+		t.Fatalf("push counts = (%d, %d), want (2, 2)", first.pushes, second.pushes)
+	}
 }

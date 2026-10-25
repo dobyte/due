@@ -118,9 +118,7 @@ func TestSubscribeAndUnsubscribeConcurrentKeepsStateConsistent(t *testing.T) {
 
 		_, inAttr := conn.Attr().Get("chat")
 
-		s.channelsMu.RLock()
-		_, inChannel := s.channels["chat"]
-		s.channelsMu.RUnlock()
+		inChannel := channelSubscriberCount(s, "chat") > 0
 
 		if inAttr != inChannel {
 			t.Fatalf("inconsistent subscription state: attr = %v, channel = %v", inAttr, inChannel)

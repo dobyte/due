@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"hash/maphash"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,13 @@ import (
 // defaultSessionShardNum is the number of session table shards (a power of two, so that the shard
 // is selected with a bit operation).
 const defaultSessionShardNum = 256
+
+// defaultChannelShardNum is the number of channel subscription table shards (a power of two, so
+// that the shard is selected with a bit operation).
+const defaultChannelShardNum = 256
+
+// channelHashSeed hashes channel names to select a channel shard.
+var channelHashSeed = maphash.MakeSeed()
 
 // sessionShard is a shard of the connection or user session table.
 //
@@ -96,23 +104,89 @@ func (s *sessionShard) unbind(uid, cid int64) (network.Conn, bool) {
 	return conn, true
 }
 
+// channelShard is a shard of the channel subscription table.
+type channelShard struct {
+	rw       sync.RWMutex
+	channels map[string]*channelSubscribers
+	_        [32]byte
+}
+
+// channelSubscribers holds the subscribers of one channel.
+//
+// The members map accepts subscription changes, while snapshot is an immutable connection list
+// read by publish. Every change invalidates the snapshot; it is rebuilt lazily on the next publish.
+type channelSubscribers struct {
+	mu       sync.Mutex
+	members  map[network.Conn]struct{}
+	snapshot atomic.Pointer[[]network.Conn]
+}
+
+// add adds conn to the subscriber set.
+func (c *channelSubscribers) add(conn network.Conn) {
+	c.mu.Lock()
+	if _, ok := c.members[conn]; !ok {
+		c.members[conn] = struct{}{}
+		c.snapshot.Store(nil)
+	}
+	c.mu.Unlock()
+}
+
+// remove removes conn from the subscriber set. It reports whether conn was removed and whether the
+// set is empty afterwards.
+func (c *channelSubscribers) remove(conn network.Conn) (removed, empty bool) {
+	c.mu.Lock()
+	if _, ok := c.members[conn]; ok {
+		delete(c.members, conn)
+		c.snapshot.Store(nil)
+		removed = true
+	}
+	empty = len(c.members) == 0
+	c.mu.Unlock()
+	return
+}
+
+// subscribers returns an immutable snapshot of the subscriber set. The snapshot is rebuilt after
+// the set changes and then reused by subsequent publishes.
+func (c *channelSubscribers) subscribers() []network.Conn {
+	if snapshot := c.snapshot.Load(); snapshot != nil {
+		return *snapshot
+	}
+
+	c.mu.Lock()
+	if snapshot := c.snapshot.Load(); snapshot != nil {
+		c.mu.Unlock()
+		return *snapshot
+	}
+
+	if len(c.members) == 0 {
+		c.mu.Unlock()
+		return nil
+	}
+
+	conns := make([]network.Conn, 0, len(c.members))
+	for conn := range c.members {
+		conns = append(conns, conn)
+	}
+	c.snapshot.Store(&conns)
+	c.mu.Unlock()
+
+	return conns
+}
+
 // session manages the connection and user sessions of a node along with their channel
 // subscriptions.
 //
-// Lock ordering is connection shard -> user shard -> channel table. Operations that need multiple
-// user shards acquire them in ascending shard index order.
+// Lock ordering is connection shard -> user shard -> channel shard -> channel subscriber mutex.
+// Operations that need multiple user shards acquire them in ascending shard index order.
 type session struct {
-	conns      [defaultSessionShardNum]sessionShard // Connection sessions, sharded by connection ID
-	users      [defaultSessionShardNum]sessionShard // User sessions, sharded by user ID
-	channelsMu sync.RWMutex                         // Protects the channel subscription table
-	channels   map[string]map[network.Conn]struct{} // Channel subscriptions, keyed by channel name
+	conns    [defaultSessionShardNum]sessionShard // Connection sessions, sharded by connection ID
+	users    [defaultSessionShardNum]sessionShard // User sessions, sharded by user ID
+	channels [defaultChannelShardNum]channelShard // Channel subscriptions, sharded by channel name
 }
 
 // newSession creates a session instance.
 func newSession() *session {
-	s := &session{
-		channels: make(map[string]map[network.Conn]struct{}),
-	}
+	s := &session{}
 
 	for i := range s.conns {
 		s.conns[i].conns = make(map[int64]network.Conn)
@@ -120,6 +194,10 @@ func newSession() *session {
 
 	for i := range s.users {
 		s.users[i].conns = make(map[int64]network.Conn)
+	}
+
+	for i := range s.channels {
+		s.channels[i].channels = make(map[string]*channelSubscribers)
 	}
 
 	return s
@@ -138,6 +216,20 @@ func (s *session) loadConnShard(cid int64) *sessionShard {
 // loadUserShard returns the user shard of the given user ID.
 func (s *session) loadUserShard(uid int64) *sessionShard {
 	return &s.users[shardIndex(uid)]
+}
+
+// loadChannelShard returns the channel shard of the given channel name.
+func (s *session) loadChannelShard(channel string) *channelShard {
+	return &s.channels[int(maphash.String(channelHashSeed, channel)&(defaultChannelShardNum-1))]
+}
+
+// loadChannel returns the subscribers of channel, or nil when the channel has no subscribers.
+func (s *session) loadChannel(channel string) *channelSubscribers {
+	shard := s.loadChannelShard(channel)
+	shard.rw.RLock()
+	subscribers := shard.channels[channel]
+	shard.rw.RUnlock()
+	return subscribers
 }
 
 // lockUserShards locks the shards of a and b in a deterministic order, returning the locked shards
@@ -493,17 +585,13 @@ func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Bu
 // true, each connection is closed after the push. It returns the number of sessions the message was
 // pushed to.
 func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
-	var conns []network.Conn
-
-	s.channelsMu.RLock()
-	if channels, ok := s.channels[channel]; ok {
-		conns = make([]network.Conn, 0, len(channels))
-		for conn := range channels {
-			conns = append(conns, conn)
-		}
+	subscribers := s.loadChannel(channel)
+	if subscribers == nil {
+		buf.Release()
+		return 0, nil
 	}
-	s.channelsMu.RUnlock()
 
+	conns := subscribers.subscribers()
 	if len(conns) == 0 {
 		buf.Release()
 		return 0, nil
@@ -593,34 +681,34 @@ func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel str
 func (s *session) addSubscription(conn network.Conn, channel string) {
 	conn.Attr().Set(channel, struct{}{})
 
-	s.channelsMu.Lock()
-	if channels, ok := s.channels[channel]; ok {
-		channels[conn] = struct{}{}
-	} else {
-		channels = make(map[network.Conn]struct{}, 1)
-		channels[conn] = struct{}{}
-		s.channels[channel] = channels
+	shard := s.loadChannelShard(channel)
+	shard.rw.Lock()
+	subscribers := shard.channels[channel]
+	if subscribers == nil {
+		subscribers = &channelSubscribers{
+			members: make(map[network.Conn]struct{}),
+		}
+		shard.channels[channel] = subscribers
 	}
-	s.channelsMu.Unlock()
+	subscribers.add(conn)
+	shard.rw.Unlock()
 }
 
 // removeSubscription removes conn from the subscribers of channel.
 func (s *session) removeSubscription(channel string, conn network.Conn) {
-	s.channelsMu.Lock()
-	s.doRemoveSubscription(channel, conn)
-	s.channelsMu.Unlock()
-}
-
-// doRemoveSubscription removes conn from the subscribers of channel while the caller holds the
-// channel lock.
-func (s *session) doRemoveSubscription(channel string, conn network.Conn) {
-	if channels, ok := s.channels[channel]; ok {
-		delete(channels, conn)
-
-		if len(channels) == 0 {
-			delete(s.channels, channel)
-		}
+	shard := s.loadChannelShard(channel)
+	shard.rw.Lock()
+	subscribers := shard.channels[channel]
+	if subscribers == nil {
+		shard.rw.Unlock()
+		return
 	}
+
+	_, empty := subscribers.remove(conn)
+	if empty {
+		delete(shard.channels, channel)
+	}
+	shard.rw.Unlock()
 }
 
 // doClearConnAttrs removes conn from every channel it is subscribed to and clears its attributes.
@@ -647,11 +735,9 @@ func (s *session) doClearConnAttrs(conn network.Conn) {
 		return
 	}
 
-	s.channelsMu.Lock()
 	for _, channel := range channels {
-		s.doRemoveSubscription(channel, conn)
+		s.removeSubscription(channel, conn)
 	}
-	s.channelsMu.Unlock()
 }
 
 // stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an

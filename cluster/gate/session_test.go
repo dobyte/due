@@ -103,8 +103,8 @@ func TestRemConnClearsUserAndChannels(t *testing.T) {
 	if n, _ := s.stat(cluster.User); n != 0 {
 		t.Fatalf("users should be empty, got %d", n)
 	}
-	if len(s.channels) != 0 {
-		t.Fatalf("channels should be empty, got %d", len(s.channels))
+	if channelCount(s) != 0 {
+		t.Fatalf("channels should be empty, got %d", channelCount(s))
 	}
 	if _, ok := conn.attr.Get("chat"); ok {
 		t.Fatal("conn attrs should be cleared")
@@ -138,4 +138,29 @@ func TestRemConnConcurrent(t *testing.T) {
 	if removed != 1 {
 		t.Fatalf("expect exactly one successful removal, got %d", removed)
 	}
+}
+
+// channelCount returns the number of channels in the session table.
+func channelCount(s *session) int {
+	total := 0
+	for i := range s.channels {
+		s.channels[i].rw.RLock()
+		total += len(s.channels[i].channels)
+		s.channels[i].rw.RUnlock()
+	}
+	return total
+}
+
+// channelSubscriberCount returns the number of subscribers of channel.
+func channelSubscriberCount(s *session, channel string) int {
+	subscribers := s.loadChannel(channel)
+	if subscribers == nil {
+		return 0
+	}
+
+	subscribers.mu.Lock()
+	count := len(subscribers.members)
+	subscribers.mu.Unlock()
+
+	return count
 }
