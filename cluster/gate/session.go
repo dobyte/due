@@ -152,17 +152,23 @@ func (s *session) remConn(conn network.Conn) bool {
 
 // has reports whether the session identified by target exists. The kind selects whether target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *session) has(kind cluster.Session, target int64) (bool, error) {
-	_, err := s.conn(kind, target)
-
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, errors.ErrNotFoundSession):
-		return false, nil
+func (s *session) has(kind cluster.Session, target int64) (ok bool, err error) {
+	switch kind {
+	case cluster.Conn:
+		shard := s.connShard(target)
+		shard.rw.RLock()
+		_, ok = shard.conns[target]
+		shard.rw.RUnlock()
+	case cluster.User:
+		shard := s.userShard(target)
+		shard.rw.RLock()
+		_, ok = shard.conns[target]
+		shard.rw.RUnlock()
 	default:
-		return false, err
+		err = errors.ErrInvalidSessionKind
 	}
+
+	return
 }
 
 // uid returns the user ID currently attached to cid, or zero if it is unbound.
