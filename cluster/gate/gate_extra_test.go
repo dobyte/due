@@ -1125,7 +1125,7 @@ func TestGateProxyTriggerAndDeliver(t *testing.T) {
 
 	// A shut gate ignores triggers and releases delivered buffers.
 	f.gate.proxy.trigger(ctx, cluster.Connect, 1, 1)
-	f.gate.proxy.deliver(ctx, newGateConn(1, 1), buffer.NewBytes([]byte{1, 2, 3}, true))
+	f.gate.proxy.deliver(ctx, newGateConn(1, 1), 1, 1, buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	f.gate.state.Store(int32(cluster.Work))
 
@@ -1133,14 +1133,14 @@ func TestGateProxyTriggerAndDeliver(t *testing.T) {
 	f.gate.proxy.trigger(ctx, cluster.Connect, 1, 1)
 
 	// A malformed message is dropped.
-	f.gate.proxy.deliver(ctx, newGateConn(1, 1), buffer.NewBytes([]byte{1, 2, 3}, true))
+	f.gate.proxy.deliver(ctx, newGateConn(1, 1), 0, 0, buffer.NewBytes([]byte{1, 2, 3}, true))
 
 	// A well-formed message without a route is dropped.
 	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
-	f.gate.proxy.deliver(ctx, newGateConn(1, 1), buf)
+	f.gate.proxy.deliver(ctx, newGateConn(1, 1), 0, 0, buf)
 
 	// The watch entry point must not panic.
 	f.gate.proxy.watch()

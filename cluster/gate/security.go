@@ -297,6 +297,7 @@ func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
 	}
 
 	output.Truncate(len(plaintext))
+
 	packed, err := packet.PackMessageBuffer(route, seq, output)
 	if err != nil {
 		output.Release()
@@ -304,7 +305,7 @@ func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
 		return true
 	}
 
-	m.gate.proxy.deliver(m.gate.ctx, conn, packed)
+	m.gate.proxy.deliver(m.gate.ctx, conn, route, seq, packed)
 
 	return true
 }

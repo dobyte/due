@@ -30,9 +30,9 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 
 	// Serialize requests for the same connection, including UID changes, so an older failure
 	// cannot roll back a newer request for that CID. Disconnect never takes this lock.
-	unlockConn := p.gate.connBindings.lock(cid)
+	connLock := p.gate.connBindings.lock(cid)
 	err := p.bindConn(ctx, cid, uid)
-	unlockConn()
+	connLock.unlock()
 	return err
 }
 
@@ -57,19 +57,19 @@ func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
 
 	// Session.Bind may synchronously close an older connection. Acquire the user lock only
 	// afterwards so that the old connection's disconnect callback can finish its own cleanup.
-	unlock := p.gate.bindings.lock(uid)
+	userLock := p.gate.userBindings.lock(uid)
 	if !p.gate.session.IsBound(cid, uid) {
-		unlock()
+		userLock.unlock()
 		return errors.ErrNotFoundSession
 	}
 
 	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
 		_ = p.gate.session.UnbindConn(cid, uid)
-		unlock()
+		userLock.unlock()
 		return err
 	}
 	bound := p.gate.session.IsBound(cid, uid)
-	unlock()
+	userLock.unlock()
 	if !bound {
 		return errors.ErrNotFoundSession
 	}
@@ -80,17 +80,17 @@ func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
 // unbindPrevious finishes the old identity's location cleanup before a connection changes UID.
 // Only one user lock is held at a time, so concurrent UID swaps cannot reverse the lock order.
 func (p *provider) unbindPrevious(ctx context.Context, cid, uid int64) error {
-	unlock := p.gate.bindings.lock(uid)
+	userLock := p.gate.userBindings.lock(uid)
 	if !p.gate.session.IsBound(cid, uid) {
-		unlock()
+		userLock.unlock()
 		return nil
 	}
 	if err := p.gate.proxy.unbindGate(ctx, cid, uid); err != nil {
-		unlock()
+		userLock.unlock()
 		return err
 	}
 	err := p.gate.session.UnbindConn(cid, uid)
-	unlock()
+	userLock.unlock()
 	if err != nil && !errors.Is(err, errors.ErrNotFoundSession) {
 		return err
 	}
@@ -107,16 +107,16 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 		return errors.ErrInvalidArgument
 	}
 
-	unlock := p.gate.bindings.lock(uid)
+	userLock := p.gate.userBindings.lock(uid)
 
 	cid, err := p.gate.session.Unbind(uid)
 	if err != nil {
-		unlock()
+		userLock.unlock()
 		return err
 	}
 
 	err = p.gate.proxy.unbindGate(ctx, cid, uid)
-	unlock()
+	userLock.unlock()
 	return err
 }
 

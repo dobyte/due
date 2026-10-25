@@ -2,39 +2,36 @@ package gate
 
 import "sync"
 
-// bindingLocks serializes binding operations for an ID. Entries are retained only while an
-// operation holds or waits for the ID's lock, so inactive IDs do not accumulate here.
-type bindingLocks struct {
-	mu    sync.Mutex
-	users map[int64]*bindingLock
-}
+// bindingShardNum is the number of shards used to serialize binding operations (a power of two so
+// that the shard is selected with a bit operation).
+const bindingShardNum = 256
 
+// bindingLock is one shard of the binding locks.
+//
+// Binding operations are sharded by the low bits of the ID to dilute lock contention; the struct is
+// padded to a 64-byte cache line to avoid false sharing between adjacent shards.
 type bindingLock struct {
-	mu   sync.Mutex
-	refs int // protected by bindingLocks.mu
+	mu sync.Mutex
+	_  [56]byte
 }
 
-func (l *bindingLocks) lock(uid int64) func() {
-	l.mu.Lock()
-	if l.users == nil {
-		l.users = make(map[int64]*bindingLock)
-	}
-	user := l.users[uid]
-	if user == nil {
-		user = &bindingLock{}
-		l.users[uid] = user
-	}
-	user.refs++
-	l.mu.Unlock()
+// bindingLocks serializes the binding operations of an ID.
+//
+// Operations on IDs that select different shards proceed in parallel, and no entry is allocated or
+// retained per operation.
+type bindingLocks struct {
+	locks [bindingShardNum]bindingLock
+}
 
-	user.mu.Lock()
-	return func() {
-		user.mu.Unlock()
-		l.mu.Lock()
-		user.refs--
-		if user.refs == 0 {
-			delete(l.users, uid)
-		}
-		l.mu.Unlock()
-	}
+// lock acquires the shard that owns id.
+func (l *bindingLocks) lock(id int64) *bindingLock {
+	lock := &l.locks[uint64(id)&(bindingShardNum-1)]
+	lock.mu.Lock()
+
+	return lock
+}
+
+// unlock releases the shard.
+func (l *bindingLock) unlock() {
+	l.mu.Unlock()
 }
