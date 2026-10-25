@@ -522,6 +522,34 @@ func TestClientHandleReceiveDefaultRoute(t *testing.T) {
 	}
 }
 
+// TestClientRouteContextPoolReset verifies that a route context is cleared before it is returned
+// to the pool.
+func TestClientRouteContextPoolReset(t *testing.T) {
+	f := newClientFixture(t)
+
+	var captured *Context
+	f.client.Proxy().AddRouteHandler(1, func(ctx *Context) { captured = ctx })
+	f.start(t)
+
+	cc := &Conn{conn: f.conn, client: f.client}
+	f.client.conns.Store(f.conn, cc)
+
+	for i := int32(0); i < 2; i++ {
+		buf, err := packet.PackMessage(1, i, []byte(`{}`))
+		if err != nil {
+			t.Fatalf("pack message failed: %v", err)
+		}
+		f.client.handleReceive(f.conn, buf)
+	}
+
+	if captured == nil {
+		t.Fatal("route handler not invoked")
+	}
+	if captured.ctx != nil || captured.conn != nil || captured.buf != nil || captured.route != 0 || captured.seq != 0 {
+		t.Fatal("route context was not reset after the handler returned")
+	}
+}
+
 func TestClientHandleReceiveEdgeCases(t *testing.T) {
 	f := newClientFixture(t)
 	f.start(t)
