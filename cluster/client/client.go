@@ -166,9 +166,7 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 
 	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; connected && ok {
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(cc)
-			})
+			safeCallEventHandler(handler, cc)
 		}
 	}
 }
@@ -218,25 +216,21 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 
 	if handlers, ok := c.routes.Load().(map[int32][]RouteHandler)[route]; ok {
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(&Context{
-					ctx:   context.Background(),
-					conn:  val.(*Conn),
-					route: route,
-					seq:   seq,
-					buf:   data,
-				})
-			})
-		}
-	} else if handler := c.defaultRouteHandler.Load().(RouteHandler); handler != nil {
-		xcall.Call(func() {
-			handler(&Context{
+			safeCallRouteHandler(handler, &Context{
 				ctx:   context.Background(),
 				conn:  val.(*Conn),
 				route: route,
 				seq:   seq,
 				buf:   data,
 			})
+		}
+	} else if handler := c.defaultRouteHandler.Load().(RouteHandler); handler != nil {
+		safeCallRouteHandler(handler, &Context{
+			ctx:   context.Background(),
+			conn:  val.(*Conn),
+			route: route,
+			seq:   seq,
+			buf:   data,
 		})
 	} else {
 		log.Debugf("route handler is not registered, route: %v", route)
@@ -312,17 +306,13 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 
 	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Connect]; ok {
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(cc)
-			})
+			safeCallEventHandler(handler, cc)
 		}
 	}
 	if !cc.markConnected() {
 		if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; ok {
 			for _, handler := range handlers {
-				xcall.Call(func() {
-					handler(cc)
-				})
+				safeCallEventHandler(handler, cc)
 			}
 		}
 		return nil, errors.ErrConnectionClosed
@@ -419,8 +409,9 @@ func (c *Client) runHookFunc(hook cluster.Hook) {
 	for i := range handlers {
 		handler := handlers[i]
 		xcall.Go(func() {
+			defer wg.Done()
+
 			handler(c.proxy)
-			wg.Done()
 		})
 	}
 

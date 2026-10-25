@@ -12,6 +12,23 @@ type funcType interface {
 	func() | func() error
 }
 
+// Recover recovers from any panic raised in the current goroutine.
+//
+// It logs the panic error as a fatal error.
+// If the panic is a runtime error, it logs it as a fatal error.
+// If the panic is any other type, it logs it as a panic error.
+// If the panic is nil, it does nothing.
+func Recover() {
+	if err := recover(); err != nil {
+		switch err.(type) {
+		case runtime.Error:
+			log.Panic(err)
+		default:
+			log.Panicf("panic error: %v", err)
+		}
+	}
+}
+
 // Call invokes fn safely.
 //
 // It recovers from any panic raised while fn runs: a runtime error ([runtime.Error]) is logged as
@@ -21,16 +38,7 @@ func Call[T funcType](fn T) error {
 		return nil
 	}
 
-	defer func() {
-		if err := recover(); err != nil {
-			switch err.(type) {
-			case runtime.Error:
-				log.Panic(err)
-			default:
-				log.Panicf("panic error: %v", err)
-			}
-		}
-	}()
+	defer Recover()
 
 	switch f := any(fn).(type) {
 	case func():
@@ -58,16 +66,7 @@ func Go[T funcType](fn T) {
 //
 // It returns the error of the last fn call, or ctx.Err() when ctx has been cancelled.
 func Backoff(ctx context.Context, fn func(ctx context.Context, attempt int) (bool, error), retry int, baseDelay, maxDelay time.Duration) error {
-	defer func() {
-		if err := recover(); err != nil {
-			switch err.(type) {
-			case runtime.Error:
-				log.Panic(err)
-			default:
-				log.Panicf("panic error: %v", err)
-			}
-		}
-	}()
+	defer Recover()
 
 	var (
 		err   error

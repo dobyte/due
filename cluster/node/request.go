@@ -20,7 +20,6 @@ import (
 	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
 )
 
@@ -565,7 +564,7 @@ func (r *request) releaseDefer() {
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
 		if r.node.router.postRouteHandler != nil {
-			xcall.Call(func() { r.node.router.postRouteHandler(r) })
+			safeCallContextHandler(r.node.router.postRouteHandler, r)
 		}
 
 		r.release()

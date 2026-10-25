@@ -1,7 +1,5 @@
 package node
 
-import "github.com/dobyte/due/v2/utils/xcall"
-
 // MiddlewareHandler is the middleware handler.
 type MiddlewareHandler func(middleware *Middleware, ctx Context)
 
@@ -40,11 +38,9 @@ func (m *Middleware) Skip(ctx Context, skip int) {
 
 	m.index += skip
 
-	xcall.Call(func() {
-		if m.index >= len(m.middlewares) {
-			m.routeHandler(ctx)
-		} else {
-			m.middlewares[m.index](m, ctx)
-		}
-	})
+	if m.index >= len(m.middlewares) {
+		safeCallContextHandler(m.routeHandler, ctx)
+	} else {
+		safeCallMiddlewareHandler(m.middlewares[m.index], m, ctx)
+	}
 }

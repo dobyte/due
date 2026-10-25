@@ -7,7 +7,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 // EventHandler is an event handler function.
@@ -80,7 +79,7 @@ func (t *Trigger) handle(evt *event) {
 	version := evt.incrVersion()
 
 	if handler, ok := t.events[evt.event]; ok {
-		xcall.Call(func() { handler(evt) })
+		safeCallContextHandler(handler, evt)
 
 		evt.compareVersionExecDefer(version)
 	}
