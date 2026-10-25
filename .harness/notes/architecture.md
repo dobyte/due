@@ -197,7 +197,7 @@ Gate 上没有 Node 那样的游戏路由 handler：接收消息后从 packet �
 
 ### 5.3 本机会话与绑定流程
 
-Gate 内部的 `session` 用锁保护连接表、用户表和频道订阅表。`cluster.Conn` 以 CID 操作连接；`cluster.User` 以 UID 操作用户连接。
+Gate 内部的 `session` 使用按 ID 分片的连接表和用户表，频道订阅表使用独立锁；断连清理在摘除会话映射后执行。`cluster.Conn` 以 CID 操作连接；`cluster.User` 以 UID 操作用户连接。
 
 Gate provider 的 Bind 先更新本机会话，再写 Locator；定位写入失败时，仅在 CID 仍是该 UID 的当前绑定时撤销本机绑定，不会撤销另一连接的替代绑定。同一 CID 的绑定请求串行执行，避免旧请求的回滚影响同一连接上的后续请求。该过程不是跨本机状态和 Redis 的事务，也不意味着被替换的旧连接能够恢复。业务登录应考虑失败返回和状态补偿。
 

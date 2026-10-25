@@ -14,55 +14,136 @@ import (
 	"github.com/dobyte/due/v2/task"
 )
 
+// defaultSessionShardNum is the number of session table shards (a power of two, so that the shard
+// is selected with a bit operation).
+const defaultSessionShardNum = 256
+
+// sessionShard is a shard of the connection or user session table.
+//
+// Shards are selected with the low bits of the connection ID or user ID; the struct is padded to a
+// 64-byte cache line to avoid false sharing between adjacent shards.
+type sessionShard struct {
+	rw    sync.RWMutex
+	conns map[int64]network.Conn
+	_     [32]byte
+}
+
 // session manages the connection and user sessions of a node along with their channel
 // subscriptions.
+//
+// Lock ordering is connection shard -> user shard -> channel table. Operations that need multiple
+// user shards acquire them in ascending shard index order.
 type session struct {
-	rw       sync.RWMutex                         // Read-write lock protecting the session maps
-	conns    map[int64]network.Conn               // Connection sessions, keyed by connection ID
-	users    map[int64]network.Conn               // User sessions, keyed by user ID
-	channels map[string]map[network.Conn]struct{} // Channel subscriptions, keyed by channel name
+	conns      [defaultSessionShardNum]sessionShard // Connection sessions, sharded by connection ID
+	users      [defaultSessionShardNum]sessionShard // User sessions, sharded by user ID
+	channelsMu sync.RWMutex                         // Protects the channel subscription table
+	channels   map[string]map[network.Conn]struct{} // Channel subscriptions, keyed by channel name
 }
 
 // newSession creates a session instance.
 func newSession() *session {
-	return &session{
-		conns:    make(map[int64]network.Conn),
-		users:    make(map[int64]network.Conn),
+	s := &session{
 		channels: make(map[string]map[network.Conn]struct{}),
 	}
+
+	for i := range s.conns {
+		s.conns[i].conns = make(map[int64]network.Conn)
+	}
+
+	for i := range s.users {
+		s.users[i].conns = make(map[int64]network.Conn)
+	}
+
+	return s
+}
+
+// shardIndex returns the shard index for the given ID.
+func shardIndex(id int64) int {
+	return int(uint64(id) & (defaultSessionShardNum - 1))
+}
+
+// connShard returns the connection shard of the given connection ID.
+func (s *session) connShard(cid int64) *sessionShard {
+	return &s.conns[shardIndex(cid)]
+}
+
+// userShard returns the user shard of the given user ID.
+func (s *session) userShard(uid int64) *sessionShard {
+	return &s.users[shardIndex(uid)]
+}
+
+// lockUserShards locks the shards of a and b in a deterministic order, returning the locked shards
+// in lock order. When both IDs select the same shard, the second shard is nil and the shard is
+// locked only once.
+func (s *session) lockUserShards(a, b int64) (first, second *sessionShard) {
+	ai, bi := shardIndex(a), shardIndex(b)
+
+	if ai == bi {
+		shard := &s.users[ai]
+		shard.rw.Lock()
+		return shard, nil
+	}
+
+	if ai < bi {
+		first, second = &s.users[ai], &s.users[bi]
+	} else {
+		first, second = &s.users[bi], &s.users[ai]
+	}
+
+	first.rw.Lock()
+	second.rw.Lock()
+
+	return
+}
+
+// unlockUserShards unlocks the shards acquired by lockUserShards.
+func unlockUserShards(first, second *sessionShard) {
+	if second != nil {
+		second.rw.Unlock()
+	}
+
+	first.rw.Unlock()
 }
 
 // addConn adds conn to the connection sessions.
 func (s *session) addConn(conn network.Conn) {
-	s.rw.Lock()
-	s.conns[conn.ID()] = conn
-	s.rw.Unlock()
+	cid := conn.ID()
+	shard := s.connShard(cid)
+	shard.rw.Lock()
+	shard.conns[cid] = conn
+	shard.rw.Unlock()
 }
 
 // remConn removes conn from the connection sessions. It reports whether conn was registered and
 // has been removed.
 //
-// The existence check and the removal happen under the same write lock, so the caller does not
-// need to call [session.has] before remConn and pay for a second lookup. When the same conn is
-// removed concurrently, only the first call reports true, which keeps repeated removals from
-// unbalancing the counters.
+// The session tables are sharded, so removing a connection only blocks the shard of its CID and
+// UID. The channel cleanup runs after the shard locks are released: a concurrent subscribe holds
+// the CID shard lock until its channel subscription is recorded, so it either completes before the
+// removal (and its channels are cleaned up here) or observes the removed connection.
 func (s *session) remConn(conn network.Conn) bool {
-	s.rw.Lock()
-	defer s.rw.Unlock()
+	cid := conn.ID()
+	shard := s.connShard(cid)
 
-	cid, uid := conn.ID(), conn.UID()
+	shard.rw.Lock()
 
-	if _, ok := s.conns[cid]; !ok {
+	if _, ok := shard.conns[cid]; !ok {
+		shard.rw.Unlock()
 		return false
 	}
 
-	delete(s.conns, cid)
+	delete(shard.conns, cid)
 
-	if uid != 0 {
-		if c, ok := s.users[uid]; ok && c == conn {
-			delete(s.users, uid)
+	if uid := conn.UID(); uid != 0 {
+		user := s.userShard(uid)
+		user.rw.Lock()
+		if c, ok := user.conns[uid]; ok && c == conn {
+			delete(user.conns, uid)
 		}
+		user.rw.Unlock()
 	}
+
+	shard.rw.Unlock()
 
 	s.doClearConnAttrs(conn)
 
@@ -71,57 +152,105 @@ func (s *session) remConn(conn network.Conn) bool {
 
 // has reports whether the session identified by target exists. The kind selects whether target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *session) has(kind cluster.Session, target int64) (ok bool, err error) {
-	s.rw.RLock()
-	defer s.rw.RUnlock()
+func (s *session) has(kind cluster.Session, target int64) (bool, error) {
+	_, err := s.conn(kind, target)
 
-	switch kind {
-	case cluster.Conn:
-		_, ok = s.conns[target]
-	case cluster.User:
-		_, ok = s.users[target]
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.ErrNotFoundSession):
+		return false, nil
 	default:
-		err = errors.ErrInvalidSessionKind
+		return false, err
 	}
-
-	return
 }
 
-// userID returns the user ID currently attached to cid, or zero if it is unbound.
-func (s *session) userID(cid int64) (int64, error) {
-	s.rw.RLock()
-	conn, err := s.conn(cluster.Conn, cid)
-	if err != nil {
-		s.rw.RUnlock()
-		return 0, err
+// uid returns the user ID currently attached to cid, or zero if it is unbound.
+func (s *session) uid(cid int64) (int64, error) {
+	shard := s.connShard(cid)
+	shard.rw.RLock()
+	conn, ok := shard.conns[cid]
+	if !ok {
+		shard.rw.RUnlock()
+		return 0, errors.ErrNotFoundSession
 	}
 	uid := conn.UID()
-	s.rw.RUnlock()
+	shard.rw.RUnlock()
 	return uid, nil
 }
 
 // isBound reports whether cid is registered and is the current connection bound to uid.
 func (s *session) isBound(cid, uid int64) bool {
-	s.rw.RLock()
-	conn := s.conns[cid]
-	bound := conn != nil && conn.UID() == uid && s.users[uid] == conn
-	s.rw.RUnlock()
+	connShard := s.connShard(cid)
+	connShard.rw.RLock()
+	conn, ok := connShard.conns[cid]
+	if !ok || conn.UID() != uid {
+		connShard.rw.RUnlock()
+		return false
+	}
+
+	userShard := s.userShard(uid)
+	userShard.rw.RLock()
+	bound := userShard.conns[uid] == conn
+	userShard.rw.RUnlock()
+
+	connShard.rw.RUnlock()
+
 	return bound
 }
 
 // bind binds the user ID uid to the connection identified by cid. When uid is already bound to
 // another connection, that connection is closed and replaced.
 func (s *session) bind(cid, uid int64) error {
-	s.rw.Lock()
-	old, err := s.doBind(cid, uid)
-	s.rw.Unlock()
+	connShard := s.connShard(cid)
+	connShard.rw.Lock()
 
-	if err != nil {
+	conn, ok := connShard.conns[cid]
+	if !ok {
+		connShard.rw.Unlock()
+		return errors.ErrNotFoundSession
+	}
+
+	oldUID := conn.UID()
+	if oldUID == uid {
+		connShard.rw.Unlock()
+		return nil
+	}
+
+	var (
+		first, second *sessionShard
+		old           network.Conn
+	)
+
+	if oldUID != 0 {
+		first, second = s.lockUserShards(oldUID, uid)
+	} else {
+		first = s.userShard(uid)
+		first.rw.Lock()
+	}
+
+	if err := conn.Bind(uid); err != nil {
+		unlockUserShards(first, second)
+		connShard.rw.Unlock()
 		return err
 	}
 
+	if oldUID != 0 {
+		oldShard := s.userShard(oldUID)
+		if c, ok := oldShard.conns[oldUID]; ok && c == conn {
+			delete(oldShard.conns, oldUID)
+		}
+	}
+
+	newShard := s.userShard(uid)
+	old = newShard.conns[uid]
+	newShard.conns[uid] = conn
+
+	unlockUserShards(first, second)
+	connShard.rw.Unlock()
+
 	if old != nil {
-		if err = old.Close(true); err != nil {
+		if err := old.Close(true); err != nil {
 			log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", cid, uid, err)
 		}
 	}
@@ -129,63 +258,34 @@ func (s *session) bind(cid, uid int64) error {
 	return nil
 }
 
-// doBind binds uid to the connection identified by cid and returns the replaced connection, if
-// any. The caller must hold the write lock.
-func (s *session) doBind(cid, uid int64) (network.Conn, error) {
-	conn, err := s.conn(cluster.Conn, cid)
-	if err != nil {
-		return nil, err
-	}
-
-	if oldUID := conn.UID(); oldUID != 0 {
-		if uid == oldUID {
-			return nil, nil
-		}
-
-		if err := conn.Bind(uid); err != nil {
-			return nil, err
-		}
-
-		if c, ok := s.users[oldUID]; ok && c == conn {
-			delete(s.users, oldUID)
-		}
-	} else {
-		if err := conn.Bind(uid); err != nil {
-			return nil, err
-		}
-	}
-
-	old := s.users[uid]
-	s.users[uid] = conn
-
-	return old, nil
-}
-
-// unbind unbinds the user ID uid and returns the ID of the connection it was bound to.
-func (s *session) unbind(uid int64) (int64, error) {
-	s.rw.Lock()
-	cid, err := s.doUnbind(uid, 0)
-	s.rw.Unlock()
+// remove unbinds the user ID uid and returns the ID of the connection it was bound to.
+func (s *session) remove(uid int64) (int64, error) {
+	shard := s.userShard(uid)
+	shard.rw.Lock()
+	cid, err := s.doUnbind(shard, uid, 0)
+	shard.rw.Unlock()
 	return cid, err
 }
 
-// unbindConn unbinds uid only if its current connection is cid. A removed or replaced binding
+// unbind unbinds uid only if its current connection is cid. A removed or replaced binding
 // returns ErrNotFoundSession without changing the current user connection.
-func (s *session) unbindConn(cid, uid int64) error {
+func (s *session) unbind(cid, uid int64) error {
 	if cid == 0 {
 		return errors.ErrNotFoundSession
 	}
-	s.rw.Lock()
-	_, err := s.doUnbind(uid, cid)
-	s.rw.Unlock()
+	shard := s.userShard(uid)
+	shard.rw.Lock()
+	_, err := s.doUnbind(shard, uid, cid)
+	shard.rw.Unlock()
 	return err
 }
 
-// doUnbind removes a user binding while the caller holds rw. A zero cid accepts any connection.
-func (s *session) doUnbind(uid, cid int64) (int64, error) {
-	conn, err := s.conn(cluster.User, uid)
-	if err != nil {
-		return 0, err
+// doUnbind removes a user binding while the caller holds the user shard lock. A zero cid accepts
+// any connection.
+func (s *session) doUnbind(shard *sessionShard, uid, cid int64) (int64, error) {
+	conn, ok := shard.conns[uid]
+	if !ok {
+		return 0, errors.ErrNotFoundSession
 	}
 	if cid != 0 && conn.ID() != cid {
 		return 0, errors.ErrNotFoundSession
@@ -195,7 +295,7 @@ func (s *session) doUnbind(uid, cid int64) (int64, error) {
 		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
 	}
 
-	delete(s.users, uid)
+	delete(shard.conns, uid)
 
 	return conn.ID(), nil
 }
@@ -203,10 +303,7 @@ func (s *session) doUnbind(uid, cid int64) (int64, error) {
 // localIP returns the local IP address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
 func (s *session) localIP(kind cluster.Session, target int64) (string, error) {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		return "", err
 	}
@@ -217,10 +314,7 @@ func (s *session) localIP(kind cluster.Session, target int64) (string, error) {
 // localAddr returns the local address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
 func (s *session) localAddr(kind cluster.Session, target int64) (net.Addr, error) {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		return nil, err
 	}
@@ -231,10 +325,7 @@ func (s *session) localAddr(kind cluster.Session, target int64) (net.Addr, error
 // remoteIP returns the remote IP address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
 func (s *session) remoteIP(kind cluster.Session, target int64) (string, error) {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		return "", err
 	}
@@ -245,10 +336,7 @@ func (s *session) remoteIP(kind cluster.Session, target int64) (string, error) {
 // remoteAddr returns the remote address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
 func (s *session) remoteAddr(kind cluster.Session, target int64) (net.Addr, error) {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		return nil, err
 	}
@@ -259,10 +347,7 @@ func (s *session) remoteAddr(kind cluster.Session, target int64) (net.Addr, erro
 // close closes the session identified by target. The kind selects whether target is a connection
 // ID or a user ID. Pass force as true to close the connection forcibly.
 func (s *session) close(kind cluster.Session, target int64, force ...bool) error {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		return err
 	}
@@ -274,10 +359,7 @@ func (s *session) close(kind cluster.Session, target int64, force ...bool) error
 // target is a connection ID or a user ID. When disconnect is true, the connection is closed after
 // the push.
 func (s *session) push(kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer) error {
-	s.rw.RLock()
 	conn, err := s.conn(kind, target)
-	s.rw.RUnlock()
-
 	if err != nil {
 		buf.Release()
 		return err
@@ -307,28 +389,20 @@ func (s *session) multicast(kind cluster.Session, targets []int64, disconnect bo
 		return 0, nil
 	}
 
-	var conns []network.Conn
-
-	s.rw.RLock()
 	switch kind {
-	case cluster.Conn:
-		for _, target := range targets {
-			if conn, ok := s.conns[target]; ok {
-				conns = append(conns, conn)
-			}
-		}
-	case cluster.User:
-		for _, target := range targets {
-			if conn, ok := s.users[target]; ok {
-				conns = append(conns, conn)
-			}
-		}
+	case cluster.Conn, cluster.User:
 	default:
-		s.rw.RUnlock()
 		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
-	s.rw.RUnlock()
+
+	conns := make([]network.Conn, 0, len(targets))
+
+	for _, target := range targets {
+		if conn, err := s.conn(kind, target); err == nil {
+			conns = append(conns, conn)
+		}
+	}
 
 	if len(conns) == 0 {
 		buf.Release()
@@ -344,24 +418,41 @@ func (s *session) multicast(kind cluster.Session, targets []int64, disconnect bo
 func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
-	s.rw.RLock()
 	switch kind {
 	case cluster.Conn:
-		conns = make([]network.Conn, 0, len(s.conns))
-		for _, conn := range s.conns {
-			conns = append(conns, conn)
+		total := 0
+		for i := range s.conns {
+			s.conns[i].rw.RLock()
+			total += len(s.conns[i].conns)
+		}
+		conns = make([]network.Conn, 0, total)
+		for i := range s.conns {
+			for _, conn := range s.conns[i].conns {
+				conns = append(conns, conn)
+			}
+		}
+		for i := range s.conns {
+			s.conns[i].rw.RUnlock()
 		}
 	case cluster.User:
-		conns = make([]network.Conn, 0, len(s.users))
-		for _, conn := range s.users {
-			conns = append(conns, conn)
+		total := 0
+		for i := range s.users {
+			s.users[i].rw.RLock()
+			total += len(s.users[i].conns)
+		}
+		conns = make([]network.Conn, 0, total)
+		for i := range s.users {
+			for _, conn := range s.users[i].conns {
+				conns = append(conns, conn)
+			}
+		}
+		for i := range s.users {
+			s.users[i].rw.RUnlock()
 		}
 	default:
-		s.rw.RUnlock()
 		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
-	s.rw.RUnlock()
 
 	if len(conns) == 0 {
 		buf.Release()
@@ -377,14 +468,14 @@ func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Bu
 func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
-	s.rw.RLock()
+	s.channelsMu.RLock()
 	if channels, ok := s.channels[channel]; ok {
 		conns = make([]network.Conn, 0, len(channels))
 		for conn := range channels {
 			conns = append(conns, conn)
 		}
 	}
-	s.rw.RUnlock()
+	s.channelsMu.RUnlock()
 
 	if len(conns) == 0 {
 		buf.Release()
@@ -396,80 +487,106 @@ func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (i
 
 // subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *session) subscribe(kind cluster.Session, targets []int64, channel string) (err error) {
+func (s *session) subscribe(kind cluster.Session, targets []int64, channel string) error {
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 
-	s.rw.Lock()
-	defer s.rw.Unlock()
-
-	var conns map[int64]network.Conn
 	switch kind {
-	case cluster.Conn:
-		conns = s.conns
-	case cluster.User:
-		conns = s.users
+	case cluster.Conn, cluster.User:
 	default:
-		err = errors.ErrInvalidSessionKind
-		return
+		return errors.ErrInvalidSessionKind
 	}
 
 	for _, target := range targets {
-		conn, ok := conns[target]
-		if !ok {
-			continue
-		}
-
-		conn.Attr().Set(channel, struct{}{})
-
-		if channels, ok := s.channels[channel]; ok {
-			channels[conn] = struct{}{}
-		} else {
-			channels = make(map[network.Conn]struct{}, len(targets))
-			channels[conn] = struct{}{}
-			s.channels[channel] = channels
+		switch kind {
+		case cluster.Conn:
+			shard := s.connShard(target)
+			shard.rw.Lock()
+			if conn, ok := shard.conns[target]; ok {
+				s.addSubscription(conn, channel)
+			}
+			shard.rw.Unlock()
+		case cluster.User:
+			shard := s.userShard(target)
+			shard.rw.Lock()
+			if conn, ok := shard.conns[target]; ok {
+				s.addSubscription(conn, channel)
+			}
+			shard.rw.Unlock()
 		}
 	}
 
-	return
+	return nil
 }
 
 // unsubscribe unsubscribes the sessions in targets from channel. The kind selects whether each
 // target is a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown
 // kind.
-func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel string) (err error) {
+func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel string) error {
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 
-	s.rw.Lock()
-	defer s.rw.Unlock()
-
-	var conns map[int64]network.Conn
 	switch kind {
-	case cluster.Conn:
-		conns = s.conns
-	case cluster.User:
-		conns = s.users
+	case cluster.Conn, cluster.User:
 	default:
-		err = errors.ErrInvalidSessionKind
-		return
+		return errors.ErrInvalidSessionKind
 	}
 
 	for _, target := range targets {
-		if conn, ok := conns[target]; ok {
-			if ok = conn.Attr().Del(channel); ok {
-				s.doUnsubscribe(channel, conn)
+		switch kind {
+		case cluster.Conn:
+			shard := s.connShard(target)
+			shard.rw.Lock()
+			if conn, ok := shard.conns[target]; ok {
+				if conn.Attr().Del(channel) {
+					s.removeSubscription(channel, conn)
+				}
 			}
+			shard.rw.Unlock()
+		case cluster.User:
+			shard := s.userShard(target)
+			shard.rw.Lock()
+			if conn, ok := shard.conns[target]; ok {
+				if conn.Attr().Del(channel) {
+					s.removeSubscription(channel, conn)
+				}
+			}
+			shard.rw.Unlock()
 		}
 	}
 
-	return
+	return nil
 }
 
-// doUnsubscribe removes conn from the subscribers of channel. The caller must hold the write lock.
-func (s *session) doUnsubscribe(channel string, conn network.Conn) {
+// addSubscription records channel as a subscription of conn. The caller must hold the connection or
+// user shard lock, which keeps conn from being removed and serializes subscription changes for the
+// shard.
+func (s *session) addSubscription(conn network.Conn, channel string) {
+	conn.Attr().Set(channel, struct{}{})
+
+	s.channelsMu.Lock()
+	if channels, ok := s.channels[channel]; ok {
+		channels[conn] = struct{}{}
+	} else {
+		channels = make(map[network.Conn]struct{}, 1)
+		channels[conn] = struct{}{}
+		s.channels[channel] = channels
+	}
+	s.channelsMu.Unlock()
+}
+
+// removeSubscription removes conn from the subscribers of channel.
+func (s *session) removeSubscription(channel string, conn network.Conn) {
+	s.channelsMu.Lock()
+	s.doRemoveSubscription(channel, conn)
+	s.channelsMu.Unlock()
+}
+
+// doRemoveSubscription removes conn from the subscribers of channel while the caller holds the
+// channel lock.
+func (s *session) doRemoveSubscription(channel string, conn network.Conn) {
 	if channels, ok := s.channels[channel]; ok {
 		delete(channels, conn)
 
@@ -480,34 +597,57 @@ func (s *session) doUnsubscribe(channel string, conn network.Conn) {
 }
 
 // doClearConnAttrs removes conn from every channel it is subscribed to and clears its attributes.
-// The caller must hold the write lock.
+// It runs after the session tables have released conn, so it no longer blocks connection and user
+// lookups for other sessions.
 func (s *session) doClearConnAttrs(conn network.Conn) {
-	if attr := conn.Attr(); attr != nil {
-		attr.Visit(func(key, _ any) bool {
-			if channel, ok := key.(string); ok {
-				s.doUnsubscribe(channel, conn)
-			}
-			return true
-		})
-
-		attr.Clear()
+	attr := conn.Attr()
+	if attr == nil {
+		return
 	}
+
+	var channels []string
+
+	attr.Visit(func(key, _ any) bool {
+		if channel, ok := key.(string); ok {
+			channels = append(channels, channel)
+		}
+		return true
+	})
+
+	attr.Clear()
+
+	if len(channels) == 0 {
+		return
+	}
+
+	s.channelsMu.Lock()
+	for _, channel := range channels {
+		s.doRemoveSubscription(channel, conn)
+	}
+	s.channelsMu.Unlock()
 }
 
 // stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an
 // unknown kind.
-func (s *session) stat(kind cluster.Session) (int64, error) {
-	s.rw.RLock()
-	defer s.rw.RUnlock()
-
+func (s *session) stat(kind cluster.Session) (total int64, err error) {
 	switch kind {
 	case cluster.Conn:
-		return int64(len(s.conns)), nil
+		for i := range s.conns {
+			s.conns[i].rw.RLock()
+			total += int64(len(s.conns[i].conns))
+			s.conns[i].rw.RUnlock()
+		}
 	case cluster.User:
-		return int64(len(s.users)), nil
+		for i := range s.users {
+			s.users[i].rw.RLock()
+			total += int64(len(s.users[i].conns))
+			s.users[i].rw.RUnlock()
+		}
 	default:
 		return 0, errors.ErrInvalidSessionKind
 	}
+
+	return
 }
 
 // doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
@@ -573,20 +713,23 @@ func (s *session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.
 // conn returns the connection of the session identified by target. The kind selects whether target
 // is a connection ID or a user ID.
 func (s *session) conn(kind cluster.Session, target int64) (network.Conn, error) {
+	var shard *sessionShard
+
 	switch kind {
 	case cluster.Conn:
-		conn, ok := s.conns[target]
-		if !ok {
-			return nil, errors.ErrNotFoundSession
-		}
-		return conn, nil
+		shard = s.connShard(target)
 	case cluster.User:
-		conn, ok := s.users[target]
-		if !ok {
-			return nil, errors.ErrNotFoundSession
-		}
-		return conn, nil
+		shard = s.userShard(target)
 	default:
 		return nil, errors.ErrInvalidSessionKind
+	}
+
+	shard.rw.RLock()
+	conn, ok := shard.conns[target]
+	shard.rw.RUnlock()
+	if ok {
+		return conn, nil
+	} else {
+		return nil, errors.ErrNotFoundSession
 	}
 }

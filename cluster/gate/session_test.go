@@ -60,8 +60,8 @@ func TestRemConnRegistered(t *testing.T) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
-	if len(s.conns) != 0 {
-		t.Fatalf("conns should be empty, got %d", len(s.conns))
+	if n, _ := s.stat(cluster.Conn); n != 0 {
+		t.Fatalf("conns should be empty, got %d", n)
 	}
 
 	// A repeated removal must return false so that the caller does not run its disconnect cleanup
@@ -97,11 +97,11 @@ func TestRemConnClearsUserAndChannels(t *testing.T) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
-	if len(s.conns) != 0 {
-		t.Fatalf("conns should be empty, got %d", len(s.conns))
+	if n, _ := s.stat(cluster.Conn); n != 0 {
+		t.Fatalf("conns should be empty, got %d", n)
 	}
-	if len(s.users) != 0 {
-		t.Fatalf("users should be empty, got %d", len(s.users))
+	if n, _ := s.stat(cluster.User); n != 0 {
+		t.Fatalf("users should be empty, got %d", n)
 	}
 	if len(s.channels) != 0 {
 		t.Fatalf("channels should be empty, got %d", len(s.channels))

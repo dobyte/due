@@ -2,6 +2,7 @@ package gate
 
 import (
 	"net"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -36,7 +37,7 @@ func (a *stubAttr) Visit(fn func(key, value any) bool) {
 // stubConn is a configurable network.Conn implementation for the session tests.
 type stubConn struct {
 	id         int64
-	uid        int64
+	uid        atomic.Int64
 	attr       network.Attr
 	bindErr    error
 	unbindErr  error
@@ -56,14 +57,14 @@ func newStubConn(id int64) *stubConn {
 }
 
 func (c *stubConn) ID() int64          { return c.id }
-func (c *stubConn) UID() int64         { return c.uid }
+func (c *stubConn) UID() int64         { return c.uid.Load() }
 func (c *stubConn) Attr() network.Attr { return c.attr }
 
 func (c *stubConn) Bind(uid int64) error {
 	if c.bindErr != nil {
 		return c.bindErr
 	}
-	c.uid = uid
+	c.uid.Store(uid)
 	return nil
 }
 
@@ -71,7 +72,7 @@ func (c *stubConn) Unbind() error {
 	if c.unbindErr != nil {
 		return c.unbindErr
 	}
-	c.uid = 0
+	c.uid.Store(0)
 	return nil
 }
 
@@ -177,7 +178,7 @@ func TestBindExtra(t *testing.T) {
 		if conn.UID() != 100 {
 			t.Errorf("conn uid = %d, want 100", conn.UID())
 		}
-		if s.users[100] != conn {
+		if s.userShard(100).conns[100] != conn {
 			t.Error("the conn must be registered under the new uid")
 		}
 	})
@@ -188,7 +189,7 @@ func TestBindExtra(t *testing.T) {
 		if err := s.bind(1, 100); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
-		if s.users[100] != conn {
+		if s.userShard(100).conns[100] != conn {
 			t.Error("the binding must be unchanged")
 		}
 	})
@@ -199,10 +200,10 @@ func TestBindExtra(t *testing.T) {
 		if err := s.bind(1, 200); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
-		if _, ok := s.users[100]; ok {
+		if _, ok := s.userShard(100).conns[100]; ok {
 			t.Error("the old uid binding must be dropped")
 		}
-		if s.users[200] != conn {
+		if s.userShard(200).conns[200] != conn {
 			t.Error("the conn must be registered under the new uid")
 		}
 	})
@@ -221,7 +222,7 @@ func TestBindExtra(t *testing.T) {
 		if old.closes != 1 {
 			t.Errorf("old conn close count = %d, want 1", old.closes)
 		}
-		if s.users[100] != replacement {
+		if s.userShard(100).conns[100] != replacement {
 			t.Error("the replacement conn must own the uid")
 		}
 	})
@@ -257,13 +258,13 @@ func TestBindExtra(t *testing.T) {
 
 	t.Run("rebind failure keeps the old binding", func(t *testing.T) {
 		s, _ := newSessionWithUser(1, 100)
-		conn := s.conns[1]
+		conn := s.connShard(1).conns[1]
 		conn.(*stubConn).bindErr = errors.New("bind failed")
 
 		if err := s.bind(1, 200); err == nil {
 			t.Error("Bind() must report the underlying bind failure")
 		}
-		if _, ok := s.users[100]; !ok {
+		if _, ok := s.userShard(100).conns[100]; !ok {
 			t.Error("the old binding must be kept when the rebind fails")
 		}
 	})
@@ -273,7 +274,7 @@ func TestBindExtra(t *testing.T) {
 func TestUnbindExtra(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		s := newSession()
-		if _, err := s.unbind(100); err != errors.ErrNotFoundSession {
+		if _, err := s.remove(100); err != errors.ErrNotFoundSession {
 			t.Errorf("Unbind() error = %v, want %v", err, errors.ErrNotFoundSession)
 		}
 	})
@@ -281,7 +282,7 @@ func TestUnbindExtra(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 
-		cid, err := s.unbind(100)
+		cid, err := s.remove(100)
 		if err != nil {
 			t.Fatalf("Unbind() error = %v, want nil", err)
 		}
@@ -291,7 +292,7 @@ func TestUnbindExtra(t *testing.T) {
 		if conn.UID() != 0 {
 			t.Errorf("conn uid = %d, want 0", conn.UID())
 		}
-		if _, ok := s.users[100]; ok {
+		if _, ok := s.userShard(100).conns[100]; ok {
 			t.Error("the user binding must be removed")
 		}
 	})
@@ -300,7 +301,7 @@ func TestUnbindExtra(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 		conn.unbindErr = errors.New("unbind failed")
 
-		cid, err := s.unbind(100)
+		cid, err := s.remove(100)
 		if err != nil {
 			t.Fatalf("Unbind() error = %v, want nil", err)
 		}

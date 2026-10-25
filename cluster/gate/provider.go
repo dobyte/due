@@ -37,7 +37,7 @@ func (p *provider) Bind(ctx context.Context, cid, uid int64) error {
 
 // bindConn updates a connection's identity while the caller holds its connection binding lock.
 func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
-	previousUID, err := p.gate.session.userID(cid)
+	previousUID, err := p.gate.session.uid(cid)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
 	}
 
 	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
-		_ = p.gate.session.unbindConn(cid, uid)
+		_ = p.gate.session.unbind(cid, uid)
 		userLock.unlock()
 		return err
 	}
@@ -88,7 +88,7 @@ func (p *provider) unbindPrevious(ctx context.Context, cid, uid int64) error {
 		userLock.unlock()
 		return err
 	}
-	err := p.gate.session.unbindConn(cid, uid)
+	err := p.gate.session.unbind(cid, uid)
 	userLock.unlock()
 	if err != nil && !errors.Is(err, errors.ErrNotFoundSession) {
 		return err
@@ -108,7 +108,7 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 
 	userLock := p.gate.userBindings.lock(uid)
 
-	cid, err := p.gate.session.unbind(uid)
+	cid, err := p.gate.session.remove(uid)
 	if err != nil {
 		userLock.unlock()
 		return err
