@@ -279,6 +279,24 @@ func (f *gateFixture) start(t *testing.T) {
 	})
 }
 
+// waitForCondition polls cond until it reports true or the timeout elapses.
+func waitForCondition(t *testing.T, timeout time.Duration, cond func() bool, message string) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		if cond() {
+			return
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal(message)
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestGateNewAndName(t *testing.T) {
 	g := NewGate(WithName("my-gate"))
 

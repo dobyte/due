@@ -19,6 +19,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/session"
+	taskpool "github.com/dobyte/due/v2/task"
 )
 
 // Gate is the gate server component.
@@ -207,13 +208,14 @@ func (g *Gate) handleConnect(conn network.Conn) {
 
 // handleDisconnect handles a closed connection.
 //
-// For a connection whose session is registered, it unbinds the user, triggers the Disconnect event
-// and completes the WaitGroup counter; a connection that is not registered (rejected during the
-// closing phase) is ignored. When session security is enabled, the Disconnect event is triggered
-// only for a connection whose handshake was confirmed, so that it stays paired with the Connect
-// event, which is deferred until the handshake is confirmed. RemConn atomically performs the
-// existence check and removal, so when concurrent duplicate disconnects happen only the first call
-// takes effect, keeping the WaitGroup's Add/Done balanced.
+// For a connection whose session is registered, it removes the local session synchronously and
+// queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
+// WaitGroup counter once that work finishes; a connection that is not registered (rejected during
+// the closing phase) is ignored. When session security is enabled, the Disconnect event is
+// triggered only for a connection whose handshake was confirmed, so that it stays paired with the
+// Connect event, which is deferred until the handshake is confirmed. RemConn atomically performs
+// the existence check and removal, so when concurrent duplicate disconnects happen only the first
+// call takes effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	cid := conn.ID()
 
@@ -227,27 +229,34 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 
 	if g.session.RemConn(conn) {
 		uid := conn.UID()
-		var userLock *bindingLock
 
-		if uid != 0 {
-			// Remove the local connection before waiting for a pending location write. Bind
-			// either observes the removal before writing, or this cleanup follows its write.
-			userLock = g.userBindings.lock(uid)
-			if online, _ := g.session.Has(session.User, uid); !online {
-				ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-				_ = g.proxy.cleanupGate(ctx, cid, uid)
-				cancel()
+		// The local session is gone, so the remaining work no longer needs the connection. Queue
+		// it so a slow locator does not hold the close callback, and release the wait count after
+		// the cleanup and the teardown notification have finished.
+		taskpool.Add(func() {
+			var userLock *bindingLock
+
+			if uid != 0 {
+				// Remove the local connection before waiting for a pending location write. Bind
+				// either observes the removal before writing, or this cleanup follows its write.
+				userLock = g.userBindings.lock(uid)
+				if online, _ := g.session.Has(session.User, uid); !online {
+					ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+					_ = g.proxy.cleanupGate(ctx, cid, uid)
+					cancel()
+				}
 			}
-		}
 
-		if confirmed {
-			g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
-		}
+			if confirmed {
+				g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+			}
 
-		g.wg.Done()
-		if userLock != nil {
-			userLock.unlock()
-		}
+			g.wg.Done()
+
+			if userLock != nil {
+				userLock.unlock()
+			}
+		})
 	}
 }
 

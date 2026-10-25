@@ -108,9 +108,10 @@ func TestGateChangeUIDCleansPreviousLocation(t *testing.T) {
 		t.Fatal("new UID is not bound")
 	}
 	g.handleDisconnect(conn)
-	if gid, _ := f.locator.LocateGate(ctx, 200); gid != "" {
-		t.Fatalf("new UID still located after disconnect: %q", gid)
-	}
+	waitForCondition(t, 3*time.Second, func() bool {
+		gid, _ := f.locator.LocateGate(ctx, 200)
+		return gid == ""
+	}, "new UID is still located after disconnect")
 }
 
 func TestGateChangeUIDStopsOnCleanupFailure(t *testing.T) {
@@ -146,6 +147,68 @@ func (l *blockingBindLocator) BindGate(ctx context.Context, uid int64, gid strin
 		}
 	}
 	return l.gateLocator.BindGate(ctx, uid, gid)
+}
+
+// blockingUnbindLocator pauses the location cleanup of one user.
+type blockingUnbindLocator struct {
+	*gateLocator
+	uid     int64
+	entered chan struct{}
+	resume  chan struct{}
+}
+
+func (l *blockingUnbindLocator) UnbindGate(ctx context.Context, uid int64, gid string) error {
+	if uid == l.uid {
+		close(l.entered)
+		select {
+		case <-l.resume:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return l.gateLocator.UnbindGate(ctx, uid, gid)
+}
+
+// TestGateDisconnectDoesNotWaitForLocationCleanup checks that the close callback returns while the
+// location cleanup is still in flight.
+func TestGateDisconnectDoesNotWaitForLocationCleanup(t *testing.T) {
+	f := newGateFixture(t)
+	g := f.gate
+	g.state.Store(int32(cluster.Work))
+	t.Cleanup(g.cancel)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	l := &blockingUnbindLocator{gateLocator: f.locator, uid: 100,
+		entered: make(chan struct{}), resume: make(chan struct{})}
+	g.opts.locator = l
+	conn := &securityConn{id: 1}
+	g.handleConnect(conn)
+	if err := (&provider{gate: g}).Bind(ctx, 1, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		g.handleDisconnect(conn)
+		close(done)
+	}()
+	select {
+	case <-l.entered:
+	case <-ctx.Done():
+		t.Fatal("cleanup did not reach the locator")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("disconnect waited for the location cleanup")
+	}
+
+	close(l.resume)
+
+	waitForCondition(t, 3*time.Second, func() bool {
+		gid, _ := l.LocateGate(ctx, 100)
+		return gid == ""
+	}, "disconnected user is still located on the gate")
 }
 
 func TestGateBindConcurrentDisconnect(t *testing.T) {
@@ -197,9 +260,10 @@ func TestGateBindConcurrentDisconnect(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("disconnect did not finish")
 	}
-	if gid, _ := l.LocateGate(ctx, 100); gid != "" {
-		t.Fatalf("disconnected user still located on gate %q", gid)
-	}
+	waitForCondition(t, 3*time.Second, func() bool {
+		gid, _ := l.LocateGate(ctx, 100)
+		return gid == ""
+	}, "disconnected user is still located on the gate")
 }
 
 // disconnectOnCloseConn models the synchronous disconnect callback made by network.Conn.Close.
@@ -262,9 +326,10 @@ func TestGateBindDisconnectedBeforeLocationWrite(t *testing.T) {
 	if err := (&provider{gate: g}).Bind(context.Background(), 2, 100); !errors.Is(err, errors.ErrNotFoundSession) {
 		t.Fatalf("binding a disconnected connection returned %v", err)
 	}
-	if gid, _ := f.locator.LocateGate(context.Background(), 100); gid != "" {
-		t.Fatalf("disconnected user located on gate %q", gid)
-	}
+	waitForCondition(t, 3*time.Second, func() bool {
+		gid, _ := f.locator.LocateGate(context.Background(), 100)
+		return gid == ""
+	}, "disconnected user is still located on the gate")
 }
 
 func TestGateBindDifferentUsersProceedIndependently(t *testing.T) {
