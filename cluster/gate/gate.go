@@ -241,7 +241,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 		}
 
 		if confirmed {
-			g.proxy.triggerDisconnect(g.ctx, cid, uid)
+			g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
 		}
 
 		g.wg.Done()

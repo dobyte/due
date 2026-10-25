@@ -90,22 +90,18 @@ func (p *proxy) cleanupGate(ctx context.Context, cid, uid int64) error {
 
 // trigger triggers an event.
 //
-// It delivers connect, disconnect and reconnect events to the matching business node.
+// It delivers connect, disconnect and reconnect events to the matching business node. No event is
+// delivered once the context is canceled. A disconnect event is still delivered while the gate is
+// shutting down, so teardown notifications are not lost during Destroy.
 func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
-	if p.gate.isShut() {
+	if ctx.Err() != nil {
 		return
 	}
-	p.doTrigger(ctx, event, cid, uid)
-}
 
-// triggerDisconnect keeps teardown notifications available until Destroy cancels the context.
-func (p *proxy) triggerDisconnect(ctx context.Context, cid, uid int64) {
-	if ctx.Err() == nil {
-		p.doTrigger(ctx, cluster.Disconnect, cid, uid)
+	if event != cluster.Disconnect && p.gate.isShut() {
+		return
 	}
-}
 
-func (p *proxy) doTrigger(ctx context.Context, event cluster.Event, cid, uid int64) {
 	if mode.IsDebugMode() {
 		log.Debugf("trigger event, event: %v cid: %d uid: %d", event.String(), cid, uid)
 	}
