@@ -15,7 +15,6 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 )
 
 // gateAttr is a connection attribute implementation for tests.
@@ -731,7 +730,7 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 	conn := newGateConn(1001, 2001)
 	f.server.connect(conn)
 
-	if ok, err := f.gate.session.Has(session.Conn, conn.ID()); err != nil {
+	if ok, err := f.gate.session.has(cluster.Conn, conn.ID()); err != nil {
 		t.Fatalf("session lookup failed: %v", err)
 	} else if !ok {
 		t.Fatal("conn must be registered after connect")
@@ -739,7 +738,7 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 
 	f.server.disconnect(conn)
 
-	if ok, _ := f.gate.session.Has(session.Conn, conn.ID()); ok {
+	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must be removed after disconnect")
 	}
 	if _, ok := f.locator.gates[2001]; ok {
@@ -760,7 +759,7 @@ func TestGateHandleConnectRejected(t *testing.T) {
 	if !conn.closed.Load() {
 		t.Fatal("conn must be closed when the gate is shut")
 	}
-	if ok, _ := f.gate.session.Has(session.Conn, conn.ID()); ok {
+	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must not be registered when the gate is shut")
 	}
 }
@@ -875,27 +874,27 @@ func TestGateProviderShutdown(t *testing.T) {
 	}{
 		{"Bind", func() error { return p.Bind(ctx, 1, 1) }},
 		{"Unbind", func() error { return p.Unbind(ctx, 1) }},
-		{"GetIP", func() error { _, err := p.GetIP(ctx, session.User, 1); return err }},
-		{"IsOnline", func() error { _, err := p.IsOnline(ctx, session.User, 1); return err }},
-		{"Stat", func() error { _, err := p.Stat(ctx, session.User); return err }},
-		{"Disconnect", func() error { return p.Disconnect(ctx, session.User, 1, false) }},
+		{"GetIP", func() error { _, err := p.GetIP(ctx, cluster.User, 1); return err }},
+		{"IsOnline", func() error { _, err := p.IsOnline(ctx, cluster.User, 1); return err }},
+		{"Stat", func() error { _, err := p.Stat(ctx, cluster.User); return err }},
+		{"Disconnect", func() error { return p.Disconnect(ctx, cluster.User, 1, false) }},
 		{"Push", func() error {
-			return p.Push(ctx, session.User, 1, false, buffer.NewBytes(nil, true))
+			return p.Push(ctx, cluster.User, 1, false, buffer.NewBytes(nil, true))
 		}},
 		{"Multicast", func() error {
-			_, err := p.Multicast(ctx, session.User, []int64{1}, false, buffer.NewBytes(nil, true))
+			_, err := p.Multicast(ctx, cluster.User, []int64{1}, false, buffer.NewBytes(nil, true))
 			return err
 		}},
 		{"Broadcast", func() error {
-			_, err := p.Broadcast(ctx, session.User, false, buffer.NewBytes(nil, true))
+			_, err := p.Broadcast(ctx, cluster.User, false, buffer.NewBytes(nil, true))
 			return err
 		}},
 		{"Publish", func() error {
 			_, err := p.Publish(ctx, "ch", false, buffer.NewBytes(nil, true))
 			return err
 		}},
-		{"Subscribe", func() error { return p.Subscribe(ctx, session.User, []int64{1}, "ch") }},
-		{"Unsubscribe", func() error { return p.Unsubscribe(ctx, session.User, []int64{1}, "ch") }},
+		{"Subscribe", func() error { return p.Subscribe(ctx, cluster.User, []int64{1}, "ch") }},
+		{"Unsubscribe", func() error { return p.Unsubscribe(ctx, cluster.User, []int64{1}, "ch") }},
 	}
 
 	for _, tt := range tests {
@@ -932,7 +931,7 @@ func TestGateProviderBindUnbind(t *testing.T) {
 	}
 
 	conn := newGateConn(1, 0)
-	f.gate.session.AddConn(conn)
+	f.gate.session.addConn(conn)
 
 	if err := p.Bind(ctx, conn.ID(), 100); err != nil {
 		t.Fatalf("bind failed: %v", err)
@@ -967,24 +966,24 @@ func TestGateProviderQueries(t *testing.T) {
 	ctx := context.Background()
 
 	conn := newGateConn(7, 0)
-	f.gate.session.AddConn(conn)
+	f.gate.session.addConn(conn)
 
-	ip, err := p.GetIP(ctx, session.Conn, conn.ID())
+	ip, err := p.GetIP(ctx, cluster.Conn, conn.ID())
 	if err != nil || ip != "10.0.0.1" {
 		t.Fatalf("unexpected ip: %s, err: %v", ip, err)
 	}
 
-	online, err := p.IsOnline(ctx, session.Conn, conn.ID())
+	online, err := p.IsOnline(ctx, cluster.Conn, conn.ID())
 	if err != nil || !online {
 		t.Fatalf("unexpected online: %v, err: %v", online, err)
 	}
 
-	total, err := p.Stat(ctx, session.Conn)
+	total, err := p.Stat(ctx, cluster.Conn)
 	if err != nil || total != 1 {
 		t.Fatalf("unexpected stat: %d, err: %v", total, err)
 	}
 
-	if err = p.Disconnect(ctx, session.Conn, conn.ID(), false); err != nil {
+	if err = p.Disconnect(ctx, cluster.Conn, conn.ID(), false); err != nil {
 		t.Fatalf("disconnect failed: %v", err)
 	}
 	if !conn.closed.Load() {
@@ -992,7 +991,7 @@ func TestGateProviderQueries(t *testing.T) {
 	}
 
 	// An invalid session kind propagates the session error.
-	if _, err = p.GetIP(ctx, session.Kind(99), 1); !errors.Is(err, errors.ErrInvalidSessionKind) {
+	if _, err = p.GetIP(ctx, cluster.Session(99), 1); !errors.Is(err, errors.ErrInvalidSessionKind) {
 		t.Fatalf("expect ErrInvalidSessionKind, got %v", err)
 	}
 }
@@ -1005,9 +1004,9 @@ func TestGateProviderPushFamily(t *testing.T) {
 	ctx := context.Background()
 
 	conn := newGateConn(11, 0)
-	f.gate.session.AddConn(conn)
+	f.gate.session.addConn(conn)
 
-	if err := p.Push(ctx, session.Conn, conn.ID(), false, buffer.NewBytes(nil, true)); err != nil {
+	if err := p.Push(ctx, cluster.Conn, conn.ID(), false, buffer.NewBytes(nil, true)); err != nil {
 		t.Fatalf("push failed: %v", err)
 	}
 	if conn.pushed.Load() != 1 {
@@ -1016,23 +1015,23 @@ func TestGateProviderPushFamily(t *testing.T) {
 
 	// Pushing to a missing user returns ErrNotFoundSession and schedules an unbind.
 	f.locator.gates[500] = "test-gate-id"
-	err := p.Push(ctx, session.User, 500, false, buffer.NewBytes(nil, true))
+	err := p.Push(ctx, cluster.User, 500, false, buffer.NewBytes(nil, true))
 	if !errors.Is(err, errors.ErrNotFoundSession) {
 		t.Fatalf("expect ErrNotFoundSession, got %v", err)
 	}
 
-	total, err := p.Multicast(ctx, session.Conn, []int64{conn.ID()}, false, buffer.NewBytes(nil, true))
+	total, err := p.Multicast(ctx, cluster.Conn, []int64{conn.ID()}, false, buffer.NewBytes(nil, true))
 	if err != nil || total != 1 {
 		t.Fatalf("unexpected multicast: %d, err: %v", total, err)
 	}
 
 	// An empty target list must be handled without pushing.
-	total, err = p.Multicast(ctx, session.Conn, nil, false, buffer.NewBytes(nil, true))
+	total, err = p.Multicast(ctx, cluster.Conn, nil, false, buffer.NewBytes(nil, true))
 	if err != nil || total != 0 {
 		t.Fatalf("unexpected empty multicast: %d, err: %v", total, err)
 	}
 
-	total, err = p.Broadcast(ctx, session.Conn, false, buffer.NewBytes(nil, true))
+	total, err = p.Broadcast(ctx, cluster.Conn, false, buffer.NewBytes(nil, true))
 	if err != nil || total != 1 {
 		t.Fatalf("unexpected broadcast: %d, err: %v", total, err)
 	}
@@ -1052,9 +1051,9 @@ func TestGateProviderSubscribe(t *testing.T) {
 	ctx := context.Background()
 
 	conn := newGateConn(21, 0)
-	f.gate.session.AddConn(conn)
+	f.gate.session.addConn(conn)
 
-	if err := p.Subscribe(ctx, session.Conn, []int64{conn.ID()}, "chat"); err != nil {
+	if err := p.Subscribe(ctx, cluster.Conn, []int64{conn.ID()}, "chat"); err != nil {
 		t.Fatalf("subscribe failed: %v", err)
 	}
 
@@ -1063,15 +1062,15 @@ func TestGateProviderSubscribe(t *testing.T) {
 		t.Fatalf("unexpected publish to subscriber: %d, err: %v", total, err)
 	}
 
-	if err = p.Unsubscribe(ctx, session.Conn, []int64{conn.ID()}, "chat"); err != nil {
+	if err = p.Unsubscribe(ctx, cluster.Conn, []int64{conn.ID()}, "chat"); err != nil {
 		t.Fatalf("unsubscribe failed: %v", err)
 	}
 
 	// An invalid session kind propagates the session error.
-	if err = p.Subscribe(ctx, session.Kind(99), []int64{1}, "chat"); !errors.Is(err, errors.ErrInvalidSessionKind) {
+	if err = p.Subscribe(ctx, cluster.Session(99), []int64{1}, "chat"); !errors.Is(err, errors.ErrInvalidSessionKind) {
 		t.Fatalf("expect ErrInvalidSessionKind, got %v", err)
 	}
-	if err = p.Unsubscribe(ctx, session.Kind(99), []int64{1}, "chat"); !errors.Is(err, errors.ErrInvalidSessionKind) {
+	if err = p.Unsubscribe(ctx, cluster.Session(99), []int64{1}, "chat"); !errors.Is(err, errors.ErrInvalidSessionKind) {
 		t.Fatalf("expect ErrInvalidSessionKind, got %v", err)
 	}
 }

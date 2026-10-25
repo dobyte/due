@@ -8,7 +8,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -261,7 +260,7 @@ func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, err
 }
 
 // Stat returns the total number of sessions, or an error when the mesh has been shut down.
-func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+func (p *Proxy) Stat(ctx context.Context, kind cluster.Session) (int64, error) {
 	if p.mesh.isShut() {
 		return 0, errors.ErrMeshShutdown
 	} else {

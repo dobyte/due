@@ -197,11 +197,11 @@ Gate 上没有 Node 那样的游戏路由 handler：接收消息后从 packet �
 
 ### 5.3 本机会话与绑定流程
 
-`Session` 用锁保护连接表、用户表和频道订阅表。`session.Conn` 以 CID 操作连接；`session.User` 以 UID 操作用户连接。
+Gate 内部的 `session` 用锁保护连接表、用户表和频道订阅表。`cluster.Conn` 以 CID 操作连接；`cluster.User` 以 UID 操作用户连接。
 
 Gate provider 的 Bind 先更新本机会话，再写 Locator；定位写入失败时，仅在 CID 仍是该 UID 的当前绑定时撤销本机绑定，不会撤销另一连接的替代绑定。同一 CID 的绑定请求串行执行，避免旧请求的回滚影响同一连接上的后续请求。该过程不是跨本机状态和 Redis 的事务，也不意味着被替换的旧连接能够恢复。业务登录应考虑失败返回和状态补偿。
 
-同一 UID 的定位写入、主动解绑和断连清理通过 Gate 内的用户锁协调，不同 UID 可独立执行。Bind 在本机绑定完成后获取锁并确认 CID/UID 仍匹配，再写定位；断连先移除本机会话，再等待先前的定位写入完成后清理，避免晚到的绑定写入留下离线定位。若本机用户表已有替代连接，旧连接断开时保留该 UID 的定位。用户锁不能覆盖 `Session.Bind`，因为它可能同步关闭旧连接并等待读取同一用户锁的断连回调；排队中的 Reconnect 也会在同一锁内核验当前绑定，连接已移除或 UID 已更换时不再发送。
+同一 UID 的定位写入、主动解绑和断连清理通过 Gate 内的用户锁协调，不同 UID 可独立执行。Bind 在本机绑定完成后获取锁并确认 CID/UID 仍匹配，再写定位；断连先移除本机会话，再等待先前的定位写入完成后清理，避免晚到的绑定写入留下离线定位。若本机用户表已有替代连接，旧连接断开时保留该 UID 的定位。用户锁不能覆盖 `session.bind`，因为它可能同步关闭旧连接并等待读取同一用户锁的断连回调；排队中的 Reconnect 也会在同一锁内核验当前绑定，连接已移除或 UID 已更换时不再发送。
 
 同一连接更换 UID 时，先清理旧 UID 的定位并有条件地解绑旧身份，再尝试绑定新 UID；旧定位清理失败则返回错误，不继续切换身份。旧、新 UID 的锁分别获取，不同时持有；已被另一连接接管的旧 UID 不受影响。新 UID 绑定失败时不会恢复已经清理的旧身份。
 
@@ -213,11 +213,11 @@ Gate Destroy 先切换 Shut 以拒绝新业务请求；内部断连清理仍可�
 
 ### 5.4 推送、组播与频道
 
-Session 支持 Push、Multicast、Broadcast、Subscribe、Unsubscribe、Publish。频道成员存储在具体 Gate 的内存中，断开连接时移除；跨 Gate 发布由链接器扇出，不是持久消息订阅系统。
+Gate 内部的 session 支持 push、multicast、broadcast、subscribe、unsubscribe、publish。频道成员存储在具体 Gate 的内存中，断开连接时移除；跨 Gate 发布由链接器扇出，不是持久消息订阅系统。
 
 批量发送会共享缓冲区并增加释放计数。返回成功或成功数量通常表示相应入队路径成功，不代表所有玩家已经读取或处理。部分失败应结合成功计数和日志判断；需要业务确认的房间指令或资产通知应另建应用层 ACK/补拉协议。
 
-源码：[cluster/gate/gate.go](../../cluster/gate/gate.go)、[cluster/gate/proxy.go](../../cluster/gate/proxy.go)、[cluster/gate/provider.go](../../cluster/gate/provider.go)、[session/session.go](../../session/session.go)。
+源码：[cluster/gate/gate.go](../../cluster/gate/gate.go)、[cluster/gate/proxy.go](../../cluster/gate/proxy.go)、[cluster/gate/provider.go](../../cluster/gate/provider.go)、[cluster/gate/session.go](../../cluster/gate/session.go)。
 
 ## 6. Node、路由与端到端消息链路
 
@@ -411,7 +411,7 @@ TCP 默认最大连接数 5000、写队列 1024、心跳间隔 10 秒、resp 心
 | `network.OnReceive` 的 Buffer | 注册的接收方负责释放；没有接收回调时网络层释放 |
 | 裸 `network.Conn.Push` 成功 | 所有权交网络层，调用方不能再使用或释放 |
 | 裸 `network.Conn.Push` 失败 | 所有权仍在调用方，必须释放 |
-| `Session.Push` | 包装层处理会话不存在及裸 Push 失败时的释放 |
+| `session.push` | 包装层处理会话不存在及裸 Push 失败时的释放 |
 | 内部 DRPC Call/Push | 内部层失败路径也可能释放其命令 Buffer；不能套用裸 network 的释放规则再次释放 |
 | 广播共享 Buffer | 发送前设置 `Delay(n)`，每个消费者负责一次释放，期间内容必须不变 |
 
@@ -868,7 +868,7 @@ request ID、UID、room ID、GID/NID、Route、generation 用于日志和追踪�
 | 问题 | 优先阅读位置 |
 | --- | --- |
 | 进程如何启动与退出 | `container.go`、`component/component.go`、`utils/xcall/goroutines.go` |
-| 连接到 UID 怎样绑定 | `cluster/gate/provider.go`、`session/session.go`、`locate/redis/` |
+| 连接到 UID 怎样绑定 | `cluster/gate/provider.go`、`cluster/gate/session.go`、`locate/redis/` |
 | 某 Route 为何选择该 Node | `cluster/node/router.go`、`internal/link/node.go`、`internal/dispatcher/` |
 | handler 在哪个执行域运行 | `cluster/node/node.go`、`request.go`、`actor.go`、`task/pool.go` |
 | Actor 为何找不到或不能销毁 | `cluster/node/scheduler.go`、`actor_options.go`、`actor.go` |

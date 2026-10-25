@@ -61,7 +61,7 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 // Sharing the user lock with disconnect keeps a valid Reconnect ahead of its Disconnect.
 func (p *proxy) reconnect(ctx context.Context, cid, uid int64) {
 	userLock := p.gate.userBindings.lock(uid)
-	if p.gate.session.IsBound(cid, uid) {
+	if p.gate.session.isBound(cid, uid) {
 		p.trigger(ctx, cluster.Reconnect, cid, uid)
 	}
 	userLock.unlock()

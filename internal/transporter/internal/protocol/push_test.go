@@ -3,12 +3,12 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestEncodePushReq(t *testing.T) {
@@ -17,7 +17,7 @@ func TestEncodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodePushReq(1, session.User, 3, true, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodePushReq(1, cluster.User, 3, true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -28,7 +28,7 @@ func TestDecodePushReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := protocol.EncodePushReq(1, session.User, 3, true, buffer.NewNocopyBuffer(message))
+	req := protocol.EncodePushReq(1, cluster.User, 3, true, buffer.NewNocopyBuffer(message))
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

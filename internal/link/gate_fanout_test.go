@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
-	"github.com/dobyte/due/v2/session"
 )
 
 // collector accumulates the payloads a gate provider receives.
@@ -79,7 +79,7 @@ func TestGateLinkerBroadcastFanOut(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			collected := &collector{}
-			capture := func(_ context.Context, _ session.Kind, _ bool, buf buffer.Buffer) (int64, error) {
+			capture := func(_ context.Context, _ cluster.Session, _ bool, buf buffer.Buffer) (int64, error) {
 				collected.record(buf)
 				return 3, nil
 			}
@@ -93,7 +93,7 @@ func TestGateLinkerBroadcastFanOut(t *testing.T) {
 			linker.dispatcher.ReplaceServices(gateService("gate-1", addr1), gateService("gate-2", addr2))
 
 			total, err := linker.Broadcast(context.Background(), &BroadcastArgs{
-				Kind:    session.Conn,
+				Kind:    cluster.Conn,
 				Message: &Message{Route: 1, Data: []byte("hello")},
 				Ack:     tt.ack,
 			})
@@ -191,7 +191,7 @@ func TestGateLinkerMulticastIndirectFanOut(t *testing.T) {
 			linker.sources.Store(int64(201), "gate-2")
 
 			total, err := linker.Multicast(context.Background(), &MulticastArgs{
-				Kind:    session.User,
+				Kind:    cluster.User,
 				Targets: []int64{200, 201},
 				Message: &Message{Route: 1, Data: []byte("hello")},
 				Ack:     tt.ack,

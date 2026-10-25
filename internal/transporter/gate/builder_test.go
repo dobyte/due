@@ -7,7 +7,6 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
@@ -38,7 +37,7 @@ func TestBuilder(t *testing.T) {
 
 	ctx := context.Background()
 
-	ip, err := client.GetIP(ctx, session.User, 1)
+	ip, err := client.GetIP(ctx, cluster.User, 1)
 	if err != nil {
 		t.Fatalf("get ip failed, err: %v", err)
 	}

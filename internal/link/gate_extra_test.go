@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 )
 
 // TestGateLinkerNew verifies that a new GateLinker has its dispatcher and builder initialized.
@@ -405,10 +404,10 @@ func TestGateLinkerGetIP(t *testing.T) {
 		want    string
 		wantErr error
 	}{
-		{name: "conn direct", args: &GetIPArgs{GID: "gate-1", Kind: session.Conn, Target: 100}, want: "127.0.0.1"},
-		{name: "user direct", args: &GetIPArgs{GID: "gate-1", Kind: session.User, Target: 200}, want: "127.0.0.1"},
-		{name: "user indirect", args: &GetIPArgs{Kind: session.User, Target: 200}, want: "127.0.0.1"},
-		{name: "invalid kind", args: &GetIPArgs{Kind: session.Kind(99), Target: 100}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn direct", args: &GetIPArgs{GID: "gate-1", Kind: cluster.Conn, Target: 100}, want: "127.0.0.1"},
+		{name: "user direct", args: &GetIPArgs{GID: "gate-1", Kind: cluster.User, Target: 200}, want: "127.0.0.1"},
+		{name: "user indirect", args: &GetIPArgs{Kind: cluster.User, Target: 200}, want: "127.0.0.1"},
+		{name: "invalid kind", args: &GetIPArgs{Kind: cluster.Session(99), Target: 100}, wantErr: errors.ErrInvalidSessionKind},
 	}
 
 	for _, tt := range tests {
@@ -430,7 +429,7 @@ func TestGateLinkerGetIP(t *testing.T) {
 	}
 
 	t.Run("direct build error", func(t *testing.T) {
-		if _, err := linker.GetIP(context.Background(), &GetIPArgs{GID: "missing", Kind: session.Conn, Target: 1}); !errors.Is(err, errors.ErrNotFoundEndpoint) {
+		if _, err := linker.GetIP(context.Background(), &GetIPArgs{GID: "missing", Kind: cluster.Conn, Target: 1}); !errors.Is(err, errors.ErrNotFoundEndpoint) {
 			t.Errorf("expect ErrNotFoundEndpoint, got %v", err)
 		}
 	})
@@ -439,7 +438,7 @@ func TestGateLinkerGetIP(t *testing.T) {
 // TestGateLinkerStat verifies session counting across gate endpoints.
 func TestGateLinkerStat(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		provider := &gateProviderStub{statFn: func(context.Context, session.Kind) (int64, error) {
+		provider := &gateProviderStub{statFn: func(context.Context, cluster.Session) (int64, error) {
 			return 7, nil
 		}}
 		_, addr := startGateServer(t, provider)
@@ -447,7 +446,7 @@ func TestGateLinkerStat(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("gate-1", addr))
 
-		total, err := linker.Stat(context.Background(), session.Conn)
+		total, err := linker.Stat(context.Background(), cluster.Conn)
 		if err != nil {
 			t.Fatalf("Stat failed: %v", err)
 		}
@@ -457,7 +456,7 @@ func TestGateLinkerStat(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		provider := &gateProviderStub{statFn: func(context.Context, session.Kind) (int64, error) {
+		provider := &gateProviderStub{statFn: func(context.Context, cluster.Session) (int64, error) {
 			return 0, errors.ErrNotFoundSession
 		}}
 		_, addr := startGateServer(t, provider)
@@ -465,7 +464,7 @@ func TestGateLinkerStat(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("gate-1", addr))
 
-		total, err := linker.Stat(context.Background(), session.Conn)
+		total, err := linker.Stat(context.Background(), cluster.Conn)
 		if !errors.Is(err, errors.ErrNotFoundSession) {
 			t.Errorf("expect ErrNotFoundSession, got %v", err)
 		}
@@ -477,7 +476,7 @@ func TestGateLinkerStat(t *testing.T) {
 	t.Run("no endpoints", func(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 
-		total, err := linker.Stat(context.Background(), session.Conn)
+		total, err := linker.Stat(context.Background(), cluster.Conn)
 		if err != nil || total != 0 {
 			t.Errorf("Stat = (%d, %v), want (0, nil)", total, err)
 		}
@@ -487,7 +486,7 @@ func TestGateLinkerStat(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("bad", "127.0.0.1:99999"))
 
-		total, err := linker.Stat(context.Background(), session.Conn)
+		total, err := linker.Stat(context.Background(), cluster.Conn)
 		if err == nil {
 			t.Errorf("expect a build error for an invalid port")
 		}
@@ -499,7 +498,7 @@ func TestGateLinkerStat(t *testing.T) {
 
 // TestGateLinkerIsOnline verifies direct, indirect and invalid-kind online checks.
 func TestGateLinkerIsOnline(t *testing.T) {
-	provider := &gateProviderStub{isOnlineFn: func(context.Context, session.Kind, int64) (bool, error) {
+	provider := &gateProviderStub{isOnlineFn: func(context.Context, cluster.Session, int64) (bool, error) {
 		return true, nil
 	}}
 	_, addr := startGateServer(t, provider)
@@ -514,10 +513,10 @@ func TestGateLinkerIsOnline(t *testing.T) {
 		want    bool
 		wantErr error
 	}{
-		{name: "conn direct", args: &IsOnlineArgs{GID: "gate-1", Kind: session.Conn, Target: 100}, want: true},
-		{name: "user direct", args: &IsOnlineArgs{GID: "gate-1", Kind: session.User, Target: 200}, want: true},
-		{name: "user indirect", args: &IsOnlineArgs{Kind: session.User, Target: 200}, want: true},
-		{name: "invalid kind", args: &IsOnlineArgs{Kind: session.Kind(99)}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn direct", args: &IsOnlineArgs{GID: "gate-1", Kind: cluster.Conn, Target: 100}, want: true},
+		{name: "user direct", args: &IsOnlineArgs{GID: "gate-1", Kind: cluster.User, Target: 200}, want: true},
+		{name: "user indirect", args: &IsOnlineArgs{Kind: cluster.User, Target: 200}, want: true},
+		{name: "invalid kind", args: &IsOnlineArgs{Kind: cluster.Session(99)}, wantErr: errors.ErrInvalidSessionKind},
 	}
 
 	for _, tt := range tests {
@@ -553,10 +552,10 @@ func TestGateLinkerDisconnect(t *testing.T) {
 		args    *DisconnectArgs
 		wantErr error
 	}{
-		{name: "conn direct", args: &DisconnectArgs{GID: "gate-1", Kind: session.Conn, Target: 100}},
-		{name: "user direct", args: &DisconnectArgs{GID: "gate-1", Kind: session.User, Target: 200, Force: true}},
-		{name: "user indirect", args: &DisconnectArgs{Kind: session.User, Target: 200}},
-		{name: "invalid kind", args: &DisconnectArgs{Kind: session.Kind(99)}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn direct", args: &DisconnectArgs{GID: "gate-1", Kind: cluster.Conn, Target: 100}},
+		{name: "user direct", args: &DisconnectArgs{GID: "gate-1", Kind: cluster.User, Target: 200, Force: true}},
+		{name: "user indirect", args: &DisconnectArgs{Kind: cluster.User, Target: 200}},
+		{name: "invalid kind", args: &DisconnectArgs{Kind: cluster.Session(99)}, wantErr: errors.ErrInvalidSessionKind},
 	}
 
 	for _, tt := range tests {
@@ -593,11 +592,11 @@ func TestGateLinkerSubscribe(t *testing.T) {
 		args    *SubscribeArgs
 		wantErr error
 	}{
-		{name: "conn direct", args: &SubscribeArgs{GID: "gate-1", Kind: session.Conn, Targets: []int64{100}, Channel: "room"}},
-		{name: "user direct", args: &SubscribeArgs{GID: "gate-1", Kind: session.User, Targets: []int64{200}, Channel: "room"}},
-		{name: "user indirect", args: &SubscribeArgs{Kind: session.User, Targets: []int64{200}, Channel: "room"}},
-		{name: "empty targets", args: &SubscribeArgs{GID: "gate-1", Kind: session.Conn, Channel: "room"}, wantErr: errors.ErrReceiveTargetEmpty},
-		{name: "invalid kind", args: &SubscribeArgs{Kind: session.Kind(99)}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn direct", args: &SubscribeArgs{GID: "gate-1", Kind: cluster.Conn, Targets: []int64{100}, Channel: "room"}},
+		{name: "user direct", args: &SubscribeArgs{GID: "gate-1", Kind: cluster.User, Targets: []int64{200}, Channel: "room"}},
+		{name: "user indirect", args: &SubscribeArgs{Kind: cluster.User, Targets: []int64{200}, Channel: "room"}},
+		{name: "empty targets", args: &SubscribeArgs{GID: "gate-1", Kind: cluster.Conn, Channel: "room"}, wantErr: errors.ErrReceiveTargetEmpty},
+		{name: "invalid kind", args: &SubscribeArgs{Kind: cluster.Session(99)}, wantErr: errors.ErrInvalidSessionKind},
 	}
 
 	for _, tt := range tests {
@@ -616,7 +615,7 @@ func TestGateLinkerSubscribe(t *testing.T) {
 	}
 
 	t.Run("direct build error", func(t *testing.T) {
-		err := linker.Subscribe(context.Background(), &SubscribeArgs{GID: "missing", Kind: session.Conn, Targets: []int64{1}})
+		err := linker.Subscribe(context.Background(), &SubscribeArgs{GID: "missing", Kind: cluster.Conn, Targets: []int64{1}})
 		if !errors.Is(err, errors.ErrNotFoundEndpoint) {
 			t.Errorf("expect ErrNotFoundEndpoint, got %v", err)
 		}
@@ -637,11 +636,11 @@ func TestGateLinkerUnsubscribe(t *testing.T) {
 		args    *UnsubscribeArgs
 		wantErr error
 	}{
-		{name: "conn direct", args: &UnsubscribeArgs{GID: "gate-1", Kind: session.Conn, Targets: []int64{100}, Channel: "room"}},
-		{name: "user direct", args: &UnsubscribeArgs{GID: "gate-1", Kind: session.User, Targets: []int64{200}, Channel: "room"}},
-		{name: "user indirect", args: &UnsubscribeArgs{Kind: session.User, Targets: []int64{200}, Channel: "room"}},
-		{name: "empty targets", args: &UnsubscribeArgs{GID: "gate-1", Kind: session.Conn, Channel: "room"}, wantErr: errors.ErrReceiveTargetEmpty},
-		{name: "invalid kind", args: &UnsubscribeArgs{Kind: session.Kind(99)}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn direct", args: &UnsubscribeArgs{GID: "gate-1", Kind: cluster.Conn, Targets: []int64{100}, Channel: "room"}},
+		{name: "user direct", args: &UnsubscribeArgs{GID: "gate-1", Kind: cluster.User, Targets: []int64{200}, Channel: "room"}},
+		{name: "user indirect", args: &UnsubscribeArgs{Kind: cluster.User, Targets: []int64{200}, Channel: "room"}},
+		{name: "empty targets", args: &UnsubscribeArgs{GID: "gate-1", Kind: cluster.Conn, Channel: "room"}, wantErr: errors.ErrReceiveTargetEmpty},
+		{name: "invalid kind", args: &UnsubscribeArgs{Kind: cluster.Session(99)}, wantErr: errors.ErrInvalidSessionKind},
 	}
 
 	for _, tt := range tests {
@@ -681,14 +680,14 @@ func TestGateLinkerMulticast(t *testing.T) {
 		wantTotal int64
 		wantErr   error
 	}{
-		{name: "invalid kind", args: &MulticastArgs{Kind: session.Kind(99), Targets: []int64{1}, Message: msg}, wantErr: errors.ErrInvalidSessionKind},
-		{name: "conn empty targets", args: &MulticastArgs{GID: "gate-1", Kind: session.Conn, Message: msg}, wantErr: errors.ErrReceiveTargetEmpty},
-		{name: "conn single no-ack", args: &MulticastArgs{GID: "gate-1", Kind: session.Conn, Targets: []int64{100}, Message: msg}},
-		{name: "conn single ack", args: &MulticastArgs{GID: "gate-1", Kind: session.Conn, Targets: []int64{100}, Message: msg, Ack: true}, wantTotal: 1},
-		{name: "conn multi ack", args: &MulticastArgs{GID: "gate-1", Kind: session.Conn, Targets: []int64{100, 101}, Message: msg, Ack: true}, wantTotal: 2},
-		{name: "user direct multi ack", args: &MulticastArgs{GID: "gate-1", Kind: session.User, Targets: []int64{200, 201}, Message: msg, Ack: true}, wantTotal: 2},
-		{name: "user indirect single no-ack", args: &MulticastArgs{Kind: session.User, Targets: []int64{200}, Message: msg}},
-		{name: "user indirect single ack", args: &MulticastArgs{Kind: session.User, Targets: []int64{200}, Message: msg, Ack: true}, wantTotal: 1},
+		{name: "invalid kind", args: &MulticastArgs{Kind: cluster.Session(99), Targets: []int64{1}, Message: msg}, wantErr: errors.ErrInvalidSessionKind},
+		{name: "conn empty targets", args: &MulticastArgs{GID: "gate-1", Kind: cluster.Conn, Message: msg}, wantErr: errors.ErrReceiveTargetEmpty},
+		{name: "conn single no-ack", args: &MulticastArgs{GID: "gate-1", Kind: cluster.Conn, Targets: []int64{100}, Message: msg}},
+		{name: "conn single ack", args: &MulticastArgs{GID: "gate-1", Kind: cluster.Conn, Targets: []int64{100}, Message: msg, Ack: true}, wantTotal: 1},
+		{name: "conn multi ack", args: &MulticastArgs{GID: "gate-1", Kind: cluster.Conn, Targets: []int64{100, 101}, Message: msg, Ack: true}, wantTotal: 2},
+		{name: "user direct multi ack", args: &MulticastArgs{GID: "gate-1", Kind: cluster.User, Targets: []int64{200, 201}, Message: msg, Ack: true}, wantTotal: 2},
+		{name: "user indirect single no-ack", args: &MulticastArgs{Kind: cluster.User, Targets: []int64{200}, Message: msg}},
+		{name: "user indirect single ack", args: &MulticastArgs{Kind: cluster.User, Targets: []int64{200}, Message: msg, Ack: true}, wantTotal: 1},
 	}
 
 	for _, tt := range tests {
@@ -710,7 +709,7 @@ func TestGateLinkerMulticast(t *testing.T) {
 	}
 
 	t.Run("direct build error", func(t *testing.T) {
-		_, err := linker.Multicast(context.Background(), &MulticastArgs{GID: "missing", Kind: session.Conn, Targets: []int64{1}, Message: msg})
+		_, err := linker.Multicast(context.Background(), &MulticastArgs{GID: "missing", Kind: cluster.Conn, Targets: []int64{1}, Message: msg})
 		if !errors.Is(err, errors.ErrNotFoundEndpoint) {
 			t.Errorf("expect ErrNotFoundEndpoint, got %v", err)
 		}
@@ -727,14 +726,14 @@ func TestGateLinkerPush(t *testing.T) {
 	linker.sources.Store(int64(200), "gate-1")
 
 	t.Run("direct", func(t *testing.T) {
-		err := linker.Push(context.Background(), &PushArgs{GID: "gate-1", Kind: session.Conn, Target: 100, Message: &Message{Route: 1, Data: []byte("x")}})
+		err := linker.Push(context.Background(), &PushArgs{GID: "gate-1", Kind: cluster.Conn, Target: 100, Message: &Message{Route: 1, Data: []byte("x")}})
 		if err != nil {
 			t.Errorf("Push failed: %v", err)
 		}
 	})
 
 	t.Run("indirect", func(t *testing.T) {
-		err := linker.Push(context.Background(), &PushArgs{Kind: session.User, Target: 200, Message: &Message{Route: 1, Data: []byte("x")}})
+		err := linker.Push(context.Background(), &PushArgs{Kind: cluster.User, Target: 200, Message: &Message{Route: 1, Data: []byte("x")}})
 		if err != nil {
 			t.Errorf("Push failed: %v", err)
 		}
@@ -748,14 +747,14 @@ func TestGateLinkerBroadcast(t *testing.T) {
 	t.Run("no endpoints", func(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 
-		total, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: session.Conn, Message: msg})
+		total, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: cluster.Conn, Message: msg})
 		if err != nil || total != 0 {
 			t.Errorf("Broadcast = (%d, %v), want (0, nil)", total, err)
 		}
 	})
 
 	t.Run("one gate", func(t *testing.T) {
-		provider := &gateProviderStub{broadcastFn: func(context.Context, session.Kind, bool, buffer.Buffer) (int64, error) {
+		provider := &gateProviderStub{broadcastFn: func(context.Context, cluster.Session, bool, buffer.Buffer) (int64, error) {
 			return 3, nil
 		}}
 		_, addr := startGateServer(t, provider)
@@ -763,7 +762,7 @@ func TestGateLinkerBroadcast(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("gate-1", addr))
 
-		total, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: session.Conn, Message: msg, Ack: true})
+		total, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: cluster.Conn, Message: msg, Ack: true})
 		if err != nil {
 			t.Fatalf("Broadcast failed: %v", err)
 		}
@@ -779,7 +778,7 @@ func TestGateLinkerBroadcast(t *testing.T) {
 		linker := NewGateLinker(context.Background(), opts)
 		linker.dispatcher.ReplaceServices(gateService("gate-1", "127.0.0.1:1"))
 
-		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: session.Conn, Message: &Message{Route: 1, Data: struct{}{}}})
+		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: cluster.Conn, Message: &Message{Route: 1, Data: struct{}{}}})
 		if !errors.Is(err, errors.ErrInvalidFormat) {
 			t.Errorf("expect ErrInvalidFormat, got %v", err)
 		}
@@ -789,7 +788,7 @@ func TestGateLinkerBroadcast(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("bad", "127.0.0.1:99999"))
 
-		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: session.Conn, Message: msg, Ack: true})
+		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: cluster.Conn, Message: msg, Ack: true})
 		if err == nil {
 			t.Errorf("expect a build error for an invalid port")
 		}
@@ -802,7 +801,7 @@ func TestGateLinkerBroadcast(t *testing.T) {
 		linker := NewGateLinker(context.Background(), baseLinkOptions())
 		linker.dispatcher.ReplaceServices(gateService("bad-1", "127.0.0.1:99999"), gateService("bad-2", "127.0.0.1:99999"))
 
-		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: session.Conn, Message: msg, Ack: true})
+		_, err := linker.Broadcast(context.Background(), &BroadcastArgs{Kind: cluster.Conn, Message: msg, Ack: true})
 		if err == nil {
 			t.Errorf("expect a build error for invalid ports")
 		}

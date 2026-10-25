@@ -3,11 +3,11 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 // EncodeDisconnectReq encodes a disconnect request.
 // Note that buf contains the full protocol.
 // Protocol: {size + header + route + seq} + private section: {session kind + target + force}
-func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool) *buffer.NocopyBuffer {
+func EncodeDisconnectReq(seq uint64, kind cluster.Session, target int64, force bool) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(disconnectReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(disconnectReqBytes-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
@@ -34,14 +34,14 @@ func EncodeDisconnectReq(seq uint64, kind session.Kind, target int64, force bool
 // DecodeDisconnectReq decodes a disconnect request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target + force}
-func DecodeDisconnectReq(buf buffer.Buffer) (kind session.Kind, target int64, force bool, err error) {
+func DecodeDisconnectReq(buf buffer.Buffer) (kind cluster.Session, target int64, force bool, err error) {
 	if buf.Len() != def.B8+def.B64+def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	data := buf.Bytes()
-	kind = session.Kind(data[0])
+	kind = cluster.Session(data[0])
 	target = int64(binary.BigEndian.Uint64(data[def.B8 : def.B8+def.B64]))
 	force = data[def.B8+def.B64] == 1
 

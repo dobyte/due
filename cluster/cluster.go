@@ -2,10 +2,7 @@
 // gate, node and mesh components.
 package cluster
 
-import (
-	"github.com/dobyte/due/v2/core/def"
-	"github.com/dobyte/due/v2/session"
-)
+import "github.com/dobyte/due/v2/core/def"
 
 // The kinds of a cluster instance.
 const (
@@ -18,6 +15,7 @@ const (
 // Kind is the type of a cluster instance.
 type Kind int
 
+// String returns the name of the cluster kind.
 func (k Kind) String() string {
 	switch k {
 	case Gate:
@@ -29,6 +27,27 @@ func (k Kind) String() string {
 	default:
 		return "master"
 	}
+}
+
+// The kinds of a session.
+const (
+	Conn Session = iota + 1 // Conn: a connection session
+	User                    // User: a user session
+)
+
+// Session is the kind of a session.
+type Session int
+
+// String returns the name of the session kind.
+func (s Session) String() string {
+	switch s {
+	case Conn:
+		return "conn"
+	case User:
+		return "user"
+	}
+
+	return ""
 }
 
 // The states of a cluster instance.
@@ -114,9 +133,9 @@ const (
 
 // GetIPArgs is the arguments of getting the client IP.
 type GetIPArgs struct {
-	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
-	Target int64        // Target is the session target, either a CID or a UID
+	GID    string  // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   Session // Kind is the session kind, either Conn or User
+	Target int64   // Target is the session target, either a CID or a UID
 }
 
 // Message is a cluster message.
@@ -128,46 +147,46 @@ type Message struct {
 
 // PushArgs is the arguments of pushing a message.
 type PushArgs struct {
-	GID        string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
-	Target     int64        // Target is the session target, either a CID or a UID
-	Message    *Message     // Message is the message to push
-	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
-	Ack        bool         // Ack reports whether the push result should be acknowledged
+	GID        string   // GID is the gate ID, it may be omitted when the session kind is user
+	Kind       Session  // Kind is the session kind, either Conn or User
+	Target     int64    // Target is the session target, either a CID or a UID
+	Message    *Message // Message is the message to push
+	Disconnect bool     // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool     // Ack reports whether the push result should be acknowledged
 }
 
 // MulticastArgs is the arguments of multicasting a message.
 type MulticastArgs struct {
-	GID        string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
-	Targets    []int64      // Targets are the session targets, either CIDs or UIDs
-	Message    *Message     // Message is the message to multicast
-	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
-	Ack        bool         // Ack reports whether the push result should be acknowledged
+	GID        string   // GID is the gate ID, it may be omitted when the session kind is user
+	Kind       Session  // Kind is the session kind, either Conn or User
+	Targets    []int64  // Targets are the session targets, either CIDs or UIDs
+	Message    *Message // Message is the message to multicast
+	Disconnect bool     // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool     // Ack reports whether the push result should be acknowledged
 }
 
 // BroadcastArgs is the arguments of broadcasting a message.
 type BroadcastArgs struct {
-	Kind       session.Kind // Kind is the session kind, either session.Conn or session.User
-	Message    *Message     // Message is the message to broadcast
-	Disconnect bool         // Disconnect reports whether to gracefully close the connection after pushing
-	Ack        bool         // Ack reports whether the push result should be acknowledged
+	Kind       Session  // Kind is the session kind, either Conn or User
+	Message    *Message // Message is the message to broadcast
+	Disconnect bool     // Disconnect reports whether to gracefully close the connection after pushing
+	Ack        bool     // Ack reports whether the push result should be acknowledged
 }
 
 // SubscribeArgs is the arguments of subscribing to a channel.
 type SubscribeArgs struct {
-	GID     string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind    session.Kind // Kind is the session kind, either session.Conn or session.User
-	Targets []int64      // Targets are the session targets, either CIDs or UIDs
-	Channel string       // Channel is the channel name
+	GID     string  // GID is the gate ID, it may be omitted when the session kind is user
+	Kind    Session // Kind is the session kind, either Conn or User
+	Targets []int64 // Targets are the session targets, either CIDs or UIDs
+	Channel string  // Channel is the channel name
 }
 
 // UnsubscribeArgs is the arguments of unsubscribing from a channel.
 type UnsubscribeArgs struct {
-	GID     string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind    session.Kind // Kind is the session kind, either session.Conn or session.User
-	Targets []int64      // Targets are the session targets, either CIDs or UIDs
-	Channel string       // Channel is the channel name
+	GID     string  // GID is the gate ID, it may be omitted when the session kind is user
+	Kind    Session // Kind is the session kind, either Conn or User
+	Targets []int64 // Targets are the session targets, either CIDs or UIDs
+	Channel string  // Channel is the channel name
 }
 
 // PublishArgs is the arguments of publishing a message to a channel.
@@ -187,17 +206,17 @@ type TriggerArgs struct {
 
 // IsOnlineArgs is the arguments of checking whether a session is online.
 type IsOnlineArgs struct {
-	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
-	Target int64        // Target is the session target, either a CID or a UID
+	GID    string  // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   Session // Kind is the session kind, either Conn or User
+	Target int64   // Target is the session target, either a CID or a UID
 }
 
 // DisconnectArgs is the arguments of disconnecting a session.
 type DisconnectArgs struct {
-	GID    string       // GID is the gate ID, it may be omitted when the session kind is user
-	Kind   session.Kind // Kind is the session kind, either session.Conn or session.User
-	Target int64        // Target is the session target, either a CID or a UID
-	Force  bool         // Force reports whether to force the disconnection
+	GID    string  // GID is the gate ID, it may be omitted when the session kind is user
+	Kind   Session // Kind is the session kind, either Conn or User
+	Target int64   // Target is the session target, either a CID or a UID
+	Force  bool    // Force reports whether to force the disconnection
 }
 
 // DeliverArgs is the arguments of delivering a message.

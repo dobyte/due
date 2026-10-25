@@ -103,7 +103,7 @@ func TestGateDestroyWaitsForDisconnectCleanup(t *testing.T) {
 	g.state.Store(int32(cluster.Work))
 	conn := &securityConn{id: 1}
 	g.handleConnect(conn)
-	if err := g.session.Bind(1, 100); err != nil {
+	if err := g.session.bind(1, 100); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.locator.BindGate(ctx, 100, g.opts.id); err != nil {

@@ -3,20 +3,20 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestEncodeUnsubscribeReq(t *testing.T) {
-	buf := protocol.EncodeUnsubscribeReq(1, session.User, []int64{1, 2, 3}, "channel")
+	buf := protocol.EncodeUnsubscribeReq(1, cluster.User, []int64{1, 2, 3}, "channel")
 
 	t.Log(buf.Bytes())
 }
 
 func TestDecodeUnsubscribeReq(t *testing.T) {
-	req := protocol.EncodeUnsubscribeReq(1, session.User, []int64{1, 2, 3}, "channel")
+	req := protocol.EncodeUnsubscribeReq(1, cluster.User, []int64{1, 2, 3}, "channel")
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

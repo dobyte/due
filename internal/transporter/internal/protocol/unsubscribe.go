@@ -3,11 +3,11 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 // EncodeUnsubscribeReq encodes an unsubscribe request (at most 65535 targets per call).
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
-func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channel string) *buffer.NocopyBuffer {
+func EncodeUnsubscribeReq(seq uint64, kind cluster.Session, targets []int64, channel string) *buffer.NocopyBuffer {
 	size := unsubscribeReqBytes + len(targets)*8 + len([]byte(channel))
 
 	writer := buffer.MallocWriter(size)
@@ -37,7 +37,7 @@ func EncodeUnsubscribeReq(seq uint64, kind session.Kind, targets []int64, channe
 // DecodeUnsubscribeReq decodes an unsubscribe request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + channel}
-func DecodeUnsubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64, channel string, err error) {
+func DecodeUnsubscribeReq(buf buffer.Buffer) (kind cluster.Session, targets []int64, channel string, err error) {
 	data := buf.Bytes()
 
 	if len(data) < def.B8+def.B16 {
@@ -45,7 +45,7 @@ func DecodeUnsubscribeReq(buf buffer.Buffer) (kind session.Kind, targets []int64
 		return
 	}
 
-	kind = session.Kind(data[0])
+	kind = cluster.Session(data[0])
 	count := int(binary.BigEndian.Uint16(data[def.B8 : def.B8+def.B16]))
 
 	offset := def.B8 + def.B16 + count*def.B64

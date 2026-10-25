@@ -3,12 +3,12 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // EncodeMulticastReq encodes a multicast request (at most 65535 targets).
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + disconnect + <message packet>}
-func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
+func EncodeMulticastReq(seq uint64, kind cluster.Session, targets []int64, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	size := multicastReqBytes + len(targets)*def.B64
 
 	writer := buffer.MallocWriter(size)
@@ -38,13 +38,13 @@ func EncodeMulticastReq(seq uint64, kind session.Kind, targets []int64, disconne
 // DecodeMulticastReq decodes a multicast request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + count + targets + disconnect + <message packet>}
-func DecodeMulticastReq(req *buffer.Bytes) (session.Kind, []int64, bool, *buffer.Bytes, error) {
+func DecodeMulticastReq(req *buffer.Bytes) (cluster.Session, []int64, bool, *buffer.Bytes, error) {
 	if req.Len() < def.B8+def.B16+def.B8 {
 		return 0, nil, false, nil, errors.ErrInvalidMessage
 	}
 
 	data := req.Bytes()
-	kind := session.Kind(data[0])
+	kind := cluster.Session(data[0])
 	count := int(binary.BigEndian.Uint16(data[def.B8 : def.B8+def.B16]))
 
 	offset := def.B8 + def.B16 + count*def.B64

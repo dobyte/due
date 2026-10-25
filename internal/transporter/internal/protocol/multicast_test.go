@@ -3,12 +3,12 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/packet"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestEncodeMulticastReq(t *testing.T) {
@@ -17,7 +17,7 @@ func TestEncodeMulticastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
+	buf := protocol.EncodeMulticastReq(1, cluster.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
 
 	t.Log(buf.Bytes())
 }
@@ -28,7 +28,7 @@ func TestDecodeMulticastReq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := protocol.EncodeMulticastReq(1, session.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
+	req := protocol.EncodeMulticastReq(1, cluster.User, []int64{1, 2, 3}, true, buffer.NewNocopyBuffer(message))
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

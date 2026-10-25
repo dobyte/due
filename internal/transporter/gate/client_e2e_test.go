@@ -12,7 +12,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
@@ -84,34 +83,34 @@ func TestClientTransportAll(t *testing.T) {
 	if err := client.Unbind(ctx, 2); err != nil {
 		t.Errorf("Unbind() error = %v", err)
 	}
-	if ip, err := client.GetIP(ctx, session.User, 1); err != nil || ip != providerIP {
+	if ip, err := client.GetIP(ctx, cluster.User, 1); err != nil || ip != providerIP {
 		t.Errorf("GetIP() = (%q, %v), want (%q, nil)", ip, err, providerIP)
 	}
-	if total, err := client.Stat(ctx, session.Conn); err != nil || total != 0 {
+	if total, err := client.Stat(ctx, cluster.Conn); err != nil || total != 0 {
 		t.Errorf("Stat() = (%d, %v), want (0, nil)", total, err)
 	}
-	if isOnline, err := client.IsOnline(ctx, session.User, 1); err != nil || isOnline {
+	if isOnline, err := client.IsOnline(ctx, cluster.User, 1); err != nil || isOnline {
 		t.Errorf("IsOnline() = (%v, %v), want (false, nil)", isOnline, err)
 	}
-	if err := client.Disconnect(ctx, session.User, 1, true); err != nil {
+	if err := client.Disconnect(ctx, cluster.User, 1, true); err != nil {
 		t.Errorf("Disconnect() error = %v", err)
 	}
-	if err := client.Push(ctx, session.User, 1, false, msg(), true); err != nil {
+	if err := client.Push(ctx, cluster.User, 1, false, msg(), true); err != nil {
 		t.Errorf("Push(ack) error = %v", err)
 	}
-	if err := client.Push(ctx, session.User, 1, false, msg(), false); err != nil {
+	if err := client.Push(ctx, cluster.User, 1, false, msg(), false); err != nil {
 		t.Errorf("Push(no ack) error = %v", err)
 	}
-	if total, err := client.Multicast(ctx, session.User, []int64{1, 2}, false, msg(), true); err != nil || total != 0 {
+	if total, err := client.Multicast(ctx, cluster.User, []int64{1, 2}, false, msg(), true); err != nil || total != 0 {
 		t.Errorf("Multicast(ack) = (%d, %v), want (0, nil)", total, err)
 	}
-	if total, err := client.Multicast(ctx, session.User, []int64{1, 2}, false, msg(), false); err != nil || total != 0 {
+	if total, err := client.Multicast(ctx, cluster.User, []int64{1, 2}, false, msg(), false); err != nil || total != 0 {
 		t.Errorf("Multicast(no ack) = (%d, %v), want (0, nil)", total, err)
 	}
-	if total, err := client.Broadcast(ctx, session.User, false, msg(), true); err != nil || total != 0 {
+	if total, err := client.Broadcast(ctx, cluster.User, false, msg(), true); err != nil || total != 0 {
 		t.Errorf("Broadcast(ack) = (%d, %v), want (0, nil)", total, err)
 	}
-	if total, err := client.Broadcast(ctx, session.User, false, msg(), false); err != nil || total != 0 {
+	if total, err := client.Broadcast(ctx, cluster.User, false, msg(), false); err != nil || total != 0 {
 		t.Errorf("Broadcast(no ack) = (%d, %v), want (0, nil)", total, err)
 	}
 	if total, err := client.Publish(ctx, "channel", false, msg(), true); err != nil || total != 0 {
@@ -120,10 +119,10 @@ func TestClientTransportAll(t *testing.T) {
 	if total, err := client.Publish(ctx, "channel", false, msg(), false); err != nil || total != 0 {
 		t.Errorf("Publish(no ack) = (%d, %v), want (0, nil)", total, err)
 	}
-	if err := client.Subscribe(ctx, session.User, []int64{1}, "channel"); err != nil {
+	if err := client.Subscribe(ctx, cluster.User, []int64{1}, "channel"); err != nil {
 		t.Errorf("Subscribe() error = %v", err)
 	}
-	if err := client.Unsubscribe(ctx, session.User, []int64{1}, "channel"); err != nil {
+	if err := client.Unsubscribe(ctx, cluster.User, []int64{1}, "channel"); err != nil {
 		t.Errorf("Unsubscribe() error = %v", err)
 	}
 	if err := client.SetState(ctx, cluster.Busy); err != nil {
@@ -144,7 +143,7 @@ func TestClientInvalidArgument(t *testing.T) {
 		{
 			name: "multicast too many targets",
 			call: func() error {
-				_, err := client.Multicast(ctx, session.User, make([]int64, 1<<16), false, msg(), true)
+				_, err := client.Multicast(ctx, cluster.User, make([]int64, 1<<16), false, msg(), true)
 				return err
 			},
 		},
@@ -158,25 +157,25 @@ func TestClientInvalidArgument(t *testing.T) {
 		{
 			name: "subscribe too many targets",
 			call: func() error {
-				return client.Subscribe(ctx, session.User, make([]int64, 1<<16), "channel")
+				return client.Subscribe(ctx, cluster.User, make([]int64, 1<<16), "channel")
 			},
 		},
 		{
 			name: "subscribe channel too long",
 			call: func() error {
-				return client.Subscribe(ctx, session.User, []int64{1}, strings.Repeat("a", 1<<8))
+				return client.Subscribe(ctx, cluster.User, []int64{1}, strings.Repeat("a", 1<<8))
 			},
 		},
 		{
 			name: "unsubscribe too many targets",
 			call: func() error {
-				return client.Unsubscribe(ctx, session.User, make([]int64, 1<<16), "channel")
+				return client.Unsubscribe(ctx, cluster.User, make([]int64, 1<<16), "channel")
 			},
 		},
 		{
 			name: "unsubscribe channel too long",
 			call: func() error {
-				return client.Unsubscribe(ctx, session.User, []int64{1}, strings.Repeat("a", 1<<8))
+				return client.Unsubscribe(ctx, cluster.User, []int64{1}, strings.Repeat("a", 1<<8))
 			},
 		},
 	}
@@ -203,37 +202,37 @@ func (p *failingProvider) Bind(context.Context, int64, int64) error { return err
 func (p *failingProvider) Unbind(context.Context, int64) error { return errors.ErrNotFoundSession }
 
 // GetIP always fails.
-func (p *failingProvider) GetIP(context.Context, session.Kind, int64) (string, error) {
+func (p *failingProvider) GetIP(context.Context, cluster.Session, int64) (string, error) {
 	return "", errors.ErrNotFoundSession
 }
 
 // IsOnline always fails.
-func (p *failingProvider) IsOnline(context.Context, session.Kind, int64) (bool, error) {
+func (p *failingProvider) IsOnline(context.Context, cluster.Session, int64) (bool, error) {
 	return false, errors.ErrNotFoundSession
 }
 
 // Stat always fails.
-func (p *failingProvider) Stat(context.Context, session.Kind) (int64, error) {
+func (p *failingProvider) Stat(context.Context, cluster.Session) (int64, error) {
 	return 0, errors.ErrNotFoundSession
 }
 
 // Disconnect always fails.
-func (p *failingProvider) Disconnect(context.Context, session.Kind, int64, bool) error {
+func (p *failingProvider) Disconnect(context.Context, cluster.Session, int64, bool) error {
 	return errors.ErrNotFoundSession
 }
 
 // Push always fails.
-func (p *failingProvider) Push(context.Context, session.Kind, int64, bool, buffer.Buffer) error {
+func (p *failingProvider) Push(context.Context, cluster.Session, int64, bool, buffer.Buffer) error {
 	return errors.ErrNotFoundSession
 }
 
 // Multicast always fails.
-func (p *failingProvider) Multicast(context.Context, session.Kind, []int64, bool, buffer.Buffer) (int64, error) {
+func (p *failingProvider) Multicast(context.Context, cluster.Session, []int64, bool, buffer.Buffer) (int64, error) {
 	return 0, errors.ErrNotFoundSession
 }
 
 // Broadcast always fails.
-func (p *failingProvider) Broadcast(context.Context, session.Kind, bool, buffer.Buffer) (int64, error) {
+func (p *failingProvider) Broadcast(context.Context, cluster.Session, bool, buffer.Buffer) (int64, error) {
 	return 0, errors.ErrNotFoundSession
 }
 
@@ -243,12 +242,12 @@ func (p *failingProvider) Publish(context.Context, string, bool, buffer.Buffer) 
 }
 
 // Subscribe always fails.
-func (p *failingProvider) Subscribe(context.Context, session.Kind, []int64, string) error {
+func (p *failingProvider) Subscribe(context.Context, cluster.Session, []int64, string) error {
 	return errors.ErrNotFoundSession
 }
 
 // Unsubscribe always fails.
-func (p *failingProvider) Unsubscribe(context.Context, session.Kind, []int64, string) error {
+func (p *failingProvider) Unsubscribe(context.Context, cluster.Session, []int64, string) error {
 	return errors.ErrNotFoundSession
 }
 
@@ -271,19 +270,19 @@ func TestClientProviderErrors(t *testing.T) {
 	}{
 		{"Bind", func() error { return client.Bind(ctx, 1, 2) }},
 		{"Unbind", func() error { return client.Unbind(ctx, 2) }},
-		{"GetIP", func() error { _, err := client.GetIP(ctx, session.User, 1); return err }},
-		{"Stat", func() error { _, err := client.Stat(ctx, session.Conn); return err }},
-		{"IsOnline", func() error { _, err := client.IsOnline(ctx, session.User, 1); return err }},
-		{"Disconnect", func() error { return client.Disconnect(ctx, session.User, 1, false) }},
-		{"Push", func() error { return client.Push(ctx, session.User, 1, false, msg(), true) }},
+		{"GetIP", func() error { _, err := client.GetIP(ctx, cluster.User, 1); return err }},
+		{"Stat", func() error { _, err := client.Stat(ctx, cluster.Conn); return err }},
+		{"IsOnline", func() error { _, err := client.IsOnline(ctx, cluster.User, 1); return err }},
+		{"Disconnect", func() error { return client.Disconnect(ctx, cluster.User, 1, false) }},
+		{"Push", func() error { return client.Push(ctx, cluster.User, 1, false, msg(), true) }},
 		{"Multicast", func() error {
-			_, err := client.Multicast(ctx, session.User, []int64{1}, false, msg(), true)
+			_, err := client.Multicast(ctx, cluster.User, []int64{1}, false, msg(), true)
 			return err
 		}},
-		{"Broadcast", func() error { _, err := client.Broadcast(ctx, session.User, false, msg(), true); return err }},
+		{"Broadcast", func() error { _, err := client.Broadcast(ctx, cluster.User, false, msg(), true); return err }},
 		{"Publish", func() error { _, err := client.Publish(ctx, "channel", false, msg(), true); return err }},
-		{"Subscribe", func() error { return client.Subscribe(ctx, session.User, []int64{1}, "channel") }},
-		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, session.User, []int64{1}, "channel") }},
+		{"Subscribe", func() error { return client.Subscribe(ctx, cluster.User, []int64{1}, "channel") }},
+		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, cluster.User, []int64{1}, "channel") }},
 		{"SetState", func() error { return client.SetState(ctx, cluster.Work) }},
 	}
 
@@ -317,29 +316,29 @@ func TestClientNoConnection(t *testing.T) {
 	}{
 		{"Bind", func() error { return client.Bind(ctx, 1, 2) }},
 		{"Unbind", func() error { return client.Unbind(ctx, 2) }},
-		{"GetIP", func() error { _, err := client.GetIP(ctx, session.User, 1); return err }},
-		{"Stat", func() error { _, err := client.Stat(ctx, session.Conn); return err }},
-		{"IsOnline", func() error { _, err := client.IsOnline(ctx, session.User, 1); return err }},
-		{"Disconnect", func() error { return client.Disconnect(ctx, session.User, 1, false) }},
-		{"Push with ack", func() error { return client.Push(ctx, session.User, 1, false, msg(), true) }},
-		{"Push without ack", func() error { return client.Push(ctx, session.User, 1, false, msg(), false) }},
+		{"GetIP", func() error { _, err := client.GetIP(ctx, cluster.User, 1); return err }},
+		{"Stat", func() error { _, err := client.Stat(ctx, cluster.Conn); return err }},
+		{"IsOnline", func() error { _, err := client.IsOnline(ctx, cluster.User, 1); return err }},
+		{"Disconnect", func() error { return client.Disconnect(ctx, cluster.User, 1, false) }},
+		{"Push with ack", func() error { return client.Push(ctx, cluster.User, 1, false, msg(), true) }},
+		{"Push without ack", func() error { return client.Push(ctx, cluster.User, 1, false, msg(), false) }},
 		{"Multicast with ack", func() error {
-			_, err := client.Multicast(ctx, session.User, []int64{1}, false, msg(), true)
+			_, err := client.Multicast(ctx, cluster.User, []int64{1}, false, msg(), true)
 			return err
 		}},
 		{"Multicast without ack", func() error {
-			_, err := client.Multicast(ctx, session.User, []int64{1}, false, msg(), false)
+			_, err := client.Multicast(ctx, cluster.User, []int64{1}, false, msg(), false)
 			return err
 		}},
-		{"Broadcast with ack", func() error { _, err := client.Broadcast(ctx, session.User, false, msg(), true); return err }},
+		{"Broadcast with ack", func() error { _, err := client.Broadcast(ctx, cluster.User, false, msg(), true); return err }},
 		{"Broadcast without ack", func() error {
-			_, err := client.Broadcast(ctx, session.User, false, msg(), false)
+			_, err := client.Broadcast(ctx, cluster.User, false, msg(), false)
 			return err
 		}},
 		{"Publish with ack", func() error { _, err := client.Publish(ctx, "channel", false, msg(), true); return err }},
 		{"Publish without ack", func() error { _, err := client.Publish(ctx, "channel", false, msg(), false); return err }},
-		{"Subscribe", func() error { return client.Subscribe(ctx, session.User, []int64{1}, "channel") }},
-		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, session.User, []int64{1}, "channel") }},
+		{"Subscribe", func() error { return client.Subscribe(ctx, cluster.User, []int64{1}, "channel") }},
+		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, cluster.User, []int64{1}, "channel") }},
 		{"GetState", func() error { _, err := client.GetState(ctx); return err }},
 		{"SetState", func() error { return client.SetState(ctx, cluster.Work) }},
 	}

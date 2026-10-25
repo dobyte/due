@@ -3,14 +3,14 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestDecodeStatReq(t *testing.T) {
-	req := protocol.EncodeStatReq(1, session.User)
+	req := protocol.EncodeStatReq(1, cluster.User)
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

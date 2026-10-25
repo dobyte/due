@@ -1,9 +1,10 @@
-package session
+package gate
 
 import (
 	"net"
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
@@ -91,31 +92,31 @@ func (c *stubConn) RemoteIP() (string, error)     { return c.remoteIP, nil }
 func (c *stubConn) RemoteAddr() (net.Addr, error) { return c.remoteAddr, nil }
 
 // newSessionWithUser creates a session holding a single connection bound to uid.
-func newSessionWithUser(cid, uid int64) (*Session, *stubConn) {
-	s := NewSession()
+func newSessionWithUser(cid, uid int64) (*session, *stubConn) {
+	s := newSession()
 	conn := newStubConn(cid)
-	s.AddConn(conn)
-	_ = s.Bind(cid, uid)
+	s.addConn(conn)
+	_ = s.bind(cid, uid)
 	return s, conn
 }
 
-// TestKindStringExtra verifies String for every kind, including unknown values.
-func TestKindStringExtra(t *testing.T) {
+// TestSessionKindStringExtra verifies String for every session kind, including unknown values.
+func TestSessionKindStringExtra(t *testing.T) {
 	cases := []struct {
 		name string
-		kind Kind
+		kind cluster.Session
 		want string
 	}{
-		{"conn", Conn, "conn"},
-		{"user", User, "user"},
-		{"zero", Kind(0), ""},
-		{"unknown", Kind(99), ""},
+		{"conn", cluster.Conn, "conn"},
+		{"user", cluster.User, "user"},
+		{"zero", cluster.Session(0), ""},
+		{"unknown", cluster.Session(99), ""},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := c.kind.String(); got != c.want {
-				t.Errorf("Kind.String() = %q, want %q", got, c.want)
+				t.Errorf("Session.String() = %q, want %q", got, c.want)
 			}
 		})
 	}
@@ -127,21 +128,21 @@ func TestHasExtra(t *testing.T) {
 
 	cases := []struct {
 		name        string
-		kind        Kind
+		kind        cluster.Session
 		target      int64
 		wantOK      bool
 		wantInvalid bool
 	}{
-		{"conn present", Conn, 1, true, false},
-		{"conn missing", Conn, 2, false, false},
-		{"user present", User, 100, true, false},
-		{"user missing", User, 200, false, false},
-		{"invalid kind", Kind(0), 1, false, true},
+		{"conn present", cluster.Conn, 1, true, false},
+		{"conn missing", cluster.Conn, 2, false, false},
+		{"user present", cluster.User, 100, true, false},
+		{"user missing", cluster.User, 200, false, false},
+		{"invalid kind", cluster.Session(0), 1, false, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			ok, err := s.Has(c.kind, c.target)
+			ok, err := s.has(c.kind, c.target)
 			if ok != c.wantOK {
 				t.Errorf("Has() ok = %v, want %v", ok, c.wantOK)
 			}
@@ -159,18 +160,18 @@ func TestHasExtra(t *testing.T) {
 // TestBindExtra verifies the binding and replacement rules of Bind.
 func TestBindExtra(t *testing.T) {
 	t.Run("conn not found", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Bind(1, 100); err != errors.ErrNotFoundSession {
+		s := newSession()
+		if err := s.bind(1, 100); err != errors.ErrNotFoundSession {
 			t.Errorf("Bind() error = %v, want %v", err, errors.ErrNotFoundSession)
 		}
 	})
 
 	t.Run("bind success", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if err := s.Bind(1, 100); err != nil {
+		if err := s.bind(1, 100); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
 		if conn.UID() != 100 {
@@ -184,7 +185,7 @@ func TestBindExtra(t *testing.T) {
 	t.Run("rebind same uid is a no-op", func(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 
-		if err := s.Bind(1, 100); err != nil {
+		if err := s.bind(1, 100); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
 		if s.users[100] != conn {
@@ -195,7 +196,7 @@ func TestBindExtra(t *testing.T) {
 	t.Run("rebind different uid drops the old binding", func(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 
-		if err := s.Bind(1, 200); err != nil {
+		if err := s.bind(1, 200); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
 		if _, ok := s.users[100]; ok {
@@ -207,14 +208,14 @@ func TestBindExtra(t *testing.T) {
 	})
 
 	t.Run("replacing a binding closes the old conn", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		old := newStubConn(1)
 		replacement := newStubConn(2)
-		s.AddConn(old)
-		s.AddConn(replacement)
+		s.addConn(old)
+		s.addConn(replacement)
 
-		_ = s.Bind(1, 100)
-		if err := s.Bind(2, 100); err != nil {
+		_ = s.bind(1, 100)
+		if err := s.bind(2, 100); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
 		if old.closes != 1 {
@@ -226,15 +227,15 @@ func TestBindExtra(t *testing.T) {
 	})
 
 	t.Run("close error while replacing is tolerated", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		old := newStubConn(1)
 		old.closeErr = errors.New("close failed")
 		replacement := newStubConn(2)
-		s.AddConn(old)
-		s.AddConn(replacement)
+		s.addConn(old)
+		s.addConn(replacement)
 
-		_ = s.Bind(1, 100)
-		if err := s.Bind(2, 100); err != nil {
+		_ = s.bind(1, 100)
+		if err := s.bind(2, 100); err != nil {
 			t.Errorf("Bind() error = %v, want nil", err)
 		}
 		if old.closes != 1 {
@@ -243,13 +244,13 @@ func TestBindExtra(t *testing.T) {
 	})
 
 	t.Run("conn bind failure is reported", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
 		want := errors.New("bind failed")
 		conn.bindErr = want
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if err := s.Bind(1, 100); err != want {
+		if err := s.bind(1, 100); err != want {
 			t.Errorf("Bind() error = %v, want %v", err, want)
 		}
 	})
@@ -259,7 +260,7 @@ func TestBindExtra(t *testing.T) {
 		conn := s.conns[1]
 		conn.(*stubConn).bindErr = errors.New("bind failed")
 
-		if err := s.Bind(1, 200); err == nil {
+		if err := s.bind(1, 200); err == nil {
 			t.Error("Bind() must report the underlying bind failure")
 		}
 		if _, ok := s.users[100]; !ok {
@@ -271,8 +272,8 @@ func TestBindExtra(t *testing.T) {
 // TestUnbindExtra verifies Unbind for success, missing users and failing unbind calls.
 func TestUnbindExtra(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
-		s := NewSession()
-		if _, err := s.Unbind(100); err != errors.ErrNotFoundSession {
+		s := newSession()
+		if _, err := s.unbind(100); err != errors.ErrNotFoundSession {
 			t.Errorf("Unbind() error = %v, want %v", err, errors.ErrNotFoundSession)
 		}
 	})
@@ -280,7 +281,7 @@ func TestUnbindExtra(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 
-		cid, err := s.Unbind(100)
+		cid, err := s.unbind(100)
 		if err != nil {
 			t.Fatalf("Unbind() error = %v, want nil", err)
 		}
@@ -299,7 +300,7 @@ func TestUnbindExtra(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 		conn.unbindErr = errors.New("unbind failed")
 
-		cid, err := s.Unbind(100)
+		cid, err := s.unbind(100)
 		if err != nil {
 			t.Fatalf("Unbind() error = %v, want nil", err)
 		}
@@ -312,33 +313,33 @@ func TestUnbindExtra(t *testing.T) {
 // locationCall wraps a location accessor so that it can be exercised uniformly.
 type locationCall struct {
 	name string
-	call func(s *Session, kind Kind, target int64) (any, error)
+	call func(s *session, kind cluster.Session, target int64) (any, error)
 }
 
 // TestLocationAccessors verifies the local and remote address accessors.
 func TestLocationAccessors(t *testing.T) {
 	addr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}
-	s := NewSession()
+	s := newSession()
 	conn := newStubConn(1)
 	conn.localIP = "127.0.0.1"
 	conn.localAddr = addr
 	conn.remoteIP = "10.0.0.1"
 	conn.remoteAddr = addr
-	s.AddConn(conn)
-	if err := s.Bind(1, 100); err != nil {
+	s.addConn(conn)
+	if err := s.bind(1, 100); err != nil {
 		t.Fatalf("Bind() error = %v, want nil", err)
 	}
 
 	calls := []locationCall{
-		{"LocalIP", func(s *Session, kind Kind, target int64) (any, error) { return s.LocalIP(kind, target) }},
-		{"LocalAddr", func(s *Session, kind Kind, target int64) (any, error) { return s.LocalAddr(kind, target) }},
-		{"RemoteIP", func(s *Session, kind Kind, target int64) (any, error) { return s.RemoteIP(kind, target) }},
-		{"RemoteAddr", func(s *Session, kind Kind, target int64) (any, error) { return s.RemoteAddr(kind, target) }},
+		{"LocalIP", func(s *session, kind cluster.Session, target int64) (any, error) { return s.localIP(kind, target) }},
+		{"LocalAddr", func(s *session, kind cluster.Session, target int64) (any, error) { return s.localAddr(kind, target) }},
+		{"RemoteIP", func(s *session, kind cluster.Session, target int64) (any, error) { return s.remoteIP(kind, target) }},
+		{"RemoteAddr", func(s *session, kind cluster.Session, target int64) (any, error) { return s.remoteAddr(kind, target) }},
 	}
 
 	for _, c := range calls {
 		t.Run(c.name+"/conn", func(t *testing.T) {
-			v, err := c.call(s, Conn, 1)
+			v, err := c.call(s, cluster.Conn, 1)
 			if err != nil {
 				t.Errorf("%s(Conn) error = %v, want nil", c.name, err)
 			}
@@ -348,7 +349,7 @@ func TestLocationAccessors(t *testing.T) {
 		})
 
 		t.Run(c.name+"/user", func(t *testing.T) {
-			v, err := c.call(s, User, 100)
+			v, err := c.call(s, cluster.User, 100)
 			if err != nil {
 				t.Errorf("%s(User) error = %v, want nil", c.name, err)
 			}
@@ -358,13 +359,13 @@ func TestLocationAccessors(t *testing.T) {
 		})
 
 		t.Run(c.name+"/missing", func(t *testing.T) {
-			if _, err := c.call(s, Conn, 999); err != errors.ErrNotFoundSession {
+			if _, err := c.call(s, cluster.Conn, 999); err != errors.ErrNotFoundSession {
 				t.Errorf("%s(Conn) error = %v, want %v", c.name, err, errors.ErrNotFoundSession)
 			}
 		})
 
 		t.Run(c.name+"/invalid kind", func(t *testing.T) {
-			if _, err := c.call(s, Kind(0), 1); err != errors.ErrInvalidSessionKind {
+			if _, err := c.call(s, cluster.Session(0), 1); err != errors.ErrInvalidSessionKind {
 				t.Errorf("%s error = %v, want %v", c.name, err, errors.ErrInvalidSessionKind)
 			}
 		})
@@ -373,27 +374,27 @@ func TestLocationAccessors(t *testing.T) {
 
 // TestCloseExtra verifies Close for found, missing and failing sessions.
 func TestCloseExtra(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newStubConn(1)
-	s.AddConn(conn)
+	s.addConn(conn)
 
-	if err := s.Close(Conn, 1); err != nil {
+	if err := s.close(cluster.Conn, 1); err != nil {
 		t.Errorf("Close() error = %v, want nil", err)
 	}
 	if conn.closes != 1 {
 		t.Errorf("conn close count = %d, want 1", conn.closes)
 	}
 
-	if err := s.Close(Conn, 2); err != errors.ErrNotFoundSession {
+	if err := s.close(cluster.Conn, 2); err != errors.ErrNotFoundSession {
 		t.Errorf("Close() error = %v, want %v", err, errors.ErrNotFoundSession)
 	}
 
-	if err := s.Close(Kind(0), 1); err != errors.ErrInvalidSessionKind {
+	if err := s.close(cluster.Session(0), 1); err != errors.ErrInvalidSessionKind {
 		t.Errorf("Close() error = %v, want %v", err, errors.ErrInvalidSessionKind)
 	}
 
 	conn.closeErr = errors.New("close failed")
-	if err := s.Close(Conn, 1); err == nil {
+	if err := s.close(cluster.Conn, 1); err == nil {
 		t.Error("Close() must report the underlying close failure")
 	}
 }
@@ -401,10 +402,10 @@ func TestCloseExtra(t *testing.T) {
 // TestPushExtra verifies Push for missing sessions, failures and the disconnect flag.
 func TestPushExtra(t *testing.T) {
 	t.Run("conn not found releases buffer", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		if err := s.Push(Conn, 1, false, buf); err != errors.ErrNotFoundSession {
+		if err := s.push(cluster.Conn, 1, false, buf); err != errors.ErrNotFoundSession {
 			t.Errorf("Push() error = %v, want %v", err, errors.ErrNotFoundSession)
 		}
 		if buf.Len() != 0 {
@@ -413,11 +414,11 @@ func TestPushExtra(t *testing.T) {
 	})
 
 	t.Run("push success", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if err := s.Push(Conn, 1, false, buffer.NewBytes([]byte("data"))); err != nil {
+		if err := s.push(cluster.Conn, 1, false, buffer.NewBytes([]byte("data"))); err != nil {
 			t.Errorf("Push() error = %v, want nil", err)
 		}
 		if conn.pushes != 1 {
@@ -426,14 +427,14 @@ func TestPushExtra(t *testing.T) {
 	})
 
 	t.Run("push failure releases buffer", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
 		want := errors.New("push failed")
 		conn.pushErr = want
-		s.AddConn(conn)
+		s.addConn(conn)
 
 		buf := buffer.NewBytes([]byte("data"))
-		if err := s.Push(Conn, 1, false, buf); err != want {
+		if err := s.push(cluster.Conn, 1, false, buf); err != want {
 			t.Errorf("Push() error = %v, want %v", err, want)
 		}
 		if buf.Len() != 0 {
@@ -442,11 +443,11 @@ func TestPushExtra(t *testing.T) {
 	})
 
 	t.Run("push with disconnect closes conn", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if err := s.Push(Conn, 1, true, buffer.NewBytes([]byte("data"))); err != nil {
+		if err := s.push(cluster.Conn, 1, true, buffer.NewBytes([]byte("data"))); err != nil {
 			t.Errorf("Push() error = %v, want nil", err)
 		}
 		if conn.closes != 1 {
@@ -455,12 +456,12 @@ func TestPushExtra(t *testing.T) {
 	})
 
 	t.Run("push disconnect close error is tolerated", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
 		conn.closeErr = errors.New("close failed")
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if err := s.Push(Conn, 1, true, buffer.NewBytes([]byte("data"))); err != nil {
+		if err := s.push(cluster.Conn, 1, true, buffer.NewBytes([]byte("data"))); err != nil {
 			t.Errorf("Push() error = %v, want nil", err)
 		}
 	})
@@ -468,7 +469,7 @@ func TestPushExtra(t *testing.T) {
 	t.Run("push by user", func(t *testing.T) {
 		s, conn := newSessionWithUser(1, 100)
 
-		if err := s.Push(User, 100, false, buffer.NewBytes([]byte("data"))); err != nil {
+		if err := s.push(cluster.User, 100, false, buffer.NewBytes([]byte("data"))); err != nil {
 			t.Errorf("Push() error = %v, want nil", err)
 		}
 		if conn.pushes != 1 {
@@ -480,10 +481,10 @@ func TestPushExtra(t *testing.T) {
 // TestMulticastExtra verifies Multicast for empty targets, unknown kinds and batch pushes.
 func TestMulticastExtra(t *testing.T) {
 	t.Run("empty targets", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Multicast(Conn, nil, false, buf)
+		n, err := s.multicast(cluster.Conn, nil, false, buf)
 		if n != 0 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (0, nil)", n, err)
 		}
@@ -493,10 +494,10 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("invalid kind", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Multicast(Kind(0), []int64{1}, false, buf)
+		n, err := s.multicast(cluster.Session(0), []int64{1}, false, buf)
 		if n != 0 || err != errors.ErrInvalidSessionKind {
 			t.Errorf("Multicast() = (%d, %v), want (0, %v)", n, err, errors.ErrInvalidSessionKind)
 		}
@@ -506,10 +507,10 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("no matching conns", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Multicast(Conn, []int64{1, 2}, false, buf)
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, false, buf)
 		if n != 0 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (0, nil)", n, err)
 		}
@@ -519,11 +520,11 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("single conn", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		n, err := s.Multicast(Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
 		if n != 1 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (1, nil)", n, err)
 		}
@@ -533,13 +534,13 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("single conn push failure", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
 		conn.pushErr = errors.New("push failed")
-		s.AddConn(conn)
+		s.addConn(conn)
 
 		buf := buffer.NewBytes([]byte("data"))
-		n, err := s.Multicast(Conn, []int64{1, 2}, false, buf)
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, false, buf)
 		if n != 0 || err == nil {
 			t.Errorf("Multicast() = (%d, %v), want (0, non-nil)", n, err)
 		}
@@ -549,11 +550,11 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("single conn with disconnect", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		n, err := s.Multicast(Conn, []int64{1}, true, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1}, true, buffer.NewBytes([]byte("data")))
 		if n != 1 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (1, nil)", n, err)
 		}
@@ -563,26 +564,26 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("multiple conns", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2, c3 := newStubConn(1), newStubConn(2), newStubConn(3)
-		s.AddConn(c1)
-		s.AddConn(c2)
-		s.AddConn(c3)
+		s.addConn(c1)
+		s.addConn(c2)
+		s.addConn(c3)
 
-		n, err := s.Multicast(Conn, []int64{1, 2, 3}, false, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1, 2, 3}, false, buffer.NewBytes([]byte("data")))
 		if n != 3 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (3, nil)", n, err)
 		}
 	})
 
 	t.Run("multiple conns with disconnect", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
 		c2.closeErr = errors.New("close failed")
-		s.AddConn(c1)
-		s.AddConn(c2)
+		s.addConn(c1)
+		s.addConn(c2)
 
-		n, err := s.Multicast(Conn, []int64{1, 2}, true, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, true, buffer.NewBytes([]byte("data")))
 		if n != 2 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (2, nil)", n, err)
 		}
@@ -592,41 +593,41 @@ func TestMulticastExtra(t *testing.T) {
 	})
 
 	t.Run("multiple conns partial failure", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
 		c2.pushErr = errors.New("push failed")
-		s.AddConn(c1)
-		s.AddConn(c2)
+		s.addConn(c1)
+		s.addConn(c2)
 
-		n, err := s.Multicast(Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
 		if n != 1 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (1, nil)", n, err)
 		}
 	})
 
 	t.Run("multiple conns total failure", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
 		c1.pushErr = errors.New("push failed")
 		c2.pushErr = errors.New("push failed")
-		s.AddConn(c1)
-		s.AddConn(c2)
+		s.addConn(c1)
+		s.addConn(c2)
 
-		n, err := s.Multicast(Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.Conn, []int64{1, 2}, false, buffer.NewBytes([]byte("data")))
 		if n != 0 || err == nil {
 			t.Errorf("Multicast() = (%d, %v), want (0, non-nil)", n, err)
 		}
 	})
 
 	t.Run("by user", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
-		s.AddConn(c1)
-		s.AddConn(c2)
-		_ = s.Bind(1, 100)
-		_ = s.Bind(2, 200)
+		s.addConn(c1)
+		s.addConn(c2)
+		_ = s.bind(1, 100)
+		_ = s.bind(2, 200)
 
-		n, err := s.Multicast(User, []int64{100, 200}, false, buffer.NewBytes([]byte("data")))
+		n, err := s.multicast(cluster.User, []int64{100, 200}, false, buffer.NewBytes([]byte("data")))
 		if n != 2 || err != nil {
 			t.Errorf("Multicast() = (%d, %v), want (2, nil)", n, err)
 		}
@@ -636,10 +637,10 @@ func TestMulticastExtra(t *testing.T) {
 // TestBroadcastExtra verifies Broadcast for unknown kinds, empty sessions and batch pushes.
 func TestBroadcastExtra(t *testing.T) {
 	t.Run("invalid kind", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Broadcast(Kind(0), false, buf)
+		n, err := s.broadcast(cluster.Session(0), false, buf)
 		if n != 0 || err != errors.ErrInvalidSessionKind {
 			t.Errorf("Broadcast() = (%d, %v), want (0, %v)", n, err, errors.ErrInvalidSessionKind)
 		}
@@ -649,10 +650,10 @@ func TestBroadcastExtra(t *testing.T) {
 	})
 
 	t.Run("no conns", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Broadcast(Conn, false, buf)
+		n, err := s.broadcast(cluster.Conn, false, buf)
 		if n != 0 || err != nil {
 			t.Errorf("Broadcast() = (%d, %v), want (0, nil)", n, err)
 		}
@@ -662,35 +663,35 @@ func TestBroadcastExtra(t *testing.T) {
 	})
 
 	t.Run("single conn", func(t *testing.T) {
-		s := NewSession()
-		s.AddConn(newStubConn(1))
+		s := newSession()
+		s.addConn(newStubConn(1))
 
-		n, err := s.Broadcast(Conn, false, buffer.NewBytes([]byte("data")))
+		n, err := s.broadcast(cluster.Conn, false, buffer.NewBytes([]byte("data")))
 		if n != 1 || err != nil {
 			t.Errorf("Broadcast() = (%d, %v), want (1, nil)", n, err)
 		}
 	})
 
 	t.Run("multiple conns", func(t *testing.T) {
-		s := NewSession()
-		s.AddConn(newStubConn(1))
-		s.AddConn(newStubConn(2))
+		s := newSession()
+		s.addConn(newStubConn(1))
+		s.addConn(newStubConn(2))
 
-		n, err := s.Broadcast(Conn, false, buffer.NewBytes([]byte("data")))
+		n, err := s.broadcast(cluster.Conn, false, buffer.NewBytes([]byte("data")))
 		if n != 2 || err != nil {
 			t.Errorf("Broadcast() = (%d, %v), want (2, nil)", n, err)
 		}
 	})
 
 	t.Run("by user", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
-		s.AddConn(c1)
-		s.AddConn(c2)
-		_ = s.Bind(1, 100)
-		_ = s.Bind(2, 200)
+		s.addConn(c1)
+		s.addConn(c2)
+		_ = s.bind(1, 100)
+		_ = s.bind(2, 200)
 
-		n, err := s.Broadcast(User, false, buffer.NewBytes([]byte("data")))
+		n, err := s.broadcast(cluster.User, false, buffer.NewBytes([]byte("data")))
 		if n != 2 || err != nil {
 			t.Errorf("Broadcast() = (%d, %v), want (2, nil)", n, err)
 		}
@@ -700,10 +701,10 @@ func TestBroadcastExtra(t *testing.T) {
 // TestPublishExtra verifies Publish for missing, single and multiple subscribers.
 func TestPublishExtra(t *testing.T) {
 	t.Run("no subscribers", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		buf := buffer.NewBytes([]byte("data"))
 
-		n, err := s.Publish("chat", false, buf)
+		n, err := s.publish("chat", false, buf)
 		if n != 0 || err != nil {
 			t.Errorf("Publish() = (%d, %v), want (0, nil)", n, err)
 		}
@@ -713,14 +714,14 @@ func TestPublishExtra(t *testing.T) {
 	})
 
 	t.Run("single subscriber", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
-		if err := s.Subscribe(Conn, []int64{1}, "chat"); err != nil {
+		s.addConn(conn)
+		if err := s.subscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
 
-		n, err := s.Publish("chat", false, buffer.NewBytes([]byte("data")))
+		n, err := s.publish("chat", false, buffer.NewBytes([]byte("data")))
 		if n != 1 || err != nil {
 			t.Errorf("Publish() = (%d, %v), want (1, nil)", n, err)
 		}
@@ -730,15 +731,15 @@ func TestPublishExtra(t *testing.T) {
 	})
 
 	t.Run("multiple subscribers", func(t *testing.T) {
-		s := NewSession()
-		s.AddConn(newStubConn(1))
-		s.AddConn(newStubConn(2))
-		s.AddConn(newStubConn(3))
-		if err := s.Subscribe(Conn, []int64{1, 2, 3}, "chat"); err != nil {
+		s := newSession()
+		s.addConn(newStubConn(1))
+		s.addConn(newStubConn(2))
+		s.addConn(newStubConn(3))
+		if err := s.subscribe(cluster.Conn, []int64{1, 2, 3}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
 
-		n, err := s.Publish("chat", false, buffer.NewBytes([]byte("data")))
+		n, err := s.publish("chat", false, buffer.NewBytes([]byte("data")))
 		if n != 3 || err != nil {
 			t.Errorf("Publish() = (%d, %v), want (3, nil)", n, err)
 		}
@@ -748,22 +749,22 @@ func TestPublishExtra(t *testing.T) {
 // TestSubscribeExtra verifies Subscribe for empty targets, unknown kinds and channel creation.
 func TestSubscribeExtra(t *testing.T) {
 	t.Run("empty targets", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Subscribe(Conn, nil, "chat"); err != nil {
+		s := newSession()
+		if err := s.subscribe(cluster.Conn, nil, "chat"); err != nil {
 			t.Errorf("Subscribe() error = %v, want nil", err)
 		}
 	})
 
 	t.Run("invalid kind", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Subscribe(Kind(0), []int64{1}, "chat"); err != errors.ErrInvalidSessionKind {
+		s := newSession()
+		if err := s.subscribe(cluster.Session(0), []int64{1}, "chat"); err != errors.ErrInvalidSessionKind {
 			t.Errorf("Subscribe() error = %v, want %v", err, errors.ErrInvalidSessionKind)
 		}
 	})
 
 	t.Run("missing target is skipped", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Subscribe(Conn, []int64{99}, "chat"); err != nil {
+		s := newSession()
+		if err := s.subscribe(cluster.Conn, []int64{99}, "chat"); err != nil {
 			t.Errorf("Subscribe() error = %v, want nil", err)
 		}
 		if len(s.channels) != 0 {
@@ -772,15 +773,15 @@ func TestSubscribeExtra(t *testing.T) {
 	})
 
 	t.Run("existing and new channels", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		c1, c2 := newStubConn(1), newStubConn(2)
-		s.AddConn(c1)
-		s.AddConn(c2)
+		s.addConn(c1)
+		s.addConn(c2)
 
-		if err := s.Subscribe(Conn, []int64{1}, "chat"); err != nil {
+		if err := s.subscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
-		if err := s.Subscribe(Conn, []int64{2}, "chat"); err != nil {
+		if err := s.subscribe(cluster.Conn, []int64{2}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
 		if len(s.channels["chat"]) != 2 {
@@ -794,7 +795,7 @@ func TestSubscribeExtra(t *testing.T) {
 	t.Run("by user", func(t *testing.T) {
 		s, _ := newSessionWithUser(1, 100)
 
-		if err := s.Subscribe(User, []int64{100}, "chat"); err != nil {
+		if err := s.subscribe(cluster.User, []int64{100}, "chat"); err != nil {
 			t.Fatalf("Subscribe() error = %v, want nil", err)
 		}
 		if len(s.channels["chat"]) != 1 {
@@ -806,31 +807,31 @@ func TestSubscribeExtra(t *testing.T) {
 // TestUnsubscribeExtra verifies Unsubscribe for empty targets, unknown kinds and removal rules.
 func TestUnsubscribeExtra(t *testing.T) {
 	t.Run("empty targets", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Unsubscribe(Conn, nil, "chat"); err != nil {
+		s := newSession()
+		if err := s.unsubscribe(cluster.Conn, nil, "chat"); err != nil {
 			t.Errorf("Unsubscribe() error = %v, want nil", err)
 		}
 	})
 
 	t.Run("invalid kind", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Unsubscribe(Kind(0), []int64{1}, "chat"); err != errors.ErrInvalidSessionKind {
+		s := newSession()
+		if err := s.unsubscribe(cluster.Session(0), []int64{1}, "chat"); err != errors.ErrInvalidSessionKind {
 			t.Errorf("Unsubscribe() error = %v, want %v", err, errors.ErrInvalidSessionKind)
 		}
 	})
 
 	t.Run("missing target is skipped", func(t *testing.T) {
-		s := NewSession()
-		if err := s.Unsubscribe(Conn, []int64{99}, "chat"); err != nil {
+		s := newSession()
+		if err := s.unsubscribe(cluster.Conn, []int64{99}, "chat"); err != nil {
 			t.Errorf("Unsubscribe() error = %v, want nil", err)
 		}
 	})
 
 	t.Run("not subscribed is skipped", func(t *testing.T) {
-		s := NewSession()
-		s.AddConn(newStubConn(1))
+		s := newSession()
+		s.addConn(newStubConn(1))
 
-		if err := s.Unsubscribe(Conn, []int64{1}, "chat"); err != nil {
+		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Errorf("Unsubscribe() error = %v, want nil", err)
 		}
 		if len(s.channels) != 0 {
@@ -839,12 +840,12 @@ func TestUnsubscribeExtra(t *testing.T) {
 	})
 
 	t.Run("removes the last subscriber and the channel", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
-		_ = s.Subscribe(Conn, []int64{1}, "chat")
+		s.addConn(conn)
+		_ = s.subscribe(cluster.Conn, []int64{1}, "chat")
 
-		if err := s.Unsubscribe(Conn, []int64{1}, "chat"); err != nil {
+		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
 		if len(s.channels) != 0 {
@@ -856,12 +857,12 @@ func TestUnsubscribeExtra(t *testing.T) {
 	})
 
 	t.Run("keeps the channel with remaining subscribers", func(t *testing.T) {
-		s := NewSession()
-		s.AddConn(newStubConn(1))
-		s.AddConn(newStubConn(2))
-		_ = s.Subscribe(Conn, []int64{1, 2}, "chat")
+		s := newSession()
+		s.addConn(newStubConn(1))
+		s.addConn(newStubConn(2))
+		_ = s.subscribe(cluster.Conn, []int64{1, 2}, "chat")
 
-		if err := s.Unsubscribe(Conn, []int64{1}, "chat"); err != nil {
+		if err := s.unsubscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
 		if len(s.channels["chat"]) != 1 {
@@ -871,9 +872,9 @@ func TestUnsubscribeExtra(t *testing.T) {
 
 	t.Run("by user", func(t *testing.T) {
 		s, _ := newSessionWithUser(1, 100)
-		_ = s.Subscribe(User, []int64{100}, "chat")
+		_ = s.subscribe(cluster.User, []int64{100}, "chat")
 
-		if err := s.Unsubscribe(User, []int64{100}, "chat"); err != nil {
+		if err := s.unsubscribe(cluster.User, []int64{100}, "chat"); err != nil {
 			t.Fatalf("Unsubscribe() error = %v, want nil", err)
 		}
 		if len(s.channels) != 0 {
@@ -884,26 +885,26 @@ func TestUnsubscribeExtra(t *testing.T) {
 
 // TestStatExtra verifies Stat for every kind.
 func TestStatExtra(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 
-	if n, err := s.Stat(Conn); n != 0 || err != nil {
+	if n, err := s.stat(cluster.Conn); n != 0 || err != nil {
 		t.Errorf("Stat(Conn) = (%d, %v), want (0, nil)", n, err)
 	}
-	if _, err := s.Stat(Kind(0)); err != errors.ErrInvalidSessionKind {
+	if _, err := s.stat(cluster.Session(0)); err != errors.ErrInvalidSessionKind {
 		t.Errorf("Stat() error = %v, want %v", err, errors.ErrInvalidSessionKind)
 	}
 
 	c1, c2, c3 := newStubConn(1), newStubConn(2), newStubConn(3)
-	s.AddConn(c1)
-	s.AddConn(c2)
-	s.AddConn(c3)
-	_ = s.Bind(1, 100)
-	_ = s.Bind(2, 200)
+	s.addConn(c1)
+	s.addConn(c2)
+	s.addConn(c3)
+	_ = s.bind(1, 100)
+	_ = s.bind(2, 200)
 
-	if n, err := s.Stat(Conn); n != 3 || err != nil {
+	if n, err := s.stat(cluster.Conn); n != 3 || err != nil {
 		t.Errorf("Stat(Conn) = (%d, %v), want (3, nil)", n, err)
 	}
-	if n, err := s.Stat(User); n != 2 || err != nil {
+	if n, err := s.stat(cluster.User); n != 2 || err != nil {
 		t.Errorf("Stat(User) = (%d, %v), want (2, nil)", n, err)
 	}
 }
@@ -911,7 +912,7 @@ func TestStatExtra(t *testing.T) {
 // TestDoBatchPushEmpty verifies the defensive empty-input branch of doBatchPush, which is not
 // reachable through the exported batch helpers because they all return early for an empty set.
 func TestDoBatchPushEmpty(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	buf := buffer.NewBytes([]byte("data"))
 
 	n, err := s.doBatchPush(nil, false, buf)
@@ -927,23 +928,23 @@ func TestDoBatchPushEmpty(t *testing.T) {
 // key is not a channel name.
 func TestRemConnExtra(t *testing.T) {
 	t.Run("nil attr", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
 		conn.attr = nil
-		s.AddConn(conn)
+		s.addConn(conn)
 
-		if !s.RemConn(conn) {
+		if !s.remConn(conn) {
 			t.Error("RemConn() = false, want true")
 		}
 	})
 
 	t.Run("non-string attr key", func(t *testing.T) {
-		s := NewSession()
+		s := newSession()
 		conn := newStubConn(1)
-		s.AddConn(conn)
+		s.addConn(conn)
 		conn.Attr().Set(123, struct{}{})
 
-		if !s.RemConn(conn) {
+		if !s.remConn(conn) {
 			t.Error("RemConn() = false, want true")
 		}
 		if _, ok := conn.Attr().Get(123); ok {

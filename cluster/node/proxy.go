@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -341,7 +340,7 @@ func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, err
 
 // Stat counts the sessions of the given kind. It returns the session count and an error when the
 // node is shut down.
-func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+func (p *Proxy) Stat(ctx context.Context, kind cluster.Session) (int64, error) {
 	if p.node.isShut() {
 		return 0, errors.ErrNodeShutdown
 	} else {

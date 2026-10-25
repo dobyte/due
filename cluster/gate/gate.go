@@ -18,7 +18,6 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 )
 
@@ -31,7 +30,7 @@ type Gate struct {
 	state        atomic.Int32
 	proxy        *proxy
 	instance     *registry.ServiceInstance
-	session      *session.Session
+	session      *session
 	linker       *gate.Server
 	security     *securityManager
 	userBindings bindingLocks
@@ -51,7 +50,7 @@ func NewGate(opts ...Option) *Gate {
 	g.opts = o
 	g.ctx, g.cancel = context.WithCancel(o.ctx)
 	g.proxy = newProxy(g)
-	g.session = session.NewSession()
+	g.session = newSession()
 	g.state.Store(int32(cluster.Shut))
 	g.wg = &sync.WaitGroup{}
 
@@ -191,10 +190,10 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		g.wg.Add(1)
 
 		if g.security != nil {
-			g.session.AddConn(g.security.wrap(conn))
+			g.session.addConn(g.security.wrap(conn))
 			g.mu.Unlock()
 		} else {
-			g.session.AddConn(conn)
+			g.session.addConn(conn)
 			g.mu.Unlock()
 			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 		}
@@ -227,7 +226,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 		g.security.remove(cid)
 	}
 
-	if g.session.RemConn(conn) {
+	if g.session.remConn(conn) {
 		uid := conn.UID()
 
 		// The local session is gone, so the remaining work no longer needs the connection. Queue
@@ -240,7 +239,7 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 				// Remove the local connection before waiting for a pending location write. Bind
 				// either observes the removal before writing, or this cleanup follows its write.
 				userLock = g.userBindings.lock(uid)
-				if online, _ := g.session.Has(session.User, uid); !online {
+				if online, _ := g.session.has(cluster.User, uid); !online {
 					ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 					_ = g.proxy.cleanupGate(ctx, cid, uid)
 					cancel()

@@ -15,7 +15,6 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/node"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 )
 
 // gateProviderStub is a gate.Provider test double whose behaviour can be overridden per method.
@@ -23,16 +22,16 @@ import (
 type gateProviderStub struct {
 	bindFn        func(ctx context.Context, cid, uid int64) error
 	unbindFn      func(ctx context.Context, uid int64) error
-	getIPFn       func(ctx context.Context, kind session.Kind, target int64) (string, error)
-	isOnlineFn    func(ctx context.Context, kind session.Kind, target int64) (bool, error)
-	statFn        func(ctx context.Context, kind session.Kind) (int64, error)
-	disconnectFn  func(ctx context.Context, kind session.Kind, target int64, force bool) error
-	pushFn        func(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error
-	multicastFn   func(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error)
-	broadcastFn   func(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer) (int64, error)
+	getIPFn       func(ctx context.Context, kind cluster.Session, target int64) (string, error)
+	isOnlineFn    func(ctx context.Context, kind cluster.Session, target int64) (bool, error)
+	statFn        func(ctx context.Context, kind cluster.Session) (int64, error)
+	disconnectFn  func(ctx context.Context, kind cluster.Session, target int64, force bool) error
+	pushFn        func(ctx context.Context, kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer) error
+	multicastFn   func(ctx context.Context, kind cluster.Session, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error)
+	broadcastFn   func(ctx context.Context, kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error)
 	publishFn     func(ctx context.Context, channel string, disconnect bool, buf buffer.Buffer) (int64, error)
-	subscribeFn   func(ctx context.Context, kind session.Kind, targets []int64, channel string) error
-	unsubscribeFn func(ctx context.Context, kind session.Kind, targets []int64, channel string) error
+	subscribeFn   func(ctx context.Context, kind cluster.Session, targets []int64, channel string) error
+	unsubscribeFn func(ctx context.Context, kind cluster.Session, targets []int64, channel string) error
 	getStateFn    func() (cluster.State, error)
 	setStateFn    func(state cluster.State) error
 
@@ -54,7 +53,7 @@ type gateProviderStub struct {
 	lastUID    int64
 	lastTarget int64
 	lastForce  bool
-	lastKind   session.Kind
+	lastKind   cluster.Session
 	lastChan   string
 	lastState  cluster.State
 }
@@ -81,7 +80,7 @@ func (p *gateProviderStub) Unbind(ctx context.Context, uid int64) error {
 }
 
 // GetIP returns the client IP address.
-func (p *gateProviderStub) GetIP(ctx context.Context, kind session.Kind, target int64) (string, error) {
+func (p *gateProviderStub) GetIP(ctx context.Context, kind cluster.Session, target int64) (string, error) {
 	p.getIPCount.Add(1)
 	if p.getIPFn != nil {
 		return p.getIPFn(ctx, kind, target)
@@ -90,7 +89,7 @@ func (p *gateProviderStub) GetIP(ctx context.Context, kind session.Kind, target 
 }
 
 // IsOnline reports whether the target is online.
-func (p *gateProviderStub) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
+func (p *gateProviderStub) IsOnline(ctx context.Context, kind cluster.Session, target int64) (bool, error) {
 	p.isOnlineCount.Add(1)
 	if p.isOnlineFn != nil {
 		return p.isOnlineFn(ctx, kind, target)
@@ -99,7 +98,7 @@ func (p *gateProviderStub) IsOnline(ctx context.Context, kind session.Kind, targ
 }
 
 // Stat returns the total number of sessions.
-func (p *gateProviderStub) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+func (p *gateProviderStub) Stat(ctx context.Context, kind cluster.Session) (int64, error) {
 	p.statCount.Add(1)
 	if p.statFn != nil {
 		return p.statFn(ctx, kind)
@@ -108,7 +107,7 @@ func (p *gateProviderStub) Stat(ctx context.Context, kind session.Kind) (int64, 
 }
 
 // Disconnect disconnects the target session.
-func (p *gateProviderStub) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
+func (p *gateProviderStub) Disconnect(ctx context.Context, kind cluster.Session, target int64, force bool) error {
 	p.disconnectCount.Add(1)
 	p.mu.Lock()
 	p.lastKind, p.lastTarget, p.lastForce = kind, target, force
@@ -120,7 +119,7 @@ func (p *gateProviderStub) Disconnect(ctx context.Context, kind session.Kind, ta
 }
 
 // Push sends a single message.
-func (p *gateProviderStub) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error {
+func (p *gateProviderStub) Push(ctx context.Context, kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer) error {
 	p.pushCount.Add(1)
 	p.mu.Lock()
 	p.lastKind, p.lastTarget = kind, target
@@ -134,7 +133,7 @@ func (p *gateProviderStub) Push(ctx context.Context, kind session.Kind, target i
 }
 
 // Multicast pushes a multicast message.
-func (p *gateProviderStub) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (p *gateProviderStub) Multicast(ctx context.Context, kind cluster.Session, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
 	p.multicastCount.Add(1)
 	var (
 		total int64 = int64(len(targets))
@@ -148,7 +147,7 @@ func (p *gateProviderStub) Multicast(ctx context.Context, kind session.Kind, tar
 }
 
 // Broadcast pushes a broadcast message.
-func (p *gateProviderStub) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (p *gateProviderStub) Broadcast(ctx context.Context, kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error) {
 	p.broadcastCount.Add(1)
 	var (
 		total int64 = 3
@@ -179,7 +178,7 @@ func (p *gateProviderStub) Publish(ctx context.Context, channel string, disconne
 }
 
 // Subscribe subscribes the targets to a channel.
-func (p *gateProviderStub) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (p *gateProviderStub) Subscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	p.subscribeCount.Add(1)
 	p.mu.Lock()
 	p.lastKind, p.lastChan = kind, channel
@@ -191,7 +190,7 @@ func (p *gateProviderStub) Subscribe(ctx context.Context, kind session.Kind, tar
 }
 
 // Unsubscribe unsubscribes the targets from a channel.
-func (p *gateProviderStub) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (p *gateProviderStub) Unsubscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	p.unsubscribeCount.Add(1)
 	p.mu.Lock()
 	p.lastKind, p.lastChan = kind, channel

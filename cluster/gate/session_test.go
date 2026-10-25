@@ -1,9 +1,10 @@
-package session
+package gate
 
 import (
 	"net"
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/network"
 )
@@ -50,12 +51,12 @@ func (a *mockAttr) Visit(fn func(key, value any) bool) {
 }
 
 func TestRemConnRegistered(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
-	if !s.RemConn(conn) {
+	if !s.remConn(conn) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
@@ -65,34 +66,34 @@ func TestRemConnRegistered(t *testing.T) {
 
 	// A repeated removal must return false so that the caller does not run its disconnect cleanup
 	// logic twice.
-	if s.RemConn(conn) {
+	if s.remConn(conn) {
 		t.Fatal("RemConn should return false for an already removed conn")
 	}
 }
 
 func TestRemConnUnregistered(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 
-	if s.RemConn(newMockConn(404)) {
+	if s.remConn(newMockConn(404)) {
 		t.Fatal("RemConn should return false for an unregistered conn")
 	}
 }
 
 func TestRemConnClearsUserAndChannels(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
-	if err := s.Bind(1, 100); err != nil {
+	if err := s.bind(1, 100); err != nil {
 		t.Fatalf("Bind failed: %v", err)
 	}
 
-	if err := s.Subscribe(Conn, []int64{1}, "chat"); err != nil {
+	if err := s.subscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 		t.Fatalf("Subscribe failed: %v", err)
 	}
 
-	if !s.RemConn(conn) {
+	if !s.remConn(conn) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
@@ -113,17 +114,17 @@ func TestRemConnClearsUserAndChannels(t *testing.T) {
 // TestRemConnConcurrent verifies that concurrent removals of the same connection allow exactly one
 // call to report true.
 func TestRemConnConcurrent(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
 	const goroutines = 32
 	results := make(chan bool, goroutines)
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
-			results <- s.RemConn(conn)
+			results <- s.remConn(conn)
 		}()
 	}
 

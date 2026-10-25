@@ -1,4 +1,4 @@
-package session
+package gate
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -13,60 +14,39 @@ import (
 	"github.com/dobyte/due/v2/task"
 )
 
-// The kinds of a session.
-const (
-	Conn Kind = iota + 1 // Conn: a connection session
-	User                 // User: a user session
-)
-
-// Kind is the kind of a session.
-type Kind int
-
-// String returns the name of the session kind.
-func (k Kind) String() string {
-	switch k {
-	case Conn:
-		return "conn"
-	case User:
-		return "user"
-	}
-
-	return ""
-}
-
-// Session manages the connection and user sessions of a node along with their channel
+// session manages the connection and user sessions of a node along with their channel
 // subscriptions.
-type Session struct {
+type session struct {
 	rw       sync.RWMutex                         // Read-write lock protecting the session maps
 	conns    map[int64]network.Conn               // Connection sessions, keyed by connection ID
 	users    map[int64]network.Conn               // User sessions, keyed by user ID
 	channels map[string]map[network.Conn]struct{} // Channel subscriptions, keyed by channel name
 }
 
-// NewSession creates a session instance.
-func NewSession() *Session {
-	return &Session{
+// newSession creates a session instance.
+func newSession() *session {
+	return &session{
 		conns:    make(map[int64]network.Conn),
 		users:    make(map[int64]network.Conn),
 		channels: make(map[string]map[network.Conn]struct{}),
 	}
 }
 
-// AddConn adds conn to the connection sessions.
-func (s *Session) AddConn(conn network.Conn) {
+// addConn adds conn to the connection sessions.
+func (s *session) addConn(conn network.Conn) {
 	s.rw.Lock()
 	s.conns[conn.ID()] = conn
 	s.rw.Unlock()
 }
 
-// RemConn removes conn from the connection sessions. It reports whether conn was registered and
+// remConn removes conn from the connection sessions. It reports whether conn was registered and
 // has been removed.
 //
 // The existence check and the removal happen under the same write lock, so the caller does not
-// need to call [Session.Has] before RemConn and pay for a second lookup. When the same conn is
+// need to call [session.has] before remConn and pay for a second lookup. When the same conn is
 // removed concurrently, only the first call reports true, which keeps repeated removals from
 // unbalancing the counters.
-func (s *Session) RemConn(conn network.Conn) bool {
+func (s *session) remConn(conn network.Conn) bool {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
@@ -89,16 +69,16 @@ func (s *Session) RemConn(conn network.Conn) bool {
 	return true
 }
 
-// Has reports whether the session identified by target exists. The kind selects whether target is
+// has reports whether the session identified by target exists. The kind selects whether target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
+func (s *session) has(kind cluster.Session, target int64) (ok bool, err error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		_, ok = s.conns[target]
-	case User:
+	case cluster.User:
 		_, ok = s.users[target]
 	default:
 		err = errors.ErrInvalidSessionKind
@@ -107,10 +87,10 @@ func (s *Session) Has(kind Kind, target int64) (ok bool, err error) {
 	return
 }
 
-// UserID returns the user ID currently attached to cid, or zero if it is unbound.
-func (s *Session) UserID(cid int64) (int64, error) {
+// userID returns the user ID currently attached to cid, or zero if it is unbound.
+func (s *session) userID(cid int64) (int64, error) {
 	s.rw.RLock()
-	conn, err := s.conn(Conn, cid)
+	conn, err := s.conn(cluster.Conn, cid)
 	if err != nil {
 		s.rw.RUnlock()
 		return 0, err
@@ -120,8 +100,8 @@ func (s *Session) UserID(cid int64) (int64, error) {
 	return uid, nil
 }
 
-// IsBound reports whether cid is registered and is the current connection bound to uid.
-func (s *Session) IsBound(cid, uid int64) bool {
+// isBound reports whether cid is registered and is the current connection bound to uid.
+func (s *session) isBound(cid, uid int64) bool {
 	s.rw.RLock()
 	conn := s.conns[cid]
 	bound := conn != nil && conn.UID() == uid && s.users[uid] == conn
@@ -129,11 +109,11 @@ func (s *Session) IsBound(cid, uid int64) bool {
 	return bound
 }
 
-// Bind binds the user ID uid to the connection identified by cid. When uid is already bound to
+// bind binds the user ID uid to the connection identified by cid. When uid is already bound to
 // another connection, that connection is closed and replaced.
-func (s *Session) Bind(cid, uid int64) error {
+func (s *session) bind(cid, uid int64) error {
 	s.rw.Lock()
-	old, err := s.bind(cid, uid)
+	old, err := s.doBind(cid, uid)
 	s.rw.Unlock()
 
 	if err != nil {
@@ -149,10 +129,10 @@ func (s *Session) Bind(cid, uid int64) error {
 	return nil
 }
 
-// bind binds uid to the connection identified by cid and returns the replaced connection, if any.
-// The caller must hold the write lock.
-func (s *Session) bind(cid, uid int64) (network.Conn, error) {
-	conn, err := s.conn(Conn, cid)
+// doBind binds uid to the connection identified by cid and returns the replaced connection, if
+// any. The caller must hold the write lock.
+func (s *session) doBind(cid, uid int64) (network.Conn, error) {
+	conn, err := s.conn(cluster.Conn, cid)
 	if err != nil {
 		return nil, err
 	}
@@ -181,29 +161,29 @@ func (s *Session) bind(cid, uid int64) (network.Conn, error) {
 	return old, nil
 }
 
-// Unbind unbinds the user ID uid and returns the ID of the connection it was bound to.
-func (s *Session) Unbind(uid int64) (int64, error) {
+// unbind unbinds the user ID uid and returns the ID of the connection it was bound to.
+func (s *session) unbind(uid int64) (int64, error) {
 	s.rw.Lock()
-	cid, err := s.unbind(uid, 0)
+	cid, err := s.doUnbind(uid, 0)
 	s.rw.Unlock()
 	return cid, err
 }
 
-// UnbindConn unbinds uid only if its current connection is cid. A removed or replaced binding
+// unbindConn unbinds uid only if its current connection is cid. A removed or replaced binding
 // returns ErrNotFoundSession without changing the current user connection.
-func (s *Session) UnbindConn(cid, uid int64) error {
+func (s *session) unbindConn(cid, uid int64) error {
 	if cid == 0 {
 		return errors.ErrNotFoundSession
 	}
 	s.rw.Lock()
-	_, err := s.unbind(uid, cid)
+	_, err := s.doUnbind(uid, cid)
 	s.rw.Unlock()
 	return err
 }
 
-// unbind removes a user binding while the caller holds rw. A zero cid accepts any connection.
-func (s *Session) unbind(uid, cid int64) (int64, error) {
-	conn, err := s.conn(User, uid)
+// doUnbind removes a user binding while the caller holds rw. A zero cid accepts any connection.
+func (s *session) doUnbind(uid, cid int64) (int64, error) {
+	conn, err := s.conn(cluster.User, uid)
 	if err != nil {
 		return 0, err
 	}
@@ -220,9 +200,9 @@ func (s *Session) unbind(uid, cid int64) (int64, error) {
 	return conn.ID(), nil
 }
 
-// LocalIP returns the local IP address of the session identified by target. The kind selects
+// localIP returns the local IP address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
-func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
+func (s *session) localIP(kind cluster.Session, target int64) (string, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -234,9 +214,9 @@ func (s *Session) LocalIP(kind Kind, target int64) (string, error) {
 	return conn.LocalIP()
 }
 
-// LocalAddr returns the local address of the session identified by target. The kind selects whether
-// target is a connection ID or a user ID.
-func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
+// localAddr returns the local address of the session identified by target. The kind selects
+// whether target is a connection ID or a user ID.
+func (s *session) localAddr(kind cluster.Session, target int64) (net.Addr, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -248,9 +228,9 @@ func (s *Session) LocalAddr(kind Kind, target int64) (net.Addr, error) {
 	return conn.LocalAddr()
 }
 
-// RemoteIP returns the remote IP address of the session identified by target. The kind selects
+// remoteIP returns the remote IP address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
-func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
+func (s *session) remoteIP(kind cluster.Session, target int64) (string, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -262,9 +242,9 @@ func (s *Session) RemoteIP(kind Kind, target int64) (string, error) {
 	return conn.RemoteIP()
 }
 
-// RemoteAddr returns the remote address of the session identified by target. The kind selects
+// remoteAddr returns the remote address of the session identified by target. The kind selects
 // whether target is a connection ID or a user ID.
-func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
+func (s *session) remoteAddr(kind cluster.Session, target int64) (net.Addr, error) {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -276,9 +256,9 @@ func (s *Session) RemoteAddr(kind Kind, target int64) (net.Addr, error) {
 	return conn.RemoteAddr()
 }
 
-// Close closes the session identified by target. The kind selects whether target is a connection ID
-// or a user ID. Pass force as true to close the connection forcibly.
-func (s *Session) Close(kind Kind, target int64, force ...bool) error {
+// close closes the session identified by target. The kind selects whether target is a connection
+// ID or a user ID. Pass force as true to close the connection forcibly.
+func (s *session) close(kind cluster.Session, target int64, force ...bool) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -290,10 +270,10 @@ func (s *Session) Close(kind Kind, target int64, force ...bool) error {
 	return conn.Close(force...)
 }
 
-// Push pushes buf to the session identified by target asynchronously. The kind selects whether
+// push pushes buf to the session identified by target asynchronously. The kind selects whether
 // target is a connection ID or a user ID. When disconnect is true, the connection is closed after
 // the push.
-func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buffer) error {
+func (s *session) push(kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer) error {
 	s.rw.RLock()
 	conn, err := s.conn(kind, target)
 	s.rw.RUnlock()
@@ -317,11 +297,11 @@ func (s *Session) Push(kind Kind, target int64, disconnect bool, buf buffer.Buff
 	return nil
 }
 
-// Multicast pushes buf to every session in targets asynchronously. The kind selects whether each
+// multicast pushes buf to every session in targets asynchronously. The kind selects whether each
 // target is a connection ID or a user ID. When disconnect is true, each connection is closed after
 // the push. It returns the number of sessions the message was pushed to, or
 // [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (s *session) multicast(kind cluster.Session, targets []int64, disconnect bool, buf buffer.Buffer) (int64, error) {
 	if len(targets) == 0 {
 		buf.Release()
 		return 0, nil
@@ -331,13 +311,13 @@ func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buf
 
 	s.rw.RLock()
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		for _, target := range targets {
 			if conn, ok := s.conns[target]; ok {
 				conns = append(conns, conn)
 			}
 		}
-	case User:
+	case cluster.User:
 		for _, target := range targets {
 			if conn, ok := s.users[target]; ok {
 				conns = append(conns, conn)
@@ -358,20 +338,20 @@ func (s *Session) Multicast(kind Kind, targets []int64, disconnect bool, buf buf
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Broadcast pushes buf to every session of the given kind asynchronously. When disconnect is true,
+// broadcast pushes buf to every session of the given kind asynchronously. When disconnect is true,
 // each connection is closed after the push. It returns the number of sessions the message was
 // pushed to, or [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *Session) Broadcast(kind Kind, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
 	s.rw.RLock()
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		conns = make([]network.Conn, 0, len(s.conns))
 		for _, conn := range s.conns {
 			conns = append(conns, conn)
 		}
-	case User:
+	case cluster.User:
 		conns = make([]network.Conn, 0, len(s.users))
 		for _, conn := range s.users {
 			conns = append(conns, conn)
@@ -391,10 +371,10 @@ func (s *Session) Broadcast(kind Kind, disconnect bool, buf buffer.Buffer) (int6
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Publish pushes buf to every session subscribed to channel asynchronously. When disconnect is
+// publish pushes buf to every session subscribed to channel asynchronously. When disconnect is
 // true, each connection is closed after the push. It returns the number of sessions the message was
 // pushed to.
-func (s *Session) Publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (int64, error) {
 	var conns []network.Conn
 
 	s.rw.RLock()
@@ -414,9 +394,9 @@ func (s *Session) Publish(channel string, disconnect bool, buf buffer.Buffer) (i
 	return s.doBatchPush(conns, disconnect, buf)
 }
 
-// Subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
+// subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err error) {
+func (s *session) subscribe(kind cluster.Session, targets []int64, channel string) (err error) {
 	if len(targets) == 0 {
 		return
 	}
@@ -426,9 +406,9 @@ func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err err
 
 	var conns map[int64]network.Conn
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		conns = s.conns
-	case User:
+	case cluster.User:
 		conns = s.users
 	default:
 		err = errors.ErrInvalidSessionKind
@@ -455,10 +435,10 @@ func (s *Session) Subscribe(kind Kind, targets []int64, channel string) (err err
 	return
 }
 
-// Unsubscribe unsubscribes the sessions in targets from channel. The kind selects whether each
+// unsubscribe unsubscribes the sessions in targets from channel. The kind selects whether each
 // target is a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown
 // kind.
-func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err error) {
+func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel string) (err error) {
 	if len(targets) == 0 {
 		return
 	}
@@ -468,9 +448,9 @@ func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err e
 
 	var conns map[int64]network.Conn
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		conns = s.conns
-	case User:
+	case cluster.User:
 		conns = s.users
 	default:
 		err = errors.ErrInvalidSessionKind
@@ -489,7 +469,7 @@ func (s *Session) Unsubscribe(kind Kind, targets []int64, channel string) (err e
 }
 
 // doUnsubscribe removes conn from the subscribers of channel. The caller must hold the write lock.
-func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
+func (s *session) doUnsubscribe(channel string, conn network.Conn) {
 	if channels, ok := s.channels[channel]; ok {
 		delete(channels, conn)
 
@@ -501,7 +481,7 @@ func (s *Session) doUnsubscribe(channel string, conn network.Conn) {
 
 // doClearConnAttrs removes conn from every channel it is subscribed to and clears its attributes.
 // The caller must hold the write lock.
-func (s *Session) doClearConnAttrs(conn network.Conn) {
+func (s *session) doClearConnAttrs(conn network.Conn) {
 	if attr := conn.Attr(); attr != nil {
 		attr.Visit(func(key, _ any) bool {
 			if channel, ok := key.(string); ok {
@@ -514,16 +494,16 @@ func (s *Session) doClearConnAttrs(conn network.Conn) {
 	}
 }
 
-// Stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an
+// stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an
 // unknown kind.
-func (s *Session) Stat(kind Kind) (int64, error) {
+func (s *session) stat(kind cluster.Session) (int64, error) {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		return int64(len(s.conns)), nil
-	case User:
+	case cluster.User:
 		return int64(len(s.users)), nil
 	default:
 		return 0, errors.ErrInvalidSessionKind
@@ -532,7 +512,7 @@ func (s *Session) Stat(kind Kind) (int64, error) {
 
 // doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
 // connection is closed after the push. It returns the number of sessions the message was pushed to.
-func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
+func (s *session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
 	switch n := len(conns); n {
 	case 0:
 		buf.Release()
@@ -592,15 +572,15 @@ func (s *Session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.
 
 // conn returns the connection of the session identified by target. The kind selects whether target
 // is a connection ID or a user ID.
-func (s *Session) conn(kind Kind, target int64) (network.Conn, error) {
+func (s *session) conn(kind cluster.Session, target int64) (network.Conn, error) {
 	switch kind {
-	case Conn:
+	case cluster.Conn:
 		conn, ok := s.conns[target]
 		if !ok {
 			return nil, errors.ErrNotFoundSession
 		}
 		return conn, nil
-	case User:
+	case cluster.User:
 		conn, ok := s.users[target]
 		if !ok {
 			return nil, errors.ErrNotFoundSession

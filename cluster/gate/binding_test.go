@@ -8,7 +8,6 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/session"
 )
 
 // blockingBindLocator pauses one user's location write after the local binding succeeds.
@@ -76,7 +75,7 @@ func TestGateFailedBindPreservesReplacement(t *testing.T) {
 	if err := <-b; err != nil {
 		t.Fatal(err)
 	}
-	if !g.session.IsBound(2, 100) {
+	if !g.session.isBound(2, 100) {
 		t.Fatal("the old request rolled back the replacement")
 	}
 	g.handleDisconnect(first)
@@ -104,7 +103,7 @@ func TestGateChangeUIDCleansPreviousLocation(t *testing.T) {
 	if gid, _ := f.locator.LocateGate(ctx, 100); gid != "" {
 		t.Fatalf("previous UID still located on gate %q", gid)
 	}
-	if !g.session.IsBound(1, 200) {
+	if !g.session.isBound(1, 200) {
 		t.Fatal("new UID is not bound")
 	}
 	g.handleDisconnect(conn)
@@ -130,7 +129,7 @@ func TestGateChangeUIDStopsOnCleanupFailure(t *testing.T) {
 	if err := p.Bind(ctx, 1, 200); !errors.Is(err, errors.ErrInvalidArgument) {
 		t.Fatalf("cleanup failure returned %v", err)
 	}
-	if !g.session.IsBound(1, 100) || g.session.IsBound(1, 200) {
+	if !g.session.isBound(1, 100) || g.session.isBound(1, 200) {
 		t.Fatal("failed cleanup changed the user's local identity")
 	}
 	f.locator.unbindGateErr = nil
@@ -237,7 +236,7 @@ func TestGateBindConcurrentDisconnect(t *testing.T) {
 	}()
 	// Wait until the local removal has happened while the location write is still blocked.
 	for {
-		if online, _ := g.session.Has(session.Conn, 1); !online {
+		if online, _ := g.session.has(cluster.Conn, 1); !online {
 			break
 		}
 		select {
@@ -285,7 +284,7 @@ func TestGateBindReplacementDoesNotDeadlock(t *testing.T) {
 	old := &disconnectOnCloseConn{securityConn: &securityConn{id: 1}}
 	old.onClose = func() { g.handleDisconnect(old) }
 	g.handleConnect(old)
-	if err := g.session.Bind(1, 100); err != nil {
+	if err := g.session.bind(1, 100); err != nil {
 		t.Fatal(err)
 	}
 	conn := &securityConn{id: 2}
@@ -313,7 +312,7 @@ func TestGateBindDisconnectedBeforeLocationWrite(t *testing.T) {
 	t.Cleanup(g.cancel)
 	old := &disconnectOnCloseConn{securityConn: &securityConn{id: 1}}
 	g.handleConnect(old)
-	if err := g.session.Bind(1, 100); err != nil {
+	if err := g.session.bind(1, 100); err != nil {
 		t.Fatal(err)
 	}
 	conn := &securityConn{id: 2}

@@ -17,7 +17,6 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
 	"github.com/jinzhu/copier"
@@ -330,7 +329,7 @@ func (r *request) UnbindNode(uid ...int64) error {
 func (r *request) Subscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
-			Kind:    session.User,
+			Kind:    cluster.User,
 			Targets: uids,
 			Channel: channel,
 		})
@@ -341,7 +340,7 @@ func (r *request) Subscribe(channel string, uids ...int64) error {
 
 		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Targets: []int64{r.cid},
 			Channel: channel,
 		})
@@ -352,7 +351,7 @@ func (r *request) Subscribe(channel string, uids ...int64) error {
 func (r *request) Unsubscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
-			Kind:    session.User,
+			Kind:    cluster.User,
 			Targets: uids,
 			Channel: channel,
 		})
@@ -363,7 +362,7 @@ func (r *request) Unsubscribe(channel string, uids ...int64) error {
 
 		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Targets: []int64{r.cid},
 			Channel: channel,
 		})
@@ -439,7 +438,7 @@ func (r *request) GetIP() (string, error) {
 
 	return r.node.proxy.GetIP(r.ctx, &cluster.GetIPArgs{
 		GID:    r.gid,
-		Kind:   session.Conn,
+		Kind:   cluster.Conn,
 		Target: r.cid,
 	})
 }
@@ -455,7 +454,7 @@ func (r *request) Reply(message *cluster.Message) error {
 	case r.gid != "": // From a gateway
 		return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Target:  r.cid,
 			Message: message,
 		})
@@ -497,7 +496,7 @@ func (r *request) Disconnect(force ...bool) error {
 
 	return r.node.proxy.Disconnect(r.ctx, &cluster.DisconnectArgs{
 		GID:    r.gid,
-		Kind:   session.Conn,
+		Kind:   cluster.Conn,
 		Target: r.cid,
 		Force:  len(force) > 0 && force[0],
 	})
