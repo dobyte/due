@@ -242,9 +242,9 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 // when the actor has not been started or when enqueuing the message fails.
 func (a *Actor) Next(ctx Context) error {
 	a.rw.RLock()
-	defer a.rw.RUnlock()
 
 	if a.state.Load() != started {
+		a.rw.RUnlock()
 		return errors.ErrActorNotStarted
 	}
 
@@ -256,8 +256,11 @@ func (a *Actor) Next(ctx Context) error {
 		ctx.deleteActor()
 		ctx.decrVersion()
 		ctx.recoverDefer()
+		a.rw.RUnlock()
 		return err
 	}
+
+	a.rw.RUnlock()
 
 	return nil
 }
