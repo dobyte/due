@@ -143,11 +143,6 @@ func (g *Gate) Destroy() {
 
 	g.stopNetworkServer()
 
-	if g.security != nil {
-		g.security.shutdown()
-	}
-	// Stop may skip connections already being closed by the transport. Their callbacks still
-	// need the locator, the node linker and the component context to finish cleanup.
 	g.wg.Wait()
 
 	g.stopLinkerServer()
@@ -173,10 +168,15 @@ func (g *Gate) startNetworkServer() {
 	}
 }
 
-// stopNetworkServer stops the network server, logging an error when stopping fails.
+// stopNetworkServer stops the network server and shuts down the session security state, logging an
+// error when stopping fails.
 func (g *Gate) stopNetworkServer() {
 	if err := g.opts.server.Stop(); err != nil {
 		log.Errorf("network server stop failed: %v", err)
+	}
+
+	if g.security != nil {
+		g.security.shutdown()
 	}
 }
 
