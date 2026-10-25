@@ -28,6 +28,74 @@ type sessionShard struct {
 	_     [32]byte
 }
 
+// load returns the connection stored under id.
+func (s *sessionShard) load(id int64) (network.Conn, bool) {
+	s.rw.RLock()
+	conn, ok := s.conns[id]
+	s.rw.RUnlock()
+	return conn, ok
+}
+
+// has reports whether id exists.
+func (s *sessionShard) has(id int64) bool {
+	s.rw.RLock()
+	_, ok := s.conns[id]
+	s.rw.RUnlock()
+	return ok
+}
+
+// store stores conn under id.
+func (s *sessionShard) store(id int64, conn network.Conn) {
+	s.rw.Lock()
+	s.conns[id] = conn
+	s.rw.Unlock()
+}
+
+// remove deletes id and returns the removed connection.
+func (s *sessionShard) remove(id int64, conn ...network.Conn) (network.Conn, bool) {
+	s.rw.Lock()
+
+	c, ok := s.conns[id]
+	if ok && len(conn) > 0 {
+		ok = c == conn[0]
+	}
+
+	if ok {
+		delete(s.conns, id)
+	}
+
+	s.rw.Unlock()
+
+	return c, ok
+}
+
+// count returns the number of stored connections.
+func (s *sessionShard) count() int {
+	s.rw.RLock()
+	count := len(s.conns)
+	s.rw.RUnlock()
+	return count
+}
+
+// unbind removes uid after unbinding its connection. A zero cid accepts any connection.
+func (s *sessionShard) unbind(uid, cid int64) (network.Conn, bool) {
+	s.rw.Lock()
+	conn, ok := s.conns[uid]
+	if !ok || (cid != 0 && conn.ID() != cid) {
+		s.rw.Unlock()
+		return nil, false
+	}
+
+	if err := conn.Unbind(); err != nil {
+		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
+	}
+
+	delete(s.conns, uid)
+	s.rw.Unlock()
+
+	return conn, true
+}
+
 // session manages the connection and user sessions of a node along with their channel
 // subscriptions.
 //
@@ -62,13 +130,13 @@ func shardIndex(id int64) int {
 	return int(uint64(id) & (defaultSessionShardNum - 1))
 }
 
-// connShard returns the connection shard of the given connection ID.
-func (s *session) connShard(cid int64) *sessionShard {
+// loadConnShard returns the connection shard of the given connection ID.
+func (s *session) loadConnShard(cid int64) *sessionShard {
 	return &s.conns[shardIndex(cid)]
 }
 
-// userShard returns the user shard of the given user ID.
-func (s *session) userShard(uid int64) *sessionShard {
+// loadUserShard returns the user shard of the given user ID.
+func (s *session) loadUserShard(uid int64) *sessionShard {
 	return &s.users[shardIndex(uid)]
 }
 
@@ -108,10 +176,7 @@ func unlockUserShards(first, second *sessionShard) {
 // addConn adds conn to the connection sessions.
 func (s *session) addConn(conn network.Conn) {
 	cid := conn.ID()
-	shard := s.connShard(cid)
-	shard.rw.Lock()
-	shard.conns[cid] = conn
-	shard.rw.Unlock()
+	s.loadConnShard(cid).store(cid, conn)
 }
 
 // remConn removes conn from the connection sessions. It reports whether conn was registered and
@@ -123,27 +188,13 @@ func (s *session) addConn(conn network.Conn) {
 // removal (and its channels are cleaned up here) or observes the removed connection.
 func (s *session) remConn(conn network.Conn) bool {
 	cid := conn.ID()
-	shard := s.connShard(cid)
-
-	shard.rw.Lock()
-
-	if _, ok := shard.conns[cid]; !ok {
-		shard.rw.Unlock()
+	if _, ok := s.loadConnShard(cid).remove(cid); !ok {
 		return false
 	}
 
-	delete(shard.conns, cid)
-
 	if uid := conn.UID(); uid != 0 {
-		user := s.userShard(uid)
-		user.rw.Lock()
-		if c, ok := user.conns[uid]; ok && c == conn {
-			delete(user.conns, uid)
-		}
-		user.rw.Unlock()
+		s.loadUserShard(uid).remove(uid, conn)
 	}
-
-	shard.rw.Unlock()
 
 	s.doClearConnAttrs(conn)
 
@@ -152,42 +203,30 @@ func (s *session) remConn(conn network.Conn) bool {
 
 // has reports whether the session identified by target exists. The kind selects whether target is
 // a connection ID or a user ID. It reports [errors.ErrInvalidSessionKind] for an unknown kind.
-func (s *session) has(kind cluster.Session, target int64) (ok bool, err error) {
+func (s *session) has(kind cluster.Session, target int64) (bool, error) {
 	switch kind {
 	case cluster.Conn:
-		shard := s.connShard(target)
-		shard.rw.RLock()
-		_, ok = shard.conns[target]
-		shard.rw.RUnlock()
+		return s.loadConnShard(target).has(target), nil
 	case cluster.User:
-		shard := s.userShard(target)
-		shard.rw.RLock()
-		_, ok = shard.conns[target]
-		shard.rw.RUnlock()
+		return s.loadUserShard(target).has(target), nil
 	default:
-		err = errors.ErrInvalidSessionKind
+		return false, errors.ErrInvalidSessionKind
 	}
-
-	return
 }
 
 // uid returns the user ID currently attached to cid, or zero if it is unbound.
 func (s *session) uid(cid int64) (int64, error) {
-	shard := s.connShard(cid)
-	shard.rw.RLock()
-	conn, ok := shard.conns[cid]
+	conn, ok := s.loadConnShard(cid).load(cid)
 	if !ok {
-		shard.rw.RUnlock()
 		return 0, errors.ErrNotFoundSession
 	}
-	uid := conn.UID()
-	shard.rw.RUnlock()
-	return uid, nil
+
+	return conn.UID(), nil
 }
 
 // isBound reports whether cid is registered and is the current connection bound to uid.
 func (s *session) isBound(cid, uid int64) bool {
-	connShard := s.connShard(cid)
+	connShard := s.loadConnShard(cid)
 	connShard.rw.RLock()
 	conn, ok := connShard.conns[cid]
 	if !ok || conn.UID() != uid {
@@ -195,7 +234,7 @@ func (s *session) isBound(cid, uid int64) bool {
 		return false
 	}
 
-	userShard := s.userShard(uid)
+	userShard := s.loadUserShard(uid)
 	userShard.rw.RLock()
 	bound := userShard.conns[uid] == conn
 	userShard.rw.RUnlock()
@@ -208,7 +247,7 @@ func (s *session) isBound(cid, uid int64) bool {
 // bind binds the user ID uid to the connection identified by cid. When uid is already bound to
 // another connection, that connection is closed and replaced.
 func (s *session) bind(cid, uid int64) error {
-	connShard := s.connShard(cid)
+	connShard := s.loadConnShard(cid)
 	connShard.rw.Lock()
 
 	conn, ok := connShard.conns[cid]
@@ -231,7 +270,7 @@ func (s *session) bind(cid, uid int64) error {
 	if oldUID != 0 {
 		first, second = s.lockUserShards(oldUID, uid)
 	} else {
-		first = s.userShard(uid)
+		first = s.loadUserShard(uid)
 		first.rw.Lock()
 	}
 
@@ -242,13 +281,13 @@ func (s *session) bind(cid, uid int64) error {
 	}
 
 	if oldUID != 0 {
-		oldShard := s.userShard(oldUID)
+		oldShard := s.loadUserShard(oldUID)
 		if c, ok := oldShard.conns[oldUID]; ok && c == conn {
 			delete(oldShard.conns, oldUID)
 		}
 	}
 
-	newShard := s.userShard(uid)
+	newShard := s.loadUserShard(uid)
 	old = newShard.conns[uid]
 	newShard.conns[uid] = conn
 
@@ -266,11 +305,12 @@ func (s *session) bind(cid, uid int64) error {
 
 // remove unbinds the user ID uid and returns the ID of the connection it was bound to.
 func (s *session) remove(uid int64) (int64, error) {
-	shard := s.userShard(uid)
-	shard.rw.Lock()
-	cid, err := s.doUnbind(shard, uid, 0)
-	shard.rw.Unlock()
-	return cid, err
+	conn, ok := s.loadUserShard(uid).unbind(uid, 0)
+	if !ok {
+		return 0, errors.ErrNotFoundSession
+	}
+
+	return conn.ID(), nil
 }
 
 // unbind unbinds uid only if its current connection is cid. A removed or replaced binding
@@ -279,31 +319,12 @@ func (s *session) unbind(cid, uid int64) error {
 	if cid == 0 {
 		return errors.ErrNotFoundSession
 	}
-	shard := s.userShard(uid)
-	shard.rw.Lock()
-	_, err := s.doUnbind(shard, uid, cid)
-	shard.rw.Unlock()
-	return err
-}
 
-// doUnbind removes a user binding while the caller holds the user shard lock. A zero cid accepts
-// any connection.
-func (s *session) doUnbind(shard *sessionShard, uid, cid int64) (int64, error) {
-	conn, ok := shard.conns[uid]
-	if !ok {
-		return 0, errors.ErrNotFoundSession
-	}
-	if cid != 0 && conn.ID() != cid {
-		return 0, errors.ErrNotFoundSession
+	if _, ok := s.loadUserShard(uid).unbind(uid, cid); !ok {
+		return errors.ErrNotFoundSession
 	}
 
-	if err := conn.Unbind(); err != nil {
-		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
-	}
-
-	delete(shard.conns, uid)
-
-	return conn.ID(), nil
+	return nil
 }
 
 // localIP returns the local IP address of the session identified by target. The kind selects
@@ -507,14 +528,14 @@ func (s *session) subscribe(kind cluster.Session, targets []int64, channel strin
 	for _, target := range targets {
 		switch kind {
 		case cluster.Conn:
-			shard := s.connShard(target)
+			shard := s.loadConnShard(target)
 			shard.rw.Lock()
 			if conn, ok := shard.conns[target]; ok {
 				s.addSubscription(conn, channel)
 			}
 			shard.rw.Unlock()
 		case cluster.User:
-			shard := s.userShard(target)
+			shard := s.loadUserShard(target)
 			shard.rw.Lock()
 			if conn, ok := shard.conns[target]; ok {
 				s.addSubscription(conn, channel)
@@ -543,7 +564,7 @@ func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel str
 	for _, target := range targets {
 		switch kind {
 		case cluster.Conn:
-			shard := s.connShard(target)
+			shard := s.loadConnShard(target)
 			shard.rw.Lock()
 			if conn, ok := shard.conns[target]; ok {
 				if conn.Attr().Del(channel) {
@@ -552,7 +573,7 @@ func (s *session) unsubscribe(kind cluster.Session, targets []int64, channel str
 			}
 			shard.rw.Unlock()
 		case cluster.User:
-			shard := s.userShard(target)
+			shard := s.loadUserShard(target)
 			shard.rw.Lock()
 			if conn, ok := shard.conns[target]; ok {
 				if conn.Attr().Del(channel) {
@@ -635,25 +656,23 @@ func (s *session) doClearConnAttrs(conn network.Conn) {
 
 // stat returns the number of sessions of the given kind, or [errors.ErrInvalidSessionKind] for an
 // unknown kind.
-func (s *session) stat(kind cluster.Session) (total int64, err error) {
+func (s *session) stat(kind cluster.Session) (int64, error) {
 	switch kind {
 	case cluster.Conn:
+		var total int64
 		for i := range s.conns {
-			s.conns[i].rw.RLock()
-			total += int64(len(s.conns[i].conns))
-			s.conns[i].rw.RUnlock()
+			total += int64(s.conns[i].count())
 		}
+		return total, nil
 	case cluster.User:
+		var total int64
 		for i := range s.users {
-			s.users[i].rw.RLock()
-			total += int64(len(s.users[i].conns))
-			s.users[i].rw.RUnlock()
+			total += int64(s.users[i].count())
 		}
+		return total, nil
 	default:
 		return 0, errors.ErrInvalidSessionKind
 	}
-
-	return
 }
 
 // doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
@@ -719,23 +738,18 @@ func (s *session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.
 // conn returns the connection of the session identified by target. The kind selects whether target
 // is a connection ID or a user ID.
 func (s *session) conn(kind cluster.Session, target int64) (network.Conn, error) {
-	var shard *sessionShard
-
 	switch kind {
 	case cluster.Conn:
-		shard = s.connShard(target)
+		if conn, ok := s.loadConnShard(target).load(target); ok {
+			return conn, nil
+		}
 	case cluster.User:
-		shard = s.userShard(target)
+		if conn, ok := s.loadUserShard(target).load(target); ok {
+			return conn, nil
+		}
 	default:
 		return nil, errors.ErrInvalidSessionKind
 	}
 
-	shard.rw.RLock()
-	conn, ok := shard.conns[target]
-	shard.rw.RUnlock()
-	if ok {
-		return conn, nil
-	} else {
-		return nil, errors.ErrNotFoundSession
-	}
+	return nil, errors.ErrNotFoundSession
 }

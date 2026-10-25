@@ -59,8 +59,8 @@ func TestBindAndRemConnConcurrentKeepsUserTableConsistent(t *testing.T) {
 		}()
 		wg.Wait()
 
-		if _, ok := s.connShard(1).conns[1]; !ok {
-			if _, ok := s.userShard(100).conns[100]; ok {
+		if _, ok := s.loadConnShard(1).conns[1]; !ok {
+			if _, ok := s.loadUserShard(100).conns[100]; ok {
 				t.Fatal("removed connection left a user binding")
 			}
 		}
@@ -88,7 +88,7 @@ func TestBindAndUnbindConcurrentKeepsStateConsistent(t *testing.T) {
 		}()
 		wg.Wait()
 
-		if bound, ok := s.userShard(100).conns[100]; ok {
+		if bound, ok := s.loadUserShard(100).conns[100]; ok {
 			if bound != conn || conn.UID() != 100 {
 				t.Fatalf("inconsistent binding: conn = %v, uid = %d", bound, conn.UID())
 			}

@@ -178,7 +178,7 @@ func TestBindExtra(t *testing.T) {
 		if conn.UID() != 100 {
 			t.Errorf("conn uid = %d, want 100", conn.UID())
 		}
-		if s.userShard(100).conns[100] != conn {
+		if s.loadUserShard(100).conns[100] != conn {
 			t.Error("the conn must be registered under the new uid")
 		}
 	})
@@ -189,7 +189,7 @@ func TestBindExtra(t *testing.T) {
 		if err := s.bind(1, 100); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
-		if s.userShard(100).conns[100] != conn {
+		if s.loadUserShard(100).conns[100] != conn {
 			t.Error("the binding must be unchanged")
 		}
 	})
@@ -200,10 +200,10 @@ func TestBindExtra(t *testing.T) {
 		if err := s.bind(1, 200); err != nil {
 			t.Fatalf("Bind() error = %v, want nil", err)
 		}
-		if _, ok := s.userShard(100).conns[100]; ok {
+		if _, ok := s.loadUserShard(100).conns[100]; ok {
 			t.Error("the old uid binding must be dropped")
 		}
-		if s.userShard(200).conns[200] != conn {
+		if s.loadUserShard(200).conns[200] != conn {
 			t.Error("the conn must be registered under the new uid")
 		}
 	})
@@ -222,7 +222,7 @@ func TestBindExtra(t *testing.T) {
 		if old.closes != 1 {
 			t.Errorf("old conn close count = %d, want 1", old.closes)
 		}
-		if s.userShard(100).conns[100] != replacement {
+		if s.loadUserShard(100).conns[100] != replacement {
 			t.Error("the replacement conn must own the uid")
 		}
 	})
@@ -258,13 +258,13 @@ func TestBindExtra(t *testing.T) {
 
 	t.Run("rebind failure keeps the old binding", func(t *testing.T) {
 		s, _ := newSessionWithUser(1, 100)
-		conn := s.connShard(1).conns[1]
+		conn := s.loadConnShard(1).conns[1]
 		conn.(*stubConn).bindErr = errors.New("bind failed")
 
 		if err := s.bind(1, 200); err == nil {
 			t.Error("Bind() must report the underlying bind failure")
 		}
-		if _, ok := s.userShard(100).conns[100]; !ok {
+		if _, ok := s.loadUserShard(100).conns[100]; !ok {
 			t.Error("the old binding must be kept when the rebind fails")
 		}
 	})
@@ -292,7 +292,7 @@ func TestUnbindExtra(t *testing.T) {
 		if conn.UID() != 0 {
 			t.Errorf("conn uid = %d, want 0", conn.UID())
 		}
-		if _, ok := s.userShard(100).conns[100]; ok {
+		if _, ok := s.loadUserShard(100).conns[100]; ok {
 			t.Error("the user binding must be removed")
 		}
 	})
