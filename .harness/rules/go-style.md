@@ -84,6 +84,7 @@
 | [Import 别名](uber-go/style.md#import-aliasing) | 包声明名与导入路径末段不一致时显式设置别名；其他情况避免无必要的别名，名称冲突等情况按原文处理。 |
 | [函数排列](uber-go/style.md#function-grouping-and-ordering) | 按接收者和大致调用顺序组织函数；公开函数靠前，构造函数可放在类型定义之后、接收者其他方法之前，独立辅助函数靠后。 |
 | [减少嵌套](uber-go/style.md#reduce-nesting) | 使用提前返回、`continue` 等方式处理特殊情况，保持正常路径清晰。 |
+| [计数循环](due-conventions.md#due-006) | 按 [DUE-006](due-conventions.md#due-006)执行：从 `0` 开始、步长为 `1` 的计数循环，不需要索引时用 `for range n`，需要索引时用 `for i := range n`，不使用 `for i := 0; i < n; i++`；非单位步长、逆序等场景仍用三段式 `for`。 |
 | [不必要的 else](uber-go/style.md#unnecessary-else) | 前一分支已经返回时，去掉无必要的 `else`。 |
 | [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。 |
 | [未导出全局命名](uber-go/style.md#prefix-unexported-globals-with-_) | 未导出的包级变量和常量使用 `_` 前缀；未导出错误值采用 `err` 前缀，是原文的明确例外。 |
