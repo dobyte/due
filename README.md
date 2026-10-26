@@ -789,7 +789,9 @@ INFO[2024/07/03 14:53:13.995049] main.go:72 [I'm server, and the current time is
 
 ### 13. Stress Test
 
-Updated **2026-10-26** using the [four-framework TCP retest report](https://github.com/dobyte/due-benchmark/blob/master/comparison/reports/2026-10-26/REPORT.md). All 108 cases and 10,800,000 measured requests completed with zero failures. Before testing, both the local `due.Version` constant and the deployed binary were verified as **v2.6.5**. The source worktree was clean at `d56a53eb788837b33d0d0a205b1c9f58fb0103ed`; HEAD had no release tag, so this is a frozen local source snapshot.
+This section contains two different kinds of tests: subsections 1-5 are the four-framework comparison, and subsection 6 is a supplementary benchmark of Due's own TCP cluster path. They use different machines, parameters and purposes, so the results are not comparable.
+
+The four-framework data in subsections 1-5 was updated on **2026-10-26** using the [four-framework TCP retest report](https://github.com/dobyte/due-benchmark/blob/master/comparison/reports/2026-10-26/REPORT.md). All 108 cases and 10,800,000 measured requests completed with zero failures. Before testing, both the local `due.Version` constant and the deployed binary were verified as **v2.6.5**. The source worktree was clean at `d56a53eb788837b33d0d0a205b1c9f58fb0103ed`; HEAD had no release tag, so this is a frozen local source snapshot.
 
 1. Test scenario
 
@@ -852,6 +854,46 @@ The charts cover all payload and connection combinations. Each point is the medi
 ![Gateway and business process RSS](assets/benchmark/server_peak_rss_mib.png)
 
 ![Load generator CPU usage](assets/benchmark/loadgen_cpu_pct.png)
+
+6. Single-framework cluster path benchmark (supplementary)
+
+This benchmark uses a different machine, connection model and concurrency settings from the four-framework comparison above. It is intended only to observe Due's own cluster path, and must not be compared with the four-framework results.
+
+Test scenario: the load generator connects through Gate, the request is routed to Node and the 1 KB payload is echoed back unchanged. The protocol is TCP + JSON, covering gateway I/O, cross-process routing and node dispatch.
+
+Test setup
+
+| Item | Configuration |
+|---|---|
+| Payload | 1 KB |
+| Throughput mode | 50/100/200/500/1000 persistent connections, 32 outstanding requests per connection, 30 s per case, 3 s warm-up |
+| Latency mode | Same connection counts, closed loop with 1 outstanding request per connection, 100,000 requests per case |
+| Rounds | 3 per case |
+| Runtime mode | release |
+
+Test environment
+
+| Item | Configuration |
+|---|---|
+| CPU | WSL2 Ubuntu, 16 logical CPUs |
+| OS | Ubuntu (WSL2), x86_64 |
+| Go | 1.27.3 |
+| Deployment | Single machine loopback; Gate, Node and load generator share the host, no CPU pinning and no `GOMAXPROCS` limit |
+| Version | Due v2.6.5, commit `06836bde` |
+
+Results (1 KB payload, medians of three rounds; the QPS range in parentheses is the minimum and maximum)
+
+| Connections | Throughput QPS (min-max) | Latency P50 (ms) | Latency P99 (ms) |
+|---:|---:|---:|---:|
+| 50 | 474,594 (455,152-493,738) | 0.574 | 1.517 |
+| 100 | 464,367 (459,968-466,201) | 0.716 | 2.081 |
+| 200 | 467,448 (467,150-467,960) | 0.982 | 3.377 |
+| 500 | 430,271 (427,502-434,260) | 2.162 | 7.032 |
+| 1000 | 415,640 (411,050-418,459) | 4.351 | 15.783 |
+
+Node dispatches routes on a single goroutine in this path, which is why throughput at 500/1000 connections is lower than at 200. Enabling Security (Gate and Client) in this environment reduces throughput by 3%-7% and slightly increases P99 latency.
+
+Raw data and reproduction parameters are in the `cluster/tcp` scenario of [due-benchmark](https://github.com/dobyte/due-benchmark).
 
 ### 14. Other Components
 
