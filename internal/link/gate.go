@@ -14,9 +14,7 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -173,9 +171,9 @@ func (l *GateLinker) SetState(ctx context.Context, gid string, state cluster.Sta
 // GetIP returns the client IP for the given session target.
 func (l *GateLinker) GetIP(ctx context.Context, args *GetIPArgs) (string, error) {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectGetIP(ctx, args.GID, args.Kind, args.Target)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectGetIP(ctx, args.Target)
 		} else {
@@ -187,7 +185,7 @@ func (l *GateLinker) GetIP(ctx context.Context, args *GetIPArgs) (string, error)
 }
 
 // doDirectGetIP gets the IP directly from the gate identified by gid.
-func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session.Kind, target int64) (string, error) {
+func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind cluster.Session, target int64) (string, error) {
 	client, err := l.doBuildClient(gid)
 	if err != nil {
 		return "", err
@@ -199,7 +197,7 @@ func (l *GateLinker) doDirectGetIP(ctx context.Context, gid string, kind session
 // doIndirectGetIP locates the user's gate and gets the IP from it.
 func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, error) {
 	v, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
-		if ip, err := client.GetIP(ctx, session.User, uid); err != nil {
+		if ip, err := client.GetIP(ctx, cluster.User, uid); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), ip, err
 		} else {
 			return false, ip, nil
@@ -213,7 +211,7 @@ func (l *GateLinker) doIndirectGetIP(ctx context.Context, uid int64) (string, er
 }
 
 // Stat returns the total number of sessions of the given kind across all gates.
-func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (total int64, err error) {
+func (l *GateLinker) Stat(ctx context.Context, kind cluster.Session) (total int64, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	l.dispatcher.VisitEndpoints(func(_ string, ep *endpoint.Endpoint) bool {
@@ -247,9 +245,9 @@ func (l *GateLinker) Stat(ctx context.Context, kind session.Kind) (total int64, 
 // IsOnline reports whether the session target is online.
 func (l *GateLinker) IsOnline(ctx context.Context, args *IsOnlineArgs) (bool, error) {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectIsOnline(ctx, args)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectIsOnline(ctx, args)
 		} else {
@@ -289,9 +287,9 @@ func (l *GateLinker) doIndirectIsOnline(ctx context.Context, args *IsOnlineArgs)
 // Disconnect disconnects the session target.
 func (l *GateLinker) Disconnect(ctx context.Context, args *DisconnectArgs) error {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectDisconnect(ctx, args)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectDisconnect(ctx, args.Target, args.Force)
 		} else {
@@ -315,7 +313,7 @@ func (l *GateLinker) doDirectDisconnect(ctx context.Context, args *DisconnectArg
 // doIndirectDisconnect locates the user's gate and disconnects the user there.
 func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force bool) error {
 	_, err := l.doRPC(ctx, uid, func(client *gate.Client, index, total int) (bool, any, error) {
-		if err := client.Disconnect(ctx, session.User, uid, force); err != nil {
+		if err := client.Disconnect(ctx, cluster.User, uid, force); err != nil {
 			return errors.Is(err, errors.ErrNotFoundSession), nil, err
 		} else {
 			return false, nil, nil
@@ -327,19 +325,47 @@ func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force 
 
 // Push pushes a message to a single target.
 func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
-	_, err := l.Multicast(ctx, &cluster.MulticastArgs{
-		GID:     args.GID,
-		Kind:    args.Kind,
-		Targets: []int64{args.Target},
-		Message: args.Message,
-		Ack:     args.Ack,
-	})
+	switch args.Kind {
+	case cluster.Conn:
+		return l.doDirectPush(ctx, args.Kind, args.GID, args.Target, args.Disconnect, args.Message, args.Ack)
+	case cluster.User:
+		if args.GID != "" {
+			return l.doDirectPush(ctx, args.Kind, args.GID, args.Target, args.Disconnect, args.Message, args.Ack)
+		}
 
-	return err
+		return l.doIndirectPush(ctx, args.Kind, args.Target, args.Disconnect, args.Message, args.Ack)
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// doDirectPush pushes a message to a target on a known gate.
+func (l *GateLinker) doDirectPush(ctx context.Context, kind cluster.Session, gid string, target int64, disconnect bool, message *Message, ack bool) error {
+	client, err := l.doBuildClient(gid)
+	if err != nil {
+		return err
+	}
+
+	buf, err := l.PackMessage(message, true)
+	if err != nil {
+		return err
+	}
+
+	return client.Push(ctx, kind, target, disconnect, buf, ack)
+}
+
+// doIndirectPush locates the user's gate and pushes the message there.
+func (l *GateLinker) doIndirectPush(ctx context.Context, kind cluster.Session, target int64, disconnect bool, message *Message, ack bool) error {
+	buf, err := l.PackMessage(message, true)
+	if err != nil {
+		return err
+	}
+
+	return l.doPush(ctx, kind, target, disconnect, buf, ack)
 }
 
 // doPush pushes a message to a single target through the gate that owns it.
-func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64, disconnect bool, message buffer.Buffer, ack bool) error {
+func (l *GateLinker) doPush(ctx context.Context, kind cluster.Session, target int64, disconnect bool, message buffer.Buffer, ack bool) error {
 	_, err := l.doRPC(ctx, target, func(client *gate.Client, index, total int) (bool, any, error) {
 		if err := client.Push(ctx, kind, target, disconnect, message, ack); ack {
 			if errors.Is(err, errors.ErrNotFoundSession) {
@@ -368,9 +394,9 @@ func (l *GateLinker) doPush(ctx context.Context, kind session.Kind, target int64
 // Set args.Ack to true to obtain the number of targets the message was pushed to successfully.
 func (l *GateLinker) Multicast(ctx context.Context, args *MulticastArgs) (int64, error) {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectMulticast(ctx, args)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectMulticast(ctx, args)
 		} else {
@@ -455,7 +481,7 @@ func (l *GateLinker) doIndirectMulticast(ctx context.Context, args *MulticastArg
 }
 
 // doMulticast pushes a message to each target concurrently and reports how many succeeded.
-func (l *GateLinker) doMulticast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, message buffer.Buffer, ack bool) (total int64, err error) {
+func (l *GateLinker) doMulticast(ctx context.Context, kind cluster.Session, targets []int64, disconnect bool, message buffer.Buffer, ack bool) (total int64, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for i := range targets {
@@ -532,7 +558,7 @@ func (l *GateLinker) Broadcast(ctx context.Context, args *BroadcastArgs) (int64,
 }
 
 // doBroadcast pushes a broadcast message to the gate at addr.
-func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind session.Kind, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
+func (l *GateLinker) doBroadcast(ctx context.Context, addr string, kind cluster.Session, disconnect bool, message buffer.Buffer, ack bool) (int64, error) {
 	if client, err := l.builder.Build(addr); err != nil {
 		message.Release()
 
@@ -608,9 +634,9 @@ func (l *GateLinker) doPublish(ctx context.Context, addr string, channel string,
 // Subscribe subscribes the targets to a channel.
 func (l *GateLinker) Subscribe(ctx context.Context, args *SubscribeArgs) error {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectSubscribe(ctx, args)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectSubscribe(ctx, args)
 		} else {
@@ -660,9 +686,9 @@ func (l *GateLinker) doIndirectSubscribe(ctx context.Context, args *SubscribeArg
 // Unsubscribe unsubscribes the targets from a channel.
 func (l *GateLinker) Unsubscribe(ctx context.Context, args *UnsubscribeArgs) error {
 	switch args.Kind {
-	case session.Conn:
+	case cluster.Conn:
 		return l.doDirectUnsubscribe(ctx, args)
-	case session.User:
+	case cluster.User:
 		if args.GID == "" {
 			return l.doIndirectUnsubscribe(ctx, args)
 		} else {
@@ -773,34 +799,12 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
 func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
-	buf, err := l.PackBuffer(message.Data, encrypt)
-	if err != nil {
-		return nil, err
-	}
-
-	return packet.PackMessage(message.Route, message.Seq, buf)
+	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt, gate.PushReqHeadroom())
 }
 
 // PackBuffer encodes message, encrypting the encoded bytes when encrypt is true.
 func (l *GateLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
-	if message == nil {
-		return nil, nil
-	}
-
-	if v, ok := message.([]byte); ok {
-		return v, nil
-	}
-
-	data, err := l.opts.Codec.Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-
-	if encrypt && l.opts.Encryptor != nil {
-		return l.opts.Encryptor.Encrypt(data)
-	}
-
-	return data, nil
+	return packBuffer(l.opts.Codec, l.opts.Encryptor, message, encrypt)
 }
 
 // WatchUserLocate watches user locate events and keeps the local source cache in sync.

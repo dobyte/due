@@ -8,13 +8,24 @@ import (
 
 // Context is the route context.
 //
-// It carries the connection and message information used by route handlers.
+// It carries the connection and message information used by route handlers. A Context is valid
+// only during the route handler call; it is recycled after the handler returns and must not be
+// retained.
 type Context struct {
 	ctx   context.Context // context
 	conn  *Conn           // connection
 	route int32           // message route
 	seq   int32           // message sequence number
 	buf   buffer.Buffer   // message data
+}
+
+// reset clears the context for reuse.
+func (c *Context) reset() {
+	c.ctx = nil
+	c.conn = nil
+	c.route = 0
+	c.seq = 0
+	c.buf = nil
 }
 
 // Context returns the context.

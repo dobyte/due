@@ -20,6 +20,16 @@ func (codec) Marshal(v any) ([]byte, error) {
 	return msgpack.Marshal(v)
 }
 
+// Append appends the msgpack encoding of v to dst.
+func (codec) Append(dst []byte, v any) ([]byte, error) {
+	data, err := msgpack.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(dst, data...), nil
+}
+
 // Unmarshal decodes data into v.
 func (codec) Unmarshal(data []byte, v any) error {
 	return msgpack.Unmarshal(data, v)

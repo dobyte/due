@@ -3,12 +3,12 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/utils/xnet"
 )
 
@@ -20,7 +20,7 @@ const (
 // EncodeGetIPReq encodes a get-IP request.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
-func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
+func EncodeGetIPReq(seq uint64, kind cluster.Session, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(getIPReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
@@ -35,14 +35,14 @@ func EncodeGetIPReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyB
 // DecodeGetIPReq decodes a get-IP request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
-func DecodeGetIPReq(buf buffer.Buffer) (kind session.Kind, target int64, err error) {
+func DecodeGetIPReq(buf buffer.Buffer) (kind cluster.Session, target int64, err error) {
 	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	data := buf.Bytes()
-	kind = session.Kind(data[0])
+	kind = cluster.Session(data[0])
 	target = int64(binary.BigEndian.Uint64(data[def.B8:]))
 
 	return

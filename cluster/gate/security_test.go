@@ -139,6 +139,22 @@ func TestSecurityHandshakeTimeout(t *testing.T) {
 	}
 }
 
+func TestSecurityExpiryIgnoresRemovedSession(t *testing.T) {
+	g := NewGate(WithSessionSecurity(&securitySigner{key: []byte("expiry-cid-test")}),
+		WithSessionSecurityHandshakeTimeout(0))
+	conn := &securityConn{id: 1}
+	g.security.wrap(conn)
+	g.security.remove(1)
+	// A timer may retain a pointer after the transport reuses that connection object. Expiry
+	// must discard the removed state before touching the reused object.
+	conn.id = 2
+	g.security.expire(1)
+	g.security.closers.Wait()
+	if conn.closed.Load() {
+		t.Fatal("expiry closed the reused connection")
+	}
+}
+
 // TestSessionSecurity verifies the handshake, the downlink sealing and the uplink rejection.
 func TestSessionSecurity(t *testing.T) {
 	signer := &securitySigner{key: []byte("gate-security-test")}
@@ -209,9 +225,68 @@ func TestSessionSecurity(t *testing.T) {
 
 	injectMessage(t, g, conn, 10, 3, sealed)
 
-	if !conn.closed.Load() {
+	if !waitClosed(conn, time.Second) {
 		t.Fatal("the connection must be closed after a tampered uplink")
 	}
+}
+
+// TestSecurityConfirmedState verifies that only a finished handshake reports the connection as
+// confirmed, which gates the Disconnect event.
+func TestSecurityConfirmedState(t *testing.T) {
+	signer := &securitySigner{key: []byte("gate-security-confirmed-test")}
+
+	g := NewGate(WithSessionSecurity(signer))
+	conn := &securityConn{pushed: make(chan []byte, 2)}
+	g.security.wrap(conn)
+	t.Cleanup(func() { g.security.remove(conn.ID()) })
+
+	if g.security.confirmed(conn.ID()) {
+		t.Fatal("a fresh connection must not be confirmed")
+	}
+
+	client := handshake.NewClient(signer, aesgcm.Suite)
+	hello, err := client.Hello()
+	if err != nil {
+		t.Fatalf("client hello failed: %v", err)
+	}
+
+	injectHandshake(t, g, conn, hello)
+
+	_, finished, err := client.Handle(nextHandshake(t, conn.next(t)))
+	if err != nil {
+		t.Fatalf("client handle failed: %v", err)
+	}
+
+	if g.security.confirmed(conn.ID()) {
+		t.Fatal("the connection must not be confirmed before the handshake finishes")
+	}
+
+	injectHandshake(t, g, conn, finished)
+
+	if !g.security.confirmed(conn.ID()) {
+		t.Fatal("the connection must be confirmed after the handshake finishes")
+	}
+
+	g.security.remove(conn.ID())
+
+	if g.security.confirmed(conn.ID()) {
+		t.Fatal("a removed connection must not be confirmed")
+	}
+}
+
+// waitClosed reports whether the transport has closed the connection within the timeout.
+func waitClosed(conn *securityConn, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		if conn.closed.Load() {
+			return true
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	return conn.closed.Load()
 }
 
 // nextHandshake extracts the payload of the next pushed handshake frame.

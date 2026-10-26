@@ -250,7 +250,7 @@ func TestSessionAcceptsOutOfOrder(t *testing.T) {
 	aad := MakeAAD(ClientToServer, clientSession.Epoch(), 1, 1)
 	sealed := make([][]byte, 0, 70)
 
-	for i := 0; i < 70; i++ {
+	for range 70 {
 		data, err := clientSession.Seal([]byte("payload"), aad)
 		if err != nil {
 			t.Fatalf("seal failed: %v", err)

@@ -3,7 +3,7 @@ module github.com/dobyte/due/transport/rpcx/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.4
+	github.com/dobyte/due/v2 v2.6.5
 	github.com/smallnest/rpcx v1.9.4
 	golang.org/x/sync v0.24.0
 )
@@ -44,7 +44,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.63 // indirect
-	github.com/panjf2000/ants/v2 v2.12.1 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect

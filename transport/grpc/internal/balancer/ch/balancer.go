@@ -203,7 +203,7 @@ func hashKey(key string) uint32 {
 func newConsistentRing(subConns []*hashSubConn) *consistentRing {
 	nodes := make([]ringNode, 0, len(subConns)*virtualNodes)
 	for _, sc := range subConns {
-		for i := 0; i < virtualNodes; i++ {
+		for i := range virtualNodes {
 			key := sc.key + "#" + strconv.Itoa(i)
 			nodes = append(nodes, ringNode{hash: hashKey(key), sc: sc.sc})
 		}

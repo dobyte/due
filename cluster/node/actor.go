@@ -242,9 +242,9 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 // when the actor has not been started or when enqueuing the message fails.
 func (a *Actor) Next(ctx Context) error {
 	a.rw.RLock()
-	defer a.rw.RUnlock()
 
 	if a.state.Load() != started {
+		a.rw.RUnlock()
 		return errors.ErrActorNotStarted
 	}
 
@@ -256,8 +256,11 @@ func (a *Actor) Next(ctx Context) error {
 		ctx.deleteActor()
 		ctx.decrVersion()
 		ctx.recoverDefer()
+		a.rw.RUnlock()
 		return err
 	}
+
+	a.rw.RUnlock()
 
 	return nil
 }
@@ -393,18 +396,18 @@ func (a *Actor) dispatch() {
 				if ctx.Kind() == Event {
 					if v, ok := a.events.Load(ctx.Event()); ok {
 						if handler, ok := v.(EventHandler); ok {
-							xcall.Call(func() { handler(ctx) })
+							safeCallContextHandler(handler, ctx)
 
 							ctx.compareVersionExecDefer(version)
 						}
 					}
 				} else {
 					if handler, ok := a.routes[ctx.Route()]; ok {
-						xcall.Call(func() { handler(ctx) })
+						safeCallContextHandler(handler, ctx)
 
 						ctx.compareVersionExecDefer(version)
 					} else if a.defaultRouteHandler != nil {
-						xcall.Call(func() { a.defaultRouteHandler(ctx) })
+						safeCallContextHandler(a.defaultRouteHandler, ctx)
 
 						ctx.compareVersionExecDefer(version)
 					}

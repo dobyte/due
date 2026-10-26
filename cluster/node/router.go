@@ -6,7 +6,6 @@ import (
 
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 // RouteHandler is a route handler function.
@@ -197,9 +196,8 @@ func (r *Router) clean() {
 // post-route handlers and the middleware chain, then recycles the request object once handling is
 // done.
 func (r *Router) handle(req *request) {
-	r.queue.Done(req == nil)
-
 	if req == nil {
+		r.queue.Done(true)
 		return
 	}
 
@@ -213,7 +211,7 @@ func (r *Router) handle(req *request) {
 	}
 
 	if r.preRouteHandler != nil {
-		xcall.Call(func() { r.preRouteHandler(req) })
+		safeCallContextHandler(r.preRouteHandler, req)
 	}
 
 	if ok {
@@ -228,10 +226,10 @@ func (r *Router) handle(req *request) {
 			r.mwPool.Put(middleware)
 			return
 		} else {
-			xcall.Call(func() { route.handler(req) })
+			safeCallContextHandler(route.handler, req)
 		}
 	} else {
-		xcall.Call(func() { r.defaultRouteHandler(req) })
+		safeCallContextHandler(r.defaultRouteHandler, req)
 	}
 
 	req.compareVersionExecDefer(version)

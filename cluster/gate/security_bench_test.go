@@ -59,7 +59,7 @@ func BenchmarkSecurityPush(b *testing.B) {
 				b.SetBytes(int64(size * recipients))
 				b.ReportAllocs()
 				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
+				for b.Loop() {
 					buf, err := packet.PackMessage(10, 1, data)
 					if err != nil {
 						b.Fatal(err)
@@ -87,7 +87,7 @@ func BenchmarkSecurityReceive(b *testing.B) {
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				sealed, err := sender.SealMessage(sealedBuffer, data, handshake.ClientToServer, 10, 1)
 				if err != nil {
 					b.Fatal(err)

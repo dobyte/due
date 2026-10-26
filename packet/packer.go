@@ -15,6 +15,9 @@ const (
 	handshakeBit           = 1 << 0 // Handshake frame flag
 	heartbeatBit           = 1 << 7 // Heartbeat frame flag
 	messageBufferAlignment = 16     // Alignment of message buffers
+	// readBufferHeadroom is reserved before every frame read from the wire so that the transport
+	// layer can prepend its own header without copying the payload.
+	readBufferHeadroom = 32
 )
 
 // FrameType is the type of a frame read from the wire.
@@ -148,7 +151,7 @@ func (p *defaultPacker) readBuffered(r *bufio.Reader) (FrameType, int64, buffer.
 
 	size -= defaultHeaderBytes
 
-	buf := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
+	buf := buffer.MallocBytesWithHeadroom(readBufferHeadroom, int(defaultSizeBytes+defaultHeaderBytes+size))
 
 	if buf == nil {
 		return FrameData, 0, nil, errors.ErrMessageTooLarge
@@ -226,7 +229,7 @@ func (p *defaultPacker) readPooled(reader io.Reader) (FrameType, int64, buffer.B
 
 	size -= defaultHeaderBytes
 
-	buf2 := buffer.MallocBytes(int(defaultSizeBytes + defaultHeaderBytes + size))
+	buf2 := buffer.MallocBytesWithHeadroom(readBufferHeadroom, int(defaultSizeBytes+defaultHeaderBytes+size))
 
 	if buf2 == nil {
 		buf1.Release()
@@ -245,6 +248,12 @@ func (p *defaultPacker) readPooled(reader io.Reader) (FrameType, int64, buffer.B
 	}
 
 	return frameType(header), 0, buf2, nil
+}
+
+// ReadBufferHeadroom returns the space reserved before every frame read from the wire. A transport
+// header that fits in this space can be prepended in place without copying the payload.
+func ReadBufferHeadroom() int {
+	return readBufferHeadroom
 }
 
 // frameType maps the header byte to the frame type. The heartbeat flag takes precedence.

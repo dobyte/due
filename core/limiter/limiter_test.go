@@ -9,7 +9,7 @@ import (
 func TestLimiter_Allow(t *testing.T) {
 	l := limiter.NewLimiter(10, 1)
 
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		if l.Allow() {
 			fmt.Println("请求允许", i+1)
 		} else {

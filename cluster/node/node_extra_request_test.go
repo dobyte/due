@@ -782,11 +782,21 @@ func TestRequestRelease(t *testing.T) {
 	r.Defer(func() {})
 	r.release()
 
-	if r.message != nil || r.cache != nil || r.chain != nil {
+	if r.message != nil || r.cache != nil {
 		t.Fatal("request should be fully reset")
+	}
+	if r.chain == nil {
+		t.Fatal("chain should be retained for reuse")
 	}
 	if r.ctx != context.Background() {
 		t.Fatal("context should be reset to background")
+	}
+
+	executed := false
+	r.Defer(func() { executed = true })
+	r.chain.FireHead()
+	if !executed {
+		t.Fatal("retained chain should be reusable")
 	}
 }
 
@@ -820,7 +830,7 @@ func TestRequestConcurrentClone(t *testing.T) {
 	r.uid = 1
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

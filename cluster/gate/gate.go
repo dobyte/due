@@ -18,22 +18,25 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
+	taskpool "github.com/dobyte/due/v2/task"
 )
 
 // Gate is the gate server component.
 type Gate struct {
 	component.Base
-	opts     *options
-	ctx      context.Context
-	cancel   context.CancelFunc
-	state    atomic.Int32
-	proxy    *proxy
-	instance *registry.ServiceInstance
-	session  *session.Session
-	linker   *gate.Server
-	security *securityManager
-	wg       *sync.WaitGroup
+	opts         *options
+	ctx          context.Context
+	cancel       context.CancelFunc
+	state        atomic.Int32
+	proxy        *proxy
+	instance     *registry.ServiceInstance
+	session      *session
+	linker       *gate.Server
+	security     *securityManager
+	userBindings bindingLocks
+	connBindings bindingLocks
+	mu           sync.Mutex // serializes connection admission with the transition to Hang or Shut
+	wg           *sync.WaitGroup
 }
 
 // NewGate returns a new gate server component configured by the given options.
@@ -47,7 +50,7 @@ func NewGate(opts ...Option) *Gate {
 	g.opts = o
 	g.ctx, g.cancel = context.WithCancel(o.ctx)
 	g.proxy = newProxy(g)
-	g.session = session.NewSession()
+	g.session = newSession()
 	g.state.Store(int32(cluster.Shut))
 	g.wg = &sync.WaitGroup{}
 
@@ -110,11 +113,14 @@ func (g *Gate) Start() {
 // It switches the state to Hang and refreshes the service instance state, then waits for all
 // online client sessions to exit naturally (graceful shutdown semantics).
 func (g *Gate) Close() {
+	g.mu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Work), int32(cluster.Hang)) {
 		if !g.state.CompareAndSwap(int32(cluster.Busy), int32(cluster.Hang)) {
+			g.mu.Unlock()
 			return
 		}
 	}
+	g.mu.Unlock()
 
 	g.refreshServiceInstance()
 
@@ -126,13 +132,18 @@ func (g *Gate) Close() {
 // It deregisters the service instance, stops the network server and the link server in turn, and
 // cancels the component context.
 func (g *Gate) Destroy() {
+	g.mu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+		g.mu.Unlock()
 		return
 	}
+	g.mu.Unlock()
 
 	g.deregisterServiceInstance()
 
 	g.stopNetworkServer()
+
+	g.wg.Wait()
 
 	g.stopLinkerServer()
 
@@ -157,10 +168,15 @@ func (g *Gate) startNetworkServer() {
 	}
 }
 
-// stopNetworkServer stops the network server, logging an error when stopping fails.
+// stopNetworkServer stops the network server and shuts down the session security state, logging an
+// error when stopping fails.
 func (g *Gate) stopNetworkServer() {
 	if err := g.opts.server.Stop(); err != nil {
 		log.Errorf("network server stop failed: %v", err)
+	}
+
+	if g.security != nil {
+		g.security.shutdown()
 	}
 }
 
@@ -169,16 +185,20 @@ func (g *Gate) stopNetworkServer() {
 // It accepts the connection and registers the session only when the server is in the Work or Busy
 // state; in any other state (Hang or Shut) it closes the connection and rejects it.
 func (g *Gate) handleConnect(conn network.Conn) {
+	g.mu.Lock()
 	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
 
 		if g.security != nil {
-			g.session.AddConn(g.security.wrap(conn))
+			g.session.addConn(g.security.wrap(conn))
+			g.mu.Unlock()
 		} else {
-			g.session.AddConn(conn)
+			g.session.addConn(conn)
+			g.mu.Unlock()
 			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
 		}
 	} else {
+		g.mu.Unlock()
 		if err := conn.Close(); err != nil {
 			log.Warnf("close conn failed: %v", err)
 		}
@@ -187,33 +207,56 @@ func (g *Gate) handleConnect(conn network.Conn) {
 
 // handleDisconnect handles a closed connection.
 //
-// For a connection whose session is registered, it unbinds the user, triggers the Disconnect event
-// and completes the WaitGroup counter; a connection that is not registered (rejected during the
-// closing phase) is ignored. RemConn atomically performs the existence check and removal, so when
-// concurrent duplicate disconnects happen only the first call takes effect, keeping the WaitGroup's
-// Add/Done balanced.
+// For a connection whose session is registered, it removes the local session synchronously and
+// queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
+// WaitGroup counter once that work finishes; a connection that is not registered (rejected during
+// the closing phase) is ignored. When session security is enabled, the Disconnect event is
+// triggered only for a connection whose handshake was confirmed, so that it stays paired with the
+// Connect event, which is deferred until the handshake is confirmed. RemConn atomically performs
+// the existence check and removal, so when concurrent duplicate disconnects happen only the first
+// call takes effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	cid := conn.ID()
 
+	confirmed := true
+
 	if g.security != nil {
 		conn = g.security.unwrap(conn)
+		confirmed = g.security.confirmed(cid)
 		g.security.remove(cid)
 	}
 
-	if g.session.RemConn(conn) {
+	if g.session.remConn(conn) {
 		uid := conn.UID()
 
-		if uid != 0 {
-			ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
-			_ = g.proxy.unbindGate(ctx, cid, uid)
-			cancel()
-		}
+		// The local session is gone, so the remaining work no longer needs the connection. Queue
+		// it so a slow locator does not hold the close callback, and release the wait count after
+		// the cleanup and the teardown notification have finished.
+		taskpool.Add(func() {
+			var userLock *bindingLock
 
-		g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+			if uid != 0 {
+				// Remove the local connection before waiting for a pending location write. Bind
+				// either observes the removal before writing, or this cleanup follows its write.
+				userLock = g.userBindings.lock(uid)
+				if online, _ := g.session.has(cluster.User, uid); !online {
+					ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+					_ = g.proxy.cleanupGate(ctx, cid, uid)
+					cancel()
+				}
+			}
 
-		g.wg.Done()
+			if confirmed {
+				g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
+			}
+
+			g.wg.Done()
+
+			if userLock != nil {
+				userLock.unlock()
+			}
+		})
 	}
-
 }
 
 // handleReceive handles a received message and delivers the client message to the matching
@@ -223,7 +266,7 @@ func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
 		return
 	}
 
-	g.proxy.deliver(g.ctx, conn, buf)
+	g.proxy.deliver(g.ctx, conn, 0, 0, buf)
 }
 
 // startLinkerServer starts the transport server.

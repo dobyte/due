@@ -3,11 +3,11 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 // EncodeIsOnlineReq encodes an is-online request.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
-func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) *buffer.NocopyBuffer {
+func EncodeIsOnlineReq(seq uint64, kind cluster.Session, target int64) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(isOnlineReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(isOnlineReqBytes-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
@@ -33,14 +33,14 @@ func EncodeIsOnlineReq(seq uint64, kind session.Kind, target int64) *buffer.Noco
 // DecodeIsOnlineReq decodes an is-online request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
-func DecodeIsOnlineReq(buf buffer.Buffer) (kind session.Kind, target int64, err error) {
+func DecodeIsOnlineReq(buf buffer.Buffer) (kind cluster.Session, target int64, err error) {
 	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
 	data := buf.Bytes()
-	kind = session.Kind(data[0])
+	kind = cluster.Session(data[0])
 	target = int64(binary.BigEndian.Uint64(data[def.B8:]))
 
 	return

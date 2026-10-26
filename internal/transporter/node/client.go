@@ -29,6 +29,10 @@ func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int6
 
 // Deliver delivers a message to the node.
 func (c *Client) Deliver(ctx context.Context, cid, uid int64, buf buffer.Buffer) error {
+	if payload, ok := buf.(*buffer.Bytes); ok {
+		return c.cli.Push(ctx, protocol.EncodeDeliverReqBuffer(0, cid, uid, payload), cid)
+	}
+
 	return c.cli.Push(ctx, protocol.EncodeDeliverReq(0, cid, uid, buf), cid)
 }
 

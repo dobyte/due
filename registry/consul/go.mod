@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/consul/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.4
+	github.com/dobyte/due/v2 v2.6.5
 	github.com/hashicorp/consul/api v1.34.4
 )
 
@@ -32,7 +32,6 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/panjf2000/ants/v2 v2.12.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect

@@ -92,3 +92,45 @@ func TestBytes_Static(t *testing.T) {
 		t.Errorf("len(Bytes()) after Release = %d, want %d", got, want)
 	}
 }
+
+// TestBytes_Resize verifies that Resize can grow the readable length within the buffer capacity
+// while keeping the reserved headroom available for prepending.
+func TestBytes_Resize(t *testing.T) {
+	b := buffer.MallocBytesWithHeadroom(16, 8)
+	if b == nil {
+		t.Fatal("MallocBytesWithHeadroom returned nil")
+	}
+	defer b.Release()
+
+	if got := b.Len(); got != 8 {
+		t.Fatalf("Len() = %d, want 8", got)
+	}
+
+	if !b.Resize(4) {
+		t.Fatal("Resize(4) = false, want true")
+	}
+	if got := b.Len(); got != 4 {
+		t.Errorf("Len() after Resize(4) = %d, want 4", got)
+	}
+
+	if !b.Resize(16) {
+		t.Fatal("Resize(16) = false, want true")
+	}
+	if got := b.Len(); got != 16 {
+		t.Errorf("Len() after Resize(16) = %d, want 16", got)
+	}
+
+	if b.Resize(17) {
+		t.Error("Resize beyond capacity = true, want false")
+	}
+	if b.Resize(-1) {
+		t.Error("Resize(-1) = true, want false")
+	}
+
+	if header := b.Prepend(4); len(header) != 4 {
+		t.Fatalf("Prepend(4) returned %d bytes, want 4", len(header))
+	}
+	if got, want := b.Len(), 20; got != want {
+		t.Errorf("Len() after Prepend = %d, want %d", got, want)
+	}
+}

@@ -26,3 +26,13 @@ func marshal(v any) ([]byte, error) {
 func unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v, options...)
 }
+
+// appendEncode appends the JSON encoding of v to dst with encoding/json/v2.
+func appendEncode(dst []byte, v any) ([]byte, error) {
+	data, err := json.Marshal(v, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(dst, data...), nil
+}

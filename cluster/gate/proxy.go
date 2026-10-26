@@ -52,9 +52,19 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	taskpool.Add(func() { p.trigger(ctx, cluster.Reconnect, cid, uid) })
+	taskpool.Add(func() { p.reconnect(ctx, cid, uid) })
 
 	return nil
+}
+
+// reconnect drops a queued event if the connection was removed before it could be published.
+// Sharing the user lock with disconnect keeps a valid Reconnect ahead of its Disconnect.
+func (p *proxy) reconnect(ctx context.Context, cid, uid int64) {
+	userLock := p.gate.userBindings.lock(uid)
+	if p.gate.session.isBound(cid, uid) {
+		p.trigger(ctx, cluster.Reconnect, cid, uid)
+	}
+	userLock.unlock()
 }
 
 // unbindGate unbinds the user from the gate.
@@ -62,7 +72,11 @@ func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 	if p.gate.isShut() {
 		return errors.ErrGateShutdown
 	}
+	return p.cleanupGate(ctx, cid, uid)
+}
 
+// cleanupGate is also used by disconnect callbacks while Destroy rejects new business requests.
+func (p *proxy) cleanupGate(ctx context.Context, cid, uid int64) error {
 	if err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id); err != nil {
 		if mode.IsDebugMode() {
 			log.Debugf("user unbind failed, gid: %s, cid: %d, uid: %d, err: %v", p.gate.opts.id, cid, uid, err)
@@ -76,9 +90,15 @@ func (p *proxy) unbindGate(ctx context.Context, cid, uid int64) error {
 
 // trigger triggers an event.
 //
-// It delivers connect, disconnect and reconnect events to the matching business node.
+// It delivers connect, disconnect and reconnect events to the matching business node. No event is
+// delivered once the context is canceled. A disconnect event is still delivered while the gate is
+// shutting down, so teardown notifications are not lost during Destroy.
 func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64) {
-	if p.gate.isShut() {
+	if ctx.Err() != nil {
+		return
+	}
+
+	if event != cluster.Disconnect && p.gate.isShut() {
 		return
 	}
 
@@ -102,24 +122,27 @@ func (p *proxy) trigger(ctx context.Context, event cluster.Event, cid, uid int64
 
 // deliver delivers a message.
 //
-// It unpacks the client message and delivers it to the route handler of the matching business
-// node.
-func (p *proxy) deliver(ctx context.Context, conn network.Conn, buf buffer.Buffer) {
+// When route is 0 the message header is parsed from buf; otherwise route and seq must already
+// describe buf, which lets a message that was unpacked and repacked on its way skip a second parse.
+func (p *proxy) deliver(ctx context.Context, conn network.Conn, route, seq int32, buf buffer.Buffer) {
 	if p.gate.isShut() {
 		buf.Release()
 		return
 	}
 
-	route, seq, err := packet.ExtractRouteSeq(buf)
-	if err != nil {
-		buf.Release()
-		log.Errorf("unpack message failed: %v", err)
-		return
+	var err error
+
+	if route == 0 {
+		if route, seq, err = packet.ExtractRouteSeq(buf); err != nil {
+			buf.Release()
+			log.Errorf("unpack message failed: %v", err)
+			return
+		}
 	}
 
 	cid, uid := conn.ID(), conn.UID()
 
-	if err = p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
+	if err := p.nodeLinker.Deliver(ctx, &link.DeliverArgs{
 		CID:    cid,
 		UID:    uid,
 		Route:  route,

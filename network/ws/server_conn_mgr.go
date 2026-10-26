@@ -32,7 +32,7 @@ func newConnMgr(server *server) *serverConnMgr {
 	cm.connPool = sync.Pool{New: func() any { return &serverConn{attr: &attr{}, connMgr: cm} }}
 	cm.partitions = make([]*partition, runtime.NumCPU()*2)
 
-	for i := 0; i < len(cm.partitions); i++ {
+	for i := range len(cm.partitions) {
 		cm.partitions[i] = &partition{connections: make(map[*websocket.Conn]*serverConn)}
 	}
 

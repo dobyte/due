@@ -77,6 +77,16 @@ func (b *Bytes) Truncate(size int) bool {
 	return true
 }
 
+// Resize sets the readable length to size and reports false when size is out of range. The reserved
+// headroom is kept intact so that a message header can still be prepended.
+func (b *Bytes) Resize(size int) bool {
+	if size < 0 || b.lower+size > len(b.buf) {
+		return false
+	}
+	b.upper = b.lower + size
+	return true
+}
+
 // Nodes returns the number of nodes.
 func (b *Bytes) Nodes() int {
 	return 1

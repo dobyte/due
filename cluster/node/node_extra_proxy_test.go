@@ -9,7 +9,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	"github.com/petermattis/goid"
 )
 
@@ -95,7 +94,7 @@ func TestProxyShutPaths(t *testing.T) {
 		}
 	})
 	t.Run("Stat", func(t *testing.T) {
-		if _, err := p.Stat(ctx, session.Conn); !errors.Is(err, errors.ErrNodeShutdown) {
+		if _, err := p.Stat(ctx, cluster.Conn); !errors.Is(err, errors.ErrNodeShutdown) {
 			t.Fatalf("expect ErrNodeShutdown, got %v", err)
 		}
 	})
@@ -256,10 +255,10 @@ func TestProxyWorkingPaths(t *testing.T) {
 	if err := p.BindGate(ctx, "", 1, 2); err == nil {
 		t.Fatal("expect an error for a missing gate id")
 	}
-	if _, err := p.GetIP(ctx, &cluster.GetIPArgs{Kind: session.User, Target: 100}); err == nil {
+	if _, err := p.GetIP(ctx, &cluster.GetIPArgs{Kind: cluster.User, Target: 100}); err == nil {
 		t.Fatal("expect an error for a missing gate endpoint")
 	}
-	if _, err := p.Stat(ctx, session.Conn); err != nil {
+	if _, err := p.Stat(ctx, cluster.Conn); err != nil {
 		t.Fatalf("stat without endpoints should succeed, got %v", err)
 	}
 	if n, err := p.Broadcast(ctx, &cluster.BroadcastArgs{}); err != nil || n != 0 {
@@ -284,9 +283,10 @@ func TestProxyPackMessage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pack message failed: %v", err)
 		}
-		if len(buf) == 0 {
-			t.Fatal("expect non-empty bytes")
+		if buf == nil || buf.Len() == 0 {
+			t.Fatal("expect a non-empty buffer")
 		}
+		buf.Release()
 	})
 
 	t.Run("pack message error", func(t *testing.T) {

@@ -1,6 +1,8 @@
 package chains
 
 import (
+	"sync"
+
 	"github.com/dobyte/due/v2/utils/xcall"
 )
 
@@ -16,6 +18,11 @@ type node struct {
 	fn   func()
 }
 
+// nodePool recycles the link nodes allocated by a chain.
+var nodePool = sync.Pool{
+	New: func() any { return &node{} },
+}
+
 func NewChain() *Chain {
 	return &Chain{}
 }
@@ -23,10 +30,19 @@ func NewChain() *Chain {
 // AddToHead adds fn to the head of the chain.
 func (c *Chain) AddToHead(fn func()) {
 	if c.head == nil || c.canceled {
-		c.head = &node{fn: fn}
-		c.tail = c.head
+		c.releaseNodes()
+
+		head := nodePool.Get().(*node)
+		head.fn = fn
+		head.prev = nil
+		head.next = nil
+		c.head = head
+		c.tail = head
 	} else {
-		head := &node{fn: fn, next: c.head}
+		head := nodePool.Get().(*node)
+		head.fn = fn
+		head.prev = nil
+		head.next = c.head
 		c.head.prev = head
 		c.head = head
 	}
@@ -35,10 +51,19 @@ func (c *Chain) AddToHead(fn func()) {
 // AddToTail adds fn to the tail of the chain.
 func (c *Chain) AddToTail(fn func()) {
 	if c.tail == nil || c.canceled {
-		c.tail = &node{fn: fn}
-		c.head = c.tail
+		c.releaseNodes()
+
+		tail := nodePool.Get().(*node)
+		tail.fn = fn
+		tail.prev = nil
+		tail.next = nil
+		c.tail = tail
+		c.head = tail
 	} else {
-		tail := &node{fn: fn, prev: c.tail}
+		tail := nodePool.Get().(*node)
+		tail.fn = fn
+		tail.prev = c.tail
+		tail.next = nil
 		c.tail.next = tail
 		c.tail = tail
 	}
@@ -50,12 +75,20 @@ func (c *Chain) FireHead() {
 		return
 	}
 
-	for head := c.head; head != nil; {
-		xcall.Call(head.fn)
+	// Detach the chain first so that a callback releasing or cancelling the chain cannot recycle
+	// a node that is still pending in this loop.
+	head := c.head
+	c.head = nil
+	c.tail = nil
+
+	for head != nil {
 		next := head.next
+		fn := head.fn
 		head.prev = nil
 		head.next = nil
 		head.fn = nil
+		nodePool.Put(head)
+		xcall.Call(fn)
 		head = next
 	}
 
@@ -70,12 +103,20 @@ func (c *Chain) FireTail() {
 		return
 	}
 
-	for tail := c.tail; tail != nil; {
-		xcall.Call(tail.fn)
+	// Detach the chain first so that a callback releasing or cancelling the chain cannot recycle
+	// a node that is still pending in this loop.
+	tail := c.tail
+	c.head = nil
+	c.tail = nil
+
+	for tail != nil {
 		prev := tail.prev
+		fn := tail.fn
 		tail.prev = nil
 		tail.next = nil
 		tail.fn = nil
+		nodePool.Put(tail)
+		xcall.Call(fn)
 		tail = prev
 	}
 
@@ -96,7 +137,20 @@ func (c *Chain) Recover() {
 
 // Release releases the chain.
 func (c *Chain) Release() {
+	c.releaseNodes()
 	c.head = nil
 	c.tail = nil
 	c.canceled = false
+}
+
+// releaseNodes returns every link node to the pool without touching the chain state.
+func (c *Chain) releaseNodes() {
+	for head := c.head; head != nil; {
+		next := head.next
+		head.prev = nil
+		head.next = nil
+		head.fn = nil
+		nodePool.Put(head)
+		head = next
+	}
 }

@@ -1,9 +1,10 @@
-package session
+package gate
 
 import (
 	"net"
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/network"
 )
@@ -50,60 +51,60 @@ func (a *mockAttr) Visit(fn func(key, value any) bool) {
 }
 
 func TestRemConnRegistered(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
-	if !s.RemConn(conn) {
+	if !s.remConn(conn) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
-	if len(s.conns) != 0 {
-		t.Fatalf("conns should be empty, got %d", len(s.conns))
+	if n, _ := s.stat(cluster.Conn); n != 0 {
+		t.Fatalf("conns should be empty, got %d", n)
 	}
 
 	// A repeated removal must return false so that the caller does not run its disconnect cleanup
 	// logic twice.
-	if s.RemConn(conn) {
+	if s.remConn(conn) {
 		t.Fatal("RemConn should return false for an already removed conn")
 	}
 }
 
 func TestRemConnUnregistered(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 
-	if s.RemConn(newMockConn(404)) {
+	if s.remConn(newMockConn(404)) {
 		t.Fatal("RemConn should return false for an unregistered conn")
 	}
 }
 
 func TestRemConnClearsUserAndChannels(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
-	if err := s.Bind(1, 100); err != nil {
+	if err := s.bind(1, 100); err != nil {
 		t.Fatalf("Bind failed: %v", err)
 	}
 
-	if err := s.Subscribe(Conn, []int64{1}, "chat"); err != nil {
+	if err := s.subscribe(cluster.Conn, []int64{1}, "chat"); err != nil {
 		t.Fatalf("Subscribe failed: %v", err)
 	}
 
-	if !s.RemConn(conn) {
+	if !s.remConn(conn) {
 		t.Fatal("RemConn should return true for a registered conn")
 	}
 
-	if len(s.conns) != 0 {
-		t.Fatalf("conns should be empty, got %d", len(s.conns))
+	if n, _ := s.stat(cluster.Conn); n != 0 {
+		t.Fatalf("conns should be empty, got %d", n)
 	}
-	if len(s.users) != 0 {
-		t.Fatalf("users should be empty, got %d", len(s.users))
+	if n, _ := s.stat(cluster.User); n != 0 {
+		t.Fatalf("users should be empty, got %d", n)
 	}
-	if len(s.channels) != 0 {
-		t.Fatalf("channels should be empty, got %d", len(s.channels))
+	if channelCount(s) != 0 {
+		t.Fatalf("channels should be empty, got %d", channelCount(s))
 	}
 	if _, ok := conn.attr.Get("chat"); ok {
 		t.Fatal("conn attrs should be cleared")
@@ -113,22 +114,22 @@ func TestRemConnClearsUserAndChannels(t *testing.T) {
 // TestRemConnConcurrent verifies that concurrent removals of the same connection allow exactly one
 // call to report true.
 func TestRemConnConcurrent(t *testing.T) {
-	s := NewSession()
+	s := newSession()
 	conn := newMockConn(1)
 
-	s.AddConn(conn)
+	s.addConn(conn)
 
 	const goroutines = 32
 	results := make(chan bool, goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
-			results <- s.RemConn(conn)
+			results <- s.remConn(conn)
 		}()
 	}
 
 	removed := 0
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		if <-results {
 			removed++
 		}
@@ -137,4 +138,29 @@ func TestRemConnConcurrent(t *testing.T) {
 	if removed != 1 {
 		t.Fatalf("expect exactly one successful removal, got %d", removed)
 	}
+}
+
+// channelCount returns the number of channels in the session table.
+func channelCount(s *session) int {
+	total := 0
+	for i := range s.channels {
+		s.channels[i].rw.RLock()
+		total += len(s.channels[i].channels)
+		s.channels[i].rw.RUnlock()
+	}
+	return total
+}
+
+// channelSubscriberCount returns the number of subscribers of channel.
+func channelSubscriberCount(s *session, channel string) int {
+	subscribers := s.loadChannel(channel)
+	if subscribers == nil {
+		return 0
+	}
+
+	subscribers.mu.Lock()
+	count := len(subscribers.members)
+	subscribers.mu.Unlock()
+
+	return count
 }

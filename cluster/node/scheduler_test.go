@@ -75,7 +75,7 @@ func TestSchedulerUnbindAllActor(t *testing.T) {
 	act := registerTestActor(s, "room", "1")
 
 	const uids = 1000
-	for i := 0; i < uids; i++ {
+	for i := range uids {
 		if err := s.bindActor(int64(i+1), "room", "1"); err != nil {
 			t.Fatalf("bindActor failed: %v", err)
 		}
@@ -83,7 +83,7 @@ func TestSchedulerUnbindAllActor(t *testing.T) {
 
 	s.unbindAllActor(act)
 
-	for i := 0; i < uids; i++ {
+	for i := range uids {
 		if _, ok := s.loadActor(int64(i+1), "room"); ok {
 			t.Fatalf("uid %d should be unbound", i+1)
 		}
@@ -103,12 +103,12 @@ func TestSchedulerConcurrentBindUnbind(t *testing.T) {
 	registerTestActor(s, "room", "1")
 
 	var wg sync.WaitGroup
-	for g := 0; g < 8; g++ {
+	for g := range 8 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
 			base := int64(g*10000) + 1
-			for i := 0; i < 5000; i++ {
+			for i := range 5000 {
 				uid := base + int64(i)
 				if err := s.bindActor(uid, "room", "1"); err != nil {
 					t.Errorf("bindActor failed: %v", err)
@@ -131,7 +131,7 @@ func TestSchedulerConcurrentBindUnbind(t *testing.T) {
 // TestSchedulerBindActorRaceDestroy binds concurrently with destroy: after destroy completes, no
 // binding pointing to a destroyed actor may remain in the scheduler.
 func TestSchedulerBindActorRaceDestroy(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		s := newTestScheduler()
 		act := registerTestActor(s, "room", "1")
 
@@ -164,7 +164,7 @@ func BenchmarkSchedulerLoadActor(b *testing.B) {
 	registerTestActor(s, "room", "1")
 
 	const uids = 100000
-	for i := 0; i < uids; i++ {
+	for i := range uids {
 		if err := s.bindActor(int64(i)+1, "room", "1"); err != nil {
 			b.Fatalf("bindActor failed: %v", err)
 		}

@@ -144,7 +144,7 @@ func TestServerDeliverOrdering(t *testing.T) {
 	}
 	defer cli.Close()
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		if err = cli.Push(context.Background(), protocol.EncodeDeliverReq(0, int64(i), 0, buffer.NewBytes(nil)), int64(i)); err != nil {
 			t.Fatalf("push failed: %v", err)
 		}
@@ -167,7 +167,7 @@ func TestServerDeliverOrdering(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		if cids[i] != int64(i) {
 			t.Fatalf("message out of order at %d: expect %d, got %d", i, i, cids[i])
 		}

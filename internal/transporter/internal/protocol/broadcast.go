@@ -3,12 +3,12 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // EncodeBroadcastReq encodes a broadcast request.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + disconnect + <message packet>}
-func EncodeBroadcastReq(seq uint64, kind session.Kind, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
+func EncodeBroadcastReq(seq uint64, kind cluster.Session, disconnect bool, message buffer.Buffer) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(broadcastReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(broadcastReqBytes-def.SizeBytes+message.Len()))
 	writer.WriteUint8s(def.DataBit)
@@ -34,13 +34,13 @@ func EncodeBroadcastReq(seq uint64, kind session.Kind, disconnect bool, message 
 // DecodeBroadcastReq decodes a broadcast request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + disconnect + <message packet>}
-func DecodeBroadcastReq(req *buffer.Bytes) (session.Kind, bool, *buffer.Bytes, error) {
+func DecodeBroadcastReq(req *buffer.Bytes) (cluster.Session, bool, *buffer.Bytes, error) {
 	if req.Len() < def.B8+def.B8 {
 		return 0, false, nil, errors.ErrInvalidMessage
 	}
 
 	data := req.Bytes()
-	kind := session.Kind(data[0])
+	kind := cluster.Session(data[0])
 	disconnect := data[def.B8] == 1
 
 	req.Slide(def.B8 + def.B8)

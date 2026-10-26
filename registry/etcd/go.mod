@@ -3,7 +3,7 @@ module github.com/dobyte/due/registry/etcd/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.4
+	github.com/dobyte/due/v2 v2.6.5
 	go.etcd.io/etcd/api/v3 v3.7.1
 	go.etcd.io/etcd/client/v3 v3.7.1
 )
@@ -22,7 +22,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
-	github.com/panjf2000/ants/v2 v2.12.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.7.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

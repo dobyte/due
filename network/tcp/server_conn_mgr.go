@@ -44,7 +44,7 @@ func newServerConnMgr(server *server) *serverConnMgr {
 	}}
 	cm.partitions = make([]*partition, runtime.NumCPU()*2)
 
-	for i := 0; i < len(cm.partitions); i++ {
+	for i := range len(cm.partitions) {
 		cm.partitions[i] = &partition{connections: make(map[net.Conn]*serverConn)}
 	}
 

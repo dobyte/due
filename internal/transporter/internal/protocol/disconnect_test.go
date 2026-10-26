@@ -3,21 +3,21 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestEncodeDisconnectReq(t *testing.T) {
-	buffer := protocol.EncodeDisconnectReq(1, session.User, 3, true)
+	buffer := protocol.EncodeDisconnectReq(1, cluster.User, 3, true)
 
 	t.Log(buffer.Bytes())
 }
 
 func TestDecodeDisconnectReq(t *testing.T) {
-	req := protocol.EncodeDisconnectReq(1, session.User, 3, false)
+	req := protocol.EncodeDisconnectReq(1, cluster.User, 3, false)
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

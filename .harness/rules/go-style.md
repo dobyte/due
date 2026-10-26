@@ -84,6 +84,7 @@
 | [Import 别名](uber-go/style.md#import-aliasing) | 包声明名与导入路径末段不一致时显式设置别名；其他情况避免无必要的别名，名称冲突等情况按原文处理。 |
 | [函数排列](uber-go/style.md#function-grouping-and-ordering) | 按接收者和大致调用顺序组织函数；公开函数靠前，构造函数可放在类型定义之后、接收者其他方法之前，独立辅助函数靠后。 |
 | [减少嵌套](uber-go/style.md#reduce-nesting) | 使用提前返回、`continue` 等方式处理特殊情况，保持正常路径清晰。 |
+| [计数循环](due-conventions.md#due-006) | 按 [DUE-006](due-conventions.md#due-006)执行：从 `0` 开始、步长为 `1` 的计数循环，不需要索引时用 `for range n`，需要索引时用 `for i := range n`，不使用 `for i := 0; i < n; i++`；非单位步长、逆序等场景仍用三段式 `for`。 |
 | [不必要的 else](uber-go/style.md#unnecessary-else) | 前一分支已经返回时，去掉无必要的 `else`。 |
 | [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。 |
 | [未导出全局命名](uber-go/style.md#prefix-unexported-globals-with-_) | 未导出的包级变量和常量使用 `_` 前缀；未导出错误值采用 `err` 前缀，是原文的明确例外。 |
@@ -110,6 +111,7 @@
 | [表驱动测试](uber-go/style.md#test-tables) | 相同逻辑的输入输出变化使用表驱动测试，采用清晰的用例名和 `give`、`want` 等命名；不同的测试行为应保持独立。 |
 | [测试表复杂度](uber-go/style.md#avoid-unnecessary-complexity-in-table-tests) | 避免用大量布尔标志和条件分支拼成复杂测试表；简单成功与失败分支按原文允许。 |
 | [并行测试](uber-go/style.md#parallel-tests) | 确保并行子测试捕获正确的用例值，并隔离共享状态。原文含循环变量重绑定说明；应用时核对各模块的 Go 版本及循环语义，避免机械添加已不需要的写法。 |
+| [基准测试循环](uber-go/style.md#benchmarks) | 按 [DUE-005](due-conventions.md#due-005)执行：不需要索引时用 `for b.Loop()`，需要索引时用 `for i := range b.N`，不使用 `for i := 0; i < b.N; i++`；其余计时控制等要求仍按原文。 |
 | [Functional Options](uber-go/style.md#functional-options) | 面向预期扩展的公共 API、构造函数及可选参数使用此模式，尤其是已有 3 个或更多参数时。上游建议带未导出 `apply` 方法的 `Option` 接口实现，没有将闭包实现一律禁止。 |
 
 ## 三、Harness 执行流程

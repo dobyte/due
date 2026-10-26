@@ -14,6 +14,7 @@ import (
 	"github.com/dobyte/due/v2/core/security/handshake"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
+	"github.com/dobyte/due/v2/mode"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xcall"
@@ -23,6 +24,9 @@ import (
 type HookHandler func(proxy *Proxy)
 
 // RouteHandler is the route handler of the client.
+//
+// The Context is valid only for the duration of the call and must not be retained after the handler
+// returns.
 type RouteHandler func(ctx *Context)
 
 // EventHandler is the event handler of the client.
@@ -44,6 +48,7 @@ type Client struct {
 	routes              atomic.Value       // route handlers (map[int32][]RouteHandler)
 	events              atomic.Value       // event handlers (map[cluster.Event][]EventHandler)
 	defaultRouteHandler atomic.Value       // default route handler (RouteHandler)
+	ctxPool             *sync.Pool         // route context pool
 	rw2                 sync.RWMutex       // connection lock, guards concurrent access to the connection table
 	conns               sync.Map           // connection table (network.Conn -> *Conn)
 }
@@ -62,6 +67,7 @@ func NewClient(opts ...Option) *Client {
 	c.routes.Store(make(map[int32][]RouteHandler))
 	c.events.Store(make(map[cluster.Event][]EventHandler))
 	c.defaultRouteHandler.Store(RouteHandler(nil))
+	c.ctxPool = &sync.Pool{New: func() any { return &Context{} }}
 	c.ctx, c.cancel = context.WithCancel(o.ctx)
 	c.state.Store(int32(cluster.Shut))
 
@@ -166,9 +172,7 @@ func (c *Client) handleDisconnect(conn network.Conn) {
 
 	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; connected && ok {
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(cc)
-			})
+			safeCallEventHandler(handler, cc)
 		}
 	}
 }
@@ -183,6 +187,8 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 		return
 	}
 
+	cc := val.(*Conn)
+
 	route, seq, data, err := packet.UnpackMessage(buf)
 	if err != nil {
 		buf.Release()
@@ -193,7 +199,7 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 	// Decrypt once when session security is enabled, so that Parse is idempotent and every
 	// handler registered for the route shares the same plaintext.
 	if c.opts.security != nil {
-		session := val.(*Conn).security.Load()
+		session := cc.security.Load()
 		if session == nil {
 			buf.Release()
 			log.Errorf("session security is not established")
@@ -216,33 +222,42 @@ func (c *Client) handleReceive(conn network.Conn, buf buffer.Buffer) {
 		data = buf
 	}
 
-	if handlers, ok := c.routes.Load().(map[int32][]RouteHandler)[route]; ok {
+	handlers, registered := c.routes.Load().(map[int32][]RouteHandler)[route]
+	switch {
+	case registered && len(handlers) > 0:
+		ctx := c.acquireContext(cc, route, seq, data)
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(&Context{
-					ctx:   context.Background(),
-					conn:  val.(*Conn),
-					route: route,
-					seq:   seq,
-					buf:   data,
-				})
-			})
+			safeCallRouteHandler(handler, ctx)
 		}
-	} else if handler := c.defaultRouteHandler.Load().(RouteHandler); handler != nil {
-		xcall.Call(func() {
-			handler(&Context{
-				ctx:   context.Background(),
-				conn:  val.(*Conn),
-				route: route,
-				seq:   seq,
-				buf:   data,
-			})
-		})
-	} else {
-		log.Debugf("route handler is not registered, route: %v", route)
+		c.releaseContext(ctx)
+	case !registered:
+		if handler := c.defaultRouteHandler.Load().(RouteHandler); handler != nil {
+			ctx := c.acquireContext(cc, route, seq, data)
+			safeCallRouteHandler(handler, ctx)
+			c.releaseContext(ctx)
+		} else if mode.IsDebugMode() {
+			log.Debugf("route handler is not registered, route: %v", route)
+		}
 	}
 
 	buf.Release()
+}
+
+// acquireContext obtains a route context from the pool and initializes it.
+func (c *Client) acquireContext(conn *Conn, route, seq int32, buf buffer.Buffer) *Context {
+	ctx := c.ctxPool.Get().(*Context)
+	ctx.ctx = context.Background()
+	ctx.conn = conn
+	ctx.route = route
+	ctx.seq = seq
+	ctx.buf = buf
+	return ctx
+}
+
+// releaseContext clears and recycles a route context.
+func (c *Client) releaseContext(ctx *Context) {
+	ctx.reset()
+	c.ctxPool.Put(ctx)
 }
 
 // handleHandshake handles a received handshake frame and hands it to the pending handshake of the
@@ -312,17 +327,13 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 
 	if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Connect]; ok {
 		for _, handler := range handlers {
-			xcall.Call(func() {
-				handler(cc)
-			})
+			safeCallEventHandler(handler, cc)
 		}
 	}
 	if !cc.markConnected() {
 		if handlers, ok := c.events.Load().(map[cluster.Event][]EventHandler)[cluster.Disconnect]; ok {
 			for _, handler := range handlers {
-				xcall.Call(func() {
-					handler(cc)
-				})
+				safeCallEventHandler(handler, cc)
 			}
 		}
 		return nil, errors.ErrConnectionClosed
@@ -419,8 +430,9 @@ func (c *Client) runHookFunc(hook cluster.Hook) {
 	for i := range handlers {
 		handler := handlers[i]
 		xcall.Go(func() {
+			defer wg.Done()
+
 			handler(c.proxy)
-			wg.Done()
 		})
 	}
 

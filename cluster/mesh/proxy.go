@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -237,15 +237,11 @@ func (p *Proxy) FetchNodeList(ctx context.Context, states ...cluster.State) ([]*
 	}
 }
 
-// PackMessage packs the given message and returns the packed message bytes, or an error when
+// PackMessage packs the given message and returns the packed buffer, whose ownership is
+// transferred to the caller and must be released with [buffer.Buffer.Release], or an error when
 // packing fails.
-func (p *Proxy) PackMessage(message *cluster.Message) ([]byte, error) {
-	buf, err := p.gateLinker.PackMessage(message, true)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
+func (p *Proxy) PackMessage(message *cluster.Message) (buffer.Buffer, error) {
+	return p.gateLinker.PackMessage(message, true)
 }
 
 // PackBuffer packs the given message content and returns the packed message bytes, or an error
@@ -264,7 +260,7 @@ func (p *Proxy) GetIP(ctx context.Context, args *cluster.GetIPArgs) (string, err
 }
 
 // Stat returns the total number of sessions, or an error when the mesh has been shut down.
-func (p *Proxy) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+func (p *Proxy) Stat(ctx context.Context, kind cluster.Session) (int64, error) {
 	if p.mesh.isShut() {
 		return 0, errors.ErrMeshShutdown
 	} else {

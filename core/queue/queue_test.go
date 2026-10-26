@@ -24,13 +24,13 @@ func waitSignal(t *testing.T, sig <-chan struct{}, msg string) {
 func TestQueue_WriteAndRead(t *testing.T) {
 	q := queue.NewQueue[int](4, 0)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if err := q.Write(i); err != nil {
 			t.Fatalf("write data failed, err: %v", err)
 		}
 	}
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		v, ok := <-q.Read()
 		if !ok {
 			t.Fatal("the queue channel is closed unexpectedly")

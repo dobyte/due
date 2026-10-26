@@ -13,7 +13,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/registry"
-	"github.com/dobyte/due/v2/session"
 	"github.com/dobyte/due/v2/transport"
 )
 
@@ -768,7 +767,7 @@ func TestMeshProxyShutdown(t *testing.T) {
 		{"UnbindNode", func() error { return p.UnbindNode(ctx, 1, "name", "nid") }},
 		{"FetchNodeList", func() error { _, err := p.FetchNodeList(ctx); return err }},
 		{"GetIP", func() error { _, err := p.GetIP(ctx, &cluster.GetIPArgs{}); return err }},
-		{"Stat", func() error { _, err := p.Stat(ctx, session.User); return err }},
+		{"Stat", func() error { _, err := p.Stat(ctx, cluster.User); return err }},
 		{"IsOnline", func() error { _, err := p.IsOnline(ctx, &cluster.IsOnlineArgs{}); return err }},
 		{"Disconnect", func() error { return p.Disconnect(ctx, &cluster.DisconnectArgs{}) }},
 		{"Push", func() error { return p.Push(ctx, &cluster.PushArgs{}) }},
@@ -870,9 +869,14 @@ func TestMeshProxyWorking(t *testing.T) {
 	}
 
 	// Message packing delegates to the gate linker.
-	if buf, err := p.PackMessage(&cluster.Message{Route: 1, Data: map[string]string{"k": "v"}}); err != nil || len(buf) == 0 {
-		t.Fatalf("unexpected PackMessage: %d, err: %v", len(buf), err)
+	packed, err := p.PackMessage(&cluster.Message{Route: 1, Data: map[string]string{"k": "v"}})
+	if err != nil {
+		t.Fatalf("unexpected PackMessage err: %v", err)
 	}
+	if packed == nil || packed.Len() == 0 {
+		t.Fatalf("unexpected PackMessage: %v", packed)
+	}
+	packed.Release()
 	if buf, err := p.PackBuffer(map[string]string{"k": "v"}); err != nil || len(buf) == 0 {
 		t.Fatalf("unexpected PackBuffer: %d, err: %v", len(buf), err)
 	}
@@ -881,7 +885,7 @@ func TestMeshProxyWorking(t *testing.T) {
 	}
 
 	// Stat with an empty dispatcher returns zero.
-	if total, err := p.Stat(ctx, session.User); err != nil || total != 0 {
+	if total, err := p.Stat(ctx, cluster.User); err != nil || total != 0 {
 		t.Fatalf("unexpected Stat: %d, err: %v", total, err)
 	}
 
@@ -894,13 +898,13 @@ func TestMeshProxyWorking(t *testing.T) {
 	}
 
 	// The remaining delegating calls must fail without panicking.
-	_, _ = p.GetIP(ctx, &cluster.GetIPArgs{Kind: session.User})
-	_, _ = p.IsOnline(ctx, &cluster.IsOnlineArgs{Kind: session.Conn})
-	_ = p.Disconnect(ctx, &cluster.DisconnectArgs{Kind: session.Conn})
-	_ = p.Push(ctx, &cluster.PushArgs{Kind: session.Conn, Message: &cluster.Message{}})
-	_, _ = p.Multicast(ctx, &cluster.MulticastArgs{Kind: session.Conn, Targets: []int64{1}, Message: &cluster.Message{}})
-	_ = p.Subscribe(ctx, &cluster.SubscribeArgs{Kind: session.Conn, Targets: []int64{1}})
-	_ = p.Unsubscribe(ctx, &cluster.UnsubscribeArgs{Kind: session.Conn, Targets: []int64{1}})
+	_, _ = p.GetIP(ctx, &cluster.GetIPArgs{Kind: cluster.User})
+	_, _ = p.IsOnline(ctx, &cluster.IsOnlineArgs{Kind: cluster.Conn})
+	_ = p.Disconnect(ctx, &cluster.DisconnectArgs{Kind: cluster.Conn})
+	_ = p.Push(ctx, &cluster.PushArgs{Kind: cluster.Conn, Message: &cluster.Message{}})
+	_, _ = p.Multicast(ctx, &cluster.MulticastArgs{Kind: cluster.Conn, Targets: []int64{1}, Message: &cluster.Message{}})
+	_ = p.Subscribe(ctx, &cluster.SubscribeArgs{Kind: cluster.Conn, Targets: []int64{1}})
+	_ = p.Unsubscribe(ctx, &cluster.UnsubscribeArgs{Kind: cluster.Conn, Targets: []int64{1}})
 	_ = p.Deliver(ctx, &cluster.DeliverArgs{NID: "missing", Message: &cluster.Message{Data: []byte("x")}})
 
 	// Setting the state delegates to the mesh.

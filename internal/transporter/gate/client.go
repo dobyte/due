@@ -10,7 +10,6 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/session"
 )
 
 type Client struct {
@@ -22,6 +21,11 @@ func NewClient(cli *drpc.Client) *Client {
 	return &Client{
 		cli: cli,
 	}
+}
+
+// PushReqHeadroom returns the headroom required to prepend a push request header in place.
+func PushReqHeadroom() int {
+	return protocol.PushReqHeadroom()
 }
 
 // Bind binds the connection cid and user uid together.
@@ -67,7 +71,7 @@ func (c *Client) Unbind(ctx context.Context, uid int64) error {
 }
 
 // GetIP returns the client IP of the target session.
-func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (string, error) {
+func (c *Client) GetIP(ctx context.Context, kind cluster.Session, target int64) (string, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeGetIPReq(seq, kind, target)
 
@@ -88,7 +92,7 @@ func (c *Client) GetIP(ctx context.Context, kind session.Kind, target int64) (st
 }
 
 // Stat returns the total number of sessions of the given kind.
-func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
+func (c *Client) Stat(ctx context.Context, kind cluster.Session) (int64, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeStatReq(seq, kind)
 
@@ -109,7 +113,7 @@ func (c *Client) Stat(ctx context.Context, kind session.Kind) (int64, error) {
 }
 
 // IsOnline reports whether the target session is online.
-func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) (bool, error) {
+func (c *Client) IsOnline(ctx context.Context, kind cluster.Session, target int64) (bool, error) {
 	seq := c.doGenSequence()
 	req := protocol.EncodeIsOnlineReq(seq, kind, target)
 
@@ -130,7 +134,7 @@ func (c *Client) IsOnline(ctx context.Context, kind session.Kind, target int64) 
 }
 
 // Disconnect disconnects the target session.
-func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
+func (c *Client) Disconnect(ctx context.Context, kind cluster.Session, target int64, force bool) error {
 	seq := c.doGenSequence()
 	req := protocol.EncodeDisconnectReq(seq, kind, target, force)
 
@@ -151,7 +155,7 @@ func (c *Client) Disconnect(ctx context.Context, kind session.Kind, target int64
 }
 
 // Push pushes a message to the target. When ack is true it waits for the response.
-func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer, ack bool) error {
+func (c *Client) Push(ctx context.Context, kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer, ack bool) error {
 	if ack {
 		seq := c.doGenSequence()
 		req := protocol.EncodePushReq(seq, kind, target, disconnect, buf)
@@ -171,13 +175,17 @@ func (c *Client) Push(ctx context.Context, kind session.Kind, target int64, disc
 			return codes.CodeToError(code)
 		}
 	} else {
+		if payload, ok := buf.(*buffer.Bytes); ok {
+			return c.cli.Push(ctx, protocol.EncodePushReqBuffer(0, kind, target, disconnect, payload), target)
+		}
+
 		return c.cli.Push(ctx, protocol.EncodePushReq(0, kind, target, disconnect, buf), target)
 	}
 }
 
 // Multicast pushes a message to multiple targets. When ack is true it waits for the response and
 // returns the number of targets that received the message.
-func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
+func (c *Client) Multicast(ctx context.Context, kind cluster.Session, targets []int64, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
 	if len(targets) > 1<<16-1 {
 		buf.Release()
 		return 0, errors.ErrInvalidArgument
@@ -208,7 +216,7 @@ func (c *Client) Multicast(ctx context.Context, kind session.Kind, targets []int
 
 // Broadcast pushes a message to all sessions. When ack is true it waits for the response and
 // returns the number of sessions that received the message.
-func (c *Client) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
+func (c *Client) Broadcast(ctx context.Context, kind cluster.Session, disconnect bool, buf buffer.Buffer, ack bool) (int64, error) {
 	if ack {
 		seq := c.doGenSequence()
 		req := protocol.EncodeBroadcastReq(seq, kind, disconnect, buf)
@@ -264,7 +272,7 @@ func (c *Client) Publish(ctx context.Context, channel string, disconnect bool, b
 }
 
 // Subscribe subscribes the targets to a channel.
-func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (c *Client) Subscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	if len(targets) > 1<<16-1 {
 		return errors.ErrInvalidArgument
 	}
@@ -293,7 +301,7 @@ func (c *Client) Subscribe(ctx context.Context, kind session.Kind, targets []int
 }
 
 // Unsubscribe unsubscribes the targets from a channel.
-func (c *Client) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (c *Client) Unsubscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	if len(targets) > 1<<16-1 {
 		return errors.ErrInvalidArgument
 	}

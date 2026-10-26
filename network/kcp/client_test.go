@@ -198,7 +198,7 @@ func doPressureTest(c int, n int, size int) {
 
 	startTime := time.Now().UnixNano()
 
-	for i := 0; i < n; i++ {
+	for range n {
 		chMsg <- struct{}{}
 	}
 

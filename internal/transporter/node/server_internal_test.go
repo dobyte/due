@@ -11,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/internal/drpc"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 // internalProvider is a minimal provider used to exercise the server handlers directly.
@@ -88,7 +87,7 @@ func captureServerConn(t *testing.T, p Provider) (*Server, *drpc.ServerConn) {
 	}
 	t.Cleanup(func() { _ = cli.Close() })
 
-	if err = cli.Push(context.Background(), protocol.EncodePushReq(0, session.User, 1, false, buffer.NewBytes(nil)), 1); err != nil {
+	if err = cli.Push(context.Background(), protocol.EncodePushReq(0, cluster.User, 1, false, buffer.NewBytes(nil)), 1); err != nil {
 		t.Fatalf("push failed: %v", err)
 	}
 

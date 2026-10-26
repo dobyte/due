@@ -3,12 +3,12 @@ package protocol
 import (
 	"encoding/binary"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/route"
-	"github.com/dobyte/due/v2/session"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // EncodeStatReq encodes a stat request.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind}
-func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
+func EncodeStatReq(seq uint64, kind cluster.Session) *buffer.NocopyBuffer {
 	writer := buffer.MallocWriter(statReqBytes)
 	writer.WriteUint32s(binary.BigEndian, uint32(statReqBytes-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
@@ -33,13 +33,13 @@ func EncodeStatReq(seq uint64, kind session.Kind) *buffer.NocopyBuffer {
 // DecodeStatReq decodes a stat request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind}
-func DecodeStatReq(buf buffer.Buffer) (kind session.Kind, err error) {
+func DecodeStatReq(buf buffer.Buffer) (kind cluster.Session, err error) {
 	if buf.Len() != def.B8 {
 		err = errors.ErrInvalidMessage
 		return
 	}
 
-	kind = session.Kind(buf.Bytes()[0])
+	kind = cluster.Session(buf.Bytes()[0])
 
 	return
 }

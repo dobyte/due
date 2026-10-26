@@ -28,6 +28,38 @@ func EncodeDeliverReq(seq uint64, cid int64, uid int64, buf buffer.Buffer) *buff
 	return buffer.NewNocopyBuffer(writer, buf)
 }
 
+// DeliverReqHeadroom returns the headroom required to prepend a deliver request header in place.
+func DeliverReqHeadroom() int {
+	return deliverReqBytes
+}
+
+// EncodeDeliverReqBuffer encodes a deliver request into the headroom reserved by message. It
+// returns message itself on success and falls back to EncodeDeliverReq when the headroom is
+// insufficient.
+func EncodeDeliverReqBuffer(seq uint64, cid int64, uid int64, message *buffer.Bytes) buffer.Buffer {
+	payload := message.Len()
+
+	header := message.Prepend(deliverReqBytes)
+	if header == nil {
+		return EncodeDeliverReq(seq, cid, uid, message)
+	}
+
+	binary.BigEndian.PutUint32(header, uint32(deliverReqBytes-def.SizeBytes+payload))
+
+	offset := def.SizeBytes
+	header[offset] = def.DataBit
+	offset += def.HeaderBytes
+	header[offset] = route.Deliver
+	offset += def.RouteBytes
+	binary.BigEndian.PutUint64(header[offset:], seq)
+	offset += def.SeqBytes
+	binary.BigEndian.PutUint64(header[offset:], uint64(cid))
+	offset += def.B64
+	binary.BigEndian.PutUint64(header[offset:], uint64(uid))
+
+	return message
+}
+
 // DecodeDeliverReq decodes a deliver request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {cid + uid + <message packet>}

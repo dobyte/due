@@ -7,7 +7,6 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
-	"github.com/dobyte/due/v2/session"
 )
 
 // providerIP is the address returned by the test provider.
@@ -28,27 +27,27 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 }
 
 // GetIP returns the client IP address.
-func (p *provider) GetIP(ctx context.Context, kind session.Kind, target int64) (ip string, err error) {
+func (p *provider) GetIP(ctx context.Context, kind cluster.Session, target int64) (ip string, err error) {
 	return providerIP, nil
 }
 
 // IsOnline reports whether the target is online.
-func (p *provider) IsOnline(ctx context.Context, kind session.Kind, target int64) (isOnline bool, err error) {
+func (p *provider) IsOnline(ctx context.Context, kind cluster.Session, target int64) (isOnline bool, err error) {
 	return
 }
 
 // Push sends a message (asynchronously).
-func (p *provider) Push(ctx context.Context, kind session.Kind, target int64, disconnect bool, buf buffer.Buffer) error {
+func (p *provider) Push(ctx context.Context, kind cluster.Session, target int64, disconnect bool, buf buffer.Buffer) error {
 	return nil
 }
 
 // Multicast pushes a multicast message (asynchronously).
-func (p *provider) Multicast(ctx context.Context, kind session.Kind, targets []int64, disconnect bool, buf buffer.Buffer) (total int64, err error) {
+func (p *provider) Multicast(ctx context.Context, kind cluster.Session, targets []int64, disconnect bool, buf buffer.Buffer) (total int64, err error) {
 	return
 }
 
 // Broadcast pushes a broadcast message (asynchronously).
-func (p *provider) Broadcast(ctx context.Context, kind session.Kind, disconnect bool, buf buffer.Buffer) (total int64, err error) {
+func (p *provider) Broadcast(ctx context.Context, kind cluster.Session, disconnect bool, buf buffer.Buffer) (total int64, err error) {
 	return
 }
 
@@ -58,22 +57,22 @@ func (p *provider) Publish(ctx context.Context, channel string, disconnect bool,
 }
 
 // Subscribe subscribes to channels.
-func (p *provider) Subscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (p *provider) Subscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	return nil
 }
 
 // Unsubscribe unsubscribes from channels.
-func (p *provider) Unsubscribe(ctx context.Context, kind session.Kind, targets []int64, channel string) error {
+func (p *provider) Unsubscribe(ctx context.Context, kind cluster.Session, targets []int64, channel string) error {
 	return nil
 }
 
 // Stat returns the total number of sessions.
-func (p *provider) Stat(ctx context.Context, kind session.Kind) (total int64, err error) {
+func (p *provider) Stat(ctx context.Context, kind cluster.Session) (total int64, err error) {
 	return
 }
 
 // Disconnect disconnects the target session.
-func (p *provider) Disconnect(ctx context.Context, kind session.Kind, target int64, force bool) error {
+func (p *provider) Disconnect(ctx context.Context, kind cluster.Session, target int64, force bool) error {
 	return nil
 }
 

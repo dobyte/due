@@ -21,7 +21,7 @@ func BenchmarkSession(b *testing.B) {
 					b.SetBytes(int64(size))
 					b.ReportAllocs()
 					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						if _, err := sender.SealMessage(dst, data, ClientToServer, 10, 1); err != nil {
 							b.Fatal(err)
 						}
@@ -35,7 +35,7 @@ func BenchmarkSession(b *testing.B) {
 					b.SetBytes(int64(size))
 					b.ReportAllocs()
 					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						sealed, err := sender.SealMessage(sealedBuffer, data, ClientToServer, 10, 1)
 						if err != nil {
 							b.Fatal(err)
@@ -67,7 +67,7 @@ func BenchmarkSession(b *testing.B) {
 					b.SetBytes(int64(size))
 					b.ReportAllocs()
 					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						if _, err := sender.Seal(data, MakeAAD(ClientToServer, 1, 10, 1)); err != nil {
 							b.Fatal(err)
 						}
@@ -79,7 +79,7 @@ func BenchmarkSession(b *testing.B) {
 					b.SetBytes(int64(size))
 					b.ReportAllocs()
 					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						aad := MakeAAD(ClientToServer, 1, 10, 1)
 						sealed, err := sender.Seal(data, aad)
 						if err != nil {

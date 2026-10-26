@@ -789,6 +789,10 @@ INFO[2024/07/03 14:53:13.995049] main.go:72 [I'm server, and the current time is
 
 ### 13. Stress Test
 
+This section contains two different kinds of tests: subsections 1-5 are the four-framework comparison, and subsection 6 is a supplementary benchmark of Due's own TCP cluster path. They use different machines, parameters and purposes, so the results are not comparable.
+
+The four-framework data in subsections 1-5 was updated on **2026-10-26** using the [four-framework TCP retest report](https://github.com/dobyte/due-benchmark/blob/master/comparison/reports/2026-10-26/REPORT.md). All 108 cases and 10,800,000 measured requests completed with zero failures. Before testing, both the local `due.Version` constant and the deployed binary were verified as **v2.6.5**. The source worktree was clean at `d56a53eb788837b33d0d0a205b1c9f58fb0103ed`; HEAD had no release tag, so this is a frozen local source snapshot.
+
 1. Test scenario
 
 The load generator calls the TCP entry of Skynet, Pitaya, KBEngine and Due. Each framework serves the request through a gateway process and a business process, and the business operation echoes the payload unchanged. The measurement covers network I/O, protocol handling, routing and inter-process dispatch, without database work or artificial delays.
@@ -814,7 +818,7 @@ The load generator calls the TCP entry of Skynet, Pitaya, KBEngine and Due. Each
 | OS | CentOS 7, Linux 3.10, x86_64 |
 | Go | 1.27.1 |
 | Deployment | Single machine loopback, frameworks run one after another |
-| Frameworks | Skynet `64391f732e76`, Pitaya `f3d0af570f76`, KBEngine `7d379b9f943d`, Due snapshot based on `8f44429a84ce` |
+| Frameworks | Skynet `64391f732e76`, Pitaya `f3d0af570f76`, KBEngine `7d379b9f943d`, Due v2.6.5 local snapshot `d56a53eb7888` |
 
 Go processes run with `GOMAXPROCS=2` and the two Skynet processes with `thread=2`. CPU affinity is bound per role: gateway on logical CPUs `0,6`, business on `1,7`, load generator on `2,3,8,9`, infrastructure on `4,10`. Affinity limits the range of the test processes, it does not reserve the whole machine.
 
@@ -824,12 +828,14 @@ All values are medians of three rounds; the range in parentheses is the minimum 
 
 | Framework | QPS (min-max) | P99 (ms) | P99.9 (ms) | Server CPU (%) | Server RSS (MiB) |
 |---|---:|---:|---:|---:|---:|
-| Skynet | 21,410 (21,133-21,642) | 8.330 | 19.655 | 184.1 | 152.0 |
-| Pitaya | 16,625 (16,529-16,625) | 11.166 | 12.478 | 349.1 | 52.6 |
-| KBEngine | 47,669 (47,441-47,902) | 2.893 | 3.391 | 152.8 | 33.5 |
-| Due | 97,005 (95,935-97,234) | 3.381 | 5.068 | 325.0 | 54.4 |
+| Skynet | 21,390 (21,230-21,572) | 7.873 | 19.681 | 188.5 | 149.7 |
+| Pitaya | 16,661 (16,584-16,685) | 11.111 | 12.052 | 350.4 | 53.5 |
+| KBEngine | 46,827 (46,058-47,892) | 2.936 | 3.015 | 152.8 | 33.6 |
+| Due v2.6.5 | 102,752 (102,423-103,330) | 2.963 | 4.739 | 322.6 | 58.0 |
 
 Due reaches the highest throughput under this load. KBEngine keeps lower P99 and P99.9 latency with this adapter, and Due consumes more CPU, so the throughput gap cannot be read as a per-CPU efficiency comparison.
+
+KBEngine uses the official poller TCP extension and native BaseApp/CellApp EntityCall; native player login and the Proxy client protocol are excluded. Server CPU/RSS covers only gateway and business processes, excluding infrastructure and management services; 100% CPU means one logical CPU. Due retains its default debug mode. The other three frameworks and load generator reuse the first run's fixed binaries, with all four frameworks measured again.
 
 These results describe the cross-process echo path of the listed versions and CPU allocation only. They are not a general ranking of the frameworks, do not include coordinated-omission correction, and do not cover idle connections, connection multiplexing, login storms or multi-machine deployments. See [due-benchmark](https://github.com/dobyte/due-benchmark) for the remaining payload and connection combinations, the full report and the raw data.
 
@@ -848,6 +854,46 @@ The charts cover all payload and connection combinations. Each point is the medi
 ![Gateway and business process RSS](assets/benchmark/server_peak_rss_mib.png)
 
 ![Load generator CPU usage](assets/benchmark/loadgen_cpu_pct.png)
+
+6. Single-framework cluster path benchmark (supplementary)
+
+This benchmark uses a different machine, connection model and concurrency settings from the four-framework comparison above. It is intended only to observe Due's own cluster path, and must not be compared with the four-framework results.
+
+Test scenario: the load generator connects through Gate, the request is routed to Node and the 1 KB payload is echoed back unchanged. The protocol is TCP + JSON, covering gateway I/O, cross-process routing and node dispatch.
+
+Test setup
+
+| Item | Configuration |
+|---|---|
+| Payload | 1 KB |
+| Throughput mode | 50/100/200/500/1000 persistent connections, 32 outstanding requests per connection, 30 s per case, 3 s warm-up |
+| Latency mode | Same connection counts, closed loop with 1 outstanding request per connection, 100,000 requests per case |
+| Rounds | 3 per case |
+| Runtime mode | release |
+
+Test environment
+
+| Item | Configuration |
+|---|---|
+| CPU | WSL2 Ubuntu, 16 logical CPUs |
+| OS | Ubuntu (WSL2), x86_64 |
+| Go | 1.27.3 |
+| Deployment | Single machine loopback; Gate, Node and load generator share the host, no CPU pinning and no `GOMAXPROCS` limit |
+| Version | Due v2.6.5, commit `06836bde` |
+
+Results (1 KB payload, medians of three rounds; the QPS range in parentheses is the minimum and maximum)
+
+| Connections | Throughput QPS (min-max) | Latency P50 (ms) | Latency P99 (ms) |
+|---:|---:|---:|---:|
+| 50 | 474,594 (455,152-493,738) | 0.574 | 1.517 |
+| 100 | 464,367 (459,968-466,201) | 0.716 | 2.081 |
+| 200 | 467,448 (467,150-467,960) | 0.982 | 3.377 |
+| 500 | 430,271 (427,502-434,260) | 2.162 | 7.032 |
+| 1000 | 415,640 (411,050-418,459) | 4.351 | 15.783 |
+
+Node dispatches routes on a single goroutine in this path, which is why throughput at 500/1000 connections is lower than at 200. Enabling Security (Gate and Client) in this environment reduces throughput by 3%-7% and slightly increases P99 latency.
+
+Raw data and reproduction parameters are in the `cluster/tcp` scenario of [due-benchmark](https://github.com/dobyte/due-benchmark).
 
 ### 14. Other Components
 

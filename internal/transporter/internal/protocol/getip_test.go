@@ -3,21 +3,21 @@ package protocol_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
 	"github.com/dobyte/due/v2/internal/transporter/internal/def"
 	"github.com/dobyte/due/v2/internal/transporter/internal/protocol"
-	"github.com/dobyte/due/v2/session"
 )
 
 func TestEncodeGetIPReq(t *testing.T) {
-	buffer := protocol.EncodeGetIPReq(1, session.User, 3)
+	buffer := protocol.EncodeGetIPReq(1, cluster.User, 3)
 
 	t.Log(buffer.Bytes())
 }
 
 func TestDecodeGetIPReq(t *testing.T) {
-	req := protocol.EncodeGetIPReq(1, session.User, 3)
+	req := protocol.EncodeGetIPReq(1, cluster.User, 3)
 	buf := buffer.NewBytes(req.Bytes()[def.SizeBytes+def.HeaderBytes+def.RouteBytes+def.SeqBytes:])
 	defer req.Release()
 

@@ -142,7 +142,7 @@ func TestDispatcher_WeightRoundRobin(t *testing.T) {
 	totalRounds := 200 // 200 is divisible by the sum of all weights (7)
 
 	// Run multiple rounds.
-	for i := 0; i < totalRounds; i++ {
+	for range totalRounds {
 		route, err := d.FindRoute(1)
 		if err != nil {
 			t.Errorf("find route failed: %v", err)
@@ -260,7 +260,7 @@ func BenchmarkDispatcher_WeightRoundRobin(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			// Prepare enough instances.
 			testInstances := make([]*registry.ServiceInstance, bm.instanceCount)
-			for i := 0; i < bm.instanceCount; i++ {
+			for i := range bm.instanceCount {
 				if i < len(instances) {
 					testInstances[i] = instances[i]
 				} else {

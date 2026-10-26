@@ -25,24 +25,24 @@ type session struct {
 	cancel        context.CancelFunc
 	conn          *net.TCPConn
 	reader        *reader
-	dueBuffers    []*buffer.NocopyBuffer // Message buffers pending write (owned by the write goroutine)
-	netBuffers    net.Buffers            // Byte slices pending write (owned by the write goroutine)
-	writeDeadline time.Time              // Write deadline (owned by the write goroutine)
+	dueBuffers    []buffer.Buffer // Message buffers pending write (owned by the write goroutine)
+	netBuffers    net.Buffers     // Byte slices pending write (owned by the write goroutine)
+	writeDeadline time.Time       // Write deadline (owned by the write goroutine)
 }
 
 type ClientConn struct {
-	cli           *Client                            // Client
-	epoch         uint64                             // Connection epoch
-	mu            sync.Mutex                         // Guards dialing and state transitions
-	cond          *sync.Cond                         // Condition variable for dial completion
-	rw            sync.RWMutex                       // Serializes queue writes against close, preventing a write to a closed queue from panicking
-	session       atomic.Pointer[session]            // Current session
-	state         atomic.Int32                       // Connection state
-	queue         *queue.Queue[*buffer.NocopyBuffer] // Message queue
-	pending       *pending                           // Pending calls
-	dialing       bool                               // Whether a dial is in progress
-	closed        atomic.Bool                        // Whether the client has been closed
-	lastFaultTime atomic.Int64                       // Time of the last fault
+	cli           *Client                     // Client
+	epoch         uint64                      // Connection epoch
+	mu            sync.Mutex                  // Guards dialing and state transitions
+	cond          *sync.Cond                  // Condition variable for dial completion
+	rw            sync.RWMutex                // Serializes queue writes against close, preventing a write to a closed queue from panicking
+	session       atomic.Pointer[session]     // Current session
+	state         atomic.Int32                // Connection state
+	queue         *queue.Queue[buffer.Buffer] // Message queue
+	pending       *pending                    // Pending calls
+	dialing       bool                        // Whether a dial is in progress
+	closed        atomic.Bool                 // Whether the client has been closed
+	lastFaultTime atomic.Int64                // Time of the last fault
 }
 
 func newClientConn(cli *Client) *ClientConn {
@@ -50,7 +50,7 @@ func newClientConn(cli *Client) *ClientConn {
 	c.cli = cli
 	c.epoch = cli.doGenEpoch()
 	c.state.Store(connClosed)
-	c.queue = queue.NewQueue[*buffer.NocopyBuffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
+	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, cli.opts.WriteQueueSize)), cli.opts.WriteTimeout)
 	c.pending = newPending()
 	c.cond = sync.NewCond(&c.mu)
 	c.lastFaultTime.Store(time.Now().UnixNano())
@@ -214,7 +214,7 @@ func (c *ClientConn) handshake(s *session) error {
 	return nil
 }
 
-func (c *ClientConn) doPush(buf *buffer.NocopyBuffer) error {
+func (c *ClientConn) doPush(buf buffer.Buffer) error {
 	if c.closed.Load() {
 		return errors.ErrClientClosed
 	}
@@ -244,7 +244,7 @@ func (c *ClientConn) doPush(buf *buffer.NocopyBuffer) error {
 }
 
 // push sends a message, releasing buf on failure.
-func (c *ClientConn) push(buf *buffer.NocopyBuffer) error {
+func (c *ClientConn) push(buf buffer.Buffer) error {
 	if err := c.doPush(buf); err != nil {
 		buf.Release()
 		return err
@@ -358,7 +358,7 @@ func (c *ClientConn) write(s *session) {
 //
 // It takes tasks from the write queue in batches and sends the collected bytes through a single
 // net.Buffers.WriteTo call to reduce the number of system calls.
-func (c *ClientConn) doBatchWrite(s *session, first *buffer.NocopyBuffer) (err error) {
+func (c *ClientConn) doBatchWrite(s *session, first buffer.Buffer) (err error) {
 	closeSig := first.Len() == 0
 
 	c.queue.Done(closeSig)

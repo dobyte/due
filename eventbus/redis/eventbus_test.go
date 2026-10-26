@@ -125,7 +125,7 @@ func TestEventbus_Subscribe_SingleConsumer(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if err = eb.Publish(ctx, loginTopic, "login"); err != nil {
 			t.Fatal(err)
 		}

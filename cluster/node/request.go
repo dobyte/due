@@ -17,10 +17,8 @@ import (
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/session"
 	taskpool "github.com/dobyte/due/v2/task"
 	"github.com/dobyte/due/v2/transport"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/jinzhu/copier"
 )
 
@@ -331,7 +329,7 @@ func (r *request) UnbindNode(uid ...int64) error {
 func (r *request) Subscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
-			Kind:    session.User,
+			Kind:    cluster.User,
 			Targets: uids,
 			Channel: channel,
 		})
@@ -342,7 +340,7 @@ func (r *request) Subscribe(channel string, uids ...int64) error {
 
 		return r.node.proxy.Subscribe(r.ctx, &cluster.SubscribeArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Targets: []int64{r.cid},
 			Channel: channel,
 		})
@@ -353,7 +351,7 @@ func (r *request) Subscribe(channel string, uids ...int64) error {
 func (r *request) Unsubscribe(channel string, uids ...int64) error {
 	if len(uids) > 0 {
 		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
-			Kind:    session.User,
+			Kind:    cluster.User,
 			Targets: uids,
 			Channel: channel,
 		})
@@ -364,7 +362,7 @@ func (r *request) Unsubscribe(channel string, uids ...int64) error {
 
 		return r.node.proxy.Unsubscribe(r.ctx, &cluster.UnsubscribeArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Targets: []int64{r.cid},
 			Channel: channel,
 		})
@@ -440,7 +438,7 @@ func (r *request) GetIP() (string, error) {
 
 	return r.node.proxy.GetIP(r.ctx, &cluster.GetIPArgs{
 		GID:    r.gid,
-		Kind:   session.Conn,
+		Kind:   cluster.Conn,
 		Target: r.cid,
 	})
 }
@@ -456,7 +454,7 @@ func (r *request) Reply(message *cluster.Message) error {
 	case r.gid != "": // From a gateway
 		return r.node.proxy.Push(r.ctx, &cluster.PushArgs{
 			GID:     r.gid,
-			Kind:    session.Conn,
+			Kind:    cluster.Conn,
 			Target:  r.cid,
 			Message: message,
 		})
@@ -498,7 +496,7 @@ func (r *request) Disconnect(force ...bool) error {
 
 	return r.node.proxy.Disconnect(r.ctx, &cluster.DisconnectArgs{
 		GID:    r.gid,
-		Kind:   session.Conn,
+		Kind:   cluster.Conn,
 		Target: r.cid,
 		Force:  len(force) > 0 && force[0],
 	})
@@ -565,7 +563,7 @@ func (r *request) releaseDefer() {
 func (r *request) compareVersionRecycle(version int32) {
 	if r.version.CompareAndSwap(version, 0) {
 		if r.node.router.postRouteHandler != nil {
-			xcall.Call(func() { r.node.router.postRouteHandler(r) })
+			safeCallContextHandler(r.node.router.postRouteHandler, r)
 		}
 
 		r.release()
@@ -573,6 +571,11 @@ func (r *request) compareVersionRecycle(version int32) {
 }
 
 // release releases the request object.
+//
+// The version is already zero here: compareVersionRecycle resets it through the successful
+// compare-and-swap, and the enqueue paths that release an unhandled request either never
+// increment it or decrement it again on failure. The chain object is retained for reuse by the
+// next pooled request.
 func (r *request) release() {
 	if b, ok := r.message.(buffer.Buffer); ok {
 		b.Release()
@@ -589,12 +592,10 @@ func (r *request) release() {
 	r.message = nil
 	r.plaintext = nil
 	r.cache = nil
-	r.version.Store(0)
 	r.actor.Store(nil)
 
 	if r.chain != nil {
 		r.chain.Release()
-		r.chain = nil
 	}
 
 	r.node.reqPool.Put(r)

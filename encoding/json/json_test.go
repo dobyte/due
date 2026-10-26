@@ -3,6 +3,7 @@ package json_test
 import (
 	"testing"
 
+	"github.com/dobyte/due/v2/encoding"
 	"github.com/dobyte/due/v2/encoding/json"
 )
 
@@ -50,6 +51,54 @@ func TestDuplicateNames(t *testing.T) {
 
 	if got.Name != "b" {
 		t.Errorf("expect the last member to win, actual: %s", got.Name)
+	}
+}
+
+// TestAppend verifies that Append produces the same bytes as Marshal and appends to dst in place
+// when dst has enough capacity.
+func TestAppend(t *testing.T) {
+	appender, ok := any(json.DefaultCodec).(encoding.Appender)
+	if !ok {
+		t.Fatal("json codec does not implement encoding.Appender")
+	}
+
+	v := payload{Name: "due", Count: 2}
+
+	want, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	got, err := appender.Append(nil, v)
+	if err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("Append = %q, want %q", got, want)
+	}
+
+	dst := make([]byte, 0, 4096)
+
+	got, err = appender.Append(dst, v)
+	if err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("Append into capacity = %q, want %q", got, want)
+	}
+	if &got[0] != &dst[:1][0] {
+		t.Errorf("Append reallocated despite sufficient capacity: dst=%p got=%p cap=%d", &dst[:1][0], &got[0], cap(dst))
+	}
+
+	prefix := []byte("prefix:")
+	dst = append(make([]byte, 0, len(prefix)+len(want)+16), prefix...)
+
+	got, err = appender.Append(dst, v)
+	if err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+	if string(got) != string(prefix)+string(want) {
+		t.Errorf("Append with prefix = %q, want %q", got, string(prefix)+string(want))
 	}
 }
 
