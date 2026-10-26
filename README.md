@@ -789,6 +789,8 @@ INFO[2024/07/03 14:53:13.995049] main.go:72 [I'm server, and the current time is
 
 ### 13. Stress Test
 
+Updated **2026-10-26** using the [four-framework TCP retest report](https://github.com/dobyte/due-benchmark/blob/master/comparison/reports/2026-10-26/REPORT.md). All 108 cases and 10,800,000 measured requests completed with zero failures. Before testing, both the local `due.Version` constant and the deployed binary were verified as **v2.6.5**. The source worktree was clean at `d56a53eb788837b33d0d0a205b1c9f58fb0103ed`; HEAD had no release tag, so this is a frozen local source snapshot.
+
 1. Test scenario
 
 The load generator calls the TCP entry of Skynet, Pitaya, KBEngine and Due. Each framework serves the request through a gateway process and a business process, and the business operation echoes the payload unchanged. The measurement covers network I/O, protocol handling, routing and inter-process dispatch, without database work or artificial delays.
@@ -814,7 +816,7 @@ The load generator calls the TCP entry of Skynet, Pitaya, KBEngine and Due. Each
 | OS | CentOS 7, Linux 3.10, x86_64 |
 | Go | 1.27.1 |
 | Deployment | Single machine loopback, frameworks run one after another |
-| Frameworks | Skynet `64391f732e76`, Pitaya `f3d0af570f76`, KBEngine `7d379b9f943d`, Due snapshot based on `8f44429a84ce` |
+| Frameworks | Skynet `64391f732e76`, Pitaya `f3d0af570f76`, KBEngine `7d379b9f943d`, Due v2.6.5 local snapshot `d56a53eb7888` |
 
 Go processes run with `GOMAXPROCS=2` and the two Skynet processes with `thread=2`. CPU affinity is bound per role: gateway on logical CPUs `0,6`, business on `1,7`, load generator on `2,3,8,9`, infrastructure on `4,10`. Affinity limits the range of the test processes, it does not reserve the whole machine.
 
@@ -824,12 +826,14 @@ All values are medians of three rounds; the range in parentheses is the minimum 
 
 | Framework | QPS (min-max) | P99 (ms) | P99.9 (ms) | Server CPU (%) | Server RSS (MiB) |
 |---|---:|---:|---:|---:|---:|
-| Skynet | 21,410 (21,133-21,642) | 8.330 | 19.655 | 184.1 | 152.0 |
-| Pitaya | 16,625 (16,529-16,625) | 11.166 | 12.478 | 349.1 | 52.6 |
-| KBEngine | 47,669 (47,441-47,902) | 2.893 | 3.391 | 152.8 | 33.5 |
-| Due | 97,005 (95,935-97,234) | 3.381 | 5.068 | 325.0 | 54.4 |
+| Skynet | 21,390 (21,230-21,572) | 7.873 | 19.681 | 188.5 | 149.7 |
+| Pitaya | 16,661 (16,584-16,685) | 11.111 | 12.052 | 350.4 | 53.5 |
+| KBEngine | 46,827 (46,058-47,892) | 2.936 | 3.015 | 152.8 | 33.6 |
+| Due v2.6.5 | 102,752 (102,423-103,330) | 2.963 | 4.739 | 322.6 | 58.0 |
 
 Due reaches the highest throughput under this load. KBEngine keeps lower P99 and P99.9 latency with this adapter, and Due consumes more CPU, so the throughput gap cannot be read as a per-CPU efficiency comparison.
+
+KBEngine uses the official poller TCP extension and native BaseApp/CellApp EntityCall; native player login and the Proxy client protocol are excluded. Server CPU/RSS covers only gateway and business processes, excluding infrastructure and management services; 100% CPU means one logical CPU. Due retains its default debug mode. The other three frameworks and load generator reuse the first run's fixed binaries, with all four frameworks measured again.
 
 These results describe the cross-process echo path of the listed versions and CPU allocation only. They are not a general ranking of the frameworks, do not include coordinated-omission correction, and do not cover idle connections, connection multiplexing, login storms or multi-machine deployments. See [due-benchmark](https://github.com/dobyte/due-benchmark) for the remaining payload and connection combinations, the full report and the raw data.
 
