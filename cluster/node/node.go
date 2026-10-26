@@ -24,6 +24,10 @@ import (
 // HookHandler is the node hook handler.
 type HookHandler func(proxy *Proxy)
 
+// dispatchBatchSize bounds how many routed requests are handled per wakeup. Handlers stay
+// serialized on the dispatcher goroutine while channel and scheduler overhead is amortized.
+const dispatchBatchSize = 64
+
 // serviceEntity is a service entity.
 type serviceEntity struct {
 	name     string // Service name, used for service discovery
@@ -243,7 +247,7 @@ func (n *Node) dispatch() {
 			}
 		case req, ok := <-requests:
 			if ok {
-				n.router.handle(req)
+				requests = n.handleRequests(req, requests)
 			} else {
 				requests = nil
 			}
@@ -255,6 +259,27 @@ func (n *Node) dispatch() {
 			}
 		}
 	}
+}
+
+// handleRequests handles first and up to dispatchBatchSize-1 more requests drained from the routing
+// queue. It returns the channel to use for the next select, or nil when the queue is closed.
+func (n *Node) handleRequests(first *request, requests <-chan *request) <-chan *request {
+	n.router.handle(first)
+
+	for i := 1; i < dispatchBatchSize; i++ {
+		select {
+		case req, ok := <-requests:
+			if !ok {
+				return nil
+			}
+
+			n.router.handle(req)
+		default:
+			return requests
+		}
+	}
+
+	return requests
 }
 
 // startLinkerServer starts the linker server.

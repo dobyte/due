@@ -799,7 +799,7 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
 func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
-	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt)
+	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt, gate.PushReqHeadroom())
 }
 
 // PackBuffer encodes message, encrypting the encoded bytes when encrypt is true.

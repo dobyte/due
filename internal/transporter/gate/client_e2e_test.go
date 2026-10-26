@@ -1,6 +1,7 @@
 package gate_test
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"strings"
@@ -128,6 +129,49 @@ func TestClientTransportAll(t *testing.T) {
 	if err := client.SetState(ctx, cluster.Busy); err != nil {
 		t.Errorf("SetState() error = %v", err)
 	}
+}
+
+// TestClientPushInPlace verifies that a pooled push buffer with reserved transport headroom is
+// encoded in place and reaches the server with the original payload.
+func TestClientPushInPlace(t *testing.T) {
+	pushes := make(chan []byte, 1)
+	server := startGateServer(t, &captureProvider{provider: &provider{}, pushes: pushes})
+	client := buildGateClient(t, server.ListenAddr(), nil)
+
+	payload := []byte("in-place-payload")
+	message := buffer.MallocBytesWithHeadroom(gate.PushReqHeadroom(), len(payload))
+	if message == nil {
+		t.Fatal("MallocBytesWithHeadroom returned nil")
+	}
+	copy(message.Bytes(), payload)
+
+	if err := client.Push(context.Background(), cluster.User, 1, false, message, false); err != nil {
+		t.Fatalf("Push failed: %v", err)
+	}
+
+	select {
+	case got := <-pushes:
+		if !bytes.Equal(got, payload) {
+			t.Errorf("payload = %q, want %q", got, payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("push not received")
+	}
+}
+
+// captureProvider records pushed payloads.
+type captureProvider struct {
+	*provider
+	pushes chan []byte
+}
+
+// Push records the payload and releases the buffer.
+func (p *captureProvider) Push(_ context.Context, _ cluster.Session, _ int64, _ bool, buf buffer.Buffer) error {
+	data := append([]byte(nil), buf.Bytes()...)
+	buf.Release()
+	p.pushes <- data
+
+	return nil
 }
 
 // TestClientInvalidArgument verifies the local argument validation of the client.

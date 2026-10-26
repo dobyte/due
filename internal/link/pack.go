@@ -12,9 +12,10 @@ import (
 // encoded size in advance. Larger payloads fall back to the segmented packer.
 const defaultMessageCapacity = 1024
 
-// packMessage packs a message, encoding directly into a pooled buffer when possible.
-func packMessage(codec encoding.Codec, encryptor crypto.Encryptor, message *Message, encrypt bool) (buffer.Buffer, error) {
-	headroom := packet.MessageBufferHeadroom()
+// packMessage packs a message, encoding directly into a pooled buffer when possible. extraHeadroom
+// reserves space for a transport header prepended after the message packet header.
+func packMessage(codec encoding.Codec, encryptor crypto.Encryptor, message *Message, encrypt bool, extraHeadroom int) (buffer.Buffer, error) {
+	headroom := packet.MessageBufferHeadroom() + extraHeadroom
 
 	if headroom > 0 && canPackInPlace(message.Data, encryptor, encrypt) {
 		if appender, ok := codec.(encoding.Appender); ok {

@@ -23,6 +23,11 @@ func NewClient(cli *drpc.Client) *Client {
 	}
 }
 
+// PushReqHeadroom returns the headroom required to prepend a push request header in place.
+func PushReqHeadroom() int {
+	return protocol.PushReqHeadroom()
+}
+
 // Bind binds the connection cid and user uid together.
 func (c *Client) Bind(ctx context.Context, cid, uid int64) error {
 	seq := c.doGenSequence()
@@ -170,6 +175,10 @@ func (c *Client) Push(ctx context.Context, kind cluster.Session, target int64, d
 			return codes.CodeToError(code)
 		}
 	} else {
+		if payload, ok := buf.(*buffer.Bytes); ok {
+			return c.cli.Push(ctx, protocol.EncodePushReqBuffer(0, kind, target, disconnect, payload), target)
+		}
+
 		return c.cli.Push(ctx, protocol.EncodePushReq(0, kind, target, disconnect, buf), target)
 	}
 }

@@ -378,7 +378,7 @@ func (l *NodeLinker) doBuildClient(nid string) (*node.Client, error) {
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
 func (l *NodeLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
-	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt)
+	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt, 0)
 }
 
 // doPackBuffer encodes message, encrypting the encoded bytes when encrypt is true.

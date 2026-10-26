@@ -31,6 +31,43 @@ func EncodePushReq(seq uint64, kind cluster.Session, target int64, disconnect bo
 	return buffer.NewNocopyBuffer(writer, message)
 }
 
+// PushReqHeadroom returns the headroom required to prepend a push request header in place.
+func PushReqHeadroom() int {
+	return pushReqBytes
+}
+
+// EncodePushReqBuffer encodes a push request into the headroom reserved by message. It returns
+// message itself on success and falls back to EncodePushReq when the headroom is insufficient.
+func EncodePushReqBuffer(seq uint64, kind cluster.Session, target int64, disconnect bool, message *buffer.Bytes) buffer.Buffer {
+	payload := message.Len()
+
+	header := message.Prepend(pushReqBytes)
+	if header == nil {
+		return EncodePushReq(seq, kind, target, disconnect, message)
+	}
+
+	binary.BigEndian.PutUint32(header, uint32(pushReqBytes-def.SizeBytes+payload))
+
+	offset := def.SizeBytes
+	header[offset] = def.DataBit
+	offset += def.HeaderBytes
+	header[offset] = route.Push
+	offset += def.RouteBytes
+	binary.BigEndian.PutUint64(header[offset:], seq)
+	offset += def.SeqBytes
+	header[offset] = uint8(kind)
+	offset += def.B8
+	binary.BigEndian.PutUint64(header[offset:], uint64(target))
+	offset += def.B64
+	if disconnect {
+		header[offset] = 1
+	} else {
+		header[offset] = 0
+	}
+
+	return message
+}
+
 // DecodePushReq decodes a push request.
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target + disconnect + <message packet>}

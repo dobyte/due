@@ -149,7 +149,7 @@ func (c *Client) Call(ctx context.Context, seq uint64, buf *buffer.NocopyBuffer,
 }
 
 // Push sends a message without waiting for a response.
-func (c *Client) Push(ctx context.Context, buf *buffer.NocopyBuffer, idx ...int64) error {
+func (c *Client) Push(ctx context.Context, buf buffer.Buffer, idx ...int64) error {
 	if conn, err := c.doLoadConn(ctx, idx...); err != nil {
 		buf.Release()
 		return err

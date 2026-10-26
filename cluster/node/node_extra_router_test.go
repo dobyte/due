@@ -37,6 +37,33 @@ func TestRouterAddRouteHandler(t *testing.T) {
 	}
 }
 
+// TestNodeHandleRequestsDrainsInOrder verifies that one dispatcher wakeup handles the first request
+// plus the queued batch in order.
+func TestNodeHandleRequestsDrainsInOrder(t *testing.T) {
+	n := newTestNode(t)
+
+	const route = int32(101)
+
+	var got []int32
+	n.router.AddRouteHandler(route, func(ctx Context) {
+		got = append(got, ctx.(*request).seq)
+	})
+
+	for seq := int32(0); seq < 3; seq++ {
+		if err := n.router.deliver("", "", "", 1, 0, seq, route, []byte("x")); err != nil {
+			t.Fatalf("deliver failed: %v", err)
+		}
+	}
+
+	if ch := n.handleRequests(<-n.router.receive(), n.router.receive()); ch == nil {
+		t.Fatal("expect the routing channel to stay open")
+	}
+
+	if len(got) != 3 || got[0] != 0 || got[1] != 1 || got[2] != 2 {
+		t.Fatalf("handled seqs = %v, want [0 1 2]", got)
+	}
+}
+
 // TestRouterHandlers verifies the default, pre and post route handlers.
 func TestRouterHandlers(t *testing.T) {
 	n := newTestNode(t)
