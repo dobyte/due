@@ -571,6 +571,11 @@ func (r *request) compareVersionRecycle(version int32) {
 }
 
 // release releases the request object.
+//
+// The version is already zero here: compareVersionRecycle resets it through the successful
+// compare-and-swap, and the enqueue paths that release an unhandled request either never
+// increment it or decrement it again on failure. The chain object is retained for reuse by the
+// next pooled request.
 func (r *request) release() {
 	if b, ok := r.message.(buffer.Buffer); ok {
 		b.Release()
@@ -587,12 +592,10 @@ func (r *request) release() {
 	r.message = nil
 	r.plaintext = nil
 	r.cache = nil
-	r.version.Store(0)
 	r.actor.Store(nil)
 
 	if r.chain != nil {
 		r.chain.Release()
-		r.chain = nil
 	}
 
 	r.node.reqPool.Put(r)

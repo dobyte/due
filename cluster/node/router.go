@@ -196,9 +196,8 @@ func (r *Router) clean() {
 // post-route handlers and the middleware chain, then recycles the request object once handling is
 // done.
 func (r *Router) handle(req *request) {
-	r.queue.Done(req == nil)
-
 	if req == nil {
+		r.queue.Done(true)
 		return
 	}
 
