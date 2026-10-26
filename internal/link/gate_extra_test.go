@@ -9,10 +9,12 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/encoding/json"
+	dueproto "github.com/dobyte/due/v2/encoding/proto"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // TestGateLinkerNew verifies that a new GateLinker has its dispatcher and builder initialized.
@@ -1097,6 +1099,35 @@ func TestGateLinkerPackMessage(t *testing.T) {
 		}
 		if string(data) != `{"a":1}` {
 			t.Errorf("payload = %q, want %q", data, `{"a":1}`)
+		}
+	})
+
+	t.Run("pack message with proto", func(t *testing.T) {
+		opts := baseLinkOptions()
+		opts.Codec = dueproto.DefaultCodec
+		linker := NewGateLinker(context.Background(), opts)
+
+		buf, err := linker.PackMessage(&Message{Route: 1, Seq: 1, Data: wrapperspb.String("hello")}, false)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		if nodes := buf.Nodes(); nodes != 1 {
+			t.Errorf("Nodes() = %d, want 1 for an in-place packed proto message", nodes)
+		}
+
+		_, _, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+
+		var got wrapperspb.StringValue
+		if err = dueproto.Unmarshal(data, &got); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if got.GetValue() != "hello" {
+			t.Errorf("value = %q, want %q", got.GetValue(), "hello")
 		}
 	})
 

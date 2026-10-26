@@ -27,6 +27,16 @@ func (codec) Marshal(v any) ([]byte, error) {
 	return proto.Marshal(msg)
 }
 
+// Append appends the protobuf encoding of v to dst.
+func (codec) Append(dst []byte, v any) ([]byte, error) {
+	msg, ok := v.(proto.Message)
+	if !ok {
+		return nil, errors.New("can't marshal a value that not implements proto.Message interface")
+	}
+
+	return proto.MarshalOptions{}.MarshalAppend(dst, msg)
+}
+
 // Unmarshal decodes data into v.
 func (codec) Unmarshal(data []byte, v any) error {
 	msg, ok := v.(proto.Message)
