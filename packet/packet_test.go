@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/utils/xrand"
 )
@@ -37,6 +38,33 @@ func TestDefaultPacker_Read(t *testing.T) {
 	t.Logf("route: %d", route)
 	t.Logf("seq: %d", seq)
 	t.Logf("buffer: %s", string(buf.Bytes()))
+}
+
+func TestDefaultPacker_ReadHeadroom(t *testing.T) {
+	packed, err := packer.PackMessage(1, 1, []byte("hello world"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer packed.Release()
+
+	_, _, buf, err := packer.Read(bytes.NewReader(packed.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer buf.Release()
+
+	pooled, ok := buf.(*buffer.Bytes)
+	if !ok {
+		t.Fatalf("expect a pooled buffer, got %T", buf)
+	}
+
+	headroom := packet.ReadBufferHeadroom()
+	if headroom <= 0 {
+		t.Fatalf("ReadBufferHeadroom() = %d, want positive", headroom)
+	}
+	if prefix := pooled.Prepend(headroom); prefix == nil {
+		t.Fatal("expect the read buffer to reserve headroom")
+	}
 }
 
 func TestDefaultPacker_UnpackMessage(t *testing.T) {
