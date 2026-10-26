@@ -60,7 +60,7 @@ func BenchmarkSyncerSerial(b *testing.B) {
 					}
 
 					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						// The benchmark focuses on throughput; errors are covered by unit tests.
 						_ = s.Write(entity)
 					}

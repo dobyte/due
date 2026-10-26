@@ -82,7 +82,7 @@ func BenchmarkEncodePushReq(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		req := protocol.EncodePushReq(1, cluster.User, 3, false, buffer.MallocBytes(len(payload)))
 		req.Release()
 	}
@@ -95,7 +95,7 @@ func BenchmarkEncodePushReqBuffer(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		message := buffer.MallocBytesWithHeadroom(protocol.PushReqHeadroom(), len(payload))
 		protocol.EncodePushReqBuffer(1, cluster.User, 3, false, message).Release()
 	}

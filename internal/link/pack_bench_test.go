@@ -37,7 +37,7 @@ func BenchmarkGateLinkerPackMessage(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				buf, err := linker.PackMessage(message, true)
 				if err != nil {
 					b.Fatalf("PackMessage failed: %v", err)

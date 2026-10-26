@@ -57,7 +57,7 @@ func BenchmarkMarshal(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := duemsgpack.Marshal(value); err != nil {
 			b.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func BenchmarkAppend(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		dst, err = duemsgpack.DefaultCodec.Append(dst[:0], value)
 		if err != nil {

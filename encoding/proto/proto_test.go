@@ -57,7 +57,7 @@ func BenchmarkMarshal(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := dueproto.Marshal(message); err != nil {
 			b.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func BenchmarkAppend(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		dst, err = dueproto.DefaultCodec.Append(dst[:0], message)
 		if err != nil {

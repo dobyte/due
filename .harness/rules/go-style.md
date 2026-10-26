@@ -110,6 +110,7 @@
 | [表驱动测试](uber-go/style.md#test-tables) | 相同逻辑的输入输出变化使用表驱动测试，采用清晰的用例名和 `give`、`want` 等命名；不同的测试行为应保持独立。 |
 | [测试表复杂度](uber-go/style.md#avoid-unnecessary-complexity-in-table-tests) | 避免用大量布尔标志和条件分支拼成复杂测试表；简单成功与失败分支按原文允许。 |
 | [并行测试](uber-go/style.md#parallel-tests) | 确保并行子测试捕获正确的用例值，并隔离共享状态。原文含循环变量重绑定说明；应用时核对各模块的 Go 版本及循环语义，避免机械添加已不需要的写法。 |
+| [基准测试循环](uber-go/style.md#benchmarks) | 按 [DUE-005](due-conventions.md#due-005)执行：不需要索引时用 `for b.Loop()`，需要索引时用 `for i := range b.N`，不使用 `for i := 0; i < b.N; i++`；其余计时控制等要求仍按原文。 |
 | [Functional Options](uber-go/style.md#functional-options) | 面向预期扩展的公共 API、构造函数及可选参数使用此模式，尤其是已有 3 个或更多参数时。上游建议带未导出 `apply` 方法的 `Option` 接口实现，没有将闭包实现一律禁止。 |
 
 ## 三、Harness 执行流程

@@ -221,7 +221,7 @@ func BenchmarkActorQueueRoundTrip(b *testing.B) {
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				write()
 			}
 		})

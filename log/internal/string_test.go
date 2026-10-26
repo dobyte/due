@@ -59,7 +59,7 @@ func BenchmarkString(b *testing.B) {
 	// v14 := &v13
 
 	b.Run("String", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			internal.String(v1)
 			// internal.String(v2)
 			// internal.String(v3)
@@ -95,7 +95,7 @@ func Benchmark(b *testing.B) {
 	// v14 := &v13
 
 	b.Run("String", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			// internal.String(v1)
 			// internal.String(v2)
 			// internal.String(v3)
@@ -114,7 +114,7 @@ func Benchmark(b *testing.B) {
 	})
 
 	b.Run("Sprintf", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			// fmt.Sprintf("%v", v1)
 			// fmt.Sprintf("%v", v2)
 			// fmt.Sprintf("%v", v3)
