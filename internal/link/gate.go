@@ -326,15 +326,43 @@ func (l *GateLinker) doIndirectDisconnect(ctx context.Context, uid int64, force 
 
 // Push pushes a message to a single target.
 func (l *GateLinker) Push(ctx context.Context, args *PushArgs) error {
-	_, err := l.Multicast(ctx, &cluster.MulticastArgs{
-		GID:     args.GID,
-		Kind:    args.Kind,
-		Targets: []int64{args.Target},
-		Message: args.Message,
-		Ack:     args.Ack,
-	})
+	switch args.Kind {
+	case cluster.Conn:
+		return l.doDirectPush(ctx, args.Kind, args.GID, args.Target, args.Disconnect, args.Message, args.Ack)
+	case cluster.User:
+		if args.GID != "" {
+			return l.doDirectPush(ctx, args.Kind, args.GID, args.Target, args.Disconnect, args.Message, args.Ack)
+		}
 
-	return err
+		return l.doIndirectPush(ctx, args.Kind, args.Target, args.Disconnect, args.Message, args.Ack)
+	default:
+		return errors.ErrInvalidSessionKind
+	}
+}
+
+// doDirectPush pushes a message to a target on a known gate.
+func (l *GateLinker) doDirectPush(ctx context.Context, kind cluster.Session, gid string, target int64, disconnect bool, message *Message, ack bool) error {
+	client, err := l.doBuildClient(gid)
+	if err != nil {
+		return err
+	}
+
+	buf, err := l.PackMessage(message, true)
+	if err != nil {
+		return err
+	}
+
+	return client.Push(ctx, kind, target, disconnect, buf, ack)
+}
+
+// doIndirectPush locates the user's gate and pushes the message there.
+func (l *GateLinker) doIndirectPush(ctx context.Context, kind cluster.Session, target int64, disconnect bool, message *Message, ack bool) error {
+	buf, err := l.PackMessage(message, true)
+	if err != nil {
+		return err
+	}
+
+	return l.doPush(ctx, kind, target, disconnect, buf, ack)
 }
 
 // doPush pushes a message to a single target through the gate that owns it.

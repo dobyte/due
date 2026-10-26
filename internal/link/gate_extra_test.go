@@ -738,6 +738,62 @@ func TestGateLinkerPush(t *testing.T) {
 			t.Errorf("Push failed: %v", err)
 		}
 	})
+
+	t.Run("invalid kind", func(t *testing.T) {
+		err := linker.Push(context.Background(), &PushArgs{Kind: cluster.Session(99), GID: "gate-1", Target: 100, Message: &Message{Route: 1, Data: []byte("x")}})
+		if !errors.Is(err, errors.ErrInvalidSessionKind) {
+			t.Errorf("expect ErrInvalidSessionKind, got %v", err)
+		}
+	})
+
+	t.Run("conn without gate", func(t *testing.T) {
+		err := linker.Push(context.Background(), &PushArgs{Kind: cluster.Conn, Target: 100, Message: &Message{Route: 1, Data: []byte("x")}})
+		if !errors.Is(err, errors.ErrInvalidGID) {
+			t.Errorf("expect ErrInvalidGID, got %v", err)
+		}
+	})
+
+	t.Run("pack error", func(t *testing.T) {
+		opts := baseLinkOptions()
+		opts.Codec = &codecStub{marshalFn: func(any) ([]byte, error) { return nil, errors.ErrInvalidFormat }}
+
+		linker := NewGateLinker(context.Background(), opts)
+		linker.dispatcher.ReplaceServices(gateService("gate-1", addr))
+
+		err := linker.Push(context.Background(), &PushArgs{GID: "gate-1", Kind: cluster.Conn, Target: 100, Message: &Message{Route: 1, Data: struct{}{}}})
+		if !errors.Is(err, errors.ErrInvalidFormat) {
+			t.Errorf("expect ErrInvalidFormat, got %v", err)
+		}
+	})
+}
+
+// TestGateLinkerPushDisconnect verifies that a single-target push forwards the disconnect flag.
+func TestGateLinkerPushDisconnect(t *testing.T) {
+	disconnects := make(chan bool, 1)
+	provider := &gateProviderStub{pushFn: func(_ context.Context, _ cluster.Session, _ int64, disconnect bool, _ buffer.Buffer) error {
+		disconnects <- disconnect
+		return nil
+	}}
+	_, addr := startGateServer(t, provider)
+
+	linker := newGateLinker()
+	linker.dispatcher.ReplaceServices(gateService("gate-1", addr))
+
+	err := linker.Push(context.Background(), &PushArgs{
+		GID:        "gate-1",
+		Kind:       cluster.Conn,
+		Target:     100,
+		Disconnect: true,
+		Ack:        true,
+		Message:    &Message{Route: 1, Data: []byte("x")},
+	})
+	if err != nil {
+		t.Fatalf("Push failed: %v", err)
+	}
+
+	if disconnect := <-disconnects; !disconnect {
+		t.Errorf("expect disconnect to be forwarded")
+	}
 }
 
 // TestGateLinkerBroadcast verifies broadcast over zero, one and many gate endpoints.
