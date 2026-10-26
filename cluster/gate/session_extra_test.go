@@ -910,6 +910,59 @@ func TestStatExtra(t *testing.T) {
 	}
 }
 
+// TestStatTracksMutations verifies that the session counters follow reconnects, rebinding,
+// unbinding and disconnection.
+func TestStatTracksMutations(t *testing.T) {
+	s := newSession()
+	c1, c2, c3 := newStubConn(1), newStubConn(2), newStubConn(3)
+	s.addConn(c1)
+	s.addConn(c2)
+	s.addConn(c3)
+	s.addConn(c3) // A duplicate add must not increase the count.
+
+	assertStat := func(kind cluster.Session, want int64) {
+		t.Helper()
+		if got, err := s.stat(kind); err != nil || got != want {
+			t.Fatalf("Stat(%v) = (%d, %v), want (%d, nil)", kind, got, err, want)
+		}
+	}
+
+	assertStat(cluster.Conn, 3)
+	assertStat(cluster.User, 0)
+
+	if err := s.bind(1, 100); err != nil {
+		t.Fatalf("Bind(1, 100) error = %v", err)
+	}
+	if err := s.bind(2, 200); err != nil {
+		t.Fatalf("Bind(2, 200) error = %v", err)
+	}
+	assertStat(cluster.User, 2)
+
+	// Rebind uid 100 from c1 to c3: the user count must stay unchanged.
+	if err := s.bind(3, 100); err != nil {
+		t.Fatalf("Bind(3, 100) error = %v", err)
+	}
+	assertStat(cluster.Conn, 3)
+	assertStat(cluster.User, 2)
+
+	if !s.remConn(c1) {
+		t.Fatal("RemConn(c1) = false, want true")
+	}
+	assertStat(cluster.Conn, 2)
+	assertStat(cluster.User, 2)
+
+	if err := s.unbind(3, 100); err != nil {
+		t.Fatalf("Unbind(3, 100) error = %v", err)
+	}
+	assertStat(cluster.User, 1)
+
+	if !s.remConn(c2) {
+		t.Fatal("RemConn(c2) = false, want true")
+	}
+	assertStat(cluster.Conn, 1)
+	assertStat(cluster.User, 0)
+}
+
 // TestDoBatchPushEmpty verifies the defensive empty-input branch of doBatchPush, which is not
 // reachable through the exported batch helpers because they all return early for an empty set.
 func TestDoBatchPushEmpty(t *testing.T) {

@@ -64,6 +64,13 @@ func TestBindAndRemConnConcurrentKeepsUserTableConsistent(t *testing.T) {
 				t.Fatal("removed connection left a user binding")
 			}
 		}
+
+		if n, err := s.stat(cluster.Conn); err != nil || n != 0 {
+			t.Fatalf("Stat(Conn) = (%d, %v), want (0, nil)", n, err)
+		}
+		if n, err := s.stat(cluster.User); err != nil || n != 0 {
+			t.Fatalf("Stat(User) = (%d, %v), want (0, nil)", n, err)
+		}
 	}
 }
 
@@ -92,6 +99,17 @@ func TestBindAndUnbindConcurrentKeepsStateConsistent(t *testing.T) {
 			if bound != conn || conn.UID() != 100 {
 				t.Fatalf("inconsistent binding: conn = %v, uid = %d", bound, conn.UID())
 			}
+		}
+
+		wantUsers := int64(0)
+		if _, ok := s.loadUserShard(100).conns[100]; ok {
+			wantUsers = 1
+		}
+		if n, err := s.stat(cluster.User); err != nil || n != wantUsers {
+			t.Fatalf("Stat(User) = (%d, %v), want (%d, nil)", n, err, wantUsers)
+		}
+		if n, err := s.stat(cluster.Conn); err != nil || n != 1 {
+			t.Fatalf("Stat(Conn) = (%d, %v), want (1, nil)", n, err)
 		}
 	}
 }

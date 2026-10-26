@@ -52,11 +52,14 @@ func (s *sessionShard) has(id int64) bool {
 	return ok
 }
 
-// store stores conn under id.
-func (s *sessionShard) store(id int64, conn network.Conn) {
+// store stores conn under id. It reports whether the ID was absent before.
+func (s *sessionShard) store(id int64, conn network.Conn) (added bool) {
 	s.rw.Lock()
+	_, ok := s.conns[id]
 	s.conns[id] = conn
 	s.rw.Unlock()
+
+	return !ok
 }
 
 // remove deletes id and returns the removed connection.
@@ -75,14 +78,6 @@ func (s *sessionShard) remove(id int64, conn ...network.Conn) (network.Conn, boo
 	s.rw.Unlock()
 
 	return c, ok
-}
-
-// count returns the number of stored connections.
-func (s *sessionShard) count() int {
-	s.rw.RLock()
-	count := len(s.conns)
-	s.rw.RUnlock()
-	return count
 }
 
 // unbind removes uid after unbinding its connection. A zero cid accepts any connection.
@@ -179,9 +174,11 @@ func (c *channelSubscribers) subscribers() []network.Conn {
 // Lock ordering is connection shard -> user shard -> channel shard -> channel subscriber mutex.
 // Operations that need multiple user shards acquire them in ascending shard index order.
 type session struct {
-	conns    [defaultSessionShardNum]sessionShard // Connection sessions, sharded by connection ID
-	users    [defaultSessionShardNum]sessionShard // User sessions, sharded by user ID
-	channels [defaultChannelShardNum]channelShard // Channel subscriptions, sharded by channel name
+	conns     [defaultSessionShardNum]sessionShard // Connection sessions, sharded by connection ID
+	users     [defaultSessionShardNum]sessionShard // User sessions, sharded by user ID
+	channels  [defaultChannelShardNum]channelShard // Channel subscriptions, sharded by channel name
+	connCount atomic.Int64                         // Number of connection sessions
+	userCount atomic.Int64                         // Number of user sessions
 }
 
 // newSession creates a session instance.
@@ -268,7 +265,9 @@ func unlockUserShards(first, second *sessionShard) {
 // addConn adds conn to the connection sessions.
 func (s *session) addConn(conn network.Conn) {
 	cid := conn.ID()
-	s.loadConnShard(cid).store(cid, conn)
+	if s.loadConnShard(cid).store(cid, conn) {
+		s.connCount.Add(1)
+	}
 }
 
 // remConn removes conn from the connection sessions. It reports whether conn was registered and
@@ -283,9 +282,12 @@ func (s *session) remConn(conn network.Conn) bool {
 	if _, ok := s.loadConnShard(cid).remove(cid); !ok {
 		return false
 	}
+	s.connCount.Add(-1)
 
 	if uid := conn.UID(); uid != 0 {
-		s.loadUserShard(uid).remove(uid, conn)
+		if _, ok := s.loadUserShard(uid).remove(uid, conn); ok {
+			s.userCount.Add(-1)
+		}
 	}
 
 	s.doClearConnAttrs(conn)
@@ -376,11 +378,15 @@ func (s *session) bind(cid, uid int64) error {
 		oldShard := s.loadUserShard(oldUID)
 		if c, ok := oldShard.conns[oldUID]; ok && c == conn {
 			delete(oldShard.conns, oldUID)
+			s.userCount.Add(-1)
 		}
 	}
 
 	newShard := s.loadUserShard(uid)
-	old = newShard.conns[uid]
+	old, exists := newShard.conns[uid]
+	if !exists {
+		s.userCount.Add(1)
+	}
 	newShard.conns[uid] = conn
 
 	unlockUserShards(first, second)
@@ -401,6 +407,7 @@ func (s *session) remove(uid int64) (int64, error) {
 	if !ok {
 		return 0, errors.ErrNotFoundSession
 	}
+	s.userCount.Add(-1)
 
 	return conn.ID(), nil
 }
@@ -415,6 +422,7 @@ func (s *session) unbind(cid, uid int64) error {
 	if _, ok := s.loadUserShard(uid).unbind(uid, cid); !ok {
 		return errors.ErrNotFoundSession
 	}
+	s.userCount.Add(-1)
 
 	return nil
 }
@@ -745,17 +753,9 @@ func (s *session) doClearConnAttrs(conn network.Conn) {
 func (s *session) stat(kind cluster.Session) (int64, error) {
 	switch kind {
 	case cluster.Conn:
-		var total int64
-		for i := range s.conns {
-			total += int64(s.conns[i].count())
-		}
-		return total, nil
+		return s.connCount.Load(), nil
 	case cluster.User:
-		var total int64
-		for i := range s.users {
-			total += int64(s.users[i].count())
-		}
-		return total, nil
+		return s.userCount.Load(), nil
 	default:
 		return 0, errors.ErrInvalidSessionKind
 	}
