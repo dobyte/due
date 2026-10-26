@@ -16,6 +16,11 @@ func (codec) Marshal(v any) ([]byte, error) {
 	return marshal(v)
 }
 
+// Append appends the JSON encoding of v to dst.
+func (codec) Append(dst []byte, v any) ([]byte, error) {
+	return appendEncode(dst, v)
+}
+
 // Unmarshal decodes data into v.
 func (codec) Unmarshal(data []byte, v any) error {
 	return unmarshal(data, v)

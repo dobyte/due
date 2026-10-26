@@ -14,7 +14,6 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/locate"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
 	"golang.org/x/sync/errgroup"
 )
@@ -800,34 +799,12 @@ func (l *GateLinker) doBuildClient(gid string) (*gate.Client, error) {
 
 // PackMessage packs a message into a buffer, optionally encrypting its payload.
 func (l *GateLinker) PackMessage(message *Message, encrypt bool) (buffer.Buffer, error) {
-	buf, err := l.PackBuffer(message.Data, encrypt)
-	if err != nil {
-		return nil, err
-	}
-
-	return packet.PackMessage(message.Route, message.Seq, buf)
+	return packMessage(l.opts.Codec, l.opts.Encryptor, message, encrypt)
 }
 
 // PackBuffer encodes message, encrypting the encoded bytes when encrypt is true.
 func (l *GateLinker) PackBuffer(message any, encrypt bool) ([]byte, error) {
-	if message == nil {
-		return nil, nil
-	}
-
-	if v, ok := message.([]byte); ok {
-		return v, nil
-	}
-
-	data, err := l.opts.Codec.Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-
-	if encrypt && l.opts.Encryptor != nil {
-		return l.opts.Encryptor.Encrypt(data)
-	}
-
-	return data, nil
+	return packBuffer(l.opts.Codec, l.opts.Encryptor, message, encrypt)
 }
 
 // WatchUserLocate watches user locate events and keeps the local source cache in sync.

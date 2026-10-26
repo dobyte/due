@@ -30,6 +30,15 @@ type Codec interface {
 	Unmarshal(data []byte, v any) error
 }
 
+// Appender is an optional interface implemented by codecs that can append an encoded value to dst.
+// It lets callers encode directly into a pooled buffer. Implementations may reallocate dst when its
+// capacity is insufficient; callers detect that by comparing the returned length with the original
+// capacity.
+type Appender interface {
+	// Append appends the encoding of v to dst.
+	Append(dst []byte, v any) ([]byte, error)
+}
+
 // Register registers a codec.
 func Register(codec Codec) {
 	if codec == nil {

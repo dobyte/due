@@ -2,13 +2,16 @@ package link
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
+	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
 )
 
@@ -989,6 +992,112 @@ func TestGateLinkerPackMessage(t *testing.T) {
 			t.Errorf("expect a non-empty packed buffer")
 		}
 		buf.Release()
+	})
+
+	t.Run("pack message in place", func(t *testing.T) {
+		linker := NewGateLinker(context.Background(), baseLinkOptions())
+
+		buf, err := linker.PackMessage(&Message{Route: 2, Seq: 3, Data: map[string]string{"message": "hello"}}, false)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		if nodes := buf.Nodes(); nodes != 1 {
+			t.Errorf("Nodes() = %d, want 1 for an in-place packed message", nodes)
+		}
+
+		route, seq, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+		if route != 2 || seq != 3 {
+			t.Errorf("route/seq = %d/%d, want 2/3", route, seq)
+		}
+		if string(data) != `{"message":"hello"}` {
+			t.Errorf("payload = %q, want %q", data, `{"message":"hello"}`)
+		}
+
+		buf, err = linker.PackMessage(&Message{Route: 2, Seq: 3, Data: "hi"}, false)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		if nodes := buf.Nodes(); nodes != 1 {
+			t.Errorf("Nodes() = %d, want 1 for a small in-place packed message", nodes)
+		}
+
+		if _, _, data, err = packet.ExtractMessage(buf); err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+		if string(data) != `"hi"` {
+			t.Errorf("payload = %q, want %q", data, `"hi"`)
+		}
+	})
+
+	t.Run("pack message fallback", func(t *testing.T) {
+		linker := NewGateLinker(context.Background(), baseLinkOptions())
+
+		want := &benchPayload{Message: strings.Repeat("x", 4*1024), SentAt: 123}
+		buf, err := linker.PackMessage(&Message{Route: 1, Seq: 2, Data: want}, true)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		_, _, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+
+		var got benchPayload
+		if err = json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if got.Message != want.Message || got.SentAt != want.SentAt {
+			t.Errorf("unexpected payload: %+v", got)
+		}
+	})
+
+	t.Run("pack message encrypted", func(t *testing.T) {
+		opts := baseLinkOptions()
+		opts.Encryptor = encryptorStub{}
+		linker := NewGateLinker(context.Background(), opts)
+
+		buf, err := linker.PackMessage(&Message{Route: 1, Seq: 1, Data: map[string]int{"a": 1}}, true)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		_, _, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+		if string(data) != `enc:{"a":1}` {
+			t.Errorf("payload = %q, want %q", data, `enc:{"a":1}`)
+		}
+	})
+
+	t.Run("pack message without appender", func(t *testing.T) {
+		opts := baseLinkOptions()
+		opts.Codec = &codecStub{marshalFn: func(any) ([]byte, error) { return []byte(`{"a":1}`), nil }}
+		linker := NewGateLinker(context.Background(), opts)
+
+		buf, err := linker.PackMessage(&Message{Route: 1, Seq: 1, Data: struct{}{}}, false)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		_, _, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+		if string(data) != `{"a":1}` {
+			t.Errorf("payload = %q, want %q", data, `{"a":1}`)
+		}
 	})
 
 	t.Run("pack message error", func(t *testing.T) {
