@@ -9,6 +9,7 @@ import (
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/encoding/json"
+	duemsgpack "github.com/dobyte/due/v2/encoding/msgpack"
 	dueproto "github.com/dobyte/due/v2/encoding/proto"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/locate"
@@ -1128,6 +1129,35 @@ func TestGateLinkerPackMessage(t *testing.T) {
 		}
 		if got.GetValue() != "hello" {
 			t.Errorf("value = %q, want %q", got.GetValue(), "hello")
+		}
+	})
+
+	t.Run("pack message with msgpack", func(t *testing.T) {
+		opts := baseLinkOptions()
+		opts.Codec = duemsgpack.DefaultCodec
+		linker := NewGateLinker(context.Background(), opts)
+
+		buf, err := linker.PackMessage(&Message{Route: 1, Seq: 1, Data: map[string]string{"message": "hello"}}, false)
+		if err != nil {
+			t.Fatalf("PackMessage failed: %v", err)
+		}
+		defer buf.Release()
+
+		if nodes := buf.Nodes(); nodes != 1 {
+			t.Errorf("Nodes() = %d, want 1 for an in-place packed msgpack message", nodes)
+		}
+
+		_, _, data, err := packet.ExtractMessage(buf)
+		if err != nil {
+			t.Fatalf("ExtractMessage failed: %v", err)
+		}
+
+		var got map[string]string
+		if err = duemsgpack.Unmarshal(data, &got); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if got["message"] != "hello" {
+			t.Errorf("message = %q, want %q", got["message"], "hello")
 		}
 	})
 
