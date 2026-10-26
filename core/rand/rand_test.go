@@ -45,7 +45,7 @@ func mustPanic(t *testing.T, fn func()) {
 
 func TestInt64(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int64(); v < 0 {
 				t.Fatalf("Int64 返回负数: %d", v)
 			}
@@ -55,7 +55,7 @@ func TestInt64(t *testing.T) {
 
 func TestUint32(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_ = r.Uint32()
 		}
 	})
@@ -63,7 +63,7 @@ func TestUint32(t *testing.T) {
 
 func TestUint64(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_ = r.Uint64()
 		}
 	})
@@ -71,7 +71,7 @@ func TestUint64(t *testing.T) {
 
 func TestInt32(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int32(); v < 0 {
 				t.Fatalf("Int32 返回负数: %d", v)
 			}
@@ -81,7 +81,7 @@ func TestInt32(t *testing.T) {
 
 func TestInt(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int(); v < 0 {
 				t.Fatalf("Int 返回负数: %d", v)
 			}
@@ -91,7 +91,7 @@ func TestInt(t *testing.T) {
 
 func TestUint(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_ = r.Uint()
 		}
 	})
@@ -99,7 +99,7 @@ func TestUint(t *testing.T) {
 
 func TestInt64N(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int64N(100); v < 0 || v >= 100 {
 				t.Fatalf("Int64N(100) 越界: %d", v)
 			}
@@ -113,7 +113,7 @@ func TestInt64N(t *testing.T) {
 
 func TestUint64N(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Uint64N(100); v >= 100 {
 				t.Fatalf("Uint64N(100) 越界: %d", v)
 			}
@@ -124,7 +124,7 @@ func TestUint64N(t *testing.T) {
 
 func TestInt32N(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int32N(100); v < 0 || v >= 100 {
 				t.Fatalf("Int32N(100) 越界: %d", v)
 			}
@@ -135,7 +135,7 @@ func TestInt32N(t *testing.T) {
 
 func TestUint32N(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Uint32N(100); v >= 100 {
 				t.Fatalf("Uint32N(100) 越界: %d", v)
 			}
@@ -146,7 +146,7 @@ func TestUint32N(t *testing.T) {
 
 func TestIntN(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.IntN(100); v < 0 || v >= 100 {
 				t.Fatalf("IntN(100) 越界: %d", v)
 			}
@@ -160,7 +160,7 @@ func TestIntN(t *testing.T) {
 
 func TestUintN(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.UintN(100); v >= 100 {
 				t.Fatalf("UintN(100) 越界: %d", v)
 			}
@@ -171,7 +171,7 @@ func TestUintN(t *testing.T) {
 
 func TestFloat64(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Float64(); v < 0 || v >= 1 {
 				t.Fatalf("Float64 越界: %f", v)
 			}
@@ -181,7 +181,7 @@ func TestFloat64(t *testing.T) {
 
 func TestFloat32(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Float32(); v < 0 || v >= 1 {
 				t.Fatalf("Float32 越界: %f", v)
 			}
@@ -210,7 +210,7 @@ func TestPerm(t *testing.T) {
 
 func TestExpFloat64(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.ExpFloat64(); v <= 0 {
 				t.Fatalf("ExpFloat64 应为正数: %f", v)
 			}
@@ -220,7 +220,7 @@ func TestExpFloat64(t *testing.T) {
 
 func TestNormFloat64(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			v := r.NormFloat64()
 			if math.IsNaN(v) || math.IsInf(v, 0) {
 				t.Fatalf("NormFloat64 返回非法值: %f", v)
@@ -319,13 +319,13 @@ func TestSymbols(t *testing.T) {
 
 func TestIntR(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.IntR(10, 20); v < 10 || v > 20 {
 				t.Fatalf("IntR(10,20) 越界: %d", v)
 			}
 		}
 		// min and max are swapped automatically when min > max.
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.IntR(20, 10); v < 10 || v > 20 {
 				t.Fatalf("IntR(20,10) 越界: %d", v)
 			}
@@ -339,7 +339,7 @@ func TestIntR(t *testing.T) {
 
 func TestInt32R(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int32R(10, 20); v < 10 || v > 20 {
 				t.Fatalf("Int32R(10,20) 越界: %d", v)
 			}
@@ -352,7 +352,7 @@ func TestInt32R(t *testing.T) {
 
 func TestInt64R(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Int64R(10, 20); v < 10 || v > 20 {
 				t.Fatalf("Int64R(10,20) 越界: %d", v)
 			}
@@ -365,7 +365,7 @@ func TestInt64R(t *testing.T) {
 
 func TestFloat32R(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Float32R(1.0, 2.0); v < 1.0 || v >= 2.0 {
 				t.Fatalf("Float32R(1,2) 越界: %f", v)
 			}
@@ -378,7 +378,7 @@ func TestFloat32R(t *testing.T) {
 
 func TestFloat64R(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Float64R(1.0, 2.0); v < 1.0 || v >= 2.0 {
 				t.Fatalf("Float64R(1,2) 越界: %f", v)
 			}
@@ -391,7 +391,7 @@ func TestFloat64R(t *testing.T) {
 
 func TestDuration(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.Duration(time.Second, 2*time.Second); v < time.Second || v > 2*time.Second {
 				t.Fatalf("Duration 越界: %v", v)
 			}
@@ -414,7 +414,7 @@ func TestLucky(t *testing.T) {
 			t.Fatal("Lucky(1000) 应为 true")
 		}
 		// A probability within (0,100) must not panic across repeated calls.
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_ = r.Lucky(50)
 		}
 	})
@@ -422,7 +422,7 @@ func TestLucky(t *testing.T) {
 
 func TestWeight(t *testing.T) {
 	runForAll(t, func(t *testing.T, r *rand.Rand) {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			idx, v, ok := r.Weight(func(x int) float64 { return float64(x) }, 1, 2, 3)
 			if !ok {
 				t.Fatal("Weight 应命中")
@@ -468,7 +468,7 @@ func TestShuffle(t *testing.T) {
 func TestGenericN(t *testing.T) {
 	t.Run("pseudo", func(t *testing.T) {
 		r := &rand.PseudoRandom{}
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.N(10); v < 0 || v >= 10 {
 				t.Fatalf("N(10) 越界: %d", v)
 			}
@@ -477,7 +477,7 @@ func TestGenericN(t *testing.T) {
 	})
 	t.Run("true", func(t *testing.T) {
 		r := &rand.TrueRandom{}
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			if v := r.N(10); v < 0 || v >= 10 {
 				t.Fatalf("N(10) 越界: %d", v)
 			}
@@ -490,11 +490,11 @@ func TestConcurrency(t *testing.T) {
 	for name, r := range generators() {
 		t.Run(name, func(t *testing.T) {
 			var wg sync.WaitGroup
-			for g := 0; g < 50; g++ {
+			for range 50 {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					for i := 0; i < 100; i++ {
+					for range 100 {
 						r.Int64()
 						r.IntN(100)
 						r.Uint64()

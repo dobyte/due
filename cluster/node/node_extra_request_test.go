@@ -820,7 +820,7 @@ func TestRequestConcurrentClone(t *testing.T) {
 	r.uid = 1
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

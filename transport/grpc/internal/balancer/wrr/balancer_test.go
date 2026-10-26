@@ -23,7 +23,7 @@ func TestPickerSingleSubConn(t *testing.T) {
 	sc := &mockSubConn{}
 	p := &Picker{subConns: []*weightedSubConn{{sc: sc, weight: 5}}}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		res, err := p.Pick(balancer.PickInfo{})
 		if err != nil {
 			t.Fatal(err)
@@ -43,7 +43,7 @@ func TestPickerWeightedDistribution(t *testing.T) {
 
 	const total = 60000
 	counts := make(map[balancer.SubConn]int)
-	for i := 0; i < total; i++ {
+	for range total {
 		res, err := p.Pick(balancer.PickInfo{})
 		if err != nil {
 			t.Fatal(err)
@@ -71,10 +71,10 @@ func TestPickerConcurrentSafe(t *testing.T) {
 	const goroutines = 8
 	const picks = 20000
 	done := make(chan struct{}, goroutines)
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer func() { done <- struct{}{} }()
-			for j := 0; j < picks; j++ {
+			for range picks {
 				if _, err := p.Pick(balancer.PickInfo{}); err != nil {
 					t.Errorf("unexpected pick error: %v", err)
 					return
@@ -82,7 +82,7 @@ func TestPickerConcurrentSafe(t *testing.T) {
 			}
 		}()
 	}
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		<-done
 	}
 }

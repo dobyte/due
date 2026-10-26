@@ -24,7 +24,7 @@ func TestPickerSingleSubConn(t *testing.T) {
 	p := &Picker{ring: newConsistentRing([]*hashSubConn{{sc: sc, key: "127.0.0.1:8011"}})}
 
 	for _, method := range []string{"/a.Service/Foo", "/b.Service/Bar", "/c.Service/Baz"} {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			res, err := p.Pick(balancer.PickInfo{FullMethodName: method})
 			if err != nil {
 				t.Fatal(err)
@@ -50,7 +50,7 @@ func TestPickerDeterministic(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			res, err := p.Pick(balancer.PickInfo{FullMethodName: method})
 			if err != nil {
 				t.Fatal(err)
@@ -95,7 +95,7 @@ func TestPickerDistribution(t *testing.T) {
 
 	// A large number of distinct keys should cover all nodes.
 	counts := make(map[balancer.SubConn]int)
-	for i := 0; i < 3000; i++ {
+	for i := range 3000 {
 		res, err := p.Pick(balancer.PickInfo{FullMethodName: "/svc.Method" + strconv.Itoa(i)})
 		if err != nil {
 			t.Fatal(err)
@@ -119,7 +119,7 @@ func TestPickerRebalance(t *testing.T) {
 
 	// Record the initial routing for a batch of keys.
 	keys := make([]string, 0, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		keys = append(keys, "key-"+strconv.Itoa(i))
 	}
 	initial := make(map[string]balancer.SubConn)

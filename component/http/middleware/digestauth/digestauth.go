@@ -160,7 +160,7 @@ func New(config ...Config) http.Handler {
 // containsInvalidHeaderChars reports whether s holds any byte outside the
 // valid header set: HTAB ('\t') or visible ASCII [0x20, 0x7E].
 func containsInvalidHeaderChars(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if (c < 0x20 && c != '\t') || c >= 0x7f {
 			return true
@@ -200,7 +200,7 @@ func splitDigestParams(s string) []string {
 		escaped bool
 	)
 
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch {
 		case escaped:
 			escaped = false

@@ -23,7 +23,7 @@ func TestConsistentHashDemo(t *testing.T) {
 	// Mock requests: 1000 user IDs access the same RPC method.
 	const userCount = 1000
 	users := make([]string, 0, userCount)
-	for i := 0; i < userCount; i++ {
+	for i := range userCount {
 		users = append(users, "user-"+strconv.Itoa(i))
 	}
 
@@ -43,7 +43,7 @@ func TestConsistentHashDemo(t *testing.T) {
 		}
 
 		// A repeated visit by the same user must hit the same node.
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			u := users[i]
 			ctx := WithHashKey(context.Background(), u)
 			res, err := p.Pick(balancer.PickInfo{Ctx: ctx, FullMethodName: "/user.Service/GetUserInfo"})
@@ -63,7 +63,7 @@ func TestConsistentHashDemo(t *testing.T) {
 		p := &Picker{ring: newConsistentRing(cluster)}
 
 		counts := make(map[balancer.SubConn]int)
-		for i := 0; i < userCount; i++ {
+		for range userCount {
 			res, err := p.Pick(balancer.PickInfo{FullMethodName: "/user.Service/GetUserInfo"})
 			if err != nil {
 				t.Fatal(err)

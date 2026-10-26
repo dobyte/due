@@ -13,7 +13,7 @@ type pending struct {
 func newPending() *pending {
 	p := &pending{calls: make([]*calls, 64)}
 
-	for i := 0; i < len(p.calls); i++ {
+	for i := range len(p.calls) {
 		p.calls[i] = &calls{calls: make(map[uint64]chan *buffer.Bytes)}
 	}
 

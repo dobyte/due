@@ -122,14 +122,14 @@ func TestRemConnConcurrent(t *testing.T) {
 	const goroutines = 32
 	results := make(chan bool, goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			results <- s.remConn(conn)
 		}()
 	}
 
 	removed := 0
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		if <-results {
 			removed++
 		}

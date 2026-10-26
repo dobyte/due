@@ -55,7 +55,7 @@ func IsIdCard(idCard string) bool {
 	checkCodes := []string{"1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"}
 
 	sum := 0
-	for i := 0; i < 17; i++ {
+	for i := range 17 {
 		num, _ := strconv.Atoi(string(idCard[i]))
 		sum += num * factor[i]
 	}
@@ -175,7 +175,7 @@ func In(v any, set any) bool {
 	if kk == reflect.Slice || kk == reflect.Array {
 		check := make(map[any]struct{}, value.Len())
 
-		for i := 0; i < value.Len(); i++ {
+		for i := range value.Len() {
 			val := value.Index(i)
 
 			if !val.Comparable() {
@@ -185,7 +185,7 @@ func In(v any, set any) bool {
 			check[val.Interface()] = struct{}{}
 		}
 
-		for i := 0; i < vv.Len(); i++ {
+		for i := range vv.Len() {
 			val := vv.Index(i)
 
 			if !val.Comparable() {
@@ -201,7 +201,7 @@ func In(v any, set any) bool {
 			return false
 		}
 
-		for i := 0; i < value.Len(); i++ {
+		for i := range value.Len() {
 			val := value.Index(i)
 
 			if !val.Comparable() {

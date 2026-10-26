@@ -117,7 +117,7 @@ func TestActorQueueSequentialWritesDoNotAllocateTimers(t *testing.T) {
 				}
 			}
 
-			for i := 0; i < 2*capacity; i++ {
+			for range 2 * capacity {
 				write()
 			}
 			allocs := testing.AllocsPerRun(256, write)
@@ -165,7 +165,7 @@ func TestActorQueueFullWriteTimeout(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the first handler did not start")
 	}
-	for i := 0; i < capacity; i++ {
+	for range capacity {
 		if err := write(Event); err != nil {
 			t.Fatalf("filling the queue failed: %v", err)
 		}
@@ -175,7 +175,7 @@ func TestActorQueueFullWriteTimeout(t *testing.T) {
 	}
 
 	resumeOnce.Do(func() { close(resume) })
-	for i := 0; i < capacity+1; i++ {
+	for range capacity + 1 {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
@@ -216,7 +216,7 @@ func BenchmarkActorQueueRoundTrip(b *testing.B) {
 				}
 				<-done
 			}
-			for i := 0; i < 2*capacity; i++ {
+			for range 2 * capacity {
 				write()
 			}
 			b.ReportAllocs()

@@ -125,7 +125,7 @@ func BenchmarkSyncerParallel(b *testing.B) {
 
 					// Pre-create a pool of instances to exclude creation cost so that only Write is timed.
 					ch := make(chan *Syncer, n)
-					for i := 0; i < n; i++ {
+					for range n {
 						s := NewSyncer(WithPath(filepath.Join(b.TempDir(), "due.log")), WithFlushInterval(fc.value))
 						ch <- s
 						defer s.Close()

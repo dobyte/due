@@ -142,7 +142,7 @@ func TestRegistry_Watch(t *testing.T) {
 }
 
 func TestMultipleNodeRegister(t *testing.T) {
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(i int) {
 			n := newNode(xconv.String(i))
 			n.start()

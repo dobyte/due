@@ -126,11 +126,11 @@ func TestWeightedRoundRobinDispatchConcurrent(t *testing.T) {
 		counts = make(map[string]int)
 	)
 
-	for g := 0; g < 8; g++ {
+	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < total/8; i++ {
+			for range total / 8 {
 				ep, err := route.FindEndpoint()
 				if err != nil {
 					t.Errorf("find endpoint failed: %v", err)

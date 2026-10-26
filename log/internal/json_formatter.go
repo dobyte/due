@@ -84,7 +84,7 @@ func writeJSONString(b *buffer, s string) {
 	const hex = "0123456789abcdef"
 
 	b.WriteByte('"')
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch c {
 		case '"':

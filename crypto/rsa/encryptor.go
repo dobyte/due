@@ -48,7 +48,7 @@ func (e *Encryptor) Encrypt(data []byte) ([]byte, error) {
 		h          = e.opts.hash.New()
 	)
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		start = i * e.opts.blockSize
 		end = (i + 1) * e.opts.blockSize
 		if end > len(data) {
@@ -86,7 +86,7 @@ func (e *Encryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 		h         = e.opts.hash.New()
 	)
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		start = i * e.privateKey.Size()
 		end = (i + 1) * e.privateKey.Size()
 		if end > len(ciphertext) {

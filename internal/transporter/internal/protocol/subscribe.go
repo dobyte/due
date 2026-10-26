@@ -55,7 +55,7 @@ func DecodeSubscribeReq(buf buffer.Buffer) (kind cluster.Session, targets []int6
 	}
 
 	targets = make([]int64, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		start := def.B8 + def.B16 + i*def.B64
 		targets[i] = int64(binary.BigEndian.Uint64(data[start : start+def.B64]))
 	}

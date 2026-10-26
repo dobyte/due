@@ -39,7 +39,7 @@ func newServerConnMgr(server *server) *serverConnMgr {
 		}
 	}}
 
-	for i := 0; i < len(cm.partitions); i++ {
+	for i := range len(cm.partitions) {
 		cm.partitions[i] = &partition{connections: make(map[*kcp.UDPSession]*serverConn)}
 	}
 
