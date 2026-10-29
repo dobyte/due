@@ -33,6 +33,7 @@ type Gate struct {
 	session      *session
 	linker       *gate.Server
 	security     *securityManager
+	limiter      *connLimiter
 	userBindings bindingLocks
 	connBindings bindingLocks
 	mu           sync.Mutex // serializes connection admission with the transition to Hang or Shut
@@ -56,6 +57,10 @@ func NewGate(opts ...Option) *Gate {
 
 	if o.security != nil {
 		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
+	}
+
+	if o.limiter != nil && o.limiter.normalize() {
+		g.limiter = newConnLimiter(o.limiter)
 	}
 
 	return g
@@ -153,14 +158,17 @@ func (g *Gate) Destroy() {
 // startNetworkServer starts the network server.
 //
 // It registers the connect, disconnect and receive handlers and starts the network server,
-// logging a fatal error when startup fails.
+// logging a fatal error when startup fails. Handshake frames are routed to the security manager
+// and bypass the connection rate limiter, so the handshake is never blocked by an exhausted
+// business frame budget.
 func (g *Gate) startNetworkServer() {
 	g.opts.server.OnConnect(g.handleConnect)
 	g.opts.server.OnDisconnect(g.handleDisconnect)
 	g.opts.server.OnReceive(g.handleReceive)
 
 	if g.security != nil {
-		g.opts.server.OnHandshake(g.security.receiveHandshake)
+		// Handshake frames intentionally bypass the connection rate limiter.
+		g.opts.server.OnHandshake(g.security.handleHandshake)
 	}
 
 	if err := g.opts.server.Start(); err != nil {
@@ -188,6 +196,10 @@ func (g *Gate) handleConnect(conn network.Conn) {
 	g.mu.Lock()
 	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
+
+		if g.limiter != nil {
+			g.limiter.add(conn.ID())
+		}
 
 		if g.security != nil {
 			g.session.addConn(g.security.wrap(conn))
@@ -227,6 +239,10 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 	}
 
 	if g.session.remConn(conn) {
+		if g.limiter != nil {
+			g.limiter.remove(cid)
+		}
+
 		uid := conn.UID()
 
 		// The local session is gone, so the remaining work no longer needs the connection. Queue
@@ -259,9 +275,26 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 	}
 }
 
-// handleReceive handles a received message and delivers the client message to the matching
-// business node.
+// handleReceive handles a received business message and delivers the client message to the
+// matching business node. Heartbeat frames are handled by the network server before this handler.
+// When session security is enabled, handshake frames are routed to the security manager and
+// therefore bypass the connection rate limiter.
 func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
+	if g.limiter != nil {
+		allowed, closeConn := g.limiter.allow(conn.ID())
+		if !allowed {
+			buf.Release()
+
+			if closeConn {
+				if err := conn.Close(true); err != nil && !errors.Is(err, errors.ErrConnectionClosed) {
+					log.Warnf("close conn failed: cid = %d, err = %v", conn.ID(), err)
+				}
+			}
+
+			return
+		}
+	}
+
 	if g.security != nil && g.security.decrypt(conn, buf) {
 		return
 	}

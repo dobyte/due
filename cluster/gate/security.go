@@ -240,8 +240,8 @@ func (m *securityManager) closeSecureConn(cid int64, conn *securedConn) {
 	}
 }
 
-// receiveHandshake handles a handshake frame received from a client.
-func (m *securityManager) receiveHandshake(conn network.Conn, buf buffer.Buffer) {
+// handleHandshake handles a handshake frame received from a client.
+func (m *securityManager) handleHandshake(conn network.Conn, buf buffer.Buffer) {
 	payload, err := packet.ExtractHandshake(buf)
 	if err != nil {
 		buf.Release()

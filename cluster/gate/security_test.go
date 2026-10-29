@@ -310,7 +310,7 @@ func injectHandshake(t *testing.T, g *Gate, conn network.Conn, frame []byte) {
 		t.Fatalf("pack handshake frame failed: %v", err)
 	}
 
-	g.security.receiveHandshake(conn, buf)
+	g.security.handleHandshake(conn, buf)
 }
 
 // injectMessage packs and delivers a business message to the gate security manager.
