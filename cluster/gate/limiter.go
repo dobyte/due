@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xconv"
 )
 
+// Limiter defaults.
 const (
 	// defaultLimiterShardNum is the number of rate limiter table shards (a power of two, so that
 	// the shard is selected with a bit operation).
@@ -69,13 +70,13 @@ func (o *limiterOptions) normalize() bool {
 // Shards are selected with the low bits of the connection ID. The sync.Map, the drop counter and
 // the free list are kept on separate cache lines so that their updates do not contend.
 type limiterShard struct {
-	buckets   sync.Map
-	_         [16]byte // keeps dropped on a separate cache line
-	dropped   atomic.Int64
-	_         [56]byte
-	freeMu    sync.Mutex
-	free      *limiterBucket
-	freeCount int
+	buckets   sync.Map       // per-connection GCRA buckets
+	_         [16]byte       // keeps dropped on a separate cache line
+	dropped   atomic.Int64   // number of messages dropped by the shard
+	_         [56]byte       // keeps the free list on a separate cache line
+	freeMu    sync.Mutex     // protects the free list
+	free      *limiterBucket // free buckets available for reuse
+	freeCount int            // number of buckets in the free list
 	_         [40]byte
 }
 
@@ -85,10 +86,10 @@ type limiterShard struct {
 // padding keeps each bucket on its own cache line. next links buckets in the shard free list and is
 // only used while the bucket is not in use.
 type limiterBucket struct {
-	tat        int64 // next allowed time, relative to the limiter epoch
-	violations int32
-	closing    bool
-	next       *limiterBucket
+	tat        int64          // next allowed time, relative to the limiter epoch
+	violations int32          // consecutive limited messages
+	closing    bool           // whether the connection close has been signaled
+	next       *limiterBucket // free-list link while the bucket is free
 	_          [40]byte
 }
 
@@ -101,16 +102,16 @@ type limiterBucket struct {
 // A connection is served by a single network read loop, so its bucket is only touched by one
 // goroutine at a time; the shard lock only protects the bucket table.
 type connLimiter struct {
-	epoch          time.Time
-	interval       int64
-	tolerance      int64
-	closeThreshold int
-	coarse         bool
-	_              [15]byte     // aligns clock to a cache line
-	clock          atomic.Int64 // cached time since epoch in nanoseconds
-	_              [56]byte     // keeps shards off the clock line
-	shards         [defaultLimiterShardNum]limiterShard
-	wg             sync.WaitGroup
+	epoch          time.Time                            // reference time for GCRA timestamps
+	interval       int64                                // emission interval in nanoseconds
+	tolerance      int64                                // burst tolerance in nanoseconds
+	closeThreshold int                                  // consecutive violations before closing; zero disables
+	coarse         bool                                 // whether the cached clock is used
+	_              [15]byte                             // aligns clock to a cache line
+	clock          atomic.Int64                         // cached time since epoch in nanoseconds
+	_              [56]byte                             // keeps shards off the clock line
+	shards         [defaultLimiterShardNum]limiterShard // per-connection bucket table
+	wg             sync.WaitGroup                       // background reporter and clock goroutines
 }
 
 // newConnLimiter creates a per-connection rate limiter with normalized options.

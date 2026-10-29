@@ -24,20 +24,20 @@ import (
 // Gate is the gate server component.
 type Gate struct {
 	component.Base
-	opts         *options
-	ctx          context.Context
-	cancel       context.CancelFunc
-	state        atomic.Int32
-	proxy        *proxy
-	instance     *registry.ServiceInstance
-	session      *session
-	linker       *gate.Server
-	security     *securityManager
-	limiter      *connLimiter
-	userBindings bindingLocks
-	connBindings bindingLocks
-	mu           sync.Mutex // serializes connection admission with the transition to Hang or Shut
-	wg           *sync.WaitGroup
+	opts         *options                  // gate options
+	ctx          context.Context           // component context
+	cancel       context.CancelFunc        // cancels the component context
+	state        atomic.Int32              // component state
+	proxy        *proxy                    // gate proxy
+	instance     *registry.ServiceInstance // registered service instance
+	session      *session                  // connection and user sessions
+	linker       *gate.Server              // internal link server
+	security     *securityManager          // session security manager
+	limiter      *connLimiter              // connection rate limiter
+	userBindings bindingLocks              // serializes user binding changes
+	connBindings bindingLocks              // serializes connection binding changes
+	mu           sync.Mutex                // serializes connection admission with the transition to Hang or Shut
+	wg           *sync.WaitGroup           // waits for connection cleanup
 }
 
 // NewGate returns a new gate server component configured by the given options.

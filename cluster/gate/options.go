@@ -21,6 +21,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
+// Default option values.
 const (
 	defaultName                      = "gate"          // default name
 	defaultDispatch                  = cluster.Random  // default dispatch strategy of stateless route messages
@@ -37,6 +38,7 @@ const (
 	defaultLimiterCloseThreshold     = 100             // default consecutive limited messages before closing
 )
 
+// Configuration keys for the gate options.
 const (
 	defaultIDKey                        = "etc.cluster.gate.id"
 	defaultNameKey                      = "etc.cluster.gate.name"
@@ -185,9 +187,7 @@ func defaultOptions() *options {
 		opts.limiter.burst = burst
 	}
 
-	if threshold := etc.Get(
-		defaultLimiterCloseThresholdKey, defaultLimiterCloseThreshold,
-	).Int(); threshold >= 0 {
+	if threshold := etc.Get(defaultLimiterCloseThresholdKey, defaultLimiterCloseThreshold).Int(); threshold >= 0 {
 		opts.limiter.closeThreshold = threshold
 	} else {
 		opts.limiter.closeThreshold = defaultLimiterCloseThreshold
