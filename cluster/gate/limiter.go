@@ -66,10 +66,12 @@ type limiterShard struct {
 }
 
 // limiterBucket holds the token bucket and the consecutive limit violations of one connection.
+//
+// The violation state is only touched by the connection read loop, so it needs no synchronization.
 type limiterBucket struct {
 	limiter    *corelimiter.Limiter
-	violations atomic.Int32
-	closing    atomic.Bool
+	violations int32
+	closing    bool
 }
 
 // connLimiter holds one token bucket per connection.
@@ -86,6 +88,7 @@ type connLimiter struct {
 	closeThreshold int
 	shards         [defaultLimiterShardNum]limiterShard
 	lastLog        atomic.Int64 // last warning time in Unix nanoseconds
+	_              [56]byte     // keeps dropped on a separate cache line
 	dropped        atomic.Int64 // number of rate limited messages
 }
 
@@ -138,35 +141,49 @@ func (r *connLimiter) allow(cid int64) (allowed bool, closeConn bool) {
 		return true, false
 	}
 
-	_, retryAfter, ok := bucket.limiter.TakeAt(time.Now(), 1)
+	now := time.Now()
+	_, retryAfter, ok := bucket.limiter.TakeAt(now, 1)
 	if ok {
-		bucket.violations.Store(0)
+		if bucket.violations != 0 {
+			bucket.violations = 0
+		}
 		return true, false
 	}
 
-	violations := bucket.violations.Add(1)
-	if r.closeThreshold > 0 && int(violations) >= r.closeThreshold {
-		closeConn = bucket.closing.CompareAndSwap(false, true)
+	if r.closeThreshold > 0 {
+		bucket.violations++
+		if int(bucket.violations) >= r.closeThreshold && !bucket.closing {
+			bucket.closing = true
+			closeConn = true
+		}
 	}
 
 	dropped := r.dropped.Add(1)
-	r.warn(cid, retryAfter, dropped, violations, closeConn)
+	if closeConn || r.shouldLog(now) {
+		r.warn(now, cid, retryAfter, dropped, bucket.violations, closeConn)
+	}
 
 	return false, closeConn
 }
 
+// shouldLog reports whether a warning may be emitted at now. It keeps the throttled logging path
+// out of the hot drop path while the intervals between warnings are short.
+func (r *connLimiter) shouldLog(now time.Time) bool {
+	return now.UnixNano()-r.lastLog.Load() >= int64(defaultLimiterLogInterval)
+}
+
 // warn logs a throttled warning for a dropped message.
 func (r *connLimiter) warn(
-	cid int64, retryAfter time.Duration, dropped int64, violations int32, closeConn bool,
+	now time.Time, cid int64, retryAfter time.Duration, dropped int64, violations int32, closeConn bool,
 ) {
-	now := time.Now().UnixNano()
+	nowNano := now.UnixNano()
 	last := r.lastLog.Load()
 
-	if now-last < int64(defaultLimiterLogInterval) {
+	if nowNano-last < int64(defaultLimiterLogInterval) {
 		return
 	}
 
-	if !r.lastLog.CompareAndSwap(last, now) {
+	if !r.lastLog.CompareAndSwap(last, nowNano) {
 		return
 	}
 

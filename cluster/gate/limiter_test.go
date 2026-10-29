@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,4 +234,73 @@ func TestGateHandleReceiveClosesLimitedConn(t *testing.T) {
 	}
 
 	f.server.disconnect(conn)
+}
+
+func BenchmarkConnLimiterAllow(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 1e9, period: time.Second, burst: 1e9})
+	r.add(1)
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		r.allow(1)
+	}
+}
+
+func BenchmarkConnLimiterDrop(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 1, period: time.Hour, burst: 1})
+	r.add(1)
+	r.allow(1)
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		r.allow(1)
+	}
+}
+
+func BenchmarkConnLimiterAllowParallel(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 1e9, period: time.Second, burst: 1e9})
+
+	var cid atomic.Int64
+
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		id := cid.Add(1)
+		r.add(id)
+
+		for pb.Next() {
+			r.allow(id)
+		}
+	})
+}
+
+func BenchmarkConnLimiterDropParallel(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 1, period: time.Hour, burst: 1})
+
+	var cid atomic.Int64
+
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		id := cid.Add(1)
+		r.add(id)
+		r.allow(id)
+
+		for pb.Next() {
+			r.allow(id)
+		}
+	})
+}
+
+func BenchmarkConnLimiterConnect(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 1e9, period: time.Second, burst: 1e9})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := range b.N {
+		cid := int64(i + 1)
+		r.add(cid)
+		r.remove(cid)
+	}
 }
