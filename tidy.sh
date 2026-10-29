@@ -19,6 +19,7 @@ readonly modules=(
     "./locate/redis"
     "./lock/redis"
     "./lock/memcache"
+    "./limiter/redis"
     "./log/aliyun"
     "./log/tencent"
     "./network/kcp"
