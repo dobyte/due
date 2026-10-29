@@ -16,22 +16,22 @@ import (
 
 // requireRedis probes whether the local redis service is available and skips the test when it is
 // not.
-func requireRedis(t *testing.T) {
-	t.Helper()
+func requireRedis(tb testing.TB) {
+	tb.Helper()
 
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:6379", 200*time.Millisecond)
 	if err != nil {
-		t.Skipf("local redis is not available: %v", err)
+		tb.Skipf("local redis is not available: %v", err)
 	}
 
 	conn.Close()
 }
 
 // uniqueName returns a unique scene name so that tests do not share bucket state.
-func uniqueName(t *testing.T) string {
-	t.Helper()
+func uniqueName(tb testing.TB) string {
+	tb.Helper()
 
-	return t.Name() + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	return tb.Name() + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
 
 func TestMaker_MakeInvalidRule(t *testing.T) {

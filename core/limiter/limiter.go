@@ -30,19 +30,29 @@ func (l *Limiter) Allow(n ...int) bool {
 		cost = n[0]
 	}
 
-	_, _, allowed := l.Take(cost)
+	_, _, allowed := l.TakeAt(time.Now(), cost)
 	return allowed
 }
 
 // Take takes n tokens from the bucket and reports the remaining tokens and the decision.
 //
+// It is equivalent to TakeAt(time.Now(), n).
+func (l *Limiter) Take(n int) (remaining int, retryAfter time.Duration, allowed bool) {
+	return l.TakeAt(time.Now(), n)
+}
+
+// TakeAt takes n tokens from the bucket using now as the current time and reports the remaining
+// tokens and the decision.
+//
+// It is like Take but lets callers that also need the timestamp reuse one clock read. now should
+// come from time.Now so that its monotonic reading is preserved.
+//
 // The remaining value is truncated to an integer. When the request is denied, retryAfter reports
 // how long it takes until n tokens are available; it is zero when the request is allowed or when
 // the bucket cannot refill because the rate is not positive.
-func (l *Limiter) Take(n int) (remaining int, retryAfter time.Duration, allowed bool) {
+func (l *Limiter) TakeAt(now time.Time, n int) (remaining int, retryAfter time.Duration, allowed bool) {
 	l.mu.Lock()
 
-	now := time.Now()
 	num := now.Sub(l.lastFillTime).Seconds() * l.rate
 
 	if num > 0 {

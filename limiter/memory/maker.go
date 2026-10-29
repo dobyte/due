@@ -20,12 +20,15 @@ const shardCount = 32
 
 // Maker is a memory limiter maker.
 type Maker struct {
-	opts   *options
-	shards [shardCount]*shard
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	closed atomic.Bool
+	opts      *options
+	shards    [shardCount]*shard
+	scenes    map[string]uint32
+	scenesMu  sync.Mutex
+	nextScene uint32
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	closed    atomic.Bool
 }
 
 var _ limiter.Maker = (*Maker)(nil)
@@ -44,11 +47,14 @@ func NewMaker(opts ...Option) *Maker {
 		o.cleanupInterval = defaultCleanupInterval
 	}
 
-	m := &Maker{opts: o}
+	m := &Maker{
+		opts:   o,
+		scenes: make(map[string]uint32),
+	}
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
 	for i := range shardCount {
-		m.shards[i] = &shard{buckets: make(map[string]*bucket)}
+		m.shards[i] = &shard{buckets: make(map[bucketKey]*bucket)}
 	}
 
 	m.wg.Add(1)
@@ -75,21 +81,13 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 		return nil, err
 	}
 
-	l := &Limiter{
+	return &Limiter{
 		maker: m,
+		scene: m.sceneID(name),
 		rate:  normalized.Rate(),
 		burst: normalized.Burst,
 		ttl:   normalized.TTL(),
-	}
-
-	if m.opts.prefix == "" {
-		l.keyPrefix, l.sceneKey = name+":", name
-	} else {
-		l.keyPrefix = m.opts.prefix + ":" + name + ":"
-		l.sceneKey = m.opts.prefix + ":" + name
-	}
-
-	return l, nil
+	}, nil
 }
 
 // Close closes the maker and waits for the cleanup goroutine to exit.
@@ -102,6 +100,27 @@ func (m *Maker) Close() error {
 	m.wg.Wait()
 
 	return nil
+}
+
+// sceneID returns the stable identifier of the named scene, assigning one when it is first seen.
+//
+// The prefix and name are joined once here, at Make time, instead of on every Allow call.
+func (m *Maker) sceneID(name string) uint32 {
+	key := name
+	if m.opts.prefix != "" {
+		key = m.opts.prefix + ":" + name
+	}
+
+	m.scenesMu.Lock()
+	id, ok := m.scenes[key]
+	if !ok {
+		m.nextScene++
+		id = m.nextScene
+		m.scenes[key] = id
+	}
+	m.scenesMu.Unlock()
+
+	return id
 }
 
 // cleanup evicts expired buckets periodically until the maker is closed.
@@ -137,7 +156,7 @@ func (m *Maker) evict() {
 }
 
 // bucket returns the bucket for key, creating it when it does not exist.
-func (m *Maker) bucket(key string, l *Limiter) *bucket {
+func (m *Maker) bucket(key bucketKey, l *Limiter) *bucket {
 	s := m.shards[shardIndex(key)]
 
 	s.mu.RLock()
@@ -165,7 +184,7 @@ func (m *Maker) bucket(key string, l *Limiter) *bucket {
 // shard is a shard of the bucket map.
 type shard struct {
 	mu      sync.RWMutex
-	buckets map[string]*bucket
+	buckets map[bucketKey]*bucket
 }
 
 // bucket holds the state of one rate limiting key.
@@ -175,16 +194,27 @@ type bucket struct {
 	lastSeen atomic.Int64 // Unix nanoseconds of the last access
 }
 
+// bucketKey identifies a bucket by scene and dimension.
+//
+// Using the structured key avoids building a concatenated key on every Allow call.
+type bucketKey struct {
+	scene     uint32
+	dimension string
+}
+
 // shardIndex returns the shard index of key using the FNV-1a hash.
-func shardIndex(key string) uint32 {
+func shardIndex(key bucketKey) uint32 {
 	const (
 		offset32 = 2166136261
 		prime32  = 16777619
 	)
 
 	hash := uint32(offset32)
-	for i := range len(key) {
-		hash ^= uint32(key[i])
+	hash ^= key.scene
+	hash *= prime32
+
+	for i := range len(key.dimension) {
+		hash ^= uint32(key.dimension[i])
 		hash *= prime32
 	}
 

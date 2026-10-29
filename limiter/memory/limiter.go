@@ -13,12 +13,11 @@ import (
 // It is stateless with respect to dimension keys: the same Limiter can be shared by concurrent
 // callers and different keys.
 type Limiter struct {
-	maker     *Maker
-	keyPrefix string
-	sceneKey  string
-	rate      float64
-	burst     int
-	ttl       time.Duration
+	maker *Maker
+	scene uint32
+	rate  float64
+	burst int
+	ttl   time.Duration
 }
 
 var _ limiter.Limiter = (*Limiter)(nil)
@@ -39,14 +38,10 @@ func (l *Limiter) Allow(_ context.Context, key string, n ...int) (limiter.Result
 		return limiter.Result{}, errors.ErrInvalidLimiterCost
 	}
 
-	bucketKey := l.sceneKey
-	if key != "" {
-		bucketKey = l.keyPrefix + key
-	}
-
-	b := l.maker.bucket(bucketKey, l)
-	remaining, retryAfter, allowed := b.limiter.Take(cost)
-	b.lastSeen.Store(time.Now().UnixNano())
+	b := l.maker.bucket(bucketKey{scene: l.scene, dimension: key}, l)
+	now := time.Now()
+	remaining, retryAfter, allowed := b.limiter.TakeAt(now, cost)
+	b.lastSeen.Store(now.UnixNano())
 
 	return limiter.Result{
 		Allowed:    allowed,
