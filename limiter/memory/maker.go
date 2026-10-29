@@ -16,7 +16,12 @@ import (
 	"github.com/dobyte/due/v2/limiter"
 )
 
-const shardCount = 32
+const (
+	shardCount = 32
+
+	// evictScanBatchSize is the maximum number of buckets scanned per shard in one cleanup pass.
+	evictScanBatchSize = 512
+)
 
 // Maker is a memory limiter maker.
 type Maker struct {
@@ -140,19 +145,62 @@ func (m *Maker) cleanup() {
 	}
 }
 
-// evict removes buckets that have been idle longer than their key expiration.
+// evict scans every shard in bounded batches.
+//
+// Each shard keeps a cursor over its key slice, so one pass scans at most evictScanBatchSize
+// buckets per shard instead of scanning the whole map.
 func (m *Maker) evict() {
 	now := time.Now().UnixNano()
 
 	for _, s := range m.shards {
-		s.mu.Lock()
-		for key, b := range s.buckets {
-			if now-b.lastSeen.Load() > int64(b.ttl) {
-				delete(s.buckets, key)
-			}
-		}
-		s.mu.Unlock()
+		m.evictShard(s, now)
 	}
+}
+
+// evictShard scans a bounded window of one shard and removes expired buckets.
+//
+// A deleted bucket is replaced by the last key in the slice, so the cursor can continue without an
+// extra index and the slice stays compact.
+func (m *Maker) evictShard(s *shard, now int64) {
+	s.mu.Lock()
+
+	if len(s.keys) == 0 {
+		s.cursor = 0
+		s.keys = nil
+		s.mu.Unlock()
+		return
+	}
+
+	if s.cursor >= len(s.keys) {
+		s.cursor = 0
+	}
+
+	for processed := 0; processed < evictScanBatchSize && s.cursor < len(s.keys); processed++ {
+		key := s.keys[s.cursor]
+		b := s.buckets[key]
+
+		if now-b.lastSeen.Load() <= int64(b.ttl) {
+			s.cursor++
+			continue
+		}
+
+		last := len(s.keys) - 1
+		if s.cursor != last {
+			// Move the last key into the cursor; it is processed next.
+			s.keys[s.cursor] = s.keys[last]
+		}
+
+		// Clear the tail so the deleted key string is not retained by the backing array.
+		s.keys[last] = bucketKey{}
+		s.keys = s.keys[:last]
+		delete(s.buckets, key)
+	}
+
+	if s.cursor >= len(s.keys) {
+		s.cursor = 0
+	}
+
+	s.mu.Unlock()
 }
 
 // bucket returns the bucket for key, creating it when it does not exist.
@@ -174,6 +222,7 @@ func (m *Maker) bucket(key bucketKey, l *Limiter) *bucket {
 			ttl:     l.ttl,
 		}
 		b.lastSeen.Store(time.Now().UnixNano())
+		s.keys = append(s.keys, key)
 		s.buckets[key] = b
 	}
 	s.mu.Unlock()
@@ -185,6 +234,8 @@ func (m *Maker) bucket(key bucketKey, l *Limiter) *bucket {
 type shard struct {
 	mu      sync.RWMutex
 	buckets map[bucketKey]*bucket
+	keys    []bucketKey // Live keys used by cursor-based eviction.
+	cursor  int         // Next key index to scan.
 }
 
 // bucket holds the state of one rate limiting key.
