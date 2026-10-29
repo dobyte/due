@@ -102,6 +102,10 @@ func (g *Gate) Start() {
 		return
 	}
 
+	if g.limiter != nil {
+		g.limiter.start(g.ctx)
+	}
+
 	g.startNetworkServer()
 
 	g.startLinkerServer()
@@ -153,6 +157,10 @@ func (g *Gate) Destroy() {
 	g.stopLinkerServer()
 
 	g.cancel()
+
+	if g.limiter != nil {
+		g.limiter.stop()
+	}
 }
 
 // startNetworkServer starts the network server.
@@ -196,10 +204,6 @@ func (g *Gate) handleConnect(conn network.Conn) {
 	g.mu.Lock()
 	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
-
-		if g.limiter != nil {
-			g.limiter.add(conn.ID())
-		}
 
 		if g.security != nil {
 			g.session.addConn(g.security.wrap(conn))

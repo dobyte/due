@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,29 +13,52 @@ import (
 func TestConnectionLimiter(t *testing.T) {
 	r := newConnLimiter(&limiterOptions{quota: 1, period: time.Second, burst: 1})
 
-	// A missing bucket does not drop messages.
-	if allowed, closeConn := r.allow(1); !allowed || closeConn {
-		t.Fatal("a connection without a bucket must be allowed")
-	}
-
-	r.add(1)
-
+	// The first message creates a full bucket and is allowed.
 	if allowed, closeConn := r.allow(1); !allowed || closeConn {
 		t.Fatal("the first message must be allowed")
+	}
+	if _, ok := r.loadShard(1).buckets.Load(int64(1)); !ok {
+		t.Fatal("the bucket must be created on first use")
 	}
 	if allowed, closeConn := r.allow(1); allowed || closeConn {
 		t.Fatal("the second message must be limited")
 	}
-	if got := r.dropped.Load(); got != 1 {
+	if got := r.loadShard(1).dropped.Load(); got != 1 {
 		t.Fatalf("unexpected dropped count: %d", got)
 	}
 
-	// Removing and re-adding the bucket resets it.
+	// Removing and recreating the bucket resets it.
+	before, _ := r.loadShard(1).buckets.Load(int64(1))
 	r.remove(1)
-	r.add(1)
 
 	if allowed, closeConn := r.allow(1); !allowed || closeConn {
 		t.Fatal("a recreated bucket must start full")
+	}
+
+	if after, ok := r.loadShard(1).buckets.Load(int64(1)); !ok || after != before {
+		t.Fatal("the bucket must be reused from the shard free list")
+	}
+}
+
+func TestLimiterShardFreeListLimit(t *testing.T) {
+	var shard limiterShard
+
+	for range defaultLimiterFreeListSize + 1 {
+		shard.put(&limiterBucket{})
+	}
+
+	if got := shard.freeCount; got != defaultLimiterFreeListSize {
+		t.Fatalf("unexpected free list size: %d", got)
+	}
+
+	for range defaultLimiterFreeListSize {
+		if shard.get() == nil {
+			t.Fatal("the free list must return a bucket")
+		}
+	}
+
+	if got := shard.freeCount; got != 0 {
+		t.Fatalf("the free list must be empty: %d", got)
 	}
 }
 
@@ -42,7 +66,6 @@ func TestConnectionLimiterClosesAfterThreshold(t *testing.T) {
 	r := newConnLimiter(&limiterOptions{
 		quota: 1, period: time.Hour, burst: 1, closeThreshold: 3,
 	})
-	r.add(1)
 
 	if allowed, closeConn := r.allow(1); !allowed || closeConn {
 		t.Fatal("the first message must be allowed")
@@ -61,6 +84,61 @@ func TestConnectionLimiterClosesAfterThreshold(t *testing.T) {
 	// The close signal is only emitted once.
 	if allowed, closeConn := r.allow(1); allowed || closeConn {
 		t.Fatal("the close signal must not repeat")
+	}
+}
+
+func TestConnectionLimiterBurst(t *testing.T) {
+	r := newConnLimiter(&limiterOptions{
+		quota: 1, period: time.Hour, burst: 3,
+	})
+
+	for i := range 3 {
+		if allowed, _ := r.allow(1); !allowed {
+			t.Fatalf("message %d must be allowed", i+1)
+		}
+	}
+
+	if allowed, _ := r.allow(1); allowed {
+		t.Fatal("the message after the burst must be limited")
+	}
+}
+
+func TestConnectionLimiterRefill(t *testing.T) {
+	r := newConnLimiter(&limiterOptions{
+		quota: 100, period: time.Second, burst: 1,
+	})
+
+	if allowed, _ := r.allow(1); !allowed {
+		t.Fatal("the first message must be allowed")
+	}
+	if allowed, _ := r.allow(1); allowed {
+		t.Fatal("the second message must be limited")
+	}
+
+	// The emission interval is 10ms.
+	time.Sleep(25 * time.Millisecond)
+
+	if allowed, _ := r.allow(1); !allowed {
+		t.Fatal("the message after refill must be allowed")
+	}
+}
+
+func TestConnectionLimiterCoarseClock(t *testing.T) {
+	r := newConnLimiter(&limiterOptions{
+		quota: 100, period: time.Second, burst: 1,
+	})
+	if !r.coarse {
+		t.Fatal("a 10ms interval must use the cached clock")
+	}
+
+	r.clock.Store(int64(time.Second))
+	if allowed, _ := r.allow(1); !allowed {
+		t.Fatal("the first message must be allowed")
+	}
+
+	r.clock.Store(int64(2 * time.Second))
+	if allowed, _ := r.allow(1); !allowed {
+		t.Fatal("the cached clock must refill the bucket")
 	}
 }
 
@@ -168,8 +246,9 @@ func TestGateConnLimiter(t *testing.T) {
 	}
 
 	l := newConnLimiter(opts)
-	if l.burst != 2 || l.rate != 2 {
-		t.Fatalf("unexpected limiter: burst = %d, rate = %f", l.burst, l.rate)
+	interval := int64(time.Second / 2)
+	if l.interval != interval || l.tolerance != interval {
+		t.Fatalf("unexpected limiter: interval = %d, tolerance = %d", l.interval, l.tolerance)
 	}
 }
 
@@ -181,11 +260,19 @@ func TestGateHandleReceiveLimited(t *testing.T) {
 	conn := newGateConn(2001, 0)
 	f.server.connect(conn)
 
+	if _, ok := f.gate.limiter.loadShard(conn.ID()).buckets.Load(conn.ID()); ok {
+		t.Fatal("the bucket must not be created on connect")
+	}
+
 	buf, err := packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("pack message failed: %v", err)
 	}
 	f.server.receive(conn, buf)
+
+	if _, ok := f.gate.limiter.loadShard(conn.ID()).buckets.Load(conn.ID()); !ok {
+		t.Fatal("the bucket must be created on first receive")
+	}
 
 	buf, err = packet.PackMessage(1, 1, []byte("payload"))
 	if err != nil {
@@ -193,7 +280,7 @@ func TestGateHandleReceiveLimited(t *testing.T) {
 	}
 	f.server.receive(conn, buf)
 
-	if got := f.gate.limiter.dropped.Load(); got != 1 {
+	if got := f.gate.limiter.loadShard(conn.ID()).dropped.Load(); got != 1 {
 		t.Fatalf("expect one limited message, got: %d", got)
 	}
 	if conn.closed.Load() {
@@ -206,7 +293,7 @@ func TestGateHandleReceiveLimited(t *testing.T) {
 	// The bucket is released with the connection.
 	f.server.disconnect(conn)
 
-	if bucket := f.gate.limiter.loadShard(conn.ID()).buckets[conn.ID()]; bucket != nil {
+	if _, ok := f.gate.limiter.loadShard(conn.ID()).buckets.Load(conn.ID()); ok {
 		t.Fatal("the bucket must be removed after disconnect")
 	}
 }
@@ -238,7 +325,7 @@ func TestGateHandleReceiveClosesLimitedConn(t *testing.T) {
 
 func BenchmarkConnLimiterAllow(b *testing.B) {
 	r := newConnLimiter(&limiterOptions{quota: 1e9, period: time.Second, burst: 1e9})
-	r.add(1)
+	r.allow(1)
 
 	b.ReportAllocs()
 
@@ -249,7 +336,6 @@ func BenchmarkConnLimiterAllow(b *testing.B) {
 
 func BenchmarkConnLimiterDrop(b *testing.B) {
 	r := newConnLimiter(&limiterOptions{quota: 1, period: time.Hour, burst: 1})
-	r.add(1)
 	r.allow(1)
 
 	b.ReportAllocs()
@@ -267,7 +353,7 @@ func BenchmarkConnLimiterAllowParallel(b *testing.B) {
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		id := cid.Add(1)
-		r.add(id)
+		r.allow(id)
 
 		for pb.Next() {
 			r.allow(id)
@@ -283,7 +369,6 @@ func BenchmarkConnLimiterDropParallel(b *testing.B) {
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		id := cid.Add(1)
-		r.add(id)
 		r.allow(id)
 
 		for pb.Next() {
@@ -292,7 +377,25 @@ func BenchmarkConnLimiterDropParallel(b *testing.B) {
 	})
 }
 
-func BenchmarkConnLimiterConnect(b *testing.B) {
+func BenchmarkConnLimiterAllowCoarseClock(b *testing.B) {
+	r := newConnLimiter(&limiterOptions{quota: 20, period: time.Second, burst: 1e9})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	r.start(ctx)
+	defer func() {
+		cancel()
+		r.stop()
+	}()
+	r.allow(1)
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		r.allow(1)
+	}
+}
+
+func BenchmarkConnLimiterLazyCreate(b *testing.B) {
 	r := newConnLimiter(&limiterOptions{quota: 1e9, period: time.Second, burst: 1e9})
 
 	b.ReportAllocs()
@@ -300,7 +403,7 @@ func BenchmarkConnLimiterConnect(b *testing.B) {
 
 	for i := range b.N {
 		cid := int64(i + 1)
-		r.add(cid)
+		r.allow(cid)
 		r.remove(cid)
 	}
 }
