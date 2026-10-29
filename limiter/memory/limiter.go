@@ -58,10 +58,5 @@ func (l *Limiter) resetAfter(remaining int) time.Duration {
 		return 0
 	}
 
-	resetAfter := time.Duration(float64(l.burst-remaining) / l.rate * float64(time.Second))
-	if resetAfter < time.Millisecond {
-		resetAfter = time.Millisecond
-	}
-
-	return resetAfter
+	return max(time.Millisecond, time.Duration(float64(l.burst-remaining)/l.rate*float64(time.Second)))
 }
