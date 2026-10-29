@@ -7,6 +7,7 @@
 package redis
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -17,8 +18,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// warnInterval is the minimum interval between two backend failure warnings.
-const warnInterval = 5 * time.Second
+const (
+	// warnInterval is the minimum interval between two backend failure warnings.
+	warnInterval = 5 * time.Second
+
+	// circuitBreakerThreshold is the number of consecutive backend failures that opens the circuit.
+	circuitBreakerThreshold = 5
+
+	// circuitBreakerCooldown is how long the circuit stays open before a probe is allowed.
+	circuitBreakerCooldown = time.Second
+)
 
 // Maker is a redis limiter maker.
 type Maker struct {
@@ -28,6 +37,10 @@ type Maker struct {
 	script   *redis.Script // Lua script that makes a decision.
 	closed   atomic.Bool   // Reports whether the maker has been closed.
 	lastWarn atomic.Int64  // Unix nanoseconds of the last backend failure warning.
+	failures atomic.Int32  // Consecutive backend failures.
+	open     atomic.Bool   // Reports whether the circuit is open.
+
+	openDuration time.Duration // How long the circuit stays open.
 }
 
 var _ limiter.Maker = (*Maker)(nil)
@@ -47,7 +60,11 @@ func NewMaker(opts ...Option) *Maker {
 		o.failurePolicy = limiter.FailOpen
 	}
 
-	m := &Maker{opts: o, script: redis.NewScript(allowScript)}
+	m := &Maker{
+		opts:         o,
+		script:       redis.NewScript(allowScript),
+		openDuration: circuitBreakerCooldown,
+	}
 
 	if o.client == nil {
 		options := &redis.UniversalOptions{
@@ -92,11 +109,21 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 		return nil, err
 	}
 
+	rate := normalized.Rate()
+	if int64(normalized.Burst) > maxExactLuaInteger/tokenScale || rate > float64(maxExactLuaInteger)/1e6 {
+		return nil, errors.ErrInvalidLimiterRule
+	}
+
 	l := &Limiter{
-		maker: m,
-		rate:  normalized.Rate(),
-		burst: normalized.Burst,
-		ttl:   max(1, normalized.TTL().Milliseconds()),
+		maker:         m,
+		client:        m.opts.client,
+		script:        m.script,
+		rateNanoPerMs: rateToNanoPerMs(rate),
+		burst:         normalized.Burst,
+		burstNano:     int64(normalized.Burst) * tokenScale,
+		ttl:           max(1, normalized.TTL().Milliseconds()),
+		timeout:       m.opts.timeout,
+		failurePolicy: m.opts.failurePolicy,
 	}
 
 	if m.opts.prefix == "" {
@@ -107,6 +134,41 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 	}
 
 	return l, nil
+}
+
+// rateToNanoPerMs converts a token-per-second rate into nano-tokens per millisecond.
+//
+// Very low rates are rounded to the nearest nano-token per millisecond; a positive rate never
+// becomes zero.
+func rateToNanoPerMs(rate float64) int64 {
+	n := math.Round(rate * 1e6)
+	if n < 1 {
+		return 1
+	}
+	if n > float64(maxExactLuaInteger) {
+		return maxExactLuaInteger
+	}
+
+	return int64(n)
+}
+
+// recordSuccess resets the consecutive backend failure count.
+func (m *Maker) recordSuccess() {
+	m.failures.Store(0)
+}
+
+// recordFailure counts a backend failure and opens the circuit after the threshold.
+func (m *Maker) recordFailure() {
+	if m.failures.Add(1) < circuitBreakerThreshold {
+		return
+	}
+
+	if m.open.CompareAndSwap(false, true) {
+		time.AfterFunc(m.openDuration, func() {
+			m.failures.Store(0)
+			m.open.Store(false)
+		})
+	}
 }
 
 // Close closes the maker and the built-in client.

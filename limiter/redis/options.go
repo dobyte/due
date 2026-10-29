@@ -12,7 +12,7 @@ import (
 const (
 	defaultAddr          = "127.0.0.1:6379" // Default client connection address
 	defaultDB            = 0                // Default database number
-	defaultMaxRetries    = 3                // Default maximum number of retries
+	defaultMaxRetries    = 1                // Default maximum number of retries
 	defaultPrefix        = "due:limiter"    // Default key prefix
 	defaultTimeout       = "200ms"          // Default timeout of one rate limiting decision
 	defaultFailurePolicy = "failOpen"       // Default failure policy
@@ -66,7 +66,7 @@ type options struct {
 	caFile string
 
 	// Maximum number of retries.
-	// Built-in client configuration, defaults to 3.
+	// Built-in client configuration, defaults to 1; -1 disables retries.
 	maxRetries int
 
 	// Client.
@@ -128,7 +128,7 @@ func WithCredentials(certFile, keyFile, caFile string) Option {
 	return func(o *options) { o.certFile, o.keyFile, o.caFile = certFile, keyFile, caFile }
 }
 
-// WithMaxRetries sets the maximum number of retries of the built-in client.
+// WithMaxRetries sets the maximum number of retries of the built-in client. -1 disables retries.
 func WithMaxRetries(maxRetries int) Option {
 	return func(o *options) { o.maxRetries = maxRetries }
 }
@@ -146,7 +146,8 @@ func WithPrefix(prefix string) Option {
 }
 
 // WithTimeout sets the timeout of one rate limiting decision. Zero or less leaves the deadline
-// entirely to the caller's context.
+// entirely to the caller's context. For high-QPS paths, configure an external client with read and
+// write timeouts and set the timeout to zero to avoid a per-call context allocation.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }

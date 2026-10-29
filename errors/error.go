@@ -77,6 +77,7 @@ var (
 	ErrMissingLimiterInstance  = New("missing limiter instance")
 	ErrInvalidLimiterRule      = New("invalid limiter rule")
 	ErrInvalidLimiterCost      = New("invalid limiter cost")
+	ErrLimiterUnavailable      = New("limiter service unavailable")
 	ErrActorNotStarted         = New("actor not started")
 	ErrWatcherStopped          = New("watcher stopped")
 	ErrWriteTimeout            = New("write timeout")
