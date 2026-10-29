@@ -52,18 +52,16 @@ func NewMaker(opts ...Option) *Maker {
 		o.cleanupInterval = defaultCleanupInterval
 	}
 
-	m := &Maker{
-		opts:   o,
-		scenes: make(map[string]uint32),
-	}
+	m := &Maker{}
+	m.opts = o
+	m.scenes = make(map[string]uint32)
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
 	for i := range shardCount {
 		m.shards[i] = &shard{buckets: make(map[bucketKey]*bucket)}
 	}
 
-	m.wg.Add(1)
-	go m.cleanup()
+	m.wg.Go(m.cleanup)
 
 	return m
 }
@@ -130,8 +128,6 @@ func (m *Maker) sceneID(name string) uint32 {
 
 // cleanup evicts expired buckets periodically until the maker is closed.
 func (m *Maker) cleanup() {
-	defer m.wg.Done()
-
 	ticker := time.NewTicker(m.opts.cleanupInterval)
 	defer ticker.Stop()
 
