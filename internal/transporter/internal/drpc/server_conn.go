@@ -125,7 +125,7 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 
 				// Ignore empty push frames. A request may legitimately carry an empty payload,
 				// such as GetState, and must still reach its handler.
-				if buf.Len() == 0 && seq == 0 {
+				if seq == 0 && buf.Len() == 0 {
 					buf.Release()
 					continue
 				}

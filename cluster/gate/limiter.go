@@ -29,6 +29,10 @@ const (
 
 	// defaultLimiterFreeListSize is the maximum number of free buckets retained per shard.
 	defaultLimiterFreeListSize = 1024
+
+	// defaultLimiterCloseRetryInterval is the minimum interval between two close signals for a
+	// connection whose previous close did not take effect.
+	defaultLimiterCloseRetryInterval = time.Second
 )
 
 // limiterOptions are the connection rate limiting options.
@@ -85,13 +89,14 @@ type limiterShard struct {
 //
 // The state is only touched by the connection read loop, so it needs no synchronization. The
 // padding keeps each bucket on its own cache line. next links buckets in the shard free list and is
-// only used while the bucket is not in use.
+// only used while the bucket is not in use. retryAt throttles repeated close signals so that a close
+// that did not take effect is retried instead of being latched forever.
 type limiterBucket struct {
 	tat        int64          // next allowed time, relative to the limiter epoch
 	violations int32          // consecutive limited messages
-	closing    bool           // whether the connection close has been signaled
+	retryAt    int64          // next allowed close signal, relative to the limiter epoch
 	next       *limiterBucket // free-list link while the bucket is free
-	_          [40]byte
+	_          [32]byte
 }
 
 // connLimiter holds one GCRA bucket per connection.
@@ -107,8 +112,9 @@ type connLimiter struct {
 	interval       int64                                // emission interval in nanoseconds
 	tolerance      int64                                // burst tolerance in nanoseconds
 	closeThreshold int                                  // consecutive violations before closing; zero disables
+	closeRetry     time.Duration                        // minimum interval between close signals
 	coarse         bool                                 // whether the cached clock is used
-	_              [15]byte                             // aligns clock to a cache line
+	_              [7]byte                              // aligns clock to a cache line
 	clock          atomic.Int64                         // cached time since epoch in nanoseconds
 	_              [56]byte                             // keeps shards off the clock line
 	shards         [defaultLimiterShardNum]limiterShard // per-connection bucket table
@@ -124,6 +130,7 @@ func newConnLimiter(opts *limiterOptions) *connLimiter {
 		interval:       interval,
 		tolerance:      limiterTolerance(interval, opts.burst),
 		closeThreshold: opts.closeThreshold,
+		closeRetry:     defaultLimiterCloseRetryInterval,
 		coarse:         interval >= int64(defaultLimiterClockInterval)*defaultLimiterCoarseFactor,
 	}
 
@@ -228,7 +235,8 @@ func (r *connLimiter) remove(cid int64) {
 }
 
 // allow reports whether a message from cid may be processed and whether the connection should be
-// closed because it reached the configured consecutive violation threshold.
+// closed because it reached the configured consecutive violation threshold. The close signal is
+// re-emitted at most once per retry interval, so a close that did not take effect is retried.
 //
 // The bucket is created on first use, so a connection that never sends a business frame does not
 // allocate one. The connection read loop owns the bucket until the connection is removed.
@@ -258,9 +266,14 @@ func (r *connLimiter) allow(cid int64) (allowed bool, closeConn bool) {
 		bucket.tat += r.interval
 	default:
 		if r.closeThreshold > 0 {
-			bucket.violations++
-			if int(bucket.violations) >= r.closeThreshold && !bucket.closing {
-				bucket.closing = true
+			if bucket.violations < math.MaxInt32 {
+				bucket.violations++
+			}
+
+			// Re-emit the close signal after the retry interval, so a close that did not take
+			// effect is retried instead of leaving the connection in a drop-only state.
+			if int(bucket.violations) >= r.closeThreshold && now >= bucket.retryAt {
+				bucket.retryAt = now + int64(r.closeRetry)
 				closeConn = true
 				log.Warnf("connection rate limit exceeded, closing connection, cid: %d, violations: %d",
 					cid, bucket.violations)
@@ -274,6 +287,7 @@ func (r *connLimiter) allow(cid int64) (allowed bool, closeConn bool) {
 
 	if bucket.violations != 0 {
 		bucket.violations = 0
+		bucket.retryAt = 0
 	}
 
 	return true, false
@@ -307,7 +321,7 @@ func (s *limiterShard) get() *limiterBucket {
 func (s *limiterShard) put(bucket *limiterBucket) {
 	bucket.tat = 0
 	bucket.violations = 0
-	bucket.closing = false
+	bucket.retryAt = 0
 	bucket.next = nil
 
 	s.freeMu.Lock()

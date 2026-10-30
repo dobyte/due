@@ -1,7 +1,6 @@
 package gate
 
 import (
-	"context"
 	"hash/maphash"
 	"net"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
-	"github.com/dobyte/due/v2/task"
 )
 
 // defaultSessionShardNum is the number of session table shards (a power of two, so that the shard
@@ -536,57 +534,41 @@ func (s *session) multicast(kind cluster.Session, targets []int64, disconnect bo
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, len(conns), conns)
 }
 
 // broadcast pushes buf to every session of the given kind asynchronously. When disconnect is true,
 // each connection is closed after the push. It returns the number of sessions the message was
 // pushed to, or [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error) {
-	var conns []network.Conn
+	var (
+		total  int
+		conns  [][]network.Conn
+		shards []sessionShard
+	)
 
 	switch kind {
 	case cluster.Conn:
-		total := 0
-		for i := range s.conns {
-			s.conns[i].rw.RLock()
-			total += len(s.conns[i].conns)
-		}
-		conns = make([]network.Conn, 0, total)
-		for i := range s.conns {
-			for _, conn := range s.conns[i].conns {
-				conns = append(conns, conn)
-			}
-		}
-		for i := range s.conns {
-			s.conns[i].rw.RUnlock()
-		}
+		shards = s.conns[:]
 	case cluster.User:
-		total := 0
-		for i := range s.users {
-			s.users[i].rw.RLock()
-			total += len(s.users[i].conns)
-		}
-		conns = make([]network.Conn, 0, total)
-		for i := range s.users {
-			for _, conn := range s.users[i].conns {
-				conns = append(conns, conn)
-			}
-		}
-		for i := range s.users {
-			s.users[i].rw.RUnlock()
-		}
+		shards = s.users[:]
 	default:
 		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
 
-	if len(conns) == 0 {
-		buf.Release()
-		return 0, nil
+	conns = make([][]network.Conn, len(shards))
+	for i := range shards {
+		shards[i].rw.RLock()
+		total += len(shards[i].conns)
+		conns[i] = make([]network.Conn, 0, len(shards[i].conns))
+		for _, conn := range shards[i].conns {
+			conns[i] = append(conns[i], conn)
+		}
+		shards[i].rw.RUnlock()
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, total, conns[:]...)
 }
 
 // publish pushes buf to every session subscribed to channel asynchronously. When disconnect is
@@ -605,7 +587,7 @@ func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (i
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, len(conns), conns)
 }
 
 // subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
@@ -763,57 +745,44 @@ func (s *session) stat(kind cluster.Session) (int64, error) {
 
 // doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
 // connection is closed after the push. It returns the number of sessions the message was pushed to.
-func (s *session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
-	switch n := len(conns); n {
-	case 0:
+func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, conns ...[]network.Conn) (int64, error) {
+	if total <= 0 {
 		buf.Release()
+
 		return 0, nil
-	case 1:
-		if err := conns[0].Push(buf); err != nil {
-			buf.Release()
-			return 0, err
-		}
-
-		if disconnect {
-			_ = conns[0].Close()
-		}
-
-		return 1, nil
-	default:
+	} else {
 		var (
-			total atomic.Int64
-			eg, _ = task.WithContext(context.Background())
+			num      int64
+			firstErr error
 		)
 
-		buf.Delay(n)
+		buf.Delay(total)
 
-		for _, conn := range conns {
-			eg.Go(func() error {
+		for _, list := range conns {
+			for _, conn := range list {
 				if err := conn.Push(buf); err != nil {
 					buf.Release()
-					return err
+					if firstErr == nil {
+						firstErr = err
+					}
+					continue
 				}
 
-				total.Add(1)
+				num++
 
 				if disconnect {
 					if err := conn.Close(); err != nil {
 						log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
 					}
 				}
-
-				return nil
-			})
+			}
 		}
 
-		err := eg.Wait()
-		num := total.Load()
-
-		if err != nil {
+		if firstErr != nil {
 			if num == 0 {
-				return 0, err
+				return 0, firstErr
 			} else {
-				log.Warnf("batch push partial failed: total = %d, err = %v", num, err)
+				log.Warnf("batch push partial failed: total = %d, err = %v", num, firstErr)
 			}
 		}
 

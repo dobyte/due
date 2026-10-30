@@ -106,9 +106,43 @@ func TestConnectionLimiterClosesAfterThreshold(t *testing.T) {
 		t.Fatal("the connection must close at the threshold")
 	}
 
-	// The close signal is only emitted once.
+	// The close signal is throttled by the retry interval while a close is pending.
 	if allowed, closeConn := r.allow(1); allowed || closeConn {
-		t.Fatal("the close signal must not repeat")
+		t.Fatal("the close signal must not repeat within the retry interval")
+	}
+}
+
+func TestConnectionLimiterRetriesCloseSignal(t *testing.T) {
+	r := newConnLimiter(&limiterOptions{
+		quota: 1, period: time.Hour, burst: 1, closeThreshold: 1,
+	})
+	r.closeRetry = 10 * time.Millisecond
+
+	if allowed, closeConn := r.allow(1); !allowed || closeConn {
+		t.Fatal("the first message must be allowed")
+	}
+
+	if allowed, closeConn := r.allow(1); allowed || !closeConn {
+		t.Fatal("the connection must close at the threshold")
+	}
+
+	if allowed, closeConn := r.allow(1); allowed || closeConn {
+		t.Fatal("the close signal must not repeat within the retry interval")
+	}
+
+	// A close that did not take effect must be retried after the retry interval.
+	time.Sleep(15 * time.Millisecond)
+
+	if allowed, closeConn := r.allow(1); allowed || !closeConn {
+		t.Fatal("a failed close must be retried after the retry interval")
+	}
+
+	// A reused bucket starts with a clean retry state.
+	shard := &limiterShard{}
+	shard.put(&limiterBucket{violations: 3, retryAt: 1})
+
+	if bucket := shard.get(); bucket.violations != 0 || bucket.retryAt != 0 {
+		t.Fatalf("the bucket state was not reset: violations=%d retryAt=%d", bucket.violations, bucket.retryAt)
 	}
 }
 

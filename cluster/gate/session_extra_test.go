@@ -969,7 +969,7 @@ func TestDoBatchPushEmpty(t *testing.T) {
 	s := newSession()
 	buf := buffer.NewBytes([]byte("data"))
 
-	n, err := s.doBatchPush(nil, false, buf)
+	n, err := s.doBatchPush(false, buf, 0)
 	if n != 0 || err != nil {
 		t.Errorf("doBatchPush() = (%d, %v), want (0, nil)", n, err)
 	}
