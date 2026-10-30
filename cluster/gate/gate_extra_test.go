@@ -308,7 +308,7 @@ func TestGateNewAndName(t *testing.T) {
 	if !g.isShut() {
 		t.Fatal("isShut must be true for a new gate")
 	}
-	if g.proxy == nil || g.session == nil || g.wg == nil {
+	if g.proxy == nil || g.session == nil {
 		t.Fatal("gate internals must be initialized")
 	}
 }

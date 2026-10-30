@@ -52,19 +52,15 @@ func (p *proxy) bindGate(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	taskpool.Add(func() { p.reconnect(ctx, cid, uid) })
+	taskpool.Add(func() {
+		userLock := p.gate.userBindings.lock(uid)
+		if p.gate.session.isBound(cid, uid) {
+			p.trigger(context.Background(), cluster.Reconnect, cid, uid)
+		}
+		userLock.unlock()
+	})
 
 	return nil
-}
-
-// reconnect drops a queued event if the connection was removed before it could be published.
-// Sharing the user lock with disconnect keeps a valid Reconnect ahead of its Disconnect.
-func (p *proxy) reconnect(ctx context.Context, cid, uid int64) {
-	userLock := p.gate.userBindings.lock(uid)
-	if p.gate.session.isBound(cid, uid) {
-		p.trigger(ctx, cluster.Reconnect, cid, uid)
-	}
-	userLock.unlock()
 }
 
 // unbindGate unbinds the user from the gate.

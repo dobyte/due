@@ -19,6 +19,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	taskpool "github.com/dobyte/due/v2/task"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 // Gate is the gate server component.
@@ -32,12 +33,12 @@ type Gate struct {
 	instance     *registry.ServiceInstance // registered service instance
 	session      *session                  // connection and user sessions
 	linker       *gate.Server              // internal link server
-	security     *securityManager          // session security manager
 	limiter      *connLimiter              // connection rate limiter
+	security     *securityManager          // session security manager
 	userBindings bindingLocks              // serializes user binding changes
 	connBindings bindingLocks              // serializes connection binding changes
 	mu           sync.Mutex                // serializes connection admission with the transition to Hang or Shut
-	wg           *sync.WaitGroup           // waits for connection cleanup
+	wg           sync.WaitGroup            // waits for connection cleanup
 }
 
 // NewGate returns a new gate server component configured by the given options.
@@ -53,7 +54,6 @@ func NewGate(opts ...Option) *Gate {
 	g.proxy = newProxy(g)
 	g.session = newSession()
 	g.state.Store(int32(cluster.Shut))
-	g.wg = &sync.WaitGroup{}
 
 	if o.security != nil {
 		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
@@ -232,13 +232,14 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // the existence check and removal, so when concurrent duplicate disconnects happen only the first
 // call takes effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
-	cid := conn.ID()
-
-	confirmed := true
+	var (
+		cid       = conn.ID()
+		confirmed = true
+	)
 
 	if g.security != nil {
-		conn = g.security.unwrap(conn)
-		confirmed = g.security.confirmed(cid)
+		conn, confirmed = g.security.unwrap(conn), g.security.confirmed(cid)
+
 		g.security.remove(cid)
 	}
 
@@ -290,9 +291,16 @@ func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
 			buf.Release()
 
 			if closeConn {
-				if err := conn.Close(true); err != nil && !errors.Is(err, errors.ErrConnectionClosed) {
-					log.Warnf("close conn failed: cid = %d, err = %v", conn.ID(), err)
-				}
+				// A transport's Close waits for the connection read loop to exit, and this handler
+				// runs inside that loop, so the close must be deferred. The security manager closes
+				// connections the same way for the same reason.
+				xcall.Go(func() {
+					if err := conn.Close(true); err != nil &&
+						!errors.Is(err, errors.ErrConnectionClosed) &&
+						!errors.Is(err, errors.ErrConnectionNotOpened) {
+						log.Warnf("close conn failed: cid = %d, err = %v", conn.ID(), err)
+					}
+				})
 			}
 
 			return

@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -316,11 +317,71 @@ func TestGateHandleReceiveClosesLimitedConn(t *testing.T) {
 		f.server.receive(conn, buf)
 	}
 
-	if !conn.closed.Load() {
-		t.Fatal("the connection must be closed after reaching the threshold")
-	}
+	waitForCondition(t, time.Second, conn.closed.Load, "the connection must be closed after reaching the threshold")
 
 	f.server.disconnect(conn)
+}
+
+// deferredCloseConn models a transport whose Close waits for the receive callback to return.
+type deferredCloseConn struct {
+	*gateConn
+	receiveReturned chan struct{}
+}
+
+func (c *deferredCloseConn) Close(force ...bool) error {
+	<-c.receiveReturned
+	c.closed.Store(true)
+	return nil
+}
+
+func TestGateHandleReceiveClosesLimitedConnOutsideCallback(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.limiter = newConnLimiter(&limiterOptions{
+		quota: 1, period: time.Hour, burst: 1, closeThreshold: 1,
+	})
+	f.start(t)
+
+	conn := &deferredCloseConn{
+		gateConn:        newGateConn(2003, 0),
+		receiveReturned: make(chan struct{}),
+	}
+	f.server.connect(conn)
+
+	var once sync.Once
+	releaseReceive := func() { once.Do(func() { close(conn.receiveReturned) }) }
+	t.Cleanup(releaseReceive)
+	t.Cleanup(func() { f.server.disconnect(conn) })
+
+	// The first message fills the bucket and is delivered.
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	f.server.receive(conn, buf)
+
+	// The second message exceeds the limit and requests the close. Closing inside the callback
+	// would make the transport wait for the callback to return, so the handler must defer it.
+	buf, err = packet.PackMessage(1, 1, []byte("payload"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		f.server.receive(conn, buf)
+	}()
+
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("the receive handler blocked on the connection close")
+	}
+
+	// The close may only complete after the receive callback has returned.
+	releaseReceive()
+
+	waitForCondition(t, time.Second, conn.closed.Load, "the connection was not closed")
 }
 
 func BenchmarkConnLimiterAllow(b *testing.B) {
