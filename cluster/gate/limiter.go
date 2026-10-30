@@ -285,9 +285,11 @@ func (r *connLimiter) allow(cid int64) (allowed bool, closeConn bool) {
 		return false, closeConn
 	}
 
+	// retryAt is intentionally not reset here: it is an absolute timestamp shared by consecutive
+	// violation streaks, so an allowed frame cannot let the same connection emit close signals
+	// faster than the retry interval.
 	if bucket.violations != 0 {
 		bucket.violations = 0
-		bucket.retryAt = 0
 	}
 
 	return true, false

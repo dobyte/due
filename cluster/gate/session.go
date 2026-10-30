@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"hash/maphash"
 	"net"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/task"
 )
 
 // defaultSessionShardNum is the number of session table shards (a power of two, so that the shard
@@ -20,6 +22,11 @@ const defaultSessionShardNum = 256
 // defaultChannelShardNum is the number of channel subscription table shards (a power of two, so
 // that the shard is selected with a bit operation).
 const defaultChannelShardNum = 256
+
+// defaultBatchPushConcurrency is the maximum number of concurrent pushes in a batch. A push can
+// block while the write queue of a slow connection is full, so the fan-out is bounded to keep one
+// slow connection from delaying the rest of the batch without spawning a goroutine per session.
+const defaultBatchPushConcurrency = 64
 
 // channelHashSeed hashes channel names to select a channel shard.
 var channelHashSeed = maphash.MakeSeed()
@@ -743,47 +750,71 @@ func (s *session) stat(kind cluster.Session) (int64, error) {
 	}
 }
 
-// doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
+// doBatchPush pushes buf to every conn in lists asynchronously. When disconnect is true, each
 // connection is closed after the push. It returns the number of sessions the message was pushed to.
-func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, conns ...[]network.Conn) (int64, error) {
-	if total <= 0 {
+//
+// The pushes run concurrently with a bounded fan-out: a push may block while the write queue of a
+// slow connection is full, and the bound keeps such a connection from delaying the rest of the
+// batch without spawning one goroutine per session. A single push runs inline.
+func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, lists ...[]network.Conn) (int64, error) {
+	switch total {
+	case 0:
 		buf.Release()
-
 		return 0, nil
-	} else {
-		var (
-			num      int64
-			firstErr error
-		)
-
-		buf.Delay(total)
-
-		for _, list := range conns {
+	case 1:
+		for _, list := range lists {
 			for _, conn := range list {
 				if err := conn.Push(buf); err != nil {
 					buf.Release()
-					if firstErr == nil {
-						firstErr = err
-					}
-					continue
+					return 0, err
 				}
-
-				num++
 
 				if disconnect {
 					if err := conn.Close(); err != nil {
 						log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
 					}
 				}
+
+				return 1, nil
 			}
 		}
 
-		if firstErr != nil {
-			if num == 0 {
-				return 0, firstErr
-			} else {
-				log.Warnf("batch push partial failed: total = %d, err = %v", num, firstErr)
+		return 0, errors.ErrUnknownError
+	default:
+		var (
+			num   int64
+			eg, _ = task.WithContext(context.Background())
+		)
+
+		buf.Delay(total)
+
+		for _, list := range lists {
+			for _, conn := range list {
+				eg.Go(func() error {
+					if err := conn.Push(buf); err != nil {
+						buf.Release()
+						return err
+					}
+
+					atomic.AddInt64(&num, 1)
+
+					if disconnect {
+						if err := conn.Close(); err != nil {
+							log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
+						}
+					}
+
+					return nil
+				})
 			}
+		}
+
+		if err := eg.Wait(); err != nil {
+			if num == 0 {
+				return 0, err
+			}
+
+			log.Warnf("batch push partial failed: total = %d, err = %v", num, err)
 		}
 
 		return num, nil

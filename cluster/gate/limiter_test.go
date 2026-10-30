@@ -146,6 +146,42 @@ func TestConnectionLimiterRetriesCloseSignal(t *testing.T) {
 	}
 }
 
+// TestConnectionLimiterThrottlesCloseAcrossStreaks verifies that an allowed frame between two
+// violation streaks does not reset the close retry window.
+func TestConnectionLimiterThrottlesCloseAcrossStreaks(t *testing.T) {
+	// A 100ms emission interval with a burst of 2 gives 100ms of tolerance, so the bucket refills
+	// one slot per emission interval while the close signal is still pending.
+	r := newConnLimiter(&limiterOptions{
+		quota: 10, period: time.Second, burst: 2, closeThreshold: 1,
+	})
+	if !r.coarse {
+		t.Fatal("the test requires the cached clock")
+	}
+
+	r.clock.Store(int64(100 * time.Millisecond))
+
+	// Exhaust the burst: the first two frames are allowed, the third one is limited and signals
+	// the first close.
+	for range 2 {
+		if allowed, closeConn := r.allow(1); !allowed || closeConn {
+			t.Fatal("a frame within the burst must be allowed without closing")
+		}
+	}
+	if allowed, closeConn := r.allow(1); allowed || !closeConn {
+		t.Fatal("the frame beyond the burst must signal the first close")
+	}
+
+	// One emission interval later a frame is allowed again; the next limited frame must still be
+	// throttled by the retry window started by the first close.
+	r.clock.Store(int64(250 * time.Millisecond))
+	if allowed, closeConn := r.allow(1); !allowed || closeConn {
+		t.Fatal("the refilled slot must be allowed")
+	}
+	if allowed, closeConn := r.allow(1); allowed || closeConn {
+		t.Fatal("an allowed frame must not reset the close retry window")
+	}
+}
+
 func TestConnectionLimiterBurst(t *testing.T) {
 	r := newConnLimiter(&limiterOptions{
 		quota: 1, period: time.Hour, burst: 3,
