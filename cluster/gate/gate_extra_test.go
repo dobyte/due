@@ -727,6 +727,8 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 	f := newGateFixture(t)
 	f.start(t)
 
+	ctx := context.Background()
+
 	conn := newGateConn(1001, 2001)
 	f.server.connect(conn)
 
@@ -736,14 +738,21 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 		t.Fatal("conn must be registered after connect")
 	}
 
+	if err := f.locator.BindGate(ctx, 2001, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
+
 	f.server.disconnect(conn)
 
 	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must be removed after disconnect")
 	}
-	if _, ok := f.locator.gates[2001]; ok {
-		t.Fatal("user must be unbound from the locator")
-	}
+
+	// The location cleanup is queued, so poll the locator under its lock.
+	waitForCondition(t, time.Second, func() bool {
+		gid, _ := f.locator.LocateGate(ctx, 2001)
+		return gid == ""
+	}, "user must be unbound from the locator")
 
 	// A duplicate disconnect must be ignored.
 	f.server.disconnect(conn)
@@ -1124,7 +1133,9 @@ func TestGateProviderPushFamily(t *testing.T) {
 	}
 
 	// Pushing to a missing user returns ErrNotFoundSession and schedules an unbind.
-	f.locator.gates[500] = "test-gate-id"
+	if err := f.locator.BindGate(ctx, 500, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
 	err := p.Push(ctx, cluster.User, 500, false, buffer.NewBytes(nil, true))
 	if !errors.Is(err, errors.ErrNotFoundSession) {
 		t.Fatalf("expect ErrNotFoundSession, got %v", err)
@@ -1187,6 +1198,54 @@ func TestGateProviderPushCleanupKeepsReboundUser(t *testing.T) {
 
 	if got, _ := f.locator.LocateGate(ctx, 600); got != "" {
 		t.Fatalf("the stale cleanup kept an offline binding: %q", got)
+	}
+}
+
+// deadlineLocator records the context of the last UnbindGate call.
+type deadlineLocator struct {
+	*gateLocator
+	mu       sync.Mutex
+	unbindCT context.Context
+}
+
+func (l *deadlineLocator) UnbindGate(ctx context.Context, uid int64, gid string) error {
+	l.mu.Lock()
+	l.unbindCT = ctx
+	l.mu.Unlock()
+
+	return l.gateLocator.UnbindGate(ctx, uid, gid)
+}
+
+func (l *deadlineLocator) lastUnbindContext() context.Context {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.unbindCT
+}
+
+func TestGateProviderPushCleanupUsesBoundedContext(t *testing.T) {
+	f := newGateFixture(t)
+	locator := &deadlineLocator{gateLocator: f.locator}
+	f.gate.opts.locator = locator
+	f.start(t)
+
+	p := &provider{gate: f.gate}
+
+	// Pushing to a missing user schedules the stale binding cleanup.
+	if err := p.Push(context.Background(), cluster.User, 700, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	waitForCondition(t, time.Second, func() bool {
+		return locator.lastUnbindContext() != nil
+	}, "the stale cleanup was not scheduled")
+
+	ctx := locator.lastUnbindContext()
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("the stale cleanup must use a bounded context")
+	}
+	if deadline, _ := ctx.Deadline(); time.Until(deadline) > 3*time.Second {
+		t.Fatalf("the stale cleanup deadline is too long: %v", time.Until(deadline))
 	}
 }
 

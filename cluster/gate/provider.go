@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -167,7 +168,15 @@ func (p *provider) Push(ctx context.Context, kind cluster.Session, target int64,
 
 	if err := p.gate.session.push(kind, target, disconnect, buf); err != nil {
 		if kind == cluster.User && errors.Is(err, errors.ErrNotFoundSession) {
-			task.Add(func() { p.unbindStaleGate(ctx, target) })
+			// The cleanup outlives the request, so it uses the component context instead of the
+			// caller context, bounded like the disconnect cleanup. The caller context may be
+			// canceled once the request returns, and an unbounded locator call would keep the
+			// user binding lock for the whole shard.
+			task.Add(func() {
+				ctx, cancel := context.WithTimeout(p.gate.ctx, 3*time.Second)
+				p.unbindStaleGate(ctx, target)
+				cancel()
+			})
 		}
 
 		return err
