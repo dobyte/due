@@ -327,6 +327,7 @@ func TestClientProviderErrors(t *testing.T) {
 		{"Publish", func() error { _, err := client.Publish(ctx, "channel", false, msg(), true); return err }},
 		{"Subscribe", func() error { return client.Subscribe(ctx, cluster.User, []int64{1}, "channel") }},
 		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, cluster.User, []int64{1}, "channel") }},
+		{"GetState", func() error { _, err := client.GetState(ctx); return err }},
 		{"SetState", func() error { return client.SetState(ctx, cluster.Work) }},
 	}
 

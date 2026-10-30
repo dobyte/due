@@ -25,6 +25,8 @@ import (
 // Gate is the gate server component.
 type Gate struct {
 	component.Base
+	userBindings bindingLocks              // serializes user binding changes
+	connBindings bindingLocks              // serializes connection binding changes
 	opts         *options                  // gate options
 	ctx          context.Context           // component context
 	cancel       context.CancelFunc        // cancels the component context
@@ -36,8 +38,6 @@ type Gate struct {
 	linker       *gate.Server              // internal link server
 	limiter      *connLimiter              // connection rate limiter
 	security     *securityManager          // session security manager
-	userBindings bindingLocks              // serializes user binding changes
-	connBindings bindingLocks              // serializes connection binding changes
 	mu           sync.Mutex                // serializes connection admission with the transition to Hang or Shut
 	wg           sync.WaitGroup            // waits for connection cleanup
 }
@@ -139,8 +139,8 @@ func (g *Gate) Close() {
 
 // Destroy destroys the component.
 //
-// It deregisters the service instance, stops the network server and the link server in turn, and
-// cancels the component context.
+// It deregisters the service instance, stops the network server and the link server in turn,
+// closes the clients to the business nodes, and cancels the component context.
 func (g *Gate) Destroy() {
 	g.mu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
@@ -156,6 +156,8 @@ func (g *Gate) Destroy() {
 	g.wg.Wait()
 
 	g.stopLinkerServer()
+
+	g.proxy.close()
 
 	g.cancel()
 

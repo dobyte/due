@@ -163,3 +163,10 @@ func (p *proxy) watch() {
 
 	p.nodeLinker.WatchClusterInstance()
 }
+
+// close closes the clients to the business nodes.
+func (p *proxy) close() {
+	if err := p.nodeLinker.Close(); err != nil {
+		log.Errorf("close node linker failed: %v", err)
+	}
+}

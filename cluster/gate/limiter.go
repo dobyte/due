@@ -67,8 +67,9 @@ func (o *limiterOptions) normalize() bool {
 
 // limiterShard is a shard of the per-connection rate limiter table.
 //
-// Shards are selected with the low bits of the connection ID. The sync.Map, the drop counter and
-// the free list are kept on separate cache lines so that their updates do not contend.
+// Shards are selected with the low bits of the connection ID. Each shard occupies three cache
+// lines: the sync.Map, the drop counter and the free list are kept on separate lines so that their
+// updates do not contend, and the three-line stride keeps adjacent shards on different lines.
 type limiterShard struct {
 	buckets   sync.Map       // per-connection GCRA buckets
 	_         [16]byte       // keeps dropped on a separate cache line
@@ -77,7 +78,7 @@ type limiterShard struct {
 	freeMu    sync.Mutex     // protects the free list
 	free      *limiterBucket // free buckets available for reuse
 	freeCount int            // number of buckets in the free list
-	_         [40]byte
+	_         [40]byte       // pads the shard to three cache lines
 }
 
 // limiterBucket holds the GCRA state and the consecutive limit violations of one connection.

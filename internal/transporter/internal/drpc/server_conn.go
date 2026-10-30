@@ -123,8 +123,9 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 				// after the client suppresses idle heartbeats.
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 
-				// ignore empty packet
-				if buf.Len() == 0 {
+				// Ignore empty push frames. A request may legitimately carry an empty payload,
+				// such as GetState, and must still reach its handler.
+				if buf.Len() == 0 && seq == 0 {
 					buf.Release()
 					continue
 				}

@@ -200,6 +200,25 @@ func TestNodeClientTriggerRejected(t *testing.T) {
 	}
 }
 
+// TestNodeClientGetState verifies that a request with an empty payload reaches the provider.
+func TestNodeClientGetState(t *testing.T) {
+	p := newProvider()
+	server := newNodeServer(t, p)
+
+	client := buildNodeClient(t, server.ListenAddr(), clientOptionsForKind(xuuid.UUID(), cluster.Gate))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	state, err := client.GetState(ctx)
+	if err != nil {
+		t.Fatalf("get state failed, err: %v", err)
+	}
+	if state != cluster.Work {
+		t.Fatalf("unexpected state, expect: %v, actual: %v", cluster.Work, state)
+	}
+}
+
 // TestNodeBuilderErrors verifies the builder error paths.
 func TestNodeBuilderErrors(t *testing.T) {
 	if _, err := node.NewServer(&provider{deliver: make(chan deliverRecord, 1)}, &node.ServerOptions{Addr: "bad::addr"}); err == nil {

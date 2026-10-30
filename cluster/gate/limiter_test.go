@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/packet"
@@ -60,6 +61,29 @@ func TestLimiterShardFreeListLimit(t *testing.T) {
 
 	if got := shard.freeCount; got != 0 {
 		t.Fatalf("the free list must be empty: %d", got)
+	}
+}
+
+func TestLimiterShardCacheLineAlignment(t *testing.T) {
+	const cacheLineSize = 64
+
+	if size := unsafe.Sizeof(limiterShard{}); size%cacheLineSize != 0 {
+		t.Fatalf("limiterShard size %d is not a multiple of the cache line size", size)
+	}
+
+	var (
+		shard limiterShard
+		r     connLimiter
+	)
+
+	if off := unsafe.Offsetof(shard.dropped); off%cacheLineSize != 0 {
+		t.Fatalf("dropped offset %d is not cache line aligned", off)
+	}
+	if off := unsafe.Offsetof(shard.freeMu); off%cacheLineSize != 0 {
+		t.Fatalf("free list offset %d is not cache line aligned", off)
+	}
+	if off := unsafe.Offsetof(r.shards); off%cacheLineSize != 0 {
+		t.Fatalf("shards offset %d is not cache line aligned", off)
 	}
 }
 
