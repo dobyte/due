@@ -815,7 +815,12 @@ func TestGateDoRegisterServiceInstanceError(t *testing.T) {
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
 
 	f.registry.registerErr = errors.New("register failed")
-	if err := f.gate.doRegisterServiceInstance(); err == nil {
+
+	f.gate.registryMu.Lock()
+	err := f.gate.doRegisterServiceInstance()
+	f.gate.registryMu.Unlock()
+
+	if err == nil {
 		t.Fatal("expect an error from doRegisterServiceInstance")
 	}
 }
@@ -832,6 +837,7 @@ func TestGateDeregisterServiceInstanceError(t *testing.T) {
 func TestGateRefreshServiceInstanceError(t *testing.T) {
 	f := newGateFixture(t)
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
 
 	f.registry.registerErr = errors.New("refresh failed")
 	f.gate.refreshServiceInstance()
@@ -840,15 +846,119 @@ func TestGateRefreshServiceInstanceError(t *testing.T) {
 func TestGateDoRefreshServiceInstance(t *testing.T) {
 	f := newGateFixture(t)
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
 
 	if err := f.gate.doRefreshServiceInstance(); err != nil {
 		t.Fatalf("refresh failed: %v", err)
 	}
-	if err := f.gate.doRefreshServiceInstance(cluster.Busy); err != nil {
-		t.Fatalf("refresh with state failed: %v", err)
+	if f.gate.instance.State != cluster.Work.String() {
+		t.Fatalf("instance state not refreshed: %s", f.gate.instance.State)
+	}
+
+	if err := f.gate.setState(cluster.Busy); err != nil {
+		t.Fatalf("set state failed: %v", err)
 	}
 	if f.gate.instance.State != cluster.Busy.String() {
 		t.Fatalf("instance state not refreshed: %s", f.gate.instance.State)
+	}
+}
+
+func TestGateRefreshSkippedAfterShut(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Shut))
+
+	if err := f.gate.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	f.registry.mu.Lock()
+	total := len(f.registry.registered)
+	f.registry.mu.Unlock()
+
+	if total != 0 {
+		t.Fatalf("a shut gate must not register again, registrations: %d", total)
+	}
+}
+
+// orderedRegistry records Register and Deregister calls and blocks the first Register so that a
+// test can order it against the deregistration.
+type orderedRegistry struct {
+	*gateRegistry
+	mu      sync.Mutex
+	ops     []string
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *orderedRegistry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.once.Do(func() { close(r.started) })
+
+	<-r.release
+
+	r.mu.Lock()
+	r.ops = append(r.ops, "register")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedRegistry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.mu.Lock()
+	r.ops = append(r.ops, "deregister")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedRegistry) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return append([]string(nil), r.ops...)
+}
+
+func TestGateRefreshSerializedWithDeregister(t *testing.T) {
+	f := newGateFixture(t)
+	reg := &orderedRegistry{
+		gateRegistry: f.registry,
+		started:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	f.gate.opts.registry = reg
+	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
+
+	refreshed := make(chan struct{})
+	go func() {
+		defer close(refreshed)
+		_ = f.gate.doRefreshServiceInstance()
+	}()
+
+	<-reg.started
+
+	// The gate shuts down while the refresh is still in flight. The deregistration must wait for
+	// the refresh, so it stays the last registry operation.
+	deregistered := make(chan struct{})
+	go func() {
+		defer close(deregistered)
+		f.gate.state.Store(int32(cluster.Shut))
+		f.gate.deregisterServiceInstance()
+	}()
+
+	select {
+	case <-deregistered:
+		t.Fatal("deregistration overtook the in-flight refresh")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(reg.release)
+	<-refreshed
+	<-deregistered
+
+	if ops := reg.recorded(); len(ops) != 2 || ops[0] != "register" || ops[1] != "deregister" {
+		t.Fatalf("unexpected registry operations: %v", ops)
 	}
 }
 
@@ -1040,6 +1150,43 @@ func TestGateProviderPushFamily(t *testing.T) {
 	total, err = p.Publish(ctx, "missing-channel", false, buffer.NewBytes(nil, true))
 	if err != nil || total != 0 {
 		t.Fatalf("unexpected publish: %d, err: %v", total, err)
+	}
+}
+
+func TestGateProviderPushCleanupKeepsReboundUser(t *testing.T) {
+	f := newGateFixture(t)
+	f.start(t)
+
+	p := &provider{gate: f.gate}
+	ctx := context.Background()
+
+	conn := newGateConn(12, 0)
+	f.server.connect(conn)
+	t.Cleanup(func() { f.server.disconnect(conn) })
+
+	// The user re-establishes the binding after the push lookup failed.
+	if err := f.gate.session.bind(conn.ID(), 600); err != nil {
+		t.Fatalf("bind session failed: %v", err)
+	}
+	if err := f.locator.BindGate(ctx, 600, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
+
+	p.unbindStaleGate(ctx, 600)
+
+	if got, _ := f.locator.LocateGate(ctx, 600); got != f.gate.opts.id {
+		t.Fatalf("the stale cleanup removed the rebound user: %q", got)
+	}
+
+	// Once the user is offline again, the cleanup removes the binding.
+	if _, err := f.gate.session.remove(600); err != nil {
+		t.Fatalf("remove session failed: %v", err)
+	}
+
+	p.unbindStaleGate(ctx, 600)
+
+	if got, _ := f.locator.LocateGate(ctx, 600); got != "" {
+		t.Fatalf("the stale cleanup kept an offline binding: %q", got)
 	}
 }
 

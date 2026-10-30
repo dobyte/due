@@ -31,6 +31,7 @@ type Gate struct {
 	state        atomic.Int32              // component state
 	proxy        *proxy                    // gate proxy
 	instance     *registry.ServiceInstance // registered service instance
+	registryMu   sync.Mutex                // serializes service instance registration with state refreshes
 	session      *session                  // connection and user sessions
 	linker       *gate.Server              // internal link server
 	limiter      *connLimiter              // connection rate limiter
@@ -353,36 +354,47 @@ func (g *Gate) registerServiceInstance() {
 		Name:     cluster.Gate.String(),
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
-		State:    g.getState().String(),
 		Endpoint: g.linker.Endpoint().String(),
 		Metadata: g.opts.metadata,
 	}
 
-	if err := g.doRegisterServiceInstance(); err != nil {
+	g.registryMu.Lock()
+	err := g.doRegisterServiceInstance()
+	g.registryMu.Unlock()
+
+	if err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // refreshServiceInstance re-registers the service instance with the current state.
 func (g *Gate) refreshServiceInstance() {
-	if err := g.doRefreshServiceInstance(g.getState()); err != nil {
+	if err := g.doRefreshServiceInstance(); err != nil {
 		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
 // deregisterServiceInstance removes this gate's service instance from the service registry.
+//
+// It takes the same lock as the refresh path, so an in-flight refresh completes before the
+// deregistration and a later refresh cannot register the instance again.
 func (g *Gate) deregisterServiceInstance() {
+	g.registryMu.Lock()
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	cancel()
+	g.registryMu.Unlock()
+
 	if err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }
 
-// doRegisterServiceInstance registers the service instance with the service registry under a
-// timeout.
+// doRegisterServiceInstance registers the service instance with the current state under a timeout.
+// The caller must hold registryMu.
 func (g *Gate) doRegisterServiceInstance() error {
+	g.instance.State = g.getState().String()
+
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
@@ -390,11 +402,16 @@ func (g *Gate) doRegisterServiceInstance() error {
 	return err
 }
 
-// doRefreshServiceInstance updates the instance state and re-registers the service instance. The
-// optional state is the target state to set.
-func (g *Gate) doRefreshServiceInstance(state ...cluster.State) error {
-	if len(state) > 0 {
-		g.instance.State = state[0].String()
+// doRefreshServiceInstance re-registers the service instance with the current state.
+//
+// It skips the registration once the gate is shut, so a refresh delayed past Destroy cannot
+// register the instance again after the deregistration.
+func (g *Gate) doRefreshServiceInstance() error {
+	g.registryMu.Lock()
+	defer g.registryMu.Unlock()
+
+	if g.isShut() {
+		return nil
 	}
 
 	return g.doRegisterServiceInstance()
@@ -419,7 +436,7 @@ func (g *Gate) setState(state cluster.State) error {
 		}
 
 		if g.state.CompareAndSwap(int32(curr), int32(state)) {
-			return g.doRefreshServiceInstance(state)
+			return g.doRefreshServiceInstance()
 		} else {
 			return errors.ErrIllegalOperation
 		}
