@@ -356,8 +356,11 @@ func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
 		state.timer.Stop()
 		state.timer = nil
 	}
-	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
 	state.mu.Unlock()
+
+	// Trigger the event after releasing the lock: the event handler may perform an RPC, and holding
+	// the state lock would block the read loop and the handshake timer for its whole duration.
+	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
 }
 
 // pushFrame pushes a plaintext handshake frame to the client.

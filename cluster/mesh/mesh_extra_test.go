@@ -735,12 +735,150 @@ func TestMeshStopTransportServerEdges(t *testing.T) {
 func TestMeshRegistryErrorPaths(t *testing.T) {
 	f := newMeshFixture(t)
 	f.mesh.instance = &registry.ServiceInstance{ID: "test"}
+	f.mesh.state.Store(int32(cluster.Work))
 
 	f.registry.registerEr = errors.New("refresh failed")
 	f.mesh.refreshServiceInstance()
 
 	f.registry.deregisterEr = errors.New("deregister failed")
 	f.mesh.deregisterServiceInstance()
+}
+
+// TestMeshRefreshSkippedAfterShut verifies that a refresh delayed past Destroy does not register
+// the instance again.
+func TestMeshRefreshSkippedAfterShut(t *testing.T) {
+	f := newMeshFixture(t)
+	f.mesh.instance = &registry.ServiceInstance{ID: "test"}
+	f.mesh.state.Store(int32(cluster.Shut))
+
+	if err := f.mesh.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	// The state must not be written once the mesh is shut.
+	if f.mesh.instance.State != "" {
+		t.Fatalf("a shut mesh refreshed the instance state: %s", f.mesh.instance.State)
+	}
+}
+
+// TestMeshRefreshBeforeRegister verifies that a refresh or a deregistration arriving before Start
+// has built the service instance is a no-op instead of a nil dereference.
+func TestMeshRefreshBeforeRegister(t *testing.T) {
+	f := newMeshFixture(t)
+	f.mesh.state.Store(int32(cluster.Work))
+
+	if err := f.mesh.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	f.mesh.deregisterServiceInstance()
+
+	if f.mesh.instance != nil {
+		t.Fatalf("unexpected service instance: %+v", f.mesh.instance)
+	}
+}
+
+// TestMeshRegisterConcurrentWithRefresh verifies that the service instance is only accessed under
+// the registry lock, so a concurrent registration and refresh are race free.
+func TestMeshRegisterConcurrentWithRefresh(t *testing.T) {
+	f := newMeshFixture(t)
+	f.mesh.transporter = f.server
+	f.mesh.state.Store(int32(cluster.Work))
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		f.mesh.registerServiceInstance()
+	}()
+
+	go func() {
+		defer wg.Done()
+		_ = f.mesh.doRefreshServiceInstance()
+	}()
+
+	wg.Wait()
+}
+
+// orderedMeshRegistry records Register and Deregister calls and blocks the first Register so that a
+// test can order it against the deregistration.
+type orderedMeshRegistry struct {
+	*meshRegistry
+	mu      sync.Mutex
+	ops     []string
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *orderedMeshRegistry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.once.Do(func() { close(r.started) })
+
+	<-r.release
+
+	r.mu.Lock()
+	r.ops = append(r.ops, "register")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedMeshRegistry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.mu.Lock()
+	r.ops = append(r.ops, "deregister")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedMeshRegistry) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return append([]string(nil), r.ops...)
+}
+
+// TestMeshRefreshSerializedWithDeregister verifies that the deregistration waits for an in-flight
+// refresh, so a destroyed mesh cannot be registered again.
+func TestMeshRefreshSerializedWithDeregister(t *testing.T) {
+	f := newMeshFixture(t)
+	reg := &orderedMeshRegistry{
+		meshRegistry: &meshRegistry{},
+		started:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	f.mesh.opts.registry = reg
+	f.mesh.instance = &registry.ServiceInstance{ID: "test"}
+	f.mesh.state.Store(int32(cluster.Work))
+
+	refreshed := make(chan struct{})
+	go func() {
+		defer close(refreshed)
+		_ = f.mesh.doRefreshServiceInstance()
+	}()
+
+	<-reg.started
+
+	deregistered := make(chan struct{})
+	go func() {
+		defer close(deregistered)
+		f.mesh.deregisterServiceInstance()
+	}()
+
+	select {
+	case <-deregistered:
+		t.Fatal("deregistration overtook the in-flight refresh")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(reg.release)
+	<-refreshed
+	<-deregistered
+
+	if ops := reg.recorded(); len(ops) != 2 || ops[0] != "register" || ops[1] != "deregister" {
+		t.Fatalf("unexpected registry operations: %v", ops)
+	}
 }
 
 func TestMeshProxyShutdown(t *testing.T) {
@@ -919,4 +1057,86 @@ func TestMeshProxyWorking(t *testing.T) {
 
 	// Watching must start every linker watch loop without blocking.
 	p.watch()
+}
+
+// meshWatchRegistry serves the configured instances on the first cluster watch event and then blocks
+// until done is closed.
+type meshWatchRegistry struct {
+	*meshRegistry
+	done chan struct{}
+}
+
+func (r *meshWatchRegistry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
+	return &meshWatchWatcher{instances: r.services, done: r.done}, nil
+}
+
+// meshWatchWatcher emits the configured instances once and then blocks.
+type meshWatchWatcher struct {
+	instances []*registry.ServiceInstance
+	done      chan struct{}
+	sent      atomic.Bool
+}
+
+func (w *meshWatchWatcher) Next() ([]*registry.ServiceInstance, error) {
+	if w.sent.CompareAndSwap(false, true) {
+		return w.instances, nil
+	}
+
+	<-w.done
+
+	return nil, context.Canceled
+}
+
+func (w *meshWatchWatcher) Stop() error { return nil }
+
+// TestMeshDestroyClosesLinkers verifies that Destroy closes the clients to the gateways and the
+// business nodes.
+func TestMeshDestroyClosesLinkers(t *testing.T) {
+	registry := &meshWatchRegistry{
+		meshRegistry: &meshRegistry{services: []*registry.ServiceInstance{{
+			ID:       "remote-node",
+			Kind:     cluster.Node.String(),
+			Endpoint: endpoint.NewEndpoint("drpc", "127.0.0.1:1", false).String(),
+		}, {
+			ID:       "remote-gate",
+			Kind:     cluster.Gate.String(),
+			Endpoint: endpoint.NewEndpoint("drpc", "127.0.0.1:1", false).String(),
+		}}},
+		done: make(chan struct{}),
+	}
+	t.Cleanup(func() { close(registry.done) })
+
+	server := &meshTransportServer{ep: endpoint.NewEndpoint("drpc", "127.0.0.1:0", false)}
+	transporter := &meshTransporter{server: server, client: meshTransportClient{}}
+	mesh := NewMesh(
+		WithID("test-mesh-id"),
+		WithName("test-mesh-name"),
+		WithCodec(json.DefaultCodec),
+		WithLocator(newMeshLocator()),
+		WithRegistry(registry),
+		WithTransporter(transporter),
+	)
+	mesh.Proxy().AddServiceProvider("test-service", "desc", &struct{}{})
+	mesh.Init()
+	mesh.Start()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !mesh.proxy.nodeLinker.HasNode("remote-node") || !mesh.proxy.gateLinker.HasGate("remote-gate") {
+		if time.Now().After(deadline) {
+			t.Fatal("the remote instances did not reach the dispatcher")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	mesh.Close()
+	mesh.Destroy()
+
+	if err := mesh.proxy.nodeLinker.SetState(context.Background(), "remote-node", cluster.Busy); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed for the node linker after destroy, got %v", err)
+	}
+
+	if err := mesh.proxy.gateLinker.SetState(context.Background(), "remote-gate", cluster.Busy); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed for the gate linker after destroy, got %v", err)
+	}
 }

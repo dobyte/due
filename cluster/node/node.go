@@ -51,7 +51,7 @@ type Node struct {
 	proxy        *Proxy
 	services     []*serviceEntity
 	instances    []*registry.ServiceInstance
-	instancesMu  sync.Mutex // Serializes the refresh of the service instance states
+	instancesMu  sync.Mutex // Serializes the registration, refresh and deregistration of the service instances
 	linker       *node.Server
 	scheduler    *Scheduler
 	transporter  transport.Server
@@ -162,7 +162,7 @@ func (n *Node) Close() {
 		}
 	}
 
-	n.refreshServiceInstances(cluster.Hang)
+	n.refreshServiceInstances()
 
 	n.runHookFunc(cluster.Close)
 
@@ -178,8 +178,8 @@ func (n *Node) Close() {
 // Destroy destroys the node server.
 //
 // It sets the state to shut, deregisters the service instances, stops the linker and transport
-// servers and releases the resources of the internal components. Destroy is idempotent and repeated
-// calls have no side effects.
+// servers, closes the clients to the business nodes and releases the resources of the internal
+// components. Destroy is idempotent and repeated calls have no side effects.
 func (n *Node) Destroy() {
 	if !n.destroyed.CompareAndSwap(false, true) {
 		return
@@ -211,6 +211,8 @@ func (n *Node) Destroy() {
 	n.trigger.clean()
 
 	n.runHookFunc(cluster.Destroy)
+
+	n.proxy.close()
 
 	n.cancel()
 }
@@ -380,12 +382,13 @@ func (n *Node) registerServiceInstances() {
 		events = append(events, int(evt))
 	}
 
-	n.instances = append(n.instances, &registry.ServiceInstance{
+	instances := make([]*registry.ServiceInstance, 0, 2)
+
+	instances = append(instances, &registry.ServiceInstance{
 		ID:       n.opts.id,
 		Name:     cluster.Node.String(),
 		Kind:     cluster.Node.String(),
 		Alias:    n.opts.name,
-		State:    n.getState().String(),
 		Routes:   routes,
 		Events:   events,
 		Endpoint: n.linker.Endpoint().String(),
@@ -399,12 +402,11 @@ func (n *Node) registerServiceInstances() {
 			services = append(services, item.name)
 		}
 
-		n.instances = append(n.instances, &registry.ServiceInstance{
+		instances = append(instances, &registry.ServiceInstance{
 			ID:       n.opts.id,
 			Name:     cluster.Mesh.String(),
 			Kind:     cluster.Mesh.String(),
 			Alias:    n.opts.name,
-			State:    n.getState().String(),
 			Services: services,
 			Endpoint: n.transporter.Endpoint().String(),
 			Weight:   n.opts.weight,
@@ -412,25 +414,34 @@ func (n *Node) registerServiceInstances() {
 		})
 	}
 
-	if err := n.doRegisterServiceInstances(); err != nil {
+	n.instancesMu.Lock()
+	n.instances = instances
+	err := n.doRegisterServiceInstances()
+	n.instancesMu.Unlock()
+
+	if err != nil {
 		log.Fatalf("register cluster instances failed: %v", err)
 	}
 }
 
 // refreshServiceInstances refreshes the state of the service instances.
 //
-// The optional state is the new state of the service instances; when it is omitted the instances
-// are only re-registered without updating the state.
-func (n *Node) refreshServiceInstances(state ...cluster.State) {
-	if err := n.doRefreshServiceInstances(state...); err != nil {
+// The instances are re-registered with the current node state.
+func (n *Node) refreshServiceInstances() {
+	if err := n.doRefreshServiceInstances(); err != nil {
 		log.Errorf("refresh cluster instances failed: %v", err)
 	}
 }
 
 // deregisterServiceInstances deregisters the service instances.
 //
-// It deregisters all registered instances in parallel and waits for all of them to complete.
+// It deregisters all registered instances in parallel and waits for all of them to complete. It
+// takes the same lock as the refresh path, so an in-flight refresh completes before the
+// deregistration and a later refresh cannot register the instances again.
 func (n *Node) deregisterServiceInstances() {
+	n.instancesMu.Lock()
+	defer n.instancesMu.Unlock()
+
 	eg, ctx := errgroup.WithContext(n.ctx)
 	for i := range n.instances {
 		instance := n.instances[i]
@@ -449,8 +460,14 @@ func (n *Node) deregisterServiceInstances() {
 // doRegisterServiceInstances performs the registration.
 //
 // It registers all service instances to the registry in parallel and waits for all of them to
-// complete. It reports an error when registering any instance fails.
+// complete. It reports an error when registering any instance fails. The caller must hold
+// instancesMu.
 func (n *Node) doRegisterServiceInstances() error {
+	state := n.getState().String()
+	for _, instance := range n.instances {
+		instance.State = state
+	}
+
 	eg, ctx := errgroup.WithContext(n.ctx)
 
 	for i := range n.instances {
@@ -469,18 +486,18 @@ func (n *Node) doRegisterServiceInstances() error {
 
 // doRefreshServiceInstances refreshes the state of the instances.
 //
-// The optional state is the new state of the service instances; when it is omitted the instances
-// are only re-registered without updating the state. It reports an error when registration fails.
-// The mutex serializes concurrent refreshes, so that the instance states are never written while
-// another refresh is reading them for registration.
-func (n *Node) doRefreshServiceInstances(state ...cluster.State) error {
+// It re-registers the instances with the current node state. The mutex serializes the refresh with
+// the other registration paths, so the instance states are never written while another path is
+// reading them. A refresh that arrives before the initial registration has nothing to publish,
+// because Start registers the instances with the state at that point. It also skips the
+// registration once the node is shut or destroyed, so a refresh delayed past Destroy cannot
+// register the instances again after the deregistration.
+func (n *Node) doRefreshServiceInstances() error {
 	n.instancesMu.Lock()
 	defer n.instancesMu.Unlock()
 
-	if len(state) > 0 {
-		for _, instance := range n.instances {
-			instance.State = state[0].String()
-		}
+	if n.destroyed.Load() || n.isShut() || len(n.instances) == 0 {
+		return nil
 	}
 
 	return n.doRegisterServiceInstances()
@@ -507,7 +524,7 @@ func (n *Node) setState(state cluster.State) error {
 		}
 
 		if n.state.CompareAndSwap(int32(curr), int32(state)) {
-			return n.doRefreshServiceInstances(state)
+			return n.doRefreshServiceInstances()
 		} else {
 			return errors.ErrIllegalOperation
 		}

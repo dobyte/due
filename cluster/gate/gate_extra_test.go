@@ -891,6 +891,49 @@ func TestGateRefreshSkippedAfterShut(t *testing.T) {
 	}
 }
 
+// TestGateRefreshBeforeRegister verifies that a refresh or a deregistration arriving before Start
+// has built the service instance is a no-op instead of a nil dereference.
+func TestGateRefreshBeforeRegister(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.state.Store(int32(cluster.Work))
+
+	if err := f.gate.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	f.gate.deregisterServiceInstance()
+
+	f.registry.mu.Lock()
+	defer f.registry.mu.Unlock()
+
+	if len(f.registry.registered) != 0 || len(f.registry.deregistered) != 0 {
+		t.Fatalf("unexpected registry calls: registered=%d deregistered=%d",
+			len(f.registry.registered), len(f.registry.deregistered))
+	}
+}
+
+// TestGateRegisterConcurrentWithRefresh verifies that the service instance is only accessed under
+// the registry lock, so a concurrent registration and refresh are race free.
+func TestGateRegisterConcurrentWithRefresh(t *testing.T) {
+	f := newGateFixture(t)
+	f.start(t)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		f.gate.registerServiceInstance()
+	}()
+
+	go func() {
+		defer wg.Done()
+		_ = f.gate.doRefreshServiceInstance()
+	}()
+
+	wg.Wait()
+}
+
 // orderedRegistry records Register and Deregister calls and blocks the first Register so that a
 // test can order it against the deregistration.
 type orderedRegistry struct {

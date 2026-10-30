@@ -31,6 +31,7 @@ type Mesh struct {
 	transporter transport.Server
 	services    []*serviceEntity
 	instance    *registry.ServiceInstance
+	registryMu  sync.Mutex // Serializes the service instance registration and state refresh
 	rw          sync.RWMutex
 	hooks       map[cluster.Hook][]HookHandler
 }
@@ -124,8 +125,8 @@ func (m *Mesh) Close() {
 
 // Destroy destroys the mesh server.
 //
-// It marks the mesh as shut, deregisters the service instance, stops the transport server and
-// releases the internal component resources.
+// It marks the mesh as shut, deregisters the service instance, stops the transport server, closes
+// the clients to the business nodes and releases the internal component resources.
 func (m *Mesh) Destroy() {
 	if !m.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
 		return
@@ -138,6 +139,8 @@ func (m *Mesh) Destroy() {
 	m.cancel()
 
 	m.runHookFunc(cluster.Destroy)
+
+	m.proxy.close()
 }
 
 // Proxy returns the mesh proxy.
@@ -191,12 +194,11 @@ func (m *Mesh) stopTransportServer() {
 //
 // It builds the mesh service instance and registers it with the registry.
 func (m *Mesh) registerServiceInstance() {
-	m.instance = &registry.ServiceInstance{
+	instance := &registry.ServiceInstance{
 		ID:       m.opts.id,
 		Name:     cluster.Mesh.String(),
 		Kind:     cluster.Mesh.String(),
 		Alias:    m.opts.name,
-		State:    m.getState().String(),
 		Endpoint: m.transporter.Endpoint().String(),
 		Services: make([]string, 0, len(m.services)),
 		Weight:   m.opts.weight,
@@ -204,34 +206,55 @@ func (m *Mesh) registerServiceInstance() {
 	}
 
 	for _, item := range m.services {
-		m.instance.Services = append(m.instance.Services, item.name)
+		instance.Services = append(instance.Services, item.name)
 	}
 
-	if err := m.doRegisterServiceInstance(); err != nil {
+	m.registryMu.Lock()
+	m.instance = instance
+	err := m.doRegisterServiceInstance()
+	m.registryMu.Unlock()
+
+	if err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // refreshServiceInstance re-registers the service instance in the registry with the current state.
 func (m *Mesh) refreshServiceInstance() {
-	if err := m.doRefreshServiceInstance(m.getState()); err != nil {
+	if err := m.doRefreshServiceInstance(); err != nil {
 		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
 // deregisterServiceInstance deregisters the service instance.
+//
+// It takes the same lock as the refresh path, so an in-flight refresh completes before the
+// deregistration and a later refresh cannot register the instance again.
 func (m *Mesh) deregisterServiceInstance() {
+	m.registryMu.Lock()
+
+	// The instance does not exist until Start has registered it, so there is nothing to
+	// deregister when the mesh is destroyed before the registration completes.
+	if m.instance == nil {
+		m.registryMu.Unlock()
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	err := m.opts.registry.Deregister(ctx, m.instance)
 	cancel()
+	m.registryMu.Unlock()
+
 	if err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }
 
 // doRegisterServiceInstance registers the service instance, returning an error when registration
-// fails.
+// fails. The caller must hold registryMu.
 func (m *Mesh) doRegisterServiceInstance() error {
+	m.instance.State = m.getState().String()
+
 	ctx, cancel := context.WithTimeout(m.ctx, 3*time.Second)
 	err := m.opts.registry.Register(ctx, m.instance)
 	cancel()
@@ -240,10 +263,18 @@ func (m *Mesh) doRegisterServiceInstance() error {
 }
 
 // doRefreshServiceInstance refreshes the instance state, returning an error when registration
-// fails. When state is omitted, the instance is only re-registered without updating its state.
-func (m *Mesh) doRefreshServiceInstance(state ...cluster.State) error {
-	if len(state) > 0 {
-		m.instance.State = state[0].String()
+// fails.
+//
+// A refresh that arrives before the initial registration has nothing to publish, because Start
+// registers the instance with the state at that point. It also skips the registration once the
+// mesh is shut, so a refresh delayed past Destroy cannot register the instance again after the
+// deregistration.
+func (m *Mesh) doRefreshServiceInstance() error {
+	m.registryMu.Lock()
+	defer m.registryMu.Unlock()
+
+	if m.isShut() || m.instance == nil {
+		return nil
 	}
 
 	return m.doRegisterServiceInstance()
@@ -325,7 +356,7 @@ func (m *Mesh) setState(state cluster.State) error {
 		}
 
 		if m.state.CompareAndSwap(int32(curr), int32(state)) {
-			return m.doRefreshServiceInstance(state)
+			return m.doRefreshServiceInstance()
 		} else {
 			return errors.ErrIllegalOperation
 		}

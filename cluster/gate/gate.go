@@ -351,7 +351,7 @@ func (g *Gate) stopLinkerServer() {
 //
 // It builds the gate service instance information and registers it with the service registry.
 func (g *Gate) registerServiceInstance() {
-	g.instance = &registry.ServiceInstance{
+	instance := &registry.ServiceInstance{
 		ID:       g.opts.id,
 		Name:     cluster.Gate.String(),
 		Kind:     cluster.Gate.String(),
@@ -361,6 +361,7 @@ func (g *Gate) registerServiceInstance() {
 	}
 
 	g.registryMu.Lock()
+	g.instance = instance
 	err := g.doRegisterServiceInstance()
 	g.registryMu.Unlock()
 
@@ -382,6 +383,14 @@ func (g *Gate) refreshServiceInstance() {
 // deregistration and a later refresh cannot register the instance again.
 func (g *Gate) deregisterServiceInstance() {
 	g.registryMu.Lock()
+
+	// The instance does not exist until Start has registered it, so there is nothing to
+	// deregister when the gate is destroyed before the registration completes.
+	if g.instance == nil {
+		g.registryMu.Unlock()
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	cancel()
@@ -406,13 +415,15 @@ func (g *Gate) doRegisterServiceInstance() error {
 
 // doRefreshServiceInstance re-registers the service instance with the current state.
 //
-// It skips the registration once the gate is shut, so a refresh delayed past Destroy cannot
-// register the instance again after the deregistration.
+// A refresh that arrives before the initial registration has nothing to publish, because Start
+// registers the instance with the state at that point. It also skips the registration once the gate
+// is shut, so a refresh delayed past Destroy cannot register the instance again after the
+// deregistration.
 func (g *Gate) doRefreshServiceInstance() error {
 	g.registryMu.Lock()
 	defer g.registryMu.Unlock()
 
-	if g.isShut() {
+	if g.isShut() || g.instance == nil {
 		return nil
 	}
 

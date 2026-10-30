@@ -784,6 +784,9 @@ func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, lis
 			eg, _ = task.WithContext(context.Background())
 		)
 
+		// Bound the fan-out so a slow connection cannot spawn one goroutine per session.
+		eg.SetLimit(defaultBatchPushConcurrency)
+
 		buf.Delay(total)
 
 		for _, list := range lists {

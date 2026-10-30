@@ -7,6 +7,7 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/link"
+	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/transport"
 )
@@ -376,4 +377,15 @@ func (p *Proxy) watch() {
 	p.nodeLinker.WatchUserLocate()
 
 	p.nodeLinker.WatchClusterInstance()
+}
+
+// close closes the clients to the gateways and the business nodes.
+func (p *Proxy) close() {
+	if err := p.gateLinker.Close(); err != nil {
+		log.Errorf("close gate linker failed: %v", err)
+	}
+
+	if err := p.nodeLinker.Close(); err != nil {
+		log.Errorf("close node linker failed: %v", err)
+	}
 }

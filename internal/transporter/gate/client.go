@@ -23,6 +23,11 @@ func NewClient(cli *drpc.Client) *Client {
 	}
 }
 
+// Close closes the underlying client and its connections.
+func (c *Client) Close() error {
+	return c.cli.Close()
+}
+
 // PushReqHeadroom returns the headroom required to prepend a push request header in place.
 func PushReqHeadroom() int {
 	return protocol.PushReqHeadroom()

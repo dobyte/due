@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -975,6 +976,90 @@ func TestDoBatchPushEmpty(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("buffer len = %d, want 0 (released)", buf.Len())
+	}
+}
+
+// blockingPushConn blocks in Push until release is closed and tracks the concurrent push count.
+type blockingPushConn struct {
+	stubConn
+	release  chan struct{}
+	started  *atomic.Int64
+	inFlight *atomic.Int64
+	peak     *atomic.Int64
+}
+
+func (c *blockingPushConn) Push(buf buffer.Buffer) error {
+	current := c.inFlight.Add(1)
+	for {
+		peak := c.peak.Load()
+		if current <= peak || c.peak.CompareAndSwap(peak, current) {
+			break
+		}
+	}
+
+	c.started.Add(1)
+	<-c.release
+	c.inFlight.Add(-1)
+	buf.Release()
+
+	return nil
+}
+
+// TestDoBatchPushBoundedFanOut verifies that a batch never runs more pushes concurrently than the
+// configured bound.
+func TestDoBatchPushBoundedFanOut(t *testing.T) {
+	var (
+		total    = defaultBatchPushConcurrency * 3
+		limit    = int64(defaultBatchPushConcurrency)
+		release  = make(chan struct{})
+		started  atomic.Int64
+		inFlight atomic.Int64
+		peak     atomic.Int64
+	)
+
+	conns := make([]network.Conn, 0, total)
+	for range total {
+		conns = append(conns, &blockingPushConn{
+			release:  release,
+			started:  &started,
+			inFlight: &inFlight,
+			peak:     &peak,
+		})
+	}
+
+	s := newSession()
+	buf := buffer.NewBytes([]byte("data"))
+
+	var (
+		done  = make(chan struct{})
+		n     int64
+		pushE error
+	)
+
+	go func() {
+		defer close(done)
+		n, pushE = s.doBatchPush(false, buf, total, conns)
+	}()
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return started.Load() >= limit
+	}, "the batch did not reach the fan-out bound")
+
+	// Give the remaining submissions a chance to exceed the bound before releasing the pushes.
+	time.Sleep(20 * time.Millisecond)
+	if got := peak.Load(); got > limit {
+		t.Fatalf("concurrent pushes = %d, want <= %d", got, limit)
+	}
+
+	close(release)
+	<-done
+
+	if pushE != nil || n != int64(total) {
+		t.Fatalf("doBatchPush() = (%d, %v), want (%d, nil)", n, pushE, total)
+	}
+
+	if got := peak.Load(); got > limit {
+		t.Fatalf("concurrent pushes = %d, want <= %d", got, limit)
 	}
 }
 
