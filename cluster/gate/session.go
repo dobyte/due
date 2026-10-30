@@ -774,12 +774,10 @@ func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, lis
 						log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
 					}
 				}
-
-				return 1, nil
 			}
 		}
 
-		return 0, errors.ErrUnknownError
+		return 1, nil
 	default:
 		var (
 			num   int64
