@@ -173,9 +173,16 @@ func (p *provider) Push(ctx context.Context, kind cluster.Session, target int64,
 			// canceled once the request returns, and an unbounded locator call would keep the
 			// user binding lock for the whole shard.
 			task.Add(func() {
-				ctx, cancel := context.WithTimeout(p.gate.ctx, 3*time.Second)
-				p.unbindStaleGate(ctx, target)
-				cancel()
+				userLock := p.gate.userBindings.lock(target)
+				if online, _ := p.gate.session.has(cluster.User, target); !online {
+					ctx, cancel := context.WithTimeout(p.gate.ctx, 3*time.Second)
+					err := p.gate.opts.locator.UnbindGate(ctx, target, p.gate.opts.id)
+					cancel()
+					if err != nil {
+						log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", target, p.gate.opts.id, err)
+					}
+				}
+				userLock.unlock()
 			})
 		}
 
@@ -183,21 +190,6 @@ func (p *provider) Push(ctx context.Context, kind cluster.Session, target int64,
 	}
 
 	return nil
-}
-
-// unbindStaleGate removes the gate binding of a user that is no longer online on this gate.
-//
-// It shares the user lock with bind and disconnect. A bind that re-establishes the user after the
-// push lookup failed either completes before the check, which then keeps the fresh binding, or
-// writes the location after this cleanup.
-func (p *provider) unbindStaleGate(ctx context.Context, uid int64) {
-	userLock := p.gate.userBindings.lock(uid)
-	if online, _ := p.gate.session.has(cluster.User, uid); !online {
-		if err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id); err != nil {
-			log.Errorf("unbind gate failed, uid = %d gid = %s err = %v", uid, p.gate.opts.id, err)
-		}
-	}
-	userLock.unlock()
 }
 
 // Multicast pushes a multicast message.

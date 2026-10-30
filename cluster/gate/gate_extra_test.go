@@ -15,6 +15,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/task"
 )
 
 // gateAttr is a connection attribute implementation for tests.
@@ -1164,18 +1165,55 @@ func TestGateProviderPushFamily(t *testing.T) {
 	}
 }
 
+// capturePool records submitted tasks so a test can run them at a controlled point.
+type capturePool struct {
+	mu    sync.Mutex
+	tasks []func()
+}
+
+func (p *capturePool) AddTask(fn func()) error {
+	p.mu.Lock()
+	p.tasks = append(p.tasks, fn)
+	p.mu.Unlock()
+
+	return nil
+}
+
+func (p *capturePool) Release() {}
+
+func (p *capturePool) run(t *testing.T, index int) {
+	t.Helper()
+
+	p.mu.Lock()
+	fn := p.tasks[index]
+	p.mu.Unlock()
+
+	fn()
+}
+
 func TestGateProviderPushCleanupKeepsReboundUser(t *testing.T) {
+	pool := &capturePool{}
+	task.SetPool(pool)
+
 	f := newGateFixture(t)
 	f.start(t)
+
+	// Cleanups run in reverse order, so the default pool is restored before the fixture teardown
+	// and the teardown never queues its cleanup tasks into the capture pool.
+	t.Cleanup(func() { task.SetPool(task.NewPool()) })
 
 	p := &provider{gate: f.gate}
 	ctx := context.Background()
 
 	conn := newGateConn(12, 0)
-	f.server.connect(conn)
-	t.Cleanup(func() { f.server.disconnect(conn) })
+	f.gate.session.addConn(conn)
 
-	// The user re-establishes the binding after the push lookup failed.
+	// The user has no local session, so Push queues the stale cleanup.
+	if err := p.Push(ctx, cluster.User, 600, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	// The user re-establishes the binding before the queued cleanup runs.
 	if err := f.gate.session.bind(conn.ID(), 600); err != nil {
 		t.Fatalf("bind session failed: %v", err)
 	}
@@ -1183,18 +1221,22 @@ func TestGateProviderPushCleanupKeepsReboundUser(t *testing.T) {
 		t.Fatalf("bind gate failed: %v", err)
 	}
 
-	p.unbindStaleGate(ctx, 600)
+	pool.run(t, 0)
 
 	if got, _ := f.locator.LocateGate(ctx, 600); got != f.gate.opts.id {
 		t.Fatalf("the stale cleanup removed the rebound user: %q", got)
 	}
 
-	// Once the user is offline again, the cleanup removes the binding.
+	// Once the user is offline again, a new cleanup removes the binding.
 	if _, err := f.gate.session.remove(600); err != nil {
 		t.Fatalf("remove session failed: %v", err)
 	}
 
-	p.unbindStaleGate(ctx, 600)
+	if err := p.Push(ctx, cluster.User, 600, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	pool.run(t, 1)
 
 	if got, _ := f.locator.LocateGate(ctx, 600); got != "" {
 		t.Fatalf("the stale cleanup kept an offline binding: %q", got)
