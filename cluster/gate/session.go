@@ -94,12 +94,13 @@ func (s *sessionShard) unbind(uid, cid int64) (network.Conn, bool) {
 		return nil, false
 	}
 
-	if err := conn.Unbind(); err != nil {
-		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
-	}
-
+	err := conn.Unbind()
 	delete(s.conns, uid)
 	s.rw.Unlock()
+
+	if err != nil {
+		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
+	}
 
 	return conn, true
 }

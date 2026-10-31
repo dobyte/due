@@ -296,7 +296,7 @@ func (e *event) Actor(kind, id string) (*Actor, bool) {
 // Invoke calls a function in a thread-safe manner.
 //
 // Inside a global handler, it calls proxy.Invoke; inside an actor processor, it calls
-// actor.Invoke. isBlock controls whether the call is blocking; it is blocking by default.
+// actor.Invoke. isBlock controls whether the call is blocking; it does not block by default.
 func (e *event) Invoke(fn func(), isBlock ...bool) error {
 	if actor := e.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)
@@ -373,6 +373,10 @@ func (e *event) Response(message any) error {
 
 // Disconnect closes the connection from the gateway.
 func (e *event) Disconnect(force ...bool) error {
+	if e.gid == "" {
+		return errors.ErrIllegalOperation
+	}
+
 	return e.node.proxy.Disconnect(e.ctx, &cluster.DisconnectArgs{
 		GID:    e.gid,
 		Kind:   cluster.Conn,

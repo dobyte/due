@@ -144,6 +144,26 @@ func TestNodeLifecycle(t *testing.T) {
 	}
 }
 
+// TestNodeHookPanicDoesNotDeadlock verifies that a panicking hook still completes the hook wait.
+func TestNodeHookPanicDoesNotDeadlock(t *testing.T) {
+	n := newTestNode(t)
+	n.Proxy().AddHookListener(cluster.Init, func(proxy *Proxy) { panic("hook panic") })
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		n.runHookFunc(cluster.Init)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("hook execution deadlocked after a panic")
+	}
+}
+
 // TestNodeLifecycleWithTransport verifies starting a node that exposes a transport service.
 func TestNodeLifecycleWithTransport(t *testing.T) {
 	transporter := &stubTransporter{server: &stubTransportServer{addr: "127.0.0.1:0"}}

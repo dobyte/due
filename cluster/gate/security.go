@@ -30,6 +30,7 @@ type securityManager struct {
 	timeout  time.Duration
 	states   sync.Map       // connection ID -> *securityState
 	conns    sync.Map       // connection ID -> *securedConn
+	pending  sync.Map       // connection ID -> []byte; handshake frame received before admission
 	closerMu sync.Mutex     // serializes the closer registration with shutdown
 	draining bool           // protected by closerMu; reports that new closes are no longer accepted
 	closers  sync.WaitGroup // security close goroutines, joined by shutdown
@@ -111,6 +112,8 @@ func (m *securityManager) confirmed(cid int64) bool {
 
 // remove releases the state of the given connection.
 func (m *securityManager) remove(cid int64) {
+	m.pending.Delete(cid)
+
 	if value, ok := m.states.LoadAndDelete(cid); ok {
 		state := value.(*securityState)
 		state.mu.Lock()
@@ -311,18 +314,30 @@ func (m *securityManager) decrypt(conn network.Conn, buf buffer.Buffer) bool {
 }
 
 // advanceHandshake advances the handshake state machine of the given connection.
+//
+// A handshake frame received before the connection has been admitted is buffered and processed by
+// [securityManager.acceptPending] once the gate registers the session; a frame received after the
+// session is confirmed is a protocol violation and closes the connection, so the handshake path
+// cannot be used to bypass the connection rate limiter.
 func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
 	value, ok := m.states.Load(conn.ID())
 	if !ok {
-		m.closeConn(conn.ID())
+		m.deferHandshake(conn, frame)
 		return
 	}
 	state := value.(*securityState)
 
 	state.mu.Lock()
 
-	if state.closed || state.session.Load() != nil {
+	if state.closed {
 		state.mu.Unlock()
+		return
+	}
+
+	if state.session.Load() != nil {
+		state.mu.Unlock()
+		log.Warnf("unexpected handshake frame after the session is confirmed, cid: %d", conn.ID())
+		m.closeConn(conn.ID())
 		return
 	}
 
@@ -361,6 +376,31 @@ func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
 	// Trigger the event after releasing the lock: the event handler may perform an RPC, and holding
 	// the state lock would block the read loop and the handshake timer for its whole duration.
 	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
+}
+
+// deferHandshake keeps a handshake frame that arrived before the connection was admitted.
+//
+// Some transports start the read loop before invoking the connect callback, so the first
+// ClientHello can race the gate admission. The frame is processed by
+// [securityManager.acceptPending] after the session is registered, which keeps the handshake and
+// the Connect event in the order the rest of the gate assumes. A frame for a connection that is
+// already closing is dropped.
+func (m *securityManager) deferHandshake(conn network.Conn, frame []byte) {
+	if len(frame) == 0 || conn.State() != network.ConnOpened {
+		return
+	}
+
+	m.pending.LoadOrStore(conn.ID(), frame)
+}
+
+// acceptPending processes the handshake frame buffered before the connection was admitted.
+func (m *securityManager) acceptPending(conn network.Conn) {
+	value, ok := m.pending.LoadAndDelete(conn.ID())
+	if !ok {
+		return
+	}
+
+	m.advanceHandshake(conn, value.([]byte))
 }
 
 // pushFrame pushes a plaintext handshake frame to the client.

@@ -397,7 +397,7 @@ func (r *request) Actor(kind, id string) (*Actor, bool) {
 // Invoke calls a function in a thread-safe way.
 //
 // In a global handler the context delegates to [Proxy.Invoke], and in an actor handler it delegates
-// to [Actor.Invoke]. isBlock reports whether the call blocks, and it blocks by default.
+// to [Actor.Invoke]. isBlock reports whether the call blocks; it does not block by default.
 func (r *request) Invoke(fn func(), isBlock ...bool) error {
 	if actor := r.actor.Load(); actor != nil {
 		return actor.Invoke(fn, isBlock...)

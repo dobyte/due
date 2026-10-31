@@ -393,6 +393,33 @@ func TestGateHandleReceiveLimited(t *testing.T) {
 	}
 }
 
+// TestGateDisconnectReleasesUnregisteredBucket verifies that a bucket created for a connection that
+// was never admitted is released on disconnect.
+func TestGateDisconnectReleasesUnregisteredBucket(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.limiter = newConnLimiter(&limiterOptions{quota: 1, period: time.Second, burst: 1})
+	f.start(t)
+
+	// The frame is processed before the connection is admitted, so the limiter creates a bucket
+	// even though no session is registered for it.
+	conn := newGateConn(2004, 0)
+	buf, err := packet.PackMessage(1, 1, []byte("payload"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	f.server.receive(conn, buf)
+
+	if _, ok := f.gate.limiter.loadShard(conn.ID()).buckets.Load(conn.ID()); !ok {
+		t.Fatal("the bucket must be created on receive")
+	}
+
+	f.server.disconnect(conn)
+
+	if _, ok := f.gate.limiter.loadShard(conn.ID()).buckets.Load(conn.ID()); ok {
+		t.Fatal("the bucket must be removed on disconnect without a registered session")
+	}
+}
+
 func TestGateHandleReceiveClosesLimitedConn(t *testing.T) {
 	f := newGateFixture(t)
 	f.gate.limiter = newConnLimiter(&limiterOptions{

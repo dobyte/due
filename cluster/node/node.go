@@ -551,8 +551,9 @@ func (n *Node) runHookFunc(hook cluster.Hook) {
 		for i := range handlers {
 			handler := handlers[i]
 			xcall.Go(func() {
+				defer wg.Done()
+
 				handler(n.proxy)
-				wg.Done()
 			})
 		}
 

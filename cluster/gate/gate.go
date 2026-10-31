@@ -211,6 +211,10 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		if g.security != nil {
 			g.session.addConn(g.security.wrap(conn))
 			g.mu.Unlock()
+
+			// A handshake frame may have arrived before this callback (some transports start the
+			// read loop first); process it now that the session has been registered.
+			g.security.acceptPending(conn)
 		} else {
 			g.session.addConn(conn)
 			g.mu.Unlock()
@@ -229,11 +233,11 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // For a connection whose session is registered, it removes the local session synchronously and
 // queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
 // WaitGroup counter once that work finishes; a connection that is not registered (rejected during
-// the closing phase) is ignored. When session security is enabled, the Disconnect event is
-// triggered only for a connection whose handshake was confirmed, so that it stays paired with the
-// Connect event, which is deferred until the handshake is confirmed. RemConn atomically performs
-// the existence check and removal, so when concurrent duplicate disconnects happen only the first
-// call takes effect, keeping the WaitGroup's Add/Done balanced.
+// the closing phase) only has its rate limiter bucket released. When session security is enabled,
+// the Disconnect event is triggered only for a connection whose handshake was confirmed, so that
+// it stays paired with the Connect event, which is deferred until the handshake is confirmed.
+// RemConn atomically performs the existence check and removal, so when concurrent duplicate
+// disconnects happen only the first call takes effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	var (
 		cid       = conn.ID()
@@ -246,11 +250,13 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 		g.security.remove(cid)
 	}
 
-	if g.session.remConn(conn) {
-		if g.limiter != nil {
-			g.limiter.remove(cid)
-		}
+	// Release the limiter bucket even when the session was never admitted: frames can arrive before
+	// the admission or while the connection is closing, so the bucket may have no session owner.
+	if g.limiter != nil {
+		g.limiter.remove(cid)
+	}
 
+	if g.session.remConn(conn) {
 		uid := conn.UID()
 
 		// The local session is gone, so the remaining work no longer needs the connection. Queue
@@ -265,8 +271,8 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 				userLock = g.userBindings.lock(uid)
 				if online, _ := g.session.has(cluster.User, uid); !online {
 					ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+					defer cancel()
 					_ = g.proxy.cleanupGate(ctx, cid, uid)
-					cancel()
 				}
 			}
 

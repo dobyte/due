@@ -667,6 +667,26 @@ func TestMeshLifecycle(t *testing.T) {
 	}
 }
 
+// TestMeshHookPanicDoesNotDeadlock verifies that a panicking hook still completes the hook wait.
+func TestMeshHookPanicDoesNotDeadlock(t *testing.T) {
+	f := newMeshFixture(t)
+	f.mesh.Proxy().AddHookListener(cluster.Init, func(p *Proxy) { panic("hook panic") })
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		f.mesh.runHookFunc(cluster.Init)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("hook execution deadlocked after a panic")
+	}
+}
+
 func TestMeshProxyReturned(t *testing.T) {
 	f := newMeshFixture(t)
 
