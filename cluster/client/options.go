@@ -171,6 +171,9 @@ func WithDialAddr(addr string) DialOption {
 }
 
 // WithConnAttr sets a connection attribute.
+//
+// The attribute is applied after the transport returns the connection, so a route handled before
+// Dial returns may not observe it.
 func WithConnAttr(key string, value any) DialOption {
 	return func(o *dialOptions) { o.attrs[key] = value }
 }

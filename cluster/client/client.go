@@ -26,7 +26,8 @@ type HookHandler func(proxy *Proxy)
 // RouteHandler is the route handler of the client.
 //
 // The Context is valid only for the duration of the call and must not be retained after the handler
-// returns.
+// returns. A route may be handled before the Connect event is delivered or before Dial returns, so
+// do not assume that connection state initialized by Connect listeners is ready.
 type RouteHandler func(ctx *Context)
 
 // EventHandler is the event handler of the client.
@@ -285,10 +286,13 @@ func (c *Client) handleHandshake(conn network.Conn, buf buffer.Buffer) {
 //
 // Transports deliver the connect handler before the first frame and before the disconnect callback,
 // so recording the connection here keeps a message or a disconnect that arrives before Dial returns
-// from being dropped.
+// from being dropped. A connection reported while the client is closing is not recorded; a dial
+// that is still in flight observes the state change and rejects the connection.
 func (c *Client) handleNetworkConnect(conn network.Conn) {
 	c.rw2.Lock()
-	c.registerConnLocked(conn)
+	if st := c.getState(); st == cluster.Work || st == cluster.Busy {
+		c.registerConnLocked(conn)
+	}
 	c.rw2.Unlock()
 }
 

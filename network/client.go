@@ -6,7 +6,9 @@ type Client interface {
 	//
 	// When addr is empty the address from the client options is used. The connect handler runs on
 	// the connection read goroutine before the first frame is read, so it may run concurrently with
-	// or after Dial returns.
+	// or after Dial returns. A transport that reports a connection through the connect handler and
+	// then fails to complete Dial must deliver the disconnect handler for that connection so
+	// consumers can release it.
 	Dial(addr ...string) (Conn, error)
 	// Protocol returns the protocol name.
 	Protocol() string
