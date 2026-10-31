@@ -191,7 +191,9 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // initialization completes, which prevents the connection object from being recycled before the
 // goroutines start. When a partition refuses the store while the server is closing, initialization
 // aborts and the caller returns the connection object to the object pool and closes the underlying
-// connection. remoteAddr is the real client address and may be nil.
+// connection. remoteAddr is the real client address and may be nil. The read goroutine runs the
+// authorization check and the connect hook before reading, so no frame is handled before the
+// connect hook returns.
 func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) bool {
 	c.rw.Lock()
 
@@ -215,21 +217,23 @@ func (c *serverConn) init(conn *websocket.Conn, remoteAddr net.Addr) bool {
 		return false
 	}
 
-	c.wg1.Go(func() { c.read(conn) })
 	c.wg2.Go(func() { c.write(conn) })
+	c.wg1.Go(func() {
+		// The connection may have been closed concurrently before initialization completes, so run
+		// the authorization check and the connect hook only while it is still opened. Running them
+		// before the read loop keeps frames from being handled before the connect hook returns.
+		if c.State() == network.ConnOpened {
+			c.checkAuthorize(conn)
+
+			if c.connMgr.server.connectHandler != nil {
+				c.connMgr.server.connectHandler(c)
+			}
+		}
+
+		c.read(conn)
+	})
 
 	c.rw.Unlock()
-
-	// The connection may have been closed concurrently before initialization completes, so run the authorization check and the connect hook only while it is still opened.
-	if c.State() != network.ConnOpened {
-		return true
-	}
-
-	c.checkAuthorize(conn)
-
-	if c.connMgr.server.connectHandler != nil {
-		c.connMgr.server.connectHandler(c)
-	}
 
 	return true
 }

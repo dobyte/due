@@ -766,9 +766,9 @@ func TestGateHandleConnectRejected(t *testing.T) {
 	conn := newGateConn(1002, 0)
 	f.gate.handleConnect(conn)
 
-	if !conn.closed.Load() {
-		t.Fatal("conn must be closed when the gate is shut")
-	}
+	// The rejection close is deferred to another goroutine because the connect callback runs inside
+	// the transport read loop, and a transport's Close waits for that loop to exit.
+	waitForCondition(t, time.Second, conn.closed.Load, "conn must be closed when the gate is shut")
 	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must not be registered when the gate is shut")
 	}

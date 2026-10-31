@@ -104,6 +104,7 @@ func (c *Client) Start() {
 		return
 	}
 
+	c.opts.client.OnConnect(c.handleNetworkConnect)
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 	c.opts.client.OnHandshake(c.handleHandshake)
@@ -280,6 +281,41 @@ func (c *Client) handleHandshake(conn network.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
+// handleNetworkConnect records the wrapped connection as soon as the transport reports it.
+//
+// Transports deliver the connect handler before the first frame and before the disconnect callback,
+// so recording the connection here keeps a message or a disconnect that arrives before Dial returns
+// from being dropped.
+func (c *Client) handleNetworkConnect(conn network.Conn) {
+	c.rw2.Lock()
+	c.registerConnLocked(conn)
+	c.rw2.Unlock()
+}
+
+// newConn wraps a network connection for the client.
+func newConn(client *Client, conn network.Conn) *Conn {
+	cc := &Conn{conn: conn, client: client, closedCh: make(chan struct{})}
+
+	if client.opts.security != nil {
+		cc.handshakeCh = make(chan []byte, 1)
+	}
+
+	return cc
+}
+
+// registerConnLocked returns the wrapped connection of conn and records it when the transport
+// connect handler has not done so. The caller must hold rw2.
+func (c *Client) registerConnLocked(conn network.Conn) *Conn {
+	if value, ok := c.conns.Load(conn); ok {
+		return value.(*Conn)
+	}
+
+	cc := newConn(c, conn)
+	c.conns.Store(conn, cc)
+
+	return cc
+}
+
 // dial dials a connection to the server.
 func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
@@ -296,24 +332,30 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 		return nil, err
 	}
 
-	cc := &Conn{conn: conn, client: c, closedCh: make(chan struct{})}
+	// The transport reports the connection through the connect handler while Dial is still running,
+	// so the wrapper usually exists already; register it here for transports that do not.
+	c.rw2.Lock()
+	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
+		c.conns.Delete(conn)
+		c.rw2.Unlock()
+		_ = conn.Close()
+		return nil, errors.ErrClientShut
+	}
+	cc := c.registerConnLocked(conn)
+	c.rw2.Unlock()
 
-	if c.opts.security != nil {
-		cc.handshakeCh = make(chan []byte, 1)
+	// The connection may have been closed before Dial returned; the disconnect callback already
+	// marked the wrapper, so report the closure instead of returning a dead connection.
+	if cc.isClosed() || conn.State() != network.ConnOpened {
+		c.rw2.Lock()
+		c.conns.Delete(conn)
+		c.rw2.Unlock()
+		return nil, errors.ErrConnectionClosed
 	}
 
 	for key, value := range o.attrs {
 		cc.SetAttr(key, value)
 	}
-
-	c.rw2.Lock()
-	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
-		c.rw2.Unlock()
-		conn.Close()
-		return nil, errors.ErrClientShut
-	}
-	c.conns.Store(conn, cc)
-	c.rw2.Unlock()
 
 	if c.opts.security != nil {
 		if err = cc.handshake(); err != nil {

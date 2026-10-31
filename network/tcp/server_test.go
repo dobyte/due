@@ -3,7 +3,9 @@ package tcp_test
 import (
 	"net/http"
 	_ "net/http/pprof"
+	"sync/atomic"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/dobyte/due/network/tcp/v2"
@@ -114,4 +116,53 @@ func TestServer_ChWrite(t *testing.T) {
 	v := unsafe.Sizeof(&chWrite{})
 
 	t.Logf("chWrite size: %d", v)
+}
+
+// TestServerConnectHookBeforeReceive verifies that the connect hook completes before any frame is
+// handled.
+func TestServerConnectHookBeforeReceive(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("127.0.0.1:0"))
+
+	var order atomic.Int32
+	server.OnConnect(func(conn network.Conn) {
+		time.Sleep(100 * time.Millisecond)
+		order.Store(1)
+	})
+
+	received := make(chan struct{}, 1)
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		buf.Release()
+
+		if order.Load() != 1 {
+			t.Error("receive ran before the connect hook returned")
+		}
+
+		received <- struct{}{}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	client := tcp.NewClient()
+	conn, err := client.Dial(server.Addr())
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	buf, err := packet.PackMessage(1, 1, []byte("ping"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	if err = conn.Push(buf); err != nil {
+		t.Fatalf("push message failed: %v", err)
+	}
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("message was not received")
+	}
 }

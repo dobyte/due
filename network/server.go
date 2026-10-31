@@ -8,6 +8,11 @@ type (
 	// CloseHandler is the handler invoked when the server stops.
 	CloseHandler func()
 	// ConnectHandler is the handler invoked when a connection is opened.
+	//
+	// The handler runs on the connection read goroutine before the first frame is read, so closing
+	// the connection or stopping the server synchronously from it would deadlock; perform those
+	// operations from another goroutine. On the client side it may run concurrently with or after
+	// Dial returns.
 	ConnectHandler func(conn Conn)
 	// DisconnectHandler is the handler invoked when a connection is closed.
 	DisconnectHandler func(conn Conn)

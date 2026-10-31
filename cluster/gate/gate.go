@@ -222,9 +222,14 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		}
 	} else {
 		g.mu.Unlock()
-		if err := conn.Close(); err != nil {
-			log.Warnf("close conn failed: %v", err)
-		}
+
+		// The connect callback runs inside the transport read loop, and a transport's Close waits
+		// for that loop to exit, so the close must be deferred to another goroutine.
+		xcall.Go(func() {
+			if err := conn.Close(); err != nil {
+				log.Warnf("close conn failed: %v", err)
+			}
+		})
 	}
 }
 

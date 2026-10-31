@@ -190,7 +190,9 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 // completes, preventing the connection object from being recycled before its goroutines start. If a
 // partition refuses storage while the server is shutting down, initialization is aborted and the
 // caller returns the connection object and closes the underlying connection. It reports whether
-// initialization succeeded, which is false while the server is shutting down.
+// initialization succeeded, which is false while the server is shutting down. The read goroutine
+// runs the authorization check and the connect hook before reading, so no frame is handled before
+// the connect hook returns.
 func (c *serverConn) init(conn *kcp.UDPSession) bool {
 	c.rw.Lock()
 
@@ -241,22 +243,23 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 		return false
 	}
 
-	c.wg1.Go(func() { c.read(conn) })
 	c.wg2.Go(func() { c.write(conn) })
+	c.wg1.Go(func() {
+		// The connection may already have been closed concurrently before initialization finished;
+		// run the authorize check and the connect hook only while the connection is still opened.
+		// Running them before the read loop keeps frames from being handled before the hook returns.
+		if c.State() == network.ConnOpened {
+			c.checkAuthorize(conn)
+
+			if c.connMgr.server.connectHandler != nil {
+				c.connMgr.server.connectHandler(c)
+			}
+		}
+
+		c.read(conn)
+	})
 
 	c.rw.Unlock()
-
-	// The connection may already have been closed concurrently before initialization finished;
-	// run the authorize check and the connect hook only while the connection is still opened.
-	if c.State() != network.ConnOpened {
-		return true
-	}
-
-	c.checkAuthorize(conn)
-
-	if c.connMgr.server.connectHandler != nil {
-		c.connMgr.server.connectHandler(c)
-	}
 
 	return true
 }

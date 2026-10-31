@@ -48,6 +48,9 @@ func (p *Proxy) AddHookListener(hook cluster.Hook, handler HookHandler) {
 }
 
 // Dial dials a connection to the server and returns the wrapped connection.
+//
+// The connection is registered as soon as the transport reports it, so route handlers may run
+// before Dial returns.
 func (p *Proxy) Dial(opts ...DialOption) (*Conn, error) {
 	return p.client.dial(opts...)
 }

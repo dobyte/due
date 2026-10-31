@@ -807,3 +807,74 @@ func TestClientAddHookListenerBeforeStart(t *testing.T) {
 	// Running a hook without any listener is a no-op.
 	f.client.runHookFunc(cluster.Destroy)
 }
+
+// earlyReceiveNetwork reports the connect handler and delivers a message inside Dial, before it
+// returns.
+type earlyReceiveNetwork struct {
+	*tNetwork
+	message buffer.Buffer
+}
+
+func (n *earlyReceiveNetwork) Dial(addr ...string) (network.Conn, error) {
+	if n.connect != nil {
+		n.connect(n.conn)
+	}
+	if n.receive != nil && n.message != nil {
+		n.receive(n.conn, n.message)
+		n.message = nil
+	}
+
+	return n.conn, nil
+}
+
+// TestClientReceivesMessageBeforeDialReturns verifies that a message delivered before Dial returns
+// is dispatched instead of being dropped because the connection was not registered yet.
+func TestClientReceivesMessageBeforeDialReturns(t *testing.T) {
+	n := &earlyReceiveNetwork{tNetwork: &tNetwork{conn: newTConn(4242)}}
+
+	msg, err := packet.PackMessage(1, 7, []byte(`{"n":42}`))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	n.message = msg
+
+	c := NewClient(
+		WithID("early-client"),
+		WithName("early-client"),
+		WithClient(n),
+		WithCodec(json.DefaultCodec),
+	)
+
+	received := make(chan int, 1)
+	c.Proxy().AddRouteHandler(1, func(ctx *Context) {
+		var out struct {
+			N int `json:"n"`
+		}
+		if err := ctx.Parse(&out); err != nil {
+			received <- -1
+			return
+		}
+
+		received <- out.N
+	})
+
+	c.Init()
+	c.Start()
+	t.Cleanup(func() {
+		c.Close()
+		c.Destroy()
+	})
+
+	if _, err = c.Proxy().Dial(); err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+
+	select {
+	case value := <-received:
+		if value != 42 {
+			t.Fatalf("unexpected message value: %d", value)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the message delivered before Dial returned was dropped")
+	}
+}
