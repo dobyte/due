@@ -8,6 +8,7 @@ package redis
 
 import (
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,14 +32,16 @@ const (
 
 // Maker is a redis limiter maker.
 type Maker struct {
-	err      error         // Initialization error, such as a TLS configuration failure.
-	opts     *options      // Limiter options
-	builtin  bool          // Reports whether the client is built in.
-	script   *redis.Script // Lua script that makes a decision.
-	closed   atomic.Bool   // Reports whether the maker has been closed.
-	lastWarn atomic.Int64  // Unix nanoseconds of the last backend failure warning.
-	failures atomic.Int32  // Consecutive backend failures.
-	open     atomic.Bool   // Reports whether the circuit is open.
+	err      error                   // Initialization error, such as a TLS configuration failure.
+	opts     *options                // Limiter options
+	builtin  bool                    // Reports whether the client is built in.
+	script   *redis.Script           // Lua script that makes a decision.
+	closed   atomic.Bool             // Reports whether the maker has been closed.
+	lastWarn atomic.Int64            // Unix nanoseconds of the last backend failure warning.
+	failures atomic.Int32            // Consecutive backend failures.
+	open     atomic.Bool             // Reports whether the circuit is open.
+	scenes   map[string]limiter.Rule // Normalized rule of every scene created by this maker.
+	scenesMu sync.Mutex              // Protects scenes.
 
 	openDuration time.Duration // How long the circuit stays open.
 }
@@ -63,6 +66,7 @@ func NewMaker(opts ...Option) *Maker {
 	m := &Maker{
 		opts:         o,
 		script:       redis.NewScript(allowScript),
+		scenes:       make(map[string]limiter.Rule),
 		openDuration: circuitBreakerCooldown,
 	}
 
@@ -89,8 +93,9 @@ func NewMaker(opts ...Option) *Maker {
 
 // Make creates a limiter for the named scene and rule.
 //
-// The name identifies the scene and must be stable for the lifetime of the maker; reusing the
-// same name with a different rule shares the existing bucket state.
+// The name identifies the scene and must be stable for the lifetime of the maker. A scene keeps the
+// rule it was created with, so creating it again with the same normalized rule reuses the existing
+// key namespace, while a different rule reports [errors.ErrConflictLimiterRule].
 func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -114,6 +119,10 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 		return nil, errors.ErrInvalidLimiterRule
 	}
 
+	if err = m.registerScene(name, normalized); err != nil {
+		return nil, err
+	}
+
 	l := &Limiter{
 		maker:         m,
 		client:        m.opts.client,
@@ -134,6 +143,28 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 	}
 
 	return l, nil
+}
+
+// registerScene records the rule of the named scene and reports whether it is the one the scene was
+// created with.
+//
+// Rejecting a different rule keeps the reported capacity and refill time aligned with the shared key
+// namespace and the Lua script parameters of every limiter of the scene.
+func (m *Maker) registerScene(name string, rule limiter.Rule) error {
+	m.scenesMu.Lock()
+	defer m.scenesMu.Unlock()
+
+	if existing, ok := m.scenes[name]; ok {
+		if existing != rule {
+			return errors.ErrConflictLimiterRule
+		}
+
+		return nil
+	}
+
+	m.scenes[name] = rule
+
+	return nil
 }
 
 // rateToNanoPerMs converts a token-per-second rate into nano-tokens per millisecond.

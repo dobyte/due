@@ -33,6 +33,25 @@ func TestMaker_MakeInvalidRule(t *testing.T) {
 	}
 }
 
+// TestMaker_MakeConflictingRule verifies that a scene keeps the rule it was created with, so the
+// reported capacity and refill time always match the shared bucket state.
+func TestMaker_MakeConflictingRule(t *testing.T) {
+	maker := newMaker(t)
+
+	if _, err := maker.Make("conflict", limiter.Rule{Quota: 1}); err != nil {
+		t.Fatalf("make limiter failed: %v", err)
+	}
+
+	if _, err := maker.Make("conflict", limiter.Rule{Quota: 2}); !errors.Is(err, errors.ErrConflictLimiterRule) {
+		t.Fatalf("expect ErrConflictLimiterRule, got: %v", err)
+	}
+
+	// A rule that normalizes to the initial one is accepted and shares the bucket state.
+	if _, err := maker.Make("conflict", limiter.Rule{Quota: 1, Period: time.Second, Burst: 1}); err != nil {
+		t.Fatalf("expect the identical rule to be accepted, got: %v", err)
+	}
+}
+
 func TestLimiter_Allow(t *testing.T) {
 	var (
 		ctx   = context.Background()

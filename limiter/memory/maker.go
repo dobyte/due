@@ -26,13 +26,22 @@ const (
 type Maker struct {
 	opts      *options
 	shards    [shardCount]*shard
-	scenes    map[string]uint32
+	scenes    map[string]*sceneEntity
 	scenesMu  sync.Mutex
 	nextScene uint32
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	closed    atomic.Bool
+}
+
+// sceneEntity holds the identifier and the rule of a named scene.
+//
+// A scene keeps the rule it was created with, so every limiter of the scene reports the bucket
+// capacity and refill time that the shared bucket state actually uses.
+type sceneEntity struct {
+	id   uint32
+	rule limiter.Rule
 }
 
 var _ limiter.Maker = (*Maker)(nil)
@@ -53,7 +62,7 @@ func NewMaker(opts ...Option) *Maker {
 
 	m := &Maker{}
 	m.opts = o
-	m.scenes = make(map[string]uint32)
+	m.scenes = make(map[string]*sceneEntity)
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
 	for i := range shardCount {
@@ -67,8 +76,9 @@ func NewMaker(opts ...Option) *Maker {
 
 // Make creates a limiter for the named scene and rule.
 //
-// The name identifies the scene and must be stable for the lifetime of the maker; reusing the
-// same name with a different rule shares the existing bucket state.
+// The name identifies the scene and must be stable for the lifetime of the maker. A scene keeps the
+// rule it was created with, so creating it again with the same normalized rule reuses the existing
+// bucket state, while a different rule reports [errors.ErrConflictLimiterRule].
 func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 	if m.closed.Load() {
 		return nil, errors.ErrIllegalOperation
@@ -83,9 +93,14 @@ func (m *Maker) Make(name string, rule limiter.Rule) (limiter.Limiter, error) {
 		return nil, err
 	}
 
+	scene, err := m.resolveScene(name, normalized)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Limiter{
 		maker: m,
-		scene: m.sceneID(name),
+		scene: scene.id,
 		rate:  normalized.Rate(),
 		burst: normalized.Burst,
 		ttl:   normalized.TTL(),
@@ -104,25 +119,34 @@ func (m *Maker) Close() error {
 	return nil
 }
 
-// sceneID returns the stable identifier of the named scene, assigning one when it is first seen.
+// resolveScene returns the entry of the named scene, assigning an identifier and the given rule when
+// the scene is first seen. Creating an existing scene with a different rule reports
+// [errors.ErrConflictLimiterRule] so that the reported capacity and refill time always match the
+// shared bucket state.
 //
 // The prefix and name are joined once here, at Make time, instead of on every Allow call.
-func (m *Maker) sceneID(name string) uint32 {
+func (m *Maker) resolveScene(name string, rule limiter.Rule) (*sceneEntity, error) {
 	key := name
 	if m.opts.prefix != "" {
 		key = m.opts.prefix + ":" + name
 	}
 
 	m.scenesMu.Lock()
-	id, ok := m.scenes[key]
-	if !ok {
-		m.nextScene++
-		id = m.nextScene
-		m.scenes[key] = id
-	}
-	m.scenesMu.Unlock()
+	defer m.scenesMu.Unlock()
 
-	return id
+	if scene, ok := m.scenes[key]; ok {
+		if scene.rule != rule {
+			return nil, errors.ErrConflictLimiterRule
+		}
+
+		return scene, nil
+	}
+
+	m.nextScene++
+	scene := &sceneEntity{id: m.nextScene, rule: rule}
+	m.scenes[key] = scene
+
+	return scene, nil
 }
 
 // cleanup evicts expired buckets periodically until the maker is closed.
