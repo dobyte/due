@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	corelimiter "github.com/dobyte/due/v2/core/limiter"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/limiter"
 )
@@ -214,8 +213,8 @@ func (m *Maker) bucket(key bucketKey, l *Limiter) *bucket {
 	b = s.buckets[key]
 	if b == nil {
 		b = &bucket{
-			limiter: corelimiter.NewLimiter(float64(l.burst), l.rate),
-			ttl:     l.ttl,
+			tokens: newTokenBucket(float64(l.burst), l.rate),
+			ttl:    l.ttl,
 		}
 		b.lastSeen.Store(time.Now().UnixNano())
 		s.keys = append(s.keys, key)
@@ -236,7 +235,7 @@ type shard struct {
 
 // bucket holds the state of one rate limiting key.
 type bucket struct {
-	limiter  *corelimiter.Limiter
+	tokens   *tokenBucket
 	ttl      time.Duration
 	lastSeen atomic.Int64 // Unix nanoseconds of the last access
 }

@@ -1,21 +1,20 @@
-package limiter_test
+package memory
 
 import (
 	"testing"
 	"time"
-
-	"github.com/dobyte/due/v2/core/limiter"
 )
 
-func TestLimiter_TakeAt(t *testing.T) {
-	l := limiter.NewLimiter(1, 1)
+// TestTokenBucketTakeAt verifies the refill, denial and retry-after behavior of the token bucket.
+func TestTokenBucketTakeAt(t *testing.T) {
+	b := newTokenBucket(1, 1)
 	now := time.Now()
 
-	if _, _, allowed := l.TakeAt(now, 1); !allowed {
+	if _, _, allowed := b.takeAt(now, 1); !allowed {
 		t.Fatal("expect the first request to be allowed")
 	}
 
-	remaining, retryAfter, allowed := l.TakeAt(now, 1)
+	remaining, retryAfter, allowed := b.takeAt(now, 1)
 	if allowed {
 		t.Fatal("expect the second request to be denied")
 	}
@@ -28,7 +27,7 @@ func TestLimiter_TakeAt(t *testing.T) {
 		t.Fatalf("expect a positive retry after, got: %v", retryAfter)
 	}
 
-	if _, _, allowed = l.TakeAt(now.Add(time.Second), 1); !allowed {
+	if _, _, allowed = b.takeAt(now.Add(time.Second), 1); !allowed {
 		t.Fatal("expect the request after refill to be allowed")
 	}
 }

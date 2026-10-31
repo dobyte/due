@@ -789,13 +789,13 @@ request ID、UID、room ID、GID/NID、Route、generation 用于日志和追踪�
 ### 17.3 生产安全边界
 
 - DRPC 默认是裸 TCP，Kind/ID 握手不认证调用者。需网络隔离或在受控入口建立认证/加密保护。
-- Authorized 表示 UID 非零，不验证 Token。每个业务接口需身份、权限、输入与频率检查；`core/limiter` 提供 token bucket 工具，但不会自动保护所有路由。
+- Authorized 表示 UID 非零，不验证 Token。每个业务接口需身份、权限、输入与频率检查；`limiter/memory` 内置 token bucket，但不会自动保护所有路由。
 - payload Encryptor 与独立 Signer 不自动构成完整的传输认证、签名校验和防重放协议；TLS、业务签名和重放防护分别设计。
 - WebSocket Origin 与可信代理范围按实际客户端配置；Forwarded 地址不能直接作为可信用户身份。
 - MQTT 没有 auth/ACL 配置时可能安装 AllowHook；debug hook 可输出敏感包信息和密码，生产需明确认证并禁用该调试方式。
 - pprof、Swagger、管理 RPC、配置写接口分别收敛访问权限；日志对 Token、凭据及个人数据脱敏。
 
-源码：[log/logger.go](../../log/logger.go)、[log/file/syncer.go](../../log/file/syncer.go)、[component/http/server.go](../../component/http/server.go)、[component/mqtt/server.go](../../component/mqtt/server.go)、[component/pprof/pprof.go](../../component/pprof/pprof.go)、[core/limiter/limiter.go](../../core/limiter/limiter.go)、[crypto/encryptor.go](../../crypto/encryptor.go)、[crypto/signer.go](../../crypto/signer.go)。
+源码：[log/logger.go](../../log/logger.go)、[log/file/syncer.go](../../log/file/syncer.go)、[component/http/server.go](../../component/http/server.go)、[component/mqtt/server.go](../../component/mqtt/server.go)、[component/pprof/pprof.go](../../component/pprof/pprof.go)、[limiter/memory/bucket.go](../../limiter/memory/bucket.go)、[crypto/encryptor.go](../../crypto/encryptor.go)、[crypto/signer.go](../../crypto/signer.go)。
 
 ## 18. 验证策略与工程约束
 

@@ -40,7 +40,7 @@ func (l *Limiter) Allow(_ context.Context, key string, n ...int) (limiter.Result
 
 	b := l.maker.bucket(bucketKey{scene: l.scene, dimension: key}, l)
 	now := time.Now()
-	remaining, retryAfter, allowed := b.limiter.TakeAt(now, cost)
+	remaining, retryAfter, allowed := b.tokens.takeAt(now, cost)
 	b.lastSeen.Store(now.UnixNano())
 
 	return limiter.Result{
