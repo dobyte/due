@@ -93,6 +93,15 @@ func (c *stubConn) LocalAddr() (net.Addr, error)  { return c.localAddr, nil }
 func (c *stubConn) RemoteIP() (string, error)     { return c.remoteIP, nil }
 func (c *stubConn) RemoteAddr() (net.Addr, error) { return c.remoteAddr, nil }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *stubConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
 // newSessionWithUser creates a session holding a single connection bound to uid.
 func newSessionWithUser(cid, uid int64) (*session, *stubConn) {
 	s := newSession()

@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
 	"github.com/dobyte/due/v2/core/security/handshake"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -101,6 +102,15 @@ func (c *securityConn) RemoteIP() (string, error) { return "10.0.0.1", nil }
 
 // RemoteAddr returns the remote address.
 func (c *securityConn) RemoteAddr() (net.Addr, error) { return nil, nil }
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *securityConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
 
 // next returns the next pushed message.
 func (c *securityConn) next(t *testing.T) []byte {

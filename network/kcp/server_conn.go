@@ -26,7 +26,8 @@ type serverConn struct {
 	rw                sync.RWMutex                // Lock
 	wg1               sync.WaitGroup              // Read wait group, reused with the connection object pool
 	wg2               sync.WaitGroup              // Write wait group, reused with the connection object pool
-	conn              *kcp.UDPSession             // Source KCP connection
+	conn              *kcp.UDPSession             // Source KCP connection used for writes and bookkeeping
+	reader            net.Conn                    // Accepted connection, possibly wrapped by the PROXY protocol
 	queue             *queue.Queue[buffer.Buffer] // Message queue
 	dueBuffers        []buffer.Buffer             // Buffers pending write
 	netBuffers        net.Buffers                 // Byte slices pending write
@@ -132,6 +133,25 @@ func (c *serverConn) Close(force ...bool) error {
 	}
 }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+//
+// The connection object is recycled and reused, so a caller that may hold a stale reference must
+// use this method instead of Close to avoid closing a newer connection that reuses the object.
+func (c *serverConn) CloseIf(id int64) error {
+	c.rw.Lock()
+
+	if c.id != id || c.conn == nil || c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		c.rw.Unlock()
+		return errors.ErrConnectionClosed
+	}
+
+	c.rw.Unlock()
+
+	c.uncheckAuthorize()
+
+	return c.doClose(true)
+}
+
 // LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
@@ -151,10 +171,10 @@ func (c *serverConn) LocalAddr() (net.Addr, error) {
 		return nil, errors.ErrConnectionClosed
 	}
 
-	conn := c.conn
+	reader := c.reader
 	c.rw.RUnlock()
 
-	return conn.LocalAddr(), nil
+	return reader.LocalAddr(), nil
 }
 
 // RemoteIP returns the remote IP address.
@@ -176,87 +196,91 @@ func (c *serverConn) RemoteAddr() (net.Addr, error) {
 		return nil, errors.ErrConnectionClosed
 	}
 
-	conn := c.conn
+	reader := c.reader
 	c.rw.RUnlock()
 
-	return conn.RemoteAddr(), nil
+	return reader.RemoteAddr(), nil
 }
 
 // init initializes the connection.
 //
 // It reuses a connection object from the pool, resetting its state, storing it in a partition and
-// starting its read and write goroutines under the write lock. The close path and the delayed close
-// task of the previous lifecycle both take the same lock, so they are blocked until initialization
-// completes, preventing the connection object from being recycled before its goroutines start. If a
-// partition refuses storage while the server is shutting down, initialization is aborted and the
-// caller returns the connection object and closes the underlying connection. It reports whether
-// initialization succeeded, which is false while the server is shutting down. The read goroutine
-// runs the authorization check and the connect hook before reading, so no frame is handled before
-// the connect hook returns.
-func (c *serverConn) init(conn *kcp.UDPSession) bool {
+// starting its read and write goroutines under the write lock. conn is the accepted connection and
+// may be wrapped by the PROXY protocol, so reads and address lookups go through it, while session
+// is the underlying KCP session used for writes and connection bookkeeping. The close path and the
+// delayed close task of the previous lifecycle both take the same lock, so they are blocked until
+// initialization completes, preventing the connection object from being recycled before its
+// goroutines start. If a partition refuses storage while the server is shutting down,
+// initialization is aborted and the caller returns the connection object and closes the underlying
+// connection. It reports whether initialization succeeded, which is false while the server is
+// shutting down. The read goroutine runs the authorization check and the connect hook before
+// reading, so no frame is handled before the connect hook returns.
+func (c *serverConn) init(conn net.Conn, session *kcp.UDPSession) bool {
 	c.rw.Lock()
 
 	c.id = c.connMgr.cid.Add(1)
 	c.uid.Store(0)
 	c.attr.values.Clear()
 	c.state.Store(int32(network.ConnOpened))
-	c.conn = conn
+	c.conn = session
+	c.reader = conn
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
 	c.authorizeTimer.Store(nil)
 
 	if c.connMgr.server.opts.mtu > 0 {
-		conn.SetMtu(c.connMgr.server.opts.mtu)
+		session.SetMtu(c.connMgr.server.opts.mtu)
 	}
 
 	if len(c.connMgr.server.opts.noDelay) == 4 {
-		conn.SetNoDelay(c.connMgr.server.opts.noDelay[0], c.connMgr.server.opts.noDelay[1], c.connMgr.server.opts.noDelay[2], c.connMgr.server.opts.noDelay[3])
+		session.SetNoDelay(c.connMgr.server.opts.noDelay[0], c.connMgr.server.opts.noDelay[1], c.connMgr.server.opts.noDelay[2], c.connMgr.server.opts.noDelay[3])
 	}
 
 	if c.connMgr.server.opts.ackNoDelay {
-		conn.SetACKNoDelay(c.connMgr.server.opts.ackNoDelay)
+		session.SetACKNoDelay(c.connMgr.server.opts.ackNoDelay)
 	}
 
 	if c.connMgr.server.opts.writeDelay {
-		conn.SetWriteDelay(c.connMgr.server.opts.writeDelay)
+		session.SetWriteDelay(c.connMgr.server.opts.writeDelay)
 	}
 
 	if len(c.connMgr.server.opts.windowSize) == 2 {
-		conn.SetWindowSize(c.connMgr.server.opts.windowSize[0], c.connMgr.server.opts.windowSize[1])
+		session.SetWindowSize(c.connMgr.server.opts.windowSize[0], c.connMgr.server.opts.windowSize[1])
 	}
 
 	if c.connMgr.server.opts.readBuffer > 0 {
-		conn.SetReadBuffer(c.connMgr.server.opts.readBuffer)
+		session.SetReadBuffer(c.connMgr.server.opts.readBuffer)
 	}
 
 	if c.connMgr.server.opts.writeBuffer > 0 {
-		conn.SetWriteBuffer(c.connMgr.server.opts.writeBuffer)
+		session.SetWriteBuffer(c.connMgr.server.opts.writeBuffer)
 	}
 
-	if !c.connMgr.storeConn(conn, c) {
+	if !c.connMgr.storeConn(session, c) {
 		// The partition has stopped accepting connections; reset the state, clear the references
 		// and abort initialization.
 		c.state.Store(int32(network.ConnClosed))
 		c.conn = nil
+		c.reader = nil
 		c.queue = nil
 		c.rw.Unlock()
 		return false
 	}
 
-	c.wg2.Go(func() { c.write(conn) })
+	c.wg2.Go(func() { c.write(session) })
 	c.wg1.Go(func() {
 		// The connection may already have been closed concurrently before initialization finished;
 		// run the authorize check and the connect hook only while the connection is still opened.
 		// Running them before the read loop keeps frames from being handled before the hook returns.
 		if c.State() == network.ConnOpened {
-			c.checkAuthorize(conn)
+			c.checkAuthorize(session)
 
 			if c.connMgr.server.connectHandler != nil {
 				c.connMgr.server.connectHandler(c)
 			}
 		}
 
-		c.read(conn)
+		c.read(conn, session)
 	})
 
 	c.rw.Unlock()
@@ -268,6 +292,7 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 //
 // It clears the connection fields and attributes so that the object can be reused.
 func (c *serverConn) reset() {
+	c.reader = nil
 	c.queue = nil
 	c.attr.values.Clear()
 	c.dueBuffers = c.dueBuffers[:0]
@@ -439,9 +464,10 @@ func (c *serverConn) doClose(force ...bool) error {
 
 // read reads messages.
 //
-// It reads KCP data in a loop, checks the connection state and heartbeat packets, and either
-// responds according to the heartbeat mechanism or hands valid messages to the receive hook.
-func (c *serverConn) read(conn *kcp.UDPSession) {
+// It reads KCP data through the accepted connection in a loop, checks the connection state and
+// heartbeat packets, and either responds according to the heartbeat mechanism or hands valid
+// messages to the receive hook.
+func (c *serverConn) read(conn net.Conn, session *kcp.UDPSession) {
 	var (
 		index = 0
 		id    = c.id
@@ -450,7 +476,7 @@ func (c *serverConn) read(conn *kcp.UDPSession) {
 	for {
 		frameType, heartbeatTime, buf, err := packet.Read(conn)
 		if err != nil {
-			taskpool.Add(func() { c.recycleClose(conn, id) })
+			taskpool.Add(func() { c.recycleClose(session, id) })
 			return
 		}
 

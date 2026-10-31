@@ -55,45 +55,86 @@ func (p *provider) bindConn(ctx context.Context, cid, uid int64) error {
 		return err
 	}
 
-	// session.bind may synchronously close an older connection. Acquire the user lock only
-	// afterwards so that the old connection's disconnect callback can finish its own cleanup.
-	userLock := p.gate.userBindings.lock(uid)
 	if !p.gate.session.isBound(cid, uid) {
-		userLock.unlock()
 		return errors.ErrNotFoundSession
 	}
 
+	// The locator call runs without the user binding lock: a slow locator must not stall the
+	// disconnect cleanup of the users that hash to the same shard. The binding is reconciled
+	// afterwards because a concurrent unbind may have completed while the call was in flight.
 	if err := p.gate.proxy.bindGate(ctx, cid, uid); err != nil {
-		_ = p.gate.session.unbind(cid, uid)
-		userLock.unlock()
+		p.rollbackBind(cid, uid)
 		return err
 	}
-	bound := p.gate.session.isBound(cid, uid)
-	userLock.unlock()
-	if !bound {
+
+	if !p.gate.session.isBound(cid, uid) {
+		_ = p.cleanupStaleBinding(ctx, uid)
 		return errors.ErrNotFoundSession
 	}
 
 	return nil
 }
 
+// rollbackBind removes the local binding after a failed locator bind unless a newer binding for
+// the same user replaced it meanwhile.
+func (p *provider) rollbackBind(cid, uid int64) {
+	userLock := p.gate.userBindings.lock(uid)
+	if p.gate.session.isBound(cid, uid) {
+		_ = p.gate.session.unbind(cid, uid)
+	}
+	userLock.unlock()
+}
+
 // unbindPrevious finishes the old identity's location cleanup before a connection changes UID.
 // Only one user lock is held at a time, so concurrent UID swaps cannot reverse the lock order.
 func (p *provider) unbindPrevious(ctx context.Context, cid, uid int64) error {
 	userLock := p.gate.userBindings.lock(uid)
-	if !p.gate.session.isBound(cid, uid) {
+	bound := p.gate.session.isBound(cid, uid)
+	userLock.unlock()
+	if !bound {
+		return nil
+	}
+
+	// Run the locator cleanup outside the user binding lock. A failure leaves the local identity
+	// unchanged so the caller can retry the UID change.
+	if err := p.gate.proxy.unbindGate(ctx, cid, uid); err != nil {
+		return err
+	}
+
+	userLock = p.gate.userBindings.lock(uid)
+	if p.gate.session.isBound(cid, uid) {
+		_ = p.gate.session.unbind(cid, uid)
 		userLock.unlock()
 		return nil
 	}
-	if err := p.gate.proxy.unbindGate(ctx, cid, uid); err != nil {
-		userLock.unlock()
-		return err
-	}
-	err := p.gate.session.unbind(cid, uid)
+	online, _ := p.gate.session.has(cluster.User, uid)
 	userLock.unlock()
-	if err != nil && !errors.Is(err, errors.ErrNotFoundSession) {
+
+	if online {
+		// A newer bind replaced the old identity while the cleanup was in flight; restore the
+		// locator binding it owns.
+		if err := p.gate.opts.locator.BindGate(ctx, uid, p.gate.opts.id); err != nil {
+			log.Warnf("restore gate binding failed, uid: %d, gid: %s, err: %v", uid, p.gate.opts.id, err)
+		}
+	}
+
+	return nil
+}
+
+// cleanupStaleBinding removes a possibly stale gate binding left by an out-of-lock transition and
+// restores it when the user has been bound again by the time the removal completes. The locator
+// unbind is conditional on the gate ID, so a binding owned by another gate is preserved.
+func (p *provider) cleanupStaleBinding(ctx context.Context, uid int64) error {
+	if err := p.gate.opts.locator.UnbindGate(ctx, uid, p.gate.opts.id); err != nil {
 		return err
 	}
+
+	if online, _ := p.gate.session.has(cluster.User, uid); online {
+		if err := p.gate.opts.locator.BindGate(ctx, uid, p.gate.opts.id); err != nil {
+			log.Warnf("restore gate binding failed, uid: %d, gid: %s, err: %v", uid, p.gate.opts.id, err)
+		}
+	}
+
 	return nil
 }
 
@@ -108,16 +149,13 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 	}
 
 	userLock := p.gate.userBindings.lock(uid)
-
-	cid, err := p.gate.session.remove(uid)
+	_, err := p.gate.session.remove(uid)
+	userLock.unlock()
 	if err != nil {
-		userLock.unlock()
 		return err
 	}
 
-	err = p.gate.proxy.unbindGate(ctx, cid, uid)
-	userLock.unlock()
-	return err
+	return p.cleanupStaleBinding(ctx, uid)
 }
 
 // GetIP returns the client IP address.

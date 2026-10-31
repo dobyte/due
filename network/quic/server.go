@@ -96,9 +96,10 @@ func (s *server) Start() error {
 
 // Stop stops the server.
 //
-// It stops accepting new connections and closes pending as well as active transport connections.
-// Application-level callbacks may still be running after Stop returns, so Stop may also be called
-// from within a callback.
+// It stops accepting new connections, closes pending as well as active transport connections and
+// waits for the stop hook to finish. It must not be called synchronously from a network callback,
+// because the callback runs on the connection read goroutine that Stop waits for; call it from
+// another goroutine instead.
 func (s *server) Stop() error {
 	s.mu.Lock()
 	r := s.run
@@ -142,15 +143,23 @@ func (s *server) serve(r *serverRun) {
 	_ = r.listener.Close()
 	r.manager.close()
 	pending.Wait()
+
 	s.mu.Lock()
 	if s.run == r {
 		s.run = nil
 	}
-	close(r.done)
 	s.mu.Unlock()
+
+	// Run the stop hook before closing done so that Stop does not return until the hook has
+	// finished. Clearing run first makes a Stop issued by the hook return immediately instead of
+	// waiting on itself.
 	if s.stopHandler != nil {
 		s.stopHandler()
 	}
+
+	s.mu.Lock()
+	close(r.done)
+	s.mu.Unlock()
 }
 
 func (s *server) handleConn(r *serverRun, id int64, qc *quic.Conn) {

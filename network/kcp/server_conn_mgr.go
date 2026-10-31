@@ -74,24 +74,25 @@ func (cm *serverConnMgr) open() {
 	}
 }
 
-// allocateConn allocates a connection for c.
+// allocateConn allocates a connection for the accepted connection conn and its KCP session.
 //
 // It increments the total connection count and checks it against the limit, rolling the count back
 // when the limit is exceeded. It then takes a connection object from the pool, initializes it and
-// stores it in a partition.
-func (cm *serverConnMgr) allocateConn(c *kcp.UDPSession) error {
+// stores it in a partition. conn may be wrapped by the PROXY protocol; session is used for writes
+// and connection bookkeeping.
+func (cm *serverConnMgr) allocateConn(conn net.Conn, session *kcp.UDPSession) error {
 	if cm.total.Add(1) > int64(cm.server.opts.maxConnNum) {
 		cm.total.Add(-1)
 		return errors.ErrTooManyConnection
 	}
 
-	conn := cm.connPool.Get().(*serverConn)
+	c := cm.connPool.Get().(*serverConn)
 
-	if !conn.init(c) {
+	if !c.init(conn, session) {
 		// A partition refuses storage while the server is shutting down; roll the count back,
 		// return the connection object and let the caller close the underlying connection.
 		cm.total.Add(-1)
-		cm.connPool.Put(conn)
+		cm.connPool.Put(c)
 		return errors.ErrServerClosed
 	}
 

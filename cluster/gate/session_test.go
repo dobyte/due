@@ -6,6 +6,7 @@ import (
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
 )
 
@@ -32,6 +33,15 @@ func (c *mockConn) LocalIP() (string, error)      { return "", nil }
 func (c *mockConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *mockConn) RemoteIP() (string, error)     { return "", nil }
 func (c *mockConn) RemoteAddr() (net.Addr, error) { return nil, nil }
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *mockConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
 
 // mockAttr is a connection attribute implementation for tests.
 type mockAttr struct {

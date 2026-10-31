@@ -1,7 +1,6 @@
 package kcp
 
 import (
-	"net"
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/network"
@@ -38,8 +37,9 @@ func NewClient(opts ...ClientOption) network.Client {
 // Dial dials the server and returns the resulting connection.
 //
 // When no address is given, the address configured on the client is used. The underlying socket is
-// an unconnected UDP socket, matching [kcp.DialWithOptions]; a connected socket would make the
-// internal WriteTo calls of kcp-go fail so that no data could ever be sent.
+// an unconnected UDP socket owned by the session, so closing the connection also closes the socket;
+// a connected socket would make the internal WriteTo calls of kcp-go fail so that no data could
+// ever be sent.
 func (c *client) Dial(addr ...string) (network.Conn, error) {
 	var address string
 	if len(addr) > 0 && addr[0] != "" {
@@ -48,14 +48,8 @@ func (c *client) Dial(addr ...string) (network.Conn, error) {
 		address = c.opts.addr
 	}
 
-	udpConn, err := net.ListenUDP("udp", nil)
+	conn, err := kcp.DialWithOptions(address, nil, 0, 0)
 	if err != nil {
-		return nil, err
-	}
-
-	conn, err := kcp.NewConn(address, nil, 0, 0, udpConn)
-	if err != nil {
-		_ = udpConn.Close()
 		return nil, err
 	}
 

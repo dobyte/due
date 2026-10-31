@@ -148,9 +148,19 @@ func (c *Client) Destroy() {
 	c.conns.Clear()
 	c.rw2.Unlock()
 
+	var wg sync.WaitGroup
+	wg.Add(len(conns))
+
+	// Close the connections concurrently: a graceful close may dwell for the transport close
+	// timeout, so closing them serially would multiply that delay by the number of connections.
 	for _, cc := range conns {
-		cc.Close()
+		go func(cc *Conn) {
+			defer wg.Done()
+			_ = cc.Close()
+		}(cc)
 	}
+
+	wg.Wait()
 
 	c.runHookFunc(cluster.Destroy)
 }

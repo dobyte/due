@@ -58,6 +58,15 @@ func (c *tConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *tConn) RemoteIP() (string, error)     { return "10.0.0.1", nil }
 func (c *tConn) RemoteAddr() (net.Addr, error) { return nil, nil }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *tConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
 func (c *tConn) Push(buf buffer.Buffer) error {
 	if c.pushErr != nil {
 		return c.pushErr
@@ -895,5 +904,92 @@ func TestClientConnectIgnoresClosingClient(t *testing.T) {
 	c.handleNetworkConnect(working)
 	if _, ok := c.conns.Load(working); !ok {
 		t.Fatal("a working client must register the connection")
+	}
+}
+
+// multiDialNetwork returns a distinct connection for every dial.
+type multiDialNetwork struct {
+	*tNetwork
+	conns []network.Conn
+	index atomic.Int32
+}
+
+func (n *multiDialNetwork) Dial(addr ...string) (network.Conn, error) {
+	index := int(n.index.Add(1)) - 1
+	if index >= len(n.conns) {
+		return nil, errors.New("no connection available")
+	}
+
+	return n.conns[index], nil
+}
+
+// blockingCloseConn reports every Close entry and blocks until release is closed.
+type blockingCloseConn struct {
+	*tConn
+	entered chan<- struct{}
+	release <-chan struct{}
+}
+
+func (c *blockingCloseConn) Close(force ...bool) error {
+	c.entered <- struct{}{}
+	<-c.release
+	return c.tConn.Close(force...)
+}
+
+// TestDestroyClosesConnectionsConcurrently verifies that a graceful close of one connection does
+// not delay the close of the others during Destroy.
+func TestDestroyClosesConnectionsConcurrently(t *testing.T) {
+	const count = 3
+
+	var (
+		entered = make(chan struct{}, count)
+		release = make(chan struct{})
+	)
+
+	conns := make([]network.Conn, 0, count)
+	for i := range count {
+		conns = append(conns, &blockingCloseConn{tConn: newTConn(int64(i + 1)), entered: entered, release: release})
+	}
+
+	c := NewClient(
+		WithID("destroy-client"),
+		WithName("destroy-client"),
+		WithClient(&multiDialNetwork{tNetwork: &tNetwork{conn: conns[0]}, conns: conns}),
+		WithCodec(json.DefaultCodec),
+	)
+	c.Init()
+	c.Start()
+
+	for range count {
+		if _, err := c.Proxy().Dial(); err != nil {
+			t.Fatalf("dial failed: %v", err)
+		}
+	}
+
+	c.Close()
+
+	done := make(chan struct{})
+	go func() {
+		c.Destroy()
+		close(done)
+	}()
+
+	// Every connection must enter Close before any of them is released; a serial Destroy would only
+	// let the first one enter and then block on it.
+	for range count {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			close(release)
+			t.Fatal("connections were not closed concurrently")
+		}
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("destroy did not finish")
 	}
 }

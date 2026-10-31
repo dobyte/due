@@ -181,6 +181,15 @@ func (c *clientConn) Close(force ...bool) error {
 	}
 }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *clientConn) CloseIf(id int64) error {
+	if c.id != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.forceClose()
+}
+
 // LocalIP returns the local IP address.
 func (c *clientConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()

@@ -288,6 +288,28 @@ func TestRestartAndCallbackStop(t *testing.T) {
 	}
 }
 
+// TestStopWaitsForStopHook verifies that Stop returns only after the stop hook has finished.
+func TestStopWaitsForStopHook(t *testing.T) {
+	s, cert := testServer(t)
+
+	var hooked atomic.Bool
+	s.OnStop(func() {
+		time.Sleep(100 * time.Millisecond)
+		hooked.Store(true)
+	})
+
+	startServer(t, s)
+	_ = dialClient(t, s, cert)
+
+	if err := s.Stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !hooked.Load() {
+		t.Fatal("Stop returned before the stop hook finished")
+	}
+}
+
 func rawDial(t testing.TB, s *server, cert string) *quicgo.Conn {
 	t.Helper()
 	config, err := makeClientTLSConfig(cert, "localhost")

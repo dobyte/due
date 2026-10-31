@@ -129,6 +129,25 @@ func (c *serverConn) Close(force ...bool) error {
 	return c.graceClose()
 }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+//
+// The connection object is recycled and reused, so a caller that may hold a stale reference must
+// use this method instead of Close to avoid closing a newer connection that reuses the object.
+func (c *serverConn) CloseIf(id int64) error {
+	c.rw.Lock()
+
+	if c.id != id || c.qc == nil || c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		c.rw.Unlock()
+		return errors.ErrConnectionClosed
+	}
+
+	c.rw.Unlock()
+
+	c.uncheckAuthorize()
+
+	return c.doClose(false)
+}
+
 // LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()

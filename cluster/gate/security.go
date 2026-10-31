@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,9 +26,12 @@ type securityOptions struct {
 
 // securityManager holds the per-connection security state and the shared handshake server.
 type securityManager struct {
-	gate     *Gate
-	server   *handshake.Server
-	timeout  time.Duration
+	gate    *Gate
+	server  *handshake.Server
+	timeout time.Duration
+	// trigger delivers the connection lifecycle events to the business nodes.
+	trigger func(ctx context.Context, event cluster.Event, cid, uid int64)
+
 	states   sync.Map       // connection ID -> *securityState
 	conns    sync.Map       // connection ID -> *securedConn
 	pending  sync.Map       // connection ID -> []byte; handshake frame received before admission
@@ -38,12 +42,14 @@ type securityManager struct {
 
 // securityState is the security state of a single connection.
 type securityState struct {
-	mu      sync.Mutex
-	pending *handshake.Pending
-	session atomic.Pointer[handshake.Session]
-	closed  bool        // protected by mu
-	closing bool        // protected by mu; at most one security close goroutine per state
-	timer   *time.Timer // protected by mu
+	mu        sync.Mutex
+	pending   *handshake.Pending
+	session   atomic.Pointer[handshake.Session]
+	closed    bool        // protected by mu
+	closing   bool        // protected by mu; at most one security close goroutine per state
+	connected bool        // protected by mu; the Connect event has been committed for delivery
+	timer     *time.Timer // protected by mu
+	eventMu   sync.Mutex  // serializes the Connect and Disconnect event deliveries of the connection
 }
 
 // securedConn decorates a connection so that every pushed message is sealed with the session key
@@ -66,11 +72,16 @@ func (c *securedConn) Push(buf buffer.Buffer) error {
 
 // newSecurityManager creates a security manager from the gate options.
 func newSecurityManager(gate *Gate, opts *securityOptions, timeout time.Duration) *securityManager {
-	return &securityManager{
+	m := &securityManager{
 		gate:    gate,
 		server:  handshake.NewServer(opts.signer, opts.suites...),
 		timeout: timeout,
 	}
+	m.trigger = func(ctx context.Context, event cluster.Event, cid, uid int64) {
+		m.gate.proxy.trigger(ctx, event, cid, uid)
+	}
+
+	return m
 }
 
 // wrap decorates conn and records the mapping so that the teardown path can find the wrapper.
@@ -110,12 +121,18 @@ func (m *securityManager) confirmed(cid int64) bool {
 	return false
 }
 
-// remove releases the state of the given connection.
-func (m *securityManager) remove(cid int64) {
+// remove releases the state of the given connection and returns it.
+//
+// The state is handed to [securityManager.deliverDisconnect] by the disconnect path so that a
+// Disconnect event cannot overtake the Connect event of the same connection. The state is marked
+// closed here, which also turns a Connect delivery that has not been committed yet into a no-op.
+func (m *securityManager) remove(cid int64) *securityState {
 	m.pending.Delete(cid)
 
+	var state *securityState
+
 	if value, ok := m.states.LoadAndDelete(cid); ok {
-		state := value.(*securityState)
+		state = value.(*securityState)
 		state.mu.Lock()
 		state.closed = true
 		if state.timer != nil {
@@ -127,6 +144,67 @@ func (m *securityManager) remove(cid int64) {
 		state.mu.Unlock()
 	}
 	m.conns.Delete(cid)
+
+	return state
+}
+
+// triggerConnect delivers the Connect event of a confirmed handshake.
+//
+// The delivery is serialized with [securityManager.deliverDisconnect] through the event lock of the
+// connection state. A disconnect racing the confirmation either waits for this delivery or marks the
+// state closed first, which turns this call into a no-op, so the Connect and Disconnect events always
+// reach the business node in order and a connection removed before its Connect event was committed
+// produces no Disconnect event.
+func (m *securityManager) triggerConnect(conn network.Conn) {
+	cid := conn.ID()
+
+	value, ok := m.states.Load(cid)
+	if !ok {
+		return
+	}
+
+	state := value.(*securityState)
+
+	state.eventMu.Lock()
+
+	state.mu.Lock()
+	if state.closed || state.connected {
+		state.mu.Unlock()
+		state.eventMu.Unlock()
+		return
+	}
+	state.connected = true
+	state.mu.Unlock()
+
+	// The event handler may perform an RPC, so the state lock is already released; the event lock
+	// keeps a concurrent Disconnect delivery waiting until this delivery finishes.
+	m.trigger(m.gate.ctx, cluster.Connect, cid, conn.UID())
+
+	state.eventMu.Unlock()
+}
+
+// deliverDisconnect delivers the Disconnect event of a removed connection when its paired Connect
+// event was committed for delivery.
+//
+// It takes the event lock, so a Connect delivery that is already in flight completes first. The state
+// has already been removed from the manager and marked closed, so no Connect can be committed after
+// the lock is acquired.
+func (m *securityManager) deliverDisconnect(state *securityState, cid, uid int64) {
+	if state == nil {
+		return
+	}
+
+	state.eventMu.Lock()
+	state.mu.Lock()
+	connected := state.connected
+	state.mu.Unlock()
+	state.eventMu.Unlock()
+
+	if !connected {
+		return
+	}
+
+	m.trigger(m.gate.ctx, cluster.Disconnect, cid, uid)
 }
 
 // expire closes a connection that did not complete the security handshake in time.
@@ -228,8 +306,10 @@ func (m *securityManager) shutdown() {
 	m.closers.Wait()
 }
 
-// closeSecureConn discards work for a removed or replaced security state. The check narrows the
-// reuse window but cannot make it atomic with Close through the existing network.Conn interface.
+// closeSecureConn forcibly closes a connection that is still the one recorded for cid.
+//
+// The compare-and-close runs inside the transport, so a connection object that has already been
+// recycled and reused by a newer connection is not closed by mistake.
 func (m *securityManager) closeSecureConn(cid int64, conn *securedConn) {
 	value, ok := m.states.Load(cid)
 	if !ok || value != conn.state {
@@ -238,7 +318,7 @@ func (m *securityManager) closeSecureConn(cid int64, conn *securedConn) {
 	if current, ok := m.conns.Load(cid); !ok || current != conn {
 		return
 	}
-	if err := conn.Conn.Close(true); err != nil && !errors.Is(err, errors.ErrConnectionClosed) {
+	if err := conn.Conn.CloseIf(cid); err != nil && !errors.Is(err, errors.ErrConnectionClosed) {
 		log.Warnf("close secure connection failed, cid: %d, err: %v", cid, err)
 	}
 }
@@ -374,8 +454,9 @@ func (m *securityManager) advanceHandshake(conn network.Conn, frame []byte) {
 	state.mu.Unlock()
 
 	// Trigger the event after releasing the lock: the event handler may perform an RPC, and holding
-	// the state lock would block the read loop and the handshake timer for its whole duration.
-	m.gate.proxy.trigger(m.gate.ctx, cluster.Connect, conn.ID(), conn.UID())
+	// the state lock would block the read loop and the handshake timer for its whole duration. The
+	// delivery is still serialized with a concurrent Disconnect event by the connection event lock.
+	m.triggerConnect(conn)
 }
 
 // deferHandshake keeps a handshake frame that arrived before the connection was admitted.

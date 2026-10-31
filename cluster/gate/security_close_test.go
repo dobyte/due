@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/task"
 )
@@ -30,6 +31,54 @@ func (c *securityCloseConn) Close(force ...bool) error {
 		c.finished <- struct{}{}
 	}
 	return nil
+}
+
+// CloseIf keeps the compare-and-close behavior of the security close path.
+func (c *securityCloseConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
+// reusedSecurityConn records the ID passed to CloseIf so the test can verify that the close uses
+// the ID captured with the security state instead of the ID the object carries now.
+type reusedSecurityConn struct {
+	*securityConn
+	received atomic.Int64
+}
+
+func (c *reusedSecurityConn) CloseIf(id int64) error {
+	c.received.Store(id)
+
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
+// TestSecurityCloseUsesCapturedConnectionID verifies that a stale security state does not close a
+// connection object that has been recycled and reused by a newer connection.
+func TestSecurityCloseUsesCapturedConnectionID(t *testing.T) {
+	g := NewGate(WithSessionSecurity(&securitySigner{key: []byte("reuse-test")}))
+	conn := &reusedSecurityConn{securityConn: &securityConn{id: 1}}
+	g.security.wrap(conn)
+	t.Cleanup(func() { g.security.remove(1) })
+
+	// Simulate the transport recycling the object for a newer connection.
+	conn.id = 2
+
+	g.security.closeConn(1)
+	g.security.closers.Wait()
+
+	if got := conn.received.Load(); got != 1 {
+		t.Fatalf("close id = %d, want the captured id 1", got)
+	}
+	if conn.closed.Load() {
+		t.Fatal("the reused connection must not be closed by the stale security state")
+	}
 }
 
 func TestSecurityCloseFromReceiveDoesNotSubmitToTaskPool(t *testing.T) {

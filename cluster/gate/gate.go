@@ -239,20 +239,24 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
 // WaitGroup counter once that work finishes; a connection that is not registered (rejected during
 // the closing phase) only has its rate limiter bucket released. When session security is enabled,
-// the Disconnect event is triggered only for a connection whose handshake was confirmed, so that
-// it stays paired with the Connect event, which is deferred until the handshake is confirmed.
-// RemConn atomically performs the existence check and removal, so when concurrent duplicate
-// disconnects happen only the first call takes effect, keeping the WaitGroup's Add/Done balanced.
+// the Disconnect event is triggered only for a connection whose Connect event was committed, and it
+// waits for an in-flight Connect delivery, so the two events always arrive in order: the Connect
+// event is deferred until the handshake is confirmed and the Disconnect event is skipped entirely
+// when the connection is removed first. RemConn atomically performs the existence check and removal,
+// so when concurrent duplicate disconnects happen only the first call takes effect, keeping the
+// WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	var (
-		cid       = conn.ID()
-		confirmed = true
+		cid   = conn.ID()
+		state *securityState
 	)
 
 	if g.security != nil {
-		conn, confirmed = g.security.unwrap(conn), g.security.confirmed(cid)
+		conn = g.security.unwrap(conn)
 
-		g.security.remove(cid)
+		// Removing the security state returns it to the event delivery path, which orders the
+		// Disconnect event with a Connect delivery that may still be in flight.
+		state = g.security.remove(cid)
 	}
 
 	// Release the limiter bucket even when the session was never admitted: frames can arrive before
@@ -281,7 +285,9 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 				}
 			}
 
-			if confirmed {
+			if g.security != nil {
+				g.security.deliverDisconnect(state, cid, uid)
+			} else {
 				g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
 			}
 

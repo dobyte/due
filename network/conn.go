@@ -38,6 +38,13 @@ type (
 		//
 		// When force is true the connection is closed forcibly.
 		Close(force ...bool) error
+		// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+		//
+		// Server connection objects are recycled and reused, so a caller that may hold a stale
+		// reference must use this method instead of Close to avoid closing a newer connection that
+		// reuses the same object. It reports ErrConnectionClosed when the connection no longer
+		// carries the given ID.
+		CloseIf(id int64) error
 		// LocalIP returns the local IP address.
 		LocalIP() (string, error)
 		// LocalAddr returns the local address.

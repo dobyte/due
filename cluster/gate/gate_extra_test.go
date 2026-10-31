@@ -61,6 +61,15 @@ func (c *gateConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *gateConn) RemoteIP() (string, error)     { return "10.0.0.1", nil }
 func (c *gateConn) RemoteAddr() (net.Addr, error) { return nil, nil }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *gateConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
 // gateServer is a network server implementation for tests.
 type gateServer struct {
 	addr string

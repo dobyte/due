@@ -1,6 +1,7 @@
 package kcp
 
 import (
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -198,7 +199,8 @@ func (s *server) serve(ln net.Listener) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
+			// kcp-go reports a closed listener as io.ErrClosedPipe instead of net.ErrClosed.
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
 				break
 			}
 
@@ -234,7 +236,7 @@ func (s *server) serve(ln net.Listener) {
 			session = conn.(*kcp.UDPSession)
 		}
 
-		if err = s.connMgr.allocateConn(session); err != nil {
+		if err = s.connMgr.allocateConn(conn, session); err != nil {
 			if errors.Is(err, errors.ErrServerClosed) {
 				log.Debugf("connection allocate error: %v", err)
 			} else {
