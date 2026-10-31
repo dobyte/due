@@ -628,24 +628,33 @@ func (n *Node) printInfo() {
 //
 // It does nothing when the node has been shut; otherwise it decrements the wait count and, when the
 // count reaches zero in the hang state, completes the node shutdown.
+//
+// Close reads the wait count after switching the node to hang, so the decision to finish the
+// shutdown must use the state observed after the decrement. Using the state read before the
+// decrement could miss the wakeup when the last wait completes concurrently with Close and leave
+// Close blocked forever.
 func (n *Node) doDoneWait() bool {
 	if n == nil {
 		return false
 	}
 
-	state := n.getState()
-
-	if state == cluster.Shut {
+	if n.getState() == cluster.Shut {
 		return false
 	}
 
-	if n.counter.Add(-1) <= 0 && state == cluster.Hang {
-		if n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
-			close(n.done)
-		} else {
-			return false
-		}
+	if n.counter.Add(-1) > 0 {
+		return true
 	}
+
+	if n.getState() != cluster.Hang {
+		return true
+	}
+
+	if !n.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
+		return false
+	}
+
+	close(n.done)
 
 	return true
 }

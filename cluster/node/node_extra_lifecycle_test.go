@@ -500,6 +500,38 @@ func TestNodeWaitCounter(t *testing.T) {
 	})
 }
 
+// TestNodeCloseCompletesWithConcurrentWait verifies that Close completes when the last wait
+// finishes concurrently with the transition to hang.
+func TestNodeCloseCompletesWithConcurrentWait(t *testing.T) {
+	for range 200 {
+		n := newTestNode(t)
+		setWorking(n)
+		n.counter.Add(1)
+
+		start := make(chan struct{})
+		closed := make(chan struct{})
+
+		go func() {
+			<-start
+			n.doDoneWait()
+		}()
+
+		go func() {
+			<-start
+			n.Close()
+			close(closed)
+		}()
+
+		close(start)
+
+		select {
+		case <-closed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("Close did not complete after the last wait finished")
+		}
+	}
+}
+
 // TestNodeAddHookAndProviderWhileWorking verifies that hooks and providers are ignored while the
 // node is running.
 func TestNodeAddHookAndProviderWhileWorking(t *testing.T) {
