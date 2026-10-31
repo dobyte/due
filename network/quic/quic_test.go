@@ -159,6 +159,64 @@ func TestWelcomeWithoutPeriodicHeartbeat(t *testing.T) {
 	await(t, disconnected)
 }
 
+// TestDisconnectAfterConnectHook verifies that the disconnect hook runs only after the connect
+// hook returns, even when the connection is closed concurrently while the connect hook is still
+// running.
+func TestDisconnectAfterConnectHook(t *testing.T) {
+	s, cert := testServer(t)
+
+	var (
+		order   atomic.Int32
+		entered = make(chan struct{})
+		release = make(chan struct{})
+	)
+
+	s.OnConnect(func(network.Conn) {
+		close(entered)
+		<-release
+		order.Store(1)
+	})
+
+	disconnected := make(chan struct{}, 1)
+	s.OnDisconnect(func(network.Conn) {
+		if order.Load() != 1 {
+			t.Error("disconnect ran before the connect hook returned")
+		}
+
+		disconnected <- struct{}{}
+	})
+
+	startServer(t, s)
+
+	cl := NewClient(WithClientAddr(s.Addr()), WithClientCredentials(cert, "localhost"),
+		WithClientHeartbeatInterval(0), WithClientDialTimeout(0), WithClientCloseTimeout(300*time.Millisecond))
+	clientSawClose := make(chan struct{}, 1)
+	cl.OnDisconnect(func(network.Conn) { clientSawClose <- struct{}{} })
+
+	c, err := cl.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close(true)
+
+	<-entered
+
+	stopped := make(chan struct{})
+	go func() {
+		_ = s.Stop()
+		close(stopped)
+	}()
+
+	// The server tears the transport down before waiting for the read goroutine, so the client
+	// observes the close while the server is still blocked on the connect hook.
+	await(t, clientSawClose)
+
+	close(release)
+
+	await(t, disconnected)
+	await(t, stopped)
+}
+
 func TestGracefulCloseDeliversAcceptedMessages(t *testing.T) {
 	s, cert := testServer(t, WithServerCloseTimeout(time.Second))
 	const count = 100

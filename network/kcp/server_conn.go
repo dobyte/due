@@ -31,7 +31,7 @@ type serverConn struct {
 	dueBuffers        []buffer.Buffer             // Buffers pending write
 	netBuffers        net.Buffers                 // Byte slices pending write
 	lastHeartbeatTime atomic.Int64                // Time of the last heartbeat
-	authorizeTimer    atomic.Value                // Authorize timer
+	authorizeTimer    atomic.Pointer[time.Timer]  // Authorize timer
 }
 
 var _ network.Conn = &serverConn{}
@@ -203,7 +203,7 @@ func (c *serverConn) init(conn *kcp.UDPSession) bool {
 	c.conn = conn
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.authorizeTimer.Store(nil)
 
 	if c.connMgr.server.opts.mtu > 0 {
 		conn.SetMtu(c.connMgr.server.opts.mtu)
@@ -299,15 +299,14 @@ func (c *serverConn) checkAuthorize(conn *kcp.UDPSession) {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
 		id := c.id
 
-		timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
+		if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 			if c.UID() != 0 {
 				return
 			}
 
 			c.recycleClose(conn, id)
-		}))
-		if t, ok := timer.(*time.Timer); ok && t != nil {
-			t.Stop()
+		})); timer != nil {
+			timer.Stop()
 		}
 	}
 }
@@ -317,10 +316,8 @@ func (c *serverConn) checkAuthorize(conn *kcp.UDPSession) {
 // It stops and clears the authorize timer, lifting the constraint that forces a close.
 func (c *serverConn) uncheckAuthorize() {
 	if c.connMgr.server.opts.authorizeTimeout > 0 {
-		timer := c.authorizeTimer.Swap((*time.Timer)(nil))
-
-		if t, ok := timer.(*time.Timer); ok && t != nil {
-			t.Stop()
+		if timer := c.authorizeTimer.Swap(nil); timer != nil {
+			timer.Stop()
 		}
 	}
 }

@@ -166,3 +166,75 @@ func TestServerConnectHookBeforeReceive(t *testing.T) {
 		t.Fatal("message was not received")
 	}
 }
+
+// TestServerDisconnectAfterConnectHook verifies that the disconnect hook runs only after the
+// connect hook returns, even when the connection is closed concurrently while the connect hook is
+// still running.
+func TestServerDisconnectAfterConnectHook(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("127.0.0.1:0"))
+
+	var (
+		order   atomic.Int32
+		entered = make(chan struct{})
+		release = make(chan struct{})
+	)
+
+	server.OnConnect(func(conn network.Conn) {
+		close(entered)
+		<-release
+		order.Store(1)
+	})
+
+	disconnected := make(chan struct{}, 1)
+	server.OnDisconnect(func(conn network.Conn) {
+		if order.Load() != 1 {
+			t.Error("disconnect ran before the connect hook returned")
+		}
+
+		disconnected <- struct{}{}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+
+	clientSawClose := make(chan struct{}, 1)
+	client := tcp.NewClient()
+	client.OnDisconnect(func(conn network.Conn) { clientSawClose <- struct{}{} })
+
+	conn, err := client.Dial(server.Addr())
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	<-entered
+
+	stopped := make(chan struct{})
+	go func() {
+		_ = server.Stop()
+		close(stopped)
+	}()
+
+	// The server closes the underlying connection before waiting for the read goroutine, so the
+	// client observes the close while the server is still blocked on the connect hook.
+	select {
+	case <-clientSawClose:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not close the connection")
+	}
+
+	close(release)
+
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("disconnect hook was not invoked")
+	}
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server stop did not finish")
+	}
+}
