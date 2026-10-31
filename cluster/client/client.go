@@ -105,7 +105,7 @@ func (c *Client) Start() {
 		return
 	}
 
-	c.opts.client.OnConnect(c.handleNetworkConnect)
+	c.opts.client.OnConnect(c.handleConnect)
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 	c.opts.client.OnHandshake(c.handleHandshake)
@@ -292,13 +292,13 @@ func (c *Client) handleHandshake(conn network.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
-// handleNetworkConnect records the wrapped connection as soon as the transport reports it.
+// handleConnect records the wrapped connection as soon as the transport reports it.
 //
 // Transports deliver the connect handler before the first frame and before the disconnect callback,
 // so recording the connection here keeps a message or a disconnect that arrives before Dial returns
 // from being dropped. A connection reported while the client is closing is not recorded; a dial
 // that is still in flight observes the state change and rejects the connection.
-func (c *Client) handleNetworkConnect(conn network.Conn) {
+func (c *Client) handleConnect(conn network.Conn) {
 	c.rw2.Lock()
 	if st := c.getState(); st == cluster.Work || st == cluster.Busy {
 		c.registerConnLocked(conn)

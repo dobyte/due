@@ -894,14 +894,14 @@ func TestClientConnectIgnoresClosingClient(t *testing.T) {
 	c := NewClient(WithClient(&tNetwork{conn: newTConn(1)}), WithCodec(json.DefaultCodec))
 
 	shut := newTConn(77)
-	c.handleNetworkConnect(shut)
+	c.handleConnect(shut)
 	if _, ok := c.conns.Load(shut); ok {
 		t.Fatal("a shut client must not register the connection")
 	}
 
 	c.state.Store(int32(cluster.Work))
 	working := newTConn(78)
-	c.handleNetworkConnect(working)
+	c.handleConnect(working)
 	if _, ok := c.conns.Load(working); !ok {
 		t.Fatal("a working client must register the connection")
 	}
