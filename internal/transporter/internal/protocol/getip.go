@@ -2,7 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
-	"net"
+	"net/netip"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -59,14 +59,18 @@ func EncodeGetIPRes(seq uint64, code uint16, ip string) *buffer.NocopyBuffer {
 	var (
 		size    = getIPResBytes - def.SizeBytes
 		ipBytes int
+		ip4     [4]byte
+		ip16    [16]byte
 	)
 
 	if code == codes.OK && ip != "" {
-		if parsed := net.ParseIP(ip); parsed != nil {
-			if parsed.To4() != nil {
-				ipBytes = def.B32
+		// netip parses without allocating, and the address bytes are written directly, so the
+		// string is parsed at most once per response.
+		if addr, err := netip.ParseAddr(ip); err == nil {
+			if addr.Is4() || addr.Is4In6() {
+				ip4, ipBytes = addr.As4(), def.B32
 			} else {
-				ipBytes = def.B128
+				ip16, ipBytes = addr.As16(), def.B128
 			}
 		}
 	}
@@ -82,10 +86,9 @@ func EncodeGetIPRes(seq uint64, code uint16, ip string) *buffer.NocopyBuffer {
 
 	switch ipBytes {
 	case def.B32:
-		writer.WriteUint32s(binary.BigEndian, xnet.IP2Long(ip))
+		writer.WriteBytes(ip4[:]...)
 	case def.B128:
-		raw := xnet.IP2Bytes(ip)
-		writer.WriteBytes(raw[:]...)
+		writer.WriteBytes(ip16[:]...)
 	}
 
 	return buffer.NewNocopyBuffer(writer)

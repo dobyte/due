@@ -34,6 +34,56 @@ func TestDecodeGetIPReqInvalidLength(t *testing.T) {
 	}
 }
 
+func BenchmarkEncodeGetIPRes(b *testing.B) {
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "ipv4", ip: "192.168.0.88"},
+		{name: "ipv6", ip: "2408:db8::1"},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				res := protocol.EncodeGetIPRes(1, codes.OK, tt.ip)
+				res.Release()
+			}
+		})
+	}
+}
+
+func BenchmarkDecodeGetIPRes(b *testing.B) {
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "ipv4", ip: "192.168.0.88"},
+		{name: "ipv6", ip: "2408:db8::1"},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			res := protocol.EncodeGetIPRes(1, codes.OK, tt.ip)
+			payload := append([]byte(nil), res.Bytes()[def.MinFrameSize:]...)
+			res.Release()
+
+			buf := buffer.NewBytes(payload)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				if _, _, err := protocol.DecodeGetIPRes(buf); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func TestGetIPResRoundTrip(t *testing.T) {
 	tests := []struct {
 		name        string

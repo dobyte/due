@@ -7,6 +7,7 @@ package xnet
 import (
 	"encoding/binary"
 	"net"
+	"net/netip"
 
 	innernet "github.com/dobyte/due/v2/core/net"
 )
@@ -65,9 +66,9 @@ func IP2Long(ip string) uint32 {
 
 // Long2IP converts a uint32 into its dotted-decimal IPv4 address string.
 func Long2IP(v uint32) string {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, v)
-	return ip.String()
+	var ip [4]byte
+	binary.BigEndian.PutUint32(ip[:], v)
+	return net.IP(ip[:]).String()
 }
 
 // IP2Bytes converts an IP address into its 16-byte network-order representation. IPv4 addresses
@@ -89,5 +90,5 @@ func IP2Bytes(ip string) [16]byte {
 // Bytes2IP converts a 16-byte network-order address into its string representation. IPv4-mapped
 // addresses are rendered as dotted-decimal IPv4.
 func Bytes2IP(v [16]byte) string {
-	return net.IP(v[:]).String()
+	return netip.AddrFrom16(v).Unmap().String()
 }
