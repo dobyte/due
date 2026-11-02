@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/binary"
 	"net"
+	"net"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -134,6 +135,9 @@ func encodeGetIPRes(seq uint64, code uint16, ip string, extended bool) *buffer.N
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
+	switch buf.Len() {
+	case def.CodeBytes, def.CodeBytes + def.B32, def.CodeBytes + def.B128:
+	default:
 	switch buf.Len() {
 	case def.CodeBytes, def.CodeBytes + def.B32, def.CodeBytes + def.B128:
 	default:
