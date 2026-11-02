@@ -8,6 +8,7 @@ const (
 	OK              uint16 = iota // Success
 	NotFoundSession               // Session connection not found
 	InternalError                 // Internal error
+	IPv6Unsupported               // The legacy response format cannot carry an IPv6 address
 )
 
 // ErrorToCode converts an error to its error code.

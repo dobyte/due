@@ -12,6 +12,56 @@ import (
 	"github.com/dobyte/due/v2/packet"
 )
 
+// TestServerListensOnDualStackForDefaultAddr verifies that the default listen address accepts both
+// IPv4 and IPv6 clients.
+func TestServerListensOnDualStackForDefaultAddr(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+	_ = probe.Close()
+
+	server := ws.NewServer(ws.WithServerAddr(":0"), ws.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, port, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if host != "::" {
+		t.Fatalf("expected a dual-stack listen address, actual: %s", server.Addr())
+	}
+
+	for _, ip := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), time.Second)
+		if err != nil {
+			t.Fatalf("dial %s failed: %v", ip, err)
+		}
+		_ = conn.Close()
+	}
+}
+
+// TestServerListensOnIPv4ForIPv4Wildcard verifies that an explicit IPv4 wildcard address binds an
+// IPv4-only socket.
+func TestServerListensOnIPv4ForIPv4Wildcard(t *testing.T) {
+	server := ws.NewServer(ws.WithServerAddr("0.0.0.0:0"), ws.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, _, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.To4() == nil {
+		t.Fatalf("expected an IPv4 listen address, actual: %s", server.Addr())
+	}
+}
+
 func TestServerStartFailureRollsBackState(t *testing.T) {
 	addr := reserveAddr(t)
 	server := ws.NewServer(ws.WithServerAddr(addr), ws.WithServerHeartbeatInterval(0))

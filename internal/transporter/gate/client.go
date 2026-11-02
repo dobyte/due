@@ -77,23 +77,43 @@ func (c *Client) Unbind(ctx context.Context, uid int64) error {
 
 // GetIP returns the client IP of the target session.
 func (c *Client) GetIP(ctx context.Context, kind cluster.Session, target int64) (string, error) {
+	code, ip, err := c.doGetIP(ctx, kind, target, false)
+	if err != nil {
+		return "", err
+	}
+
+	// The legacy response format cannot carry an IPv6 address. The peer reports that through
+	// codes.IPv6Unsupported, after which the extended request fetches the full address.
+	if code == codes.IPv6Unsupported {
+		if code, ip, err = c.doGetIP(ctx, kind, target, true); err != nil {
+			return "", err
+		}
+	}
+
+	return ip, codes.CodeToError(code)
+}
+
+// doGetIP performs a single get-IP call and returns the raw response code.
+func (c *Client) doGetIP(ctx context.Context, kind cluster.Session, target int64, extended bool) (uint16, string, error) {
 	seq := c.doGenSequence()
-	req := protocol.EncodeGetIPReq(seq, kind, target)
+
+	var req *buffer.NocopyBuffer
+	if extended {
+		req = protocol.EncodeGetIPReqExt(seq, kind, target)
+	} else {
+		req = protocol.EncodeGetIPReq(seq, kind, target)
+	}
 
 	res, err := c.cli.Call(ctx, seq, req)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
 	code, ip, err := protocol.DecodeGetIPRes(res)
 
 	res.Release()
 
-	if err != nil {
-		return "", err
-	} else {
-		return ip, codes.CodeToError(code)
-	}
+	return code, ip, err
 }
 
 // Stat returns the total number of sessions of the given kind.

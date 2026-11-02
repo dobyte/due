@@ -19,6 +19,18 @@ func stubResolvers() {
 	net.SetPrivateIPResolver(func() (string, error) { return stubPrivateIP, nil })
 }
 
+// requireIPv6 skips the test when the system has no usable IPv6 loopback.
+func requireIPv6(t *testing.T) {
+	t.Helper()
+
+	probe, err := stdnet.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+
+	_ = probe.Close()
+}
+
 // splitHostPort splits an address into host and port, failing the test when the address is invalid.
 func splitHostPort(t *testing.T, addr string) (string, string) {
 	t.Helper()
@@ -63,7 +75,7 @@ func TestParseAddr(t *testing.T) {
 			t.Fatalf("parse addr failed: %v", err)
 		}
 
-		if listenAddr != stdnet.JoinHostPort(net.IPv4Zero, "3553") {
+		if listenAddr != ":3553" {
 			t.Fatalf("invalid listen addr, actual: %s", listenAddr)
 		}
 		if exposeAddr != stdnet.JoinHostPort(stubPrivateIP, "3553") {
@@ -100,6 +112,60 @@ func TestParseAddr(t *testing.T) {
 		}
 	})
 
+	t.Run("ipv6 wildcard addr with fixed port", func(t *testing.T) {
+		listenAddr, exposeAddr, err := net.ParseAddr("[::]:3553")
+		if err != nil {
+			t.Fatalf("parse addr failed: %v", err)
+		}
+
+		if listenAddr != stdnet.JoinHostPort(net.IPv6Zero, "3553") {
+			t.Fatalf("invalid listen addr, actual: %s", listenAddr)
+		}
+		if exposeAddr != stdnet.JoinHostPort(stubPrivateIP, "3553") {
+			t.Fatalf("invalid expose addr, actual: %s", exposeAddr)
+		}
+	})
+
+	t.Run("ipv6 wildcard addr with random port", func(t *testing.T) {
+		requireIPv6(t)
+
+		listenAddr, exposeAddr, err := net.ParseAddr("[::]:0")
+		if err != nil {
+			t.Fatalf("parse addr failed: %v", err)
+		}
+
+		listenHost, listenPort := splitHostPort(t, listenAddr)
+		if listenHost != net.IPv6Zero {
+			t.Fatalf("invalid listen host, expect: %s, actual: %s", net.IPv6Zero, listenHost)
+		}
+		if listenPort == "" || listenPort == "0" {
+			t.Fatalf("invalid listen port, actual: %s", listenPort)
+		}
+		if exposeAddr != stdnet.JoinHostPort(stubPrivateIP, listenPort) {
+			t.Fatalf("invalid expose addr, actual: %s", exposeAddr)
+		}
+	})
+
+	t.Run("ipv6 host with random port", func(t *testing.T) {
+		requireIPv6(t)
+
+		listenAddr, exposeAddr, err := net.ParseAddr("[::1]:0")
+		if err != nil {
+			t.Fatalf("parse addr failed: %v", err)
+		}
+
+		listenHost, listenPort := splitHostPort(t, listenAddr)
+		if listenHost != "::1" {
+			t.Fatalf("invalid listen host, expect: ::1, actual: %s", listenHost)
+		}
+		if listenPort == "" || listenPort == "0" {
+			t.Fatalf("invalid listen port, actual: %s", listenPort)
+		}
+		if exposeAddr != listenAddr {
+			t.Fatalf("expose addr mismatched, expect: %s, actual: %s", listenAddr, exposeAddr)
+		}
+	})
+
 	t.Run("invalid addr", func(t *testing.T) {
 		if _, _, err := net.ParseAddr("127.0.0.1"); err == nil {
 			t.Fatal("expect an error for the invalid address")
@@ -107,8 +173,43 @@ func TestParseAddr(t *testing.T) {
 	})
 }
 
+func TestListenNetwork(t *testing.T) {
+	tests := []struct {
+		name    string
+		network string
+		addr    string
+		want    string
+	}{
+		{name: "empty host", network: "tcp", addr: ":3553", want: "tcp"},
+		{name: "ipv6 wildcard", network: "tcp", addr: "[::]:3553", want: "tcp"},
+		{name: "ipv4 wildcard", network: "tcp", addr: "0.0.0.0:3553", want: "tcp4"},
+		{name: "ipv4 host", network: "tcp", addr: "127.0.0.1:3553", want: "tcp4"},
+		{name: "ipv6 host", network: "tcp", addr: "[::1]:3553", want: "tcp"},
+		{name: "hostname", network: "tcp", addr: "localhost:3553", want: "tcp"},
+		{name: "udp ipv4 wildcard", network: "udp", addr: "0.0.0.0:3553", want: "udp4"},
+		{name: "udp ipv6 wildcard", network: "udp", addr: "[::]:3553", want: "udp"},
+		{name: "invalid addr", network: "tcp", addr: "invalid", want: "tcp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := net.ListenNetwork(tt.network, tt.addr); got != tt.want {
+				t.Fatalf("invalid network, expect: %s, actual: %s", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestFulfillAddr(t *testing.T) {
-	if addr := net.FulfillAddr(":3553"); addr != "0.0.0.0:3553" {
+	if addr := net.FulfillAddr(":3553"); addr != "[::]:3553" {
+		t.Fatalf("invalid addr, expect: [::]:3553, actual: %s", addr)
+	}
+
+	if addr := net.FulfillAddr("[::]:3553"); addr != "[::]:3553" {
+		t.Fatalf("invalid addr, expect: [::]:3553, actual: %s", addr)
+	}
+
+	if addr := net.FulfillAddr("0.0.0.0:3553"); addr != "0.0.0.0:3553" {
 		t.Fatalf("invalid addr, expect: 0.0.0.0:3553, actual: %s", addr)
 	}
 
@@ -169,6 +270,16 @@ func TestAssignRandPort(t *testing.T) {
 	}
 
 	port, err = net.AssignRandPort("127.0.0.1")
+	if err != nil {
+		t.Fatalf("assign random port failed: %v", err)
+	}
+	if port <= 0 {
+		t.Fatalf("invalid port, actual: %d", port)
+	}
+
+	requireIPv6(t)
+
+	port, err = net.AssignRandPort("::1")
 	if err != nil {
 		t.Fatalf("assign random port failed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package tcp_test
 
 import (
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"sync/atomic"
@@ -116,6 +117,56 @@ func TestServer_ChWrite(t *testing.T) {
 	v := unsafe.Sizeof(&chWrite{})
 
 	t.Logf("chWrite size: %d", v)
+}
+
+// TestServerListensOnDualStackForDefaultAddr verifies that the default listen address accepts both
+// IPv4 and IPv6 clients.
+func TestServerListensOnDualStackForDefaultAddr(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+	_ = probe.Close()
+
+	server := tcp.NewServer(tcp.WithServerAddr(":0"), tcp.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, port, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if host != "::" {
+		t.Fatalf("expected a dual-stack listen address, actual: %s", server.Addr())
+	}
+
+	for _, ip := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), time.Second)
+		if err != nil {
+			t.Fatalf("dial %s failed: %v", ip, err)
+		}
+		_ = conn.Close()
+	}
+}
+
+// TestServerListensOnIPv4ForIPv4Wildcard verifies that an explicit IPv4 wildcard address binds an
+// IPv4-only socket.
+func TestServerListensOnIPv4ForIPv4Wildcard(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("0.0.0.0:0"), tcp.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, _, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.To4() == nil {
+		t.Fatalf("expected an IPv4 listen address, actual: %s", server.Addr())
+	}
 }
 
 // TestServerConnectHookBeforeReceive verifies that the connect hook completes before any frame is

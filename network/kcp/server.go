@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	innernet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -28,6 +29,22 @@ type server struct {
 }
 
 var _ network.Server = &server{}
+
+// serverListener closes the packet connection backing the KCP listener, because kcp.ServeConn does
+// not take ownership of the connection passed to it.
+type serverListener struct {
+	*kcp.Listener
+	conn net.PacketConn
+}
+
+// Close closes the KCP listener and its underlying packet connection.
+func (l *serverListener) Close() error {
+	err := l.Listener.Close()
+	if connErr := l.conn.Close(); err == nil {
+		err = connErr
+	}
+	return err
+}
 
 // NewServer returns a new server.
 //
@@ -170,14 +187,24 @@ func (s *server) init() error {
 		return errors.ErrServerStarted
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
+	network := innernet.ListenNetwork("udp", s.opts.addr)
+	addr, err := net.ResolveUDPAddr(network, s.opts.addr)
 	if err != nil {
 		return err
 	}
 
-	if s.listener, err = kcp.ListenWithOptions(addr.String(), nil, 0, 0); err != nil {
+	conn, err := net.ListenUDP(network, addr)
+	if err != nil {
 		return err
 	}
+
+	listener, err := kcp.ServeConn(nil, 0, 0, conn)
+	if err != nil {
+		_ = conn.Close()
+		return err
+	}
+
+	s.listener = &serverListener{Listener: listener, conn: conn}
 
 	if s.opts.enableProxyProtocol {
 		s.listener = &proxyproto.Listener{Listener: s.listener}

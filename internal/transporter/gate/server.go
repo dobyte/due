@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"net"
 
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/internal/transporter/internal/codes"
@@ -86,7 +87,7 @@ func (s *Server) unbind(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) er
 
 // getIP returns the client IP address.
 func (s *Server) getIP(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) error {
-	kind, target, err := protocol.DecodeGetIPReq(req)
+	kind, target, extended, err := protocol.DecodeGetIPReq(req)
 
 	req.Release()
 
@@ -98,9 +99,23 @@ func (s *Server) getIP(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) err
 
 	if seq == 0 {
 		return err
-	} else {
-		return conn.Push(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
 	}
+
+	code := codes.ErrorToCode(err)
+
+	// The legacy response format cannot carry an IPv6 address. Clients that support the extended
+	// format retry with an extended request after receiving this code.
+	if !extended && code == codes.OK && ip != "" {
+		if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() == nil {
+			return conn.Push(protocol.EncodeGetIPRes(seq, codes.IPv6Unsupported, ""))
+		}
+	}
+
+	if extended {
+		return conn.Push(protocol.EncodeGetIPResExt(seq, code, ip))
+	}
+
+	return conn.Push(protocol.EncodeGetIPRes(seq, code, ip))
 }
 
 // stat returns the total number of online sessions.

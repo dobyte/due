@@ -41,7 +41,7 @@ func PrivateIP() (string, error) {
 	return innernet.PrivateIP()
 }
 
-// FulfillAddr completes addr so that it is a valid, fully qualified address.
+// FulfillAddr completes addr with the dual-stack wildcard host when the host is missing.
 func FulfillAddr(addr string) string {
 	return innernet.FulfillAddr(addr)
 }
@@ -68,4 +68,26 @@ func Long2IP(v uint32) string {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, v)
 	return ip.String()
+}
+
+// IP2Bytes converts an IP address into its 16-byte network-order representation. IPv4 addresses
+// use the IPv4-mapped IPv6 form, so Bytes2IP can restore the dotted-decimal string. Invalid
+// addresses return the zero value.
+func IP2Bytes(ip string) [16]byte {
+	var raw [16]byte
+
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return raw
+	}
+
+	copy(raw[:], parsed.To16())
+
+	return raw
+}
+
+// Bytes2IP converts a 16-byte network-order address into its string representation. IPv4-mapped
+// addresses are rendered as dotted-decimal IPv4.
+func Bytes2IP(v [16]byte) string {
+	return net.IP(v[:]).String()
 }

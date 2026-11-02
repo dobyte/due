@@ -3,9 +3,11 @@ package quic
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"sync"
 	"sync/atomic"
 
+	innernet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -16,6 +18,7 @@ type serverRun struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	listener *quic.Listener
+	conn     net.PacketConn
 	manager  *serverConnMgr
 	done     chan struct{}
 	stopping bool
@@ -76,15 +79,29 @@ func (s *server) Start() error {
 		s.mu.Unlock()
 		return err
 	}
-	config := transportConfig(s.opts.heartbeatInterval)
-	config.HandshakeIdleTimeout = s.opts.handshakeTimeout
-	ln, err := quic.ListenAddr(s.opts.addr, &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{alpn}}, config)
+	network := innernet.ListenNetwork("udp", s.opts.addr)
+	addr, err := net.ResolveUDPAddr(network, s.opts.addr)
 	if err != nil {
 		s.mu.Unlock()
 		return err
 	}
+
+	conn, err := net.ListenUDP(network, addr)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+
+	config := transportConfig(s.opts.heartbeatInterval)
+	config.HandshakeIdleTimeout = s.opts.handshakeTimeout
+	ln, err := quic.Listen(conn, &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{alpn}}, config)
+	if err != nil {
+		_ = conn.Close()
+		s.mu.Unlock()
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &serverRun{ctx: ctx, cancel: cancel, listener: ln, manager: newServerConnMgr(s), done: make(chan struct{})}
+	r := &serverRun{ctx: ctx, cancel: cancel, listener: ln, conn: conn, manager: newServerConnMgr(s), done: make(chan struct{})}
 	s.run = r
 	s.mu.Unlock()
 	go s.serve(r)
@@ -143,6 +160,9 @@ func (s *server) serve(r *serverRun) {
 	_ = r.listener.Close()
 	r.manager.close()
 	pending.Wait()
+	// quic.Listen does not take ownership of the packet connection, so close it after all
+	// connections have been drained.
+	_ = r.conn.Close()
 
 	s.mu.Lock()
 	if s.run == r {
