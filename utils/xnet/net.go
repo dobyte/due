@@ -55,13 +55,14 @@ func AssignRandPort(ip ...string) (int, error) {
 // IP2Long converts an IPv4 address into its uint32 representation. It returns 0 when ip is not a
 // valid IPv4 address.
 func IP2Long(ip string) uint32 {
-	v := net.ParseIP(ip).To4()
-
-	if len(v) == 0 {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil || !(addr.Is4() || addr.Is4In6()) {
 		return 0
 	}
 
-	return binary.BigEndian.Uint32(v)
+	v := addr.As4()
+
+	return binary.BigEndian.Uint32(v[:])
 }
 
 // Long2IP converts a uint32 into its dotted-decimal IPv4 address string.
@@ -77,12 +78,9 @@ func Long2IP(v uint32) string {
 func IP2Bytes(ip string) [16]byte {
 	var raw [16]byte
 
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return raw
+	if addr, err := netip.ParseAddr(ip); err == nil {
+		raw = addr.As16()
 	}
-
-	copy(raw[:], parsed.To16())
 
 	return raw
 }

@@ -80,3 +80,38 @@ func TestIP2Bytes_Invalid(t *testing.T) {
 		}
 	}
 }
+
+// TestIP2BytesZone verifies that a zoned IPv6 address keeps its address bytes.
+func TestIP2BytesZone(t *testing.T) {
+	if got, want := IP2Bytes("fe80::1%eth0"), IP2Bytes("fe80::1"); got != want {
+		t.Errorf("IP2Bytes(fe80::1%%eth0) = %v, want %v", got, want)
+	}
+}
+
+func BenchmarkIP2Long(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_ = IP2Long("218.108.212.34")
+	}
+}
+
+func BenchmarkIP2Bytes(b *testing.B) {
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "ipv4", ip: "218.108.212.34"},
+		{name: "ipv6", ip: "2408:db8::1"},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_ = IP2Bytes(tt.ip)
+			}
+		})
+	}
+}

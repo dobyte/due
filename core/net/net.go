@@ -63,18 +63,53 @@ func ParseAddr(addr string, expose ...bool) (string, string, error) {
 }
 
 // ExtractIP extracts the host from addr.
+//
+// TCP and UDP addresses are unwrapped directly, which avoids formatting and re-splitting the
+// address string on statements such as LocalIP and RemoteIP. Other address types fall back to
+// splitting addr.String().
 func ExtractIP(addr net.Addr) (ip string, err error) {
-	ip, _, err = net.SplitHostPort(addr.String())
-	return
+	switch v := addr.(type) {
+	case *net.TCPAddr:
+		return formatHost(v.IP, v.Zone), nil
+	case *net.UDPAddr:
+		return formatHost(v.IP, v.Zone), nil
+	default:
+		ip, _, err = net.SplitHostPort(addr.String())
+		return
+	}
 }
 
 // ExtractPort extracts the port from addr.
+//
+// TCP and UDP addresses are unwrapped directly, so the port is not parsed from the address string.
 func ExtractPort(addr net.Addr) (int, error) {
-	_, port, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return 0, err
+	switch v := addr.(type) {
+	case *net.TCPAddr:
+		return v.Port, nil
+	case *net.UDPAddr:
+		return v.Port, nil
+	default:
+		_, port, err := net.SplitHostPort(addr.String())
+		if err != nil {
+			return 0, err
+		}
+		return strconv.Atoi(port)
 	}
-	return strconv.Atoi(port)
+}
+
+// formatHost renders ip with its zone. The zero IP renders as an empty host, matching the result of
+// splitting the string form of an address without an IP.
+func formatHost(ip net.IP, zone string) string {
+	if len(ip) == 0 {
+		return ""
+	}
+
+	host := ip.String()
+	if zone != "" {
+		host += "%" + zone
+	}
+
+	return host
 }
 
 // ExternalIP returns the external IP address.

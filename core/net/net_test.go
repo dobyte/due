@@ -328,3 +328,65 @@ func TestDeprecatedIPFuncs(t *testing.T) {
 		t.Fatalf("invalid internal ip, expect: %s, actual: %s", stubPrivateIP, ip)
 	}
 }
+
+// TestExtractIPAndPortSpecialCases covers the address forms unwrapped without splitting the string
+// form: a zoned IPv6 address and an address without an IP.
+func TestExtractIPAndPortSpecialCases(t *testing.T) {
+	zoned := &stdnet.TCPAddr{IP: stdnet.ParseIP("fe80::1"), Port: 3553, Zone: "eth0"}
+
+	if ip, err := net.ExtractIP(zoned); err != nil || ip != "fe80::1%eth0" {
+		t.Fatalf("ExtractIP(zoned) = (%q, %v), want (fe80::1%%eth0, nil)", ip, err)
+	}
+	if port, err := net.ExtractPort(zoned); err != nil || port != 3553 {
+		t.Fatalf("ExtractPort(zoned) = (%d, %v), want (3553, nil)", port, err)
+	}
+
+	empty := &stdnet.UDPAddr{Port: 3553}
+
+	if ip, err := net.ExtractIP(empty); err != nil || ip != "" {
+		t.Fatalf("ExtractIP(empty) = (%q, %v), want (\"\", nil)", ip, err)
+	}
+	if port, err := net.ExtractPort(empty); err != nil || port != 3553 {
+		t.Fatalf("ExtractPort(empty) = (%d, %v), want (3553, nil)", port, err)
+	}
+}
+
+func BenchmarkExtractIP(b *testing.B) {
+	tests := []struct {
+		name string
+		addr stdnet.Addr
+	}{
+		{name: "tcp ipv4", addr: &stdnet.TCPAddr{IP: stdnet.ParseIP("192.168.0.88"), Port: 3553}},
+		{name: "udp ipv6", addr: &stdnet.UDPAddr{IP: stdnet.ParseIP("2408:db8::1"), Port: 3553}},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, _ = net.ExtractIP(tt.addr)
+			}
+		})
+	}
+}
+
+func BenchmarkExtractPort(b *testing.B) {
+	tests := []struct {
+		name string
+		addr stdnet.Addr
+	}{
+		{name: "tcp", addr: &stdnet.TCPAddr{IP: stdnet.ParseIP("192.168.0.88"), Port: 3553}},
+		{name: "udp", addr: &stdnet.UDPAddr{IP: stdnet.ParseIP("2408:db8::1"), Port: 3553}},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, _ = net.ExtractPort(tt.addr)
+			}
+		})
+	}
+}
