@@ -2,6 +2,7 @@ package net
 
 import (
 	"net"
+	"net/netip"
 	"net/url"
 	"strconv"
 
@@ -141,6 +142,24 @@ func FulfillAddr(addr string) string {
 	}
 
 	return net.JoinHostPort(host, port)
+}
+
+// ListenNetwork returns the network used to listen on addr.
+//
+// The IPv4 variant of network is selected when the host is an IPv4 literal, so that an explicit
+// IPv4 address, including the IPv4 wildcard, does not create a dual-stack socket. An empty host,
+// the IPv6 wildcard, IPv6 literals and host names keep the given network.
+func ListenNetwork(network, addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return network
+	}
+
+	if ip, err := netip.ParseAddr(host); err == nil && ip.Is4() {
+		return network + "4"
+	}
+
+	return network
 }
 
 // ParseHostPort parses an endpoint into a host and a port.

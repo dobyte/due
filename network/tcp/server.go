@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	innernet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -177,7 +178,8 @@ func (s *server) init() error {
 		return errors.ErrServerStarted
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
+	network := innernet.ListenNetwork("tcp", s.opts.addr)
+	addr, err := net.ResolveTCPAddr(network, s.opts.addr)
 	if err != nil {
 		return err
 	}
@@ -188,13 +190,13 @@ func (s *server) init() error {
 			return err
 		}
 
-		if s.listener, err = tls.Listen(addr.Network(), addr.String(), &tls.Config{
+		if s.listener, err = tls.Listen(network, addr.String(), &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		}); err != nil {
 			return err
 		}
 	} else {
-		if s.listener, err = net.ListenTCP(addr.Network(), addr); err != nil {
+		if s.listener, err = net.ListenTCP(network, addr); err != nil {
 			return err
 		}
 	}

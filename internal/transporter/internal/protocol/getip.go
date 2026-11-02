@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
+	"net"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -14,7 +15,7 @@ import (
 
 const (
 	getIPReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64
-	getIPResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B32
+	getIPResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B128
 )
 
 // EncodeGetIPReq encodes a get-IP request.
@@ -51,10 +52,29 @@ func DecodeGetIPReq(buf buffer.Buffer) (kind cluster.Session, target int64, err 
 // EncodeGetIPRes encodes a get-IP response.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
+// The IP is encoded as 4 bytes for IPv4 and 16 bytes for IPv6, so an IPv4 response keeps the
+// original wire format.
 func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer {
-	size := getIPResBytes - def.SizeBytes
-	if code != codes.OK || len(ip) == 0 || ip[0] == "" {
-		size -= def.B32
+	var (
+		size  = getIPResBytes - def.SizeBytes
+		raw   [16]byte
+		valid bool
+		ipv4  bool
+	)
+
+	if code == codes.OK && len(ip) > 0 && ip[0] != "" {
+		if parsed := net.ParseIP(ip[0]); parsed != nil {
+			valid = true
+			ipv4 = parsed.To4() != nil
+			raw = xnet.IP2Long(ip[0])
+		}
+	}
+
+	switch {
+	case !valid:
+		size -= def.B128
+	case ipv4:
+		size -= def.B128 - def.B32
 	}
 
 	writer := buffer.MallocWriter(getIPResBytes)
@@ -64,8 +84,12 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint16s(binary.BigEndian, code)
 
-	if code == codes.OK && len(ip) > 0 && ip[0] != "" {
-		writer.WriteUint32s(binary.BigEndian, xnet.IP2Long(ip[0]))
+	if valid {
+		if ipv4 {
+			writer.WriteUint32s(binary.BigEndian, binary.BigEndian.Uint32(raw[12:]))
+		} else {
+			writer.WriteBytes(raw[:]...)
+		}
 	}
 
 	return buffer.NewNocopyBuffer(writer)
@@ -75,7 +99,9 @@ func EncodeGetIPRes(seq uint64, code uint16, ip ...string) *buffer.NocopyBuffer 
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
-	if buf.Len() != def.CodeBytes && buf.Len() != def.CodeBytes+def.B32 {
+	switch buf.Len() {
+	case def.CodeBytes, def.CodeBytes + def.B32, def.CodeBytes + def.B128:
+	default:
 		err = errors.ErrInvalidMessage
 		return
 	}
@@ -83,8 +109,8 @@ func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
 	data := buf.Bytes()
 	code = binary.BigEndian.Uint16(data[:def.CodeBytes])
 
-	if code == codes.OK && buf.Len() == def.CodeBytes+def.B32 {
-		ip = xnet.Long2IP(binary.BigEndian.Uint32(data[def.CodeBytes:]))
+	if code == codes.OK && buf.Len() > def.CodeBytes {
+		ip = net.IP(data[def.CodeBytes:]).String()
 	}
 
 	return

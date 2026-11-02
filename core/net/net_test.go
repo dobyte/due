@@ -107,6 +107,33 @@ func TestParseAddr(t *testing.T) {
 	})
 }
 
+func TestListenNetwork(t *testing.T) {
+	tests := []struct {
+		name    string
+		network string
+		addr    string
+		want    string
+	}{
+		{name: "empty host", network: "tcp", addr: ":3553", want: "tcp"},
+		{name: "ipv6 wildcard", network: "tcp", addr: "[::]:3553", want: "tcp"},
+		{name: "ipv4 wildcard", network: "tcp", addr: "0.0.0.0:3553", want: "tcp4"},
+		{name: "ipv4 host", network: "tcp", addr: "127.0.0.1:3553", want: "tcp4"},
+		{name: "ipv6 host", network: "tcp", addr: "[::1]:3553", want: "tcp"},
+		{name: "hostname", network: "tcp", addr: "localhost:3553", want: "tcp"},
+		{name: "udp ipv4 wildcard", network: "udp", addr: "0.0.0.0:3553", want: "udp4"},
+		{name: "udp ipv6 wildcard", network: "udp", addr: "[::]:3553", want: "udp"},
+		{name: "invalid addr", network: "tcp", addr: "invalid", want: "tcp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := net.ListenNetwork(tt.network, tt.addr); got != tt.want {
+				t.Fatalf("invalid network, expect: %s, actual: %s", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestFulfillAddr(t *testing.T) {
 	if addr := net.FulfillAddr(":3553"); addr != "0.0.0.0:3553" {
 		t.Fatalf("invalid addr, expect: 0.0.0.0:3553, actual: %s", addr)

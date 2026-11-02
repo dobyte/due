@@ -119,6 +119,42 @@ func message(t testing.TB, data []byte) buffer.Buffer {
 	return buf
 }
 
+// TestServerListensOnDualStackForDefaultAddr verifies that the default listen address binds a
+// dual-stack socket.
+func TestServerListensOnDualStackForDefaultAddr(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+	_ = probe.Close()
+
+	s, _ := testServer(t, WithServerAddr(":0"))
+	startServer(t, s)
+
+	host, _, err := net.SplitHostPort(s.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if host != "::" {
+		t.Fatalf("expected a dual-stack listen address, actual: %s", s.Addr())
+	}
+}
+
+// TestServerListensOnIPv4ForIPv4Wildcard verifies that an explicit IPv4 wildcard address binds an
+// IPv4-only socket.
+func TestServerListensOnIPv4ForIPv4Wildcard(t *testing.T) {
+	s, _ := testServer(t, WithServerAddr("0.0.0.0:0"))
+	startServer(t, s)
+
+	host, _, err := net.SplitHostPort(s.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.To4() == nil {
+		t.Fatalf("expected an IPv4 listen address, actual: %s", s.Addr())
+	}
+}
+
 func TestWelcomeWithoutPeriodicHeartbeat(t *testing.T) {
 	s, cert := testServer(t)
 	var order atomic.Int32

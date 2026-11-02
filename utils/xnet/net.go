@@ -5,7 +5,6 @@
 package xnet
 
 import (
-	"encoding/binary"
 	"net"
 
 	innernet "github.com/dobyte/due/v2/core/net"
@@ -51,21 +50,24 @@ func AssignRandPort(ip ...string) (int, error) {
 	return innernet.AssignRandPort(ip...)
 }
 
-// IP2Long converts an IPv4 address into its uint32 representation. It returns 0 when ip is not a
-// valid IPv4 address.
-func IP2Long(ip string) uint32 {
-	v := net.ParseIP(ip).To4()
+// IP2Long converts an IP address into its 16-byte network-order representation. IPv4 addresses
+// use the IPv4-mapped IPv6 form, so Long2IP can restore the dotted-decimal string. Invalid
+// addresses return the zero value.
+func IP2Long(ip string) [16]byte {
+	var bytes [16]byte
 
-	if len(v) == 0 {
-		return 0
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return bytes
 	}
 
-	return binary.BigEndian.Uint32(v)
+	copy(bytes[:], parsed.To16())
+
+	return bytes
 }
 
-// Long2IP converts a uint32 into its dotted-decimal IPv4 address string.
-func Long2IP(v uint32) string {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, v)
-	return ip.String()
+// Long2IP converts a 16-byte network-order address into its string representation. IPv4-mapped
+// addresses are rendered as dotted-decimal IPv4.
+func Long2IP(v [16]byte) string {
+	return net.IP(v[:]).String()
 }

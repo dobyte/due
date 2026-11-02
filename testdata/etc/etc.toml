@@ -550,7 +550,7 @@ shutdownMaxWaitTime = "0s"
     [network.ws]
         # ws网络服务器
         [network.ws.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 客户端连接路径
             path = "/"
@@ -630,7 +630,7 @@ shutdownMaxWaitTime = "0s"
     [network.tcp]
         # tcp网络服务器
         [network.tcp.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 私钥文件
             keyFile = ""
@@ -678,7 +678,7 @@ shutdownMaxWaitTime = "0s"
     [network.quic]
         # quic网络服务器
         [network.quic.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 私钥文件
             keyFile = ""
