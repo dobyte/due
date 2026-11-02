@@ -3,7 +3,6 @@ package protocol
 import (
 	"encoding/binary"
 	"net"
-	"net"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/buffer"
@@ -15,56 +14,30 @@ import (
 )
 
 const (
-	getIPReqBytes    = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64
-	getIPReqExtBytes = getIPReqBytes + def.B8
-	getIPResBytes    = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B128
+	getIPReqBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.B8 + def.B64
+	getIPResBytes = def.SizeBytes + def.HeaderBytes + def.RouteBytes + def.SeqBytes + def.CodeBytes + def.B128
 )
 
-// EncodeGetIPReq encodes a get-IP request in the legacy format.
+// EncodeGetIPReq encodes a get-IP request.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
 func EncodeGetIPReq(seq uint64, kind cluster.Session, target int64) *buffer.NocopyBuffer {
-	return encodeGetIPReq(seq, kind, target, false)
-}
-
-// EncodeGetIPReqExt encodes a get-IP request that accepts an IPv6 response.
-//
-// The extended format appends a flag byte to the legacy request, so it must only be sent after the
-// peer has reported support through codes.IPv6Unsupported. Peers running the legacy protocol
-// reject a request of an unexpected length.
-func EncodeGetIPReqExt(seq uint64, kind cluster.Session, target int64) *buffer.NocopyBuffer {
-	return encodeGetIPReq(seq, kind, target, true)
-}
-
-func encodeGetIPReq(seq uint64, kind cluster.Session, target int64, extended bool) *buffer.NocopyBuffer {
-	size := getIPReqBytes
-	if extended {
-		size = getIPReqExtBytes
-	}
-
-	writer := buffer.MallocWriter(size)
-	writer.WriteUint32s(binary.BigEndian, uint32(size-def.SizeBytes))
+	writer := buffer.MallocWriter(getIPReqBytes)
+	writer.WriteUint32s(binary.BigEndian, uint32(getIPReqBytes-def.SizeBytes))
 	writer.WriteUint8s(def.DataBit)
 	writer.WriteUint8s(route.GetIP)
 	writer.WriteUint64s(binary.BigEndian, seq)
 	writer.WriteUint8s(uint8(kind))
 	writer.WriteInt64s(binary.BigEndian, target)
 
-	if extended {
-		writer.WriteUint8s(1)
-	}
-
 	return buffer.NewNocopyBuffer(writer)
 }
 
-// DecodeGetIPReq decodes a get-IP request and reports whether the sender accepts an IPv6 response.
+// DecodeGetIPReq decodes a get-IP request.
 // Note that buf contains only the private section.
-// Protocol: public section: {size + header + route + seq} +
-// private section: {session kind + target + [extended]}
-func DecodeGetIPReq(buf buffer.Buffer) (kind cluster.Session, target int64, extended bool, err error) {
-	switch buf.Len() {
-	case def.B8 + def.B64, def.B8 + def.B64 + def.B8:
-	default:
+// Protocol: public section: {size + header + route + seq} + private section: {session kind + target}
+func DecodeGetIPReq(buf buffer.Buffer) (kind cluster.Session, target int64, err error) {
+	if buf.Len() != def.B8+def.B64 {
 		err = errors.ErrInvalidMessage
 		return
 	}
@@ -72,30 +45,17 @@ func DecodeGetIPReq(buf buffer.Buffer) (kind cluster.Session, target int64, exte
 	data := buf.Bytes()
 	kind = cluster.Session(data[0])
 	target = int64(binary.BigEndian.Uint64(data[def.B8:]))
-	extended = buf.Len() > def.B8+def.B64 && data[def.B8+def.B64] != 0
 
 	return
 }
 
-// EncodeGetIPRes encodes a get-IP response in the legacy format.
+// EncodeGetIPRes encodes a get-IP response.
 // Note that buf contains the full protocol.
 // Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 //
-// The legacy format carries an IPv4 address in 4 bytes and omits the IP section for an address it
-// cannot represent, such as an IPv6 address.
+// The IP is encoded as 4 bytes for IPv4 and 16 bytes for IPv6, and omitted when the address is
+// absent or cannot be parsed.
 func EncodeGetIPRes(seq uint64, code uint16, ip string) *buffer.NocopyBuffer {
-	return encodeGetIPRes(seq, code, ip, false)
-}
-
-// EncodeGetIPResExt encodes a get-IP response that can carry an IPv6 address.
-//
-// The extended format encodes an IPv4 address in 4 bytes and an IPv6 address in 16 bytes, so IPv4
-// responses keep the legacy layout.
-func EncodeGetIPResExt(seq uint64, code uint16, ip string) *buffer.NocopyBuffer {
-	return encodeGetIPRes(seq, code, ip, true)
-}
-
-func encodeGetIPRes(seq uint64, code uint16, ip string, extended bool) *buffer.NocopyBuffer {
 	var (
 		size    = getIPResBytes - def.SizeBytes
 		ipBytes int
@@ -105,7 +65,7 @@ func encodeGetIPRes(seq uint64, code uint16, ip string, extended bool) *buffer.N
 		if parsed := net.ParseIP(ip); parsed != nil {
 			if parsed.To4() != nil {
 				ipBytes = def.B32
-			} else if extended {
+			} else {
 				ipBytes = def.B128
 			}
 		}
@@ -135,9 +95,6 @@ func encodeGetIPRes(seq uint64, code uint16, ip string, extended bool) *buffer.N
 // Note that buf contains only the private section.
 // Protocol: public section: {size + header + route + seq} + private section: {code + [ip]}
 func DecodeGetIPRes(buf buffer.Buffer) (code uint16, ip string, err error) {
-	switch buf.Len() {
-	case def.CodeBytes, def.CodeBytes + def.B32, def.CodeBytes + def.B128:
-	default:
 	switch buf.Len() {
 	case def.CodeBytes, def.CodeBytes + def.B32, def.CodeBytes + def.B128:
 	default:

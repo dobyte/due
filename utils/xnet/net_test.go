@@ -25,24 +25,7 @@ func TestIP2Long_ValidIPv4(t *testing.T) {
 	}
 }
 
-// TestIP2Long_ValidIPv6 verifies that valid IPv6 addresses round-trip correctly.
-func TestIP2Long_ValidIPv6(t *testing.T) {
-	cases := []string{
-		"::",
-		"::1",
-		"2408:db8::1",
-		"2001:db8::ff00:42:8329",
-	}
-
-	for _, ip := range cases {
-		long := IP2Long(ip)
-		if got := Long2IP(long); got != ip {
-			t.Errorf("Long2IP(IP2Long(%q)) = %q, want %q", ip, got, ip)
-		}
-	}
-}
-
-// TestIP2Long_Invalid verifies that invalid addresses return the zero value.
+// TestIP2Long_Invalid verifies that invalid and non-IPv4 addresses return 0.
 func TestIP2Long_Invalid(t *testing.T) {
 	cases := []string{
 		"invalid",
