@@ -75,20 +75,19 @@ type linkerOptions struct {
 
 // options are the gate options.
 type options struct {
-	ctx                      context.Context   // context
-	id                       string            // instance ID
-	name                     string            // instance name
-	server                   network.Server    // gate server
-	locator                  locate.Locator    // user locator
-	registry                 registry.Registry // service registry
-	dispatch                 cluster.Dispatch  // dispatch strategy of stateless route messages
-	metadata                 map[string]string // metadata
-	addr                     string            // internal RPC listen address
-	expose                   bool              // whether the internal RPC address is exposed to the public network
-	linker                   *linkerOptions    // linker options
-	limiter                  *limiterOptions   // connection rate limiting options
-	security                 *securityOptions  // session security options
-	securityHandshakeTimeout time.Duration     // session security handshake timeout
+	ctx      context.Context   // context
+	id       string            // instance ID
+	name     string            // instance name
+	server   network.Server    // gate server
+	locator  locate.Locator    // user locator
+	registry registry.Registry // service registry
+	dispatch cluster.Dispatch  // dispatch strategy of stateless route messages
+	metadata map[string]string // metadata
+	addr     string            // internal RPC listen address
+	expose   bool              // whether the internal RPC address is exposed to the public network
+	linker   *linkerOptions    // linker options
+	limiter  *limiterOptions   // connection rate limiting options
+	security *securityOptions  // session security options
 }
 
 // defaultOptions returns the default options.
@@ -101,7 +100,7 @@ func defaultOptions() *options {
 	opts.linker = &linkerOptions{}
 	opts.limiter = &limiterOptions{closeThreshold: defaultLimiterCloseThreshold}
 	opts.metadata = make(map[string]string)
-	opts.securityHandshakeTimeout = defaultSecurityHandshakeTimeout
+	opts.security = &securityOptions{timeout: defaultSecurityHandshakeTimeout}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -304,12 +303,13 @@ func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 			return
 		}
 
-		configured := suites
-		if len(configured) == 0 {
-			configured = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
-		}
+		o.security.signer = signer
 
-		o.security = &securityOptions{signer: signer, suites: slices.Clone(configured)}
+		if len(suites) == 0 {
+			o.security.suites = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
+		} else {
+			o.security.suites = suites
+		}
 	}
 }
 
@@ -318,7 +318,7 @@ func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 func WithSessionSecurityHandshakeTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		if timeout >= 0 {
-			o.securityHandshakeTimeout = timeout
+			o.security.timeout = timeout
 		} else {
 			log.Warnf("the specified session security handshake timeout is less than zero and will be ignored")
 		}

@@ -56,8 +56,8 @@ func NewGate(opts ...Option) *Gate {
 	g.session = newSession()
 	g.state.Store(int32(cluster.Shut))
 
-	if o.security != nil {
-		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
+	if o.security != nil && o.security.signer != nil {
+		g.security = newSecurityManager(g, o.security)
 	}
 
 	if o.limiter != nil && o.limiter.normalize() {

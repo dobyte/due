@@ -20,8 +20,9 @@ import (
 
 // securityOptions configures the session security between the client and the gate.
 type securityOptions struct {
-	signer crypto.Signer // signer used to authenticate the gate
-	suites []aead.Suite  // negotiable AEAD suites, empty means the handshake defaults
+	signer  crypto.Signer // signer used to authenticate the gate
+	suites  []aead.Suite  // negotiable AEAD suites, empty means the handshake defaults
+	timeout time.Duration // session security handshake timeout, zero disables the timeout
 }
 
 // securityManager holds the per-connection security state and the shared handshake server.
@@ -71,11 +72,11 @@ func (c *securedConn) Push(buf buffer.Buffer) error {
 }
 
 // newSecurityManager creates a security manager from the gate options.
-func newSecurityManager(gate *Gate, opts *securityOptions, timeout time.Duration) *securityManager {
+func newSecurityManager(gate *Gate, opts *securityOptions) *securityManager {
 	m := &securityManager{
 		gate:    gate,
 		server:  handshake.NewServer(opts.signer, opts.suites...),
-		timeout: timeout,
+		timeout: opts.timeout,
 	}
 	m.trigger = func(ctx context.Context, event cluster.Event, cid, uid int64) {
 		m.gate.proxy.trigger(ctx, event, cid, uid)

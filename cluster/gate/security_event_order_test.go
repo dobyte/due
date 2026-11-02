@@ -22,7 +22,7 @@ func newEventOrderGate(t *testing.T) (*Gate, *securitySigner) {
 	t.Cleanup(g.cancel)
 
 	signer := &securitySigner{key: []byte("gate-event-order-test")}
-	g.security = newSecurityManager(g, &securityOptions{signer: signer, suites: []aead.Suite{aesgcm.Suite}}, 0)
+	g.security = newSecurityManager(g, &securityOptions{signer: signer, suites: []aead.Suite{aesgcm.Suite}, timeout: 0})
 	g.state.Store(int32(cluster.Work))
 
 	return g, signer
