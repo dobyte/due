@@ -334,7 +334,7 @@ Actor 的 PID 由 `kind/id` 组成，存于当前 Node Scheduler 的本地表中
 
 请求经 Scheduler 按 `Route → Kind`、`UID + Kind → Actor` 定位；同一 UID 可绑定多个 Kind，每个 Kind 对应一个当前 Actor。请求缺少 UID、路由映射或绑定时返回具体错误。
 
-事件 `ctx.Next` 则可扫描可调度 Actors，为注册相应事件的 Actor Clone 后投递，不是自动只发给该 UID 绑定的 Actor。连接事件广播的业务过滤及扇出成本应由业务控制。
+事件 `ctx.Next` 只向注册了该事件的可调度 Actor 投递：Scheduler 维护 `Event → Actor` 订阅索引，为订阅者 Clone 后投递，不扫描全部 Actor，也不是自动只发给该 UID 绑定的 Actor。连接事件广播的业务过滤、订阅者数量带来的扇出成本仍应由业务控制。
 
 多个 Kind 不应竞争同一 Route 的映射。Actor 创建后的动态处理器注册通过任务队列提交，API 返回并不一定意味着路由已生效；需要明确的初始化完成屏障。
 
