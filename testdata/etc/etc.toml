@@ -41,6 +41,16 @@ shutdownMaxWaitTime = "0s"
             commandQueueSize = 4096
             # 命令写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
             commandWriteTimeout = "0s"
+        # 连接限流配置
+        [cluster.gate.limiter]
+            # 限流配额（限流周期内允许的消息数）。默认为0（不启用限流）
+            quota = 0
+            # 限流周期，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1s
+            period = "1s"
+            # 突发容量，默认为0（使用限流配额的向上取整值）
+            burst = 0
+            # 连续被限流的消息数达到该值后关闭连接。默认为100（0表示不关闭）
+            closeThreshold = 100
     # 集群节点配置
     [cluster.node]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
