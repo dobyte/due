@@ -310,8 +310,8 @@ func (s *Source) listen() {
 	}
 }
 
-// refresh refreshes the configuration periodically. It runs a config search every
-// 3 seconds to detect added or removed configuration items.
+// refresh refreshes the configuration periodically. It runs a config search at a
+// fixed interval to detect added or removed configuration items.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
@@ -319,7 +319,7 @@ func (s *Source) refresh() {
 
 	s.search()
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
