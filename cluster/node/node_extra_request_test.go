@@ -70,13 +70,16 @@ func TestRequestParse(t *testing.T) {
 		}
 	})
 
-	t.Run("empty bytes rejected", func(t *testing.T) {
+	t.Run("empty bytes accepted", func(t *testing.T) {
 		_, r := newWorkingRequest(t)
 		r.message = []byte{}
 
-		var v payload
-		if err := r.Parse(&v); !errors.Is(err, errors.ErrInvalidMessage) {
-			t.Fatalf("expect the invalid message error, got %v", err)
+		v := payload{A: 1}
+		if err := r.Parse(&v); err != nil {
+			t.Fatalf("parse empty message failed: %v", err)
+		}
+		if v.A != 1 {
+			t.Fatalf("expect the target to stay untouched, got a=%d", v.A)
 		}
 	})
 
