@@ -132,7 +132,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			case 0:
 				// ignore
 			case 1:
-				if configuration, err := s.load(ctx, result.PageItems[0].DataId); err != nil {
+				if configuration, err := s.loadItem(ctx, result.PageItems[0].DataId, result.PageItems[0].Content); err != nil {
 					return nil, err
 				} else {
 					configurations = append(configurations, configuration)
@@ -142,7 +142,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 				for _, item := range result.PageItems {
 					wg.Go(func() error {
-						configuration, err := s.load(ctx, item.DataId)
+						configuration, err := s.loadItem(ctx, item.DataId, item.Content)
 						if err != nil {
 							return err
 						}
@@ -189,6 +189,17 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	configuration := s.conv(file, content)
 
 	return configuration, nil
+}
+
+// loadItem loads a configuration item. It reuses the content returned by the config search when the
+// server provides it and the content does not need decryption; otherwise it fetches the content by
+// dataId.
+func (s *Source) loadItem(ctx context.Context, file, content string) (*config.Configuration, error) {
+	if !s.opts.openKMS && content != "" {
+		return s.conv(file, content), nil
+	}
+
+	return s.load(ctx, file)
 }
 
 // Store stores a configuration item.
@@ -431,34 +442,49 @@ func (s *Source) onChange(_, _, file, content string) {
 // buildClient builds the Nacos config client. It parses the server address list
 // and builds a Nacos config center client; an address may carry an optional
 // scheme, defaulting to http.
+//
+// The built-in client lists configurations through the Nacos v3 admin API when
+// the server supports it, so a periodic search does not transfer the content of
+// every configuration. Servers without the v3 admin API fall back to the SDK
+// search at runtime.
 func (s *Source) buildClient() (config_client.IConfigClient, error) {
-	param := vo.NacosClientParam{
-		ServerConfigs: make([]constant.ServerConfig, 0, len(s.opts.urls)),
-		ClientConfig: &constant.ClientConfig{
-			TimeoutMs:            uint64(s.opts.timeout.Milliseconds()),
-			NamespaceId:          s.opts.namespaceId,
-			ClusterName:          s.opts.clusterName,
-			Endpoint:             s.opts.endpoint,
-			RegionId:             s.opts.regionId,
-			AccessKey:            s.opts.accessKey,
-			SecretKey:            s.opts.secretKey,
-			OpenKMS:              s.opts.openKMS,
-			CacheDir:             s.opts.cacheDir,
-			Username:             s.opts.username,
-			Password:             s.opts.password,
-			LogDir:               s.opts.logDir,
-			LogLevel:             s.opts.logLevel,
-			NotLoadCacheAtStart:  true,
-			UpdateCacheWhenEmpty: true,
-		},
+	serverConfigs, endpoint, err := newServerConfigs(s.opts.urls)
+
+	if len(serverConfigs) == 0 {
+		if err != nil {
+			return nil, err
+		} else {
+			return nil, errors.New("invalid server urls")
+		}
+	} else {
+		if err != nil {
+			log.Warnf("%s parse failed: %v", endpoint, err)
+		}
+
+		clientConfig := newClientConfig(s.opts)
+		client, err := clients.NewConfigClient(vo.NacosClientParam{
+			ServerConfigs: serverConfigs,
+			ClientConfig:  &clientConfig,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return newListConfigClient(client, s.opts, s.ctx), nil
 	}
+}
+
+// newServerConfigs parses the server address list. An address may carry an
+// optional scheme, defaulting to http.
+func newServerConfigs(urls []string) ([]constant.ServerConfig, string, error) {
+	configs := make([]constant.ServerConfig, 0, len(urls))
 
 	var (
 		err      error
 		endpoint string
 	)
 
-	for _, v := range s.opts.urls {
+	for _, v := range urls {
 		if !strings.Contains(v, "://") {
 			v = "http://" + v
 		}
@@ -481,7 +507,7 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 			continue
 		}
 
-		param.ServerConfigs = append(param.ServerConfigs, constant.ServerConfig{
+		configs = append(configs, constant.ServerConfig{
 			Scheme:      raw.Scheme,
 			ContextPath: raw.Path,
 			IpAddr:      host,
@@ -489,18 +515,27 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 		})
 	}
 
-	if len(param.ServerConfigs) == 0 {
-		if err != nil {
-			return nil, err
-		} else {
-			return nil, errors.New("invalid server urls")
-		}
-	} else {
-		if err != nil {
-			log.Warnf("%s parse failed: %v", endpoint, err)
-		}
+	return configs, endpoint, err
+}
 
-		return clients.NewConfigClient(param)
+// newClientConfig builds the Nacos client config from the source options.
+func newClientConfig(o *options) constant.ClientConfig {
+	return constant.ClientConfig{
+		TimeoutMs:            uint64(o.timeout.Milliseconds()),
+		NamespaceId:          o.namespaceId,
+		ClusterName:          o.clusterName,
+		Endpoint:             o.endpoint,
+		RegionId:             o.regionId,
+		AccessKey:            o.accessKey,
+		SecretKey:            o.secretKey,
+		OpenKMS:              o.openKMS,
+		CacheDir:             o.cacheDir,
+		Username:             o.username,
+		Password:             o.password,
+		LogDir:               o.logDir,
+		LogLevel:             o.logLevel,
+		NotLoadCacheAtStart:  true,
+		UpdateCacheWhenEmpty: true,
 	}
 }
 
