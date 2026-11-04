@@ -83,8 +83,8 @@ func (r *request) Kind() Kind {
 
 // Parse parses the message into v.
 //
-// An empty payload is rejected with [errors.ErrInvalidMessage], and the cached plaintext is reused
-// so that a repeated parse does not decrypt the message again.
+// An empty payload leaves v untouched and reports no error, and the cached plaintext is reused so
+// that a repeated parse does not decrypt the message again.
 func (r *request) Parse(v any) error {
 	if r.plaintext != nil {
 		return r.node.opts.codec.Unmarshal(r.plaintext, v)
@@ -104,7 +104,7 @@ func (r *request) Parse(v any) error {
 	}
 
 	if len(msg) == 0 {
-		return errors.ErrInvalidMessage
+		return nil
 	}
 
 	if r.gid != "" && r.node.opts.encryptor != nil {
