@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
@@ -36,6 +37,11 @@ const (
 	defaultSecurityHandshakeTimeout  = 5 * time.Second // default session security handshake timeout
 	defaultLimiterPeriod             = "1s"            // default connection rate limit period
 	defaultLimiterCloseThreshold     = 100             // default consecutive limited messages before closing
+	defaultGuardPeriod               = "1s"            // default IP admission rate period
+	defaultGuardStrikeThreshold      = 0               // automatic IP bans are opt-in
+	defaultGuardStrikeWindow         = "5m"            // default window of the violations that lead to a ban
+	defaultGuardMinBanDuration       = "1m"            // default first ban duration
+	defaultGuardMaxBanDuration       = "1h"            // default maximum ban duration
 )
 
 // Configuration keys for the gate options.
@@ -57,6 +63,16 @@ const (
 	defaultLimiterPeriodKey             = "etc.cluster.gate.limiter.period"
 	defaultLimiterBurstKey              = "etc.cluster.gate.limiter.burst"
 	defaultLimiterCloseThresholdKey     = "etc.cluster.gate.limiter.closeThreshold"
+	defaultGuardMaxConnsKey             = "etc.cluster.gate.guard.maxConns"
+	defaultGuardMaxEntriesKey           = "etc.cluster.gate.guard.maxEntries"
+	defaultGuardQuotaKey                = "etc.cluster.gate.guard.quota"
+	defaultGuardPeriodKey               = "etc.cluster.gate.guard.period"
+	defaultGuardBurstKey                = "etc.cluster.gate.guard.burst"
+	defaultGuardWhitelistKey            = "etc.cluster.gate.guard.whitelist"
+	defaultGuardStrikeThresholdKey      = "etc.cluster.gate.guard.strikeThreshold"
+	defaultGuardStrikeWindowKey         = "etc.cluster.gate.guard.strikeWindow"
+	defaultGuardMinBanDurationKey       = "etc.cluster.gate.guard.minBanDuration"
+	defaultGuardMaxBanDurationKey       = "etc.cluster.gate.guard.maxBanDuration"
 )
 
 // Option is a gate option.
@@ -86,6 +102,7 @@ type options struct {
 	addr     string            // internal RPC listen address
 	expose   bool              // whether the internal RPC address is exposed to the public network
 	linker   *linkerOptions    // linker options
+	guard    *guardOptions     // per-IP admission and ban options
 	limiter  *limiterOptions   // connection rate limiting options
 	security *securityOptions  // session security options
 }
@@ -99,6 +116,13 @@ func defaultOptions() *options {
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
 	opts.limiter = &limiterOptions{closeThreshold: defaultLimiterCloseThreshold}
+	opts.guard = &guardOptions{
+		strikeThreshold: defaultGuardStrikeThreshold,
+		strikeWindow:    xconv.Duration(defaultGuardStrikeWindow),
+		minBanDuration:  xconv.Duration(defaultGuardMinBanDuration),
+		maxBanDuration:  xconv.Duration(defaultGuardMaxBanDuration),
+		maxEntries:      defaultGuardMaxEntries,
+	}
 	opts.metadata = make(map[string]string)
 	opts.security = &securityOptions{timeout: defaultSecurityHandshakeTimeout}
 
@@ -190,6 +214,60 @@ func defaultOptions() *options {
 		opts.limiter.closeThreshold = threshold
 	} else {
 		opts.limiter.closeThreshold = defaultLimiterCloseThreshold
+	}
+
+	if maxConns := etc.Get(defaultGuardMaxConnsKey).Int(); maxConns > 0 {
+		opts.guard.maxConns = maxConns
+	}
+
+	if maxEntries := etc.Get(defaultGuardMaxEntriesKey).Int(); maxEntries > 0 {
+		opts.guard.maxEntries = maxEntries
+	}
+
+	if quota := etc.Get(defaultGuardQuotaKey).Float64(); quota > 0 {
+		opts.guard.quota = quota
+	}
+
+	if period := etc.Get(defaultGuardPeriodKey, defaultGuardPeriod).Duration(); period > 0 {
+		opts.guard.period = period
+	} else {
+		opts.guard.period = xconv.Duration(defaultGuardPeriod)
+	}
+
+	if burst := etc.Get(defaultGuardBurstKey).Int(); burst > 0 {
+		opts.guard.burst = burst
+	}
+
+	if threshold := etc.Get(defaultGuardStrikeThresholdKey, defaultGuardStrikeThreshold).Int(); threshold >= 0 {
+		opts.guard.strikeThreshold = threshold
+	} else {
+		opts.guard.strikeThreshold = defaultGuardStrikeThreshold
+	}
+
+	if window := etc.Get(defaultGuardStrikeWindowKey, defaultGuardStrikeWindow).Duration(); window > 0 {
+		opts.guard.strikeWindow = window
+	} else {
+		opts.guard.strikeWindow = xconv.Duration(defaultGuardStrikeWindow)
+	}
+
+	if duration := etc.Get(defaultGuardMinBanDurationKey, defaultGuardMinBanDuration).Duration(); duration > 0 {
+		opts.guard.minBanDuration = duration
+	} else {
+		opts.guard.minBanDuration = xconv.Duration(defaultGuardMinBanDuration)
+	}
+
+	if duration := etc.Get(defaultGuardMaxBanDurationKey, defaultGuardMaxBanDuration).Duration(); duration > 0 {
+		opts.guard.maxBanDuration = duration
+	} else {
+		opts.guard.maxBanDuration = xconv.Duration(defaultGuardMaxBanDuration)
+	}
+
+	if whitelist := etc.Get(defaultGuardWhitelistKey).String(); whitelist != "" {
+		for _, item := range strings.Split(whitelist, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				opts.guard.whitelist = append(opts.guard.whitelist, item)
+			}
+		}
 	}
 
 	return opts
@@ -372,6 +450,111 @@ func WithLimiterCloseThreshold(threshold int) Option {
 				threshold)
 		} else {
 			o.limiter.closeThreshold = threshold
+		}
+	}
+}
+
+// WithGuardMaxConns sets the maximum number of concurrent connections allowed per IP. A zero value
+// disables the limit.
+func WithGuardMaxConns(maxConns int) Option {
+	return func(o *options) {
+		if maxConns < 0 {
+			log.Warnf("the specified max connections is negative and will be ignored: %d", maxConns)
+		} else {
+			o.guard.maxConns = maxConns
+		}
+	}
+}
+
+// WithGuardMaxEntries sets the maximum number of IP entries retained by the guard. A non-positive
+// value is ignored.
+func WithGuardMaxEntries(maxEntries int) Option {
+	return func(o *options) {
+		if maxEntries <= 0 {
+			log.Warnf("the specified max entries is non-positive and will be ignored: %d", maxEntries)
+		} else {
+			o.guard.maxEntries = maxEntries
+		}
+	}
+}
+
+// WithGuardAcceptRate sets the connection admission rate per IP. A zero quota disables the limit.
+func WithGuardAcceptRate(quota float64, period time.Duration) Option {
+	return func(o *options) {
+		if quota < 0 || math.IsNaN(quota) || math.IsInf(quota, 0) {
+			log.Warnf("the specified IP admission quota is invalid and will be ignored: %v", quota)
+			return
+		}
+
+		if quota > 0 && period <= 0 {
+			log.Warnf("the specified IP admission period is non-positive and will be ignored: %v", period)
+			return
+		}
+
+		o.guard.quota = quota
+
+		if period > 0 {
+			o.guard.period = period
+		}
+	}
+}
+
+// WithGuardWhitelist sets the IP whitelist.
+func WithGuardWhitelist(whitelist []string) Option {
+	prefixes := slices.Clone(whitelist)
+
+	return func(o *options) {
+		if len(prefixes) == 0 {
+			log.Warnf("the specified whitelist is empty and will be ignored")
+		} else {
+			o.guard.whitelist = prefixes
+		}
+	}
+}
+
+// WithGuardStrikeThreshold sets the number of violations within the strike window that triggers a
+// ban. Violations include connection admission rejections and, when the connection limiter is
+// enabled, close signals emitted by the message rate limiter. A zero threshold disables automatic
+// bans.
+func WithGuardStrikeThreshold(threshold int) Option {
+	return func(o *options) {
+		if threshold < 0 {
+			log.Warnf("the specified strike threshold is negative and will be ignored: %d", threshold)
+		} else {
+			o.guard.strikeThreshold = threshold
+		}
+	}
+}
+
+// WithGuardStrikeWindow sets the strike window.
+func WithGuardStrikeWindow(window time.Duration) Option {
+	return func(o *options) {
+		if window <= 0 {
+			log.Warnf("the specified strike window is non-positive and will be ignored: %v", window)
+		} else {
+			o.guard.strikeWindow = window
+		}
+	}
+}
+
+// WithGuardMinBanDuration sets the first ban duration. A non-positive duration is ignored.
+func WithGuardMinBanDuration(duration time.Duration) Option {
+	return func(o *options) {
+		if duration <= 0 {
+			log.Warnf("the specified min ban duration is non-positive and will be ignored: %v", duration)
+		} else {
+			o.guard.minBanDuration = duration
+		}
+	}
+}
+
+// WithGuardMaxBanDuration sets the maximum ban duration. A non-positive duration is ignored.
+func WithGuardMaxBanDuration(duration time.Duration) Option {
+	return func(o *options) {
+		if duration <= 0 {
+			log.Warnf("the specified max ban duration is non-positive and will be ignored: %v", duration)
+		} else {
+			o.guard.maxBanDuration = duration
 		}
 	}
 }

@@ -37,6 +37,7 @@ type Gate struct {
 	session      *session                  // connection and user sessions
 	linker       *gate.Server              // internal link server
 	limiter      *connLimiter              // connection rate limiter
+	guard        *guard                    // per-IP admission and ban guard
 	security     *securityManager          // session security manager
 	mu           sync.Mutex                // serializes connection admission with the transition to Hang or Shut
 	wg           sync.WaitGroup            // waits for connection cleanup
@@ -54,6 +55,7 @@ func NewGate(opts ...Option) *Gate {
 	g.ctx, g.cancel = context.WithCancel(o.ctx)
 	g.proxy = newProxy(g)
 	g.session = newSession()
+	g.guard = newGuard(o.guard)
 	g.state.Store(int32(cluster.Shut))
 
 	if o.security != nil && o.security.signer != nil {
@@ -63,6 +65,8 @@ func NewGate(opts ...Option) *Gate {
 	if o.limiter != nil && o.limiter.normalize() {
 		g.limiter = newConnLimiter(o.limiter)
 	}
+
+	g.guard.setRateLimited(g.limiter != nil)
 
 	return g
 }
@@ -106,6 +110,8 @@ func (g *Gate) Start() {
 	if g.limiter != nil {
 		g.limiter.start(g.ctx)
 	}
+
+	g.guard.start(g.ctx)
 
 	g.startNetworkServer()
 
@@ -164,6 +170,8 @@ func (g *Gate) Destroy() {
 	if g.limiter != nil {
 		g.limiter.stop()
 	}
+
+	g.guard.stop()
 }
 
 // startNetworkServer starts the network server.
@@ -201,11 +209,24 @@ func (g *Gate) stopNetworkServer() {
 
 // handleConnect handles a newly opened connection.
 //
-// It accepts the connection and registers the session only when the server is in the Work or Busy
-// state; in any other state (Hang or Shut) it closes the connection and rejects it.
+// The per-IP guard runs outside the connection admission lock so that IP parsing and shard locking
+// do not serialize every new connection. The state is checked again under the lock before the
+// session is registered; a connection admitted while the gate transitions to Hang or Shut is
+// removed from the guard and closed.
 func (g *Gate) handleConnect(conn network.Conn) {
+	cid := conn.ID()
+
+	if state := g.getState(); state != cluster.Work && state != cluster.Busy {
+		closeConnAsync(conn)
+		return
+	}
+
+	if !g.guard.admit(conn) {
+		return
+	}
+
 	g.mu.Lock()
-	if state := cluster.State(g.state.Load()); state == cluster.Work || state == cluster.Busy {
+	if state := g.getState(); state == cluster.Work || state == cluster.Busy {
 		g.wg.Add(1)
 
 		if g.security != nil {
@@ -218,19 +239,23 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		} else {
 			g.session.addConn(conn)
 			g.mu.Unlock()
-			g.proxy.trigger(g.ctx, cluster.Connect, conn.ID(), conn.UID())
+			g.proxy.trigger(g.ctx, cluster.Connect, cid, conn.UID())
 		}
 	} else {
 		g.mu.Unlock()
-
-		// The connect callback runs inside the transport read loop, and a transport's Close waits
-		// for that loop to exit, so the close must be deferred to another goroutine.
-		xcall.Go(func() {
-			if err := conn.Close(); err != nil {
-				log.Warnf("close conn failed: %v", err)
-			}
-		})
+		g.guard.remove(conn)
+		closeConnAsync(conn)
 	}
+}
+
+// closeConnAsync closes conn in another goroutine because the connect callback runs inside the
+// transport read loop, and a transport's Close waits for that loop to exit.
+func closeConnAsync(conn network.Conn) {
+	xcall.Go(func() {
+		if err := conn.Close(); err != nil {
+			log.Warnf("close conn failed: %v", err)
+		}
+	})
 }
 
 // handleDisconnect handles a closed connection.
@@ -238,13 +263,13 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // For a connection whose session is registered, it removes the local session synchronously and
 // queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
 // WaitGroup counter once that work finishes; a connection that is not registered (rejected during
-// the closing phase) only has its rate limiter bucket released. When session security is enabled,
-// the Disconnect event is triggered only for a connection whose Connect event was committed, and it
-// waits for an in-flight Connect delivery, so the two events always arrive in order: the Connect
-// event is deferred until the handshake is confirmed and the Disconnect event is skipped entirely
-// when the connection is removed first. RemConn atomically performs the existence check and removal,
-// so when concurrent duplicate disconnects happen only the first call takes effect, keeping the
-// WaitGroup's Add/Done balanced.
+// the closing phase) only has its rate limiter bucket and guard entry released. When session
+// security is enabled, the Disconnect event is triggered only for a connection whose Connect event
+// was committed, and it waits for an in-flight Connect delivery, so the two events always arrive in
+// order: the Connect event is deferred until the handshake is confirmed and the Disconnect event is
+// skipped entirely when the connection is removed first. RemConn atomically performs the existence
+// check and removal, so when concurrent duplicate disconnects happen only the first call takes
+// effect, keeping the WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
 	var (
 		cid   = conn.ID()
@@ -264,6 +289,9 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 	if g.limiter != nil {
 		g.limiter.remove(cid)
 	}
+
+	// Release the IP entry reference even when the session was never admitted.
+	g.guard.remove(conn)
 
 	if g.session.remConn(conn) {
 		uid := conn.UID()
@@ -311,6 +339,12 @@ func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
 			buf.Release()
 
 			if closeConn {
+				// A strike may ban the IP and close every tracked connection, including this one,
+				// asynchronously. Only close this connection here when no ban was triggered.
+				if g.guard.strike(conn) {
+					return
+				}
+
 				// A transport's Close waits for the connection read loop to exit, and this handler
 				// runs inside that loop, so the close must be deferred. The security manager closes
 				// connections the same way for the same reason.
