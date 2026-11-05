@@ -417,7 +417,7 @@ The configuration items for each protocol live under `etc.network.<protocol>.ser
 
 | Configuration Item | tcp | ws | kcp | quic | Description |
 | --- | --- | --- | --- | --- | --- |
-| addr | :3553 | :3553 | :3553 | :3553 | Listen address |
+| addr | :3553 | :3553 | :3553 | :3553 | Listen address; :port is dual-stack, 0.0.0.0:port is IPv4 only |
 | maxConnNum | 5000 | 5000 | 5000 | 5000 | Maximum number of connections |
 | writeQueueSize | 1024 | 1024 | 1024 | 1024 | Write queue size |
 | writeTimeout | 0s | 0s | 0s | 0s | Write timeout; 0 means unlimited |

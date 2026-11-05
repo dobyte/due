@@ -26,7 +26,8 @@ type HookHandler func(proxy *Proxy)
 // RouteHandler is the route handler of the client.
 //
 // The Context is valid only for the duration of the call and must not be retained after the handler
-// returns.
+// returns. A route may be handled before the Connect event is delivered or before Dial returns, so
+// do not assume that connection state initialized by Connect listeners is ready.
 type RouteHandler func(ctx *Context)
 
 // EventHandler is the event handler of the client.
@@ -104,6 +105,7 @@ func (c *Client) Start() {
 		return
 	}
 
+	c.opts.client.OnConnect(c.handleConnect)
 	c.opts.client.OnDisconnect(c.handleDisconnect)
 	c.opts.client.OnReceive(c.handleReceive)
 	c.opts.client.OnHandshake(c.handleHandshake)
@@ -146,9 +148,19 @@ func (c *Client) Destroy() {
 	c.conns.Clear()
 	c.rw2.Unlock()
 
+	var wg sync.WaitGroup
+	wg.Add(len(conns))
+
+	// Close the connections concurrently: a graceful close may dwell for the transport close
+	// timeout, so closing them serially would multiply that delay by the number of connections.
 	for _, cc := range conns {
-		cc.Close()
+		go func(cc *Conn) {
+			defer wg.Done()
+			_ = cc.Close()
+		}(cc)
 	}
+
+	wg.Wait()
 
 	c.runHookFunc(cluster.Destroy)
 }
@@ -280,6 +292,44 @@ func (c *Client) handleHandshake(conn network.Conn, buf buffer.Buffer) {
 	buf.Release()
 }
 
+// handleConnect records the wrapped connection as soon as the transport reports it.
+//
+// Transports deliver the connect handler before the first frame and before the disconnect callback,
+// so recording the connection here keeps a message or a disconnect that arrives before Dial returns
+// from being dropped. A connection reported while the client is closing is not recorded; a dial
+// that is still in flight observes the state change and rejects the connection.
+func (c *Client) handleConnect(conn network.Conn) {
+	c.rw2.Lock()
+	if st := c.getState(); st == cluster.Work || st == cluster.Busy {
+		c.registerConnLocked(conn)
+	}
+	c.rw2.Unlock()
+}
+
+// newConn wraps a network connection for the client.
+func newConn(client *Client, conn network.Conn) *Conn {
+	cc := &Conn{conn: conn, client: client, closedCh: make(chan struct{})}
+
+	if client.opts.security != nil {
+		cc.handshakeCh = make(chan []byte, 1)
+	}
+
+	return cc
+}
+
+// registerConnLocked returns the wrapped connection of conn and records it when the transport
+// connect handler has not done so. The caller must hold rw2.
+func (c *Client) registerConnLocked(conn network.Conn) *Conn {
+	if value, ok := c.conns.Load(conn); ok {
+		return value.(*Conn)
+	}
+
+	cc := newConn(c, conn)
+	c.conns.Store(conn, cc)
+
+	return cc
+}
+
 // dial dials a connection to the server.
 func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
@@ -296,24 +346,30 @@ func (c *Client) dial(opts ...DialOption) (*Conn, error) {
 		return nil, err
 	}
 
-	cc := &Conn{conn: conn, client: c, closedCh: make(chan struct{})}
+	// The transport reports the connection through the connect handler while Dial is still running,
+	// so the wrapper usually exists already; register it here for transports that do not.
+	c.rw2.Lock()
+	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
+		c.conns.Delete(conn)
+		c.rw2.Unlock()
+		_ = conn.Close()
+		return nil, errors.ErrClientShut
+	}
+	cc := c.registerConnLocked(conn)
+	c.rw2.Unlock()
 
-	if c.opts.security != nil {
-		cc.handshakeCh = make(chan []byte, 1)
+	// The connection may have been closed before Dial returned; the disconnect callback already
+	// marked the wrapper, so report the closure instead of returning a dead connection.
+	if cc.isClosed() || conn.State() != network.ConnOpened {
+		c.rw2.Lock()
+		c.conns.Delete(conn)
+		c.rw2.Unlock()
+		return nil, errors.ErrConnectionClosed
 	}
 
 	for key, value := range o.attrs {
 		cc.SetAttr(key, value)
 	}
-
-	c.rw2.Lock()
-	if st := c.getState(); st != cluster.Work && st != cluster.Busy {
-		c.rw2.Unlock()
-		conn.Close()
-		return nil, errors.ErrClientShut
-	}
-	c.conns.Store(conn, cc)
-	c.rw2.Unlock()
 
 	if c.opts.security != nil {
 		if err = cc.handshake(); err != nil {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/cluster"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
@@ -52,5 +53,18 @@ func TestBuilder(t *testing.T) {
 	}
 	if again != client {
 		t.Fatal("expect the cached client to be reused")
+	}
+
+	// Closing the builder closes the cached clients and rejects new builds.
+	if err = builder.Close(); err != nil {
+		t.Fatalf("close builder failed, err: %v", err)
+	}
+
+	if _, err = builder.Build(server.ListenAddr()); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed on build, got %v", err)
+	}
+
+	if err = builder.Close(); err != nil {
+		t.Fatalf("closing the builder twice failed, err: %v", err)
 	}
 }

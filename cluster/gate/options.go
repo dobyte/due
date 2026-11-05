@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
+// Default option values.
 const (
 	defaultName                      = "gate"          // default name
 	defaultDispatch                  = cluster.Random  // default dispatch strategy of stateless route messages
@@ -32,8 +34,11 @@ const (
 	defaultLinkerCommandQueueSize    = 4096            // default message queue size
 	defaultLinkerCommandWriteTimeout = "0s"            // default write timeout
 	defaultSecurityHandshakeTimeout  = 5 * time.Second // default session security handshake timeout
+	defaultLimiterPeriod             = "1s"            // default connection rate limit period
+	defaultLimiterCloseThreshold     = 100             // default consecutive limited messages before closing
 )
 
+// Configuration keys for the gate options.
 const (
 	defaultIDKey                        = "etc.cluster.gate.id"
 	defaultNameKey                      = "etc.cluster.gate.name"
@@ -48,6 +53,10 @@ const (
 	defaultLinkerFaultRecoveryTimeKey   = "etc.cluster.gate.linker.faultRecoveryTime"
 	defaultLinkerCommandQueueSizeKey    = "etc.cluster.gate.linker.commandQueueSize"
 	defaultLinkerCommandWriteTimeoutKey = "etc.cluster.gate.linker.commandWriteTimeout"
+	defaultLimiterQuotaKey              = "etc.cluster.gate.limiter.quota"
+	defaultLimiterPeriodKey             = "etc.cluster.gate.limiter.period"
+	defaultLimiterBurstKey              = "etc.cluster.gate.limiter.burst"
+	defaultLimiterCloseThresholdKey     = "etc.cluster.gate.limiter.closeThreshold"
 )
 
 // Option is a gate option.
@@ -66,19 +75,19 @@ type linkerOptions struct {
 
 // options are the gate options.
 type options struct {
-	ctx                      context.Context   // context
-	id                       string            // instance ID
-	name                     string            // instance name
-	server                   network.Server    // gate server
-	locator                  locate.Locator    // user locator
-	registry                 registry.Registry // service registry
-	dispatch                 cluster.Dispatch  // dispatch strategy of stateless route messages
-	metadata                 map[string]string // metadata
-	addr                     string            // internal RPC listen address
-	expose                   bool              // whether the internal RPC address is exposed to the public network
-	linker                   *linkerOptions    // linker options
-	security                 *securityOptions  // session security options
-	securityHandshakeTimeout time.Duration     // session security handshake timeout
+	ctx      context.Context   // context
+	id       string            // instance ID
+	name     string            // instance name
+	server   network.Server    // gate server
+	locator  locate.Locator    // user locator
+	registry registry.Registry // service registry
+	dispatch cluster.Dispatch  // dispatch strategy of stateless route messages
+	metadata map[string]string // metadata
+	addr     string            // internal RPC listen address
+	expose   bool              // whether the internal RPC address is exposed to the public network
+	linker   *linkerOptions    // linker options
+	limiter  *limiterOptions   // connection rate limiting options
+	security *securityOptions  // session security options
 }
 
 // defaultOptions returns the default options.
@@ -89,8 +98,9 @@ func defaultOptions() *options {
 	opts.ctx = context.Background()
 	opts.expose = etc.Get(defaultExposeKey).Bool()
 	opts.linker = &linkerOptions{}
+	opts.limiter = &limiterOptions{closeThreshold: defaultLimiterCloseThreshold}
 	opts.metadata = make(map[string]string)
-	opts.securityHandshakeTimeout = defaultSecurityHandshakeTimeout
+	opts.security = &securityOptions{timeout: defaultSecurityHandshakeTimeout}
 
 	if id := etc.Get(defaultIDKey).String(); id != "" {
 		opts.id = id
@@ -160,6 +170,26 @@ func defaultOptions() *options {
 
 	if err := etc.Get(defaultMetadataKey).Scan(&opts.metadata); err != nil {
 		log.Warnf("scan metadata failed: %v", err)
+	}
+
+	if quota := etc.Get(defaultLimiterQuotaKey).Float64(); quota > 0 {
+		opts.limiter.quota = quota
+	}
+
+	if period := etc.Get(defaultLimiterPeriodKey, defaultLimiterPeriod).Duration(); period > 0 {
+		opts.limiter.period = period
+	} else {
+		opts.limiter.period = xconv.Duration(defaultLimiterPeriod)
+	}
+
+	if burst := etc.Get(defaultLimiterBurstKey).Int(); burst > 0 {
+		opts.limiter.burst = burst
+	}
+
+	if threshold := etc.Get(defaultLimiterCloseThresholdKey, defaultLimiterCloseThreshold).Int(); threshold >= 0 {
+		opts.limiter.closeThreshold = threshold
+	} else {
+		opts.limiter.closeThreshold = defaultLimiterCloseThreshold
 	}
 
 	return opts
@@ -273,12 +303,13 @@ func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 			return
 		}
 
-		configured := suites
-		if len(configured) == 0 {
-			configured = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
-		}
+		o.security.signer = signer
 
-		o.security = &securityOptions{signer: signer, suites: slices.Clone(configured)}
+		if len(suites) == 0 {
+			o.security.suites = []aead.Suite{aesgcm.Suite, chacha20poly1305.Suite}
+		} else {
+			o.security.suites = suites
+		}
 	}
 }
 
@@ -287,9 +318,60 @@ func WithSessionSecurity(signer crypto.Signer, suites ...aead.Suite) Option {
 func WithSessionSecurityHandshakeTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		if timeout >= 0 {
-			o.securityHandshakeTimeout = timeout
+			o.security.timeout = timeout
 		} else {
 			log.Warnf("the specified session security handshake timeout is less than zero and will be ignored")
+		}
+	}
+}
+
+// WithLimiterQuota sets the rate limit quota. A zero quota disables rate limiting and overrides a
+// quota configured through etc.
+//
+// The limit applies to business frames only. Heartbeat frames are handled before the receive
+// handler. When session security is enabled, handshake frames are routed to the security manager
+// and also bypass the limit.
+func WithLimiterQuota(quota float64) Option {
+	return func(o *options) {
+		if quota < 0 || math.IsNaN(quota) || math.IsInf(quota, 0) {
+			log.Warnf("the specified rate limit quota is invalid and will be ignored: %v", quota)
+		} else {
+			o.limiter.quota = quota
+		}
+	}
+}
+
+// WithLimiterPeriod sets the rate limit period.
+func WithLimiterPeriod(period time.Duration) Option {
+	return func(o *options) {
+		if period <= 0 {
+			log.Warnf("the specified rate limit period is non-positive and will be ignored: %v", period)
+		} else {
+			o.limiter.period = period
+		}
+	}
+}
+
+// WithLimiterBurst sets the rate limit burst.
+func WithLimiterBurst(burst int) Option {
+	return func(o *options) {
+		if burst <= 0 {
+			log.Warnf("the specified rate limit burst is non-positive and will be ignored: %v", burst)
+		} else {
+			o.limiter.burst = burst
+		}
+	}
+}
+
+// WithLimiterCloseThreshold sets the number of consecutive limited messages that closes the
+// connection. A zero threshold disables closing.
+func WithLimiterCloseThreshold(threshold int) Option {
+	return func(o *options) {
+		if threshold < 0 {
+			log.Warnf("the specified rate limit close threshold is negative and will be ignored: %v",
+				threshold)
+		} else {
+			o.limiter.closeThreshold = threshold
 		}
 	}
 }

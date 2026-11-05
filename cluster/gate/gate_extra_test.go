@@ -15,6 +15,7 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 	"github.com/dobyte/due/v2/registry"
+	"github.com/dobyte/due/v2/task"
 )
 
 // gateAttr is a connection attribute implementation for tests.
@@ -59,6 +60,15 @@ func (c *gateConn) LocalIP() (string, error)      { return "127.0.0.1", nil }
 func (c *gateConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *gateConn) RemoteIP() (string, error)     { return "10.0.0.1", nil }
 func (c *gateConn) RemoteAddr() (net.Addr, error) { return nil, nil }
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *gateConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
 
 // gateServer is a network server implementation for tests.
 type gateServer struct {
@@ -308,7 +318,7 @@ func TestGateNewAndName(t *testing.T) {
 	if !g.isShut() {
 		t.Fatal("isShut must be true for a new gate")
 	}
-	if g.proxy == nil || g.session == nil || g.wg == nil {
+	if g.proxy == nil || g.session == nil {
 		t.Fatal("gate internals must be initialized")
 	}
 }
@@ -727,6 +737,8 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 	f := newGateFixture(t)
 	f.start(t)
 
+	ctx := context.Background()
+
 	conn := newGateConn(1001, 2001)
 	f.server.connect(conn)
 
@@ -736,14 +748,21 @@ func TestGateHandleConnectAndDisconnect(t *testing.T) {
 		t.Fatal("conn must be registered after connect")
 	}
 
+	if err := f.locator.BindGate(ctx, 2001, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
+
 	f.server.disconnect(conn)
 
 	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must be removed after disconnect")
 	}
-	if _, ok := f.locator.gates[2001]; ok {
-		t.Fatal("user must be unbound from the locator")
-	}
+
+	// The location cleanup is queued, so poll the locator under its lock.
+	waitForCondition(t, time.Second, func() bool {
+		gid, _ := f.locator.LocateGate(ctx, 2001)
+		return gid == ""
+	}, "user must be unbound from the locator")
 
 	// A duplicate disconnect must be ignored.
 	f.server.disconnect(conn)
@@ -756,9 +775,9 @@ func TestGateHandleConnectRejected(t *testing.T) {
 	conn := newGateConn(1002, 0)
 	f.gate.handleConnect(conn)
 
-	if !conn.closed.Load() {
-		t.Fatal("conn must be closed when the gate is shut")
-	}
+	// The rejection close is deferred to another goroutine because the connect callback runs inside
+	// the transport read loop, and a transport's Close waits for that loop to exit.
+	waitForCondition(t, time.Second, conn.closed.Load, "conn must be closed when the gate is shut")
 	if ok, _ := f.gate.session.has(cluster.Conn, conn.ID()); ok {
 		t.Fatal("conn must not be registered when the gate is shut")
 	}
@@ -815,7 +834,12 @@ func TestGateDoRegisterServiceInstanceError(t *testing.T) {
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
 
 	f.registry.registerErr = errors.New("register failed")
-	if err := f.gate.doRegisterServiceInstance(); err == nil {
+
+	f.gate.registryMu.Lock()
+	err := f.gate.doRegisterServiceInstance()
+	f.gate.registryMu.Unlock()
+
+	if err == nil {
 		t.Fatal("expect an error from doRegisterServiceInstance")
 	}
 }
@@ -832,6 +856,7 @@ func TestGateDeregisterServiceInstanceError(t *testing.T) {
 func TestGateRefreshServiceInstanceError(t *testing.T) {
 	f := newGateFixture(t)
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
 
 	f.registry.registerErr = errors.New("refresh failed")
 	f.gate.refreshServiceInstance()
@@ -840,15 +865,162 @@ func TestGateRefreshServiceInstanceError(t *testing.T) {
 func TestGateDoRefreshServiceInstance(t *testing.T) {
 	f := newGateFixture(t)
 	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
 
 	if err := f.gate.doRefreshServiceInstance(); err != nil {
 		t.Fatalf("refresh failed: %v", err)
 	}
-	if err := f.gate.doRefreshServiceInstance(cluster.Busy); err != nil {
-		t.Fatalf("refresh with state failed: %v", err)
+	if f.gate.instance.State != cluster.Work.String() {
+		t.Fatalf("instance state not refreshed: %s", f.gate.instance.State)
+	}
+
+	if err := f.gate.setState(cluster.Busy); err != nil {
+		t.Fatalf("set state failed: %v", err)
 	}
 	if f.gate.instance.State != cluster.Busy.String() {
 		t.Fatalf("instance state not refreshed: %s", f.gate.instance.State)
+	}
+}
+
+func TestGateRefreshSkippedAfterShut(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Shut))
+
+	if err := f.gate.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	f.registry.mu.Lock()
+	total := len(f.registry.registered)
+	f.registry.mu.Unlock()
+
+	if total != 0 {
+		t.Fatalf("a shut gate must not register again, registrations: %d", total)
+	}
+}
+
+// TestGateRefreshBeforeRegister verifies that a refresh or a deregistration arriving before Start
+// has built the service instance is a no-op instead of a nil dereference.
+func TestGateRefreshBeforeRegister(t *testing.T) {
+	f := newGateFixture(t)
+	f.gate.state.Store(int32(cluster.Work))
+
+	if err := f.gate.doRefreshServiceInstance(); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	f.gate.deregisterServiceInstance()
+
+	f.registry.mu.Lock()
+	defer f.registry.mu.Unlock()
+
+	if len(f.registry.registered) != 0 || len(f.registry.deregistered) != 0 {
+		t.Fatalf("unexpected registry calls: registered=%d deregistered=%d",
+			len(f.registry.registered), len(f.registry.deregistered))
+	}
+}
+
+// TestGateRegisterConcurrentWithRefresh verifies that the service instance is only accessed under
+// the registry lock, so a concurrent registration and refresh are race free.
+func TestGateRegisterConcurrentWithRefresh(t *testing.T) {
+	f := newGateFixture(t)
+	f.start(t)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		f.gate.registerServiceInstance()
+	}()
+
+	go func() {
+		defer wg.Done()
+		_ = f.gate.doRefreshServiceInstance()
+	}()
+
+	wg.Wait()
+}
+
+// orderedRegistry records Register and Deregister calls and blocks the first Register so that a
+// test can order it against the deregistration.
+type orderedRegistry struct {
+	*gateRegistry
+	mu      sync.Mutex
+	ops     []string
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *orderedRegistry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.once.Do(func() { close(r.started) })
+
+	<-r.release
+
+	r.mu.Lock()
+	r.ops = append(r.ops, "register")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedRegistry) Deregister(ctx context.Context, ins *registry.ServiceInstance) error {
+	r.mu.Lock()
+	r.ops = append(r.ops, "deregister")
+	r.mu.Unlock()
+
+	return nil
+}
+
+func (r *orderedRegistry) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return append([]string(nil), r.ops...)
+}
+
+func TestGateRefreshSerializedWithDeregister(t *testing.T) {
+	f := newGateFixture(t)
+	reg := &orderedRegistry{
+		gateRegistry: f.registry,
+		started:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	f.gate.opts.registry = reg
+	f.gate.instance = &registry.ServiceInstance{ID: "test"}
+	f.gate.state.Store(int32(cluster.Work))
+
+	refreshed := make(chan struct{})
+	go func() {
+		defer close(refreshed)
+		_ = f.gate.doRefreshServiceInstance()
+	}()
+
+	<-reg.started
+
+	// The gate shuts down while the refresh is still in flight. The deregistration must wait for
+	// the refresh, so it stays the last registry operation.
+	deregistered := make(chan struct{})
+	go func() {
+		defer close(deregistered)
+		f.gate.state.Store(int32(cluster.Shut))
+		f.gate.deregisterServiceInstance()
+	}()
+
+	select {
+	case <-deregistered:
+		t.Fatal("deregistration overtook the in-flight refresh")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(reg.release)
+	<-refreshed
+	<-deregistered
+
+	if ops := reg.recorded(); len(ops) != 2 || ops[0] != "register" || ops[1] != "deregister" {
+		t.Fatalf("unexpected registry operations: %v", ops)
 	}
 }
 
@@ -1014,7 +1186,9 @@ func TestGateProviderPushFamily(t *testing.T) {
 	}
 
 	// Pushing to a missing user returns ErrNotFoundSession and schedules an unbind.
-	f.locator.gates[500] = "test-gate-id"
+	if err := f.locator.BindGate(ctx, 500, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
 	err := p.Push(ctx, cluster.User, 500, false, buffer.NewBytes(nil, true))
 	if !errors.Is(err, errors.ErrNotFoundSession) {
 		t.Fatalf("expect ErrNotFoundSession, got %v", err)
@@ -1040,6 +1214,132 @@ func TestGateProviderPushFamily(t *testing.T) {
 	total, err = p.Publish(ctx, "missing-channel", false, buffer.NewBytes(nil, true))
 	if err != nil || total != 0 {
 		t.Fatalf("unexpected publish: %d, err: %v", total, err)
+	}
+}
+
+// capturePool records submitted tasks so a test can run them at a controlled point.
+type capturePool struct {
+	mu    sync.Mutex
+	tasks []func()
+}
+
+func (p *capturePool) AddTask(fn func()) error {
+	p.mu.Lock()
+	p.tasks = append(p.tasks, fn)
+	p.mu.Unlock()
+
+	return nil
+}
+
+func (p *capturePool) Release() {}
+
+func (p *capturePool) run(t *testing.T, index int) {
+	t.Helper()
+
+	p.mu.Lock()
+	fn := p.tasks[index]
+	p.mu.Unlock()
+
+	fn()
+}
+
+func TestGateProviderPushCleanupKeepsReboundUser(t *testing.T) {
+	pool := &capturePool{}
+	task.SetPool(pool)
+
+	f := newGateFixture(t)
+	f.start(t)
+
+	// Cleanups run in reverse order, so the default pool is restored before the fixture teardown
+	// and the teardown never queues its cleanup tasks into the capture pool.
+	t.Cleanup(func() { task.SetPool(task.NewPool()) })
+
+	p := &provider{gate: f.gate}
+	ctx := context.Background()
+
+	conn := newGateConn(12, 0)
+	f.gate.session.addConn(conn)
+
+	// The user has no local session, so Push queues the stale cleanup.
+	if err := p.Push(ctx, cluster.User, 600, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	// The user re-establishes the binding before the queued cleanup runs.
+	if err := f.gate.session.bind(conn.ID(), 600); err != nil {
+		t.Fatalf("bind session failed: %v", err)
+	}
+	if err := f.locator.BindGate(ctx, 600, f.gate.opts.id); err != nil {
+		t.Fatalf("bind gate failed: %v", err)
+	}
+
+	pool.run(t, 0)
+
+	if got, _ := f.locator.LocateGate(ctx, 600); got != f.gate.opts.id {
+		t.Fatalf("the stale cleanup removed the rebound user: %q", got)
+	}
+
+	// Once the user is offline again, a new cleanup removes the binding.
+	if _, err := f.gate.session.remove(600); err != nil {
+		t.Fatalf("remove session failed: %v", err)
+	}
+
+	if err := p.Push(ctx, cluster.User, 600, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	pool.run(t, 1)
+
+	if got, _ := f.locator.LocateGate(ctx, 600); got != "" {
+		t.Fatalf("the stale cleanup kept an offline binding: %q", got)
+	}
+}
+
+// deadlineLocator records the context of the last UnbindGate call.
+type deadlineLocator struct {
+	*gateLocator
+	mu       sync.Mutex
+	unbindCT context.Context
+}
+
+func (l *deadlineLocator) UnbindGate(ctx context.Context, uid int64, gid string) error {
+	l.mu.Lock()
+	l.unbindCT = ctx
+	l.mu.Unlock()
+
+	return l.gateLocator.UnbindGate(ctx, uid, gid)
+}
+
+func (l *deadlineLocator) lastUnbindContext() context.Context {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.unbindCT
+}
+
+func TestGateProviderPushCleanupUsesBoundedContext(t *testing.T) {
+	f := newGateFixture(t)
+	locator := &deadlineLocator{gateLocator: f.locator}
+	f.gate.opts.locator = locator
+	f.start(t)
+
+	p := &provider{gate: f.gate}
+
+	// Pushing to a missing user schedules the stale binding cleanup.
+	if err := p.Push(context.Background(), cluster.User, 700, false, buffer.NewBytes(nil, true)); !errors.Is(err, errors.ErrNotFoundSession) {
+		t.Fatalf("expect ErrNotFoundSession, got %v", err)
+	}
+
+	waitForCondition(t, time.Second, func() bool {
+		return locator.lastUnbindContext() != nil
+	}, "the stale cleanup was not scheduled")
+
+	ctx := locator.lastUnbindContext()
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("the stale cleanup must use a bounded context")
+	}
+	if deadline, _ := ctx.Deadline(); time.Until(deadline) > 3*time.Second {
+		t.Fatalf("the stale cleanup deadline is too long: %v", time.Until(deadline))
 	}
 }
 

@@ -160,3 +160,53 @@ func TestGateDestroyWaitsForDisconnectCleanup(t *testing.T) {
 		t.Fatal("node did not receive Disconnect during Destroy")
 	}
 }
+
+func TestGateDestroyClosesNodeClients(t *testing.T) {
+	server, err := nodetransport.NewServer(
+		&disconnectNode{events: make(chan disconnectRecord, 1)},
+		&nodetransport.ServerOptions{Addr: "127.0.0.1:0"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Stop() })
+
+	f := newGateFixture(t)
+	g := f.gate
+	t.Cleanup(g.cancel)
+	g.opts.registry = &disconnectRegistry{gateRegistry: f.registry, instance: &registry.ServiceInstance{
+		ID: "client-node", Name: "node", Kind: "node", State: cluster.Work.String(),
+		Endpoint: server.Endpoint().String(),
+	}}
+	g.proxy = newProxy(g)
+	g.proxy.nodeLinker.WatchClusterInstance()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	for !g.proxy.nodeLinker.HasNode("client-node") {
+		select {
+		case <-ctx.Done():
+			t.Fatal("node was not discovered")
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	g.state.Store(int32(cluster.Work))
+
+	// The request builds and caches a client to the node.
+	if err = g.proxy.nodeLinker.SetState(ctx, "client-node", cluster.Busy); err != nil {
+		t.Fatalf("set state failed: %v", err)
+	}
+
+	g.state.Store(int32(cluster.Hang))
+
+	g.Destroy()
+
+	if err = g.proxy.nodeLinker.SetState(ctx, "client-node", cluster.Busy); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed after destroy, got %v", err)
+	}
+}

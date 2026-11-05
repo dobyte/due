@@ -19,24 +19,27 @@ import (
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/registry"
 	taskpool "github.com/dobyte/due/v2/task"
+	"github.com/dobyte/due/v2/utils/xcall"
 )
 
 // Gate is the gate server component.
 type Gate struct {
 	component.Base
-	opts         *options
-	ctx          context.Context
-	cancel       context.CancelFunc
-	state        atomic.Int32
-	proxy        *proxy
-	instance     *registry.ServiceInstance
-	session      *session
-	linker       *gate.Server
-	security     *securityManager
-	userBindings bindingLocks
-	connBindings bindingLocks
-	mu           sync.Mutex // serializes connection admission with the transition to Hang or Shut
-	wg           *sync.WaitGroup
+	userBindings bindingLocks              // serializes user binding changes
+	connBindings bindingLocks              // serializes connection binding changes
+	opts         *options                  // gate options
+	ctx          context.Context           // component context
+	cancel       context.CancelFunc        // cancels the component context
+	state        atomic.Int32              // component state
+	proxy        *proxy                    // gate proxy
+	instance     *registry.ServiceInstance // registered service instance
+	registryMu   sync.Mutex                // serializes service instance registration with state refreshes
+	session      *session                  // connection and user sessions
+	linker       *gate.Server              // internal link server
+	limiter      *connLimiter              // connection rate limiter
+	security     *securityManager          // session security manager
+	mu           sync.Mutex                // serializes connection admission with the transition to Hang or Shut
+	wg           sync.WaitGroup            // waits for connection cleanup
 }
 
 // NewGate returns a new gate server component configured by the given options.
@@ -52,10 +55,13 @@ func NewGate(opts ...Option) *Gate {
 	g.proxy = newProxy(g)
 	g.session = newSession()
 	g.state.Store(int32(cluster.Shut))
-	g.wg = &sync.WaitGroup{}
 
-	if o.security != nil {
-		g.security = newSecurityManager(g, o.security, o.securityHandshakeTimeout)
+	if o.security != nil && o.security.signer != nil {
+		g.security = newSecurityManager(g, o.security)
+	}
+
+	if o.limiter != nil && o.limiter.normalize() {
+		g.limiter = newConnLimiter(o.limiter)
 	}
 
 	return g
@@ -97,6 +103,10 @@ func (g *Gate) Start() {
 		return
 	}
 
+	if g.limiter != nil {
+		g.limiter.start(g.ctx)
+	}
+
 	g.startNetworkServer()
 
 	g.startLinkerServer()
@@ -129,8 +139,8 @@ func (g *Gate) Close() {
 
 // Destroy destroys the component.
 //
-// It deregisters the service instance, stops the network server and the link server in turn, and
-// cancels the component context.
+// It deregisters the service instance, stops the network server and the link server in turn,
+// closes the clients to the business nodes, and cancels the component context.
 func (g *Gate) Destroy() {
 	g.mu.Lock()
 	if !g.state.CompareAndSwap(int32(cluster.Hang), int32(cluster.Shut)) {
@@ -147,20 +157,29 @@ func (g *Gate) Destroy() {
 
 	g.stopLinkerServer()
 
+	g.proxy.close()
+
 	g.cancel()
+
+	if g.limiter != nil {
+		g.limiter.stop()
+	}
 }
 
 // startNetworkServer starts the network server.
 //
 // It registers the connect, disconnect and receive handlers and starts the network server,
-// logging a fatal error when startup fails.
+// logging a fatal error when startup fails. Handshake frames are routed to the security manager
+// and bypass the connection rate limiter, so the handshake is never blocked by an exhausted
+// business frame budget.
 func (g *Gate) startNetworkServer() {
 	g.opts.server.OnConnect(g.handleConnect)
 	g.opts.server.OnDisconnect(g.handleDisconnect)
 	g.opts.server.OnReceive(g.handleReceive)
 
 	if g.security != nil {
-		g.opts.server.OnHandshake(g.security.receiveHandshake)
+		// Handshake frames intentionally bypass the connection rate limiter.
+		g.opts.server.OnHandshake(g.security.handleHandshake)
 	}
 
 	if err := g.opts.server.Start(); err != nil {
@@ -192,6 +211,10 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		if g.security != nil {
 			g.session.addConn(g.security.wrap(conn))
 			g.mu.Unlock()
+
+			// A handshake frame may have arrived before this callback (some transports start the
+			// read loop first); process it now that the session has been registered.
+			g.security.acceptPending(conn)
 		} else {
 			g.session.addConn(conn)
 			g.mu.Unlock()
@@ -199,9 +222,14 @@ func (g *Gate) handleConnect(conn network.Conn) {
 		}
 	} else {
 		g.mu.Unlock()
-		if err := conn.Close(); err != nil {
-			log.Warnf("close conn failed: %v", err)
-		}
+
+		// The connect callback runs inside the transport read loop, and a transport's Close waits
+		// for that loop to exit, so the close must be deferred to another goroutine.
+		xcall.Go(func() {
+			if err := conn.Close(); err != nil {
+				log.Warnf("close conn failed: %v", err)
+			}
+		})
 	}
 }
 
@@ -210,20 +238,31 @@ func (g *Gate) handleConnect(conn network.Conn) {
 // For a connection whose session is registered, it removes the local session synchronously and
 // queues the location cleanup and the Disconnect event for asynchronous delivery, completing the
 // WaitGroup counter once that work finishes; a connection that is not registered (rejected during
-// the closing phase) is ignored. When session security is enabled, the Disconnect event is
-// triggered only for a connection whose handshake was confirmed, so that it stays paired with the
-// Connect event, which is deferred until the handshake is confirmed. RemConn atomically performs
-// the existence check and removal, so when concurrent duplicate disconnects happen only the first
-// call takes effect, keeping the WaitGroup's Add/Done balanced.
+// the closing phase) only has its rate limiter bucket released. When session security is enabled,
+// the Disconnect event is triggered only for a connection whose Connect event was committed, and it
+// waits for an in-flight Connect delivery, so the two events always arrive in order: the Connect
+// event is deferred until the handshake is confirmed and the Disconnect event is skipped entirely
+// when the connection is removed first. RemConn atomically performs the existence check and removal,
+// so when concurrent duplicate disconnects happen only the first call takes effect, keeping the
+// WaitGroup's Add/Done balanced.
 func (g *Gate) handleDisconnect(conn network.Conn) {
-	cid := conn.ID()
-
-	confirmed := true
+	var (
+		cid   = conn.ID()
+		state *securityState
+	)
 
 	if g.security != nil {
 		conn = g.security.unwrap(conn)
-		confirmed = g.security.confirmed(cid)
-		g.security.remove(cid)
+
+		// Removing the security state returns it to the event delivery path, which orders the
+		// Disconnect event with a Connect delivery that may still be in flight.
+		state = g.security.remove(cid)
+	}
+
+	// Release the limiter bucket even when the session was never admitted: frames can arrive before
+	// the admission or while the connection is closing, so the bucket may have no session owner.
+	if g.limiter != nil {
+		g.limiter.remove(cid)
 	}
 
 	if g.session.remConn(conn) {
@@ -241,12 +280,14 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 				userLock = g.userBindings.lock(uid)
 				if online, _ := g.session.has(cluster.User, uid); !online {
 					ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
+					defer cancel()
 					_ = g.proxy.cleanupGate(ctx, cid, uid)
-					cancel()
 				}
 			}
 
-			if confirmed {
+			if g.security != nil {
+				g.security.deliverDisconnect(state, cid, uid)
+			} else {
 				g.proxy.trigger(g.ctx, cluster.Disconnect, cid, uid)
 			}
 
@@ -259,9 +300,33 @@ func (g *Gate) handleDisconnect(conn network.Conn) {
 	}
 }
 
-// handleReceive handles a received message and delivers the client message to the matching
-// business node.
+// handleReceive handles a received business message and delivers the client message to the
+// matching business node. Heartbeat frames are handled by the network server before this handler.
+// When session security is enabled, handshake frames are routed to the security manager and
+// therefore bypass the connection rate limiter.
 func (g *Gate) handleReceive(conn network.Conn, buf buffer.Buffer) {
+	if g.limiter != nil {
+		allowed, closeConn := g.limiter.allow(conn.ID())
+		if !allowed {
+			buf.Release()
+
+			if closeConn {
+				// A transport's Close waits for the connection read loop to exit, and this handler
+				// runs inside that loop, so the close must be deferred. The security manager closes
+				// connections the same way for the same reason.
+				xcall.Go(func() {
+					if err := conn.Close(true); err != nil &&
+						!errors.Is(err, errors.ErrConnectionClosed) &&
+						!errors.Is(err, errors.ErrConnectionNotOpened) {
+						log.Warnf("close conn failed: cid = %d, err = %v", conn.ID(), err)
+					}
+				})
+			}
+
+			return
+		}
+	}
+
 	if g.security != nil && g.security.decrypt(conn, buf) {
 		return
 	}
@@ -303,41 +368,61 @@ func (g *Gate) stopLinkerServer() {
 //
 // It builds the gate service instance information and registers it with the service registry.
 func (g *Gate) registerServiceInstance() {
-	g.instance = &registry.ServiceInstance{
+	instance := &registry.ServiceInstance{
 		ID:       g.opts.id,
 		Name:     cluster.Gate.String(),
 		Kind:     cluster.Gate.String(),
 		Alias:    g.opts.name,
-		State:    g.getState().String(),
 		Endpoint: g.linker.Endpoint().String(),
 		Metadata: g.opts.metadata,
 	}
 
-	if err := g.doRegisterServiceInstance(); err != nil {
+	g.registryMu.Lock()
+	g.instance = instance
+	err := g.doRegisterServiceInstance()
+	g.registryMu.Unlock()
+
+	if err != nil {
 		log.Fatalf("register cluster instance failed: %v", err)
 	}
 }
 
 // refreshServiceInstance re-registers the service instance with the current state.
 func (g *Gate) refreshServiceInstance() {
-	if err := g.doRefreshServiceInstance(g.getState()); err != nil {
+	if err := g.doRefreshServiceInstance(); err != nil {
 		log.Errorf("refresh cluster instance failed: %v", err)
 	}
 }
 
 // deregisterServiceInstance removes this gate's service instance from the service registry.
+//
+// It takes the same lock as the refresh path, so an in-flight refresh completes before the
+// deregistration and a later refresh cannot register the instance again.
 func (g *Gate) deregisterServiceInstance() {
+	g.registryMu.Lock()
+
+	// The instance does not exist until Start has registered it, so there is nothing to
+	// deregister when the gate is destroyed before the registration completes.
+	if g.instance == nil {
+		g.registryMu.Unlock()
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	err := g.opts.registry.Deregister(ctx, g.instance)
 	cancel()
+	g.registryMu.Unlock()
+
 	if err != nil {
 		log.Errorf("deregister cluster instance failed: %v", err)
 	}
 }
 
-// doRegisterServiceInstance registers the service instance with the service registry under a
-// timeout.
+// doRegisterServiceInstance registers the service instance with the current state under a timeout.
+// The caller must hold registryMu.
 func (g *Gate) doRegisterServiceInstance() error {
+	g.instance.State = g.getState().String()
+
 	ctx, cancel := context.WithTimeout(g.ctx, 3*time.Second)
 	err := g.opts.registry.Register(ctx, g.instance)
 	cancel()
@@ -345,11 +430,18 @@ func (g *Gate) doRegisterServiceInstance() error {
 	return err
 }
 
-// doRefreshServiceInstance updates the instance state and re-registers the service instance. The
-// optional state is the target state to set.
-func (g *Gate) doRefreshServiceInstance(state ...cluster.State) error {
-	if len(state) > 0 {
-		g.instance.State = state[0].String()
+// doRefreshServiceInstance re-registers the service instance with the current state.
+//
+// A refresh that arrives before the initial registration has nothing to publish, because Start
+// registers the instance with the state at that point. It also skips the registration once the gate
+// is shut, so a refresh delayed past Destroy cannot register the instance again after the
+// deregistration.
+func (g *Gate) doRefreshServiceInstance() error {
+	g.registryMu.Lock()
+	defer g.registryMu.Unlock()
+
+	if g.isShut() || g.instance == nil {
+		return nil
 	}
 
 	return g.doRegisterServiceInstance()
@@ -374,7 +466,7 @@ func (g *Gate) setState(state cluster.State) error {
 		}
 
 		if g.state.CompareAndSwap(int32(curr), int32(state)) {
-			return g.doRefreshServiceInstance(state)
+			return g.doRefreshServiceInstance()
 		} else {
 			return errors.ErrIllegalOperation
 		}

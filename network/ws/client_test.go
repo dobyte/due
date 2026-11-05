@@ -2,6 +2,7 @@ package ws_test
 
 import (
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,4 +79,58 @@ func reserveAddr(t *testing.T) string {
 	defer ln.Close()
 
 	return ln.Addr().String()
+}
+
+// TestClientConnectHookBeforeReceive verifies that the client connect hook fires before any frame
+// is handled.
+func TestClientConnectHookBeforeReceive(t *testing.T) {
+	addr := reserveAddr(t)
+
+	server := ws.NewServer(ws.WithServerAddr(addr))
+	server.OnConnect(func(conn network.Conn) {
+		buf, err := packet.PackMessage(1, 1, []byte("welcome"))
+		if err != nil {
+			t.Errorf("pack message failed: %v", err)
+			return
+		}
+		if err = conn.Push(buf); err != nil {
+			buf.Release()
+			t.Errorf("push message failed: %v", err)
+		}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	var order atomic.Int32
+	received := make(chan struct{}, 1)
+
+	client := ws.NewClient(ws.WithClientUrl("ws://" + addr))
+	client.OnConnect(func(conn network.Conn) {
+		time.Sleep(100 * time.Millisecond)
+		order.Store(1)
+	})
+	client.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		buf.Release()
+
+		if order.Load() != 1 {
+			t.Error("receive ran before the connect hook returned")
+		}
+
+		received <- struct{}{}
+	})
+
+	conn, err := client.Dial()
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("welcome message was not received")
+	}
 }

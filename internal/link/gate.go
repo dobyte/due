@@ -47,6 +47,11 @@ func NewGateLinker(ctx context.Context, opts *Options) *GateLinker {
 	return l
 }
 
+// Close closes the clients to the gateways and rejects new RPCs to them.
+func (l *GateLinker) Close() error {
+	return l.builder.Close()
+}
+
 // HasGate reports whether the gate identified by gid exists.
 func (l *GateLinker) HasGate(gid string) bool {
 	_, err := l.dispatcher.FindEndpoint(gid)

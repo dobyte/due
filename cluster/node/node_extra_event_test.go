@@ -442,12 +442,21 @@ func TestEventReply(t *testing.T) {
 
 // TestEventDisconnect verifies the disconnect helper of an event.
 func TestEventDisconnect(t *testing.T) {
-	_, e := newWorkingEvent(t)
-	e.gid = "gate-1"
+	t.Run("missing gid", func(t *testing.T) {
+		_, e := newWorkingEvent(t)
+		if err := e.Disconnect(); !errors.Is(err, errors.ErrIllegalOperation) {
+			t.Fatalf("expect ErrIllegalOperation, got %v", err)
+		}
+	})
 
-	if err := e.Disconnect(true); err == nil {
-		t.Fatal("expect an error without a gate endpoint")
-	}
+	t.Run("with gid", func(t *testing.T) {
+		_, e := newWorkingEvent(t)
+		e.gid = "gate-1"
+
+		if err := e.Disconnect(true); err == nil {
+			t.Fatal("expect an error without a gate endpoint")
+		}
+	})
 }
 
 // TestEventNewMeshClient verifies the mesh client helper of an event.

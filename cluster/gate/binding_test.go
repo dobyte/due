@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/errors"
@@ -369,4 +370,21 @@ func TestGateBindDifferentUsersProceedIndependently(t *testing.T) {
 	}
 	g.handleDisconnect(first)
 	g.handleDisconnect(second)
+}
+
+func TestBindingLockCacheLineAlignment(t *testing.T) {
+	const cacheLineSize = 64
+
+	if size := unsafe.Sizeof(bindingLock{}); size%cacheLineSize != 0 {
+		t.Fatalf("bindingLock size %d is not a multiple of the cache line size", size)
+	}
+
+	var gate Gate
+
+	if off := unsafe.Offsetof(gate.userBindings); off%cacheLineSize != 0 {
+		t.Fatalf("userBindings offset %d is not cache line aligned", off)
+	}
+	if off := unsafe.Offsetof(gate.connBindings); off%cacheLineSize != 0 {
+		t.Fatalf("connBindings offset %d is not cache line aligned", off)
+	}
 }

@@ -32,7 +32,7 @@ type serverConn struct {
 	output            *bufferWriter               // Write helper
 	dueBuffers        []buffer.Buffer             // Buffers pending write
 	lastHeartbeatTime atomic.Int64                // Time of the last heartbeat
-	authorizeTimer    atomic.Value                // Authorize timer
+	authorizeTimer    atomic.Pointer[time.Timer]  // Authorize timer
 }
 
 var _ network.Conn = &serverConn{}
@@ -129,6 +129,25 @@ func (c *serverConn) Close(force ...bool) error {
 	return c.graceClose()
 }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+//
+// The connection object is recycled and reused, so a caller that may hold a stale reference must
+// use this method instead of Close to avoid closing a newer connection that reuses the object.
+func (c *serverConn) CloseIf(id int64) error {
+	c.rw.Lock()
+
+	if c.id != id || c.qc == nil || c.state.Swap(int32(network.ConnClosed)) == int32(network.ConnClosed) {
+		c.rw.Unlock()
+		return errors.ErrConnectionClosed
+	}
+
+	c.rw.Unlock()
+
+	c.uncheckAuthorize()
+
+	return c.doClose(false)
+}
+
 // LocalIP returns the local IP address.
 func (c *serverConn) LocalIP() (string, error) {
 	addr, err := c.LocalAddr()
@@ -199,7 +218,7 @@ func (c *serverConn) init(id int64, qc *quic.Conn, stream *quic.Stream) bool {
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, c.connMgr.server.opts.writeQueueSize)), c.connMgr.server.opts.writeTimeout)
 	c.output = newBufferWriter(stream)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.authorizeTimer.Store((*time.Timer)(nil))
+	c.authorizeTimer.Store(nil)
 
 	if !c.connMgr.linkConn(id, c) {
 		// The manager has been closed or the reserved entry has already been cleaned up; reset
@@ -278,16 +297,14 @@ func (c *serverConn) checkAuthorize(stream *quic.Stream) {
 
 	id := c.id
 
-	timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
+	if timer := c.authorizeTimer.Swap(time.AfterFunc(c.connMgr.server.opts.authorizeTimeout, func() {
 		if c.UID() != 0 {
 			return
 		}
 
 		c.recycleClose(stream, id)
-	}))
-
-	if t, ok := timer.(*time.Timer); ok && t != nil {
-		t.Stop()
+	})); timer != nil {
+		timer.Stop()
 	}
 }
 
@@ -300,10 +317,8 @@ func (c *serverConn) uncheckAuthorize() {
 		return
 	}
 
-	timer := c.authorizeTimer.Swap((*time.Timer)(nil))
-
-	if t, ok := timer.(*time.Timer); ok && t != nil {
-		t.Stop()
+	if timer := c.authorizeTimer.Swap(nil); timer != nil {
+		timer.Stop()
 	}
 }
 

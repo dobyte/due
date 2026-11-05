@@ -135,3 +135,41 @@ func TestNodeLinkerTrigger(t *testing.T) {
 		t.Fatal("provider did not receive the event in time")
 	}
 }
+
+func TestNodeLinkerClose(t *testing.T) {
+	provider := &mockProvider{ch: make(chan triggerRecord, 1)}
+
+	addr := listenFreeAddr(t)
+
+	server, err := node.NewServer(provider, &node.ServerOptions{Addr: addr})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	if err = server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer server.Stop()
+
+	linker := newTestNodeLinker()
+
+	client, err := linker.builder.Build(addr)
+	if err != nil {
+		t.Fatalf("build client failed: %v", err)
+	}
+
+	if err = linker.Close(); err != nil {
+		t.Fatalf("close linker failed: %v", err)
+	}
+
+	if err = client.Deliver(context.Background(), 1, 2, buffer.NewNocopyBuffer([]byte("after close"))); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed on delivery, got %v", err)
+	}
+
+	if _, err = linker.builder.Build(addr); !errors.Is(err, errors.ErrClientClosed) {
+		t.Fatalf("expect ErrClientClosed on build, got %v", err)
+	}
+
+	if err = linker.Close(); err != nil {
+		t.Fatalf("closing the linker twice failed: %v", err)
+	}
+}

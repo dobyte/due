@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dobyte/due/v2/cluster"
 	"github.com/dobyte/due/v2/core/queue"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
@@ -34,6 +35,7 @@ type Scheduler struct {
 	actors sync.Map
 	routes sync.Map
 	kinds  sync.Map
+	events sync.Map                        // Event subscriptions of schedulable actors (cluster.Event → *eventEntity)
 	shards [relationShardNum]relationShard // Shards of the binding relations between users and actors
 }
 
@@ -45,6 +47,50 @@ type Scheduler struct {
 type kindEntity struct {
 	count  atomic.Int32 // Reference count of the schedulable actors of the kind
 	routes sync.Map     // Set of routes registered by the kind (route int32 → struct{})
+}
+
+// eventEntity holds the schedulable actors that registered a handler for one event.
+//
+// It indexes event subscriptions so that dispatch visits only the subscribed actors instead of
+// scanning every actor of the node. Registration and removal are O(1); dispatch copies the members
+// while holding the read lock and delivers after releasing it, so a slow actor cannot block
+// registration. An empty entity is kept after its last actor is removed: the number of distinct
+// events is bounded by the registered handlers, and keeping it avoids a load-or-store race with a
+// concurrent registration.
+type eventEntity struct {
+	mu     sync.RWMutex
+	actors map[*Actor]struct{}
+}
+
+// newEventEntity creates an event entity subscribed by act.
+func newEventEntity(act *Actor) *eventEntity {
+	return &eventEntity{actors: map[*Actor]struct{}{act: {}}}
+}
+
+// add subscribes act to the event.
+func (e *eventEntity) add(act *Actor) {
+	e.mu.Lock()
+	e.actors[act] = struct{}{}
+	e.mu.Unlock()
+}
+
+// remove unsubscribes act from the event.
+func (e *eventEntity) remove(act *Actor) {
+	e.mu.Lock()
+	delete(e.actors, act)
+	e.mu.Unlock()
+}
+
+// snapshot returns the current subscribers.
+func (e *eventEntity) snapshot() []*Actor {
+	e.mu.RLock()
+	actors := make([]*Actor, 0, len(e.actors))
+	for act := range e.actors {
+		actors = append(actors, act)
+	}
+	e.mu.RUnlock()
+
+	return actors
 }
 
 // newScheduler creates a new scheduler for the given node server.
@@ -324,6 +370,34 @@ func (s *Scheduler) releaseKind(kind string) {
 	})
 }
 
+// subscribeEvent subscribes act to event so that dispatch visits only the subscribed actors.
+func (s *Scheduler) subscribeEvent(event cluster.Event, act *Actor) {
+	if value, ok := s.events.Load(event); ok {
+		value.(*eventEntity).add(act)
+		return
+	}
+
+	value, _ := s.events.LoadOrStore(event, newEventEntity(act))
+	value.(*eventEntity).add(act)
+}
+
+// unsubscribeEvents unsubscribes act from every event it registered.
+//
+// It is called after the actor task queue has been closed, so an in-flight handler registration has
+// either completed before it or been skipped by the started check; no subscription can be re-added
+// after the removal.
+func (s *Scheduler) unsubscribeEvents(act *Actor) {
+	act.events.Range(func(key, _ any) bool {
+		if event, ok := key.(cluster.Event); ok {
+			if value, ok := s.events.Load(event); ok {
+				value.(*eventEntity).remove(act)
+			}
+		}
+
+		return true
+	})
+}
+
 // loadActor returns the actor bound to a user.
 //
 // It is called for every dispatched message and locks the shard by UID read-only, avoiding cache
@@ -379,21 +453,22 @@ func (s *Scheduler) dispatchRequest(ctx Context) error {
 }
 
 // dispatchEvent dispatches an event. It clones the context and delivers it to every schedulable
-// actor.
+// actor subscribed to the event.
 func (s *Scheduler) dispatchEvent(ctx Context) error {
-	s.actors.Range(func(_, actor any) bool {
-		if act, ok := actor.(*Actor); ok && act.opts.dispatch {
-			if _, ok = act.events.Load(ctx.Event()); ok {
-				c := ctx.Clone()
+	value, ok := s.events.Load(ctx.Event())
+	if !ok {
+		return nil
+	}
 
-				if err := act.Next(c); err != nil {
-					c.release()
-				}
-			}
+	actors := value.(*eventEntity).snapshot()
+
+	for _, act := range actors {
+		c := ctx.Clone()
+
+		if err := act.Next(c); err != nil {
+			c.release()
 		}
-
-		return true
-	})
+	}
 
 	return nil
 }

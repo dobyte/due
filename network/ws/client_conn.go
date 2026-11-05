@@ -44,12 +44,16 @@ func newClientConn(cli *client, conn *websocket.Conn) network.Conn {
 	c.state.Store(int32(network.ConnOpened))
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(minWriteQueueSize, cli.opts.writeQueueSize)), cli.opts.writeTimeout)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.wg1.Go(func() { c.read(conn) })
 	c.wg2.Go(func() { c.write(conn) })
+	c.wg1.Go(func() {
+		// The connect hook runs before the read loop so that it always fires before the receive
+		// hook.
+		if c.cli.connectHandler != nil {
+			c.cli.connectHandler(c)
+		}
 
-	if c.cli.connectHandler != nil {
-		c.cli.connectHandler(c)
-	}
+		c.read(conn)
+	})
 
 	return c
 }
@@ -137,6 +141,15 @@ func (c *clientConn) Close(force ...bool) error {
 	} else {
 		return c.graceClose()
 	}
+}
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *clientConn) CloseIf(id int64) error {
+	if c.id != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.forceClose()
 }
 
 // LocalIP returns the local IP address.

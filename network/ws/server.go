@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	innernet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -142,12 +143,13 @@ func (s *server) init() error {
 		return errors.ErrServerStarted
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", s.opts.addr)
+	network := innernet.ListenNetwork("tcp", s.opts.addr)
+	addr, err := net.ResolveTCPAddr(network, s.opts.addr)
 	if err != nil {
 		return err
 	}
 
-	ln, err := net.ListenTCP(addr.Network(), addr)
+	ln, err := net.ListenTCP(network, addr)
 	if err != nil {
 		return err
 	}

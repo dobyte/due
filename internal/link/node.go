@@ -65,6 +65,11 @@ func NewNodeLinker(ctx context.Context, opts *Options) *NodeLinker {
 	return l
 }
 
+// Close closes the clients to the business nodes and rejects new RPCs to them.
+func (l *NodeLinker) Close() error {
+	return l.builder.Close()
+}
+
 // shard returns the source cache shard that owns uid.
 func (l *NodeLinker) shard(uid int64) *sourceShard {
 	return &l.shards[uint64(uid)&(sourceShardNum-1)]

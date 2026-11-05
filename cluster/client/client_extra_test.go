@@ -58,6 +58,15 @@ func (c *tConn) LocalAddr() (net.Addr, error)  { return nil, nil }
 func (c *tConn) RemoteIP() (string, error)     { return "10.0.0.1", nil }
 func (c *tConn) RemoteAddr() (net.Addr, error) { return nil, nil }
 
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *tConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
+
 func (c *tConn) Push(buf buffer.Buffer) error {
 	if c.pushErr != nil {
 		return c.pushErr
@@ -806,4 +815,181 @@ func TestClientAddHookListenerBeforeStart(t *testing.T) {
 
 	// Running a hook without any listener is a no-op.
 	f.client.runHookFunc(cluster.Destroy)
+}
+
+// earlyReceiveNetwork reports the connect handler and delivers a message inside Dial, before it
+// returns.
+type earlyReceiveNetwork struct {
+	*tNetwork
+	message buffer.Buffer
+}
+
+func (n *earlyReceiveNetwork) Dial(addr ...string) (network.Conn, error) {
+	if n.connect != nil {
+		n.connect(n.conn)
+	}
+	if n.receive != nil && n.message != nil {
+		n.receive(n.conn, n.message)
+		n.message = nil
+	}
+
+	return n.conn, nil
+}
+
+// TestClientReceivesMessageBeforeDialReturns verifies that a message delivered before Dial returns
+// is dispatched instead of being dropped because the connection was not registered yet.
+func TestClientReceivesMessageBeforeDialReturns(t *testing.T) {
+	n := &earlyReceiveNetwork{tNetwork: &tNetwork{conn: newTConn(4242)}}
+
+	msg, err := packet.PackMessage(1, 7, []byte(`{"n":42}`))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	n.message = msg
+
+	c := NewClient(
+		WithID("early-client"),
+		WithName("early-client"),
+		WithClient(n),
+		WithCodec(json.DefaultCodec),
+	)
+
+	received := make(chan int, 1)
+	c.Proxy().AddRouteHandler(1, func(ctx *Context) {
+		var out struct {
+			N int `json:"n"`
+		}
+		if err := ctx.Parse(&out); err != nil {
+			received <- -1
+			return
+		}
+
+		received <- out.N
+	})
+
+	c.Init()
+	c.Start()
+	t.Cleanup(func() {
+		c.Close()
+		c.Destroy()
+	})
+
+	if _, err = c.Proxy().Dial(); err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+
+	select {
+	case value := <-received:
+		if value != 42 {
+			t.Fatalf("unexpected message value: %d", value)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the message delivered before Dial returned was dropped")
+	}
+}
+
+// TestClientConnectIgnoresClosingClient verifies that a connection reported while the client is not
+// working is not registered.
+func TestClientConnectIgnoresClosingClient(t *testing.T) {
+	c := NewClient(WithClient(&tNetwork{conn: newTConn(1)}), WithCodec(json.DefaultCodec))
+
+	shut := newTConn(77)
+	c.handleConnect(shut)
+	if _, ok := c.conns.Load(shut); ok {
+		t.Fatal("a shut client must not register the connection")
+	}
+
+	c.state.Store(int32(cluster.Work))
+	working := newTConn(78)
+	c.handleConnect(working)
+	if _, ok := c.conns.Load(working); !ok {
+		t.Fatal("a working client must register the connection")
+	}
+}
+
+// multiDialNetwork returns a distinct connection for every dial.
+type multiDialNetwork struct {
+	*tNetwork
+	conns []network.Conn
+	index atomic.Int32
+}
+
+func (n *multiDialNetwork) Dial(addr ...string) (network.Conn, error) {
+	index := int(n.index.Add(1)) - 1
+	if index >= len(n.conns) {
+		return nil, errors.New("no connection available")
+	}
+
+	return n.conns[index], nil
+}
+
+// blockingCloseConn reports every Close entry and blocks until release is closed.
+type blockingCloseConn struct {
+	*tConn
+	entered chan<- struct{}
+	release <-chan struct{}
+}
+
+func (c *blockingCloseConn) Close(force ...bool) error {
+	c.entered <- struct{}{}
+	<-c.release
+	return c.tConn.Close(force...)
+}
+
+// TestDestroyClosesConnectionsConcurrently verifies that a graceful close of one connection does
+// not delay the close of the others during Destroy.
+func TestDestroyClosesConnectionsConcurrently(t *testing.T) {
+	const count = 3
+
+	var (
+		entered = make(chan struct{}, count)
+		release = make(chan struct{})
+	)
+
+	conns := make([]network.Conn, 0, count)
+	for i := range count {
+		conns = append(conns, &blockingCloseConn{tConn: newTConn(int64(i + 1)), entered: entered, release: release})
+	}
+
+	c := NewClient(
+		WithID("destroy-client"),
+		WithName("destroy-client"),
+		WithClient(&multiDialNetwork{tNetwork: &tNetwork{conn: conns[0]}, conns: conns}),
+		WithCodec(json.DefaultCodec),
+	)
+	c.Init()
+	c.Start()
+
+	for range count {
+		if _, err := c.Proxy().Dial(); err != nil {
+			t.Fatalf("dial failed: %v", err)
+		}
+	}
+
+	c.Close()
+
+	done := make(chan struct{})
+	go func() {
+		c.Destroy()
+		close(done)
+	}()
+
+	// Every connection must enter Close before any of them is released; a serial Destroy would only
+	// let the first one enter and then block on it.
+	for range count {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			close(release)
+			t.Fatal("connections were not closed concurrently")
+		}
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("destroy did not finish")
+	}
 }

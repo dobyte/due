@@ -334,7 +334,7 @@ Actor 的 PID 由 `kind/id` 组成，存于当前 Node Scheduler 的本地表中
 
 请求经 Scheduler 按 `Route → Kind`、`UID + Kind → Actor` 定位；同一 UID 可绑定多个 Kind，每个 Kind 对应一个当前 Actor。请求缺少 UID、路由映射或绑定时返回具体错误。
 
-事件 `ctx.Next` 则可扫描可调度 Actors，为注册相应事件的 Actor Clone 后投递，不是自动只发给该 UID 绑定的 Actor。连接事件广播的业务过滤及扇出成本应由业务控制。
+事件 `ctx.Next` 只向注册了该事件的可调度 Actor 投递：Scheduler 维护 `Event → Actor` 订阅索引，为订阅者 Clone 后投递，不扫描全部 Actor，也不是自动只发给该 UID 绑定的 Actor。连接事件广播的业务过滤、订阅者数量带来的扇出成本仍应由业务控制。
 
 多个 Kind 不应竞争同一 Route 的映射。Actor 创建后的动态处理器注册通过任务队列提交，API 返回并不一定意味着路由已生效；需要明确的初始化完成屏障。
 
@@ -425,7 +425,7 @@ Buffer 的计数原子性不代表支持并发 `Slide/Mount` 等结构修改；�
 
 Gate 与 Client 可通过 `WithSessionSecurity` 启用会话安全。握手建立 AEAD Session 后，业务 payload 使用 `epoch:1 | counter:8 | ciphertext | tag` 格式；AAD 绑定 version、direction、epoch、route 和 seq，发送 counter 保持原子递增，接收重放窗口仅在认证成功后推进，并继续使用互斥锁保护。
 
-安全校验失败或握手超时时，Gate 为每个安全会话最多启动一个独立的强制关闭协程，避免接收回调在同步 Close 中等待自身退出；Destroy 在网络服务器停止后先停止接受新的关闭请求并停掉各会话的握手定时器，再等待已启动的协程完成，避免清理滞后于网络服务器停止的断连回调在等待期间登记新协程。任务绑定捕获的 CID 与原安全状态，执行前再次检查映射，断开时移除状态、停止定时器，使过期任务失效。该检查无法与现有 network.Conn.Close 原子执行，因此仍存在检查后连接被回收复用的极端竞态。启用安全会话时，Connect 在握手确认后触发，未确认会话断开不触发 Disconnect。
+安全校验失败或握手超时时，Gate 为每个安全会话最多启动一个独立的强制关闭协程，避免接收回调在同步 Close 中等待自身退出；Destroy 在网络服务器停止后先停止接受新的关闭请求并停掉各会话的握手定时器，再等待已启动的协程完成，避免清理滞后于网络服务器停止的断连回调在等待期间登记新协程。任务绑定捕获的 CID 与原安全状态，执行前再次检查映射，断开时移除状态、停止定时器，使过期任务失效；最终关闭通过 `network.Conn.CloseIf` 在传输层内按 CID 比较后再执行，因此连接对象被回收复用后不会误关新连接。启用安全会话时，Connect 在握手确认后触发，未确认会话断开不触发 Disconnect。
 
 `Session.SealMessage` / `OpenMessage` 接受调用方的目标切片，复用每次调用独占的 nonce/AAD 工作区；原有 `Seal` / `Open` 保留独立输出的语义。Gate 和 Client 使用池化 Bytes 保存输出。广播明文可以共享，每个连接必须生成独立密文；密文 buffer 成功入队后由网络写出路径释放，失败时释放新密文，原明文仍按调用方的所有权规则处理。
 
@@ -789,13 +789,13 @@ request ID、UID、room ID、GID/NID、Route、generation 用于日志和追踪�
 ### 17.3 生产安全边界
 
 - DRPC 默认是裸 TCP，Kind/ID 握手不认证调用者。需网络隔离或在受控入口建立认证/加密保护。
-- Authorized 表示 UID 非零，不验证 Token。每个业务接口需身份、权限、输入与频率检查；`core/limiter` 提供 token bucket 工具，但不会自动保护所有路由。
+- Authorized 表示 UID 非零，不验证 Token。每个业务接口需身份、权限、输入与频率检查；`limiter/memory` 内置 token bucket，但不会自动保护所有路由。
 - payload Encryptor 与独立 Signer 不自动构成完整的传输认证、签名校验和防重放协议；TLS、业务签名和重放防护分别设计。
 - WebSocket Origin 与可信代理范围按实际客户端配置；Forwarded 地址不能直接作为可信用户身份。
 - MQTT 没有 auth/ACL 配置时可能安装 AllowHook；debug hook 可输出敏感包信息和密码，生产需明确认证并禁用该调试方式。
 - pprof、Swagger、管理 RPC、配置写接口分别收敛访问权限；日志对 Token、凭据及个人数据脱敏。
 
-源码：[log/logger.go](../../log/logger.go)、[log/file/syncer.go](../../log/file/syncer.go)、[component/http/server.go](../../component/http/server.go)、[component/mqtt/server.go](../../component/mqtt/server.go)、[component/pprof/pprof.go](../../component/pprof/pprof.go)、[core/limiter/limiter.go](../../core/limiter/limiter.go)、[crypto/encryptor.go](../../crypto/encryptor.go)、[crypto/signer.go](../../crypto/signer.go)。
+源码：[log/logger.go](../../log/logger.go)、[log/file/syncer.go](../../log/file/syncer.go)、[component/http/server.go](../../component/http/server.go)、[component/mqtt/server.go](../../component/mqtt/server.go)、[component/pprof/pprof.go](../../component/pprof/pprof.go)、[limiter/memory/bucket.go](../../limiter/memory/bucket.go)、[crypto/encryptor.go](../../crypto/encryptor.go)、[crypto/signer.go](../../crypto/signer.go)。
 
 ## 18. 验证策略与工程约束
 

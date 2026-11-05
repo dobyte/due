@@ -131,6 +131,21 @@ func TestClientTransportAll(t *testing.T) {
 	}
 }
 
+// TestClientGetIPIPv6 verifies that the client retries with the extended request when the gate
+// reports that the legacy response format cannot carry an IPv6 address.
+func TestClientGetIPIPv6(t *testing.T) {
+	server, _ := newTestServer(t)
+	client := buildGateClient(t, server.ListenAddr(), nil)
+
+	ip, err := client.GetIP(context.Background(), cluster.User, providerIPv6Target)
+	if err != nil {
+		t.Fatalf("GetIP() error = %v", err)
+	}
+	if ip != providerIPv6 {
+		t.Fatalf("GetIP() = %q, want %q", ip, providerIPv6)
+	}
+}
+
 // TestClientPushInPlace verifies that a pooled push buffer with reserved transport headroom is
 // encoded in place and reaches the server with the original payload.
 func TestClientPushInPlace(t *testing.T) {
@@ -327,6 +342,7 @@ func TestClientProviderErrors(t *testing.T) {
 		{"Publish", func() error { _, err := client.Publish(ctx, "channel", false, msg(), true); return err }},
 		{"Subscribe", func() error { return client.Subscribe(ctx, cluster.User, []int64{1}, "channel") }},
 		{"Unsubscribe", func() error { return client.Unsubscribe(ctx, cluster.User, []int64{1}, "channel") }},
+		{"GetState", func() error { _, err := client.GetState(ctx); return err }},
 		{"SetState", func() error { return client.SetState(ctx, cluster.Work) }},
 	}
 

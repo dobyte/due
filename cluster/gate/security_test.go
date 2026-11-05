@@ -11,6 +11,7 @@ import (
 	"github.com/dobyte/due/v2/core/buffer"
 	"github.com/dobyte/due/v2/core/security/aead/aesgcm"
 	"github.com/dobyte/due/v2/core/security/handshake"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/network"
 	"github.com/dobyte/due/v2/packet"
 )
@@ -101,6 +102,15 @@ func (c *securityConn) RemoteIP() (string, error) { return "10.0.0.1", nil }
 
 // RemoteAddr returns the remote address.
 func (c *securityConn) RemoteAddr() (net.Addr, error) { return nil, nil }
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *securityConn) CloseIf(id int64) error {
+	if c.ID() != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.Close(true)
+}
 
 // next returns the next pushed message.
 func (c *securityConn) next(t *testing.T) []byte {
@@ -274,6 +284,82 @@ func TestSecurityConfirmedState(t *testing.T) {
 	}
 }
 
+// TestSecurityHandshakeAfterConfirmCloses verifies that a handshake frame received after the session
+// is confirmed is treated as a protocol violation and closes the connection.
+func TestSecurityHandshakeAfterConfirmCloses(t *testing.T) {
+	signer := &securitySigner{key: []byte("gate-security-late-handshake-test")}
+
+	g := NewGate(WithSessionSecurity(signer))
+	conn := &securityConn{pushed: make(chan []byte, 4)}
+	g.security.wrap(conn)
+	t.Cleanup(func() { g.security.remove(conn.ID()) })
+
+	client := handshake.NewClient(signer, aesgcm.Suite)
+	hello, err := client.Hello()
+	if err != nil {
+		t.Fatalf("client hello failed: %v", err)
+	}
+
+	injectHandshake(t, g, conn, hello)
+
+	_, finished, err := client.Handle(nextHandshake(t, conn.next(t)))
+	if err != nil {
+		t.Fatalf("client handle failed: %v", err)
+	}
+
+	injectHandshake(t, g, conn, finished)
+
+	if !g.security.confirmed(conn.ID()) {
+		t.Fatal("the session must be confirmed after the finished frame")
+	}
+
+	// A handshake frame after confirmation must close the connection instead of being ignored.
+	injectHandshake(t, g, conn, hello)
+
+	if !waitClosed(conn, time.Second) {
+		t.Fatal("the connection must be closed after a late handshake frame")
+	}
+}
+
+// TestSecurityHandshakeBeforeAdmission verifies that a handshake frame received before the connect
+// callback admits the connection is buffered and processed once the gate registers the session.
+func TestSecurityHandshakeBeforeAdmission(t *testing.T) {
+	signer := &securitySigner{key: []byte("gate-security-pre-admission-test")}
+
+	g := NewGate(WithSessionSecurity(signer))
+	conn := &securityConn{pushed: make(chan []byte, 4)}
+	t.Cleanup(func() { g.security.remove(conn.ID()) })
+
+	client := handshake.NewClient(signer, aesgcm.Suite)
+	hello, err := client.Hello()
+	if err != nil {
+		t.Fatalf("client hello failed: %v", err)
+	}
+
+	// Some transports start the read loop before the connect callback, so the first ClientHello may
+	// arrive before the security state exists.
+	injectHandshake(t, g, conn, hello)
+
+	if len(conn.pushed) != 0 {
+		t.Fatal("the server hello must not be sent before the admission")
+	}
+
+	// The admission registers the security state and replays the buffered frame.
+	g.security.wrap(conn)
+	g.security.acceptPending(conn)
+
+	_, finished, err := client.Handle(nextHandshake(t, conn.next(t)))
+	if err != nil {
+		t.Fatalf("client handle failed: %v", err)
+	}
+
+	injectHandshake(t, g, conn, finished)
+
+	if !g.security.confirmed(conn.ID()) {
+		t.Fatal("the session must be confirmed after the finished frame")
+	}
+}
+
 // waitClosed reports whether the transport has closed the connection within the timeout.
 func waitClosed(conn *securityConn, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
@@ -310,7 +396,7 @@ func injectHandshake(t *testing.T, g *Gate, conn network.Conn, frame []byte) {
 		t.Fatalf("pack handshake frame failed: %v", err)
 	}
 
-	g.security.receiveHandshake(conn, buf)
+	g.security.handleHandshake(conn, buf)
 }
 
 // injectMessage packs and delivers a business message to the gate security manager.

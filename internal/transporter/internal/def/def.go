@@ -5,6 +5,7 @@ const (
 	B16
 	B32
 	B64
+	B128
 )
 
 const (

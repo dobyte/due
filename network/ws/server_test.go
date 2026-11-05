@@ -2,10 +2,65 @@ package ws_test
 
 import (
 	"net"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dobyte/due/network/ws/v2"
+	"github.com/dobyte/due/v2/core/buffer"
+	"github.com/dobyte/due/v2/network"
+	"github.com/dobyte/due/v2/packet"
 )
+
+// TestServerListensOnDualStackForDefaultAddr verifies that the default listen address accepts both
+// IPv4 and IPv6 clients.
+func TestServerListensOnDualStackForDefaultAddr(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+	_ = probe.Close()
+
+	server := ws.NewServer(ws.WithServerAddr(":0"), ws.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, port, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if host != "::" {
+		t.Fatalf("expected a dual-stack listen address, actual: %s", server.Addr())
+	}
+
+	for _, ip := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), time.Second)
+		if err != nil {
+			t.Fatalf("dial %s failed: %v", ip, err)
+		}
+		_ = conn.Close()
+	}
+}
+
+// TestServerListensOnIPv4ForIPv4Wildcard verifies that an explicit IPv4 wildcard address binds an
+// IPv4-only socket.
+func TestServerListensOnIPv4ForIPv4Wildcard(t *testing.T) {
+	server := ws.NewServer(ws.WithServerAddr("0.0.0.0:0"), ws.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, _, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.To4() == nil {
+		t.Fatalf("expected an IPv4 listen address, actual: %s", server.Addr())
+	}
+}
 
 func TestServerStartFailureRollsBackState(t *testing.T) {
 	addr := reserveAddr(t)
@@ -37,5 +92,55 @@ func TestServerStartFailureRollsBackState(t *testing.T) {
 	}
 	if err = server.Stop(); err != nil {
 		t.Fatalf("stop restarted server failed: %v", err)
+	}
+}
+
+// TestServerConnectHookBeforeReceive verifies that the connect hook completes before any frame is
+// handled.
+func TestServerConnectHookBeforeReceive(t *testing.T) {
+	addr := reserveAddr(t)
+	server := ws.NewServer(ws.WithServerAddr(addr))
+
+	var order atomic.Int32
+	server.OnConnect(func(conn network.Conn) {
+		time.Sleep(100 * time.Millisecond)
+		order.Store(1)
+	})
+
+	received := make(chan struct{}, 1)
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		buf.Release()
+
+		if order.Load() != 1 {
+			t.Error("receive ran before the connect hook returned")
+		}
+
+		received <- struct{}{}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	client := ws.NewClient(ws.WithClientUrl("ws://" + addr))
+	conn, err := client.Dial()
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	buf, err := packet.PackMessage(1, 1, []byte("ping"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	if err = conn.Push(buf); err != nil {
+		t.Fatalf("push message failed: %v", err)
+	}
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("message was not received")
 	}
 }
