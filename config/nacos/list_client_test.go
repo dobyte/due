@@ -1,6 +1,8 @@
 package nacos
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -83,7 +85,7 @@ func TestListClientSearchConfig(t *testing.T) {
 	o.timeout = time.Second
 
 	stub := &stubConfigClient{}
-	client := newListConfigClient(stub, o, context.Background())
+	client := newListConfigClient(stub, o)
 
 	list, ok := client.(*listClient)
 	if !ok {
@@ -153,7 +155,7 @@ func TestListClientFallback(t *testing.T) {
 		TotalCount: 1,
 		PageItems:  []model.ConfigItem{{DataId: "fallback.json"}},
 	}}
-	client := newListConfigClient(stub, o, context.Background())
+	client := newListConfigClient(stub, o)
 
 	list, ok := client.(*listClient)
 	if !ok {
@@ -192,12 +194,14 @@ func TestListClientPermissionFallback(t *testing.T) {
 
 	o := defaultOptions()
 	o.urls = []string{server.URL + "/nacos"}
+	o.username = "nacos"
+	o.password = "nacos"
 	o.timeout = time.Second
 
 	stub := &stubConfigClient{page: &model.ConfigPage{
 		PageItems: []model.ConfigItem{{DataId: "fallback.json"}},
 	}}
-	client := newListConfigClient(stub, o, context.Background())
+	client := newListConfigClient(stub, o)
 
 	list, ok := client.(*listClient)
 	if !ok {
@@ -231,7 +235,7 @@ func TestListClientInvalidURL(t *testing.T) {
 	o.timeout = time.Second
 
 	stub := &stubConfigClient{}
-	client := newListConfigClient(stub, o, context.Background())
+	client := newListConfigClient(stub, o)
 
 	list, ok := client.(*listClient)
 	if !ok {
@@ -279,7 +283,7 @@ func TestListClientBusinessErrorFallback(t *testing.T) {
 			stub := &stubConfigClient{page: &model.ConfigPage{
 				PageItems: []model.ConfigItem{{DataId: "fallback.json"}},
 			}}
-			client := newListConfigClient(stub, o, context.Background())
+			client := newListConfigClient(stub, o)
 
 			list, ok := client.(*listClient)
 			if !ok {
@@ -317,7 +321,7 @@ func TestListClientAccurateSearch(t *testing.T) {
 	o.timeout = time.Second
 
 	stub := &stubConfigClient{}
-	client := newListConfigClient(stub, o, context.Background())
+	client := newListConfigClient(stub, o)
 
 	list, ok := client.(*listClient)
 	if !ok {
@@ -345,7 +349,7 @@ func TestNewListConfigClientNil(t *testing.T) {
 func TestListClientDoubleWrap(t *testing.T) {
 	inner := &listClient{}
 
-	if client := newListConfigClient(inner, nil, context.Background()); client != inner {
+	if client := newListConfigClient(inner, nil); client != inner {
 		t.Fatalf("expect the existing list client, got %T", client)
 	}
 }
@@ -394,4 +398,197 @@ func TestSourceLoadUsesSearchContent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSourceLoadReusesCachedContent verifies that a full load only fetches the content of a new or
+// changed dataId and reuses the cached content of an unchanged one.
+func TestSourceLoadReusesCachedContent(t *testing.T) {
+	stub := &stubConfigClient{}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+
+	source := &Source{opts: o}
+
+	load := func(items ...model.ConfigItem) {
+		t.Helper()
+
+		stub.page = &model.ConfigPage{
+			TotalCount:     len(items),
+			PageNumber:     1,
+			PagesAvailable: 1,
+			PageItems:      items,
+		}
+
+		if _, err := source.Load(context.Background()); err != nil {
+			t.Fatalf("load configs failed: %v", err)
+		}
+	}
+
+	load(
+		model.ConfigItem{DataId: "a.json", Md5: "m1"},
+		model.ConfigItem{DataId: "b.yaml", Md5: "m2"},
+	)
+	if got := stub.getCalls.Load(); got != 2 {
+		t.Fatalf("expect 2 get config calls on the first load, got %d", got)
+	}
+
+	load(
+		model.ConfigItem{DataId: "a.json", Md5: "m1"},
+		model.ConfigItem{DataId: "b.yaml", Md5: "m2"},
+	)
+	if got := stub.getCalls.Load(); got != 2 {
+		t.Fatalf("expect the cached content to be reused, got %d get config calls", got)
+	}
+
+	// A changed md5 has to fetch the content again, while the unchanged item stays cached.
+	load(
+		model.ConfigItem{DataId: "a.json", Md5: "m1"},
+		model.ConfigItem{DataId: "b.yaml", Md5: "m3"},
+	)
+	if got := stub.getCalls.Load(); got != 3 {
+		t.Fatalf("expect 3 get config calls after the change, got %d", got)
+	}
+
+	// A pushed change invalidates the cached content of that dataId.
+	source.onChange("", "", "a.json", "changed")
+
+	load(
+		model.ConfigItem{DataId: "a.json", Md5: "m1"},
+		model.ConfigItem{DataId: "b.yaml", Md5: "m3"},
+	)
+	if got := stub.getCalls.Load(); got != 4 {
+		t.Fatalf("expect 4 get config calls after the invalidation, got %d", got)
+	}
+}
+
+// TestListClientExport verifies that Export calls the v3 admin export endpoint, parses the ZIP
+// response and returns a map from dataId to content.
+func TestListClientExport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nacos"+configExportPath {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		if _, err := w.Write(makeExportZip("test-group", map[string]string{
+			"a.json": `{"key":"a"}`,
+			"b.yaml": "key: b\n",
+			"sub/c":  "ignored", // nested path falls back to base name
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+
+	o := defaultOptions()
+	o.urls = []string{server.URL + "/nacos"}
+	o.timeout = time.Second
+
+	stub := &stubConfigClient{}
+	client := newListConfigClient(stub, o)
+	list, ok := client.(*listClient)
+	if !ok {
+		t.Fatalf("expect a list client, got %T", client)
+	}
+
+	content, err := list.Export("test-group")
+	if err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	if got := content["a.json"]; got != `{"key":"a"}` {
+		t.Errorf("expect a.json content %q, got %q", `{"key":"a"}`, got)
+	}
+	if got := content["b.yaml"]; got != "key: b\n" {
+		t.Errorf("expect b.yaml content %q, got %q", "key: b\n", got)
+	}
+	if got := content["c"]; got != "ignored" {
+		t.Errorf("expect fallback base name c content %q, got %q", "ignored", got)
+	}
+}
+
+// TestSourceLoadWithExport verifies that the first full load uses the export shortcut on a
+// listClient and does not issue GetConfig calls per item.
+func TestSourceLoadWithExport(t *testing.T) {
+	stub := &stubConfigClient{}
+	o := defaultOptions()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nacos" + configListPath:
+			// SearchConfig returns dataId + md5 (no content, as usual for v3 admin list)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"message":"success","data":{"totalCount":2,"pageNumber":1,"pagesAvailable":1,"pageItems":[{"dataId":"a.json","groupName":"test-group","md5":"m1"},{"dataId":"b.yaml","groupName":"test-group","md5":"m2"}]}}`))
+		case "/nacos" + configExportPath:
+			// Export returns ZIP with content
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(makeExportZip("test-group", map[string]string{
+				"a.json": `content-of-a`,
+				"b.yaml": "content-of-b",
+			}))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	o.urls = []string{server.URL + "/nacos"}
+	o.groupName = "test-group"
+	o.timeout = time.Second
+
+	source := &Source{}
+	source.opts = o
+	source.versions = make(map[string]uint64)
+	source.chListen = make(chan listenRequest)
+	source.chCancel = make(chan string)
+	source.cache = make(map[string]cachedItem)
+
+	lc := newListConfigClient(stub, o)
+	source.opts.client = lc
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if len(configs) != 2 {
+		t.Fatalf("expect 2 configs, got %d", len(configs))
+	}
+
+	// Export shortcut: GetConfig should NOT have been called.
+	if got := stub.getCalls.Load(); got != 0 {
+		t.Fatalf("expect 0 get config calls with export shortcut, got %d", got)
+	}
+
+	// Content must match what the export returned.
+	for _, c := range configs {
+		switch c.File {
+		case "a.json":
+			if string(c.Content) != "content-of-a" {
+				t.Errorf("a.json: expect %q, got %q", "content-of-a", string(c.Content))
+			}
+		case "b.yaml":
+			if string(c.Content) != "content-of-b" {
+				t.Errorf("b.yaml: expect %q, got %q", "content-of-b", string(c.Content))
+			}
+		default:
+			t.Errorf("unexpected config file %s", c.File)
+		}
+	}
+}
+
+// makeExportZip builds a ZIP payload matching the v3 admin export format: each entry is named
+// groupName/dataId and carries the configuration content.
+func makeExportZip(group string, contents map[string]string) []byte {
+	buf := bytes.NewBuffer(nil)
+	zw := zip.NewWriter(buf)
+	for name, content := range contents {
+		f, _ := zw.Create(group + "/" + name)
+		_, _ = f.Write([]byte(content))
+	}
+	_ = zw.Close()
+	return buf.Bytes()
 }
