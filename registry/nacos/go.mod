@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/dobyte/due/v2 v2.6.5
-	github.com/nacos-group/nacos-sdk-go/v2 v2.3.5
+	github.com/nacos-group/nacos-sdk-go/v2 v2.3.6
 	golang.org/x/sync v0.24.0
 )
 
