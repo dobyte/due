@@ -123,7 +123,20 @@ func TestSchedulerDispatchEvent(t *testing.T) {
 		t.Cleanup(func() { act.Destroy() })
 
 		var called atomic.Int32
-		act.events.Store(cluster.Connect, EventHandler(func(ctx Context) { called.Add(1) }))
+
+		// Register the handler through the actor task queue and wait until it has been applied, so
+		// that the event subscription is visible to the scheduler before the event is dispatched.
+		registered := make(chan struct{})
+		act.AddEventHandler(cluster.Connect, func(ctx Context) { called.Add(1) })
+		if _, err = act.taskQueue.Commit(func() { close(registered) }); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
+
+		select {
+		case <-registered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("the event handler should be registered")
+		}
 
 		n.scheduler.routes.Store(int32(1), "room")
 		if err = n.scheduler.bindActor(100, "room", "1"); err != nil {
@@ -145,6 +158,46 @@ func TestSchedulerDispatchEvent(t *testing.T) {
 		}
 		if called.Load() != 1 {
 			t.Fatalf("expect the actor event handler called once, got %d", called.Load())
+		}
+	})
+
+	t.Run("subscription removed on destroy", func(t *testing.T) {
+		n := newTestNode(t)
+		setWorking(n)
+
+		act, err := n.Proxy().Spawn(newStubProcessorCreator(), WithActorKind("room"), WithActorID("3"))
+		if err != nil {
+			t.Fatalf("spawn failed: %v", err)
+		}
+		t.Cleanup(func() { act.Destroy() })
+
+		registered := make(chan struct{})
+		act.AddEventHandler(cluster.Connect, func(ctx Context) {})
+		if _, err = act.taskQueue.Commit(func() { close(registered) }); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
+
+		select {
+		case <-registered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("the event handler should be registered")
+		}
+
+		if _, ok := n.scheduler.events.Load(cluster.Connect); !ok {
+			t.Fatal("the event subscription should exist")
+		}
+
+		act.Destroy()
+
+		if value, ok := n.scheduler.events.Load(cluster.Connect); ok {
+			entity := value.(*eventEntity)
+			entity.mu.RLock()
+			_, subscribed := entity.actors[act]
+			entity.mu.RUnlock()
+
+			if subscribed {
+				t.Fatal("a destroyed actor must not remain subscribed to events")
+			}
 		}
 	})
 

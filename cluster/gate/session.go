@@ -23,6 +23,11 @@ const defaultSessionShardNum = 256
 // that the shard is selected with a bit operation).
 const defaultChannelShardNum = 256
 
+// defaultBatchPushConcurrency is the maximum number of concurrent pushes in a batch. A push can
+// block while the write queue of a slow connection is full, so the fan-out is bounded to keep one
+// slow connection from delaying the rest of the batch without spawning a goroutine per session.
+const defaultBatchPushConcurrency = 64
+
 // channelHashSeed hashes channel names to select a channel shard.
 var channelHashSeed = maphash.MakeSeed()
 
@@ -89,12 +94,13 @@ func (s *sessionShard) unbind(uid, cid int64) (network.Conn, bool) {
 		return nil, false
 	}
 
-	if err := conn.Unbind(); err != nil {
-		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
-	}
-
+	err := conn.Unbind()
 	delete(s.conns, uid)
 	s.rw.Unlock()
+
+	if err != nil {
+		log.Warnf("unbind user failed: cid = %d, uid = %d, err = %v", conn.ID(), uid, err)
+	}
 
 	return conn, true
 }
@@ -536,57 +542,41 @@ func (s *session) multicast(kind cluster.Session, targets []int64, disconnect bo
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, len(conns), conns)
 }
 
 // broadcast pushes buf to every session of the given kind asynchronously. When disconnect is true,
 // each connection is closed after the push. It returns the number of sessions the message was
 // pushed to, or [errors.ErrInvalidSessionKind] for an unknown kind.
 func (s *session) broadcast(kind cluster.Session, disconnect bool, buf buffer.Buffer) (int64, error) {
-	var conns []network.Conn
+	var (
+		total  int
+		conns  [][]network.Conn
+		shards []sessionShard
+	)
 
 	switch kind {
 	case cluster.Conn:
-		total := 0
-		for i := range s.conns {
-			s.conns[i].rw.RLock()
-			total += len(s.conns[i].conns)
-		}
-		conns = make([]network.Conn, 0, total)
-		for i := range s.conns {
-			for _, conn := range s.conns[i].conns {
-				conns = append(conns, conn)
-			}
-		}
-		for i := range s.conns {
-			s.conns[i].rw.RUnlock()
-		}
+		shards = s.conns[:]
 	case cluster.User:
-		total := 0
-		for i := range s.users {
-			s.users[i].rw.RLock()
-			total += len(s.users[i].conns)
-		}
-		conns = make([]network.Conn, 0, total)
-		for i := range s.users {
-			for _, conn := range s.users[i].conns {
-				conns = append(conns, conn)
-			}
-		}
-		for i := range s.users {
-			s.users[i].rw.RUnlock()
-		}
+		shards = s.users[:]
 	default:
 		buf.Release()
 		return 0, errors.ErrInvalidSessionKind
 	}
 
-	if len(conns) == 0 {
-		buf.Release()
-		return 0, nil
+	conns = make([][]network.Conn, len(shards))
+	for i := range shards {
+		shards[i].rw.RLock()
+		total += len(shards[i].conns)
+		conns[i] = make([]network.Conn, 0, len(shards[i].conns))
+		for _, conn := range shards[i].conns {
+			conns[i] = append(conns[i], conn)
+		}
+		shards[i].rw.RUnlock()
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, total, conns[:]...)
 }
 
 // publish pushes buf to every session subscribed to channel asynchronously. When disconnect is
@@ -605,7 +595,7 @@ func (s *session) publish(channel string, disconnect bool, buf buffer.Buffer) (i
 		return 0, nil
 	}
 
-	return s.doBatchPush(conns, disconnect, buf)
+	return s.doBatchPush(disconnect, buf, len(conns), conns)
 }
 
 // subscribe subscribes the sessions in targets to channel. The kind selects whether each target is
@@ -761,60 +751,72 @@ func (s *session) stat(kind cluster.Session) (int64, error) {
 	}
 }
 
-// doBatchPush pushes buf to every conn in conns asynchronously. When disconnect is true, each
+// doBatchPush pushes buf to every conn in lists asynchronously. When disconnect is true, each
 // connection is closed after the push. It returns the number of sessions the message was pushed to.
-func (s *session) doBatchPush(conns []network.Conn, disconnect bool, buf buffer.Buffer) (int64, error) {
-	switch n := len(conns); n {
+//
+// The pushes run concurrently with a bounded fan-out: a push may block while the write queue of a
+// slow connection is full, and the bound keeps such a connection from delaying the rest of the
+// batch without spawning one goroutine per session. A single push runs inline.
+func (s *session) doBatchPush(disconnect bool, buf buffer.Buffer, total int, lists ...[]network.Conn) (int64, error) {
+	switch total {
 	case 0:
 		buf.Release()
 		return 0, nil
 	case 1:
-		if err := conns[0].Push(buf); err != nil {
-			buf.Release()
-			return 0, err
-		}
-
-		if disconnect {
-			_ = conns[0].Close()
-		}
-
-		return 1, nil
-	default:
-		var (
-			total atomic.Int64
-			eg, _ = task.WithContext(context.Background())
-		)
-
-		buf.Delay(n)
-
-		for _, conn := range conns {
-			eg.Go(func() error {
+		for _, list := range lists {
+			for _, conn := range list {
 				if err := conn.Push(buf); err != nil {
 					buf.Release()
-					return err
+					return 0, err
 				}
-
-				total.Add(1)
 
 				if disconnect {
 					if err := conn.Close(); err != nil {
 						log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
 					}
 				}
-
-				return nil
-			})
+			}
 		}
 
-		err := eg.Wait()
-		num := total.Load()
+		return 1, nil
+	default:
+		var (
+			num   int64
+			eg, _ = task.WithContext(context.Background())
+		)
 
-		if err != nil {
+		// Bound the fan-out so a slow connection cannot spawn one goroutine per session.
+		eg.SetLimit(defaultBatchPushConcurrency)
+
+		buf.Delay(total)
+
+		for _, list := range lists {
+			for _, conn := range list {
+				eg.Go(func() error {
+					if err := conn.Push(buf); err != nil {
+						buf.Release()
+						return err
+					}
+
+					atomic.AddInt64(&num, 1)
+
+					if disconnect {
+						if err := conn.Close(); err != nil {
+							log.Warnf("close conn failed: cid = %d, uid = %d, err = %v", conn.ID(), conn.UID(), err)
+						}
+					}
+
+					return nil
+				})
+			}
+		}
+
+		if err := eg.Wait(); err != nil {
 			if num == 0 {
 				return 0, err
-			} else {
-				log.Warnf("batch push partial failed: total = %d, err = %v", num, err)
 			}
+
+			log.Warnf("batch push partial failed: total = %d, err = %v", num, err)
 		}
 
 		return num, nil

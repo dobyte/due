@@ -228,9 +228,18 @@ func (a *Actor) AddEventHandler(event cluster.Event, handler EventHandler) {
 	}
 
 	if _, err := a.taskQueue.Commit(func() {
+		// The read lock serializes the registration with destroy, which takes the write lock before
+		// removing the actor from the event index. A registration that passed the started check is
+		// therefore always visible to the removal.
+		a.rw.RLock()
 		if a.started() {
 			a.events.Store(event, handler)
+
+			if a.opts.dispatch {
+				a.scheduler.subscribeEvent(event, a)
+			}
 		}
+		a.rw.RUnlock()
 	}); err != nil {
 		log.Warnf("add event handler %s failed, err: %v", event, err)
 	}
@@ -342,6 +351,13 @@ func (a *Actor) destroy() bool {
 	a.taskQueue.Close()
 	a.messageQueue.Close()
 	a.rw.Unlock()
+
+	// Remove the actor from the event index after the task queue has been closed: a registration
+	// that is still in flight holds the read lock and has completed before the write lock above was
+	// acquired, so no subscription is left behind or re-added afterwards.
+	if a.opts.dispatch {
+		a.scheduler.unsubscribeEvents(a)
+	}
 
 	// Release all tasks left in the task queue.
 	a.taskQueue.Clean()

@@ -50,8 +50,6 @@ func newClientConn(cli *client, conn *kcp.UDPSession) network.Conn {
 	c.dueBuffers = make([]buffer.Buffer, 0, maxBatchWriteNum)
 	c.netBuffers = make(net.Buffers, 0, 2*maxBatchWriteNum)
 	c.lastHeartbeatTime.Store(time.Now().UnixNano())
-	c.wg1.Go(func() { c.read(conn) })
-	c.wg2.Go(func() { c.write(conn) })
 
 	if c.cli.opts.mtu > 0 {
 		conn.SetMtu(c.cli.opts.mtu)
@@ -81,9 +79,16 @@ func newClientConn(cli *client, conn *kcp.UDPSession) network.Conn {
 		conn.SetWriteBuffer(c.cli.opts.writeBuffer)
 	}
 
-	if c.cli.connectHandler != nil {
-		c.cli.connectHandler(c)
-	}
+	c.wg2.Go(func() { c.write(conn) })
+	c.wg1.Go(func() {
+		// The connect hook runs before the read loop so that it always fires before the receive
+		// hook.
+		if c.cli.connectHandler != nil {
+			c.cli.connectHandler(c)
+		}
+
+		c.read(conn)
+	})
 
 	return c
 }
@@ -174,6 +179,15 @@ func (c *clientConn) Close(force ...bool) error {
 	} else {
 		return c.graceClose()
 	}
+}
+
+// CloseIf closes the connection forcibly when it is still the connection with the given ID.
+func (c *clientConn) CloseIf(id int64) error {
+	if c.id != id {
+		return errors.ErrConnectionClosed
+	}
+
+	return c.forceClose()
 }
 
 // LocalIP returns the local IP address.

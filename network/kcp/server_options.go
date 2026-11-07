@@ -210,6 +210,11 @@ func WithServerCloseTimeout(closeTimeout time.Duration) ServerOption {
 	}
 }
 
+// WithServerEnableProxyProtocol sets whether to enable the PROXY protocol.
+func WithServerEnableProxyProtocol(enableProxyProtocol bool) ServerOption {
+	return func(o *serverOptions) { o.enableProxyProtocol = enableProxyProtocol }
+}
+
 // WithServerMtu sets the maximum transmission unit.
 func WithServerMtu(mtu int) ServerOption {
 	return func(o *serverOptions) { o.mtu = mtu }

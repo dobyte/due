@@ -1,9 +1,12 @@
 package tcp_test
 
 import (
+	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"sync/atomic"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/dobyte/due/network/tcp/v2"
@@ -114,4 +117,175 @@ func TestServer_ChWrite(t *testing.T) {
 	v := unsafe.Sizeof(&chWrite{})
 
 	t.Logf("chWrite size: %d", v)
+}
+
+// TestServerListensOnDualStackForDefaultAddr verifies that the default listen address accepts both
+// IPv4 and IPv6 clients.
+func TestServerListensOnDualStackForDefaultAddr(t *testing.T) {
+	probe, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("IPv6 is not available")
+	}
+	_ = probe.Close()
+
+	server := tcp.NewServer(tcp.WithServerAddr(":0"), tcp.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, port, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if host != "::" {
+		t.Fatalf("expected a dual-stack listen address, actual: %s", server.Addr())
+	}
+
+	for _, ip := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), time.Second)
+		if err != nil {
+			t.Fatalf("dial %s failed: %v", ip, err)
+		}
+		_ = conn.Close()
+	}
+}
+
+// TestServerListensOnIPv4ForIPv4Wildcard verifies that an explicit IPv4 wildcard address binds an
+// IPv4-only socket.
+func TestServerListensOnIPv4ForIPv4Wildcard(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("0.0.0.0:0"), tcp.WithServerHeartbeatInterval(0))
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	host, _, err := net.SplitHostPort(server.Addr())
+	if err != nil {
+		t.Fatalf("split listen addr failed: %v", err)
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.To4() == nil {
+		t.Fatalf("expected an IPv4 listen address, actual: %s", server.Addr())
+	}
+}
+
+// TestServerConnectHookBeforeReceive verifies that the connect hook completes before any frame is
+// handled.
+func TestServerConnectHookBeforeReceive(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("127.0.0.1:0"))
+
+	var order atomic.Int32
+	server.OnConnect(func(conn network.Conn) {
+		time.Sleep(100 * time.Millisecond)
+		order.Store(1)
+	})
+
+	received := make(chan struct{}, 1)
+	server.OnReceive(func(conn network.Conn, buf buffer.Buffer) {
+		buf.Release()
+
+		if order.Load() != 1 {
+			t.Error("receive ran before the connect hook returned")
+		}
+
+		received <- struct{}{}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+	defer func() { _ = server.Stop() }()
+
+	client := tcp.NewClient()
+	conn, err := client.Dial(server.Addr())
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	buf, err := packet.PackMessage(1, 1, []byte("ping"))
+	if err != nil {
+		t.Fatalf("pack message failed: %v", err)
+	}
+	if err = conn.Push(buf); err != nil {
+		t.Fatalf("push message failed: %v", err)
+	}
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("message was not received")
+	}
+}
+
+// TestServerDisconnectAfterConnectHook verifies that the disconnect hook runs only after the
+// connect hook returns, even when the connection is closed concurrently while the connect hook is
+// still running.
+func TestServerDisconnectAfterConnectHook(t *testing.T) {
+	server := tcp.NewServer(tcp.WithServerAddr("127.0.0.1:0"))
+
+	var (
+		order   atomic.Int32
+		entered = make(chan struct{})
+		release = make(chan struct{})
+	)
+
+	server.OnConnect(func(conn network.Conn) {
+		close(entered)
+		<-release
+		order.Store(1)
+	})
+
+	disconnected := make(chan struct{}, 1)
+	server.OnDisconnect(func(conn network.Conn) {
+		if order.Load() != 1 {
+			t.Error("disconnect ran before the connect hook returned")
+		}
+
+		disconnected <- struct{}{}
+	})
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server failed: %v", err)
+	}
+
+	clientSawClose := make(chan struct{}, 1)
+	client := tcp.NewClient()
+	client.OnDisconnect(func(conn network.Conn) { clientSawClose <- struct{}{} })
+
+	conn, err := client.Dial(server.Addr())
+	if err != nil {
+		t.Fatalf("dial server failed: %v", err)
+	}
+	defer conn.Close(true)
+
+	<-entered
+
+	stopped := make(chan struct{})
+	go func() {
+		_ = server.Stop()
+		close(stopped)
+	}()
+
+	// The server closes the underlying connection before waiting for the read goroutine, so the
+	// client observes the close while the server is still blocked on the connect hook.
+	select {
+	case <-clientSawClose:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not close the connection")
+	}
+
+	close(release)
+
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("disconnect hook was not invoked")
+	}
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server stop did not finish")
+	}
 }

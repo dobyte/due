@@ -9,8 +9,14 @@ import (
 	"github.com/dobyte/due/v2/internal/transporter/gate"
 )
 
-// providerIP is the address returned by the test provider.
-const providerIP = "192.168.0.88"
+const (
+	// providerIP is the address returned by the test provider.
+	providerIP = "192.168.0.88"
+	// providerIPv6 is the IPv6 address returned by the test provider.
+	providerIPv6 = "2408:db8::1"
+	// providerIPv6Target is the target for which the test provider returns an IPv6 address.
+	providerIPv6Target = 2
+)
 
 type provider struct {
 	gate.Provider
@@ -28,6 +34,10 @@ func (p *provider) Unbind(ctx context.Context, uid int64) error {
 
 // GetIP returns the client IP address.
 func (p *provider) GetIP(ctx context.Context, kind cluster.Session, target int64) (ip string, err error) {
+	if target == providerIPv6Target {
+		return providerIPv6, nil
+	}
+
 	return providerIP, nil
 }
 

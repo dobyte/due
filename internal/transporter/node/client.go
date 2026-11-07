@@ -22,6 +22,11 @@ func NewClient(cli *drpc.Client) *Client {
 	}
 }
 
+// Close closes the client and releases its connections.
+func (c *Client) Close() error {
+	return c.cli.Close()
+}
+
 // Trigger triggers an event on the node.
 func (c *Client) Trigger(ctx context.Context, event cluster.Event, cid, uid int64) error {
 	return c.cli.Push(ctx, protocol.EncodeTriggerReq(0, event, cid, uid), cid)

@@ -3,9 +3,11 @@ package quic
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"sync"
 	"sync/atomic"
 
+	innernet "github.com/dobyte/due/v2/core/net"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/network"
@@ -16,6 +18,7 @@ type serverRun struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	listener *quic.Listener
+	conn     net.PacketConn
 	manager  *serverConnMgr
 	done     chan struct{}
 	stopping bool
@@ -76,15 +79,29 @@ func (s *server) Start() error {
 		s.mu.Unlock()
 		return err
 	}
-	config := transportConfig(s.opts.heartbeatInterval)
-	config.HandshakeIdleTimeout = s.opts.handshakeTimeout
-	ln, err := quic.ListenAddr(s.opts.addr, &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{alpn}}, config)
+	network := innernet.ListenNetwork("udp", s.opts.addr)
+	addr, err := net.ResolveUDPAddr(network, s.opts.addr)
 	if err != nil {
 		s.mu.Unlock()
 		return err
 	}
+
+	conn, err := net.ListenUDP(network, addr)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+
+	config := transportConfig(s.opts.heartbeatInterval)
+	config.HandshakeIdleTimeout = s.opts.handshakeTimeout
+	ln, err := quic.Listen(conn, &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{alpn}}, config)
+	if err != nil {
+		_ = conn.Close()
+		s.mu.Unlock()
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &serverRun{ctx: ctx, cancel: cancel, listener: ln, manager: newServerConnMgr(s), done: make(chan struct{})}
+	r := &serverRun{ctx: ctx, cancel: cancel, listener: ln, conn: conn, manager: newServerConnMgr(s), done: make(chan struct{})}
 	s.run = r
 	s.mu.Unlock()
 	go s.serve(r)
@@ -96,9 +113,10 @@ func (s *server) Start() error {
 
 // Stop stops the server.
 //
-// It stops accepting new connections and closes pending as well as active transport connections.
-// Application-level callbacks may still be running after Stop returns, so Stop may also be called
-// from within a callback.
+// It stops accepting new connections, closes pending as well as active transport connections and
+// waits for the stop hook to finish. It must not be called synchronously from a network callback,
+// because the callback runs on the connection read goroutine that Stop waits for; call it from
+// another goroutine instead.
 func (s *server) Stop() error {
 	s.mu.Lock()
 	r := s.run
@@ -142,15 +160,26 @@ func (s *server) serve(r *serverRun) {
 	_ = r.listener.Close()
 	r.manager.close()
 	pending.Wait()
+	// quic.Listen does not take ownership of the packet connection, so close it after all
+	// connections have been drained.
+	_ = r.conn.Close()
+
 	s.mu.Lock()
 	if s.run == r {
 		s.run = nil
 	}
-	close(r.done)
 	s.mu.Unlock()
+
+	// Run the stop hook before closing done so that Stop does not return until the hook has
+	// finished. Clearing run first makes a Stop issued by the hook return immediately instead of
+	// waiting on itself.
 	if s.stopHandler != nil {
 		s.stopHandler()
 	}
+
+	s.mu.Lock()
+	close(r.done)
+	s.mu.Unlock()
 }
 
 func (s *server) handleConn(r *serverRun, id int64, qc *quic.Conn) {

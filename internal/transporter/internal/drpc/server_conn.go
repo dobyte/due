@@ -49,8 +49,8 @@ func newServerConn(svr *Server, conn *net.TCPConn) *ServerConn {
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.queue = queue.NewQueue[buffer.Buffer](int32(max(128, c.svr.opts.WriteQueueSize)), c.svr.opts.WriteTimeout)
 	c.wg1 = &sync.WaitGroup{}
-	c.wg1.Go(func() { c.read(conn) })
 	c.wg2 = &sync.WaitGroup{}
+	c.wg1.Go(func() { c.read(conn) })
 	c.wg2.Go(func() { c.write(c.conn) })
 
 	return c
@@ -123,8 +123,9 @@ func (c *ServerConn) read(conn *net.TCPConn) {
 				// after the client suppresses idle heartbeats.
 				c.lastHeartbeatTime.Store(time.Now().UnixNano())
 
-				// ignore empty packet
-				if buf.Len() == 0 {
+				// Ignore empty push frames. A request may legitimately carry an empty payload,
+				// such as GetState, and must still reach its handler.
+				if seq == 0 && buf.Len() == 0 {
 					buf.Release()
 					continue
 				}

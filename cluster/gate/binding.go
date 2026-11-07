@@ -9,7 +9,9 @@ const bindingShardNum = 256
 // bindingLock is one shard of the binding locks.
 //
 // Binding operations are sharded by the low bits of the ID to dilute lock contention; the struct is
-// padded to a 64-byte cache line to avoid false sharing between adjacent shards.
+// padded to a 64-byte cache line to avoid false sharing between adjacent shards. The containing
+// array must start on a cache line boundary, so Gate keeps the binding lock arrays at the beginning
+// of its struct.
 type bindingLock struct {
 	mu sync.Mutex
 	_  [56]byte

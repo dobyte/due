@@ -13,15 +13,19 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/task"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
 // Name is the name of the config source.
 const Name = "nacos"
+
+// loadConcurrency limits the concurrent content fetches of one config list page, so that a full
+// load does not allocate an unbounded number of requests and goroutines at once.
+const loadConcurrency = 8
 
 // listenRequest is a listen request. It carries a dataId and the channel used to
 // report the listen result.
@@ -30,20 +34,28 @@ type listenRequest struct {
 	done   chan error // Channel reporting the listen result
 }
 
+// cachedItem is the cached content of one config item.
+type cachedItem struct {
+	md5     string // Md5 reported by the config list
+	content string // Config content
+}
+
 // Source is a config source backed by Nacos.
 type Source struct {
-	err      error              // Error encountered while building the client
-	opts     *options           // Config options
-	ctx      context.Context    // Context
-	cancel   context.CancelFunc // Cancel function
-	builtin  bool               // Whether the client is built in
-	version  uint64             // Current search version
-	versions map[string]uint64  // Search version of each dataId
-	chListen chan listenRequest // Listen request channel
-	chCancel chan string        // Cancel-listen request channel
-	watchers sync.Map           // Watcher set
-	once     sync.Once          // Ensures the shutdown runs only once
-	wg       sync.WaitGroup     // Wait group for goroutine exit
+	err      error                 // Error encountered while building the client
+	opts     *options              // Config options
+	ctx      context.Context       // Context
+	cancel   context.CancelFunc    // Cancel function
+	builtin  bool                  // Whether the client is built in
+	version  uint64                // Current search version
+	versions map[string]uint64     // Search version of each dataId
+	chListen chan listenRequest    // Listen request channel
+	chCancel chan string           // Cancel-listen request channel
+	watchers sync.Map              // Watcher set
+	once     sync.Once             // Ensures the shutdown runs only once
+	wg       sync.WaitGroup        // Wait group for goroutine exit
+	cacheMu  sync.Mutex            // Guards the content cache
+	cache    map[string]cachedItem // Content cache of the last full load, keyed by dataId
 }
 
 // NewSource creates a config source. It builds a Nacos config center client from
@@ -62,6 +74,7 @@ func NewSource(opts ...Option) config.Source {
 	s.versions = make(map[string]uint64)
 	s.chListen = make(chan listenRequest)
 	s.chCancel = make(chan string)
+	s.cache = make(map[string]cachedItem)
 
 	if o.client == nil {
 		o.client, s.err = s.buildClient()
@@ -91,7 +104,9 @@ func (s *Source) Name() string {
 // Load loads configuration items.
 //
 // When file is provided it loads only that item; otherwise it pages through and
-// loads every item under the group.
+// loads every item under the group. On the very first full load (cache empty) Load asks the
+// client to export all contents in one shot if supported, so N GetConfig calls are replaced by
+// a single ZIP download. Later full loads keep the md5-reuse shortcut.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -103,92 +118,221 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		} else {
 			return []*config.Configuration{configuration}, nil
 		}
-	} else {
-		var (
-			mu             sync.Mutex
-			index          = 1
-			configurations = make([]*config.Configuration, 0)
-		)
+	}
 
-		for {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
-				// continue
+	var (
+		index          = 1
+		configurations = make([]*config.Configuration, 0)
+		loaded         = make(map[string]cachedItem) // Content cache of this load
+	)
+
+	// Optional: one-shot export to skip N GetConfig calls on the first load.
+	var exportContent map[string]string
+	if s.cacheIsEmpty() {
+		if ec, ok := s.opts.client.(exportClient); ok {
+			if contentMap, err := ec.Export(s.opts.groupName); err == nil && len(contentMap) > 0 {
+				exportContent = contentMap
 			}
+		}
+	}
 
-			result, err := s.opts.client.SearchConfig(vo.SearchConfigParam{
-				Search:   "blur",
-				Group:    s.opts.groupName,
-				PageNo:   index,
-				PageSize: 20,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			switch len(result.PageItems) {
-			case 0:
-				// ignore
-			case 1:
-				if configuration, err := s.load(ctx, result.PageItems[0].DataId); err != nil {
-					return nil, err
-				} else {
-					configurations = append(configurations, configuration)
-				}
-			default:
-				wg, _ := task.WithContext(ctx)
-
-				for _, item := range result.PageItems {
-					wg.Go(func() error {
-						configuration, err := s.load(ctx, item.DataId)
-						if err != nil {
-							return err
-						}
-
-						mu.Lock()
-						configurations = append(configurations, configuration)
-						mu.Unlock()
-
-						return nil
-					})
-				}
-
-				if err := wg.Wait(); err != nil {
-					return nil, err
-				}
-			}
-
-			if result.PageNumber >= result.PagesAvailable {
-				break
-			}
-
-			index = result.PageNumber + 1
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			// continue
 		}
 
-		return configurations, nil
+		result, err := s.opts.client.SearchConfig(vo.SearchConfigParam{
+			Search:   "blur",
+			Group:    s.opts.groupName,
+			PageNo:   index,
+			PageSize: 20,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if len(result.PageItems) > 0 {
+			if exportContent != nil {
+				// Export shortcut: content already fetched, skip GetConfig per item.
+				for _, item := range result.PageItems {
+					content := exportContent[item.DataId]
+					if content == "" {
+						// The export missed this item; fetch it individually.
+						c, err := s.fetchContent(ctx, item.DataId)
+						if err != nil {
+							return nil, err
+						}
+						content = c
+					}
+
+					configurations = append(configurations, s.conv(item.DataId, content))
+					loaded[item.DataId] = cachedItem{md5: item.Md5, content: content}
+				}
+			} else {
+				configs, entries, err := s.loadItems(ctx, result.PageItems)
+				if err != nil {
+					return nil, err
+				}
+
+				configurations = append(configurations, configs...)
+
+				for dataId, entry := range entries {
+					loaded[dataId] = entry
+				}
+			}
+		}
+
+		if result.PageNumber >= result.PagesAvailable {
+			break
+		}
+
+		index = result.PageNumber + 1
 	}
+
+	// Replace the cache with the items of this load, so that removed items do not stay cached.
+	s.replaceCache(loaded)
+
+	return configurations, nil
 }
 
 // load loads a single configuration item. It fetches the content from the Nacos
 // server by dataId and converts it into the unified configuration structure.
 func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	content, err := s.opts.client.GetConfig(vo.ConfigParam{
-		DataId: file,
-		Group:  s.opts.groupName,
-	})
+	content, err := s.fetchContent(ctx, file)
 	if err != nil {
 		return nil, err
 	}
 
-	configuration := s.conv(file, content)
+	return s.conv(file, content), nil
+}
 
-	return configuration, nil
+// loadItems loads one config list page. It reuses the cached content of an unchanged item and
+// fetches the content of a new or changed one, with a bounded number of concurrent requests.
+func (s *Source) loadItems(ctx context.Context, items []model.ConfigItem) ([]*config.Configuration, map[string]cachedItem, error) {
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		firstErr error
+		configs  = make([]*config.Configuration, 0, len(items))
+		entries  = make(map[string]cachedItem, len(items))
+		tokens   = make(chan struct{}, loadConcurrency)
+	)
+
+	for _, item := range items {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return nil, nil, ctx.Err()
+		case tokens <- struct{}{}:
+		}
+
+		wg.Add(1)
+
+		go func(item model.ConfigItem) {
+			defer wg.Done()
+			defer func() { <-tokens }()
+
+			content, ok := s.cachedContent(item)
+			if !ok {
+				fetched, err := s.fetchContent(ctx, item.DataId)
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					mu.Unlock()
+					return
+				}
+
+				content = fetched
+			}
+
+			mu.Lock()
+			configs = append(configs, s.conv(item.DataId, content))
+			entries[item.DataId] = cachedItem{md5: item.Md5, content: content}
+			mu.Unlock()
+		}(item)
+	}
+
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, nil, firstErr
+	}
+
+	return configs, entries, nil
+}
+
+// cachedContent returns the content of an item that does not need to be fetched again. The content
+// of an unchanged item is reused from the previous load, and a page that carries the content itself
+// is used as is.
+func (s *Source) cachedContent(item model.ConfigItem) (string, bool) {
+	if s.opts.openKMS {
+		// Decryption has to run on the content returned by the server.
+		return "", false
+	}
+
+	if item.Content != "" {
+		return item.Content, true
+	}
+
+	if item.Md5 == "" {
+		return "", false
+	}
+
+	s.cacheMu.Lock()
+	entry, ok := s.cache[item.DataId]
+	s.cacheMu.Unlock()
+
+	if ok && entry.md5 == item.Md5 && entry.content != "" {
+		return entry.content, true
+	}
+
+	return "", false
+}
+
+// fetchContent fetches the content of one dataId from the Nacos server.
+func (s *Source) fetchContent(ctx context.Context, file string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	return s.opts.client.GetConfig(vo.ConfigParam{
+		DataId: file,
+		Group:  s.opts.groupName,
+	})
+}
+
+// replaceCache swaps the content cache with the items of the last full load.
+func (s *Source) replaceCache(items map[string]cachedItem) {
+	s.cacheMu.Lock()
+	s.cache = items
+	s.cacheMu.Unlock()
+}
+
+// invalidateCache drops the cached content of an item whose content changed.
+func (s *Source) invalidateCache(file string) {
+	s.cacheMu.Lock()
+	delete(s.cache, file)
+	s.cacheMu.Unlock()
+}
+
+// cacheIsEmpty reports whether the content cache has no entry. It is used to decide whether the
+// export shortcut can substitute N GetConfig calls during the very first full load.
+func (s *Source) cacheIsEmpty() bool {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	return len(s.cache) == 0
+}
+
+// exportClient is implemented by config clients that can batch-export all configurations at once,
+// bypassing N individual GetConfig requests on the first full load. listClient implements it; the
+// fallback SDK client does not, so Load degrades to per-config fetch transparently.
+type exportClient interface {
+	Export(group string) (map[string]string, error)
 }
 
 // Store stores a configuration item.
@@ -419,6 +563,9 @@ func (s *Source) requestListen(dataId string) error {
 // pushes a configuration change and notifies every registered watcher of the new
 // configuration.
 func (s *Source) onChange(_, _, file, content string) {
+	// The cached content is stale now; the next full load fetches it again.
+	s.invalidateCache(file)
+
 	configuration := s.conv(file, content)
 
 	s.watchers.Range(func(key, value any) bool {
@@ -431,34 +578,49 @@ func (s *Source) onChange(_, _, file, content string) {
 // buildClient builds the Nacos config client. It parses the server address list
 // and builds a Nacos config center client; an address may carry an optional
 // scheme, defaulting to http.
+//
+// The built-in client lists configurations through the Nacos v3 admin API when
+// the server supports it, so a periodic search does not transfer the content of
+// every configuration. Servers without the v3 admin API fall back to the SDK
+// search at runtime.
 func (s *Source) buildClient() (config_client.IConfigClient, error) {
-	param := vo.NacosClientParam{
-		ServerConfigs: make([]constant.ServerConfig, 0, len(s.opts.urls)),
-		ClientConfig: &constant.ClientConfig{
-			TimeoutMs:            uint64(s.opts.timeout.Milliseconds()),
-			NamespaceId:          s.opts.namespaceId,
-			ClusterName:          s.opts.clusterName,
-			Endpoint:             s.opts.endpoint,
-			RegionId:             s.opts.regionId,
-			AccessKey:            s.opts.accessKey,
-			SecretKey:            s.opts.secretKey,
-			OpenKMS:              s.opts.openKMS,
-			CacheDir:             s.opts.cacheDir,
-			Username:             s.opts.username,
-			Password:             s.opts.password,
-			LogDir:               s.opts.logDir,
-			LogLevel:             s.opts.logLevel,
-			NotLoadCacheAtStart:  true,
-			UpdateCacheWhenEmpty: true,
-		},
+	serverConfigs, endpoint, err := newServerConfigs(s.opts.urls)
+
+	if len(serverConfigs) == 0 {
+		if err != nil {
+			return nil, err
+		} else {
+			return nil, errors.New("invalid server urls")
+		}
+	} else {
+		if err != nil {
+			log.Warnf("%s parse failed: %v", endpoint, err)
+		}
+
+		clientConfig := newClientConfig(s.opts)
+		client, err := clients.NewConfigClient(vo.NacosClientParam{
+			ServerConfigs: serverConfigs,
+			ClientConfig:  &clientConfig,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return newListConfigClient(client, s.opts), nil
 	}
+}
+
+// newServerConfigs parses the server address list. An address may carry an
+// optional scheme, defaulting to http.
+func newServerConfigs(urls []string) ([]constant.ServerConfig, string, error) {
+	configs := make([]constant.ServerConfig, 0, len(urls))
 
 	var (
 		err      error
 		endpoint string
 	)
 
-	for _, v := range s.opts.urls {
+	for _, v := range urls {
 		if !strings.Contains(v, "://") {
 			v = "http://" + v
 		}
@@ -481,7 +643,7 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 			continue
 		}
 
-		param.ServerConfigs = append(param.ServerConfigs, constant.ServerConfig{
+		configs = append(configs, constant.ServerConfig{
 			Scheme:      raw.Scheme,
 			ContextPath: raw.Path,
 			IpAddr:      host,
@@ -489,18 +651,27 @@ func (s *Source) buildClient() (config_client.IConfigClient, error) {
 		})
 	}
 
-	if len(param.ServerConfigs) == 0 {
-		if err != nil {
-			return nil, err
-		} else {
-			return nil, errors.New("invalid server urls")
-		}
-	} else {
-		if err != nil {
-			log.Warnf("%s parse failed: %v", endpoint, err)
-		}
+	return configs, endpoint, err
+}
 
-		return clients.NewConfigClient(param)
+// newClientConfig builds the Nacos client config from the source options.
+func newClientConfig(o *options) constant.ClientConfig {
+	return constant.ClientConfig{
+		TimeoutMs:            uint64(o.timeout.Milliseconds()),
+		NamespaceId:          o.namespaceId,
+		ClusterName:          o.clusterName,
+		Endpoint:             o.endpoint,
+		RegionId:             o.regionId,
+		AccessKey:            o.accessKey,
+		SecretKey:            o.secretKey,
+		OpenKMS:              o.openKMS,
+		CacheDir:             o.cacheDir,
+		Username:             o.username,
+		Password:             o.password,
+		LogDir:               o.logDir,
+		LogLevel:             o.logLevel,
+		NotLoadCacheAtStart:  true,
+		UpdateCacheWhenEmpty: true,
 	}
 }
 

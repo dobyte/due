@@ -15,12 +15,12 @@ shutdownMaxWaitTime = "0s"
         id = ""
         # 实例名称
         name = "gate"
-        # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
-        dispatch = "random"
         # 内建RPC服务器监听地址。不填写默认随机监听
         addr = ":0"
         # 是否将内建RPC通信地址暴露到公网。默认为false
         expose = false
+        # 无状态路由消息分发策略。支持策略：随机（random）、轮询（rr）、加权轮询（wrr）。默认为random
+        dispatch = "random"
         # 实例元数据
         [cluster.gate.metadata]
             # 键值对，且均为字符串类型。由于注册中心的元数据参数限制，建议将键值对的数量控制在20个以内，键的字符长度控制在127个字符内，值得字符长度控制在512个字符内。
@@ -41,6 +41,38 @@ shutdownMaxWaitTime = "0s"
             commandQueueSize = 4096
             # 命令写入超时时间，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认0s（不超时）
             commandWriteTimeout = "0s"
+        # 连接限流配置
+        [cluster.gate.limiter]
+            # 限流配额（限流周期内允许的消息数）。默认为0（不启用限流）
+            quota = 0
+            # 限流周期，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1s
+            period = "1s"
+            # 突发容量，默认为0（使用限流配额的向上取整值）
+            burst = 0
+            # 连续被限流的消息数达到该值后关闭连接。默认为100（0表示不关闭）
+            closeThreshold = 100
+        # 连接防护与封禁配置
+        [cluster.gate.guard]
+            # 每个IP允许的最大并发连接数。默认为0（不限制）
+            maxConns = 0
+            # 防护表最大IP条目数。达到上限后新IP不再跟踪（fail-open）。默认65536
+            maxEntries = 65536
+            # 每个IP在准入周期内允许的连接数。默认为0（不限制）
+            quota = 0
+            # 准入周期，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1s
+            period = "1s"
+            # 准入突发容量，默认为0（使用quota的向上取整值）
+            burst = 0
+            # 白名单IP或CIDR，多个用逗号分隔。白名单IP绕过准入限制和封禁。默认为空
+            whitelist = ""
+            # 触发封禁的窗口内违规次数。默认为0（不启用自动封禁）。消息限流违规需要同时启用limiter
+            strikeThreshold = 0
+            # 违规统计窗口，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为5m
+            strikeWindow = "5m"
+            # 首次封禁时长，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1m
+            minBanDuration = "1m"
+            # 封禁时长上限，支持单位：纳秒（ns）、微秒（us | µs）、毫秒（ms）、秒（s）、分（m）、小时（h）、天（d）。默认为1h
+            maxBanDuration = "1h"
     # 集群节点配置
     [cluster.node]
         # 实例ID，集群中唯一。不填写默认自动生成唯一的实例ID
@@ -550,7 +582,7 @@ shutdownMaxWaitTime = "0s"
     [network.ws]
         # ws网络服务器
         [network.ws.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 客户端连接路径
             path = "/"
@@ -630,7 +662,7 @@ shutdownMaxWaitTime = "0s"
     [network.tcp]
         # tcp网络服务器
         [network.tcp.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 私钥文件
             keyFile = ""
@@ -678,7 +710,7 @@ shutdownMaxWaitTime = "0s"
     [network.quic]
         # quic网络服务器
         [network.quic.server]
-            # 服务器监听地址
+            # 服务器监听地址。默认为:3553，绑定双栈（IPv4与IPv6）；0.0.0.0:3553仅绑定IPv4；[::]:3553绑定双栈；[fd00::10]:3553仅绑定指定IPv6地址
             addr = ":3553"
             # 私钥文件
             keyFile = ""

@@ -98,9 +98,9 @@ func (s *Server) getIP(conn *drpc.ServerConn, seq uint64, req *buffer.Bytes) err
 
 	if seq == 0 {
 		return err
-	} else {
-		return conn.Push(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
 	}
+
+	return conn.Push(protocol.EncodeGetIPRes(seq, codes.ErrorToCode(err), ip))
 }
 
 // stat returns the total number of online sessions.
