@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
@@ -351,6 +352,45 @@ func TestListClientDoubleWrap(t *testing.T) {
 
 	if client := newListConfigClient(inner, nil); client != inner {
 		t.Fatalf("expect the existing list client, got %T", client)
+	}
+}
+
+// TestServerAddress verifies that the context path and scheme are normalized before being joined
+// with the API path.
+func TestServerAddress(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  constant.ServerConfig
+		want string
+	}{
+		{
+			name: "context path with leading and trailing slashes",
+			cfg:  constant.ServerConfig{Scheme: "https", IpAddr: "10.0.0.1", Port: 443, ContextPath: "/nacos/"},
+			want: "https://10.0.0.1:443/nacos" + configListPath,
+		},
+		{
+			name: "context path without slashes",
+			cfg:  constant.ServerConfig{Scheme: "http", IpAddr: "127.0.0.1", Port: 8848, ContextPath: "nacos"},
+			want: "http://127.0.0.1:8848/nacos" + configListPath,
+		},
+		{
+			name: "root context path",
+			cfg:  constant.ServerConfig{Scheme: "http", IpAddr: "127.0.0.1", Port: 8848, ContextPath: "/"},
+			want: "http://127.0.0.1:8848" + configListPath,
+		},
+		{
+			name: "empty context path falls back to the default scheme and web context",
+			cfg:  constant.ServerConfig{IpAddr: "127.0.0.1", Port: 8848},
+			want: "http://127.0.0.1:8848/nacos" + configListPath,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := serverAddress(tt.cfg, configListPath); got != tt.want {
+				t.Errorf("expect %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
 

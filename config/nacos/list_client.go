@@ -239,25 +239,31 @@ func (c *listClient) login() error {
 	return lastErr
 }
 
-// loginAt sends one login request to the given server and returns the access token and TTL.
-func (c *listClient) loginAt(server constant.ServerConfig) (token string, ttl int64, err error) {
+// serverAddress builds an absolute URL for the given server and API path. The context path is
+// normalized to a single leading slash and no trailing slash.
+func serverAddress(server constant.ServerConfig, apiPath string) string {
 	contextPath := server.ContextPath
 	if contextPath == "" {
 		contextPath = constant.WEB_CONTEXT
 	}
-	if !strings.HasPrefix(contextPath, "/") {
-		contextPath = "/" + contextPath
-	}
-	if strings.HasSuffix(contextPath, "/") {
-		contextPath = contextPath[:len(contextPath)-1]
-	}
+	contextPath = strings.Trim(contextPath, "/")
 
 	scheme := server.Scheme
 	if scheme == "" {
 		scheme = "http"
 	}
 
-	reqURL := scheme + "://" + server.IpAddr + ":" + strconv.FormatUint(server.Port, 10) + contextPath + v3LoginPath
+	address := scheme + "://" + server.IpAddr + ":" + strconv.FormatUint(server.Port, 10)
+	if contextPath != "" {
+		address += "/" + contextPath
+	}
+
+	return address + apiPath
+}
+
+// loginAt sends one login request to the given server and returns the access token and TTL.
+func (c *listClient) loginAt(server constant.ServerConfig) (token string, ttl int64, err error) {
+	reqURL := serverAddress(server, v3LoginPath)
 
 	header := http.Header{"content-type": []string{"application/x-www-form-urlencoded"}}
 
@@ -370,7 +376,7 @@ func (c *listClient) requestRaw(path string, params map[string]string) ([]byte, 
 	var lastErr error
 
 	for _, server := range c.servers {
-		url := configAdminAddress(server, path)
+		url := serverAddress(server, path)
 		resp, err := c.agent.Get(url, http.Header{}, c.timeout, params)
 		if err != nil {
 			lastErr = err
@@ -412,15 +418,14 @@ func parseExport(data []byte, group string) (map[string]string, error) {
 	prefix := group + "/"
 
 	for _, f := range zr.File {
-		// Skip directories and empty files.
-		if f.FileInfo().IsDir() || f.FileInfo().Size() == 0 {
+		// Skip directory entries and empty files, whose content cannot be distinguished from a
+		// missing entry in the returned map.
+		if info := f.FileInfo(); info.IsDir() || info.Size() == 0 {
 			continue
 		}
 
-		name := f.Name
-		if strings.HasPrefix(name, prefix) {
-			name = strings.TrimPrefix(name, prefix)
-		}
+		// Entries are named groupName/dataId; strip the group prefix when present.
+		name, _ := strings.CutPrefix(f.Name, prefix)
 		// Strip any remaining directory components inside the group.
 		name = path.Base(name)
 		if name == "." || name == "/" {
@@ -442,24 +447,6 @@ func parseExport(data []byte, group string) (map[string]string, error) {
 	}
 
 	return result, nil
-}
-
-// configAdminAddress builds a full v3 admin API URL from the given server and path.
-func configAdminAddress(server constant.ServerConfig, apiPath string) string {
-	contextPath := server.ContextPath
-	if contextPath == "" {
-		contextPath = constant.WEB_CONTEXT
-	}
-	if !strings.HasPrefix(contextPath, "/") {
-		contextPath = "/" + contextPath
-	}
-
-	scheme := server.Scheme
-	if scheme == "" {
-		scheme = "http"
-	}
-
-	return scheme + "://" + server.IpAddr + ":" + strconv.FormatUint(server.Port, 10) + contextPath + apiPath
 }
 
 // list requests one page from the v3 admin API, trying every configured server in turn.
@@ -517,7 +504,7 @@ func (c *listClient) request(server constant.ServerConfig, params map[string]str
 		params[constant.KEY_ACCESS_TOKEN] = token
 	}
 
-	resp, err := c.agent.Get(configListAddress(server), http.Header{}, c.timeout, params)
+	resp, err := c.agent.Get(serverAddress(server, configListPath), http.Header{}, c.timeout, params)
 	if err != nil {
 		return "", err
 	}
@@ -533,24 +520,6 @@ func (c *listClient) request(server constant.ServerConfig, params map[string]str
 	}
 
 	return string(body), nil
-}
-
-// configListAddress builds the list URL of the given server.
-func configListAddress(server constant.ServerConfig) string {
-	contextPath := server.ContextPath
-	if contextPath == "" {
-		contextPath = constant.WEB_CONTEXT
-	}
-	if !strings.HasPrefix(contextPath, "/") {
-		contextPath = "/" + contextPath
-	}
-
-	scheme := server.Scheme
-	if scheme == "" {
-		scheme = "http"
-	}
-
-	return scheme + "://" + server.IpAddr + ":" + strconv.FormatUint(server.Port, 10) + contextPath + configListPath
 }
 
 // parseConfigList decodes one list response.
