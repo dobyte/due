@@ -1,20 +1,24 @@
 package nacos
 
 import (
-	"context"
+	"archive/zip"
+	"bytes"
+	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/http_agent"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/nacos_error"
-	"github.com/nacos-group/nacos-sdk-go/v2/common/nacos_server"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
@@ -24,6 +28,18 @@ import (
 // every configuration.
 const configListPath = "/v3/admin/cs/config/list"
 
+// configExportPath is the Nacos v3 admin API that exports all configurations of a group as a
+// ZIP archive. Unlike the list endpoint, each entry carries the full configuration content.
+const configExportPath = "/v3/admin/cs/config/export"
+
+// v3LoginPath is the Nacos 3.x authentication endpoint. The SDK security proxy still targets the
+// removed /v1/auth/users/login path, so the list client authenticates against this endpoint directly.
+const v3LoginPath = "/v3/auth/user/login"
+
+// reLoginWindowSeconds is the minimum interval between forced login attempts after a 403, matching
+// the SDK throttle to avoid login storms.
+const reLoginWindowSeconds = 60
+
 // listClient decorates a config client so that SearchConfig lists configurations through the Nacos
 // v3 admin API. Every other method is delegated to the wrapped client.
 //
@@ -32,13 +48,20 @@ const configListPath = "/v3/admin/cs/config/list"
 // to the wrapped SearchConfig and disables the v3 path for the rest of its lifetime.
 type listClient struct {
 	config_client.IConfigClient
-	server       *nacos_server.NacosServer
-	tenant       string
-	timeout      uint64
-	cancel       context.CancelFunc
-	disabled     atomic.Bool
-	warnOnce     sync.Once
-	fallbackOnce sync.Once
+	servers      []constant.ServerConfig // Server address list used by the list requests
+	tenant       string                  // Namespace id
+	username     string                  // Nacos account username for v3 admin auth
+	password     string                  // Nacos account password for v3 admin auth
+	timeout      uint64                  // Request timeout in milliseconds
+	agent        http_agent.IHttpAgent   // HTTP agent shared by the list requests
+	accessToken  atomic.Value            // Cached access token (string), set by login
+	tokenTtl     int64                   // Token lifetime in seconds, 0 when unknown
+	lastRefresh  int64                   // Unix timestamp of the last successful login
+	reLoginFlag  atomic.Bool             // Whether the next login must bypass the ttl window
+	loginMu      sync.Mutex              // Serializes concurrent login attempts
+	disabled     atomic.Bool             // Whether the v3 path is permanently unavailable
+	warnOnce     sync.Once               // Ensures the unavailable warning is logged once
+	fallbackOnce sync.Once               // Ensures the transient failure warning is logged once
 }
 
 // NewListConfigClient wraps client so that SearchConfig lists configurations through the Nacos v3
@@ -50,9 +73,9 @@ type listClient struct {
 // when the server does not provide the v3 admin API, and is returned unchanged for ACM endpoint or
 // AccessKey deployments, where the admin API is not applicable. A nil client returns nil.
 //
-// The caller owns the returned client and must call CloseClient when it is no longer needed. Use
-// WithContext to control the lifetime of the internal token refresh. When a username is configured,
-// the wrapper keeps its own token refresh goroutine in addition to the one of the wrapped client.
+// The caller owns the returned client and must call CloseClient when it is no longer needed. The
+// wrapper starts no goroutine of its own: the access token is refreshed lazily when a list request
+// is rejected.
 func NewListConfigClient(client config_client.IConfigClient, opts ...Option) config_client.IConfigClient {
 	if client == nil {
 		return nil
@@ -63,12 +86,12 @@ func NewListConfigClient(client config_client.IConfigClient, opts ...Option) con
 		opt(o)
 	}
 
-	return newListConfigClient(client, o, o.ctx)
+	return newListConfigClient(client, o)
 }
 
 // newListConfigClient wraps client with the v3 list implementation. It returns client unchanged when
 // the options describe a deployment that cannot use the v3 admin API.
-func newListConfigClient(client config_client.IConfigClient, o *options, ctx context.Context) config_client.IConfigClient {
+func newListConfigClient(client config_client.IConfigClient, o *options) config_client.IConfigClient {
 	if client == nil {
 		return nil
 	}
@@ -76,6 +99,10 @@ func newListConfigClient(client config_client.IConfigClient, o *options, ctx con
 	// Avoid wrapping a client that already uses the v3 list implementation, which would issue the
 	// same request twice on failure.
 	if _, ok := client.(*listClient); ok {
+		return client
+	}
+
+	if o == nil {
 		return client
 	}
 
@@ -91,29 +118,25 @@ func newListConfigClient(client config_client.IConfigClient, o *options, ctx con
 	}
 
 	clientConfig := newClientConfig(o)
-	listCtx, cancel := context.WithCancel(ctx)
-	server, err := nacos_server.NewNacosServer(
-		listCtx,
-		serverConfigs,
-		clientConfig,
-		&http_agent.HttpAgent{TlsConfig: clientConfig.TLSCfg},
-		uint64(o.timeout.Milliseconds()),
-		"",
-		nil,
-	)
-	if err != nil {
-		cancel()
-		log.Warnf("create nacos config list client failed: %v", err)
-		return client
+
+	// The access token is fetched lazily when the first list request is rejected, so the wrapper
+	// does not need a periodic refresh goroutine. A login here is best-effort: if it fails the
+	// first request will trigger it again.
+	agent := &http_agent.HttpAgent{TlsConfig: clientConfig.TLSCfg}
+
+	lc := &listClient{
+		IConfigClient: client,
+		servers:       serverConfigs,
+		tenant:        o.namespaceId,
+		username:      o.username,
+		password:      o.password,
+		timeout:       uint64(o.timeout.Milliseconds()),
+		agent:         agent,
 	}
 
-	return &listClient{
-		IConfigClient: client,
-		server:        server,
-		tenant:        o.namespaceId,
-		timeout:       uint64(o.timeout.Milliseconds()),
-		cancel:        cancel,
-	}
+	_ = lc.login()
+
+	return lc
 }
 
 // SearchConfig lists configurations through the v3 admin API. It falls back to the wrapped client
@@ -124,6 +147,23 @@ func (c *listClient) SearchConfig(param vo.SearchConfigParam) (*model.ConfigPage
 	}
 
 	page, err := c.list(param)
+	if err != nil && isAuthError(err) {
+		if c.username == "" {
+			// The v3 admin API requires authentication, but no credentials are configured. On
+			// Nacos 3.x the SDK fallback also targets the v3 admin list and would fail with the
+			// same 403, so falling back only retries the same failing request. Keep the v3 path
+			// enabled and return a clear error so every subsequent call surfaces it rather than
+			// silently falling through to the SDK's opaque retry error.
+			return nil, errNoCredentials
+		}
+
+		// The cached access token may have expired; refresh it once and retry.
+		c.invalidateToken()
+		if loginErr := c.login(); loginErr != nil {
+			log.Warnf("nacos v3 login failed after auth rejection: %v", loginErr)
+		}
+		page, err = c.list(param)
+	}
 	if err == nil {
 		return page, nil
 	}
@@ -142,13 +182,274 @@ func (c *listClient) SearchConfig(param vo.SearchConfigParam) (*model.ConfigPage
 	return c.IConfigClient.SearchConfig(param)
 }
 
-// CloseClient stops the token refresh of the v3 list client and closes the wrapped client.
+// CloseClient closes the wrapped client. The list client holds no goroutine to stop.
 func (c *listClient) CloseClient() {
-	c.cancel()
 	c.IConfigClient.CloseClient()
 }
 
-// list requests one page from the v3 admin API.
+// login authenticates against the Nacos 3.x /v3/auth/user/login endpoint and caches the access
+// token. It is idempotent and throttled: repeated calls within the token TTL window reuse the
+// cached token, and forced re-logins after a 403 are spaced by reLoginWindowSeconds.
+func (c *listClient) login() error {
+	if c.username == "" {
+		// No credentials configured; the server may still allow anonymous access.
+		return nil
+	}
+
+	c.loginMu.Lock()
+	defer c.loginMu.Unlock()
+
+	now := time.Now().Unix()
+
+	if c.lastRefresh > 0 {
+		if c.reLoginFlag.Load() {
+			if now-c.lastRefresh < reLoginWindowSeconds {
+				return nil
+			}
+		} else if c.tokenTtl > 0 {
+			// Refresh two windows before expiration to keep the token valid.
+			refreshAt := c.lastRefresh + c.tokenTtl - 2*(c.tokenTtl/10)
+			if now < refreshAt {
+				return nil
+			}
+		}
+	}
+
+	var lastErr error
+
+	for _, server := range c.servers {
+		token, ttl, err := c.loginAt(server)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		c.accessToken.Store(token)
+		c.tokenTtl = ttl
+		c.lastRefresh = now
+		c.reLoginFlag.Store(false)
+		log.Infof("nacos v3 login success, tokenTtl: %d seconds", ttl)
+		return nil
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("nacos v3 login failed: no server available")
+	}
+
+	return lastErr
+}
+
+// serverAddress builds an absolute URL for the given server and API path. The context path is
+// normalized to a single leading slash and no trailing slash.
+func serverAddress(server constant.ServerConfig, apiPath string) string {
+	contextPath := server.ContextPath
+	if contextPath == "" {
+		contextPath = constant.WEB_CONTEXT
+	}
+	contextPath = strings.Trim(contextPath, "/")
+
+	scheme := server.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	address := scheme + "://" + server.IpAddr + ":" + strconv.FormatUint(server.Port, 10)
+	if contextPath != "" {
+		address += "/" + contextPath
+	}
+
+	return address + apiPath
+}
+
+// loginAt sends one login request to the given server and returns the access token and TTL.
+func (c *listClient) loginAt(server constant.ServerConfig) (token string, ttl int64, err error) {
+	reqURL := serverAddress(server, v3LoginPath)
+
+	header := http.Header{"content-type": []string{"application/x-www-form-urlencoded"}}
+
+	resp, err := c.agent.Post(reqURL, header, c.timeout, map[string]string{
+		"username": c.username,
+		"password": c.password,
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", 0, errors.New(string(body))
+	}
+
+	var result struct {
+		AccessToken string `json:"accessToken"`
+		TokenTtl    int64  `json:"tokenTtl"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, err
+	}
+
+	if result.AccessToken == "" {
+		return "", 0, errors.New("nacos v3 login response missing accessToken")
+	}
+
+	return result.AccessToken, result.TokenTtl, nil
+}
+
+// getAccessToken returns the cached access token, logging in if it is missing or expired. It
+// returns an empty string when no credentials are configured.
+func (c *listClient) getAccessToken() (string, error) {
+	if v := c.accessToken.Load(); v != nil {
+		return v.(string), nil
+	}
+
+	if err := c.login(); err != nil {
+		return "", err
+	}
+
+	if v := c.accessToken.Load(); v != nil {
+		return v.(string), nil
+	}
+
+	return "", nil
+}
+
+// invalidateToken marks the cached token as rejected so the next login bypasses the TTL window.
+func (c *listClient) invalidateToken() {
+	c.reLoginFlag.Store(true)
+}
+
+// Export exports the content of every configuration under group as a map keyed by dataId.
+// The v3 admin export endpoint returns a ZIP archive whose entries are named as group/dataId.
+// Export returns nil when the v3 admin API is permanently unavailable.
+func (c *listClient) Export(group string) (map[string]string, error) {
+	if c.disabled.Load() {
+		return nil, nil
+	}
+
+	params := map[string]string{"groupName": group, "group": group}
+	if c.tenant != "" {
+		params["tenant"] = c.tenant
+		params["namespaceId"] = c.tenant
+	}
+
+	raw, err := c.requestRaw(configExportPath, params)
+	if err != nil && isAuthError(err) {
+		if c.username == "" {
+			// Same reasoning as SearchConfig: the SDK fallback for content fetch (GetConfig) may
+			// also require auth on Nacos 3.x. Return a clear error rather than failing opaquely.
+			return nil, errNoCredentials
+		}
+
+		c.invalidateToken()
+		if loginErr := c.login(); loginErr != nil {
+			log.Warnf("nacos v3 login failed after auth rejection: %v", loginErr)
+		}
+		raw, err = c.requestRaw(configExportPath, params)
+	}
+	if err != nil {
+		if isListUnavailable(err) {
+			c.disabled.Store(true)
+			c.warnOnce.Do(func() {
+				log.Warnf("nacos v3 config export is unavailable, falling back to per-config fetch: %v", err)
+			})
+		}
+		return nil, err
+	}
+
+	return parseExport(raw, group)
+}
+
+// requestRaw sends one HTTP GET request to the given path on every configured server in turn and
+// returns the response body bytes of the first successful response. It shares the same auth
+// injection logic as listClient.request.
+func (c *listClient) requestRaw(path string, params map[string]string) ([]byte, error) {
+	if token, err := c.getAccessToken(); err == nil && token != "" {
+		params[constant.KEY_ACCESS_TOKEN] = token
+	}
+
+	var lastErr error
+
+	for _, server := range c.servers {
+		url := serverAddress(server, path)
+		resp, err := c.agent.Get(url, http.Header{}, c.timeout, params)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			lastErr = nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), string(body), nil)
+			continue
+		}
+
+		return body, nil
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("nacos config export request failed")
+	}
+
+	return nil, lastErr
+}
+
+// parseExport parses the ZIP archive returned by the v3 admin export endpoint and returns a map
+// from dataId to content. ZIP entries are named as groupName/dataId so the group prefix is
+// stripped.
+func parseExport(data []byte, group string) (map[string]string, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string, len(zr.File))
+	prefix := group + "/"
+
+	for _, f := range zr.File {
+		// Skip directory entries and empty files, whose content cannot be distinguished from a
+		// missing entry in the returned map.
+		if info := f.FileInfo(); info.IsDir() || info.Size() == 0 {
+			continue
+		}
+
+		// Entries are named groupName/dataId; strip the group prefix when present.
+		name, _ := strings.CutPrefix(f.Name, prefix)
+		// Strip any remaining directory components inside the group.
+		name = path.Base(name)
+		if name == "." || name == "/" {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		result[name] = string(content)
+	}
+
+	return result, nil
+}
+
+// list requests one page from the v3 admin API, trying every configured server in turn.
 func (c *listClient) list(param vo.SearchConfigParam) (*model.ConfigPage, error) {
 	pageNo, pageSize := param.PageNo, param.PageSize
 	if pageNo <= 0 {
@@ -177,13 +478,54 @@ func (c *listClient) list(param vo.SearchConfigParam) (*model.ConfigPage, error)
 		params["appName"] = param.AppName
 	}
 
-	raw, err := c.server.ReqConfigApi(configListPath, params, nil, http.MethodGet, c.timeout)
-	if err != nil {
-		return nil, err
+	var lastErr error
+
+	for _, server := range c.servers {
+		raw, err := c.request(server, params)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		return parseConfigList(raw)
 	}
 
+	if lastErr == nil {
+		lastErr = errors.New("nacos config list request failed")
+	}
+
+	return nil, lastErr
+}
+
+// request sends one list request to the given server and returns the response body.
+func (c *listClient) request(server constant.ServerConfig, params map[string]string) (string, error) {
+	// Inject the cached access token, if the deployment requires authentication.
+	if token, err := c.getAccessToken(); err == nil && token != "" {
+		params[constant.KEY_ACCESS_TOKEN] = token
+	}
+
+	resp, err := c.agent.Get(serverAddress(server, configListPath), http.Header{}, c.timeout, params)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), string(body), nil)
+	}
+
+	return string(body), nil
+}
+
+// parseConfigList decodes one list response.
+func parseConfigList(raw string) (*model.ConfigPage, error) {
 	var result configListResult
-	if err = json.Unmarshal([]byte(raw), &result); err != nil {
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, err
 	}
 
@@ -210,6 +552,18 @@ func (c *listClient) list(param vo.SearchConfigParam) (*model.ConfigPage, error)
 	return page, nil
 }
 
+// isAuthError reports whether the request was rejected because the access token is missing or
+// expired, so that a login may fix it.
+func isAuthError(err error) bool {
+	var nacosErr *nacos_error.NacosError
+	if errors.As(err, &nacosErr) {
+		code := nacosErr.ErrorCode()
+		return code == "401" || code == "403"
+	}
+
+	return false
+}
+
 // isListUnavailable reports whether the list request failed in a way that will not recover by
 // retrying: the server does not provide the v3 admin API, or the configured account is not allowed
 // to use it. Transient statuses such as 408 and 429 keep the v3 path enabled.
@@ -227,13 +581,7 @@ func isListUnavailable(err error) bool {
 		return isUnavailableResultCode(listErr.code)
 	}
 
-	message := err.Error()
-
-	return strings.Contains(message, "error code 400") ||
-		strings.Contains(message, "error code 401") ||
-		strings.Contains(message, "error code 403") ||
-		strings.Contains(message, "error code 404") ||
-		strings.Contains(message, "error code 405")
+	return false
 }
 
 // isUnavailableCode reports whether the HTTP status code means the v3 list endpoint cannot be used
@@ -266,6 +614,11 @@ type listError struct {
 	code    int
 	message string
 }
+
+// errNoCredentials is returned when the v3 admin API rejects an anonymous request but no username
+// or password is configured. It avoids the futile fallback to the SDK, which would hit the same
+// v3 admin endpoint on Nacos 3.x and fail identically.
+var errNoCredentials = errors.New("nacos admin API requires authentication: configure username and password (e.g. WithUsername/WithPassword) or disable nacos.core.auth.admin.enabled on the server")
 
 // Error returns the error message reported by the Nacos server.
 func (e *listError) Error() string {
