@@ -3,7 +3,7 @@ module github.com/dobyte/due/limiter/redis/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.5
+	github.com/dobyte/due/v2 v2.6.7
 	github.com/redis/go-redis/v9 v9.22.0
 )
 
