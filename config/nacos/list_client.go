@@ -228,7 +228,6 @@ func (c *listClient) login() error {
 		c.tokenTtl = ttl
 		c.lastRefresh = now
 		c.reLoginFlag.Store(false)
-		log.Infof("nacos v3 login success, tokenTtl: %d seconds", ttl)
 		return nil
 	}
 
