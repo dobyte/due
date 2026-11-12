@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -500,6 +501,75 @@ func TestSourceLoadReusesCachedContent(t *testing.T) {
 	)
 	if got := stub.getCalls.Load(); got != 4 {
 		t.Fatalf("expect 4 get config calls after the invalidation, got %d", got)
+	}
+}
+
+// TestSourceLoadFixedFiles verifies that a configured file list limits a full load to those
+// dataIds and skips the group search.
+func TestSourceLoadFixedFiles(t *testing.T) {
+	stub := &stubConfigClient{
+		page: &model.ConfigPage{
+			TotalCount:     1,
+			PageNumber:     1,
+			PagesAvailable: 1,
+			PageItems:      []model.ConfigItem{{DataId: "c.json", Content: "from-search"}},
+		},
+	}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+	o.files = []string{"a.json", "b.yaml"}
+
+	source := &Source{opts: o}
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load configs failed: %v", err)
+	}
+
+	files := make(map[string]struct{}, len(configs))
+	for _, configuration := range configs {
+		files[configuration.File] = struct{}{}
+	}
+	if len(files) != 2 {
+		t.Fatalf("expect 2 configurations, got %d", len(files))
+	}
+	if _, ok := files["a.json"]; !ok {
+		t.Fatalf("expect a.json to be loaded")
+	}
+	if _, ok := files["b.yaml"]; !ok {
+		t.Fatalf("expect b.yaml to be loaded")
+	}
+	if _, ok := files["c.json"]; ok {
+		t.Fatalf("expect c.json to be skipped")
+	}
+	if got := stub.getCalls.Load(); got != 2 {
+		t.Fatalf("expect 2 get config calls, got %d", got)
+	}
+	if got := stub.calls.Load(); got != 0 {
+		t.Fatalf("expect no search calls, got %d", got)
+	}
+}
+
+// TestNormalizeFiles verifies that the fixed file list drops empty entries and duplicates.
+func TestNormalizeFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		give []string
+		want []string
+	}{
+		{name: "empty list", give: nil, want: nil},
+		{name: "trim and dedupe", give: []string{" a.json ", "", "b.yaml", "a.json", "  "}, want: []string{"a.json", "b.yaml"}},
+		{name: "all empty", give: []string{"", "  "}, want: []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeFiles(tt.give); !slices.Equal(got, tt.want) {
+				t.Fatalf("expect %v, got %v", tt.want, got)
+			}
+		})
 	}
 }
 

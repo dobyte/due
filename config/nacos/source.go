@@ -68,6 +68,8 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
+	o.files = normalizeFiles(o.files)
+
 	s := &Source{}
 	s.opts = o
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
@@ -94,9 +96,10 @@ func (s *Source) Name() string {
 
 // Load loads configuration items.
 //
-// When file is provided it loads only that item; otherwise it pages through and
-// loads every item under the group. On the very first full load (cache empty) Load asks the
-// client to export all contents in one shot if supported, so N GetConfig calls are replaced by
+// When file is provided it loads only that item; otherwise it loads the fixed
+// file list when one is configured, or pages through and loads every item under
+// the group. On the very first full load (cache empty) Load asks the client to
+// export all contents in one shot if supported, so N GetConfig calls are replaced by
 // a single ZIP download. Later full loads keep the md5-reuse shortcut.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
@@ -109,6 +112,18 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		} else {
 			return []*config.Configuration{configuration}, nil
 		}
+	}
+
+	// Fixed file list: load only the configured dataIds, without searching the group.
+	if len(s.opts.files) > 0 {
+		configurations, entries, err := s.loadItems(ctx, s.fixedItems())
+		if err != nil {
+			return nil, err
+		}
+
+		s.replaceCache(entries)
+
+		return configurations, nil
 	}
 
 	var (
@@ -198,6 +213,18 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	}
 
 	return s.conv(file, content), nil
+}
+
+// fixedItems converts the fixed file list into config list items, so that loading
+// reuses the same per-item logic as a full group load. The items carry no md5, so
+// the content of every listed dataId is fetched and the export shortcut is skipped.
+func (s *Source) fixedItems() []model.ConfigItem {
+	items := make([]model.ConfigItem, 0, len(s.opts.files))
+	for _, file := range s.opts.files {
+		items = append(items, model.ConfigItem{DataId: file})
+	}
+
+	return items
 }
 
 // loadItems loads one config list page. It reuses the cached content of an unchanged item and
@@ -446,7 +473,8 @@ func (s *Source) listen() {
 }
 
 // refresh refreshes the configuration periodically. It runs a config search at a
-// fixed interval to detect added or removed configuration items.
+// fixed interval to detect added or removed configuration items, or, when a fixed
+// file list is configured, retries the listen registration of those files.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
@@ -469,9 +497,26 @@ func (s *Source) refresh() {
 
 // search searches for configuration items under the group. It pages through the
 // config list, sends a listen request for each added dataId and a cancel request
-// for each removed dataId.
+// for each removed dataId. When a fixed file list is configured, it only ensures
+// those dataIds are listened to and never searches or cancels.
 func (s *Source) search() {
 	s.version++
+
+	// Fixed file list: listen only to the configured dataIds instead of searching the group.
+	if len(s.opts.files) > 0 {
+		for _, dataId := range s.opts.files {
+			// Skip the version mark when listening fails so that the next search retries it.
+			if _, ok := s.versions[dataId]; !ok {
+				if err := s.requestListen(dataId); err != nil {
+					continue
+				}
+			}
+
+			s.versions[dataId] = s.version
+		}
+
+		return
+	}
 
 	index := 1
 

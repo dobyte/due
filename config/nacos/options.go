@@ -2,6 +2,7 @@ package nacos
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/dobyte/due/v2/config"
@@ -33,6 +34,7 @@ const (
 	defaultUrlsKey        = "etc.config.nacos.urls"
 	defaultClusterNameKey = "etc.config.nacos.clusterName"
 	defaultGroupNameKey   = "etc.config.nacos.groupName"
+	defaultFilesKey       = "etc.config.nacos.files"
 	defaultTimeoutKey     = "etc.config.nacos.timeout"
 	defaultNamespaceIdKey = "etc.config.nacos.namespaceId"
 	defaultEndpointKey    = "etc.config.nacos.endpoint"
@@ -71,6 +73,10 @@ type options struct {
 
 	// Group name, defaulting to DEFAULT_GROUP.
 	groupName string
+
+	// Fixed list of dataIds to load and listen to, defaulting to empty.
+	// When empty, every configuration under the group is loaded and listened to.
+	files []string
 
 	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
 	timeout time.Duration
@@ -120,6 +126,7 @@ func defaultOptions() *options {
 		urls:        etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
+		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		namespaceId: etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
 		endpoint:    etc.Get(defaultEndpointKey, defaultEndpoint).String(),
@@ -133,6 +140,33 @@ func defaultOptions() *options {
 		logDir:      etc.Get(defaultLogDirKey, defaultLogDir).String(),
 		logLevel:    etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
 	}
+}
+
+// normalizeFiles trims the configured file list and drops empty and duplicate entries, so that an
+// empty dataId cannot fail a full load and a duplicated one cannot be fetched or listened twice.
+func normalizeFiles(files []string) []string {
+	if len(files) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(files))
+	normalized := make([]string, 0, len(files))
+
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if file == "" {
+			continue
+		}
+
+		if _, ok := seen[file]; ok {
+			continue
+		}
+
+		seen[file] = struct{}{}
+		normalized = append(normalized, file)
+	}
+
+	return normalized
 }
 
 // WithContext sets the context.
@@ -163,6 +197,16 @@ func WithClusterName(clusterName string) Option {
 // WithGroupName sets the group name.
 func WithGroupName(groupName string) Option {
 	return func(o *options) { o.groupName = groupName }
+}
+
+// WithFiles sets the fixed list of dataIds to load and listen to. When it is
+// empty, every configuration under the group is loaded and listened to.
+//
+// The configured files are fetched individually, so the group export shortcut
+// and the md5-based content cache do not apply to them. Empty and duplicate
+// entries are ignored.
+func WithFiles(files ...string) Option {
+	return func(o *options) { o.files = files }
 }
 
 // WithTimeout sets the timeout for requests to the Nacos server.
