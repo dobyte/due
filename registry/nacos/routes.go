@@ -21,7 +21,7 @@ const (
 //
 // It guards against corrupt values such as "s:0-2147483647", which would otherwise exhaust memory
 // while decoding.
-const maxRouteCount = 1 << 20
+const maxRouteCount = 1 << 16
 
 var (
 	errInvalidRoutes = errors.New("invalid routes metadata")
@@ -157,6 +157,10 @@ func unmarshalRoutes(value string) ([]registry.Route, error) {
 		routes := make([]registry.Route, 0)
 		if err := json.Unmarshal([]byte(value), &routes); err != nil {
 			return nil, err
+		}
+
+		if len(routes) > maxRouteCount {
+			return nil, errTooManyRoutes
 		}
 
 		return routes, nil

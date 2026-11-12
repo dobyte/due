@@ -3,9 +3,12 @@ package nacos
 import (
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/dobyte/due/v2/registry"
+	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
 
 func TestMarshalRoutes(t *testing.T) {
@@ -184,6 +187,62 @@ func TestUnmarshalRoutesLegacyJSON(t *testing.T) {
 	}
 }
 
+func TestUnmarshalRoutesLegacyJSONTooMany(t *testing.T) {
+	var b strings.Builder
+	b.WriteByte('[')
+
+	for i := range maxRouteCount + 1 {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+
+		b.WriteString(`{"i":`)
+		b.WriteString(strconv.Itoa(i))
+		b.WriteByte('}')
+	}
+
+	b.WriteByte(']')
+
+	if _, err := unmarshalRoutes(b.String()); err == nil {
+		t.Fatal("unmarshalRoutes() error = nil, want error")
+	}
+}
+
+func TestParseInstancesSkipsInvalidRoutes(t *testing.T) {
+	instances := []model.Instance{
+		{
+			Healthy: true,
+			Enable:  true,
+			Metadata: map[string]string{
+				metaFieldID:     "bad",
+				metaFieldRoutes: "x:1",
+			},
+		},
+		{
+			Healthy: true,
+			Enable:  true,
+			Metadata: map[string]string{
+				metaFieldID:     "good",
+				metaFieldRoutes: "s:1-2",
+			},
+		},
+	}
+
+	services := parseInstances(instances)
+	if len(services) != 1 {
+		t.Fatalf("parseInstances() returned %d instances, want 1", len(services))
+	}
+
+	if services[0].ID != "good" {
+		t.Fatalf("parseInstances() ID = %q, want %q", services[0].ID, "good")
+	}
+
+	want := []registry.Route{{ID: 1, Stateful: true}, {ID: 2, Stateful: true}}
+	if !slices.Equal(services[0].Routes, want) {
+		t.Fatalf("parseInstances() routes = %+v, want %+v", services[0].Routes, want)
+	}
+}
+
 func TestUnmarshalRoutesInvalid(t *testing.T) {
 	tests := []string{
 		"s",
@@ -195,7 +254,7 @@ func TestUnmarshalRoutesInvalid(t *testing.T) {
 		"s:1,,2",
 		"s:1-x",
 		"isa-:1",
-		"s:0-1048576",
+		"s:0-65536",
 	}
 
 	for _, give := range tests {

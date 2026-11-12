@@ -359,5 +359,5 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 		return nil, err
 	}
 
-	return parseInstances(instances)
+	return parseInstances(instances), nil
 }
