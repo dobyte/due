@@ -180,7 +180,11 @@ func (wm *watcherMgr) callback(instances []model.Instance, err error) {
 		return
 	}
 
-	services := parseInstances(instances)
+	services, err := parseInstances(instances)
+	if err != nil {
+		log.Warnf("%s instances parse failed: %v", wm.serviceName, err)
+		return
+	}
 
 	wm.rw.Lock()
 	wm.serviceInstances = services

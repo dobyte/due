@@ -182,6 +182,11 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		}
 	}
 
+	if size := metadataSize(param.Metadata); size > nacosMetadataLimit {
+		log.Warnf("instance metadata length %d exceeds the nacos limit %d, insID: %s kind: %s name: %s",
+			size, nacosMetadataLimit, ins.ID, ins.Kind, ins.Name)
+	}
+
 	if ok, err := r.opts.client.RegisterInstance(param); err != nil {
 		return err
 	} else if !ok {
@@ -359,5 +364,5 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 		return nil, err
 	}
 
-	return parseInstances(instances), nil
+	return parseInstances(instances)
 }

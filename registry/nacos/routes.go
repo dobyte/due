@@ -81,6 +81,10 @@ func marshalRoutes(routes []registry.Route) (string, error) {
 		groups[flags] = append(groups[flags], route.ID)
 	}
 
+	if len(seen) > maxRouteCount {
+		return "", errTooManyRoutes
+	}
+
 	// Sort groups by flags so that the encoded value is stable across registrations.
 	slices.Sort(order)
 

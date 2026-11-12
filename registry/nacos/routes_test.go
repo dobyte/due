@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
@@ -89,6 +90,17 @@ func TestMarshalRoutes(t *testing.T) {
 func TestMarshalRoutesNegativeID(t *testing.T) {
 	if _, err := marshalRoutes([]registry.Route{{ID: -1}}); err == nil {
 		t.Fatal("marshalRoutes() error = nil, want error")
+	}
+}
+
+func TestMarshalRoutesTooMany(t *testing.T) {
+	routes := make([]registry.Route, maxRouteCount+1)
+	for i := range routes {
+		routes[i].ID = int32(i)
+	}
+
+	if _, err := marshalRoutes(routes); !errors.Is(err, errTooManyRoutes) {
+		t.Fatalf("marshalRoutes() error = %v, want %v", err, errTooManyRoutes)
 	}
 }
 
@@ -228,7 +240,11 @@ func TestParseInstancesSkipsInvalidRoutes(t *testing.T) {
 		},
 	}
 
-	services := parseInstances(instances)
+	services, err := parseInstances(instances)
+	if err != nil {
+		t.Fatalf("parseInstances() error = %v", err)
+	}
+
 	if len(services) != 1 {
 		t.Fatalf("parseInstances() returned %d instances, want 1", len(services))
 	}
@@ -240,6 +256,90 @@ func TestParseInstancesSkipsInvalidRoutes(t *testing.T) {
 	want := []registry.Route{{ID: 1, Stateful: true}, {ID: 2, Stateful: true}}
 	if !slices.Equal(services[0].Routes, want) {
 		t.Fatalf("parseInstances() routes = %+v, want %+v", services[0].Routes, want)
+	}
+}
+
+func TestParseInstancesAllInvalid(t *testing.T) {
+	instances := []model.Instance{
+		{
+			Healthy: true,
+			Enable:  true,
+			Metadata: map[string]string{
+				metaFieldID:     "bad-1",
+				metaFieldRoutes: "x:1",
+			},
+		},
+		{
+			Healthy: true,
+			Enable:  true,
+			Metadata: map[string]string{
+				metaFieldID:     "bad-2",
+				metaFieldRoutes: "s:3-1",
+			},
+		},
+	}
+
+	services, err := parseInstances(instances)
+	if !errors.Is(err, errAllInstancesParseFailed) {
+		t.Fatalf("parseInstances() error = %v, want %v", err, errAllInstancesParseFailed)
+	}
+
+	if services != nil {
+		t.Fatalf("parseInstances() services = %+v, want nil", services)
+	}
+}
+
+func TestParseInstancesNoHealthy(t *testing.T) {
+	instances := []model.Instance{
+		{
+			Metadata: map[string]string{
+				metaFieldID:     "unhealthy",
+				metaFieldRoutes: "x:1",
+			},
+		},
+	}
+
+	services, err := parseInstances(instances)
+	if err != nil {
+		t.Fatalf("parseInstances() error = %v", err)
+	}
+
+	if len(services) != 0 {
+		t.Fatalf("parseInstances() returned %d instances, want 0", len(services))
+	}
+}
+
+func TestWatcherCallbackKeepsSnapshotWhenAllInstancesFail(t *testing.T) {
+	old := []*registry.ServiceInstance{{ID: "old", Routes: []registry.Route{{ID: 1}}}}
+	wm := newWatcherMgr(&Registry{}, "node", old)
+
+	wm.callback([]model.Instance{
+		{
+			Healthy: true,
+			Enable:  true,
+			Metadata: map[string]string{
+				metaFieldID:     "bad",
+				metaFieldRoutes: "x:1",
+			},
+		},
+	}, nil)
+
+	services, err := wm.services()
+	if err != nil {
+		t.Fatalf("services() error = %v", err)
+	}
+
+	if len(services) != 1 || services[0].ID != "old" {
+		t.Fatalf("services() = %+v, want the previous snapshot", services)
+	}
+}
+
+func TestMetadataSize(t *testing.T) {
+	metadata := map[string]string{"id": "node-1", "kind": "node"}
+	want := len("id") + len("node-1") + len("kind") + len("node")
+
+	if got := metadataSize(metadata); got != want {
+		t.Fatalf("metadataSize() = %d, want %d", got, want)
 	}
 }
 

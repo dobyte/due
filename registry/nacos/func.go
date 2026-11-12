@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -13,19 +14,33 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
 
+// nacosMetadataLimit is the default total length limit of instance metadata keys and values
+// enforced by Nacos 2.3.0+. Older versions do not enforce it.
+const nacosMetadataLimit = 1024
+
+var errAllInstancesParseFailed = errors.New("all instances parse failed")
+
 // parseInstances parses a service instance list.
 //
-// Instances with invalid metadata are logged and skipped, so that one bad instance does not block
-// the discovery updates of the whole service.
-func parseInstances(instances []model.Instance) []*registry.ServiceInstance {
+// Instances with invalid metadata are logged and skipped. An error is returned only when every
+// healthy instance fails to parse, so that callers keep the previous snapshot instead of clearing
+// the routing table.
+func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, error) {
 	services := make([]*registry.ServiceInstance, 0, len(instances))
+
+	var total, failed int
+
 	for _, instance := range instances {
 		if !instance.Healthy || !instance.Enable {
 			continue
 		}
 
+		total++
+
 		ins, err := parseInstance(instance)
 		if err != nil {
+			failed++
+
 			log.Warnf("instance parse failed, insID: %s kind: %s name: %s endpoint: %s err: %v",
 				instance.Metadata[metaFieldID], instance.Metadata[metaFieldKind],
 				instance.Metadata[metaFieldName], instance.Metadata[metaFieldEndpoint], err)
@@ -35,7 +50,11 @@ func parseInstances(instances []model.Instance) []*registry.ServiceInstance {
 		services = append(services, ins)
 	}
 
-	return services
+	if total > 0 && failed == total {
+		return nil, errAllInstancesParseFailed
+	}
+
+	return services, nil
 }
 
 // parseInstance parses one service instance.
@@ -106,4 +125,15 @@ func parseServerConfig(addr string) (constant.ServerConfig, error) {
 		IpAddr:      host,
 		Port:        xconv.Uint64(port),
 	}, nil
+}
+
+// metadataSize returns the total length of all metadata keys and values.
+func metadataSize(metadata map[string]string) int {
+	size := 0
+
+	for key, value := range metadata {
+		size += len(key) + len(value)
+	}
+
+	return size
 }
