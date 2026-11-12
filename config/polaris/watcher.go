@@ -45,20 +45,32 @@ func (w *watcher) notice(configuration *config.Configuration) {
 
 // Next returns the changed configuration list.
 //
-// It blocks until a configuration change notification arrives and returns every
+// It blocks until at least one configuration change is pending and returns every
 // latest pending configuration; it returns an error when the context is cancelled.
 func (w *watcher) Next() ([]*config.Configuration, error) {
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case <-w.chWatch:
-	}
+	for {
+		select {
+		case <-w.ctx.Done():
+			return nil, w.ctx.Err()
+		case <-w.chWatch:
+		}
 
+		if configs := w.takePending(); len(configs) > 0 {
+			return configs, nil
+		}
+
+		// The signal carried no configuration: its changes were merged into a previous Next call.
+		// Keep waiting instead of returning an empty result.
+	}
+}
+
+// takePending drains and returns the pending configurations, keyed by file name.
+func (w *watcher) takePending() []*config.Configuration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if len(w.pending) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	configs := make([]*config.Configuration, 0, len(w.pending))
@@ -67,7 +79,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 	w.pending = make(map[string]*config.Configuration)
 
-	return configs, nil
+	return configs
 }
 
 // Stop stops watching.

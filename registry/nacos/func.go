@@ -1,9 +1,14 @@
 package nacos
 
 import (
+	"net"
+	"net/url"
+	"strings"
+
 	"github.com/dobyte/due/v2/encoding/json"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
 
@@ -59,4 +64,29 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 	}
 
 	return services, nil
+}
+
+// parseServerConfig parses one server address, prepending http when no scheme is present, so that
+// the address list accepts the same forms as the config source.
+func parseServerConfig(addr string) (constant.ServerConfig, error) {
+	if !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+
+	raw, err := url.Parse(addr)
+	if err != nil {
+		return constant.ServerConfig{}, err
+	}
+
+	host, port, err := net.SplitHostPort(raw.Host)
+	if err != nil {
+		return constant.ServerConfig{}, err
+	}
+
+	return constant.ServerConfig{
+		Scheme:      raw.Scheme,
+		ContextPath: raw.Path,
+		IpAddr:      host,
+		Port:        xconv.Uint64(port),
+	}, nil
 }

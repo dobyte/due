@@ -75,17 +75,13 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	r.cancel = cancel
 
 	if r.registry.opts.enableHeartbeatCheck {
-		r.wg.Add(1)
+		r.wg.Go(func() { r.heartbeat(ctx, ins) })
 	}
 
 	r.mu.Unlock()
 
 	if oldCancel != nil {
 		oldCancel()
-	}
-
-	if r.registry.opts.enableHeartbeatCheck {
-		go r.heartbeat(ctx, ins)
 	}
 
 	return nil
@@ -250,8 +246,6 @@ func (r *registrar) deregisterService(ctx context.Context, insID string) error {
 // deregisterCriticalServiceAfter is less than or equal to 0, meaning Consul never automatically
 // deregisters the service, the heartbeat keeps retrying instead of giving up.
 func (r *registrar) heartbeat(ctx context.Context, ins *registry.ServiceInstance) {
-	defer r.wg.Done()
-
 	if ctx.Err() != nil {
 		return
 	}

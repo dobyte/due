@@ -6,8 +6,6 @@ package nacos
 
 import (
 	"context"
-	stdnet "net"
-	"net/url"
 	"sync"
 	"sync/atomic"
 
@@ -66,24 +64,13 @@ func NewRegistry(opts ...Option) *Registry {
 		serverConfigs := make([]constant.ServerConfig, 0, len(o.urls))
 
 		for _, v := range o.urls {
-			raw, err := url.Parse(v)
+			serverConfig, err := parseServerConfig(v)
 			if err != nil {
 				log.Warnf("%s parse failed: %v", v, err)
 				continue
 			}
 
-			host, port, err := stdnet.SplitHostPort(raw.Host)
-			if err != nil {
-				log.Warnf("%s parse failed: %v", v, err)
-				continue
-			}
-
-			serverConfigs = append(serverConfigs, constant.ServerConfig{
-				Scheme:      raw.Scheme,
-				ContextPath: raw.Path,
-				IpAddr:      host,
-				Port:        xconv.Uint64(port),
-			})
+			serverConfigs = append(serverConfigs, serverConfig)
 		}
 
 		if len(serverConfigs) == 0 {

@@ -22,7 +22,7 @@ func NewSource(opts ...Option) config.Source {
 	}
 
 	if o.path == "" {
-		log.Fatal("no config file path specified")
+		log.Warnf("no config file path specified, loading the config will fail")
 	}
 
 	return core.NewSource(o.path, o.mode)

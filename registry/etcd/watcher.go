@@ -144,10 +144,10 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 // Stop stops watching.
 //
 // It closes the internal notification channel and recycles the owning manager. It is idempotent;
-// repeated calls return an illegal operation error.
+// repeated calls return nil.
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
-		return errors.ErrIllegalOperation
+		return nil
 	}
 
 	w.mu.Lock()

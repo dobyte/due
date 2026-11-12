@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/fsnotify/fsnotify"
@@ -17,9 +18,10 @@ type watcher struct {
 	cancel  context.CancelFunc
 	source  *Source
 	watcher *fsnotify.Watcher
+	stopped atomic.Bool
 }
 
-func newWatcher(ctx context.Context, source *Source) (config.Watcher, error) {
+func newWatcher(ctx context.Context, source *Source) (*watcher, error) {
 	info, err := os.Stat(source.path)
 	if err != nil {
 		return nil, err
@@ -102,6 +104,12 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 
 // Stop stops watching.
 func (w *watcher) Stop() error {
+	if !w.stopped.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	w.cancel()
+	w.source.watchers.Delete(w)
+
 	return w.watcher.Close()
 }

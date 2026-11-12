@@ -20,6 +20,14 @@ import (
 // Name is the name of the config source.
 const Name = "polaris"
 
+// loadConcurrency limits the concurrent content fetches of one full load, so that loading a large
+// group does not create an unbounded number of requests and goroutines at once.
+const loadConcurrency = 8
+
+// refreshInterval is the interval at which the config group is searched again to detect config
+// files added to or removed from the group.
+const refreshInterval = 3 * time.Second
+
 // Source is a config source backed by Polaris.
 type Source struct {
 	err            error              // Error encountered while building the client
@@ -29,6 +37,7 @@ type Source struct {
 	builtin        bool               // Whether the client is built in
 	version        uint64             // Current search version
 	versions       map[string]uint64  // Search version of each config file
+	searchFailed   bool               // Whether a search failure was logged; refresh goroutine only
 	chListen       chan string        // Listen request channel
 	chCancel       chan string        // Cancel-listen request channel
 	watchers       sync.Map           // Watcher set
@@ -67,17 +76,8 @@ func NewSource(opts ...Option) config.Source {
 		s.groupClient = api.NewConfigGroupAPIBySDKContext(o.client)
 	}
 
-	s.wg.Add(2)
-
-	go func() {
-		defer s.wg.Done()
-		s.listen()
-	}()
-
-	go func() {
-		defer s.wg.Done()
-		s.refresh()
-	}()
+	s.wg.Go(s.listen)
+	s.wg.Go(s.refresh)
 
 	return s
 }
@@ -97,55 +97,57 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
-		if configuration, err := s.load(ctx, file[0]); err != nil {
-			return nil, err
-		} else {
-			return []*config.Configuration{configuration}, nil
-		}
-	} else {
-		var (
-			mu             sync.Mutex
-			configurations = make([]*config.Configuration, 0)
-		)
-
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
+		configuration, err := s.load(ctx, file[0])
 		if err != nil {
 			return nil, err
 		}
 
-		files, _, ok := group.GetFiles()
-		if !ok {
-			return configurations, nil
-		}
+		return []*config.Configuration{configuration}, nil
+	}
 
-		wg, _ := task.WithContext(ctx)
+	var (
+		mu             sync.Mutex
+		configurations = make([]*config.Configuration, 0)
+	)
 
-		for _, item := range files {
-			fileName := item.FileName
-			wg.Go(func() error {
-				configuration, err := s.load(ctx, fileName)
-				if err != nil {
-					return err
-				}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
-				mu.Lock()
-				configurations = append(configurations, configuration)
-				mu.Unlock()
+	group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
+	if err != nil {
+		return nil, err
+	}
 
-				return nil
-			})
-		}
-
-		if err := wg.Wait(); err != nil {
-			return nil, err
-		}
-
+	files, _, ok := group.GetFiles()
+	if !ok {
 		return configurations, nil
 	}
+
+	wg, _ := task.WithContext(ctx)
+	wg.SetLimit(loadConcurrency)
+
+	for _, item := range files {
+		fileName := item.FileName
+		wg.Go(func() error {
+			configuration, err := s.load(ctx, fileName)
+			if err != nil {
+				return err
+			}
+
+			mu.Lock()
+			configurations = append(configurations, configuration)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := wg.Wait(); err != nil {
+		return nil, err
+	}
+
+	return configurations, nil
 }
 
 // load loads a single configuration item. It fetches the content from the Polaris
@@ -252,6 +254,14 @@ func (s *Source) Close() error {
 		// Wait for the listen and refresh goroutines to exit so that the SDK context is not destroyed concurrently.
 		s.wg.Wait()
 
+		// Stop the registered watchers so that their Next returns instead of blocking forever on
+		// a watcher context that is not derived from the source context.
+		s.watchers.Range(func(key, _ any) bool {
+			_ = key.(*watcher).Stop()
+
+			return true
+		})
+
 		if s.builtin {
 			s.opts.client.Destroy()
 		}
@@ -337,7 +347,7 @@ func (s *Source) refresh() {
 		return
 	}
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
 
 	for {
@@ -368,13 +378,21 @@ func (s *Source) search() {
 			// config file changes.
 			s.searchDisabled = true
 			log.Warnf("search config list is not supported by server, disable group search: %v", err)
-		} else {
+		} else if !s.searchFailed {
+			// Warn once per failure streak: an unreachable server would otherwise log a warning at
+			// every refresh interval.
+			s.searchFailed = true
 			log.Warnf("search config list failed: %v", err)
-			// Return immediately when the query fails; otherwise the incremented version
-			// with an unrefreshed config list would make the cancel loop below treat every
-			// item as stale and cancel all listeners in bulk.
 		}
+		// Return immediately when the query fails; otherwise the incremented version
+		// with an unrefreshed config list would make the cancel loop below treat every
+		// item as stale and cancel all listeners in bulk.
 		return
+	}
+
+	if s.searchFailed {
+		s.searchFailed = false
+		log.Infof("search config list recovered")
 	}
 
 	files, _, ok := group.GetFiles()
@@ -487,11 +505,13 @@ func isExistedResourceError(err error) bool {
 
 // conv converts a configuration. It converts a config file name and its content
 // into the unified configuration structure, using the file extension of the name
-// as the config format.
+// as the config format. The file name is relative to the group, so it is both the
+// path within the source and the file name, matching the other config sources.
 func conv(file, content string) *config.Configuration {
 	ext := filepath.Ext(file)
 
 	return &config.Configuration{
+		Path:     file,
 		File:     file,
 		Name:     strings.TrimSuffix(file, ext),
 		Format:   strings.TrimPrefix(ext, "."),

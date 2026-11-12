@@ -27,11 +27,12 @@ type watcher struct {
 	plan    *watch.Plan                  // Watch plan
 	mu      sync.Mutex                   // Send lock
 	stopped atomic.Bool                  // Whether the watcher has stopped
+	warned  atomic.Bool                  // Whether the current watch failure was logged
 	chWatch chan []*config.Configuration // Configuration change channel
 }
 
 // newWatcher creates a watcher.
-func newWatcher(ctx context.Context, s *Source) (config.Watcher, error) {
+func newWatcher(ctx context.Context, s *Source) (*watcher, error) {
 	w := &watcher{}
 	w.ctx, w.cancel = context.WithCancel(ctx)
 	w.source = s
@@ -66,7 +67,9 @@ func (w *watcher) init() (err error) {
 					return
 				}
 
-				log.Warnf("consul watch failed: %v", runErr)
+				if w.warned.CompareAndSwap(false, true) {
+					log.Warnf("consul watch failed: %v", runErr)
+				}
 
 				select {
 				case <-w.ctx.Done():
@@ -102,6 +105,10 @@ func (w *watcher) planHandler(idx uint64, raw any) {
 	kvs, ok := raw.(api.KVPairs)
 	if !ok {
 		return
+	}
+
+	if w.warned.CompareAndSwap(true, false) {
+		log.Infof("consul watch recovered")
 	}
 
 	configs := make([]*config.Configuration, 0, len(kvs))
@@ -175,6 +182,8 @@ func (w *watcher) Stop() error {
 	w.mu.Lock()
 	close(w.chWatch)
 	w.mu.Unlock()
+
+	w.source.watchers.Delete(w)
 
 	return nil
 }

@@ -5,9 +5,12 @@ package consul
 
 import (
 	"context"
+	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/registry"
 	"github.com/dobyte/due/v2/utils/xconv"
@@ -22,12 +25,17 @@ var _ registry.Registry = &Registry{}
 // Registry is a Consul-based service registry and discovery component that implements
 // [registry.Registry].
 type Registry struct {
-	err        error      // Initialization error, recorded when creating the built-in client fails
-	opts       *options   // Options
-	mu1        sync.Mutex // Protects the watchers registry
-	watchers   sync.Map   // Registry of service watcher managers
-	mu2        sync.Mutex // Protects the registrars registry
-	registrars sync.Map   // Registry of service registrars
+	err        error              // Initialization error, recorded when creating the built-in client fails
+	opts       *options           // Options
+	ctx        context.Context    // Component root context; watch goroutines derive from it and terminate with the component
+	cancel     context.CancelFunc // Cancel function of the component root context
+	builtin    bool               // Whether the client is the built-in one
+	transport  *http.Transport    // Underlying transport of the built-in client
+	closed     atomic.Bool        // Whether the component has been closed
+	mu1        sync.Mutex         // Protects the watchers registry
+	watchers   sync.Map           // Registry of service watcher managers
+	mu2        sync.Mutex         // Protects the registrars registry
+	registrars sync.Map           // Registry of service registrars
 }
 
 // NewRegistry creates a Consul-based service registry and discovery instance.
@@ -39,6 +47,7 @@ func NewRegistry(opts ...Option) *Registry {
 
 	r := &Registry{}
 	r.opts = o
+	r.ctx, r.cancel = context.WithCancel(context.Background())
 
 	if o.client == nil {
 		config := api.DefaultConfig()
@@ -46,6 +55,8 @@ func NewRegistry(opts ...Option) *Registry {
 			config.Address = o.addr
 		}
 
+		r.builtin = true
+		r.transport = config.Transport
 		o.client, r.err = api.NewClient(config)
 	}
 
@@ -61,6 +72,10 @@ func (r *Registry) Name() string {
 func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) error {
 	if r.err != nil {
 		return r.err
+	}
+
+	if r.closed.Load() {
+		return errors.ErrRegistryClosed
 	}
 
 	return r.doBuildRegistrar(makeInsID(ins)).register(ctx, ins)
@@ -92,6 +107,10 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 		return r.err
 	}
 
+	if r.closed.Load() {
+		return errors.ErrRegistryClosed
+	}
+
 	if v, ok := r.registrars.Load(makeInsID(ins)); ok {
 		return v.(*registrar).deregister(ctx)
 	}
@@ -103,6 +122,10 @@ func (r *Registry) Deregister(ctx context.Context, ins *registry.ServiceInstance
 func (r *Registry) Watch(ctx context.Context, serviceName string) (registry.Watcher, error) {
 	if r.err != nil {
 		return nil, r.err
+	}
+
+	if r.closed.Load() {
+		return nil, errors.ErrRegistryClosed
 	}
 
 	mgr, err := r.doBuildWatcherMgr(ctx, serviceName)
@@ -125,17 +148,30 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 	}
 
 	r.mu1.Lock()
-	defer r.mu1.Unlock()
 
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
-		return mgr, nil
-	} else {
-		mgr := newWatcherMgr(r, serviceName, services, index)
-		r.watchers.Store(serviceName, mgr)
-		mgr.init()
+		r.mu1.Unlock()
 
 		return mgr, nil
 	}
+
+	mgr := newWatcherMgr(r, serviceName, services, index)
+	r.watchers.Store(serviceName, mgr)
+	mgr.init()
+
+	// Prevent registering an already closed watch manager when Close and Watch run concurrently.
+	// The mutex is released before stopping the manager, because removeFromRegistry takes it again.
+	closed := r.closed.Load()
+
+	r.mu1.Unlock()
+
+	if closed {
+		mgr.stop()
+
+		return nil, errors.ErrRegistryClosed
+	}
+
+	return mgr, nil
 }
 
 // loadWatcherMgr loads the service watcher manager, returning nil when it does not exist or has
@@ -156,6 +192,14 @@ func (r *Registry) Close() error {
 		return r.err
 	}
 
+	if !r.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// Cancel the component root context first so that every watcher goroutine terminates even if
+	// the watch manager has not been visited by the shutdown loop below.
+	r.cancel()
+
 	r.registrars.Range(func(key, value any) bool {
 		value.(*registrar).close()
 		return true
@@ -166,6 +210,10 @@ func (r *Registry) Close() error {
 		return true
 	})
 
+	if r.builtin && r.transport != nil {
+		r.transport.CloseIdleConnections()
+	}
+
 	return nil
 }
 
@@ -173,6 +221,10 @@ func (r *Registry) Close() error {
 func (r *Registry) Services(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
 	if r.err != nil {
 		return nil, r.err
+	}
+
+	if r.closed.Load() {
+		return nil, errors.ErrRegistryClosed
 	}
 
 	if v, ok := r.watchers.Load(serviceName); ok {

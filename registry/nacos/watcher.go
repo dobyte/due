@@ -113,7 +113,7 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 // Stop stops watching service instance updates.
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
-		return errors.ErrIllegalOperation
+		return nil
 	}
 
 	w.mu.Lock()

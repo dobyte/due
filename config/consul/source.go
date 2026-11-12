@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
@@ -21,6 +22,7 @@ type Source struct {
 	opts      *options        // Configuration options
 	builtin   bool            // Whether the client is built in
 	transport *http.Transport // Underlying transport of the built-in client
+	watchers  sync.Map        // Watcher set
 }
 
 // NewSource creates a config source. It builds a Consul config center client from
@@ -149,15 +151,29 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, s.err
 	}
 
-	return newWatcher(ctx, s)
+	w, err := newWatcher(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	s.watchers.Store(w, struct{}{})
+
+	return w, nil
 }
 
-// Close closes the config source. It closes the idle connections of the built-in
-// client's transport; an external client is closed by the caller.
+// Close closes the config source. It stops the registered watchers and closes the
+// idle connections of the built-in client's transport; an external client is
+// closed by the caller.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
 	}
+
+	s.watchers.Range(func(key, _ any) bool {
+		_ = key.(*watcher).Stop()
+
+		return true
+	})
 
 	if s.builtin && s.transport != nil {
 		s.transport.CloseIdleConnections()

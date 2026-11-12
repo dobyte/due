@@ -114,7 +114,7 @@ func (w *watcher) Next() ([]*registry.ServiceInstance, error) {
 // Stop stops watching.
 func (w *watcher) Stop() error {
 	if w.state.Swap(stateStopped) == stateStopped {
-		return errors.ErrIllegalOperation
+		return nil
 	}
 
 	w.mu.Lock()
@@ -147,7 +147,7 @@ type watcherMgr struct {
 func newWatcherMgr(r *Registry, serviceName string, services []*registry.ServiceInstance, waitIndex uint64) *watcherMgr {
 	wm := &watcherMgr{}
 	wm.registry = r
-	wm.ctx, wm.cancel = context.WithCancel(context.Background())
+	wm.ctx, wm.cancel = context.WithCancel(r.ctx)
 	wm.serviceName = serviceName
 	wm.watchers = make(map[int64]*watcher)
 	wm.serviceInstances = services
@@ -298,33 +298,41 @@ func (wm *watcherMgr) watchLoop() {
 	}
 }
 
-// resyncWithRetry retries synchronizing the service instances.
+// resyncWithRetry retries synchronizing the service instances until it succeeds or the manager is
+// stopped, so that a transient outage does not permanently stop service discovery.
 func (wm *watcherMgr) resyncWithRetry() bool {
-	err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
-		if wm.stopped.Load() {
-			return false, errors.ErrWatcherStopped
+	for {
+		err := xcall.Backoff(wm.ctx, func(ctx context.Context, attempt int) (bool, error) {
+			if wm.stopped.Load() {
+				return false, errors.ErrWatcherStopped
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, wm.registry.opts.timeout)
+			services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true, false)
+			cancel()
+			if err != nil {
+				log.Warnf("consul watch resync failed, retry %d times, err: %v", attempt, err)
+				return true, err
+			}
+
+			wm.rw.Lock()
+			wm.serviceInstances = services
+			wm.serviceWaitIndex = index
+			wm.rw.Unlock()
+
+			wm.healthy.Store(true)
+			wm.broadcast()
+
+			return false, nil
+		}, max(1, wm.registry.opts.retryTimes), 100*time.Millisecond, 3*time.Second)
+		if err == nil {
+			return true
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, wm.registry.opts.timeout)
-		services, index, err := wm.registry.services(ctx, wm.serviceName, 0, true, false)
-		cancel()
-		if err != nil {
-			log.Warnf("consul watch resync failed, retry %d times, err: %v", attempt, err)
-			return true, err
+		if wm.ctx.Err() != nil || wm.stopped.Load() {
+			return false
 		}
-
-		wm.rw.Lock()
-		wm.serviceInstances = services
-		wm.serviceWaitIndex = index
-		wm.rw.Unlock()
-
-		wm.healthy.Store(true)
-		wm.broadcast()
-
-		return false, nil
-	}, max(1, wm.registry.opts.retryTimes), 100*time.Millisecond, 3*time.Second)
-
-	return err == nil
+	}
 }
 
 // broadcast notifies the watchers of service instance updates.

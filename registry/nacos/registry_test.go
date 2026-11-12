@@ -1,4 +1,9 @@
+//go:build integration
+// +build integration
+
 // Package nacos_test contains manual verification scripts that require a local Nacos service.
+//
+// Run the tests with: go test -tags integration ./...
 package nacos_test
 
 import (

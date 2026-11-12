@@ -76,7 +76,7 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	keepaliveCtx, cancel := context.WithCancel(r.registry.ctx)
 	r.ctx, r.cancel = keepaliveCtx, cancel
 	r.leaseID = leaseID
-	r.wg.Add(1)
+	r.wg.Go(func() { r.keepalive(keepaliveCtx, leaseID, key, value) })
 	r.mu.Unlock()
 
 	if oldCancel != nil {
@@ -86,8 +86,6 @@ func (r *registrar) register(ctx context.Context, ins *registry.ServiceInstance)
 	if oldLeaseID != 0 {
 		r.revoke(oldLeaseID)
 	}
-
-	go r.keepalive(keepaliveCtx, leaseID, key, value)
 
 	return nil
 }
@@ -191,8 +189,6 @@ func (r *registrar) revoke(leaseID clientv3.LeaseID) {
 // stream from repeatedly resetting the backoff. It exits only when the registration is stopped or
 // superseded.
 func (r *registrar) keepalive(ctx context.Context, leaseID clientv3.LeaseID, key, value string) {
-	defer r.wg.Done()
-
 	var (
 		ok    bool
 		delay = minRetryDelay

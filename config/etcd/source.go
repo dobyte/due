@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
@@ -17,9 +18,10 @@ const Name = "etcd"
 
 // Source is the etcd config source.
 type Source struct {
-	err     error    // Error returned when the client was built
-	opts    *options // Configuration options
-	builtin bool     // Whether the client is built in
+	err      error    // Error returned when the client was built
+	opts     *options // Configuration options
+	builtin  bool     // Whether the client is built in
+	watchers sync.Map // Watcher set
 }
 
 // NewSource creates a config source. It builds an etcd config center client from
@@ -141,15 +143,25 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		res = nil
 	}
 
-	return newWatcher(ctx, s, res), nil
+	w := newWatcher(ctx, s, res)
+	s.watchers.Store(w, struct{}{})
+
+	return w, nil
 }
 
-// Close closes the resources. It closes the client connection for a built-in
-// client; an external client is closed by the caller.
+// Close closes the resources. It stops the registered watchers and closes the
+// client connection for a built-in client; an external client is closed by the
+// caller.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
 	}
+
+	s.watchers.Range(func(key, _ any) bool {
+		_ = key.(*watcher).Stop()
+
+		return true
+	})
 
 	if s.builtin {
 		return s.opts.client.Close()

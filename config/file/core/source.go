@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
@@ -18,8 +19,9 @@ const Name = "file"
 
 // Source is a file-based config source.
 type Source struct {
-	path string
-	mode config.Mode
+	path     string
+	mode     config.Mode
+	watchers sync.Map // Watcher set
 }
 
 var _ config.Source = &Source{}
@@ -37,6 +39,10 @@ func (s *Source) Name() string {
 // Load loads the configurations of the given files, or every file under the source path when file
 // is empty.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	path := s.path
 
 	if len(file) > 0 && file[0] != "" {
@@ -77,6 +83,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.mode != config.WriteOnly && s.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	info, err := os.Stat(s.path)
@@ -132,11 +142,24 @@ func checkFilePath(root, file string) error {
 
 // Watch starts watching the source path and returns a [config.Watcher].
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
-	return newWatcher(ctx, s)
+	w, err := newWatcher(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	s.watchers.Store(w, struct{}{})
+
+	return w, nil
 }
 
-// Close closes the source.
+// Close closes the source. It stops the registered watchers.
 func (s *Source) Close() error {
+	s.watchers.Range(func(key, _ any) bool {
+		_ = key.(*watcher).Stop()
+
+		return true
+	})
+
 	return nil
 }
 

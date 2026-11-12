@@ -1,6 +1,9 @@
+//go:build integration
+// +build integration
+
 // Package etcd_test contains manual verification scripts that require a local etcd service.
 //
-// Run the tests with: go test -tags=etcd ./...
+// Run the tests with: go test -tags integration ./...
 package etcd_test
 
 import (

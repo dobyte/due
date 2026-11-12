@@ -1,3 +1,10 @@
+//go:build integration
+// +build integration
+
+// These tests require a running Polaris server and are excluded from the default test run. Run
+// them with:
+//
+//	go test -tags integration ./...
 package polaris_test
 
 import (

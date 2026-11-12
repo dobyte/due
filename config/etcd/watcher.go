@@ -247,6 +247,8 @@ func (w *watcher) Stop() error {
 
 	w.watcher.Close()
 
+	w.source.watchers.Delete(w)
+
 	return nil
 }
 

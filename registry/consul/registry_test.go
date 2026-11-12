@@ -1,3 +1,10 @@
+//go:build integration
+// +build integration
+
+// These tests require a running Consul server (defaulting to 127.0.0.1:8500) and are excluded
+// from the default test run. Run them with:
+//
+//	go test -tags integration ./...
 package consul_test
 
 import (

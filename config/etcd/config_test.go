@@ -1,3 +1,10 @@
+//go:build integration
+// +build integration
+
+// These tests require a running etcd server (defaulting to 127.0.0.1:2379) and are excluded from
+// the default test run. Run them with:
+//
+//	go test -tags integration ./...
 package etcd_test
 
 import (
