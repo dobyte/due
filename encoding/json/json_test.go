@@ -102,6 +102,44 @@ func TestAppend(t *testing.T) {
 	}
 }
 
+type omitemptyPayload struct {
+	Name  string `json:"name,omitempty"`
+	Count int    `json:"count,omitempty"`
+	Flag  bool   `json:"flag,omitempty"`
+	Ptr   *bool  `json:"ptr,omitempty"`
+}
+
+// TestOmitEmpty verifies that both backends share the legacy omitempty definition, where false and
+// zero numbers are omitted like encoding/json v1 and sonic, instead of being kept like the
+// encoding/json/v2 default.
+func TestOmitEmpty(t *testing.T) {
+	data, err := json.Marshal(omitemptyPayload{})
+	if err != nil {
+		t.Fatalf("marshal zero payload failed: %v", err)
+	}
+	if got := string(data); got != "{}" {
+		t.Errorf("expect an empty object, got %s", got)
+	}
+
+	data, err = json.Marshal(omitemptyPayload{Name: "due", Count: 2, Flag: true})
+	if err != nil {
+		t.Fatalf("marshal payload failed: %v", err)
+	}
+	if want, got := `{"name":"due","count":2,"flag":true}`, string(data); got != want {
+		t.Errorf("expect %s, got %s", want, got)
+	}
+
+	// A non-nil pointer is not empty regardless of the pointed value.
+	flag := false
+	data, err = json.Marshal(omitemptyPayload{Ptr: &flag})
+	if err != nil {
+		t.Fatalf("marshal pointer payload failed: %v", err)
+	}
+	if want, got := `{"ptr":false}`, string(data); got != want {
+		t.Errorf("expect %s, got %s", want, got)
+	}
+}
+
 // TestInvalidUTF8 verifies that invalid UTF-8 neither fails the encoding nor the decoding on both
 // backends. The backends keep the raw bytes differently, so only the absence of an error is
 // asserted here.

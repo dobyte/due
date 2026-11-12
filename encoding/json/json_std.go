@@ -4,14 +4,17 @@
 package json
 
 import (
+	jsonv1 "encoding/json"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 )
 
 // options align the encoding/json/v2 backend with the sonic backend, which is the default one:
-// field names match case-insensitively, duplicate object members keep the last value, and invalid
-// UTF-8 is tolerated instead of failing the operation.
+// field names match case-insensitively, duplicate object members keep the last value, invalid
+// UTF-8 is tolerated instead of failing the operation, and omitempty follows the legacy definition
+// so that false and zero numbers are omitted like sonic instead of being kept by v2.
 var options = []json.Options{
+	jsonv1.OmitEmptyWithLegacySemantics(true),
 	json.MatchCaseInsensitiveNames(true),
 	jsontext.AllowDuplicateNames(true),
 	jsontext.AllowInvalidUTF8(true),
