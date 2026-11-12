@@ -624,6 +624,62 @@ func TestSourceLoadReusesCachedContent(t *testing.T) {
 	}
 }
 
+// TestSourceLoadRespectsFixedFiles verifies that an explicit load is constrained by the configured
+// file list.
+func TestSourceLoadRespectsFixedFiles(t *testing.T) {
+	stub := &stubConfigClient{}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+	o.files = []string{"a.json"}
+
+	source := &Source{opts: o}
+
+	if _, err := source.Load(context.Background(), "b.yaml"); err == nil {
+		t.Fatal("expect an error for a file outside the configured files")
+	}
+
+	configs, err := source.Load(context.Background(), "a.json")
+	if err != nil {
+		t.Fatalf("load the configured file failed: %v", err)
+	}
+	if len(configs) != 1 || configs[0].File != "a.json" {
+		t.Fatalf("unexpected configurations: %+v", configs)
+	}
+
+	// Without an explicit file the configured list is still loaded.
+	configs, err = source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load the fixed files failed: %v", err)
+	}
+	if len(configs) != 1 || configs[0].File != "a.json" {
+		t.Fatalf("unexpected configurations: %+v", configs)
+	}
+}
+
+// TestSourceStoreRespectsFixedFiles verifies that an explicit store is constrained by the configured
+// file list.
+func TestSourceStoreRespectsFixedFiles(t *testing.T) {
+	stub := &stubConfigClient{}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+	o.files = []string{"a.json"}
+	o.mode = config.ReadWrite
+
+	source := &Source{opts: o}
+
+	if err := source.Store(context.Background(), "b.yaml", []byte("{}")); err == nil {
+		t.Fatal("expect an error for a file outside the configured files")
+	}
+
+	if err := source.Store(context.Background(), "a.json", []byte("{}")); err != nil {
+		t.Fatalf("store the configured file failed: %v", err)
+	}
+}
+
 // TestSourceLoadFixedFiles verifies that a configured file list limits a full load to those
 // dataIds and skips the group search.
 func TestSourceLoadFixedFiles(t *testing.T) {

@@ -68,6 +68,7 @@ type options struct {
 
 	// Fixed list of dataIds to load and listen to, defaulting to empty.
 	// When empty, every configuration under the group is loaded and listened to.
+	// An explicit load or store of a file outside this list is rejected.
 	files []string
 
 	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
@@ -196,7 +197,8 @@ func WithGroupName(groupName string) Option {
 //
 // The configured files are fetched individually, so the group export shortcut
 // and the md5-based content cache do not apply to them. Empty and duplicate
-// entries are ignored.
+// entries are ignored. When the list is not empty, an explicit load or store of
+// a file outside the list is rejected.
 func WithFiles(files ...string) Option {
 	return func(o *options) { o.files = files }
 }

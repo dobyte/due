@@ -35,6 +35,10 @@ const (
 	refreshInterval = 10 * time.Second
 )
 
+// errFileNotConfigured is returned when an explicit load or store addresses a file outside the
+// configured file list.
+var errFileNotConfigured = errors.New("config file is not in the configured files")
+
 // listenRequest is a listen request. It carries a dataId and the channel used to
 // report the listen result.
 type listenRequest struct {
@@ -105,10 +109,10 @@ func (s *Source) Name() string {
 
 // Load loads configuration items.
 //
-// When file is provided it loads only that item; otherwise it loads the fixed
-// file list when one is configured, or pages through and loads every item under
-// the group. On the very first full load (cache empty) Load asks the client to
-// export all contents in one shot if supported, so N GetConfig calls are replaced by
+// When file is provided it loads only that item, which must be among the configured files when a
+// fixed file list is set; otherwise it loads the fixed file list when one is configured, or pages
+// through and loads every item under the group. On the very first full load (cache empty) Load asks
+// the client to export all contents in one shot if supported, so N GetConfig calls are replaced by
 // a single ZIP download. Later full loads keep the md5-reuse shortcut.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
@@ -116,6 +120,12 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
+		// A configured file list also constrains an explicit load, so that this source only exposes
+		// the configurations it is configured to load and listen to.
+		if len(s.opts.files) > 0 && !s.hasFile(file[0]) {
+			return nil, errFileNotConfigured
+		}
+
 		configuration, err := s.load(ctx, file[0])
 		if err != nil {
 			return nil, err
@@ -224,6 +234,18 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	}
 
 	return s.conv(file, content), nil
+}
+
+// hasFile reports whether file is in the configured file list. It is the single point to extend
+// when the configured files support patterns.
+func (s *Source) hasFile(file string) bool {
+	for _, configured := range s.opts.files {
+		if configured == file {
+			return true
+		}
+	}
+
+	return false
 }
 
 // fixedItems converts the fixed file list into config list items, so that loading
@@ -354,7 +376,8 @@ type exportClient interface {
 // Store stores a configuration item.
 //
 // It supports only the write-only and read-write modes. After a successful
-// publish the server pushes the change to every registered watcher.
+// publish the server pushes the change to every registered watcher. When a fixed
+// file list is configured, only a file in that list can be stored.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -362,6 +385,12 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
+	}
+
+	// A configured file list also constrains an explicit store, so that this source only writes the
+	// configurations it is configured to manage.
+	if len(s.opts.files) > 0 && !s.hasFile(file) {
+		return errFileNotConfigured
 	}
 
 	if err := ctx.Err(); err != nil {
