@@ -51,7 +51,7 @@
 | [使用 defer 清理](uber-go/style.md#defer-to-clean-up) | 普通场景使用 `defer` 清理，按 Uber 的条件评估开销；高性能场景优先执行 [DUE-003](due-conventions.md#due-003)，能不用就不用，并保证清理语义完整。 |
 | [Channel 容量](uber-go/style.md#channel-size-is-one-or-none) | 通常使用无缓冲 Channel 或容量为 1 的 Channel；其他容量应严格审查大小依据、满载时是否阻塞以及阻塞如何处理。 |
 | [原子操作](uber-go/style.md#use-gouberorgatomic) | 按上游使用 `go.uber.org/atomic` 提供的类型封装，减少原始类型与原子操作混用产生的错误。 |
-| [Goroutine 生命周期](uber-go/style.md#dont-fire-and-forget-goroutines) | 不启动无人管理的 Goroutine。每个 Goroutine 应有可预测的结束条件或取消信号，并提供等待退出的机制。 |
+| [Goroutine 生命周期](uber-go/style.md#dont-fire-and-forget-goroutines) | 不启动无人管理的 Goroutine。每个 Goroutine 应有可预测的结束条件或取消信号，并提供等待退出的机制。由 `sync.WaitGroup` 管理时，按 [DUE-007](due-conventions.md#due-007)使用 `wg.Go(func(){})` 启动。 |
 | [等待退出](uber-go/style.md#wait-for-goroutines-to-exit) | `Close`、`Stop` 或 `Shutdown` 等入口既通知停止，也等待退出；对可能启动 Goroutine 的包，按原文使用 `go.uber.org/goleak` 检查泄漏。 |
 | [禁止在 init 中启动 Goroutine](uber-go/style.md#no-goroutines-in-init) | 不在 `init()` 中启动 Goroutine，将启动、取消和等待放入明确的生命周期入口。 |
 

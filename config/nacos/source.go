@@ -81,17 +81,8 @@ func NewSource(opts ...Option) config.Source {
 		s.builtin = true
 	}
 
-	s.wg.Add(2)
-
-	go func() {
-		defer s.wg.Done()
-		s.listen()
-	}()
-
-	go func() {
-		defer s.wg.Done()
-		s.refresh()
-	}()
+	s.wg.Go(s.listen)
+	s.wg.Go(s.refresh)
 
 	return s
 }
