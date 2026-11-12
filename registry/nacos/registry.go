@@ -163,11 +163,12 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	param.Metadata[metaFieldWeight] = xconv.String(int(param.Weight))
 
 	if len(ins.Routes) > 0 {
-		if routes, err := json.Marshal(ins.Routes); err != nil {
+		routes, err := marshalRoutes(ins.Routes)
+		if err != nil {
 			return err
-		} else {
-			param.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
 		}
+
+		param.Metadata[metaFieldRoutes] = routes
 	}
 
 	if len(ins.Events) > 0 {
