@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/dobyte/due/v2 v2.6.7
 	github.com/nacos-group/nacos-sdk-go/v2 v2.3.6
+	golang.org/x/sync v0.24.0
 )
 
 require (
@@ -64,7 +65,6 @@ require (
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.1.0 // indirect

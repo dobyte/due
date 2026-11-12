@@ -40,6 +40,10 @@ const v3LoginPath = "/v3/auth/user/login"
 // the SDK throttle to avoid login storms.
 const reLoginWindowSeconds = 60
 
+// maxErrorBodyLength limits the response body embedded in an error message, so that an oversized
+// error page is not carried around in memory and logs.
+const maxErrorBodyLength = 512
+
 // listClient decorates a config client so that SearchConfig lists configurations through the Nacos
 // v3 admin API. Every other method is delegated to the wrapped client.
 //
@@ -57,6 +61,7 @@ type listClient struct {
 	accessToken  atomic.Value            // Cached access token (string), set by login
 	tokenTtl     int64                   // Token lifetime in seconds, 0 when unknown
 	lastRefresh  int64                   // Unix timestamp of the last successful login
+	lastAttempt  int64                   // Unix timestamp of the last login attempt, successful or not
 	reLoginFlag  atomic.Bool             // Whether the next login must bypass the ttl window
 	loginMu      sync.Mutex              // Serializes concurrent login attempts
 	disabled     atomic.Bool             // Whether the v3 path is permanently unavailable
@@ -189,7 +194,9 @@ func (c *listClient) CloseClient() {
 
 // login authenticates against the Nacos 3.x /v3/auth/user/login endpoint and caches the access
 // token. It is idempotent and throttled: repeated calls within the token TTL window reuse the
-// cached token, and forced re-logins after a 403 are spaced by reLoginWindowSeconds.
+// cached token, a forced re-login after a 403 is spaced by reLoginWindowSeconds, and a failed
+// login backs off for the same window so that an unreachable or misconfigured auth endpoint is not
+// probed on every request.
 func (c *listClient) login() error {
 	if c.username == "" {
 		// No credentials configured; the server may still allow anonymous access.
@@ -201,19 +208,26 @@ func (c *listClient) login() error {
 
 	now := time.Now().Unix()
 
-	if c.lastRefresh > 0 {
-		if c.reLoginFlag.Load() {
-			if now-c.lastRefresh < reLoginWindowSeconds {
-				return nil
-			}
-		} else if c.tokenTtl > 0 {
-			// Refresh two windows before expiration to keep the token valid.
-			refreshAt := c.lastRefresh + c.tokenTtl - 2*(c.tokenTtl/10)
-			if now < refreshAt {
-				return nil
-			}
+	switch {
+	case c.reLoginFlag.Load():
+		// The token was rejected, so the ttl window does not apply. A successful login within the
+		// window still means the token is fresh, keeping the previous rate limit for retries.
+		if c.lastRefresh > 0 && now-c.lastRefresh < reLoginWindowSeconds {
+			return nil
 		}
+	case c.accessToken.Load() != nil && c.tokenTtl > 0:
+		// Refresh two windows before expiration to keep the token valid.
+		refreshAt := c.lastRefresh + c.tokenTtl - 2*(c.tokenTtl/10)
+		if now < refreshAt {
+			return nil
+		}
+	case c.lastAttempt > 0 && now-c.lastAttempt < reLoginWindowSeconds:
+		// The previous attempt failed; wait for the backoff window before probing the endpoint
+		// again so that every request does not pay for a full round of login timeouts.
+		return nil
 	}
+
+	c.lastAttempt = now
 
 	var lastErr error
 
@@ -281,7 +295,7 @@ func (c *listClient) loginAt(server constant.ServerConfig) (token string, ttl in
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, errors.New(string(body))
+		return "", 0, nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), truncateBody(body), nil)
 	}
 
 	var result struct {
@@ -298,6 +312,15 @@ func (c *listClient) loginAt(server constant.ServerConfig) (token string, ttl in
 	}
 
 	return result.AccessToken, result.TokenTtl, nil
+}
+
+// truncateBody truncates a response body for use in an error message.
+func truncateBody(body []byte) string {
+	if len(body) <= maxErrorBodyLength {
+		return string(body)
+	}
+
+	return string(body[:maxErrorBodyLength])
 }
 
 // getAccessToken returns the cached access token, logging in if it is missing or expired. It
@@ -337,7 +360,7 @@ func (c *listClient) Export(group string) (map[string]string, error) {
 		params["namespaceId"] = c.tenant
 	}
 
-	raw, err := c.requestRaw(configExportPath, params)
+	raw, err := c.doGet(configExportPath, params)
 	if err != nil && isAuthError(err) {
 		if c.username == "" {
 			// Same reasoning as SearchConfig: the SDK fallback for content fetch (GetConfig) may
@@ -349,7 +372,7 @@ func (c *listClient) Export(group string) (map[string]string, error) {
 		if loginErr := c.login(); loginErr != nil {
 			log.Warnf("nacos v3 login failed after auth rejection: %v", loginErr)
 		}
-		raw, err = c.requestRaw(configExportPath, params)
+		raw, err = c.doGet(configExportPath, params)
 	}
 	if err != nil {
 		if isListUnavailable(err) {
@@ -364,10 +387,10 @@ func (c *listClient) Export(group string) (map[string]string, error) {
 	return parseExport(raw, group)
 }
 
-// requestRaw sends one HTTP GET request to the given path on every configured server in turn and
-// returns the response body bytes of the first successful response. It shares the same auth
-// injection logic as listClient.request.
-func (c *listClient) requestRaw(path string, params map[string]string) ([]byte, error) {
+// doGet sends one HTTP GET request to the given path on every configured server in turn and returns
+// the body of the first successful response. The cached access token is injected once, so that a
+// login attempt is not repeated for every server.
+func (c *listClient) doGet(path string, params map[string]string) ([]byte, error) {
 	if token, err := c.getAccessToken(); err == nil && token != "" {
 		params[constant.KEY_ACCESS_TOKEN] = token
 	}
@@ -375,22 +398,9 @@ func (c *listClient) requestRaw(path string, params map[string]string) ([]byte, 
 	var lastErr error
 
 	for _, server := range c.servers {
-		url := serverAddress(server, path)
-		resp, err := c.agent.Get(url, http.Header{}, c.timeout, params)
+		body, err := c.get(server, path, params)
 		if err != nil {
 			lastErr = err
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			lastErr = nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), string(body), nil)
 			continue
 		}
 
@@ -398,10 +408,30 @@ func (c *listClient) requestRaw(path string, params map[string]string) ([]byte, 
 	}
 
 	if lastErr == nil {
-		lastErr = errors.New("nacos config export request failed")
+		lastErr = errors.New("nacos config request failed: no server available")
 	}
 
 	return nil, lastErr
+}
+
+// get sends one HTTP GET request to the given server and returns the response body.
+func (c *listClient) get(server constant.ServerConfig, path string, params map[string]string) ([]byte, error) {
+	resp, err := c.agent.Get(serverAddress(server, path), http.Header{}, c.timeout, params)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), truncateBody(body), nil)
+	}
+
+	return body, nil
 }
 
 // parseExport parses the ZIP archive returned by the v3 admin export endpoint and returns a map
@@ -477,54 +507,18 @@ func (c *listClient) list(param vo.SearchConfigParam) (*model.ConfigPage, error)
 		params["appName"] = param.AppName
 	}
 
-	var lastErr error
-
-	for _, server := range c.servers {
-		raw, err := c.request(server, params)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		return parseConfigList(raw)
-	}
-
-	if lastErr == nil {
-		lastErr = errors.New("nacos config list request failed")
-	}
-
-	return nil, lastErr
-}
-
-// request sends one list request to the given server and returns the response body.
-func (c *listClient) request(server constant.ServerConfig, params map[string]string) (string, error) {
-	// Inject the cached access token, if the deployment requires authentication.
-	if token, err := c.getAccessToken(); err == nil && token != "" {
-		params[constant.KEY_ACCESS_TOKEN] = token
-	}
-
-	resp, err := c.agent.Get(serverAddress(server, configListPath), http.Header{}, c.timeout, params)
+	raw, err := c.doGet(configListPath, params)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", nacos_error.NewNacosError(strconv.Itoa(resp.StatusCode), string(body), nil)
-	}
-
-	return string(body), nil
+	return parseConfigList(raw)
 }
 
 // parseConfigList decodes one list response.
-func parseConfigList(raw string) (*model.ConfigPage, error) {
+func parseConfigList(raw []byte) (*model.ConfigPage, error) {
 	var result configListResult
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, err
 	}
 
@@ -565,7 +559,8 @@ func isAuthError(err error) bool {
 
 // isListUnavailable reports whether the list request failed in a way that will not recover by
 // retrying: the server does not provide the v3 admin API, or the configured account is not allowed
-// to use it. Transient statuses such as 408 and 429 keep the v3 path enabled.
+// to use it. Transient statuses such as 401, 408 and 429 keep the v3 path enabled, because the
+// access token can be refreshed or the endpoint can recover.
 func isListUnavailable(err error) bool {
 	var (
 		nacosErr *nacos_error.NacosError
@@ -584,10 +579,12 @@ func isListUnavailable(err error) bool {
 }
 
 // isUnavailableCode reports whether the HTTP status code means the v3 list endpoint cannot be used
-// by this deployment.
+// by this deployment. A 401 is not included: it may be caused by an expired token or a temporarily
+// unavailable login endpoint, so the v3 path keeps retrying with the login backoff instead of being
+// disabled for the rest of the process lifetime.
 func isUnavailableCode(code string) bool {
 	switch code {
-	case "400", "401", "403", "404", "405":
+	case "400", "403", "404", "405":
 		return true
 	default:
 		return false

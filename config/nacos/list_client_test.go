@@ -13,8 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/nacos_error"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
@@ -24,6 +27,7 @@ var _ config_client.IConfigClient = (*stubConfigClient)(nil)
 // stubConfigClient is a config client whose SearchConfig reports how often the fallback is used.
 type stubConfigClient struct {
 	page        *model.ConfigPage
+	searchErr   error
 	calls       atomic.Int32
 	getCalls    atomic.Int32
 	listenCalls atomic.Int32
@@ -55,6 +59,10 @@ func (c *stubConfigClient) CancelListenConfig(vo.ConfigParam) error {
 
 func (c *stubConfigClient) SearchConfig(vo.SearchConfigParam) (*model.ConfigPage, error) {
 	c.calls.Add(1)
+
+	if c.searchErr != nil {
+		return nil, c.searchErr
+	}
 
 	if c.page == nil {
 		return &model.ConfigPage{}, nil
@@ -224,6 +232,88 @@ func TestListClientPermissionFallback(t *testing.T) {
 	}
 
 	list.CloseClient()
+}
+
+// TestListClientUnauthorizedKeepsV3 verifies that a 401 keeps the v3 path enabled, since an
+// expired token or a temporarily unavailable login endpoint may recover, instead of disabling the
+// v3 path for the rest of the process lifetime.
+func TestListClientUnauthorizedKeepsV3(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	defer server.Close()
+
+	o := defaultOptions()
+	o.urls = []string{server.URL + "/nacos"}
+	o.username = "nacos"
+	o.password = "nacos"
+	o.timeout = time.Second
+
+	stub := &stubConfigClient{page: &model.ConfigPage{
+		PageItems: []model.ConfigItem{{DataId: "fallback.json"}},
+	}}
+	client := newListConfigClient(stub, o)
+
+	list, ok := client.(*listClient)
+	if !ok {
+		t.Fatalf("expect a list client, got %T", client)
+	}
+
+	page, err := list.SearchConfig(vo.SearchConfigParam{Search: "blur"})
+	if err != nil {
+		t.Fatalf("search config failed: %v", err)
+	}
+	if len(page.PageItems) != 1 || page.PageItems[0].DataId != "fallback.json" {
+		t.Fatalf("expect the fallback page, got %+v", page)
+	}
+	if list.disabled.Load() {
+		t.Fatal("a 401 should not permanently disable the v3 list path")
+	}
+	if calls := stub.calls.Load(); calls != 1 {
+		t.Fatalf("expect the fallback client to serve the search, got %d calls", calls)
+	}
+
+	list.CloseClient()
+}
+
+// TestListClientLoginErrorKeepsStatus verifies that a failed login reports the HTTP status and a
+// bounded body instead of an unbounded plain error.
+func TestListClientLoginErrorKeepsStatus(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), maxErrorBodyLength*2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	o := defaultOptions()
+	o.urls = []string{server.URL + "/nacos"}
+	o.username = "nacos"
+	o.password = "nacos"
+	o.timeout = time.Second
+
+	list, ok := newListConfigClient(&stubConfigClient{}, o).(*listClient)
+	if !ok {
+		t.Fatal("expect a list client")
+	}
+
+	_, _, err := list.loginAt(list.servers[0])
+	if err == nil {
+		t.Fatal("expect a login error")
+	}
+
+	var nacosErr *nacos_error.NacosError
+	if !errors.As(err, &nacosErr) {
+		t.Fatalf("expect a nacos error, got %T", err)
+	}
+	if got := nacosErr.ErrorCode(); got != "401" {
+		t.Fatalf("expect error code 401, got %q", got)
+	}
+	if got, want := len(nacosErr.Error()), maxErrorBodyLength+len("[401] "); got > want {
+		t.Fatalf("expect an error message of at most %d bytes, got %d", want, got)
+	}
 }
 
 // TestListClientInvalidURL verifies that an invalid address does not prevent the v3 path from being
@@ -398,6 +488,33 @@ func TestServerAddress(t *testing.T) {
 	}
 }
 
+// TestNewServerConfigs verifies that an invalid address is skipped while the remaining addresses
+// stay usable, and that the first failure is reported.
+func TestNewServerConfigs(t *testing.T) {
+	configs, endpoint, err := newServerConfigs([]string{
+		"bad::addr",
+		"10.0.0.1:8848",
+		"https://10.0.0.2:443/nacos",
+		"bad::addr2",
+	})
+
+	if err == nil {
+		t.Fatal("expect an error for the invalid addresses")
+	}
+	if endpoint != "bad::addr" {
+		t.Fatalf("expect the first invalid address bad::addr, got %q", endpoint)
+	}
+	if len(configs) != 2 {
+		t.Fatalf("expect 2 valid server configs, got %d", len(configs))
+	}
+	if configs[0].Scheme != "http" || configs[0].IpAddr != "10.0.0.1" || configs[0].Port != 8848 {
+		t.Fatalf("unexpected default scheme server config: %+v", configs[0])
+	}
+	if configs[1].Scheme != "https" || configs[1].ContextPath != "/nacos" {
+		t.Fatalf("unexpected https server config: %+v", configs[1])
+	}
+}
+
 // TestSourceLoadUsesSearchContent verifies that Load reuses the content returned by the search and
 // still fetches the content when KMS decryption is required.
 func TestSourceLoadUsesSearchContent(t *testing.T) {
@@ -552,6 +669,142 @@ func TestSourceLoadFixedFiles(t *testing.T) {
 	}
 	if got := stub.calls.Load(); got != 0 {
 		t.Fatalf("expect no search calls, got %d", got)
+	}
+	if !source.cacheIsEmpty() {
+		t.Fatal("the fixed file list must not populate the content cache")
+	}
+}
+
+// TestSourceConv verifies that a dataId is exposed as the path within the source as well as the
+// file name, matching the configuration structure produced by the other config sources.
+func TestSourceConv(t *testing.T) {
+	configuration := (&Source{}).conv("config.json", "content")
+
+	if configuration.Path != "config.json" {
+		t.Fatalf("expect path config.json, got %q", configuration.Path)
+	}
+	if configuration.File != "config.json" || configuration.Name != "config" {
+		t.Fatalf("unexpected file or name: %+v", configuration)
+	}
+	if configuration.Format != "json" || string(configuration.Content) != "content" {
+		t.Fatalf("unexpected format or content: %+v", configuration)
+	}
+	if configuration.FullPath != "config.json" {
+		t.Fatalf("expect full path config.json, got %q", configuration.FullPath)
+	}
+}
+
+// TestSearchFailureLogging verifies that consecutive failing searches keep a single failure state
+// and that a successful search clears it, so that a broken server does not log at every refresh.
+func TestSearchFailureLogging(t *testing.T) {
+	stub := &stubConfigClient{searchErr: errors.New("server unavailable")}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	source := &Source{
+		opts:     o,
+		ctx:      ctx,
+		versions: make(map[string]uint64),
+		chListen: make(chan listenRequest),
+		chCancel: make(chan string),
+	}
+
+	source.search()
+	if !source.searchFailed {
+		t.Fatal("expect the failure state to be recorded")
+	}
+
+	// A second failure keeps the state, so the warning is not repeated.
+	source.search()
+	if !source.searchFailed {
+		t.Fatal("expect the failure state to survive consecutive failures")
+	}
+
+	stub.searchErr = nil
+	source.search()
+	if source.searchFailed {
+		t.Fatal("expect the failure state to be cleared after a successful search")
+	}
+}
+
+// TestWatcherNextSkipsEmptySignal verifies that a notification signal without pending
+// configurations does not make Next return an empty result.
+func TestWatcherNextSkipsEmptySignal(t *testing.T) {
+	w := newWatcher(context.Background(), &Source{})
+
+	// Simulate a leftover signal whose configurations were merged into a previous Next call.
+	w.chWatch <- struct{}{}
+
+	type result struct {
+		configs []*config.Configuration
+		err     error
+	}
+
+	done := make(chan result, 1)
+	go func() {
+		configs, err := w.Next()
+		done <- result{configs: configs, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		t.Fatalf("Next returned an empty result: %+v", r)
+	case <-time.After(50 * time.Millisecond):
+		// Next is still waiting for a real change, as expected.
+	}
+
+	w.notice(&config.Configuration{File: "a.json"})
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("Next failed: %v", r.err)
+		}
+		if len(r.configs) != 1 || r.configs[0].File != "a.json" {
+			t.Fatalf("unexpected configurations: %+v", r.configs)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Next did not return the pending configuration")
+	}
+}
+
+// TestSourceCloseStopsWatchers verifies that closing the source stops the registered watchers, so
+// that Next returns instead of blocking forever on a watcher context the caller never cancels.
+func TestSourceCloseStopsWatchers(t *testing.T) {
+	source := NewSource(WithClient(&stubConfigClient{}))
+
+	w, err := source.Watch(context.Background())
+	if err != nil {
+		t.Fatalf("watch failed: %v", err)
+	}
+
+	errs := make(chan error, 1)
+	go func() {
+		_, err := w.Next()
+		errs <- err
+	}()
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source failed: %v", err)
+	}
+
+	select {
+	case err := <-errs:
+		if err == nil {
+			t.Fatal("expect Next to return an error after the source is closed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Next blocked after the source was closed")
+	}
+
+	// A watcher registered after the shutdown must not be left blocking either.
+	if _, err := source.Watch(context.Background()); err == nil {
+		t.Fatal("expect Watch to fail on a closed source")
 	}
 }
 

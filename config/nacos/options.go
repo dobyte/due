@@ -16,15 +16,7 @@ const (
 	defaultClusterName = "DEFAULT"
 	defaultGroupName   = "DEFAULT_GROUP"
 	defaultTimeout     = "3s"
-	defaultNamespaceId = ""
-	defaultEndpoint    = ""
-	defaultRegionId    = ""
-	defaultAccessKey   = ""
-	defaultSecretKey   = ""
-	defaultOpenKMS     = false
 	defaultCacheDir    = "./run/nacos/config/cache"
-	defaultUsername    = ""
-	defaultPassword    = ""
 	defaultLogDir      = "./run/nacos/config/log"
 	defaultLogLevel    = "info"
 )
@@ -128,15 +120,15 @@ func defaultOptions() *options {
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
 		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
-		namespaceId: etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
-		endpoint:    etc.Get(defaultEndpointKey, defaultEndpoint).String(),
-		regionId:    etc.Get(defaultRegionIdKey, defaultRegionId).String(),
-		accessKey:   etc.Get(defaultAccessKeyKey, defaultAccessKey).String(),
-		secretKey:   etc.Get(defaultSecretKeyKey, defaultSecretKey).String(),
-		openKMS:     etc.Get(defaultOpenKMSKey, defaultOpenKMS).Bool(),
+		namespaceId: etc.Get(defaultNamespaceIdKey).String(),
+		endpoint:    etc.Get(defaultEndpointKey).String(),
+		regionId:    etc.Get(defaultRegionIdKey).String(),
+		accessKey:   etc.Get(defaultAccessKeyKey).String(),
+		secretKey:   etc.Get(defaultSecretKeyKey).String(),
+		openKMS:     etc.Get(defaultOpenKMSKey).Bool(),
 		cacheDir:    etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
-		username:    etc.Get(defaultUsernameKey, defaultUsername).String(),
-		password:    etc.Get(defaultPasswordKey, defaultPassword).String(),
+		username:    etc.Get(defaultUsernameKey).String(),
+		password:    etc.Get(defaultPasswordKey).String(),
 		logDir:      etc.Get(defaultLogDirKey, defaultLogDir).String(),
 		logLevel:    etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
 	}
