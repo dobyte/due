@@ -472,11 +472,16 @@ func (s *Source) listen() {
 	}
 }
 
-// refresh refreshes the configuration periodically. It runs a config search at a
-// fixed interval to detect added or removed configuration items, or, when a fixed
-// file list is configured, retries the listen registration of those files.
+// refresh registers the configuration listening. When a fixed file list is configured, it
+// registers those dataIds once because the list never changes; otherwise it runs a config search
+// at a fixed interval to detect added or removed configuration items.
 func (s *Source) refresh() {
 	if s.err != nil {
+		return
+	}
+
+	if len(s.opts.files) > 0 {
+		s.listenFiles()
 		return
 	}
 
@@ -495,28 +500,26 @@ func (s *Source) refresh() {
 	}
 }
 
-// search searches for configuration items under the group. It pages through the
-// config list, sends a listen request for each added dataId and a cancel request
-// for each removed dataId. When a fixed file list is configured, it only ensures
-// those dataIds are listened to and never searches or cancels.
-func (s *Source) search() {
-	s.version++
-
-	// Fixed file list: listen only to the configured dataIds instead of searching the group.
-	if len(s.opts.files) > 0 {
-		for _, dataId := range s.opts.files {
-			// Skip the version mark when listening fails so that the next search retries it.
-			if _, ok := s.versions[dataId]; !ok {
-				if err := s.requestListen(dataId); err != nil {
-					continue
-				}
-			}
-
-			s.versions[dataId] = s.version
+// listenFiles registers config listening for the fixed file list. A failed registration is logged
+// by the listen goroutine and not retried, since the list is fixed and the error is deterministic.
+func (s *Source) listenFiles() {
+	for _, dataId := range s.opts.files {
+		select {
+		case <-s.ctx.Done():
+			return
+		default:
+			// continue
 		}
 
-		return
+		_ = s.requestListen(dataId)
 	}
+}
+
+// search searches for configuration items under the group. It pages through the
+// config list, sends a listen request for each added dataId and a cancel request
+// for each removed dataId.
+func (s *Source) search() {
+	s.version++
 
 	index := 1
 

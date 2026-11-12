@@ -23,9 +23,10 @@ var _ config_client.IConfigClient = (*stubConfigClient)(nil)
 
 // stubConfigClient is a config client whose SearchConfig reports how often the fallback is used.
 type stubConfigClient struct {
-	page     *model.ConfigPage
-	calls    atomic.Int32
-	getCalls atomic.Int32
+	page        *model.ConfigPage
+	calls       atomic.Int32
+	getCalls    atomic.Int32
+	listenCalls atomic.Int32
 }
 
 func (c *stubConfigClient) GetConfig(vo.ConfigParam) (string, error) {
@@ -43,6 +44,8 @@ func (c *stubConfigClient) DeleteConfig(vo.ConfigParam) (bool, error) {
 }
 
 func (c *stubConfigClient) ListenConfig(vo.ConfigParam) error {
+	c.listenCalls.Add(1)
+
 	return nil
 }
 
@@ -549,6 +552,33 @@ func TestSourceLoadFixedFiles(t *testing.T) {
 	}
 	if got := stub.calls.Load(); got != 0 {
 		t.Fatalf("expect no search calls, got %d", got)
+	}
+}
+
+// TestRefreshFixedFiles verifies that a fixed file list registers the listens once and never
+// searches the group.
+func TestRefreshFixedFiles(t *testing.T) {
+	stub := &stubConfigClient{}
+
+	source := NewSource(
+		WithClient(stub),
+		WithFiles("a.json", "b.yaml"),
+	)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for stub.listenCalls.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if got := stub.listenCalls.Load(); got != 2 {
+		t.Fatalf("expect 2 listen calls, got %d", got)
+	}
+	if got := stub.calls.Load(); got != 0 {
+		t.Fatalf("expect no search calls, got %d", got)
+	}
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source failed: %v", err)
 	}
 }
 
