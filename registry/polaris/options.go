@@ -70,6 +70,17 @@ func defaultOptions() *options {
 	}
 }
 
+// normalize falls back to the default directories when they are empty.
+func (o *options) normalize() {
+	if o.cacheDir == "" {
+		o.cacheDir = defaultCacheDir
+	}
+
+	if o.logDir == "" {
+		o.logDir = defaultLogDir
+	}
+}
+
 // WithUrls sets the server addresses.
 func WithUrls(urls ...string) Option {
 	return func(o *options) { o.urls = urls }
@@ -96,11 +107,13 @@ func WithProtocol(protocol string) Option {
 }
 
 // WithCacheDir sets the directory caching service information.
+// An empty value falls back to the default directory.
 func WithCacheDir(cacheDir string) Option {
 	return func(o *options) { o.cacheDir = cacheDir }
 }
 
 // WithLogDir sets the log storage path.
+// An empty value falls back to the default directory.
 func WithLogDir(logDir string) Option {
 	return func(o *options) { o.logDir = logDir }
 }

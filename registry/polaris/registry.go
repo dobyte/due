@@ -54,6 +54,8 @@ func NewRegistry(opts ...Option) *Registry {
 		opt(o)
 	}
 
+	o.normalize()
+
 	r := &Registry{}
 	r.opts = o
 
@@ -320,9 +322,27 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 	return parseInstances(resp.GetInstances())
 }
 
+// setLoggersDir configures the process-wide Polaris SDK loggers once.
+//
+// The SDK shares its loggers across all contexts, so reconfiguring them for every built-in
+// client would reset log settings owned by other Polaris components and rebuild the file
+// loggers on each call, leaking the replaced ones.
+var (
+	setLoggersDirOnce sync.Once
+	setLoggersDirErr  error
+)
+
+func setLoggersDir(logDir string) error {
+	setLoggersDirOnce.Do(func() {
+		setLoggersDirErr = api.SetLoggersDir(logDir)
+	})
+
+	return setLoggersDirErr
+}
+
 // buildClient builds the Polaris SDK context.
 func (r *Registry) buildClient() (api.SDKContext, error) {
-	if err := api.SetLoggersDir(r.opts.logDir); err != nil {
+	if err := setLoggersDir(r.opts.logDir); err != nil {
 		return nil, err
 	}
 
