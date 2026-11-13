@@ -9,6 +9,8 @@ type Matcher interface {
 	// Has reports whether a config exists for any of the patterns.
 	Has() bool
 	// Get returns the value of the first pattern that resolves, falling back to def when none does.
+	// The returned value may reference the internal config maps and slices and must be treated as
+	// read-only; modifying it corrupts the snapshot shared by every reader.
 	Get(def ...any) value.Value
 	// Scan scans the value of the first pattern that resolves into dest.
 	Scan(dest any) error
@@ -38,7 +40,9 @@ func (m *defaultMatcher) Has() bool {
 	return false
 }
 
-// Get returns the value of the first pattern that resolves, falling back to def when none does.
+// Get returns the value of the first pattern that resolves, falling back to def when none does. The
+// returned value must be treated as read-only, since it may reference the internal config maps and
+// slices.
 func (m *defaultMatcher) Get(def ...any) value.Value {
 	if m.c != nil {
 		for _, pattern := range m.patterns {

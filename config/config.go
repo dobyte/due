@@ -48,7 +48,9 @@ func Has(pattern string) bool {
 	return c.Has(pattern)
 }
 
-// Get returns the config value under pattern, falling back to def when the config is missing.
+// Get returns the config value under pattern, falling back to def when the config is missing. The
+// returned value must be treated as read-only, since it may reference the internal config maps and
+// slices.
 func Get(pattern string, def ...any) value.Value {
 	c := GetConfigurator()
 	if c == nil {

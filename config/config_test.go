@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,6 +103,51 @@ func (s *fakeSource) storedContent(file string) []byte {
 	defer s.mu.Unlock()
 
 	return s.stored[file]
+}
+
+// flakySource fails its first Load calls so that the startup retry can be exercised.
+type flakySource struct {
+	*fakeSource
+
+	failMu   sync.Mutex
+	failures int
+}
+
+func (s *flakySource) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
+	s.failMu.Lock()
+	if s.failures > 0 {
+		s.failures--
+		s.failMu.Unlock()
+
+		return nil, errors.New("config source is unavailable")
+	}
+	s.failMu.Unlock()
+
+	return s.fakeSource.Load(ctx, file...)
+}
+
+// flakyWatchSource fails its first Watch calls so that the watcher retry can be exercised.
+type flakyWatchSource struct {
+	*fakeSource
+
+	failMu   sync.Mutex
+	failures int
+	calls    atomic.Int32
+}
+
+func (s *flakyWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
+	s.calls.Add(1)
+
+	s.failMu.Lock()
+	if s.failures > 0 {
+		s.failures--
+		s.failMu.Unlock()
+
+		return nil, errors.New("config watcher is unavailable")
+	}
+	s.failMu.Unlock()
+
+	return s.fakeSource.Watch(ctx)
 }
 
 // waitNames waits until the given name shows up in a notification, failing the test on timeout.
@@ -633,5 +679,107 @@ func TestGlobalConfiguratorCloseClears(t *testing.T) {
 
 	if config.GetConfigurator() != nil {
 		t.Fatal("expect the global configurator to be cleared")
+	}
+}
+
+// TestConfiguratorRetriesFailedLoad verifies that a source that fails to load at startup is retried
+// in the background.
+func TestConfiguratorRetriesFailedLoad(t *testing.T) {
+	source := &flakySource{fakeSource: newFakeSource(`{"timezone":"Local"}`), failures: 1}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	deadline := time.Now().Add(10 * time.Second)
+
+	for !c.Has("config.timezone") {
+		if time.Now().After(deadline) {
+			t.Fatal("the config is not loaded after the retry")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestConfiguratorRetriesFailedWatch verifies that a source that cannot be watched at startup is
+// reopened in the background.
+func TestConfiguratorRetriesFailedWatch(t *testing.T) {
+	source := &flakyWatchSource{fakeSource: newFakeSource(`{"timezone":"Local"}`), failures: 1}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	notified := make(chan struct{}, 1)
+	c.Watch(func(...string) {
+		select {
+		case notified <- struct{}{}:
+		default:
+		}
+	}, "config")
+
+	deadline := time.Now().Add(10 * time.Second)
+
+	for source.calls.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the watcher is not reopened after the failure")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	select {
+	case <-notified:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reopened watcher does not report changes")
+	}
+}
+
+// TestConfiguratorWatchCallbackPanic verifies that a panicking callback does not stop the other
+// callbacks nor terminate the process.
+func TestConfiguratorWatchCallbackPanic(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	notified := make(chan struct{}, 1)
+
+	c.Watch(func(...string) { panic("boom") })
+	c.Watch(func(...string) {
+		select {
+		case notified <- struct{}{}:
+		default:
+		}
+	}, "config")
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	select {
+	case <-notified:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the notification stops after a panicking callback")
+	}
+}
+
+// TestConfiguratorSetIndexLimit verifies that Set does not allocate a slice for an oversized index.
+func TestConfiguratorSetIndexLimit(t *testing.T) {
+	tests := []struct {
+		name    string
+		give    string
+		pattern string
+	}{
+		{name: "map node", give: `{"list":[1]}`, pattern: "config.list.1000000"},
+		{name: "slice node", give: `{"matrix":[[1]]}`, pattern: "config.matrix.0.1000000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := newFakeSource(tt.give)
+			c := config.NewConfigurator(config.WithSources(source))
+			defer c.Close()
+
+			if err := c.Set(tt.pattern, 2); err == nil {
+				t.Fatal("expect an error for the oversized index")
+			}
+		})
 	}
 }

@@ -1,8 +1,6 @@
 package consul
 
 import (
-	"context"
-
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 	"github.com/hashicorp/consul/api"
@@ -26,9 +24,6 @@ type Option func(o *options)
 
 // options holds the configuration options of a [Source].
 type options struct {
-	// ctx is the context and defaults to [context.Background].
-	ctx context.Context
-
 	// addr is the client connection address.
 	// It configures the built-in client and defaults to 127.0.0.1:8500.
 	addr string
@@ -55,7 +50,6 @@ type options struct {
 // configuration environment and filling in its default value.
 func defaultOptions() *options {
 	return &options{
-		ctx:   context.Background(),
 		addr:  etc.Get(defaultAddrKey, defaultAddr).String(),
 		path:  etc.Get(defaultPathKey, defaultPath).String(),
 		mode:  config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
@@ -71,11 +65,6 @@ func WithAddr(addr string) Option {
 // WithClient sets the external client.
 func WithClient(client *api.Client) Option {
 	return func(o *options) { o.client = client }
-}
-
-// WithContext sets the context.
-func WithContext(ctx context.Context) Option {
-	return func(o *options) { o.ctx = ctx }
 }
 
 // WithPath sets the base path.

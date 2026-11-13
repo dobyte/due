@@ -25,6 +25,9 @@ const (
 	watchMinBackoff = time.Second
 	// watchMaxBackoff is the maximum delay before retrying a failed config watch.
 	watchMaxBackoff = 30 * time.Second
+	// maxSliceIndex is the largest index that Set expands a config slice to, so that a mistyped
+	// index cannot allocate an unbounded amount of memory.
+	maxSliceIndex = 10000
 )
 
 // Configurator manages a set of config sources and exposes the config loaded from them.
@@ -35,6 +38,8 @@ type Configurator interface {
 	// Has reports whether a config matching pattern exists.
 	Has(pattern string) bool
 	// Get returns the config value under pattern, falling back to def when the config is missing.
+	// The returned value may reference the internal config maps and slices and must be treated as
+	// read-only; modifying it corrupts the snapshot shared by every reader.
 	Get(pattern string, def ...any) value.Value
 	// Set sets the config value under pattern; a non-container value on the path is replaced when a
 	// nested pattern is given.
@@ -93,39 +98,110 @@ func NewConfigurator(opts ...Option) Configurator {
 	return r
 }
 
-// init initializes the config sources and loads their config into the value store.
+// init initializes the config sources and loads their config into the value store. A source that
+// fails to load is retried in the background, so that a temporary failure does not leave the store
+// permanently incomplete.
 func (c *defaultConfigurator) init() {
 	c.sources = make(map[string]Source, len(c.opts.sources))
 	for _, s := range c.opts.sources {
 		c.sources[s.Name()] = s
 	}
 
-	values := make(map[string]any)
 	for _, s := range c.opts.sources {
 		cs, err := s.Load(c.ctx)
 		if err != nil {
 			log.Printf("load configure failed: %v", err)
+
+			c.wg.Go(func() {
+				c.reload(s)
+			})
+
 			continue
 		}
 
-		for _, cc := range cs {
-			if len(cc.Content) == 0 {
-				continue
-			}
+		c.apply(cs)
+	}
+}
 
-			v, err := c.opts.decoder(cc.Format, cc.Content)
-			if err != nil {
-				if !errors.Is(err, errors.ErrInvalidFormat) {
-					log.Printf("decode configure failed: %v", err)
-				}
-				continue
-			}
+// reload retries loading the configurations of a source that failed at startup and merges them into
+// the store once the source becomes available.
+func (c *defaultConfigurator) reload(s Source) {
+	delay := watchMinBackoff
 
-			values[cc.Name] = v
+	for {
+		if !c.sleep(delay) {
+			return
 		}
+
+		cs, err := s.Load(c.ctx)
+		if err != nil {
+			if c.ctx.Err() != nil {
+				return
+			}
+
+			log.Printf("load configure failed: %v", err)
+
+			delay = nextWatchDelay(delay)
+
+			continue
+		}
+
+		if names := c.apply(cs); len(names) > 0 {
+			c.wg.Go(func() {
+				c.notify(names...)
+			})
+		}
+
+		return
+	}
+}
+
+// apply decodes the given configurations and merges them into the value store. It returns the names
+// of the configurations that were applied.
+func (c *defaultConfigurator) apply(cs []*Configuration) []string {
+	names := make([]string, 0, len(cs))
+	values := make(map[string]any, len(cs))
+
+	for _, cc := range cs {
+		if len(cc.Content) == 0 {
+			continue
+		}
+
+		v, err := c.opts.decoder(cc.Format, cc.Content)
+		if err != nil {
+			if !errors.Is(err, errors.ErrInvalidFormat) {
+				log.Printf("decode configure failed: %v", err)
+			}
+			continue
+		}
+
+		names = append(names, cc.Name)
+		values[cc.Name] = v
 	}
 
-	c.store(values)
+	if len(values) == 0 {
+		return names
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	dst, err := c.copy()
+	if err != nil {
+		log.Printf("copy configure failed: %v", err)
+
+		return names
+	}
+
+	if err = mergo.Merge(&dst, values, mergo.WithOverride); err != nil {
+		log.Printf("merge configure failed: %v", err)
+
+		return names
+	}
+
+	c.store(dst)
+
+	return names
 }
 
 // store publishes values as the current snapshot. The map must not be modified afterwards, so that
@@ -149,6 +225,10 @@ func (c *defaultConfigurator) copy() (map[string]any, error) {
 
 	dst := make(map[string]any)
 
+	if len(values) == 0 {
+		return dst, nil
+	}
+
 	err := copier.CopyWithOption(&dst, values, copier.Option{
 		DeepCopy: true,
 	})
@@ -159,26 +239,20 @@ func (c *defaultConfigurator) copy() (map[string]any, error) {
 	return dst, nil
 }
 
-// watch starts a goroutine per source that watches it and merges its changes into the store.
+// watch starts a goroutine per source that opens a watcher for it and merges its changes into the
+// store.
 func (c *defaultConfigurator) watch() {
 	for _, s := range c.opts.sources {
-		w, err := s.Watch(c.ctx)
-		if err != nil {
-			log.Printf("watching configure change failed: %v", err)
-			continue
-		}
-
 		c.wg.Go(func() {
-			c.watchSource(w)
+			c.watchSource(s)
 		})
 	}
 }
 
-// watchSource consumes the changes of a watcher until the configurator is closed. A failing watcher
-// is retried with a backoff instead of spinning on the error.
-func (c *defaultConfigurator) watchSource(w Watcher) {
-	defer w.Stop()
-
+// watchSource opens a watcher for the source and consumes its changes until the configurator is
+// closed. Both a watcher that cannot be opened and one that stops are retried with a backoff, so
+// that a temporary failure does not disable hot reload permanently.
+func (c *defaultConfigurator) watchSource(s Source) {
 	var (
 		delay  = watchMinBackoff
 		warned bool
@@ -192,9 +266,12 @@ func (c *defaultConfigurator) watchSource(w Watcher) {
 			// exec watch
 		}
 
-		cs, err := w.Next()
+		w, err := s.Watch(c.ctx)
+		if err == nil && w == nil {
+			err = errors.New("nil config watcher")
+		}
 		if err != nil {
-			if c.ctx.Err() != nil || errors.Is(err, errors.ErrWatcherStopped) || errors.Is(err, io.EOF) {
+			if c.ctx.Err() != nil {
 				return
 			}
 
@@ -203,19 +280,11 @@ func (c *defaultConfigurator) watchSource(w Watcher) {
 				warned = true
 			}
 
-			select {
-			case <-c.ctx.Done():
+			if !c.sleep(delay) {
 				return
-			case <-time.After(delay):
 			}
 
-			if delay < watchMaxBackoff {
-				if delay > watchMaxBackoff/2 {
-					delay = watchMaxBackoff
-				} else {
-					delay *= 2
-				}
-			}
+			delay = nextWatchDelay(delay)
 
 			continue
 		}
@@ -223,41 +292,60 @@ func (c *defaultConfigurator) watchSource(w Watcher) {
 		warned = false
 		delay = watchMinBackoff
 
-		names := make([]string, 0, len(cs))
-		values := make(map[string]any)
-		for _, cc := range cs {
-			if len(cc.Content) == 0 {
-				continue
-			}
-
-			v, err := c.opts.decoder(cc.Format, cc.Content)
-			if err != nil {
-				log.Printf("decode configure failed: %v", err)
-				continue
-			}
-			names = append(names, cc.Name)
-			values[cc.Name] = v
+		warned, delay = c.consume(w, delay)
+		if c.ctx.Err() != nil {
+			return
 		}
 
-		func() {
-			c.mu.Lock()
-			defer c.mu.Unlock()
+		// The watcher has stopped; reopen it after a backoff so that a watcher that fails
+		// immediately is not reopened in a tight loop.
+		if !c.sleep(delay) {
+			return
+		}
 
-			dst, err := c.copy()
-			if err != nil {
-				log.Printf("copy configure failed: %v", err)
-				return
+		delay = nextWatchDelay(delay)
+	}
+}
+
+// consume reads the changes of a watcher until it stops or the configurator is closed. It returns
+// the current warning state and the retry delay for the next watcher.
+func (c *defaultConfigurator) consume(w Watcher, delay time.Duration) (bool, time.Duration) {
+	defer w.Stop()
+
+	var warned bool
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return warned, delay
+		default:
+			// exec watch
+		}
+
+		cs, err := w.Next()
+		if err != nil {
+			if c.ctx.Err() != nil || errors.Is(err, errors.ErrWatcherStopped) || errors.Is(err, io.EOF) {
+				return warned, delay
 			}
 
-			if err = mergo.Merge(&dst, values, mergo.WithOverride); err != nil {
-				log.Printf("merge configure failed: %v", err)
-				return
+			if !warned {
+				log.Printf("watching configure change failed: %v", err)
+				warned = true
 			}
 
-			c.store(dst)
-		}()
+			if !c.sleep(delay) {
+				return warned, delay
+			}
 
-		if len(names) > 0 {
+			delay = nextWatchDelay(delay)
+
+			continue
+		}
+
+		warned = false
+		delay = watchMinBackoff
+
+		if names := c.apply(cs); len(names) > 0 {
 			c.wg.Go(func() {
 				c.notify(names...)
 			})
@@ -265,8 +353,36 @@ func (c *defaultConfigurator) watchSource(w Watcher) {
 	}
 }
 
+// sleep waits for delay or until the configurator is closed. It reports false when the configurator
+// is closed.
+func (c *defaultConfigurator) sleep(delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-c.ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// nextWatchDelay doubles delay and caps it at watchMaxBackoff.
+func nextWatchDelay(delay time.Duration) time.Duration {
+	if delay >= watchMaxBackoff {
+		return watchMaxBackoff
+	}
+
+	if delay *= 2; delay > watchMaxBackoff {
+		delay = watchMaxBackoff
+	}
+
+	return delay
+}
+
 // notify calls every watcher that matches one of the given names. The watcher list is snapshotted
-// before the callbacks run, so a callback can call [Configurator.Watch] without deadlocking.
+// before the callbacks run, so a callback can call [Configurator.Watch] without deadlocking. A
+// panicking callback is recovered so that it cannot terminate the process.
 func (c *defaultConfigurator) notify(names ...string) {
 	c.rw.RLock()
 	watchers := make([]*watcher, len(c.watchers))
@@ -275,7 +391,7 @@ func (c *defaultConfigurator) notify(names ...string) {
 
 	for _, w := range watchers {
 		if len(w.names) == 0 {
-			w.callback(names...)
+			callWatchCallback(w.callback, names...)
 		} else {
 			validNames := make([]string, 0, min(len(w.names), len(names)))
 			for _, name := range names {
@@ -285,10 +401,22 @@ func (c *defaultConfigurator) notify(names ...string) {
 			}
 
 			if len(validNames) > 0 {
-				w.callback(validNames...)
+				callWatchCallback(w.callback, validNames...)
 			}
 		}
 	}
+}
+
+// callWatchCallback invokes cb and recovers from its panic, so that a faulty watcher callback cannot
+// terminate the process.
+func callWatchCallback(cb WatchCallbackFunc, names ...string) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("watch callback panic: %v", err)
+		}
+	}()
+
+	cb(names...)
 }
 
 // Close closes the configurator and its config sources.
@@ -345,7 +473,9 @@ func (c *defaultConfigurator) doHas(pattern string) bool {
 	return found
 }
 
-// Get returns the config value under pattern, falling back to def when the config is missing.
+// Get returns the config value under pattern, falling back to def when the config is missing. The
+// returned value must be treated as read-only, since it may reference the internal config maps and
+// slices.
 func (c *defaultConfigurator) Get(pattern string, def ...any) value.Value {
 	if val, ok := c.doGet(pattern); ok {
 		return val
@@ -440,6 +570,10 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 						// the next node capacity is not enough
 						// expand capacity
 						if err == nil && ii >= len(nv) {
+							if ii > maxSliceIndex {
+								return errors.New("index too large")
+							}
+
 							dst := make([]any, ii+1)
 							copy(dst, nv)
 							vs[key] = dst
@@ -488,6 +622,10 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 					// the next node capacity is not enough
 					// expand capacity
 					if parseErr == nil && next >= len(nv) {
+						if next > maxSliceIndex {
+							return errors.New("index too large")
+						}
+
 						dst := make([]any, next+1)
 						copy(dst, nv)
 						vs[ii] = dst
