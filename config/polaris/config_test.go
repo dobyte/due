@@ -16,6 +16,7 @@ import (
 
 	"github.com/dobyte/due/config/polaris/v2"
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 )
 
 func init() {
@@ -121,6 +122,22 @@ func TestFullChain(t *testing.T) {
 			t.Fatal("watch hot update timeout")
 		}
 		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// TestFiles verifies that an explicit load or store outside the configured file list is rejected.
+func TestFiles(t *testing.T) {
+	source := polaris.NewSource(polaris.WithMode(config.ReadWrite), polaris.WithFiles("config.json"))
+	defer source.Close()
+
+	ctx := context.Background()
+
+	if _, err := source.Load(ctx, "gate.json"); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
+	}
+
+	if err := source.Store(ctx, "gate.json", []byte(`{}`)); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
 	}
 }
 

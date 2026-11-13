@@ -113,7 +113,12 @@ func (w *watcher) planHandler(idx uint64, raw any) {
 
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		configs = append(configs, w.source.parseKV(kv.Key, kv.Value))
+		c := w.source.parseKV(kv.Key, kv.Value)
+		if !w.source.matchFile(c.Path) {
+			continue
+		}
+
+		configs = append(configs, c)
 	}
 
 	w.notify(configs)

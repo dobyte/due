@@ -77,7 +77,13 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	// When file is provided, query by the exact key and return only the target
 	// configuration item.
 	if len(file) > 0 && file[0] != "" {
-		key := s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
+		name := strings.TrimPrefix(file[0], "/")
+
+		if !s.matchFile(name) {
+			return nil, errors.ErrFileNotConfigured
+		}
+
+		key := s.opts.path + "/" + name
 
 		kv, _, err := s.opts.client.KV().Get(key, (&api.QueryOptions{}).WithContext(ctx))
 		if err != nil {
@@ -99,7 +105,12 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		configs = append(configs, s.parseKV(kv.Key, kv.Value))
+		c := s.parseKV(kv.Key, kv.Value)
+		if !s.matchFile(c.Path) {
+			continue
+		}
+
+		configs = append(configs, c)
 	}
 
 	return configs, nil
@@ -116,7 +127,13 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
+	name := strings.TrimPrefix(file, "/")
+
+	if !s.matchFile(name) {
+		return errors.ErrFileNotConfigured
+	}
+
+	key := s.opts.path + "/" + name
 
 	_, err := s.opts.client.KV().Put(&api.KVPair{
 		Key:   key,
@@ -142,6 +159,16 @@ func (s *Source) parseKV(key string, value []byte) *config.Configuration {
 		Content:  value,
 		FullPath: fullPath,
 	}
+}
+
+// matchFile reports whether file is selected by the configured file list. When no
+// file is configured, every file is selected.
+func (s *Source) matchFile(file string) bool {
+	if len(s.opts.files) == 0 {
+		return true
+	}
+
+	return config.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It creates a watcher that observes

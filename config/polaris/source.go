@@ -97,6 +97,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
+		if !s.matchFile(file[0]) {
+			return nil, errors.ErrFileNotConfigured
+		}
+
 		configuration, err := s.load(ctx, file[0])
 		if err != nil {
 			return nil, err
@@ -129,6 +133,11 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	for _, item := range files {
 		fileName := item.FileName
+
+		if !s.matchFile(fileName) {
+			continue
+		}
+
 		wg.Go(func() error {
 			configuration, err := s.load(ctx, fileName)
 			if err != nil {
@@ -196,6 +205,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return err
 	}
 
+	if !s.matchFile(file) {
+		return errors.ErrFileNotConfigured
+	}
+
 	if err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content)); err == nil {
 		return nil
 	} else if !isUnimplementedError(err) && !isDataConflictError(err) {
@@ -220,6 +233,16 @@ func (s *Source) createOrUpdateConfigFile(file, content string) error {
 	}
 
 	return s.configClient.UpdateConfigFile(s.opts.namespace, s.opts.group, file, content)
+}
+
+// matchFile reports whether file is selected by the configured file list. When no
+// file is configured, every file is selected.
+func (s *Source) matchFile(file string) bool {
+	if len(s.opts.files) == 0 {
+		return true
+	}
+
+	return config.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It creates a new watcher and registers it
@@ -304,6 +327,10 @@ func (s *Source) listen() {
 // watcher sees the latest published configuration (matching Nacos ListenConfig,
 // which also invokes the callback once right after a listener is registered).
 func (s *Source) subscribe(fileName string) {
+	if !s.matchFile(fileName) {
+		return
+	}
+
 	// Reserve the slot atomically so that only one goroutine performs the network
 	// subscription and listener registration per file, avoiding duplicate listeners
 	// and duplicate notifications under concurrency.
@@ -412,6 +439,10 @@ func (s *Source) search() {
 	}
 
 	for _, item := range files {
+		if !s.matchFile(item.FileName) {
+			continue
+		}
+
 		_, found := s.versions[item.FileName]
 		_, subscribed := s.subscribed.Load(item.FileName)
 
@@ -452,7 +483,12 @@ func (s *Source) onChange(event model.ConfigFileChangeEvent) {
 		return
 	}
 
-	s.notify(conv(event.ConfigFileMetadata.GetFileName(), event.NewValue))
+	fileName := event.ConfigFileMetadata.GetFileName()
+	if !s.matchFile(fileName) {
+		return
+	}
+
+	s.notify(conv(fileName, event.NewValue))
 }
 
 // buildClient builds the Polaris SDK context. It sets the server addresses, the

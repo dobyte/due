@@ -22,6 +22,7 @@ const (
 	defaultDialTimeoutKey = "etc.config.etcd.dialTimeout"
 	defaultPathKey        = "etc.config.etcd.path"
 	defaultModeKey        = "etc.config.etcd.mode"
+	defaultFilesKey       = "etc.config.etcd.files"
 	defaultUsernameKey    = "etc.config.etcd.username"
 	defaultPasswordKey    = "etc.config.etcd.password"
 	defaultTimeoutKey     = "etc.config.etcd.timeout"
@@ -51,6 +52,12 @@ type options struct {
 	// It supports the read-only, write-only and read-write modes and defaults to read-only.
 	mode config.Mode
 
+	// files is the list of files to load, store and watch, relative to path. An entry
+	// without "*" is an exact path; an entry containing "*" is a pattern where "*"
+	// matches any sequence of characters. When it is empty, every file under path is
+	// available.
+	files []string
+
 	// username is the username.
 	username string
 
@@ -69,6 +76,7 @@ func defaultOptions() *options {
 		dialTimeout: etc.Get(defaultDialTimeoutKey, defaultDialTimeout).Duration(),
 		path:        etc.Get(defaultPathKey, defaultPath).String(),
 		mode:        config.Mode(etc.Get(defaultModeKey, defaultMode).String()),
+		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
 		username:    etc.Get(defaultUsernameKey).String(),
 		password:    etc.Get(defaultPasswordKey).String(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
@@ -98,6 +106,17 @@ func WithPath(path string) Option {
 // WithMode sets the read-write mode.
 func WithMode(mode config.Mode) Option {
 	return func(o *options) { o.mode = mode }
+}
+
+// WithFiles sets the list of files to load, store and watch, relative to the source
+// path. When it is empty, every file under the source path is available.
+//
+// An entry is an exact path unless it contains "*", in which case it is a pattern
+// where "*" matches any sequence of characters and every other character is
+// literal; only "*" is supported as a wildcard. When the list is not empty, an
+// explicit load or store of a file outside the list is rejected.
+func WithFiles(files ...string) Option {
+	return func(o *options) { o.files = files }
 }
 
 // WithUsername sets the username.

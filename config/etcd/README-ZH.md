@@ -31,6 +31,8 @@ go get -u github.com/dobyte/due/config/etcd/v2@latest
         path = "/config"
         # 读写模式。可选：read-only | write-only | read-write，默认为read-only
         mode = "read-write"
+        # 需要加载、修改和监听的配置文件清单，相对 path 的路径。为空表示 path 下的所有文件
+        files = ["config.json", "gateway/*.yaml"]
 ```
 
 3.开始使用
@@ -82,6 +84,15 @@ func main() {
     log.Infof("timezone: %s", timezone)
 }
 ```
+
+### 3.文件清单
+
+`files` 用于限定需要加载、修改和监听的配置，路径相对 `path`。为空时保持原有行为，`path` 下的所有配置均可用。
+
+* 不含 `*` 的项为精确路径，必须与相对 `path` 的路径完全一致。
+* 含 `*` 的项为模式，`*` 可匹配任意字符（包括 `/`），其他字符按字面值匹配；仅支持 `*` 一种通配符。
+* 清单非空时，`Load` 只会返回命中清单的配置；显式加载或存储清单外的文件会返回 `errors.ErrFileNotConfigured`。
+* 监听同样只会上报命中清单的配置变更。
 
 ### 4.详细示例
 

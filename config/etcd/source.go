@@ -77,7 +77,13 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	)
 
 	if len(file) > 0 && file[0] != "" {
-		key += strings.TrimPrefix(file[0], "/")
+		name := strings.TrimPrefix(file[0], "/")
+
+		if !s.matchFile(name) {
+			return nil, errors.ErrFileNotConfigured
+		}
+
+		key += name
 	} else {
 		opts = append(opts, clientv3.WithPrefix())
 	}
@@ -89,7 +95,12 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	configs := make([]*config.Configuration, 0, len(res.Kvs))
 	for _, kv := range res.Kvs {
-		configs = append(configs, s.parseKV(kv.Key, kv.Value))
+		c := s.parseKV(kv.Key, kv.Value)
+		if !s.matchFile(c.Path) {
+			continue
+		}
+
+		configs = append(configs, c)
 	}
 
 	return configs, nil
@@ -106,7 +117,13 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	key := s.opts.path + strings.TrimPrefix(file, "/")
+	name := strings.TrimPrefix(file, "/")
+
+	if !s.matchFile(name) {
+		return errors.ErrFileNotConfigured
+	}
+
+	key := s.opts.path + name
 	_, err := s.opts.client.Put(ctx, key, string(content))
 	return err
 }
@@ -126,6 +143,16 @@ func (s *Source) parseKV(key, value []byte) *config.Configuration {
 		Content:  value,
 		FullPath: fullPath,
 	}
+}
+
+// matchFile reports whether file is selected by the configured file list. When no
+// file is configured, every file is selected.
+func (s *Source) matchFile(file string) bool {
+	if len(s.opts.files) == 0 {
+		return true
+	}
+
+	return config.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It pulls the full configuration once as the

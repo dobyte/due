@@ -44,6 +44,10 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 		// Use the full pull result as the initial snapshot.
 		for _, kv := range res.Kvs {
 			c := w.source.parseKV(kv.Key, kv.Value)
+			if !w.source.matchFile(c.Path) {
+				continue
+			}
+
 			w.configs[c.FullPath] = c
 		}
 
@@ -122,6 +126,10 @@ func (w *watcher) watchLoop() {
 				switch ev.Type {
 				case mvccpb.PUT:
 					c := w.source.parseKV(ev.Kv.Key, ev.Kv.Value)
+					if !w.source.matchFile(c.Path) {
+						continue
+					}
+
 					w.configs[c.FullPath] = c
 				case mvccpb.DELETE:
 					delete(w.configs, string(ev.Kv.Key))
@@ -157,6 +165,10 @@ func (w *watcher) resync() bool {
 			w.configs = make(map[string]*config.Configuration)
 			for _, kv := range res.Kvs {
 				c := w.source.parseKV(kv.Key, kv.Value)
+				if !w.source.matchFile(c.Path) {
+					continue
+				}
+
 				w.configs[c.FullPath] = c
 			}
 			w.rw.Unlock()
