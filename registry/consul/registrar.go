@@ -194,7 +194,12 @@ func (r *registrar) put(ctx context.Context, ins *registry.ServiceInstance) (str
 		}
 	}
 
-	for field, value := range marshalMetaRoutes(ins.Routes) {
+	metas, err := marshalMetaRoutes(ins.Routes)
+	if err != nil {
+		return "", err
+	}
+
+	for field, value := range metas {
 		registration.Meta[field] = value
 	}
 

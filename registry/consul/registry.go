@@ -295,7 +295,11 @@ func (r *Registry) services(ctx context.Context, serviceName string, waitIndex u
 			continue
 		}
 
-		ins.Routes = unmarshalMetaRoutes(entry.Service.Meta)
+		if routes, err := unmarshalMetaRoutes(entry.Service.Meta); err != nil {
+			log.Warnf("consul unmarshal meta routes failed: %v", err)
+		} else {
+			ins.Routes = routes
+		}
 
 		if events, err := unmarshalMetaList[int](metaFieldEvents, entry.Service.Meta); err != nil {
 			log.Warnf("consul unmarshal meta events failed: %v", err)
