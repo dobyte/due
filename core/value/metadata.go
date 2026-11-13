@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	_jsonTagKey    = "json"
-	_defaultTagKey = "default"
+	jsonTagKey    = "json"
+	defaultTagKey = "default"
 )
 
 type fieldInfo struct {
@@ -24,11 +24,11 @@ type structInfo struct {
 	lowers map[string]struct{}
 }
 
-var _structInfos sync.Map // map[reflect.Type]*structInfo
+var structInfos sync.Map // map[reflect.Type]*structInfo
 
 // structInfoOf returns the cached scan metadata of t, building it on first use.
 func structInfoOf(t reflect.Type) *structInfo {
-	if cached, ok := _structInfos.Load(t); ok {
+	if cached, ok := structInfos.Load(t); ok {
 		return cached.(*structInfo)
 	}
 
@@ -38,7 +38,7 @@ func structInfoOf(t reflect.Type) *structInfo {
 	for _, field := range info.fields {
 		info.lowers[field.lower] = struct{}{}
 	}
-	actual, _ := _structInfos.LoadOrStore(t, info)
+	actual, _ := structInfos.LoadOrStore(t, info)
 
 	return actual.(*structInfo)
 }
@@ -86,7 +86,7 @@ func buildStructInfo(
 			name = field.Name
 		}
 
-		def := field.Tag.Get(_defaultTagKey)
+		def := field.Tag.Get(defaultTagKey)
 		info.fields = append(info.fields, fieldInfo{
 			name:     name,
 			lower:    strings.ToLower(name),
@@ -99,7 +99,7 @@ func buildStructInfo(
 
 // jsonFieldName returns the field name declared by the json tag.
 func jsonFieldName(field reflect.StructField) string {
-	name, _, _ := strings.Cut(field.Tag.Get(_jsonTagKey), ",")
+	name, _, _ := strings.Cut(field.Tag.Get(jsonTagKey), ",")
 
 	return name
 }
@@ -114,7 +114,7 @@ func parseDefaultValue(def string, t reflect.Type) any {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	if unmarshalerKindOf(t) != _unmarshalerNone {
+	if unmarshalerKindOf(t) != unmarshalerNone {
 		return def
 	}
 

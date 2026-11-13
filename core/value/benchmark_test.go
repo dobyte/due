@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-var _benchmarkSink any
+var benchmarkSink any
 
 func BenchmarkValueScanPrimitive(b *testing.B) {
 	v := NewValue("8080")
@@ -20,7 +20,7 @@ func BenchmarkValueScanPrimitive(b *testing.B) {
 		}
 	}
 
-	_benchmarkSink = n
+	benchmarkSink = n
 }
 
 func BenchmarkValueScanStruct(b *testing.B) {
@@ -42,7 +42,7 @@ func BenchmarkValueScanStruct(b *testing.B) {
 		}
 	}
 
-	_benchmarkSink = cfg
+	benchmarkSink = cfg
 }
 
 func BenchmarkValueScanStructLargeMap(b *testing.B) {
@@ -72,7 +72,7 @@ func BenchmarkValueScanStructLargeMap(b *testing.B) {
 		}
 	}
 
-	_benchmarkSink = cfg
+	benchmarkSink = cfg
 }
 
 func BenchmarkValueScanMapAny(b *testing.B) {
@@ -92,7 +92,7 @@ func BenchmarkValueScanMapAny(b *testing.B) {
 		}
 	}
 
-	_benchmarkSink = m
+	benchmarkSink = m
 }
 
 func BenchmarkValueScanIntSlice(b *testing.B) {
@@ -113,5 +113,5 @@ func BenchmarkValueScanIntSlice(b *testing.B) {
 		}
 	}
 
-	_benchmarkSink = dst
+	benchmarkSink = dst
 }

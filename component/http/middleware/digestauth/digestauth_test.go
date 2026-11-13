@@ -104,10 +104,10 @@ func TestGenerateNonceRandomFailure(t *testing.T) {
 	}
 }
 
-var _noncePattern = regexp.MustCompile(`nonce="([^"]+)"`)
+var noncePattern = regexp.MustCompile(`nonce="([^"]+)"`)
 
 func extractNonce(challenge string) string {
-	matches := _noncePattern.FindStringSubmatch(challenge)
+	matches := noncePattern.FindStringSubmatch(challenge)
 	if len(matches) != 2 {
 		return ""
 	}

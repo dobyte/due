@@ -67,7 +67,7 @@ type messageScratch struct {
 	aad   [aadSize]byte
 }
 
-var _messageScratchPool = sync.Pool{New: func() any { return new(messageScratch) }}
+var messageScratchPool = sync.Pool{New: func() any { return new(messageScratch) }}
 
 // Session is the AEAD session established by the handshake.
 //
@@ -134,19 +134,19 @@ func (s *Session) Overhead() int {
 
 // Seal encrypts plaintext and binds it to aad.
 func (s *Session) Seal(plaintext, aad []byte) ([]byte, error) {
-	scratch := _messageScratchPool.Get().(*messageScratch)
+	scratch := messageScratchPool.Get().(*messageScratch)
 	sealed, err := s.seal(nil, plaintext, aad, scratch.nonce[:])
-	_messageScratchPool.Put(scratch)
+	messageScratchPool.Put(scratch)
 	return sealed, err
 }
 
 // SealMessage appends an encrypted message to dst, binding its direction, route and sequence
 // number using MakeAAD's encoding. dst must not overlap plaintext. The caller owns the output.
 func (s *Session) SealMessage(dst, plaintext []byte, direction Direction, route, seq int32) ([]byte, error) {
-	scratch := _messageScratchPool.Get().(*messageScratch)
+	scratch := messageScratchPool.Get().(*messageScratch)
 	writeAAD(scratch.aad[:], direction, s.epoch, route, seq)
 	sealed, err := s.seal(dst, plaintext, scratch.aad[:], scratch.nonce[:])
-	_messageScratchPool.Put(scratch)
+	messageScratchPool.Put(scratch)
 	return sealed, err
 }
 
@@ -179,9 +179,9 @@ func (s *Session) seal(dst, plaintext, aad, nonce []byte) ([]byte, error) {
 // The replay window is advanced only after the payload is authenticated, so forged packets cannot
 // consume window slots.
 func (s *Session) Open(sealed, aad []byte) ([]byte, error) {
-	scratch := _messageScratchPool.Get().(*messageScratch)
+	scratch := messageScratchPool.Get().(*messageScratch)
 	plaintext, err := s.open(nil, sealed, aad, scratch.nonce[:])
-	_messageScratchPool.Put(scratch)
+	messageScratchPool.Put(scratch)
 	return plaintext, err
 }
 
@@ -190,10 +190,10 @@ func (s *Session) Open(sealed, aad []byte) ([]byte, error) {
 // in-place decryption. On error no plaintext is returned and dst's backing memory may be modified.
 // Replay state advances only after authentication succeeds, as in Open.
 func (s *Session) OpenMessage(dst, sealed []byte, direction Direction, route, seq int32) ([]byte, error) {
-	scratch := _messageScratchPool.Get().(*messageScratch)
+	scratch := messageScratchPool.Get().(*messageScratch)
 	writeAAD(scratch.aad[:], direction, s.epoch, route, seq)
 	plaintext, err := s.open(dst, sealed, scratch.aad[:], scratch.nonce[:])
-	_messageScratchPool.Put(scratch)
+	messageScratchPool.Put(scratch)
 	return plaintext, err
 }
 

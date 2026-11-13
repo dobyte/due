@@ -23,37 +23,37 @@ type jsonUnmarshaler interface {
 type unmarshalerKind uint8
 
 const (
-	_unmarshalerNone unmarshalerKind = iota
-	_unmarshalerJSON
-	_unmarshalerText
+	unmarshalerNone unmarshalerKind = iota
+	unmarshalerJSON
+	unmarshalerText
 )
 
 var (
-	_jsonUnmarshalerType = reflect.TypeOf((*jsonUnmarshaler)(nil)).Elem()
-	_textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
-	_unmarshalerKinds    sync.Map // map[reflect.Type]unmarshalerKind
-	_anyMapType          = reflect.TypeOf(map[string]any(nil))
-	_durationType        = reflect.TypeOf(time.Duration(0))
+	jsonUnmarshalerType = reflect.TypeOf((*jsonUnmarshaler)(nil)).Elem()
+	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	unmarshalerKinds    sync.Map // map[reflect.Type]unmarshalerKind
+	anyMapType          = reflect.TypeOf(map[string]any(nil))
+	durationType        = reflect.TypeOf(time.Duration(0))
 )
 
 // unmarshalerKindOf reports which custom decoder the addressable destination type implements.
 // Results are cached by type so that ordinary fields avoid interface boxing.
 func unmarshalerKindOf(t reflect.Type) unmarshalerKind {
-	if cached, ok := _unmarshalerKinds.Load(t); ok {
+	if cached, ok := unmarshalerKinds.Load(t); ok {
 		return cached.(unmarshalerKind)
 	}
 
-	kind := _unmarshalerNone
+	kind := unmarshalerNone
 	pointer := reflect.PointerTo(t)
 
 	switch {
-	case pointer.Implements(_jsonUnmarshalerType):
-		kind = _unmarshalerJSON
-	case pointer.Implements(_textUnmarshalerType):
-		kind = _unmarshalerText
+	case pointer.Implements(jsonUnmarshalerType):
+		kind = unmarshalerJSON
+	case pointer.Implements(textUnmarshalerType):
+		kind = unmarshalerText
 	}
 
-	actual, _ := _unmarshalerKinds.LoadOrStore(t, kind)
+	actual, _ := unmarshalerKinds.LoadOrStore(t, kind)
 
 	return actual.(unmarshalerKind)
 }
@@ -77,7 +77,7 @@ func scanValue(src any, dst reflect.Value) error {
 		}
 	}
 
-	if kind := unmarshalerKindOf(dst.Type()); kind != _unmarshalerNone {
+	if kind := unmarshalerKindOf(dst.Type()); kind != unmarshalerNone {
 		if ok, err := scanWithUnmarshaler(src, dst, kind); ok {
 			return err
 		}
@@ -127,12 +127,12 @@ func scanInterface(src any, dst reflect.Value) error {
 
 // scanWithUnmarshaler gives custom decoders precedence over the built-in conversion rules.
 func scanWithUnmarshaler(src any, dst reflect.Value, kind unmarshalerKind) (bool, error) {
-	if kind == _unmarshalerNone || !dst.CanAddr() {
+	if kind == unmarshalerNone || !dst.CanAddr() {
 		return false, nil
 	}
 
 	addr := dst.Addr().Interface()
-	if kind == _unmarshalerJSON {
+	if kind == unmarshalerJSON {
 		u := addr.(jsonUnmarshaler)
 		if xreflect.IsNil(src) {
 			return true, nil
@@ -211,7 +211,7 @@ func scanMap(src any, dst reflect.Value) error {
 		return nil
 	}
 
-	if dst.Type() == _anyMapType {
+	if dst.Type() == anyMapType {
 		out := make(map[string]any, len(obj))
 		for key, val := range obj {
 			out[key] = cloneNode(val)
@@ -290,7 +290,7 @@ func scanScalar(src any, dst reflect.Value) error {
 		return nil
 	}
 
-	if dst.Type() == _durationType {
+	if dst.Type() == durationType {
 		d, err := parseDuration(src)
 		if err != nil {
 			return err
