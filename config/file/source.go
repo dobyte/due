@@ -25,5 +25,9 @@ func NewSource(opts ...Option) config.Source {
 		log.Warnf("no config file path specified, loading the config will fail")
 	}
 
-	return core.NewSource(o.path, o.mode)
+	for _, file := range unmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
+	}
+
+	return core.NewSource(o.path, o.mode, o.files...)
 }

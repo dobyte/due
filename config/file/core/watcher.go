@@ -85,6 +85,10 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 			}
 
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				if !w.source.matchFile(event.Name) {
+					continue
+				}
+
 				c, err := w.source.loadFile(event.Name)
 				if err != nil {
 					return nil, err

@@ -1072,34 +1072,6 @@ func TestPatternTerm(t *testing.T) {
 	}
 }
 
-// TestMatchDataId verifies that a mixed list of exact dataIds and "*" patterns selects the
-// intended items and treats every other character literally.
-func TestMatchDataId(t *testing.T) {
-	files := []string{"config.json", "gate-*.json", "rooms/*.yaml", "weird[1]?.json"}
-
-	tests := []struct {
-		name   string
-		dataId string
-		want   bool
-	}{
-		{name: "exact", dataId: "config.json", want: true},
-		{name: "prefix pattern", dataId: "gate-a.json", want: true},
-		{name: "prefix pattern mismatch", dataId: "gate-a.yaml", want: false},
-		{name: "star matches separator", dataId: "rooms/a/b.yaml", want: true},
-		{name: "literal meta in exact entry", dataId: "weird[1]?.json", want: true},
-		{name: "literal meta is not a wildcard", dataId: "weird1.json", want: false},
-		{name: "unmatched", dataId: "other.json", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := matchDataId(files, tt.dataId); got != tt.want {
-				t.Fatalf("matchDataId(%q) = %v, want %v", tt.dataId, got, tt.want)
-			}
-		})
-	}
-}
-
 // exportStub wraps a stub client and records whether the export shortcut was used.
 type exportStub struct {
 	*stubConfigClient

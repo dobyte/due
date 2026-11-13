@@ -21,14 +21,18 @@ const Name = "file"
 type Source struct {
 	path     string
 	mode     config.Mode
+	files    []string // Selected files; empty means every file under the source path
 	watchers sync.Map // Watcher set
 }
 
 var _ config.Source = &Source{}
 
-// NewSource returns a file-based config source rooted at path with the given mode.
-func NewSource(path string, mode config.Mode) *Source {
-	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode}
+// NewSource returns a file-based config source rooted at path with the given mode. The optional
+// files select the files to load, store and watch, relative to path; an entry is an exact path
+// unless it contains "*", which matches any sequence of characters. When files is empty, every
+// file under the source path is available.
+func NewSource(path string, mode config.Mode, files ...string) *Source {
+	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode, files: normalizeFiles(files)}
 }
 
 // Name returns the name of the source.
@@ -43,9 +47,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, err
 	}
 
+	explicit := len(file) > 0 && file[0] != ""
 	path := s.path
 
-	if len(file) > 0 && file[0] != "" {
+	if explicit {
 		info, err := os.Stat(s.path)
 		if err != nil {
 			return nil, err
@@ -67,8 +72,18 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, err
 	}
 
+	// A directory is expanded and every file in it is filtered by the configured files, so the
+	// directory path itself must not be checked against the list.
 	if info.IsDir() {
 		return s.loadDir(path)
+	}
+
+	if !s.matchFile(path) {
+		if explicit {
+			return nil, errors.ErrFileNotConfigured
+		}
+
+		return nil, nil
 	}
 
 	c, err := s.loadFile(path)
@@ -100,6 +115,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if err = checkFilePath(s.path, file); err != nil {
 		return err
+	}
+
+	if !s.matchFile(filepath.Join(s.path, file)) {
+		return errors.ErrFileNotConfigured
 	}
 
 	return xos.WriteFile(filepath.Join(s.path, file), content)
@@ -138,6 +157,36 @@ func checkFilePath(root, file string) error {
 	}
 
 	return nil
+}
+
+// matchFile reports whether path is selected by the configured files. When no file is configured,
+// every path is selected.
+func (s *Source) matchFile(path string) bool {
+	if len(s.files) == 0 {
+		return true
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+
+	absRoot, err := filepath.Abs(s.path)
+	if err != nil {
+		return false
+	}
+
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+
+	// In single-file mode the relative path is the current directory, so use the file name.
+	if rel == "." {
+		rel = filepath.Base(absPath)
+	}
+
+	return config.MatchFile(s.files, filepath.ToSlash(rel))
 }
 
 // Watch starts watching the source path and returns a [config.Watcher].
@@ -223,6 +272,10 @@ func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
 		}
 
 		if d.IsDir() || strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+
+		if !s.matchFile(path) {
 			return nil
 		}
 

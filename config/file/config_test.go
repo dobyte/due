@@ -195,3 +195,184 @@ func TestWatch(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadSingleFileWithFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	path := filepath.Join(dir, configFile)
+
+	source := file.NewSource(file.WithPath(path), file.WithFiles(configFile))
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("invalid config count, expect: 1, actual: %d", len(configs))
+	}
+
+	source = file.NewSource(file.WithPath(path), file.WithFiles("missing.json"))
+
+	configs, err = source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+	if len(configs) != 0 {
+		t.Fatalf("invalid config count, expect: 0, actual: %d", len(configs))
+	}
+}
+
+func TestLoadWithFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+	writeFile(t, dir, "gate.yaml", "name: gate\n")
+	writeFile(t, dir, "node.yaml", "name: node\n")
+
+	tests := []struct {
+		name  string
+		files []string
+		// expect is the set of expected config file names.
+		expect []string
+	}{
+		{name: "exact", files: []string{configFile}, expect: []string{configFile}},
+		{name: "pattern", files: []string{"*.yaml"}, expect: []string{"gate.yaml", "node.yaml"}},
+		{name: "prefix", files: []string{"gate*"}, expect: []string{"gate.yaml"}},
+		{name: "cleaned", files: []string{"./gate.yaml"}, expect: []string{"gate.yaml"}},
+		{name: "none", files: []string{"missing.json"}, expect: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := file.NewSource(file.WithPath(dir), file.WithFiles(tt.files...))
+
+			configs, err := source.Load(context.Background())
+			if err != nil {
+				t.Fatalf("load config failed, err: %v", err)
+			}
+
+			actual := make(map[string]struct{}, len(configs))
+			for _, cc := range configs {
+				actual[cc.File] = struct{}{}
+			}
+
+			if len(actual) != len(tt.expect) {
+				t.Fatalf("invalid config count, expect: %d, actual: %d", len(tt.expect), len(actual))
+			}
+
+			for _, name := range tt.expect {
+				if _, ok := actual[name]; !ok {
+					t.Fatalf("expect the config file to be loaded, actual: %v", actual)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadWithFilesExplicitDirectory(t *testing.T) {
+	dir := t.TempDir()
+	gateDir := filepath.Join(dir, "gateway")
+
+	if err := os.MkdirAll(gateDir, 0o755); err != nil {
+		t.Fatalf("create directory failed, err: %v", err)
+	}
+
+	writeFile(t, gateDir, "gate.yaml", "name: gate\n")
+	writeFile(t, gateDir, "node.json", `{"name":"node"}`)
+
+	source := file.NewSource(file.WithPath(dir), file.WithFiles("*.yaml"))
+
+	configs, err := source.Load(context.Background(), "gateway")
+	if err != nil {
+		t.Fatalf("load the explicit directory failed, err: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("invalid config count, expect: 1, actual: %d", len(configs))
+	}
+	if configs[0].File != "gate.yaml" {
+		t.Fatalf("invalid config file, expect: gate.yaml, actual: %s", configs[0].File)
+	}
+}
+
+func TestLoadWithFilesRejectsUnlistedFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+	writeFile(t, dir, "gate.yaml", "name: gate\n")
+
+	source := file.NewSource(file.WithPath(dir), file.WithFiles("gate.yaml"))
+
+	if _, err := source.Load(context.Background(), configFile); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
+	}
+
+	if _, err := source.Load(context.Background(), "gate.yaml"); err != nil {
+		t.Fatalf("load the configured file failed, err: %v", err)
+	}
+}
+
+func TestStoreWithFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	source := file.NewSource(file.WithPath(dir), file.WithMode(config.ReadWrite), file.WithFiles("gate.yaml"))
+
+	if err := source.Store(context.Background(), configFile, []byte(`{}`)); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
+	}
+
+	if err := source.Store(context.Background(), "gate.yaml", []byte(`{"name":"gate"}`)); err != nil {
+		t.Fatalf("store the configured file failed, err: %v", err)
+	}
+}
+
+// TestWatchWithFiles verifies that changes to a file outside the configured list are not reported
+// while the listed file is still watched.
+func TestWatchWithFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+	writeFile(t, dir, "gate.yaml", "name: gate\n")
+
+	c := config.NewConfigurator(config.WithSources(file.NewSource(
+		file.WithPath(dir),
+		file.WithMode(config.ReadWrite),
+		file.WithFiles("gate.yaml"),
+	)))
+	defer c.Close()
+
+	notified := make(chan string, 2)
+	c.Watch(func(names ...string) {
+		for _, name := range names {
+			select {
+			case notified <- name:
+			default:
+			}
+		}
+	}, "config", "gate")
+
+	writeFile(t, dir, configFile, `{"timezone":"UTC"}`)
+
+	select {
+	case name := <-notified:
+		t.Fatalf("unexpected notification for the unlisted file, actual: %s", name)
+	case <-time.After(700 * time.Millisecond):
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+
+	for {
+		writeFile(t, dir, "gate.yaml", "name: gate-2\n")
+
+		select {
+		case name := <-notified:
+			if name != "gate" {
+				t.Fatalf("invalid notified name, expect: gate, actual: %s", name)
+			}
+
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("the watch callback is not triggered")
+		}
+	}
+}
