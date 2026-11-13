@@ -499,8 +499,8 @@ func (s *Source) onChange(event model.ConfigFileChangeEvent) {
 }
 
 // buildClient builds the Polaris SDK context. It sets the server addresses, the
-// communication protocol and the request timeout, then builds the SDK context
-// from the configuration.
+// communication protocol, the request timeout, the cache directory and the log
+// directory, then builds the SDK context from the configuration.
 func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg := api.NewConfiguration()
 
@@ -508,6 +508,11 @@ func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg.GetGlobal().GetServerConnector().SetProtocol(s.opts.protocol)
 	cfg.GetGlobal().GetServerConnector().SetMessageTimeout(s.opts.timeout)
 	cfg.GetGlobal().GetAPI().SetTimeout(s.opts.timeout)
+	cfg.GetConfigFile().GetLocalCache().SetPersistDir(s.opts.cacheDir)
+
+	if err := api.ConfigLoggers(s.opts.logDir, api.InfoLog); err != nil {
+		return nil, errors.New("configure polaris loggers failed: " + err.Error())
+	}
 
 	return api.InitContextByConfig(cfg)
 }

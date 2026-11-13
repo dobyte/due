@@ -35,6 +35,10 @@ go get -u github.com/dobyte/due/config/polaris/v2@latest
         timeout = "3s"
         # 与Polaris服务端的通信协议，可选：grpc，默认为grpc
         protocol = "grpc"
+        # 配置缓存目录，默认为 ./run/polaris/config/cache
+        cacheDir = "./run/polaris/config/cache"
+        # 日志目录，默认为 ./run/polaris/config/log
+        logDir = "./run/polaris/config/log"
         # 需要加载、修改和监听的配置文件清单，相对 group 的文件名。为空表示 group 下的所有文件
         files = ["config.json", "gateway/*.yaml"]
 ```
@@ -102,7 +106,7 @@ func main() {
 
 ### 4.外部SDK上下文
 
-polaris组件支持传入外部SDK上下文，用于复用已有的polaris-go SDK实例，此时SDK上下文的销毁由调用方负责。
+polaris组件支持传入外部SDK上下文，用于复用已有的polaris-go SDK实例，此时SDK上下文的销毁由调用方负责。此时 `cacheDir` 与 `logDir` 不生效，缓存与日志由外部SDK上下文自行配置。
 
 ```go
 package main

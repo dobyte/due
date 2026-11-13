@@ -16,6 +16,8 @@ const (
 	defaultGroup     = "default"
 	defaultTimeout   = "3s"
 	defaultProtocol  = "grpc"
+	defaultCacheDir  = "./run/polaris/config/cache"
+	defaultLogDir    = "./run/polaris/config/log"
 )
 
 const (
@@ -26,6 +28,8 @@ const (
 	defaultFilesKey     = "etc.config.polaris.files"
 	defaultTimeoutKey   = "etc.config.polaris.timeout"
 	defaultProtocolKey  = "etc.config.polaris.protocol"
+	defaultCacheDirKey  = "etc.config.polaris.cacheDir"
+	defaultLogDirKey    = "etc.config.polaris.logDir"
 )
 
 // Option is a config option.
@@ -64,6 +68,12 @@ type options struct {
 
 	// Protocol for communicating with the Polaris server, defaulting to grpc.
 	protocol string
+
+	// Cache directory of config files, defaulting to ./run/polaris/config/cache.
+	cacheDir string
+
+	// Log directory, defaulting to ./run/polaris/config/log.
+	logDir string
 }
 
 // defaultOptions returns the default config options.
@@ -77,6 +87,8 @@ func defaultOptions() *options {
 		files:     etc.Get(defaultFilesKey, []string{}).Strings(),
 		timeout:   etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		protocol:  etc.Get(defaultProtocolKey, defaultProtocol).String(),
+		cacheDir:  etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
+		logDir:    etc.Get(defaultLogDirKey, defaultLogDir).String(),
 	}
 }
 
@@ -131,4 +143,16 @@ func WithTimeout(timeout time.Duration) Option {
 // WithProtocol sets the protocol for communicating with the Polaris server.
 func WithProtocol(protocol string) Option {
 	return func(o *options) { o.protocol = protocol }
+}
+
+// WithCacheDir sets the cache directory of config files. It applies to the
+// built-in SDK context; an external SDK context configures its own cache.
+func WithCacheDir(cacheDir string) Option {
+	return func(o *options) { o.cacheDir = cacheDir }
+}
+
+// WithLogDir sets the log directory. It applies to the built-in SDK context; an
+// external SDK context configures its own loggers.
+func WithLogDir(logDir string) Option {
+	return func(o *options) { o.logDir = logDir }
 }
