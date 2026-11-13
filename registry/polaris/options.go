@@ -12,6 +12,8 @@ const (
 	defaultNamespace = "default"
 	defaultTimeout   = "3s"
 	defaultProtocol  = "grpc"
+	defaultCacheDir  = "./run/polaris/naming/cache"
+	defaultLogDir    = "./run/polaris/naming/log"
 )
 
 const (
@@ -19,6 +21,8 @@ const (
 	defaultNamespaceKey = "etc.registry.polaris.namespace"
 	defaultTimeoutKey   = "etc.registry.polaris.timeout"
 	defaultProtocolKey  = "etc.registry.polaris.protocol"
+	defaultCacheDirKey  = "etc.registry.polaris.cacheDir"
+	defaultLogDirKey    = "etc.registry.polaris.logDir"
 )
 
 type Option func(o *options)
@@ -45,6 +49,14 @@ type options struct {
 	// Protocol for communicating with the Polaris server.
 	// Defaults to grpc.
 	protocol string
+
+	// Directory caching service information.
+	// Defaults to ./run/polaris/naming/cache.
+	cacheDir string
+
+	// Log storage path.
+	// Defaults to ./run/polaris/naming/log.
+	logDir string
 }
 
 func defaultOptions() *options {
@@ -53,6 +65,8 @@ func defaultOptions() *options {
 		namespace: etc.Get(defaultNamespaceKey, defaultNamespace).String(),
 		timeout:   etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		protocol:  etc.Get(defaultProtocolKey, defaultProtocol).String(),
+		cacheDir:  etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
+		logDir:    etc.Get(defaultLogDirKey, defaultLogDir).String(),
 	}
 }
 
@@ -79,4 +93,14 @@ func WithTimeout(timeout time.Duration) Option {
 // WithProtocol sets the protocol for communicating with the Polaris server.
 func WithProtocol(protocol string) Option {
 	return func(o *options) { o.protocol = protocol }
+}
+
+// WithCacheDir sets the directory caching service information.
+func WithCacheDir(cacheDir string) Option {
+	return func(o *options) { o.cacheDir = cacheDir }
+}
+
+// WithLogDir sets the log storage path.
+func WithLogDir(logDir string) Option {
+	return func(o *options) { o.logDir = logDir }
 }

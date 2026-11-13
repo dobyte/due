@@ -86,10 +86,10 @@
 | [减少嵌套](uber-go/style.md#reduce-nesting) | 使用提前返回、`continue` 等方式处理特殊情况，保持正常路径清晰。 |
 | [计数循环](due-conventions.md#due-006) | 按 [DUE-006](due-conventions.md#due-006)执行：从 `0` 开始、步长为 `1` 的计数循环，不需要索引时用 `for range n`，需要索引时用 `for i := range n`，不使用 `for i := 0; i < n; i++`；非单位步长、逆序等场景仍用三段式 `for`。 |
 | [不必要的 else](uber-go/style.md#unnecessary-else) | 前一分支已经返回时，去掉无必要的 `else`。 |
-| [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。 |
+| [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。同一作用域内声明多个变量时，按 [DUE-009](due-conventions.md#due-009)使用 `var ()` 分组。 |
 | [未导出全局命名](uber-go/style.md#prefix-unexported-globals-with-_) | 未导出的包级变量和常量使用 `_` 前缀；未导出错误值采用 `err` 前缀，是原文的明确例外。 |
 | [结构体嵌入排列](uber-go/style.md#embedding-in-structs) | 嵌入字段放在结构体最前面，与普通命名字段用空行分隔；是否嵌入仍遵守类型与 API 规则。 |
-| [局部变量声明](uber-go/style.md#local-variable-declarations) | 非零初始化通常用 `:=`；零值结构体和 Slice 等使用原文规定的 `var` 形式。 |
+| [局部变量声明](uber-go/style.md#local-variable-declarations) | 非零初始化通常用 `:=`；零值结构体和 Slice 等使用原文规定的 `var` 形式。同一作用域内声明多个变量时，按 [DUE-009](due-conventions.md#due-009)使用 `var ()` 分组。 |
 | [nil Slice](uber-go/style.md#nil-is-a-valid-slice) | 将 `nil` 视为有效的空 Slice，空结果优先返回 `nil`，判断空使用 `len(s) == 0`；明确 `nil` 与已分配空 Slice 在序列化等场景的差别。 |
 | [变量作用域](uber-go/style.md#reduce-scope-of-variables) | 在不增加无必要嵌套的前提下缩小变量作用域。 |
 | [含义不明的参数](uber-go/style.md#avoid-naked-parameters) | 对含义不清的布尔值或其他字面量参数，用命名类型等方式表达语义，必要时添加参数注释。 |

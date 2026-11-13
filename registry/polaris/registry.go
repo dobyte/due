@@ -322,12 +322,17 @@ func (r *Registry) services(_ context.Context, serviceName string) ([]*registry.
 
 // buildClient builds the Polaris SDK context.
 func (r *Registry) buildClient() (api.SDKContext, error) {
+	if err := api.SetLoggersDir(r.opts.logDir); err != nil {
+		return nil, err
+	}
+
 	cfg := api.NewConfiguration()
 
 	cfg.GetGlobal().GetServerConnector().SetAddresses(r.opts.urls)
 	cfg.GetGlobal().GetServerConnector().SetProtocol(r.opts.protocol)
 	cfg.GetGlobal().GetServerConnector().SetMessageTimeout(r.opts.timeout)
 	cfg.GetGlobal().GetAPI().SetTimeout(r.opts.timeout)
+	cfg.GetConsumer().GetLocalCache().SetPersistDir(r.opts.cacheDir)
 
 	return api.InitContextByConfig(cfg)
 }
