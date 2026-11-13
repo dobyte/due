@@ -55,9 +55,12 @@ func parseInstances(instances []model.Instance) ([]*registry.ServiceInstance, er
 		ins.Metadata = make(map[string]string)
 
 		if v := metadata[metaFieldRoutes]; v != "" {
-			if err := json.Unmarshal([]byte(v), &ins.Routes); err != nil {
+			routes, err := unmarshalRoutes(v)
+			if err != nil {
 				return nil, err
 			}
+
+			ins.Routes = routes
 		}
 
 		if v := metadata[metaFieldEvents]; v != "" {

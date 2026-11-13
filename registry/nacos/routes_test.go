@@ -99,8 +99,8 @@ func TestMarshalRoutesTooMany(t *testing.T) {
 		routes[i].ID = int32(i)
 	}
 
-	if _, err := marshalRoutes(routes); !errors.Is(err, errTooManyRoutes) {
-		t.Fatalf("marshalRoutes() error = %v, want %v", err, errTooManyRoutes)
+	if _, err := marshalRoutes(routes); !errors.Is(err, errors.ErrTooManyRoutes) {
+		t.Fatalf("marshalRoutes() error = %v, want %v", err, errors.ErrTooManyRoutes)
 	}
 }
 

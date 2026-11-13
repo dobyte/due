@@ -114,11 +114,12 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	req.Metadata[metaFieldWeight] = xconv.String(weight)
 
 	if len(ins.Routes) > 0 {
-		if routes, err := json.Marshal(ins.Routes); err != nil {
+		routes, err := marshalRoutes(ins.Routes)
+		if err != nil {
 			return err
-		} else {
-			req.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
 		}
+
+		req.Metadata[metaFieldRoutes] = routes
 	}
 
 	if len(ins.Events) > 0 {

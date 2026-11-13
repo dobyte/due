@@ -61,7 +61,7 @@
 | --- | --- |
 | [错误类型](uber-go/style.md#error-types) | 按调用方是否需要匹配错误或提取信息，选择静态错误、格式化错误或自定义类型；导出的错误值和类型属于公共 API。需要使用 errors 包时，按 [DUE-002](due-conventions.md#due-002)采用 Due 统一入口。 |
 | [错误包装](uber-go/style.md#error-wrapping) | 没有新增上下文时可以原样返回。使用 `%w` 或 `%v` 前判断底层原因是否应成为调用方可观察的错误契约，避免重复堆叠上下文。 |
-| [错误命名](uber-go/style.md#error-naming) | 存为包级变量的错误值使用 `Err` 或 `err` 前缀；自定义错误类型使用 `Error` 后缀，遵守原文导出性规则。 |
+| [错误命名](uber-go/style.md#error-naming) | 存为包级变量的错误值使用 `Err` 或 `err` 前缀；自定义错误类型使用 `Error` 后缀，遵守原文导出性规则。Due 项目要求包级错误值统一定义在 errors 包，按 [DUE-008](due-conventions.md#due-008)执行。 |
 | [错误只处理一次](uber-go/style.md#handle-errors-once) | 正常情况下选择恢复、记录并降级、或向上传递等一种处理方式，避免无必要地同时记录并返回同一错误。 |
 | [类型断言失败](uber-go/style.md#handle-type-assertion-failures) | 使用 comma-ok 形式处理可能失败的类型断言，避免未处理的断言引发 Panic。 |
 | [避免 Panic](uber-go/style.md#dont-panic) | 普通生产错误通过 `error` 传播，不以 `panic/recover` 实现日常错误处理；保留原文不可恢复错误等例外，测试优先使用 `t.Fatal` 或 `t.FailNow`。 |

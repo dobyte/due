@@ -23,11 +23,6 @@ const (
 // while decoding.
 const maxRouteCount = 1 << 16
 
-var (
-	errInvalidRoutes = errors.New("invalid routes metadata")
-	errTooManyRoutes = errors.New("routes metadata exceeds the route count limit")
-)
-
 // marshalRoutes encodes routes into a compact, human-readable metadata value.
 //
 // Nacos limits the total length of all instance metadata, so the JSON form of a non-trivial route
@@ -82,7 +77,7 @@ func marshalRoutes(routes []registry.Route) (string, error) {
 	}
 
 	if len(seen) > maxRouteCount {
-		return "", errTooManyRoutes
+		return "", errors.ErrTooManyRoutes
 	}
 
 	// Sort groups by flags so that the encoded value is stable across registrations.
@@ -164,7 +159,7 @@ func unmarshalRoutes(value string) ([]registry.Route, error) {
 		}
 
 		if len(routes) > maxRouteCount {
-			return nil, errTooManyRoutes
+			return nil, errors.ErrTooManyRoutes
 		}
 
 		return routes, nil
@@ -175,7 +170,7 @@ func unmarshalRoutes(value string) ([]registry.Route, error) {
 	for _, group := range strings.Split(value, ";") {
 		flags, ranges, ok := strings.Cut(group, ":")
 		if !ok {
-			return nil, errInvalidRoutes
+			return nil, errors.ErrInvalidRoutes
 		}
 
 		var route registry.Route
@@ -190,7 +185,7 @@ func unmarshalRoutes(value string) ([]registry.Route, error) {
 				case 'a':
 					route.Authorized = true
 				default:
-					return nil, errInvalidRoutes
+					return nil, errors.ErrInvalidRoutes
 				}
 			}
 		}
@@ -200,19 +195,19 @@ func unmarshalRoutes(value string) ([]registry.Route, error) {
 
 			startID, err := strconv.ParseInt(start, 10, 32)
 			if err != nil || startID < 0 {
-				return nil, errInvalidRoutes
+				return nil, errors.ErrInvalidRoutes
 			}
 
 			endID := startID
 
 			if hasEnd {
 				if endID, err = strconv.ParseInt(end, 10, 32); err != nil || endID < startID {
-					return nil, errInvalidRoutes
+					return nil, errors.ErrInvalidRoutes
 				}
 			}
 
 			if endID-startID+1 > maxRouteCount-int64(len(routes)) {
-				return nil, errTooManyRoutes
+				return nil, errors.ErrTooManyRoutes
 			}
 
 			for id := startID; id <= endID; id++ {

@@ -33,6 +33,8 @@ var (
 	ErrTooManyConnection       = New("too many connection")
 	ErrSeqOverflow             = New("seq overflow")
 	ErrRouteOverflow           = New("route overflow")
+	ErrInvalidRoutes           = New("invalid routes metadata")
+	ErrTooManyRoutes           = New("routes metadata exceeds the route count limit")
 	ErrMessageTooLarge         = New("message too large")
 	ErrInvalidDecoder          = New("invalid decoder")
 	ErrInvalidScanner          = New("invalid scanner")
