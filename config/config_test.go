@@ -286,6 +286,32 @@ func TestConfiguratorMatch(t *testing.T) {
 	}
 }
 
+func TestConfiguratorMatchScanDefaults(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	var opts struct {
+		Host string `json:"host" default:"0.0.0.0"`
+		Port int    `json:"port" default:"9000"`
+	}
+
+	if err := c.Match("config.missing").Scan(&opts); err != nil {
+		t.Fatalf("scan defaults failed, err: %v", err)
+	}
+	if opts.Host != "0.0.0.0" || opts.Port != 9000 {
+		t.Fatalf("invalid default options, actual: %+v", opts)
+	}
+
+	tz := "keep"
+	if err := c.Match("config.missing").Scan(&tz); err != nil {
+		t.Fatalf("scan with no match should not fail, err: %v", err)
+	}
+	if tz != "keep" {
+		t.Fatalf("scan with no match should not overwrite scalars, actual: %s", tz)
+	}
+}
+
 func TestConfiguratorWatch(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/dobyte/due/v2/encoding/json"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xconv"
 	"github.com/dobyte/due/v2/utils/xreflect"
 )
@@ -226,6 +226,11 @@ func (v *value) Map() map[string]any {
 }
 
 func (v *value) Scan(pointer any) error {
+	rv := reflect.ValueOf(pointer)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return errors.ErrInvalidScanner
+	}
+
 	switch p := pointer.(type) {
 	case *int:
 		*p = v.Int()
@@ -258,19 +263,7 @@ func (v *value) Scan(pointer any) error {
 	case *time.Duration:
 		*p = v.Duration()
 	default:
-		switch val := v.Value().(type) {
-		case string, *string:
-			return json.Unmarshal(v.Bytes(), pointer)
-		case []byte, *[]byte:
-			return json.Unmarshal(v.Bytes(), pointer)
-		default:
-			b, err := json.Marshal(val)
-			if err != nil {
-				return err
-			}
-
-			return json.Unmarshal(b, pointer)
-		}
+		return scanValue(v.v, rv.Elem(), "")
 	}
 
 	return nil

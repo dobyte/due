@@ -1,0 +1,95 @@
+package value
+
+import (
+	"reflect"
+	"strings"
+	"sync"
+)
+
+const (
+	_jsonTagKey    = "json"
+	_defaultTagKey = "default"
+)
+
+type fieldInfo struct {
+	name  string
+	index []int
+	def   string
+}
+
+type structInfo struct {
+	fields []fieldInfo
+}
+
+var _structInfos sync.Map // map[reflect.Type]*structInfo
+
+// structInfoOf returns the cached scan metadata of t, building it on first use.
+func structInfoOf(t reflect.Type) *structInfo {
+	if cached, ok := _structInfos.Load(t); ok {
+		return cached.(*structInfo)
+	}
+
+	info := &structInfo{}
+	buildStructInfo(t, nil, info, make(map[reflect.Type]bool))
+	actual, _ := _structInfos.LoadOrStore(t, info)
+
+	return actual.(*structInfo)
+}
+
+// buildStructInfo collects exported fields in declaration order, flattening anonymous structs to
+// follow the field-promotion rules of encoding/json.
+func buildStructInfo(
+	t reflect.Type,
+	prefix []int,
+	info *structInfo,
+	visited map[reflect.Type]bool,
+) {
+	if visited[t] {
+		return
+	}
+	visited[t] = true
+	defer delete(visited, t)
+
+	for i := range t.NumField() {
+		field := t.Field(i)
+		name := jsonFieldName(field)
+		if name == "-" {
+			continue
+		}
+
+		index := make([]int, len(prefix)+1)
+		copy(index, prefix)
+		index[len(prefix)] = i
+
+		if field.Anonymous && name == "" {
+			embedded := field.Type
+			if embedded.Kind() == reflect.Pointer {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				buildStructInfo(embedded, index, info, visited)
+				continue
+			}
+		}
+
+		if field.PkgPath != "" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+
+		info.fields = append(info.fields, fieldInfo{
+			name:  name,
+			index: index,
+			def:   field.Tag.Get(_defaultTagKey),
+		})
+	}
+}
+
+// jsonFieldName returns the field name declared by the json tag.
+func jsonFieldName(field reflect.StructField) string {
+	name, _, _ := strings.Cut(field.Tag.Get(_jsonTagKey), ",")
+
+	return name
+}

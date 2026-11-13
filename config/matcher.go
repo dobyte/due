@@ -1,6 +1,8 @@
 package config
 
 import (
+	"reflect"
+
 	"github.com/dobyte/due/v2/core/value"
 )
 
@@ -55,7 +57,8 @@ func (m *defaultMatcher) Get(def ...any) value.Value {
 	return value.NewValue(def...)
 }
 
-// Scan scans the value of the first pattern that resolves into dest.
+// Scan scans the value of the first pattern that resolves into dest. When no pattern resolves and
+// dest points to a struct, the default tags of that struct are applied.
 func (m *defaultMatcher) Scan(dest any) error {
 	if m.c != nil {
 		for _, pattern := range m.patterns {
@@ -63,6 +66,12 @@ func (m *defaultMatcher) Scan(dest any) error {
 				return val.Scan(dest)
 			}
 		}
+	}
+
+	rv := reflect.ValueOf(dest)
+
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() && rv.Elem().Kind() == reflect.Struct {
+		return value.NewValue().Scan(dest)
 	}
 
 	return nil
