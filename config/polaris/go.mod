@@ -4,8 +4,8 @@ go 1.27.0
 
 require (
 	github.com/dobyte/due/v2 v2.6.7
-	github.com/polarismesh/polaris-go v1.7.1
-	github.com/polarismesh/specification v1.8.0
+	github.com/polarismesh/polaris-go v1.7.2
+	github.com/polarismesh/specification v1.8.1-0.20260730090605-7b2855bfb207
 )
 
 require (
