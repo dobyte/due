@@ -30,6 +30,12 @@ func unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v, options...)
 }
 
+// unmarshalString decodes a JSON string into v with encoding/json/v2, selected by the stdjson
+// build tag.
+func unmarshalString(s string, v any) error {
+	return unmarshal([]byte(s), v)
+}
+
 // appendEncode appends the JSON encoding of v to dst with encoding/json/v2.
 func appendEncode(dst []byte, v any) ([]byte, error) {
 	data, err := json.Marshal(v, options...)

@@ -28,11 +28,19 @@ const (
 	unmarshalerText
 )
 
+const maxMaskedFields = 64
+
 var (
 	jsonUnmarshalerType = reflect.TypeOf((*jsonUnmarshaler)(nil)).Elem()
 	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 	unmarshalerKinds    sync.Map // map[reflect.Type]unmarshalerKind
 	anyMapType          = reflect.TypeOf(map[string]any(nil))
+	anySliceType        = reflect.TypeOf([]any(nil))
+	stringStringMapType = reflect.TypeOf(map[string]string(nil))
+	stringIntMapType    = reflect.TypeOf(map[string]int(nil))
+	stringInt64MapType  = reflect.TypeOf(map[string]int64(nil))
+	stringBoolMapType   = reflect.TypeOf(map[string]bool(nil))
+	stringSliceType     = reflect.TypeOf([]string(nil))
 	durationType        = reflect.TypeOf(time.Duration(0))
 )
 
@@ -61,23 +69,32 @@ func unmarshalerKindOf(t reflect.Type) unmarshalerKind {
 // scanValue scans src into dst, converting values between compatible types. The default tag of a
 // struct field is applied when the field is absent or empty.
 func scanValue(src any, dst reflect.Value) error {
+	return scanValueKind(src, dst, unmarshalerKindOf(dst.Type()), false)
+}
+
+// scanValueKind scans src into dst using a precomputed unmarshaler kind. fresh reports whether src
+// was decoded by this scan, in which case container nodes can be adopted without cloning.
+func scanValueKind(src any, dst reflect.Value, kind unmarshalerKind, fresh bool) error {
 	if !dst.CanSet() {
 		return nil
 	}
 
 	if dst.Kind() == reflect.Interface {
-		return scanInterface(src, dst)
+		return scanInterface(src, dst, fresh)
 	}
 
-	if !xreflect.IsNil(src) {
+	if src != nil {
 		rv := reflect.ValueOf(src)
-		if rv.Type().AssignableTo(dst.Type()) && !isContainerKind(dst.Kind()) {
-			dst.Set(rv)
-			return nil
+		if !isNilValue(rv) {
+			rt := rv.Type()
+			if !isContainerKind(dst.Kind()) && (rt == dst.Type() || rt.AssignableTo(dst.Type())) {
+				dst.Set(rv)
+				return nil
+			}
 		}
 	}
 
-	if kind := unmarshalerKindOf(dst.Type()); kind != unmarshalerNone {
+	if kind != unmarshalerNone {
 		if ok, err := scanWithUnmarshaler(src, dst, kind); ok {
 			return err
 		}
@@ -91,28 +108,1126 @@ func scanValue(src any, dst reflect.Value) error {
 		if dst.IsNil() {
 			dst.Set(reflect.New(dst.Type().Elem()))
 		}
-		return scanValue(src, dst.Elem())
+		return scanValueKind(src, dst.Elem(), unmarshalerKindOf(dst.Elem().Type()), fresh)
 	case reflect.Struct:
-		return scanStruct(src, dst)
+		if dst.CanAddr() {
+			if decoded, err := scanJSONStruct(src, dst); decoded {
+				return err
+			}
+		}
+		return scanStruct(src, dst, fresh)
 	case reflect.Map:
-		return scanMap(src, dst)
+		return scanMap(src, dst, fresh)
 	case reflect.Slice, reflect.Array:
-		return scanSlice(src, dst)
+		return scanSlice(src, dst, fresh)
 	default:
 		return scanScalar(src, dst)
 	}
 }
 
+type jsonInput struct {
+	data   []byte
+	text   string
+	isText bool
+}
+
+func (in jsonInput) unmarshal(v any) error {
+	if in.isText {
+		return json.UnmarshalString(in.text, v)
+	}
+	return json.Unmarshal(in.data, v)
+}
+
+func (in jsonInput) isObject() bool {
+	if in.isText {
+		return isJSONObjectString(in.text)
+	}
+	return isJSONObjectBytes(in.data)
+}
+
+func (in jsonInput) isArray() bool {
+	if in.isText {
+		return isJSONArrayString(in.text)
+	}
+	return isJSONArrayBytes(in.data)
+}
+
+func jsonInputOf(src any) (jsonInput, bool) {
+	if s, ok := stringValue(src); ok {
+		return jsonInput{text: s, isText: true}, true
+	}
+	if data, ok := bytesValue(src); ok {
+		return jsonInput{data: data}, true
+	}
+
+	return jsonInput{}, false
+}
+
+// scanJSONStruct decodes a JSON object directly into a struct. Structs without defaults use one
+// direct decode; defaulted structs are scanned field by field from raw JSON, which keeps nested
+// defaults and cross-type conversions working without an intermediate map[string]any.
+func scanJSONStruct(src any, dst reflect.Value) (bool, error) {
+	in, ok := jsonInputOf(src)
+	if !ok || !in.isObject() {
+		return false, nil
+	}
+
+	info := structInfoOf(dst.Type())
+
+	if !info.hasDefaults {
+		if in.unmarshal(dst.Addr().Interface()) == nil {
+			return true, nil
+		}
+		return true, scanJSONStructRaw(in, dst, info)
+	}
+
+	if !info.hasNestedDefault && len(info.fields) <= maxMaskedFields {
+		if scanJSONStructDefaults(in, dst, info) {
+			return true, nil
+		}
+	}
+
+	return true, scanJSONStructRaw(in, dst, info)
+}
+
+func scanJSONStructDefaults(in jsonInput, dst reflect.Value, info *structInfo) bool {
+	if in.unmarshal(dst.Addr().Interface()) != nil {
+		return false
+	}
+
+	if in.isText {
+		return scanStructPresence(in.text, dst, info)
+	}
+
+	return scanStructPresence(in.data, dst, info)
+}
+
+// scanStructPresence records the fields present in a raw JSON object and applies the defaults of
+// the remaining fields. A later duplicate key overrides an earlier one.
+func scanStructPresence[T jsonText](data T, dst reflect.Value, info *structInfo) bool {
+	var matched uint64
+
+	err := walkJSONObject(data, func(key string, value T) error {
+		index, ok := info.fieldIndex(key)
+		if !ok {
+			return nil
+		}
+
+		field := &info.fields[index]
+		bit := uint64(1) << index
+		if field.def != "" && isMissingJSONValue(value, field.typ) {
+			matched &^= bit
+		} else {
+			matched |= bit
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+
+	for i := range info.fields {
+		field := &info.fields[i]
+		if field.def == "" || matched&(uint64(1)<<i) != 0 {
+			continue
+		}
+		if err := scanField(nil, dst, field, false); err != nil {
+			return false
+		}
+	}
+
+	return true
+}
+
+// scanJSONStructRaw scans a JSON object into a struct without building an intermediate map,
+// keeping nested defaults and cross-type conversions working.
+func scanJSONStructRaw(in jsonInput, dst reflect.Value, info *structInfo) error {
+	if in.isText {
+		return scanRawObject(in.text, dst, info)
+	}
+
+	return scanRawObject(in.data, dst, info)
+}
+
+// scanRawObject scans a raw JSON object into a struct and applies defaults to absent fields.
+func scanRawObject[T jsonText](data T, dst reflect.Value, info *structInfo) error {
+	if len(info.fields) > maxMaskedFields {
+		return scanRawObjectWide(data, dst, info)
+	}
+
+	var matched uint64
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		index, ok := info.fieldIndex(key)
+		if !ok {
+			return nil
+		}
+
+		matched |= uint64(1) << index
+
+		return scanRawField(value, dst, &info.fields[index])
+	}); err != nil {
+		return err
+	}
+
+	for i := range info.fields {
+		if matched&(uint64(1)<<i) != 0 {
+			continue
+		}
+		if err := scanField(nil, dst, &info.fields[i], false); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// scanRawObjectWide is the raw object scanner for structs with more than 64 fields.
+func scanRawObjectWide[T jsonText](data T, dst reflect.Value, info *structInfo) error {
+	matched := make([]bool, len(info.fields))
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		index, ok := info.fieldIndex(key)
+		if !ok {
+			return nil
+		}
+
+		matched[index] = true
+
+		return scanRawField(value, dst, &info.fields[index])
+	}); err != nil {
+		return err
+	}
+
+	for i := range info.fields {
+		if matched[i] {
+			continue
+		}
+		if err := scanField(nil, dst, &info.fields[i], false); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// scanRawField scans one raw JSON value into a struct field, falling back to the field default
+// when the value counts as absent.
+func scanRawField[T jsonText](raw T, dst reflect.Value, field *fieldInfo) error {
+	if isMissingJSONValue(raw, field.typ) {
+		return scanField(nil, dst, field, false)
+	}
+
+	fv, err := fieldByIndex(dst, field.index, true)
+	if err != nil {
+		return wrapFieldError(field.name, err)
+	}
+
+	if err := scanRawValue(raw, fv, field.unmarshaler); err != nil {
+		return wrapFieldError(field.name, err)
+	}
+
+	return nil
+}
+
+// scanRawValue decodes one raw JSON value into dst. Types that carry default tags are scanned
+// recursively; other values use a direct decode with a type-conversion fallback.
+func scanRawValue[T jsonText](raw T, dst reflect.Value, kind unmarshalerKind) error {
+	data := trimJSONSpace(raw)
+	if len(data) == 0 || isJSONNull(data) {
+		return nil
+	}
+
+	if dst.Kind() == reflect.Interface {
+		var val any
+		if err := json.Unmarshal([]byte(data), &val); err != nil {
+			return err
+		}
+		return scanInterface(val, dst, true)
+	}
+
+	switch kind {
+	case unmarshalerJSON:
+		return dst.Addr().Interface().(jsonUnmarshaler).UnmarshalJSON([]byte(data))
+	case unmarshalerText:
+		var val any
+		if err := json.Unmarshal([]byte(data), &val); err != nil {
+			return err
+		}
+		return scanValueKind(val, dst, kind, true)
+	}
+
+	switch dst.Kind() {
+	case reflect.Pointer:
+		if elem := dst.Type().Elem(); typeNeedsDefaults(elem) {
+			if dst.IsNil() {
+				dst.Set(reflect.New(elem))
+			}
+			return scanRawValue(data, dst.Elem(), unmarshalerKindOf(elem))
+		}
+	case reflect.Struct:
+		if data[0] == '{' {
+			info := structInfoOf(dst.Type())
+			if info.hasDefaults {
+				return scanRawObject(data, dst, info)
+			}
+			if json.Unmarshal([]byte(data), dst.Addr().Interface()) == nil {
+				return nil
+			}
+			return scanRawObject(data, dst, info)
+		}
+	case reflect.Map:
+		if data[0] == '{' && typeNeedsDefaults(dst.Type().Elem()) {
+			return scanRawMap(data, dst)
+		}
+	case reflect.Slice, reflect.Array:
+		if data[0] == '[' && typeNeedsDefaults(dst.Type().Elem()) {
+			return scanRawSlice(data, dst)
+		}
+	}
+
+	if handled, err := scanRawPrimitive(data, dst); handled {
+		return err
+	}
+
+	if val, ok := rawScalarValue(data); ok {
+		return scanValueKind(val, dst, kind, true)
+	}
+
+	if err := json.Unmarshal([]byte(data), dst.Addr().Interface()); err == nil {
+		return nil
+	}
+
+	switch dst.Kind() {
+	case reflect.Pointer:
+		elem := dst.Type().Elem()
+		if dst.IsNil() {
+			dst.Set(reflect.New(elem))
+		}
+		return scanRawValue(data, dst.Elem(), unmarshalerKindOf(elem))
+	case reflect.Map:
+		if data[0] == '{' {
+			return scanRawMap(data, dst)
+		}
+	case reflect.Slice, reflect.Array:
+		if data[0] == '[' {
+			return scanRawSlice(data, dst)
+		}
+	}
+
+	var val any
+	if err := json.Unmarshal([]byte(data), &val); err != nil {
+		return err
+	}
+
+	return scanValueKind(val, dst, kind, true)
+}
+
+// scanRawPrimitive converts a JSON scalar into a scalar destination of the matching kind.
+func scanRawPrimitive[T jsonText](data T, dst reflect.Value) (bool, error) {
+	switch dst.Kind() {
+	case reflect.String:
+		if data[0] != '"' {
+			return false, nil
+		}
+		value, err := unquoteJSONString(data)
+		if err != nil {
+			return true, err
+		}
+		dst.SetString(value)
+		return true, nil
+	case reflect.Bool:
+		switch {
+		case len(data) == 4 && data[0] == 't':
+			dst.SetBool(true)
+			return true, nil
+		case len(data) == 5 && data[0] == 'f':
+			dst.SetBool(false)
+			return true, nil
+		default:
+			return false, nil
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, ok := parseJSONInt(data)
+		if !ok {
+			return false, nil
+		}
+		if dst.OverflowInt(n) {
+			return true, errors.NewError("scan: value overflows " + dst.Type().String())
+		}
+		dst.SetInt(n)
+		return true, nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, ok := parseJSONUint(data)
+		if !ok {
+			return false, nil
+		}
+		if dst.OverflowUint(n) {
+			return true, errors.NewError("scan: value overflows " + dst.Type().String())
+		}
+		dst.SetUint(n)
+		return true, nil
+	case reflect.Float32, reflect.Float64:
+		f, ok := parseJSONFloat(data)
+		if !ok {
+			return false, nil
+		}
+		if dst.OverflowFloat(f) {
+			return true, errors.NewError("scan: value overflows " + dst.Type().String())
+		}
+		dst.SetFloat(f)
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// rawScalarValue decodes a JSON scalar into a Go primitive for cross-type conversion.
+func rawScalarValue[T jsonText](data T) (any, bool) {
+	switch data[0] {
+	case '"':
+		value, err := unquoteJSONString(data)
+		if err != nil {
+			return nil, false
+		}
+		return value, true
+	case 't':
+		return true, len(data) == 4
+	case 'f':
+		return false, len(data) == 5
+	case 'n':
+		return nil, isJSONNull(data)
+	default:
+		if n, ok := parseJSONInt(data); ok {
+			return n, true
+		}
+		if f, err := strconv.ParseFloat(string(data), 64); err == nil {
+			return f, true
+		}
+		return nil, false
+	}
+}
+
+// scanRawMap scans a raw JSON object into a map without an intermediate object.
+func scanRawMap[T jsonText](data T, dst reflect.Value) error {
+	switch dst.Type() {
+	case stringStringMapType:
+		return scanRawStringMap(data, dst)
+	case stringIntMapType:
+		return scanRawIntMap(data, dst)
+	case stringInt64MapType:
+		return scanRawInt64Map(data, dst)
+	case stringBoolMapType:
+		return scanRawBoolMap(data, dst)
+	}
+
+	var (
+		keyType  = dst.Type().Key()
+		keyKind  = unmarshalerKindOf(keyType)
+		elemKind = unmarshalerKindOf(dst.Type().Elem())
+		out      = reflect.MakeMap(dst.Type())
+	)
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		var kv reflect.Value
+		if keyType.Kind() == reflect.String && keyKind == unmarshalerNone {
+			kv = reflect.ValueOf(key).Convert(keyType)
+		} else {
+			kv = reflect.New(keyType).Elem()
+			if err := scanValueKind(key, kv, keyKind, false); err != nil {
+				return wrapFieldError(key, err)
+			}
+		}
+
+		vv := reflect.New(dst.Type().Elem()).Elem()
+		if err := scanRawValue(value, vv, elemKind); err != nil {
+			return wrapFieldError(key, err)
+		}
+
+		out.SetMapIndex(kv, vv)
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(out)
+
+	return nil
+}
+
+// scanRawStringMap scans a raw JSON object into a map[string]string.
+func scanRawStringMap[T jsonText](data T, dst reflect.Value) error {
+	out := make(map[string]string)
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		val, err := rawValueOf(value)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		out[key] = xconv.String(val)
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(reflect.ValueOf(out))
+
+	return nil
+}
+
+// scanRawIntMap scans a raw JSON object into a map[string]int.
+func scanRawIntMap[T jsonText](data T, dst reflect.Value) error {
+	out := make(map[string]int)
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		val, err := rawValueOf(value)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		if val == nil {
+			out[key] = 0
+			return nil
+		}
+		n, err := parseInt(val, strconv.IntSize)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		out[key] = int(n)
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(reflect.ValueOf(out))
+
+	return nil
+}
+
+// scanRawInt64Map scans a raw JSON object into a map[string]int64.
+func scanRawInt64Map[T jsonText](data T, dst reflect.Value) error {
+	out := make(map[string]int64)
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		val, err := rawValueOf(value)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		if val == nil {
+			out[key] = 0
+			return nil
+		}
+		n, err := parseInt(val, 64)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		out[key] = n
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(reflect.ValueOf(out))
+
+	return nil
+}
+
+// scanRawBoolMap scans a raw JSON object into a map[string]bool.
+func scanRawBoolMap[T jsonText](data T, dst reflect.Value) error {
+	out := make(map[string]bool)
+
+	if err := walkJSONObject(data, func(key string, value T) error {
+		val, err := rawValueOf(value)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		if val == nil {
+			out[key] = false
+			return nil
+		}
+		b, err := parseBool(val)
+		if err != nil {
+			return wrapFieldError(key, err)
+		}
+		out[key] = b
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(reflect.ValueOf(out))
+
+	return nil
+}
+
+// rawValueOf decodes a raw JSON value into its scalar form, or a generic node for composites.
+func rawValueOf[T jsonText](raw T) (any, error) {
+	value := trimJSONSpace(raw)
+	if len(value) == 0 || isJSONNull(value) {
+		return nil, nil
+	}
+	if val, ok := rawScalarValue(value); ok {
+		return val, nil
+	}
+
+	var val any
+	if err := json.Unmarshal([]byte(value), &val); err != nil {
+		return nil, err
+	}
+
+	return val, nil
+}
+
+// scanRawSlice scans a raw JSON array into a slice or array without an intermediate slice.
+func scanRawSlice[T jsonText](data T, dst reflect.Value) error {
+	count, err := countJSONArray(data)
+	if err != nil {
+		return err
+	}
+
+	kind := unmarshalerKindOf(dst.Type().Elem())
+
+	if dst.Kind() == reflect.Array {
+		index := 0
+		limit := min(count, dst.Len())
+		return walkJSONArray(data, func(_ int, value T) error {
+			if index >= limit {
+				return nil
+			}
+			if err := scanRawValue(value, dst.Index(index), kind); err != nil {
+				return wrapIndexError(index, err)
+			}
+			index++
+			return nil
+		})
+	}
+
+	out := reflect.MakeSlice(dst.Type(), count, count)
+	index := 0
+	if err = walkJSONArray(data, func(_ int, value T) error {
+		if err := scanRawValue(value, out.Index(index), kind); err != nil {
+			return wrapIndexError(index, err)
+		}
+		index++
+		return nil
+	}); err != nil {
+		return err
+	}
+	dst.Set(out)
+
+	return nil
+}
+
+// typeNeedsDefaults reports whether t or any nested type declares a default tag, in which case a
+// plain JSON decode would silently drop those defaults.
+func typeNeedsDefaults(t reflect.Type) bool {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	switch t.Kind() {
+	case reflect.Struct:
+		return structInfoOf(t).hasDefaults
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return typeNeedsDefaults(t.Elem())
+	default:
+		return false
+	}
+}
+
+func isMissingJSONValue[T jsonText](raw T, t reflect.Type) bool {
+	data := trimJSONSpace(raw)
+	if isJSONNull(data) {
+		return true
+	}
+
+	return len(data) == 2 && data[0] == '"' && data[1] == '"' && !typeKeepsEmpty(t)
+}
+
+// jsonText is a JSON document or a slice of one, so string sources need no byte copy.
+type jsonText interface {
+	~string | ~[]byte
+}
+
+const maxJSONDepth = 10000
+
+// rawScan walks a JSON document without building intermediate values.
+type rawScan[T jsonText] struct {
+	data  T
+	pos   int
+	depth int
+}
+
+// walkJSONObject visits every member of a JSON object in document order.
+func walkJSONObject[T jsonText](data T, fn func(key string, value T) error) error {
+	s := rawScan[T]{data: data}
+	s.skipSpace()
+	if s.pos >= len(data) || data[s.pos] != '{' {
+		return errors.NewError("scan: source is not a JSON object")
+	}
+	s.pos++
+	s.skipSpace()
+	if s.pos < len(data) && data[s.pos] == '}' {
+		s.pos++
+		return s.end()
+	}
+
+	for {
+		s.skipSpace()
+		if s.pos >= len(data) || data[s.pos] != '"' {
+			return errors.NewError("scan: invalid JSON object")
+		}
+		keyStart := s.pos
+		if err := s.skipString(); err != nil {
+			return err
+		}
+		key, err := unquoteJSONString(data[keyStart:s.pos])
+		if err != nil {
+			return err
+		}
+
+		s.skipSpace()
+		if s.pos >= len(data) || data[s.pos] != ':' {
+			return errors.NewError("scan: invalid JSON object")
+		}
+		s.pos++
+		s.skipSpace()
+		valueStart := s.pos
+		if err := s.skipValue(); err != nil {
+			return err
+		}
+		if err := fn(key, data[valueStart:s.pos]); err != nil {
+			return err
+		}
+
+		s.skipSpace()
+		if s.pos >= len(data) {
+			return errors.NewError("scan: invalid JSON object")
+		}
+		switch data[s.pos] {
+		case ',':
+			s.pos++
+		case '}':
+			s.pos++
+			return s.end()
+		default:
+			return errors.NewError("scan: invalid JSON object")
+		}
+	}
+}
+
+// walkJSONArray visits every element of a JSON array in document order.
+func walkJSONArray[T jsonText](data T, fn func(index int, value T) error) error {
+	s := rawScan[T]{data: data}
+	s.skipSpace()
+	if s.pos >= len(data) || data[s.pos] != '[' {
+		return errors.NewError("scan: source is not a JSON array")
+	}
+	s.pos++
+	s.skipSpace()
+	if s.pos < len(data) && data[s.pos] == ']' {
+		s.pos++
+		return s.end()
+	}
+
+	for index := 0; ; index++ {
+		s.skipSpace()
+		valueStart := s.pos
+		if err := s.skipValue(); err != nil {
+			return err
+		}
+		if err := fn(index, data[valueStart:s.pos]); err != nil {
+			return err
+		}
+
+		s.skipSpace()
+		if s.pos >= len(data) {
+			return errors.NewError("scan: invalid JSON array")
+		}
+		switch data[s.pos] {
+		case ',':
+			s.pos++
+		case ']':
+			s.pos++
+			return s.end()
+		default:
+			return errors.NewError("scan: invalid JSON array")
+		}
+	}
+}
+
+// countJSONArray returns the number of elements of a JSON array.
+func countJSONArray[T jsonText](data T) (int, error) {
+	count := 0
+	err := walkJSONArray(data, func(int, T) error {
+		count++
+		return nil
+	})
+
+	return count, err
+}
+
+func (s *rawScan[T]) skipSpace() {
+	for s.pos < len(s.data) && isJSONSpace(s.data[s.pos]) {
+		s.pos++
+	}
+}
+
+// end reports an error when any non-space content follows the scanned document.
+func (s *rawScan[T]) end() error {
+	s.skipSpace()
+	if s.pos != len(s.data) {
+		return errors.NewError("scan: invalid JSON document")
+	}
+
+	return nil
+}
+
+func (s *rawScan[T]) skipValue() error {
+	s.skipSpace()
+	if s.pos >= len(s.data) {
+		return errors.NewError("scan: unexpected end of JSON document")
+	}
+
+	switch s.data[s.pos] {
+	case '"':
+		return s.skipString()
+	case '{':
+		return s.skipObject()
+	case '[':
+		return s.skipArray()
+	case 't':
+		return s.skipLiteral("true")
+	case 'f':
+		return s.skipLiteral("false")
+	case 'n':
+		return s.skipLiteral("null")
+	default:
+		return s.skipNumber()
+	}
+}
+
+func (s *rawScan[T]) skipLiteral(literal string) error {
+	if s.pos+len(literal) > len(s.data) {
+		return errors.NewError("scan: invalid JSON literal")
+	}
+	for i := range len(literal) {
+		if s.data[s.pos+i] != literal[i] {
+			return errors.NewError("scan: invalid JSON literal")
+		}
+	}
+	s.pos += len(literal)
+
+	return nil
+}
+
+func (s *rawScan[T]) skipNumber() error {
+	start := s.pos
+
+	for s.pos < len(s.data) {
+		switch s.data[s.pos] {
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+', '.', 'e', 'E':
+			s.pos++
+		default:
+			if s.pos == start {
+				return errors.NewError("scan: invalid JSON value")
+			}
+			return nil
+		}
+	}
+
+	if s.pos == start {
+		return errors.NewError("scan: invalid JSON value")
+	}
+
+	return nil
+}
+
+func (s *rawScan[T]) skipString() error {
+	if s.pos >= len(s.data) || s.data[s.pos] != '"' {
+		return errors.NewError("scan: invalid JSON string")
+	}
+
+	s.pos++
+	for s.pos < len(s.data) {
+		switch s.data[s.pos] {
+		case '\\':
+			s.pos += 2
+		case '"':
+			s.pos++
+			return nil
+		default:
+			s.pos++
+		}
+	}
+
+	return errors.NewError("scan: unterminated JSON string")
+}
+
+func (s *rawScan[T]) skipObject() error {
+	if s.depth >= maxJSONDepth {
+		return errors.NewError("scan: JSON nesting too deep")
+	}
+	s.depth++
+	err := s.skipObjectBody()
+	s.depth--
+
+	return err
+}
+
+func (s *rawScan[T]) skipObjectBody() error {
+	s.pos++
+	s.skipSpace()
+	if s.pos < len(s.data) && s.data[s.pos] == '}' {
+		s.pos++
+		return nil
+	}
+
+	for {
+		s.skipSpace()
+		if err := s.skipString(); err != nil {
+			return err
+		}
+		s.skipSpace()
+		if s.pos >= len(s.data) || s.data[s.pos] != ':' {
+			return errors.NewError("scan: invalid JSON object")
+		}
+		s.pos++
+		if err := s.skipValue(); err != nil {
+			return err
+		}
+		s.skipSpace()
+		if s.pos >= len(s.data) {
+			return errors.NewError("scan: invalid JSON object")
+		}
+		switch s.data[s.pos] {
+		case ',':
+			s.pos++
+		case '}':
+			s.pos++
+			return nil
+		default:
+			return errors.NewError("scan: invalid JSON object")
+		}
+	}
+}
+
+func (s *rawScan[T]) skipArray() error {
+	if s.depth >= maxJSONDepth {
+		return errors.NewError("scan: JSON nesting too deep")
+	}
+	s.depth++
+	err := s.skipArrayBody()
+	s.depth--
+
+	return err
+}
+
+func (s *rawScan[T]) skipArrayBody() error {
+	s.pos++
+	s.skipSpace()
+	if s.pos < len(s.data) && s.data[s.pos] == ']' {
+		s.pos++
+		return nil
+	}
+
+	for {
+		if err := s.skipValue(); err != nil {
+			return err
+		}
+		s.skipSpace()
+		if s.pos >= len(s.data) {
+			return errors.NewError("scan: invalid JSON array")
+		}
+		switch s.data[s.pos] {
+		case ',':
+			s.pos++
+		case ']':
+			s.pos++
+			return nil
+		default:
+			return errors.NewError("scan: invalid JSON array")
+		}
+	}
+}
+
+func isJSONSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+func isJSONNull[T jsonText](data T) bool {
+	return len(data) == 4 && data[0] == 'n' && data[1] == 'u' && data[2] == 'l' && data[3] == 'l'
+}
+
+func trimJSONSpace[T jsonText](data T) T {
+	start, end := 0, len(data)
+	for start < end && isJSONSpace(data[start]) {
+		start++
+	}
+	for end > start && isJSONSpace(data[end-1]) {
+		end--
+	}
+
+	return data[start:end]
+}
+
+// unquoteJSONString decodes a quoted JSON string, avoiding an extra copy when no escapes exist.
+func unquoteJSONString[T jsonText](data T) (string, error) {
+	if len(data) < 2 || data[0] != '"' || data[len(data)-1] != '"' {
+		return "", errors.NewError("scan: invalid JSON string")
+	}
+
+	body := data[1 : len(data)-1]
+	for i := range len(body) {
+		if body[i] != '\\' {
+			continue
+		}
+
+		var value string
+		if err := json.Unmarshal([]byte(data), &value); err != nil {
+			return "", err
+		}
+		return value, nil
+	}
+
+	return string(body), nil
+}
+
+func parseJSONInt[T jsonText](data T) (int64, bool) {
+	if len(data) == 0 {
+		return 0, false
+	}
+
+	var (
+		i   = 0
+		neg = data[0] == '-'
+		n   uint64
+	)
+	if neg {
+		i = 1
+	}
+	if i == len(data) {
+		return 0, false
+	}
+
+	for ; i < len(data); i++ {
+		c := data[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		d := uint64(c - '0')
+		if n > (math.MaxUint64-d)/10 {
+			return 0, false
+		}
+		n = n*10 + d
+	}
+
+	if neg {
+		if n > uint64(math.MaxInt64)+1 {
+			return 0, false
+		}
+		if n == uint64(math.MaxInt64)+1 {
+			return math.MinInt64, true
+		}
+		return -int64(n), true
+	}
+	if n > math.MaxInt64 {
+		return 0, false
+	}
+
+	return int64(n), true
+}
+
+func parseJSONUint[T jsonText](data T) (uint64, bool) {
+	if len(data) == 0 || data[0] == '-' {
+		return 0, false
+	}
+
+	var n uint64
+	for i := range len(data) {
+		c := data[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		d := uint64(c - '0')
+		if n > (math.MaxUint64-d)/10 {
+			return 0, false
+		}
+		n = n*10 + d
+	}
+
+	return n, true
+}
+
+func parseJSONFloat[T jsonText](data T) (float64, bool) {
+	f, err := strconv.ParseFloat(string(data), 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return f, true
+}
+
+func typeKeepsEmpty(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.String:
+		return true
+	case reflect.Slice, reflect.Array:
+		return t.Elem().Kind() == reflect.Uint8
+	default:
+		return false
+	}
+}
+
+func isJSONObjectString(s string) bool {
+	s = trimSpaceFast(s)
+
+	return s != "" && s[0] == '{'
+}
+
+func isJSONObjectBytes(data []byte) bool {
+	data = bytes.TrimSpace(data)
+
+	return len(data) != 0 && data[0] == '{'
+}
+
+func isJSONArrayString(s string) bool {
+	s = trimSpaceFast(s)
+
+	return s != "" && s[0] == '['
+}
+
+func isJSONArrayBytes(data []byte) bool {
+	data = bytes.TrimSpace(data)
+
+	return len(data) != 0 && data[0] == '['
+}
+
+// isNilValue reports whether rv holds a nil chan, func, map, pointer, slice or unsafe pointer.
+func isNilValue(rv reflect.Value) bool {
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map,
+		reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 // scanInterface assigns src to an interface destination, copying JSON node containers so that the
 // caller cannot mutate the config snapshot through the scanned value.
-func scanInterface(src any, dst reflect.Value) error {
+func scanInterface(src any, dst reflect.Value, fresh bool) error {
 	if xreflect.IsNil(src) {
 		return nil
 	}
 
 	rv := reflect.ValueOf(src)
 	if dst.Type().NumMethod() == 0 {
-		dst.Set(reflect.ValueOf(cloneNode(src)))
+		if fresh {
+			dst.Set(rv)
+		} else {
+			dst.Set(reflect.ValueOf(cloneNode(src)))
+		}
 		return nil
 	}
 	if !rv.Type().Implements(dst.Type()) {
@@ -156,54 +1271,131 @@ func scanWithUnmarshaler(src any, dst reflect.Value, kind unmarshalerKind) (bool
 }
 
 // scanStruct decodes an object into a struct, matching fields by json tag or field name.
-func scanStruct(src any, dst reflect.Value) error {
-	obj, err := scanObject(src)
+func scanStruct(src any, dst reflect.Value, fresh bool) error {
+	obj, decoded, err := scanObjectFresh(src)
 	if err != nil {
 		return err
 	}
 
+	fresh = fresh || decoded
 	info := structInfoOf(dst.Type())
 
-	var folded map[string]any
+	if obj == nil {
+		return scanStructDefaults(dst, info, fresh)
+	}
+	if len(info.fields) > maxMaskedFields {
+		return scanStructWide(obj, dst, info, fresh)
+	}
 
-	for _, field := range info.fields {
-		fv, err := fieldByIndex(dst, field.index, true)
-		if err != nil {
-			return wrapFieldError(field.name, err)
-		}
+	return scanStructByKey(obj, dst, info, fresh)
+}
 
-		var (
-			val any
-			ok  bool
-		)
-		if obj != nil {
-			val, ok = obj[field.name]
-			if !ok {
-				if folded == nil {
-					folded = foldObject(obj, info.lowers)
-				}
-				val = folded[field.lower]
-			}
-		}
-		if isMissingValue(val, fv) {
-			if field.def == "" {
-				val = nil
-			} else {
-				val = field.defValue
-			}
-		}
-
-		if err = scanValue(val, fv); err != nil {
-			return wrapFieldError(field.name, err)
+// scanStructDefaults applies the defaults of an absent object.
+func scanStructDefaults(dst reflect.Value, info *structInfo, fresh bool) error {
+	for i := range info.fields {
+		if err := scanField(nil, dst, &info.fields[i], fresh); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
+// scanStructByKey matches each source key once and records the consumed field in a bitmask, so a
+// small object is traversed only once instead of once per field.
+func scanStructByKey(obj map[string]any, dst reflect.Value, info *structInfo, fresh bool) error {
+	var matched uint64
+
+	for key, val := range obj {
+		index, ok := info.fieldIndex(key)
+		if !ok {
+			continue
+		}
+
+		bit := uint64(1) << index
+		if matched&bit != 0 {
+			continue
+		}
+		matched |= bit
+
+		if err := scanField(val, dst, &info.fields[index], fresh); err != nil {
+			return err
+		}
+	}
+
+	for i := range info.fields {
+		if matched&(uint64(1)<<i) != 0 {
+			continue
+		}
+		if err := scanField(nil, dst, &info.fields[i], fresh); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// scanStructWide is the fallback for structs with more than 64 fields.
+func scanStructWide(obj map[string]any, dst reflect.Value, info *structInfo, fresh bool) error {
+	matched := make([]bool, len(info.fields))
+
+	for key, val := range obj {
+		index, ok := info.fieldIndex(key)
+		if !ok || matched[index] {
+			continue
+		}
+		matched[index] = true
+
+		if err := scanField(val, dst, &info.fields[index], fresh); err != nil {
+			return err
+		}
+	}
+
+	for i := range info.fields {
+		if matched[i] {
+			continue
+		}
+		if err := scanField(nil, dst, &info.fields[i], fresh); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// scanField scans a single matched or missing field.
+func scanField(val any, dst reflect.Value, field *fieldInfo, fresh bool) error {
+	fv, err := fieldByIndex(dst, field.index, true)
+	if err != nil {
+		return wrapFieldError(field.name, err)
+	}
+
+	if isMissingValue(val, fv) {
+		if field.def == "" {
+			val = nil
+		} else {
+			val = field.defValue
+			fresh = false // cached defaults are shared between scans
+		}
+	}
+
+	if err = scanValueKind(val, fv, field.unmarshaler, fresh); err != nil {
+		return wrapFieldError(field.name, err)
+	}
+
+	return nil
+}
+
 // scanMap decodes an object into a map, converting keys and values to the declared map types.
-func scanMap(src any, dst reflect.Value) error {
-	obj, err := scanObject(src)
+func scanMap(src any, dst reflect.Value, fresh bool) error {
+	if in, ok := jsonInputOf(src); ok && in.isObject() && dst.Type() != anyMapType {
+		if in.isText {
+			return scanRawMap(in.text, dst)
+		}
+		return scanRawMap(in.data, dst)
+	}
+
+	obj, decoded, err := scanObjectFresh(src)
 	if err != nil {
 		return err
 	}
@@ -211,7 +1403,13 @@ func scanMap(src any, dst reflect.Value) error {
 		return nil
 	}
 
+	fresh = fresh || decoded
+
 	if dst.Type() == anyMapType {
+		if fresh {
+			dst.Set(reflect.ValueOf(obj))
+			return nil
+		}
 		out := make(map[string]any, len(obj))
 		for key, val := range obj {
 			out[key] = cloneNode(val)
@@ -220,15 +1418,85 @@ func scanMap(src any, dst reflect.Value) error {
 		return nil
 	}
 
-	out := reflect.MakeMapWithSize(dst.Type(), len(obj))
+	if dst.Type() == stringStringMapType {
+		out := make(map[string]string, len(obj))
+		for key, val := range obj {
+			out[key] = xconv.String(val)
+		}
+		dst.Set(reflect.ValueOf(out))
+		return nil
+	}
+
+	if dst.Type() == stringIntMapType {
+		out := make(map[string]int, len(obj))
+		for key, val := range obj {
+			if val == nil {
+				out[key] = 0
+				continue
+			}
+			n, err := parseInt(val, strconv.IntSize)
+			if err != nil {
+				return wrapFieldError(key, err)
+			}
+			out[key] = int(n)
+		}
+		dst.Set(reflect.ValueOf(out))
+		return nil
+	}
+
+	if dst.Type() == stringInt64MapType {
+		out := make(map[string]int64, len(obj))
+		for key, val := range obj {
+			if val == nil {
+				out[key] = 0
+				continue
+			}
+			n, err := parseInt(val, 64)
+			if err != nil {
+				return wrapFieldError(key, err)
+			}
+			out[key] = n
+		}
+		dst.Set(reflect.ValueOf(out))
+		return nil
+	}
+
+	if dst.Type() == stringBoolMapType {
+		out := make(map[string]bool, len(obj))
+		for key, val := range obj {
+			if val == nil {
+				out[key] = false
+				continue
+			}
+			b, err := parseBool(val)
+			if err != nil {
+				return wrapFieldError(key, err)
+			}
+			out[key] = b
+		}
+		dst.Set(reflect.ValueOf(out))
+		return nil
+	}
+
+	if dst.Type().Key().Kind() == reflect.String &&
+		unmarshalerKindOf(dst.Type().Key()) == unmarshalerNone {
+		return scanStringKeyedMap(obj, dst, fresh)
+	}
+
+	var (
+		keyKind  = unmarshalerKindOf(dst.Type().Key())
+		elemKind = unmarshalerKindOf(dst.Type().Elem())
+		out      = reflect.MakeMapWithSize(dst.Type(), len(obj))
+	)
+
 	for key, val := range obj {
 		kv := reflect.New(dst.Type().Key()).Elem()
-		if err = scanValue(key, kv); err != nil {
+		if err = scanValueKind(key, kv, keyKind, false); err != nil {
 			return wrapFieldError(key, err)
 		}
 
 		vv := reflect.New(dst.Type().Elem()).Elem()
-		if err = scanValue(val, vv); err != nil {
+		if err = scanValueKind(val, vv, elemKind, fresh); err != nil {
 			return wrapFieldError(key, err)
 		}
 
@@ -239,8 +1507,29 @@ func scanMap(src any, dst reflect.Value) error {
 	return nil
 }
 
+// scanStringKeyedMap scans a map whose key type is a string kind, avoiding per-key conversion.
+func scanStringKeyedMap(obj map[string]any, dst reflect.Value, fresh bool) error {
+	var (
+		keyType  = dst.Type().Key()
+		elemKind = unmarshalerKindOf(dst.Type().Elem())
+		out      = reflect.MakeMapWithSize(dst.Type(), len(obj))
+	)
+
+	for key, val := range obj {
+		kv := reflect.ValueOf(key).Convert(keyType)
+		vv := reflect.New(dst.Type().Elem()).Elem()
+		if err := scanValueKind(val, vv, elemKind, fresh); err != nil {
+			return wrapFieldError(key, err)
+		}
+		out.SetMapIndex(kv, vv)
+	}
+	dst.Set(out)
+
+	return nil
+}
+
 // scanSlice decodes a slice or array from another slice, an array or a delimited string.
-func scanSlice(src any, dst reflect.Value) error {
+func scanSlice(src any, dst reflect.Value, fresh bool) error {
 	if xreflect.IsNil(src) {
 		return nil
 	}
@@ -254,8 +1543,21 @@ func scanSlice(src any, dst reflect.Value) error {
 		}
 	}
 
+	if in, ok := jsonInputOf(src); ok && in.isArray() && dst.Type() != anySliceType {
+		if in.isText {
+			return scanRawSlice(in.text, dst)
+		}
+		return scanRawSlice(in.data, dst)
+	}
+
+	if s, ok := stringValue(src); ok {
+		if handled, err := scanStringSlice(s, dst); handled {
+			return err
+		}
+	}
+
 	if srcValue, ok := sliceSource(src); ok {
-		return scanSliceValue(srcValue, dst)
+		return scanSliceValue(srcValue, dst, fresh)
 	}
 
 	items, err := scanItems(src)
@@ -263,10 +1565,23 @@ func scanSlice(src any, dst reflect.Value) error {
 		return err
 	}
 
+	return scanSliceItems(items, dst, true)
+}
+
+func scanSliceItems(items []any, dst reflect.Value, fresh bool) error {
+	if dst.Type() == stringSliceType {
+		if out, ok := nativeStringSlice(items); ok {
+			dst.Set(reflect.ValueOf(out))
+			return nil
+		}
+	}
+
+	kind := unmarshalerKindOf(dst.Type().Elem())
+
 	if dst.Kind() == reflect.Array {
 		count := min(len(items), dst.Len())
 		for i := range count {
-			if err = scanValue(items[i], dst.Index(i)); err != nil {
+			if err := scanValueKind(items[i], dst.Index(i), kind, fresh); err != nil {
 				return wrapIndexError(i, err)
 			}
 		}
@@ -275,7 +1590,7 @@ func scanSlice(src any, dst reflect.Value) error {
 
 	out := reflect.MakeSlice(dst.Type(), len(items), len(items))
 	for i := range items {
-		if err = scanValue(items[i], out.Index(i)); err != nil {
+		if err := scanValueKind(items[i], out.Index(i), kind, fresh); err != nil {
 			return wrapIndexError(i, err)
 		}
 	}
@@ -333,48 +1648,54 @@ func scanScalar(src any, dst reflect.Value) error {
 	return nil
 }
 
-// scanObject normalizes src into a string-keyed object.
-func scanObject(src any) (map[string]any, error) {
+// scanObjectFresh normalizes src into a string-keyed object. The fresh result reports whether the
+// object was decoded from a string or byte source by this call and can therefore be adopted.
+func scanObjectFresh(src any) (map[string]any, bool, error) {
 	if xreflect.IsNil(src) {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	switch v := src.(type) {
 	case map[string]any:
-		return v, nil
+		return v, false, nil
 	case string:
-		return decodeObject([]byte(v))
+		obj, err := decodeObjectString(v)
+		return obj, err == nil, err
 	case []byte:
-		return decodeObject(v)
+		obj, err := decodeObject(v)
+		return obj, err == nil, err
 	}
 
 	rv := reflect.ValueOf(src)
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return nil, nil
+			return nil, false, nil
 		}
 		rv = rv.Elem()
 	}
 
 	switch rv.Kind() {
 	case reflect.String:
-		return decodeObject([]byte(rv.String()))
+		obj, err := decodeObjectString(rv.String())
+		return obj, err == nil, err
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return decodeObject(rv.Bytes())
+			obj, err := decodeObject(rv.Bytes())
+			return obj, err == nil, err
 		}
-		return nil, unsupportedSource(rv, "object")
+		return nil, false, unsupportedSource(rv, "object")
 	case reflect.Map:
 		obj := make(map[string]any, rv.Len())
 		iter := rv.MapRange()
 		for iter.Next() {
 			obj[xconv.String(iter.Key().Interface())] = iter.Value().Interface()
 		}
-		return obj, nil
+		return obj, false, nil
 	case reflect.Struct:
-		return structObject(rv)
+		obj, err := structObject(rv)
+		return obj, false, err
 	default:
-		return nil, unsupportedSource(rv, "object")
+		return nil, false, unsupportedSource(rv, "object")
 	}
 }
 
@@ -409,16 +1730,36 @@ func sliceSource(src any) (reflect.Value, bool) {
 }
 
 // scanSliceValue scans a slice or array source directly, avoiding an intermediate []any.
-func scanSliceValue(src, dst reflect.Value) error {
+func scanSliceValue(src, dst reflect.Value, fresh bool) error {
 	if dst.Kind() == reflect.Array {
+		kind := unmarshalerKindOf(dst.Type().Elem())
 		count := min(src.Len(), dst.Len())
 		for i := range count {
-			if err := scanSliceElement(src.Index(i), dst.Index(i), i); err != nil {
+			if err := scanSliceElement(src.Index(i), dst.Index(i), i, kind, fresh); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+
+	if src.Type().Elem().Kind() == reflect.Interface && dst.Type() == stringSliceType {
+		out := make([]string, src.Len())
+		ok := true
+		for i := range out {
+			value, isString := stringValue(src.Index(i).Interface())
+			if !isString {
+				ok = false
+				break
+			}
+			out[i] = value
+		}
+		if ok {
+			dst.Set(reflect.ValueOf(out))
+			return nil
+		}
+	}
+
+	kind := unmarshalerKindOf(dst.Type().Elem())
 
 	if src.Type().Elem() == dst.Type().Elem() && dst.Type().Elem().Kind() != reflect.Interface {
 		out := reflect.MakeSlice(dst.Type(), src.Len(), src.Len())
@@ -429,7 +1770,7 @@ func scanSliceValue(src, dst reflect.Value) error {
 
 	out := reflect.MakeSlice(dst.Type(), src.Len(), src.Len())
 	for i := range src.Len() {
-		if err := scanSliceElement(src.Index(i), out.Index(i), i); err != nil {
+		if err := scanSliceElement(src.Index(i), out.Index(i), i, kind, fresh); err != nil {
 			return err
 		}
 	}
@@ -439,7 +1780,7 @@ func scanSliceValue(src, dst reflect.Value) error {
 }
 
 // scanSliceElement converts one element, using a direct primitive path when possible.
-func scanSliceElement(src, dst reflect.Value, index int) error {
+func scanSliceElement(src, dst reflect.Value, index int, kind unmarshalerKind, fresh bool) error {
 	if ok, err := scanPrimitive(src, dst); ok {
 		if err != nil {
 			return wrapIndexError(index, err)
@@ -447,7 +1788,7 @@ func scanSliceElement(src, dst reflect.Value, index int) error {
 		return nil
 	}
 
-	if err := scanValue(src.Interface(), dst); err != nil {
+	if err := scanValueKind(src.Interface(), dst, kind, fresh); err != nil {
 		return wrapIndexError(index, err)
 	}
 
@@ -551,6 +1892,154 @@ func scanPrimitive(src, dst reflect.Value) (bool, error) {
 	return false, nil
 }
 
+// trimSpaceFast trims ASCII whitespace only when the string actually starts or ends with it.
+func trimSpaceFast(s string) string {
+	if s == "" {
+		return s
+	}
+	if s[0] > ' ' && s[len(s)-1] > ' ' && s[0] < 0x80 && s[len(s)-1] < 0x80 {
+		return s
+	}
+	return strings.TrimSpace(s)
+}
+
+// nativeStringSlice converts JSON array items into a native string slice.
+func nativeStringSlice(items []any) ([]string, bool) {
+	out := make([]string, len(items))
+	for i, item := range items {
+		value, ok := stringValue(item)
+		if !ok {
+			return nil, false
+		}
+		out[i] = value
+	}
+
+	return out, true
+}
+
+// scanStringSlice parses a delimited string directly into a primitive slice or array, avoiding an
+// intermediate []any and []string.
+func scanStringSlice(s string, dst reflect.Value) (bool, error) {
+	s = trimSpaceFast(s)
+	if s == "" {
+		if dst.Kind() == reflect.Slice {
+			dst.Set(reflect.MakeSlice(dst.Type(), 0, 0))
+		}
+		return true, nil
+	}
+	if s[0] == '[' {
+		return false, nil
+	}
+
+	elem := dst.Type().Elem()
+	if elem != durationType {
+		switch elem.Kind() {
+		case reflect.String, reflect.Bool,
+			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+			reflect.Float32, reflect.Float64:
+		default:
+			return false, nil
+		}
+	}
+
+	count := strings.Count(s, ",") + 1
+	if dst.Kind() == reflect.Array {
+		count = min(count, dst.Len())
+	}
+
+	if dst.Type() == stringSliceType {
+		out := make([]string, count)
+		start := 0
+		index := 0
+		for i := range len(s) + 1 {
+			if i < len(s) && s[i] != ',' {
+				continue
+			}
+			if index >= count {
+				break
+			}
+			out[index] = trimSpaceFast(s[start:i])
+			index++
+			start = i + 1
+		}
+		dst.Set(reflect.ValueOf(out))
+		return true, nil
+	}
+
+	var out reflect.Value
+	if dst.Kind() == reflect.Array {
+		out = dst
+	} else {
+		out = reflect.MakeSlice(dst.Type(), count, count)
+	}
+
+	start := 0
+	index := 0
+	for i := range len(s) + 1 {
+		if i < len(s) && s[i] != ',' {
+			continue
+		}
+		if index >= count {
+			break
+		}
+		if err := setStringSliceItem(out.Index(index), elem, trimSpaceFast(s[start:i])); err != nil {
+			return true, wrapIndexError(index, err)
+		}
+		index++
+		start = i + 1
+	}
+
+	if dst.Kind() == reflect.Slice {
+		dst.Set(out)
+	}
+
+	return true, nil
+}
+
+// setStringSliceItem assigns one parsed string segment to a primitive slice element.
+func setStringSliceItem(item reflect.Value, elem reflect.Type, value string) error {
+	if elem == durationType {
+		d, err := parseDurationText(value)
+		if err != nil {
+			return err
+		}
+		item.SetInt(int64(d))
+		return nil
+	}
+
+	switch elem.Kind() {
+	case reflect.String:
+		item.SetString(value)
+	case reflect.Bool:
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return err
+		}
+		item.SetBool(b)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(value, 10, elem.Bits())
+		if err != nil {
+			return err
+		}
+		item.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(value, 10, elem.Bits())
+		if err != nil {
+			return err
+		}
+		item.SetUint(n)
+	case reflect.Float32, reflect.Float64:
+		n, err := strconv.ParseFloat(value, elem.Bits())
+		if err != nil {
+			return err
+		}
+		item.SetFloat(n)
+	}
+
+	return nil
+}
+
 // scanItems normalizes src into a slice of elements.
 func scanItems(src any) ([]any, error) {
 	if xreflect.IsNil(src) {
@@ -606,6 +2095,23 @@ func decodeObject(data []byte) (map[string]any, error) {
 	return obj, nil
 }
 
+func decodeObjectString(s string) (map[string]any, error) {
+	trimmed := trimSpaceFast(s)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if trimmed[0] != '{' {
+		return nil, errors.NewError("scan: source is not a JSON object")
+	}
+
+	var obj map[string]any
+	if err := json.UnmarshalString(trimmed, &obj); err != nil {
+		return nil, err
+	}
+
+	return obj, nil
+}
+
 func structObject(rv reflect.Value) (map[string]any, error) {
 	info := structInfoOf(rv.Type())
 	obj := make(map[string]any, len(info.fields))
@@ -625,14 +2131,14 @@ func structObject(rv reflect.Value) (map[string]any, error) {
 
 // splitItems parses a JSON array or a comma-separated list.
 func splitItems(s string) ([]any, error) {
-	s = strings.TrimSpace(s)
+	s = trimSpaceFast(s)
 	if s == "" {
 		return nil, nil
 	}
 
 	if s[0] == '[' {
 		var items []any
-		if err := json.Unmarshal([]byte(s), &items); err != nil {
+		if err := json.UnmarshalString(s, &items); err != nil {
 			return nil, err
 		}
 		return items, nil
@@ -641,7 +2147,7 @@ func splitItems(s string) ([]any, error) {
 	parts := strings.Split(s, ",")
 	items := make([]any, len(parts))
 	for i := range parts {
-		items[i] = strings.TrimSpace(parts[i])
+		items[i] = trimSpaceFast(parts[i])
 	}
 
 	return items, nil
@@ -650,6 +2156,13 @@ func splitItems(s string) ([]any, error) {
 // fieldByIndex resolves a cached field index path. When alloc is true, nil embedded pointers on
 // the way are allocated; otherwise the field is reported as unavailable.
 func fieldByIndex(v reflect.Value, index []int, alloc bool) (reflect.Value, error) {
+	if len(index) == 1 {
+		if v.Kind() != reflect.Struct {
+			return reflect.Value{}, errors.NewError("scan: invalid field index")
+		}
+		return v.Field(index[0]), nil
+	}
+
 	for i, x := range index {
 		if i > 0 && v.Kind() == reflect.Pointer {
 			if v.IsNil() {
@@ -668,19 +2181,6 @@ func fieldByIndex(v reflect.Value, index []int, alloc bool) (reflect.Value, erro
 	}
 
 	return v, nil
-}
-
-// foldObject builds a lower-case key index restricted to the keys the struct can consume.
-func foldObject(obj map[string]any, lowers map[string]struct{}) map[string]any {
-	folded := make(map[string]any, min(len(obj), len(lowers)))
-	for key, val := range obj {
-		lower := strings.ToLower(key)
-		if _, ok := lowers[lower]; ok {
-			folded[lower] = val
-		}
-	}
-
-	return folded
 }
 
 // isMissingValue reports whether a struct field should fall back to its default. An empty string
@@ -857,10 +2357,10 @@ func setBytesValue(dst reflect.Value, data []byte) error {
 
 func parseInt(src any, bits int) (int64, error) {
 	if s, ok := src.(string); ok {
-		return strconv.ParseInt(strings.TrimSpace(s), 10, bits)
+		return strconv.ParseInt(trimSpaceFast(s), 10, bits)
 	}
 	if b, ok := src.([]byte); ok {
-		return strconv.ParseInt(strings.TrimSpace(string(b)), 10, bits)
+		return strconv.ParseInt(trimSpaceFast(string(b)), 10, bits)
 	}
 
 	var (
@@ -877,10 +2377,10 @@ func parseInt(src any, bits int) (int64, error) {
 
 	switch rv.Kind() {
 	case reflect.String:
-		return strconv.ParseInt(strings.TrimSpace(rv.String()), 10, bits)
+		return strconv.ParseInt(trimSpaceFast(rv.String()), 10, bits)
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return strconv.ParseInt(strings.TrimSpace(string(rv.Bytes())), 10, bits)
+			return strconv.ParseInt(trimSpaceFast(string(rv.Bytes())), 10, bits)
 		}
 		return 0, unsupportedSource(rv, "integer")
 	case reflect.Bool:
@@ -921,10 +2421,10 @@ func parseInt(src any, bits int) (int64, error) {
 
 func parseUint(src any, bits int) (uint64, error) {
 	if s, ok := src.(string); ok {
-		return strconv.ParseUint(strings.TrimSpace(s), 10, bits)
+		return strconv.ParseUint(trimSpaceFast(s), 10, bits)
 	}
 	if b, ok := src.([]byte); ok {
-		return strconv.ParseUint(strings.TrimSpace(string(b)), 10, bits)
+		return strconv.ParseUint(trimSpaceFast(string(b)), 10, bits)
 	}
 
 	var (
@@ -941,10 +2441,10 @@ func parseUint(src any, bits int) (uint64, error) {
 
 	switch rv.Kind() {
 	case reflect.String:
-		return strconv.ParseUint(strings.TrimSpace(rv.String()), 10, bits)
+		return strconv.ParseUint(trimSpaceFast(rv.String()), 10, bits)
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return strconv.ParseUint(strings.TrimSpace(string(rv.Bytes())), 10, bits)
+			return strconv.ParseUint(trimSpaceFast(string(rv.Bytes())), 10, bits)
 		}
 		return 0, unsupportedSource(rv, "unsigned integer")
 	case reflect.Bool:
@@ -984,10 +2484,10 @@ func parseUint(src any, bits int) (uint64, error) {
 
 func parseFloat(src any, bits int) (float64, error) {
 	if s, ok := src.(string); ok {
-		return strconv.ParseFloat(strings.TrimSpace(s), bits)
+		return strconv.ParseFloat(trimSpaceFast(s), bits)
 	}
 	if b, ok := src.([]byte); ok {
-		return strconv.ParseFloat(strings.TrimSpace(string(b)), bits)
+		return strconv.ParseFloat(trimSpaceFast(string(b)), bits)
 	}
 
 	var (
@@ -1004,10 +2504,10 @@ func parseFloat(src any, bits int) (float64, error) {
 
 	switch rv.Kind() {
 	case reflect.String:
-		return strconv.ParseFloat(strings.TrimSpace(rv.String()), bits)
+		return strconv.ParseFloat(trimSpaceFast(rv.String()), bits)
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return strconv.ParseFloat(strings.TrimSpace(string(rv.Bytes())), bits)
+			return strconv.ParseFloat(trimSpaceFast(string(rv.Bytes())), bits)
 		}
 		return 0, unsupportedSource(rv, "float")
 	case reflect.Bool:
@@ -1036,9 +2536,9 @@ func parseBool(src any) (bool, error) {
 	case bool:
 		return v, nil
 	case string:
-		return strconv.ParseBool(strings.TrimSpace(v))
+		return strconv.ParseBool(trimSpaceFast(v))
 	case []byte:
-		return strconv.ParseBool(strings.TrimSpace(string(v)))
+		return strconv.ParseBool(trimSpaceFast(string(v)))
 	}
 
 	rv := reflect.ValueOf(src)
@@ -1051,10 +2551,10 @@ func parseBool(src any) (bool, error) {
 
 	switch rv.Kind() {
 	case reflect.String:
-		return strconv.ParseBool(strings.TrimSpace(rv.String()))
+		return strconv.ParseBool(trimSpaceFast(rv.String()))
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
-			return strconv.ParseBool(strings.TrimSpace(string(rv.Bytes())))
+			return strconv.ParseBool(trimSpaceFast(string(rv.Bytes())))
 		}
 		return false, unsupportedSource(rv, "bool")
 	case reflect.Bool:
@@ -1090,7 +2590,7 @@ func parseDuration(src any) (time.Duration, error) {
 }
 
 func parseDurationText(s string) (time.Duration, error) {
-	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ToLower(trimSpaceFast(s))
 	if s == "" {
 		return 0, nil
 	}

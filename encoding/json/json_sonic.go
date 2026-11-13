@@ -18,6 +18,11 @@ func unmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
 }
 
+// unmarshalString decodes a JSON string into v with sonic, which is the default backend.
+func unmarshalString(s string, v any) error {
+	return sonic.UnmarshalString(s, v)
+}
+
 // appendEncode appends the JSON encoding of v to dst without allocating when dst has capacity.
 func appendEncode(dst []byte, v any) ([]byte, error) {
 	if err := encoder.EncodeInto(&dst, v, 0); err != nil {

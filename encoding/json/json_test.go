@@ -30,6 +30,18 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// TestUnmarshalString verifies that string decoding matches byte decoding on both backends.
+func TestUnmarshalString(t *testing.T) {
+	var got payload
+	if err := json.UnmarshalString(`{"name":"due","count":2}`, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got != (payload{Name: "due", Count: 2}) {
+		t.Errorf("unexpected payload: %+v", got)
+	}
+}
+
 // TestCaseInsensitiveNames verifies that field names match regardless of case on both backends.
 func TestCaseInsensitiveNames(t *testing.T) {
 	var got payload
