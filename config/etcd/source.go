@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/pattern"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -152,7 +153,7 @@ func (s *Source) matchFile(file string) bool {
 		return true
 	}
 
-	return config.MatchFile(s.opts.files, file)
+	return pattern.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It pulls the full configuration once as the

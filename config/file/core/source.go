@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/pattern"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xos"
 )
@@ -186,7 +187,7 @@ func (s *Source) matchFile(path string) bool {
 		rel = filepath.Base(absPath)
 	}
 
-	return config.MatchFile(s.files, filepath.ToSlash(rel))
+	return pattern.MatchFile(s.files, filepath.ToSlash(rel))
 }
 
 // Watch starts watching the source path and returns a [config.Watcher].

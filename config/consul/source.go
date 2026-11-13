@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/pattern"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/hashicorp/consul/api"
@@ -168,7 +169,7 @@ func (s *Source) matchFile(file string) bool {
 		return true
 	}
 
-	return config.MatchFile(s.opts.files, file)
+	return pattern.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It creates a watcher that observes

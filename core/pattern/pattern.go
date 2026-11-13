@@ -1,4 +1,5 @@
-package config
+// Package pattern implements the wildcard matching shared by the config sources.
+package pattern
 
 import "strings"
 
