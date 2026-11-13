@@ -19,7 +19,6 @@ const (
 	defaultCacheDir    = "./run/nacos/config/cache"
 	defaultLogDir      = "./run/nacos/config/log"
 	defaultLogLevel    = "info"
-	defaultServerBlur  = true
 )
 
 const (
@@ -40,7 +39,6 @@ const (
 	defaultPasswordKey    = "etc.config.nacos.password"
 	defaultLogDirKey      = "etc.config.nacos.logDir"
 	defaultLogLevelKey    = "etc.config.nacos.logLevel"
-	defaultServerBlurKey  = "etc.config.nacos.serverBlur"
 )
 
 // Option is a config option.
@@ -73,11 +71,6 @@ type options struct {
 	// exact dataId; an entry containing "*" is a pattern where "*" matches any sequence of
 	// characters. An explicit load or store of a file outside this list is rejected.
 	files []string
-
-	// Whether to narrow the search of a pattern entry with a server-side blur keyword,
-	// defaulting to enabled. Disable it when the target Nacos version does not filter the
-	// config list by dataId.
-	serverBlur bool
 
 	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
 	timeout time.Duration
@@ -128,7 +121,6 @@ func defaultOptions() *options {
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
 		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
-		serverBlur:  etc.Get(defaultServerBlurKey, defaultServerBlur).Bool(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		namespaceId: etc.Get(defaultNamespaceIdKey).String(),
 		endpoint:    etc.Get(defaultEndpointKey).String(),
@@ -216,14 +208,6 @@ func WithGroupName(groupName string) Option {
 // matching items is loaded. Empty and duplicate entries are ignored.
 func WithFiles(files ...string) Option {
 	return func(o *options) { o.files = files }
-}
-
-// WithServerBlur sets whether a pattern entry narrows the server-side search with
-// a blur keyword. It is enabled by default; disable it when the target Nacos
-// version does not filter the config list by dataId, so that each search scans the
-// whole group instead.
-func WithServerBlur(serverBlur bool) Option {
-	return func(o *options) { o.serverBlur = serverBlur }
 }
 
 // WithTimeout sets the timeout for requests to the Nacos server.

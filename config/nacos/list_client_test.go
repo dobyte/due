@@ -1100,9 +1100,21 @@ func TestMatchDataId(t *testing.T) {
 	}
 }
 
-// TestSourceLoadPatterns verifies that pattern mode searches the group, keeps only the matching
-// items, adds the exact entries the search does not return and uses the server-side blur keyword
-// only when it is enabled.
+// exportStub wraps a stub client and records whether the export shortcut was used.
+type exportStub struct {
+	*stubConfigClient
+	exportCalls atomic.Int32
+}
+
+func (c *exportStub) Export(string) (map[string]string, error) {
+	c.exportCalls.Add(1)
+
+	return map[string]string{}, nil
+}
+
+// TestSourceLoadPatterns verifies that pattern mode searches the group with the server-side blur
+// keyword, keeps only the matching items, adds the exact entries the search does not return and
+// never uses the export shortcut.
 func TestSourceLoadPatterns(t *testing.T) {
 	items := []model.ConfigItem{
 		{DataId: "config.json", Md5: "m1"},
@@ -1112,65 +1124,90 @@ func TestSourceLoadPatterns(t *testing.T) {
 	}
 	want := []string{"config.json", "gate-a.json"}
 
-	tests := []struct {
-		name       string
-		serverBlur bool
-		wantSearch []string
-	}{
-		{name: "server blur", serverBlur: true, wantSearch: []string{"gate-"}},
-		{name: "whole group scan", serverBlur: false, wantSearch: []string{""}},
+	stub := &stubConfigClient{}
+	searched := make([]string, 0, 1)
+	stub.searchFunc = func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
+		searched = append(searched, param.DataId)
+
+		pageItems := make([]model.ConfigItem, 0, len(items))
+		for _, item := range items {
+			if param.DataId != "" && !strings.Contains(item.DataId, param.DataId) {
+				continue
+			}
+			pageItems = append(pageItems, item)
+		}
+
+		return &model.ConfigPage{
+			TotalCount:     len(pageItems),
+			PageNumber:     1,
+			PagesAvailable: 1,
+			PageItems:      pageItems,
+		}, nil
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			stub := &stubConfigClient{}
-			searched := make([]string, 0, 1)
-			stub.searchFunc = func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
-				searched = append(searched, param.DataId)
+	export := &exportStub{stubConfigClient: stub}
 
-				pageItems := make([]model.ConfigItem, 0, len(items))
-				for _, item := range items {
-					if param.DataId != "" && !strings.Contains(item.DataId, param.DataId) {
-						continue
-					}
-					pageItems = append(pageItems, item)
-				}
+	o := defaultOptions()
+	o.client = export
+	o.groupName = "test-group"
+	o.files = []string{"config.json", "gate-*.json"}
 
-				return &model.ConfigPage{
-					TotalCount:     len(pageItems),
-					PageNumber:     1,
-					PagesAvailable: 1,
-					PageItems:      pageItems,
-				}, nil
-			}
+	source := &Source{opts: o, patternMode: true, cache: make(map[string]cachedItem)}
 
-			o := defaultOptions()
-			o.client = stub
-			o.groupName = "test-group"
-			o.files = []string{"config.json", "gate-*.json"}
-			o.serverBlur = tt.serverBlur
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load configs failed: %v", err)
+	}
 
-			source := &Source{opts: o, patternMode: true, cache: make(map[string]cachedItem)}
+	files := make([]string, 0, len(configs))
+	for _, configuration := range configs {
+		files = append(files, configuration.File)
+	}
+	if !slices.Equal(files, want) {
+		t.Fatalf("expect %v, got %v", want, files)
+	}
+	if got := stub.getCalls.Load(); got != 2 {
+		t.Fatalf("expect 2 get config calls, got %d", got)
+	}
+	if wantSearched := []string{"gate-"}; !slices.Equal(searched, wantSearched) {
+		t.Fatalf("expect searches %v, got %v", wantSearched, searched)
+	}
+	if got := export.exportCalls.Load(); got != 0 {
+		t.Fatalf("expect no export calls in pattern mode, got %d", got)
+	}
+}
 
-			configs, err := source.Load(context.Background())
-			if err != nil {
-				t.Fatalf("load configs failed: %v", err)
-			}
+// TestSourceLoadPatternsWholeGroupScan verifies that a pattern without a usable keyword scans the
+// whole group once instead of querying every keyword as well.
+func TestSourceLoadPatternsWholeGroupScan(t *testing.T) {
+	searched := make([]string, 0, 1)
+	stub := &stubConfigClient{
+		searchFunc: func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
+			searched = append(searched, param.DataId)
 
-			files := make([]string, 0, len(configs))
-			for _, configuration := range configs {
-				files = append(files, configuration.File)
-			}
-			if !slices.Equal(files, want) {
-				t.Fatalf("expect %v, got %v", want, files)
-			}
-			if got := stub.getCalls.Load(); got != 2 {
-				t.Fatalf("expect 2 get config calls, got %d", got)
-			}
-			if !slices.Equal(searched, tt.wantSearch) {
-				t.Fatalf("expect searches %v, got %v", tt.wantSearch, searched)
-			}
-		})
+			return &model.ConfigPage{
+				TotalCount:     1,
+				PageNumber:     1,
+				PagesAvailable: 1,
+				PageItems:      []model.ConfigItem{{DataId: "gate-a.json", Md5: "m1"}},
+			}, nil
+		},
+	}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+	// "a*" has no literal segment long enough, so the whole group has to be scanned.
+	o.files = []string{"gate-*.json", "a*"}
+
+	source := &Source{opts: o, patternMode: true, cache: make(map[string]cachedItem)}
+
+	if _, err := source.Load(context.Background()); err != nil {
+		t.Fatalf("load configs failed: %v", err)
+	}
+
+	if want := []string{""}; !slices.Equal(searched, want) {
+		t.Fatalf("expect searches %v, got %v", want, searched)
 	}
 }
 
@@ -1190,8 +1227,8 @@ func TestSourceStorePatterns(t *testing.T) {
 		t.Fatalf("store matching file failed: %v", err)
 	}
 
-	if err := source.Store(context.Background(), "other.json", []byte("content")); err != errFileNotConfigured {
-		t.Fatalf("expect errFileNotConfigured, got %v", err)
+	if err := source.Store(context.Background(), "other.json", []byte("content")); err != errors.ErrFileNotConfigured {
+		t.Fatalf("expect errors.ErrFileNotConfigured, got %v", err)
 	}
 }
 

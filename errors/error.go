@@ -40,6 +40,7 @@ var (
 	ErrInvalidConfigContent    = New("invalid config content")
 	ErrNotFoundConfigSource    = New("not found config source")
 	ErrConfigStoreFailed       = New("config store failed")
+	ErrFileNotConfigured       = New("config file is not in the configured files")
 	ErrInvalidFormat           = New("invalid format")
 	ErrIllegalRequest          = New("illegal request")
 	ErrIllegalOperation        = New("illegal operation")

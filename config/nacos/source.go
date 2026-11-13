@@ -36,10 +36,6 @@ const (
 	refreshInterval = 10 * time.Second
 )
 
-// errFileNotConfigured is returned when an explicit load or store addresses a file outside the
-// configured file list.
-var errFileNotConfigured = errors.New("config file is not in the configured files")
-
 // listenRequest is a listen request. It carries a dataId and the channel used to
 // report the listen result.
 type listenRequest struct {
@@ -124,9 +120,8 @@ func (s *Source) Name() string {
 // a single ZIP download. Later full loads keep the md5-reuse shortcut.
 //
 // A configured file entry may contain the "*" wildcard. In that case Load searches the group,
-// narrowed by a server-side blur keyword when enabled, keeps only the matching items and never
-// uses the export shortcut, so that the content of unmatched configurations is not loaded into
-// memory.
+// narrowed by a server-side blur keyword, keeps only the matching items and never uses the export
+// shortcut, so that the content of unmatched configurations is not loaded into memory.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -136,7 +131,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		// A configured file list also constrains an explicit load, so that this source only exposes
 		// the configurations it is configured to load and listen to.
 		if len(s.opts.files) > 0 && !s.matchFile(file[0]) {
-			return nil, errFileNotConfigured
+			return nil, errors.ErrFileNotConfigured
 		}
 
 		configuration, err := s.load(ctx, file[0])
@@ -327,15 +322,18 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 		}
 	}
 
-	for _, term := range terms {
-		if err := s.eachSearchPage(ctx, term, collect); err != nil {
-			return nil, err
-		}
-	}
-
+	// A whole-group scan already covers every term, so it is used alone when a pattern has no
+	// usable keyword. Otherwise each keyword narrows the server-side search, which is what keeps
+	// the candidate set out of memory.
 	if full {
 		if err := s.eachSearchPage(ctx, "", collect); err != nil {
 			return nil, err
+		}
+	} else {
+		for _, term := range terms {
+			if err := s.eachSearchPage(ctx, term, collect); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -361,13 +359,9 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 }
 
 // searchTerms returns the deduplicated server-side blur keywords of the configured patterns. It
-// returns nil when the prefilter is disabled or when no pattern has a literal segment long enough
-// to narrow the search, in which case the caller scans the whole group once.
+// returns nil when no pattern has a literal segment long enough to narrow the search, in which case
+// the caller scans the whole group once.
 func (s *Source) searchTerms() []string {
-	if !s.opts.serverBlur {
-		return nil
-	}
-
 	var (
 		seen  = make(map[string]struct{}, len(s.opts.files))
 		terms = make([]string, 0, len(s.opts.files))
@@ -576,7 +570,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	// A configured file list also constrains an explicit store, so that this source only writes the
 	// configurations it is configured to manage.
 	if len(s.opts.files) > 0 && !s.matchFile(file) {
-		return errFileNotConfigured
+		return errors.ErrFileNotConfigured
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -758,12 +752,40 @@ func (s *Source) searchPage(pageNo int, dataId string) (*model.ConfigPage, error
 	})
 }
 
-// search searches for configuration items under the group. It collects the items selected by the
-// configured files, sends a listen request for each added dataId and a cancel request for each
+// search searches for configuration items under the group. A group without a file list is paged
+// and handled page by page, so the whole group is never accumulated in memory; pattern mode
+// discovers the matched items first, since they have to be merged across keywords and
+// de-duplicated. It sends a listen request for each added dataId and a cancel request for each
 // removed dataId. A failed search leaves the version table untouched, so a broken server does not
 // cancel and then re-register every listener.
 func (s *Source) search() {
-	items, err := s.discover(s.ctx)
+	s.version++
+	version := s.version
+
+	// mark registers listening for the items and stamps them with the current version.
+	mark := func(items []model.ConfigItem) {
+		for _, item := range items {
+			if _, ok := s.versions[item.DataId]; !ok {
+				// Skip the version mark when listening fails so that the next search retries it.
+				if err := s.requestListen(item.DataId); err != nil {
+					continue
+				}
+			}
+
+			s.versions[item.DataId] = version
+		}
+	}
+
+	var err error
+	if len(s.opts.files) == 0 {
+		err = s.eachSearchPage(s.ctx, "", mark)
+	} else {
+		var items []model.ConfigItem
+		if items, err = s.discover(s.ctx); err == nil {
+			mark(items)
+		}
+	}
+
 	if err != nil {
 		if s.ctx.Err() != nil {
 			return
@@ -777,20 +799,6 @@ func (s *Source) search() {
 		}
 
 		return
-	}
-
-	s.version++
-	version := s.version
-
-	for _, item := range items {
-		if _, ok := s.versions[item.DataId]; !ok {
-			// Skip the version mark when listening fails so that the next search retries it.
-			if err := s.requestListen(item.DataId); err != nil {
-				continue
-			}
-		}
-
-		s.versions[item.DataId] = version
 	}
 
 	if s.searchFailed {
