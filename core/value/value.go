@@ -263,7 +263,7 @@ func (v *value) Scan(pointer any) error {
 	case *time.Duration:
 		*p = v.Duration()
 	default:
-		return scanValue(v.v, rv.Elem(), "")
+		return scanValue(v.v, rv.Elem())
 	}
 
 	return nil

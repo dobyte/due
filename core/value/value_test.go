@@ -96,6 +96,7 @@ func TestScanNamedSourceTypes(t *testing.T) {
 		Timeout time.Duration `json:"timeout"`
 		Tags    []int         `json:"tags"`
 		Raw     []byte        `json:"raw"`
+		RawText []byte        `json:"rawText"`
 	}
 
 	src := map[string]any{
@@ -105,6 +106,7 @@ func TestScanNamedSourceTypes(t *testing.T) {
 		"timeout": scanText("1H"),
 		"tags":    scanText("1,2,3"),
 		"raw":     scanBytes("due"),
+		"rawText": scanText("due"),
 	}
 
 	if err := NewValue(src).Scan(&cfg); err != nil {
@@ -118,6 +120,9 @@ func TestScanNamedSourceTypes(t *testing.T) {
 	}
 	if string(cfg.Raw) != "due" {
 		t.Fatalf("invalid raw bytes, actual: %s", cfg.Raw)
+	}
+	if string(cfg.RawText) != "due" {
+		t.Fatalf("invalid raw text bytes, actual: %s", cfg.RawText)
 	}
 
 	var nested scanConfig
@@ -167,9 +172,9 @@ func TestScanRejectsInvalidPointer(t *testing.T) {
 func TestScanStructDefaultAndConversion(t *testing.T) {
 	src := map[string]any{
 		"NAME":    "svc",
-		"retries": "5",
-		"timeout": "2s",
-		"tags":    "x, y",
+		"RETRIES": "5",
+		"TIMEOUT": "2s",
+		"TAGS":    "x, y",
 		"nested":  map[string]any{"port": "8080"},
 		"count":   0,
 		"Skip":    "ignored",
@@ -235,6 +240,35 @@ func TestScanStructFromEmptyValue(t *testing.T) {
 	}
 }
 
+func TestScanDefaultIsolation(t *testing.T) {
+	type defaultConfig struct {
+		Tags []string       `json:"tags" default:"a,b"`
+		Meta map[string]int `json:"meta" default:"{\"count\":1}"`
+	}
+
+	var (
+		first  defaultConfig
+		second defaultConfig
+	)
+
+	if err := NewValue().Scan(&first); err != nil {
+		t.Fatalf("scan first defaults failed, err: %v", err)
+	}
+	if err := NewValue().Scan(&second); err != nil {
+		t.Fatalf("scan second defaults failed, err: %v", err)
+	}
+
+	first.Tags[0] = "changed"
+	first.Meta["count"] = 2
+
+	if second.Tags[0] != "a" {
+		t.Fatalf("cached default slices should not be shared, actual: %v", second.Tags)
+	}
+	if second.Meta["count"] != 1 {
+		t.Fatalf("cached default maps should not be shared, actual: %v", second.Meta)
+	}
+}
+
 func TestScanStructFromJSONString(t *testing.T) {
 	var cfg scanConfig
 	if err := NewValue(`{"name":"json","nested":{"host":"10.0.0.1"}}`).Scan(&cfg); err != nil {
@@ -296,6 +330,16 @@ func TestScanStructEmptyCollectionPolicy(t *testing.T) {
 	if empty.Tags != nil {
 		t.Fatalf("empty string should keep the zero value without a default, actual: %v", empty.Tags)
 	}
+
+	var nilBytes struct {
+		Raw []byte `json:"raw" default:"due"`
+	}
+	if err := NewValue(map[string]any{"raw": []byte(nil)}).Scan(&nilBytes); err != nil {
+		t.Fatalf("scan nil bytes failed, err: %v", err)
+	}
+	if string(nilBytes.Raw) != "due" {
+		t.Fatalf("nil byte slice should fall back to the default, actual: %v", nilBytes.Raw)
+	}
 }
 
 func TestScanStructWithEmbeddedField(t *testing.T) {
@@ -332,6 +376,62 @@ func TestScanStructToMap(t *testing.T) {
 	}
 }
 
+func TestScanSliceFromSlice(t *testing.T) {
+	var strs []string
+	if err := NewValue([]string{"a", "b"}).Scan(&strs); err != nil {
+		t.Fatalf("scan string slice failed, err: %v", err)
+	}
+	if !reflect.DeepEqual(strs, []string{"a", "b"}) {
+		t.Fatalf("invalid string slice, actual: %v", strs)
+	}
+
+	var ints []int64
+	if err := NewValue([]int{1, 2}).Scan(&ints); err != nil {
+		t.Fatalf("scan int slice failed, err: %v", err)
+	}
+	if !reflect.DeepEqual(ints, []int64{1, 2}) {
+		t.Fatalf("invalid int slice, actual: %v", ints)
+	}
+
+	var array [3]int
+	if err := NewValue([]int{1, 2}).Scan(&array); err != nil {
+		t.Fatalf("scan array failed, err: %v", err)
+	}
+	if array != [3]int{1, 2, 0} {
+		t.Fatalf("invalid array, actual: %v", array)
+	}
+
+	src := []any{map[string]any{"count": 1}}
+	var anys []any
+	if err := NewValue(src).Scan(&anys); err != nil {
+		t.Fatalf("scan any slice failed, err: %v", err)
+	}
+	anys[0].(map[string]any)["count"] = 2
+	if src[0].(map[string]any)["count"] != 1 {
+		t.Fatalf("scanned slice should not alias the source, actual: %v", src)
+	}
+}
+
+func TestFoldObjectKeepsWantedKeys(t *testing.T) {
+	obj := map[string]any{
+		"NAME":  "svc",
+		"PORT":  "8080",
+		"EXTRA": 1,
+	}
+	lowers := map[string]struct{}{"name": {}, "port": {}}
+
+	folded := foldObject(obj, lowers)
+	if len(folded) != 2 {
+		t.Fatalf("expect 2 folded keys, actual: %v", folded)
+	}
+	if folded["name"] != "svc" || folded["port"] != "8080" {
+		t.Fatalf("invalid folded object, actual: %v", folded)
+	}
+	if _, ok := folded["extra"]; ok {
+		t.Fatalf("unexpected folded key, actual: %v", folded)
+	}
+}
+
 func TestScanMapDoesNotAliasSource(t *testing.T) {
 	src := map[string]any{"nested": map[string]any{"count": 1}}
 
@@ -361,6 +461,41 @@ func TestScanDefaultError(t *testing.T) {
 	}
 }
 
+func TestScanErrorPaths(t *testing.T) {
+	var cfg struct {
+		Nested scanNestedConfig `json:"nested"`
+		Tags   []int            `json:"tags"`
+	}
+
+	err := NewValue(map[string]any{
+		"nested": map[string]any{"port": "bad"},
+	}).Scan(&cfg)
+	if err == nil || !strings.Contains(err.Error(), "nested.port") {
+		t.Fatalf("expect a nested field path, actual: %v", err)
+	}
+
+	err = NewValue(map[string]any{"tags": "1,x"}).Scan(&cfg)
+	if err == nil || !strings.Contains(err.Error(), "tags[1]") {
+		t.Fatalf("expect a slice index path, actual: %v", err)
+	}
+
+	var list struct {
+		Items []scanNestedConfig `json:"items"`
+	}
+	err = NewValue(map[string]any{
+		"items": []any{map[string]any{"port": "bad"}},
+	}).Scan(&list)
+	if err == nil || !strings.Contains(err.Error(), "items[0].port") {
+		t.Fatalf("expect an indexed field path, actual: %v", err)
+	}
+
+	var bytes []uint8
+	err = NewValue([]int{300}).Scan(&bytes)
+	if err == nil || !strings.Contains(err.Error(), "[0]") {
+		t.Fatalf("expect an element overflow error, actual: %v", err)
+	}
+}
+
 func TestScanTime(t *testing.T) {
 	var tm time.Time
 	if err := NewValue("2026-11-13T10:00:00Z").Scan(&tm); err != nil {
@@ -387,5 +522,10 @@ func TestMapStillWorks(t *testing.T) {
 	m := NewValue(map[string]any{"count": 1}).Map()
 	if m["count"] != 1 {
 		t.Fatalf("invalid map result, actual: %v", m)
+	}
+
+	m = NewValue(`{"count":2}`).Map()
+	if m["count"] != float64(2) {
+		t.Fatalf("invalid json map result, actual: %v", m)
 	}
 }

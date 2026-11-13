@@ -12,13 +12,16 @@ const (
 )
 
 type fieldInfo struct {
-	name  string
-	index []int
-	def   string
+	name     string
+	lower    string
+	index    []int
+	def      string
+	defValue any
 }
 
 type structInfo struct {
 	fields []fieldInfo
+	lowers map[string]struct{}
 }
 
 var _structInfos sync.Map // map[reflect.Type]*structInfo
@@ -31,6 +34,10 @@ func structInfoOf(t reflect.Type) *structInfo {
 
 	info := &structInfo{}
 	buildStructInfo(t, nil, info, make(map[reflect.Type]bool))
+	info.lowers = make(map[string]struct{}, len(info.fields))
+	for _, field := range info.fields {
+		info.lowers[field.lower] = struct{}{}
+	}
 	actual, _ := _structInfos.LoadOrStore(t, info)
 
 	return actual.(*structInfo)
@@ -79,10 +86,13 @@ func buildStructInfo(
 			name = field.Name
 		}
 
+		def := field.Tag.Get(_defaultTagKey)
 		info.fields = append(info.fields, fieldInfo{
-			name:  name,
-			index: index,
-			def:   field.Tag.Get(_defaultTagKey),
+			name:     name,
+			lower:    strings.ToLower(name),
+			index:    index,
+			def:      def,
+			defValue: parseDefaultValue(def, field.Type),
 		})
 	}
 }
@@ -92,4 +102,35 @@ func jsonFieldName(field reflect.StructField) string {
 	name, _, _ := strings.Cut(field.Tag.Get(_jsonTagKey), ",")
 
 	return name
+}
+
+// parseDefaultValue decodes a default tag once so repeated scans do not re-parse it. Scalar and
+// custom-encoded defaults keep their text form.
+func parseDefaultValue(def string, t reflect.Type) any {
+	if def == "" {
+		return nil
+	}
+
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if unmarshalerKindOf(t) != _unmarshalerNone {
+		return def
+	}
+
+	switch t.Kind() {
+	case reflect.Struct, reflect.Map:
+		if obj, err := decodeObject([]byte(def)); err == nil && obj != nil {
+			return obj
+		}
+	case reflect.Slice, reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return def
+		}
+		if items, err := splitItems(def); err == nil && items != nil {
+			return items
+		}
+	}
+
+	return def
 }
