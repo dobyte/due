@@ -19,6 +19,7 @@ const (
 	defaultCacheDir    = "./run/nacos/config/cache"
 	defaultLogDir      = "./run/nacos/config/log"
 	defaultLogLevel    = "info"
+	defaultServerBlur  = true
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 	defaultPasswordKey    = "etc.config.nacos.password"
 	defaultLogDirKey      = "etc.config.nacos.logDir"
 	defaultLogLevelKey    = "etc.config.nacos.logLevel"
+	defaultServerBlurKey  = "etc.config.nacos.serverBlur"
 )
 
 // Option is a config option.
@@ -66,10 +68,16 @@ type options struct {
 	// Group name, defaulting to DEFAULT_GROUP.
 	groupName string
 
-	// Fixed list of dataIds to load and listen to, defaulting to empty.
-	// When empty, every configuration under the group is loaded and listened to.
-	// An explicit load or store of a file outside this list is rejected.
+	// List of dataIds to load and listen to, defaulting to empty. When empty, every
+	// configuration under the group is loaded and listened to. An entry without "*" is an
+	// exact dataId; an entry containing "*" is a pattern where "*" matches any sequence of
+	// characters. An explicit load or store of a file outside this list is rejected.
 	files []string
+
+	// Whether to narrow the search of a pattern entry with a server-side blur keyword,
+	// defaulting to enabled. Disable it when the target Nacos version does not filter the
+	// config list by dataId.
+	serverBlur bool
 
 	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
 	timeout time.Duration
@@ -120,6 +128,7 @@ func defaultOptions() *options {
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
 		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
+		serverBlur:  etc.Get(defaultServerBlurKey, defaultServerBlur).Bool(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		namespaceId: etc.Get(defaultNamespaceIdKey).String(),
 		endpoint:    etc.Get(defaultEndpointKey).String(),
@@ -192,15 +201,29 @@ func WithGroupName(groupName string) Option {
 	return func(o *options) { o.groupName = groupName }
 }
 
-// WithFiles sets the fixed list of dataIds to load and listen to. When it is
-// empty, every configuration under the group is loaded and listened to.
+// WithFiles sets the list of dataIds to load and listen to. When it is empty,
+// every configuration under the group is loaded and listened to.
 //
-// The configured files are fetched individually, so the group export shortcut
-// and the md5-based content cache do not apply to them. Empty and duplicate
-// entries are ignored. When the list is not empty, an explicit load or store of
-// a file outside the list is rejected.
+// An entry is an exact dataId unless it contains "*", in which case it is a
+// pattern where "*" matches any sequence of characters and every other character
+// is literal; only "*" is supported as a wildcard. When the list is not empty, an
+// explicit load or store of a file outside the list is rejected.
+//
+// Exact entries are fetched individually, so the group export shortcut and the
+// md5-based content cache do not apply to them. A list containing a pattern
+// searches the group at start and at every refresh interval, narrowed by a
+// server-side blur keyword derived from each pattern, and only the content of
+// matching items is loaded. Empty and duplicate entries are ignored.
 func WithFiles(files ...string) Option {
 	return func(o *options) { o.files = files }
+}
+
+// WithServerBlur sets whether a pattern entry narrows the server-side search with
+// a blur keyword. It is enabled by default; disable it when the target Nacos
+// version does not filter the config list by dataId, so that each search scans the
+// whole group instead.
+func WithServerBlur(serverBlur bool) Option {
+	return func(o *options) { o.serverBlur = serverBlur }
 }
 
 // WithTimeout sets the timeout for requests to the Nacos server.

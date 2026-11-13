@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,6 +63,7 @@ type Source struct {
 	version      uint64                // Current search version
 	versions     map[string]uint64     // Search version of each dataId
 	searchFailed bool                  // Whether a search failure was logged; refresh goroutine only
+	patternMode  bool                  // Whether the file list contains "*" patterns
 	chListen     chan listenRequest    // Listen request channel
 	chCancel     chan string           // Cancel-listen request channel
 	watchers     sync.Map              // Watcher set
@@ -83,8 +85,14 @@ func NewSource(opts ...Option) config.Source {
 
 	o.files = normalizeFiles(o.files)
 
-	s := &Source{}
-	s.opts = o
+	s := &Source{opts: o}
+	for _, file := range o.files {
+		if isPattern(file) {
+			s.patternMode = true
+			break
+		}
+	}
+
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
 	s.versions = make(map[string]uint64)
 	s.chListen = make(chan listenRequest)
@@ -114,6 +122,11 @@ func (s *Source) Name() string {
 // through and loads every item under the group. On the very first full load (cache empty) Load asks
 // the client to export all contents in one shot if supported, so N GetConfig calls are replaced by
 // a single ZIP download. Later full loads keep the md5-reuse shortcut.
+//
+// A configured file entry may contain the "*" wildcard. In that case Load searches the group,
+// narrowed by a server-side blur keyword when enabled, keeps only the matching items and never
+// uses the export shortcut, so that the content of unmatched configurations is not loaded into
+// memory.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -122,7 +135,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	if len(file) > 0 && file[0] != "" {
 		// A configured file list also constrains an explicit load, so that this source only exposes
 		// the configurations it is configured to load and listen to.
-		if len(s.opts.files) > 0 && !s.hasFile(file[0]) {
+		if len(s.opts.files) > 0 && !s.matchFile(file[0]) {
 			return nil, errFileNotConfigured
 		}
 
@@ -134,9 +147,15 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return []*config.Configuration{configuration}, nil
 	}
 
-	// Fixed file list: load only the configured dataIds, without searching the group. These items
-	// carry no md5, so the content cache cannot detect a change: it is neither read nor replaced.
 	if len(s.opts.files) > 0 {
+		// Pattern mode searches the group and keeps only the matching items, so the export shortcut
+		// and the fixed-list fast path do not apply.
+		if s.patternMode {
+			return s.loadPatterns(ctx)
+		}
+
+		// Fixed file list: load only the configured dataIds, without searching the group. These items
+		// carry no md5, so the content cache cannot detect a change: it is neither read nor replaced.
 		configurations, _, err := s.loadItems(ctx, s.fixedItems())
 		if err != nil {
 			return nil, err
@@ -169,7 +188,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			// continue
 		}
 
-		result, err := s.searchPage(index)
+		result, err := s.searchPage(index, "")
 		if err != nil {
 			return nil, err
 		}
@@ -236,21 +255,15 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	return s.conv(file, content), nil
 }
 
-// hasFile reports whether file is in the configured file list. It is the single point to extend
-// when the configured files support patterns.
-func (s *Source) hasFile(file string) bool {
-	for _, configured := range s.opts.files {
-		if configured == file {
-			return true
-		}
-	}
-
-	return false
+// matchFile reports whether dataId is selected by the configured file list, which may mix exact
+// dataIds and "*" patterns.
+func (s *Source) matchFile(dataId string) bool {
+	return matchDataId(s.opts.files, dataId)
 }
 
-// fixedItems converts the fixed file list into config list items, so that loading
-// reuses the same per-item logic as a full group load. The items carry no md5, so
-// the content of every listed dataId is fetched and the export shortcut is skipped.
+// fixedItems converts an exact file list into config list items, so that loading reuses the same
+// per-item logic as a full group load. The items carry no md5, so the content of every listed
+// dataId is fetched and the export shortcut is skipped. Pattern mode does not use it.
 func (s *Source) fixedItems() []model.ConfigItem {
 	items := make([]model.ConfigItem, 0, len(s.opts.files))
 	for _, file := range s.opts.files {
@@ -258,6 +271,179 @@ func (s *Source) fixedItems() []model.ConfigItem {
 	}
 
 	return items
+}
+
+// loadPatterns loads the configurations selected by the configured patterns. It searches the group
+// instead of using the export shortcut, so that only the content of matching items is fetched.
+func (s *Source) loadPatterns(ctx context.Context) ([]*config.Configuration, error) {
+	items, err := s.discover(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	configurations, entries, err := s.loadItems(ctx, items)
+	if err != nil {
+		return nil, err
+	}
+
+	s.replaceCache(entries)
+
+	// Keep the result deterministic regardless of the fetch completion order.
+	sort.Slice(configurations, func(i, j int) bool {
+		return configurations[i].File < configurations[j].File
+	})
+
+	return configurations, nil
+}
+
+// discover returns the config list items selected by the configured files. A group with no file
+// list yields every item. With a pattern list the candidate set is narrowed by one server-side blur
+// keyword per pattern and then filtered by the configured files; exact entries are appended when
+// the search does not return them. The result is deduplicated and sorted by dataId.
+func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
+	var (
+		terms = s.searchTerms()
+		full  = len(s.opts.files) == 0 || terms == nil || s.hasUntetheredPattern()
+		items = make([]model.ConfigItem, 0)
+		seen  = make(map[string]struct{})
+	)
+
+	collect := func(pageItems []model.ConfigItem) {
+		for i := range pageItems {
+			item := pageItems[i]
+			if _, ok := seen[item.DataId]; ok {
+				continue
+			}
+			if len(s.opts.files) > 0 && !s.matchFile(item.DataId) {
+				continue
+			}
+
+			seen[item.DataId] = struct{}{}
+			items = append(items, item)
+		}
+	}
+
+	for _, term := range terms {
+		if err := s.eachSearchPage(ctx, term, collect); err != nil {
+			return nil, err
+		}
+	}
+
+	if full {
+		if err := s.eachSearchPage(ctx, "", collect); err != nil {
+			return nil, err
+		}
+	}
+
+	// An exact entry does not necessarily contain any search term, so add the missing ones. The
+	// synthetic item carries no md5 and its content is fetched individually.
+	for _, file := range s.opts.files {
+		if isPattern(file) {
+			continue
+		}
+		if _, ok := seen[file]; ok {
+			continue
+		}
+
+		seen[file] = struct{}{}
+		items = append(items, model.ConfigItem{DataId: file})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].DataId < items[j].DataId
+	})
+
+	return items, nil
+}
+
+// searchTerms returns the deduplicated server-side blur keywords of the configured patterns. It
+// returns nil when the prefilter is disabled or when no pattern has a literal segment long enough
+// to narrow the search, in which case the caller scans the whole group once.
+func (s *Source) searchTerms() []string {
+	if !s.opts.serverBlur {
+		return nil
+	}
+
+	var (
+		seen  = make(map[string]struct{}, len(s.opts.files))
+		terms = make([]string, 0, len(s.opts.files))
+	)
+
+	for _, file := range s.opts.files {
+		if !isPattern(file) {
+			continue
+		}
+
+		term := patternTerm(file)
+		if term == "" {
+			continue
+		}
+		if _, ok := seen[term]; ok {
+			continue
+		}
+
+		seen[term] = struct{}{}
+		terms = append(terms, term)
+	}
+
+	if len(terms) == 0 {
+		return nil
+	}
+
+	return terms
+}
+
+// hasUntetheredPattern reports whether a configured pattern has no literal segment usable as a
+// server-side keyword, so that the group has to be scanned once for it.
+func (s *Source) hasUntetheredPattern() bool {
+	for _, file := range s.opts.files {
+		if isPattern(file) && patternTerm(file) == "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// eachSearchPage pages through the config list of the group and calls fn for every page. dataId is
+// used as the server-side blur keyword; an empty value lists the whole group.
+func (s *Source) eachSearchPage(ctx context.Context, dataId string, fn func([]model.ConfigItem)) error {
+	index := 1
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// continue
+		}
+
+		result, err := s.searchPage(index, dataId)
+		if err != nil {
+			return err
+		}
+
+		if len(result.PageItems) > 0 {
+			fn(result.PageItems)
+		}
+
+		if result.PageNumber >= result.PagesAvailable {
+			return nil
+		}
+
+		// Advance locally and stop when the response does not move forward, so that a page that
+		// does not echo the requested number cannot keep the loop on the same page forever.
+		next := result.PageNumber + 1
+		if next <= index {
+			return nil
+		}
+
+		index = next
+	}
 }
 
 // loadItems loads one config list page. It reuses the cached content of an unchanged item and
@@ -376,8 +562,8 @@ type exportClient interface {
 // Store stores a configuration item.
 //
 // It supports only the write-only and read-write modes. After a successful
-// publish the server pushes the change to every registered watcher. When a fixed
-// file list is configured, only a file in that list can be stored.
+// publish the server pushes the change to every registered watcher. When a file
+// list is configured, only a file selected by it can be stored.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
@@ -389,7 +575,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	// A configured file list also constrains an explicit store, so that this source only writes the
 	// configurations it is configured to manage.
-	if len(s.opts.files) > 0 && !s.hasFile(file) {
+	if len(s.opts.files) > 0 && !s.matchFile(file) {
 		return errFileNotConfigured
 	}
 
@@ -516,15 +702,15 @@ func (s *Source) listen() {
 	}
 }
 
-// refresh registers the configuration listening. When a fixed file list is configured, it
-// registers those dataIds once because the list never changes; otherwise it runs a config search
-// at a fixed interval to detect added or removed configuration items.
+// refresh registers the configuration listening. When an exact file list is configured, it
+// registers those dataIds once because the list never changes; otherwise, including pattern mode,
+// it runs a config search at a fixed interval to detect added or removed configuration items.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
 	}
 
-	if len(s.opts.files) > 0 {
+	if len(s.opts.files) > 0 && !s.patternMode {
 		s.listenFiles()
 		return
 	}
@@ -560,69 +746,51 @@ func (s *Source) listenFiles() {
 }
 
 // searchPage requests one page of the config list of the group. Loading and the periodic search
-// share it so that both page through the same view with the same page size.
-func (s *Source) searchPage(pageNo int) (*model.ConfigPage, error) {
+// share it so that both page through the same view with the same page size. dataId narrows the
+// search with the server-side blur keyword; an empty value lists the whole group.
+func (s *Source) searchPage(pageNo int, dataId string) (*model.ConfigPage, error) {
 	return s.opts.client.SearchConfig(vo.SearchConfigParam{
 		Search:   "blur",
+		DataId:   dataId,
 		Group:    s.opts.groupName,
 		PageNo:   pageNo,
 		PageSize: searchPageSize,
 	})
 }
 
-// search searches for configuration items under the group. It pages through the
-// config list, sends a listen request for each added dataId and a cancel request
-// for each removed dataId.
+// search searches for configuration items under the group. It collects the items selected by the
+// configured files, sends a listen request for each added dataId and a cancel request for each
+// removed dataId. A failed search leaves the version table untouched, so a broken server does not
+// cancel and then re-register every listener.
 func (s *Source) search() {
+	items, err := s.discover(s.ctx)
+	if err != nil {
+		if s.ctx.Err() != nil {
+			return
+		}
+
+		// Warn once per failure streak: an unreachable server would otherwise log a warning at
+		// every refresh interval.
+		if !s.searchFailed {
+			s.searchFailed = true
+			log.Warnf("search config list failed: %v", err)
+		}
+
+		return
+	}
+
 	s.version++
+	version := s.version
 
-	index := 1
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		default:
-			// continue
-		}
-
-		result, err := s.searchPage(index)
-		if err != nil {
-			// Warn once per failure streak: an unreachable server would otherwise log a warning at
-			// every refresh interval.
-			if !s.searchFailed {
-				s.searchFailed = true
-				log.Warnf("search config list failed: %v", err)
+	for _, item := range items {
+		if _, ok := s.versions[item.DataId]; !ok {
+			// Skip the version mark when listening fails so that the next search retries it.
+			if err := s.requestListen(item.DataId); err != nil {
+				continue
 			}
-			// Return immediately when the query fails; otherwise the incremented version
-			// with an unrefreshed config list would make the cancel loop below treat every
-			// item as stale and cancel all listeners in bulk.
-			return
 		}
 
-		for _, item := range result.PageItems {
-			if _, ok := s.versions[item.DataId]; !ok {
-				// Skip the version mark when listening fails so that the next search retries it.
-				if err := s.requestListen(item.DataId); err != nil {
-					continue
-				}
-			}
-
-			s.versions[item.DataId] = s.version
-		}
-
-		if result.PageNumber >= result.PagesAvailable {
-			break
-		}
-
-		// Advance locally and stop when the response does not move forward, so that a page that
-		// does not echo the requested number cannot keep the loop on the same page forever.
-		next := result.PageNumber + 1
-		if next <= index {
-			break
-		}
-
-		index = next
+		s.versions[item.DataId] = version
 	}
 
 	if s.searchFailed {
@@ -630,8 +798,8 @@ func (s *Source) search() {
 		log.Infof("search config list recovered")
 	}
 
-	for dataId, version := range s.versions {
-		if version != s.version {
+	for dataId, v := range s.versions {
+		if v != version {
 			select {
 			case s.chCancel <- dataId:
 			case <-s.ctx.Done():

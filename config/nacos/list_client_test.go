@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ var _ config_client.IConfigClient = (*stubConfigClient)(nil)
 type stubConfigClient struct {
 	page        *model.ConfigPage
 	searchErr   error
+	searchFunc  func(vo.SearchConfigParam) (*model.ConfigPage, error)
 	calls       atomic.Int32
 	getCalls    atomic.Int32
 	listenCalls atomic.Int32
@@ -57,8 +59,12 @@ func (c *stubConfigClient) CancelListenConfig(vo.ConfigParam) error {
 	return nil
 }
 
-func (c *stubConfigClient) SearchConfig(vo.SearchConfigParam) (*model.ConfigPage, error) {
+func (c *stubConfigClient) SearchConfig(param vo.SearchConfigParam) (*model.ConfigPage, error) {
 	c.calls.Add(1)
+
+	if c.searchFunc != nil {
+		return c.searchFunc(param)
+	}
 
 	if c.searchErr != nil {
 		return nil, c.searchErr
@@ -1040,4 +1046,182 @@ func makeExportZip(group string, contents map[string]string) []byte {
 	}
 	_ = zw.Close()
 	return buf.Bytes()
+}
+
+// TestPatternTerm verifies the literal segment pushed to the server as the blur keyword.
+func TestPatternTerm(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{name: "prefix", pattern: "gate-*.json", want: "gate-"},
+		{name: "path prefix", pattern: "rooms/*.yaml", want: "rooms/"},
+		{name: "weak extension anchor", pattern: "*.json", want: ".json"},
+		{name: "short first segment", pattern: "a*-gate.json", want: "-gate.json"},
+		{name: "no literal", pattern: "*", want: ""},
+		{name: "suffix", pattern: "*-gate.json", want: "-gate.json"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := patternTerm(tt.pattern); got != tt.want {
+				t.Fatalf("patternTerm(%q) = %q, want %q", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMatchDataId verifies that a mixed list of exact dataIds and "*" patterns selects the
+// intended items and treats every other character literally.
+func TestMatchDataId(t *testing.T) {
+	files := []string{"config.json", "gate-*.json", "rooms/*.yaml", "weird[1]?.json"}
+
+	tests := []struct {
+		name   string
+		dataId string
+		want   bool
+	}{
+		{name: "exact", dataId: "config.json", want: true},
+		{name: "prefix pattern", dataId: "gate-a.json", want: true},
+		{name: "prefix pattern mismatch", dataId: "gate-a.yaml", want: false},
+		{name: "star matches separator", dataId: "rooms/a/b.yaml", want: true},
+		{name: "literal meta in exact entry", dataId: "weird[1]?.json", want: true},
+		{name: "literal meta is not a wildcard", dataId: "weird1.json", want: false},
+		{name: "unmatched", dataId: "other.json", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchDataId(files, tt.dataId); got != tt.want {
+				t.Fatalf("matchDataId(%q) = %v, want %v", tt.dataId, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSourceLoadPatterns verifies that pattern mode searches the group, keeps only the matching
+// items, adds the exact entries the search does not return and uses the server-side blur keyword
+// only when it is enabled.
+func TestSourceLoadPatterns(t *testing.T) {
+	items := []model.ConfigItem{
+		{DataId: "config.json", Md5: "m1"},
+		{DataId: "gate-a.json", Md5: "m2"},
+		{DataId: "gate-b.yaml", Md5: "m3"},
+		{DataId: "other.json", Md5: "m4"},
+	}
+	want := []string{"config.json", "gate-a.json"}
+
+	tests := []struct {
+		name       string
+		serverBlur bool
+		wantSearch []string
+	}{
+		{name: "server blur", serverBlur: true, wantSearch: []string{"gate-"}},
+		{name: "whole group scan", serverBlur: false, wantSearch: []string{""}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stub := &stubConfigClient{}
+			searched := make([]string, 0, 1)
+			stub.searchFunc = func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
+				searched = append(searched, param.DataId)
+
+				pageItems := make([]model.ConfigItem, 0, len(items))
+				for _, item := range items {
+					if param.DataId != "" && !strings.Contains(item.DataId, param.DataId) {
+						continue
+					}
+					pageItems = append(pageItems, item)
+				}
+
+				return &model.ConfigPage{
+					TotalCount:     len(pageItems),
+					PageNumber:     1,
+					PagesAvailable: 1,
+					PageItems:      pageItems,
+				}, nil
+			}
+
+			o := defaultOptions()
+			o.client = stub
+			o.groupName = "test-group"
+			o.files = []string{"config.json", "gate-*.json"}
+			o.serverBlur = tt.serverBlur
+
+			source := &Source{opts: o, patternMode: true, cache: make(map[string]cachedItem)}
+
+			configs, err := source.Load(context.Background())
+			if err != nil {
+				t.Fatalf("load configs failed: %v", err)
+			}
+
+			files := make([]string, 0, len(configs))
+			for _, configuration := range configs {
+				files = append(files, configuration.File)
+			}
+			if !slices.Equal(files, want) {
+				t.Fatalf("expect %v, got %v", want, files)
+			}
+			if got := stub.getCalls.Load(); got != 2 {
+				t.Fatalf("expect 2 get config calls, got %d", got)
+			}
+			if !slices.Equal(searched, tt.wantSearch) {
+				t.Fatalf("expect searches %v, got %v", tt.wantSearch, searched)
+			}
+		})
+	}
+}
+
+// TestSourceStorePatterns verifies that a pattern entry allows storing a matching new file and
+// still rejects a file outside the list.
+func TestSourceStorePatterns(t *testing.T) {
+	stub := &stubConfigClient{}
+
+	o := defaultOptions()
+	o.client = stub
+	o.mode = config.ReadWrite
+	o.files = []string{"gate-*.json"}
+
+	source := &Source{opts: o, patternMode: true}
+
+	if err := source.Store(context.Background(), "gate-a.json", []byte("content")); err != nil {
+		t.Fatalf("store matching file failed: %v", err)
+	}
+
+	if err := source.Store(context.Background(), "other.json", []byte("content")); err != errFileNotConfigured {
+		t.Fatalf("expect errFileNotConfigured, got %v", err)
+	}
+}
+
+// TestRefreshPatterns verifies that a pattern list searches the group instead of registering the
+// configured entries once.
+func TestRefreshPatterns(t *testing.T) {
+	stub := &stubConfigClient{
+		page: &model.ConfigPage{
+			TotalCount:     1,
+			PageNumber:     1,
+			PagesAvailable: 1,
+			PageItems:      []model.ConfigItem{{DataId: "gate-a.json"}},
+		},
+	}
+
+	source := NewSource(WithClient(stub), WithFiles("gate-*.json"))
+
+	deadline := time.Now().Add(2 * time.Second)
+	for stub.listenCalls.Load() < 1 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if got := stub.listenCalls.Load(); got != 1 {
+		t.Fatalf("expect 1 listen call, got %d", got)
+	}
+	if got := stub.calls.Load(); got == 0 {
+		t.Fatal("expect the pattern list to search the group")
+	}
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source failed: %v", err)
+	}
 }
