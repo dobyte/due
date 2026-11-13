@@ -376,3 +376,55 @@ func TestWatchWithFiles(t *testing.T) {
 		}
 	}
 }
+
+// TestWatchNewDirectory verifies that the files that already exist in a directory moved into the
+// watched tree are loaded, because a non-recursive watcher cannot observe their creation.
+func TestWatchNewDirectory(t *testing.T) {
+	dir := t.TempDir()
+	staging := t.TempDir()
+
+	c := config.NewConfigurator(config.WithSources(file.NewSource(file.WithPath(dir), file.WithMode(config.ReadWrite))))
+	defer c.Close()
+
+	notified := make(chan string, 1)
+	c.Watch(func(names ...string) {
+		for _, name := range names {
+			select {
+			case notified <- name:
+			default:
+			}
+		}
+	}, "gate")
+
+	deadline := time.Now().Add(15 * time.Second)
+
+	for {
+		sub := filepath.Join(staging, "config")
+
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatalf("create directory failed, err: %v", err)
+		}
+		writeFile(t, sub, "gate.yaml", "name: gate\n")
+
+		target := filepath.Join(dir, "config")
+		_ = os.RemoveAll(target)
+
+		if err := os.Rename(sub, target); err != nil {
+			t.Fatalf("move directory failed, err: %v", err)
+		}
+
+		select {
+		case name := <-notified:
+			if name != "gate" {
+				t.Fatalf("invalid notified name, expect: gate, actual: %s", name)
+			}
+
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("the watch callback is not triggered for the new directory")
+		}
+	}
+}

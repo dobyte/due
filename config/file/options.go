@@ -1,10 +1,6 @@
 package file
 
 import (
-	"path"
-	"path/filepath"
-	"strings"
-
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/etc"
 )
@@ -64,24 +60,4 @@ func WithMode(mode config.Mode) Option {
 // is rejected. Empty and duplicate entries are ignored.
 func WithFiles(files ...string) Option {
 	return func(o *options) { o.files = files }
-}
-
-// unmatchableFiles returns the configured entries that can never match a path relative to the
-// source path, because they are absolute or contain a directory traversal.
-func unmatchableFiles(files []string) []string {
-	var invalid []string
-
-	for _, file := range files {
-		file = path.Clean(filepath.ToSlash(strings.TrimSpace(file)))
-		if file == "." {
-			continue
-		}
-
-		if strings.HasPrefix(file, "/") || filepath.IsAbs(filepath.FromSlash(file)) ||
-			file == ".." || strings.HasPrefix(file, "../") {
-			invalid = append(invalid, file)
-		}
-	}
-
-	return invalid
 }

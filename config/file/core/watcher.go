@@ -76,10 +76,24 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 			}
 
 			// A newly created directory must be added to the watcher, otherwise changes to its
-			// config files cannot be observed.
+			// config files cannot be observed. Files that already exist in the directory are
+			// loaded immediately, because a non-recursive watcher only observes events raised
+			// after the directory is added.
 			if event.Has(fsnotify.Create) {
-				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-					_ = w.watcher.Add(event.Name)
+				if info, statErr := os.Stat(event.Name); statErr == nil && info.IsDir() {
+					if addErr := w.addDir(event.Name); addErr != nil {
+						return nil, addErr
+					}
+
+					configs, loadErr := w.source.loadDir(event.Name)
+					if loadErr != nil {
+						return nil, loadErr
+					}
+
+					if len(configs) > 0 {
+						return configs, nil
+					}
+
 					continue
 				}
 			}
@@ -104,6 +118,22 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 			return nil, w.ctx.Err()
 		}
 	}
+}
+
+// addDir adds dir and its subdirectories to the watcher, matching the walk performed when the
+// watcher starts.
+func (w *watcher) addDir(dir string) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+
+		return w.watcher.Add(path)
+	})
 }
 
 // Stop stops watching.

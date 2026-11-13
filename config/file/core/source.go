@@ -33,7 +33,7 @@ var _ config.Source = &Source{}
 // unless it contains "*", which matches any sequence of characters. When files is empty, every
 // file under the source path is available.
 func NewSource(path string, mode config.Mode, files ...string) *Source {
-	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode, files: normalizeFiles(files)}
+	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode, files: pattern.NormalizeFiles(files)}
 }
 
 // Name returns the name of the source.

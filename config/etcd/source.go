@@ -34,6 +34,8 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
+	o.files = pattern.NormalizeFiles(o.files)
+
 	s := &Source{}
 	s.opts = o
 
@@ -119,6 +121,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	}
 
 	name := strings.TrimPrefix(file, "/")
+
+	if name == "" {
+		return errors.New("invalid file path: empty")
+	}
 
 	if !s.matchFile(name) {
 		return errors.ErrFileNotConfigured

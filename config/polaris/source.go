@@ -60,6 +60,8 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
+	o.files = pattern.NormalizeFiles(o.files)
+
 	s := &Source{}
 	s.opts = o
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
@@ -204,6 +206,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+
+	if file == "" {
+		return errors.New("invalid file name: empty")
 	}
 
 	if !s.matchFile(file) {

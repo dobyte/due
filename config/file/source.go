@@ -9,11 +9,6 @@ import (
 // Name is the name of the file config source.
 const Name = core.Name
 
-// Source is a file-based config source.
-type Source struct {
-	opts *options
-}
-
 // NewSource returns a new file config source configured with opts.
 func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
@@ -25,7 +20,7 @@ func NewSource(opts ...Option) config.Source {
 		log.Warnf("no config file path specified, loading the config will fail")
 	}
 
-	for _, file := range unmatchableFiles(o.files) {
+	for _, file := range core.UnmatchableFiles(o.files) {
 		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
 	}
 

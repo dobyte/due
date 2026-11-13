@@ -1,6 +1,11 @@
 package polaris
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/dobyte/due/v2/config"
+)
 
 func TestMatchFile(t *testing.T) {
 	tests := []struct {
@@ -25,5 +30,13 @@ func TestMatchFile(t *testing.T) {
 				t.Fatalf("matchFile(%q) = %v, want %v", tt.value, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestStoreRejectsEmptyFile(t *testing.T) {
+	s := &Source{opts: &options{mode: config.ReadWrite}}
+
+	if err := s.Store(context.Background(), "", []byte(`{}`)); err == nil {
+		t.Fatal("expect an error for the empty file name")
 	}
 }
