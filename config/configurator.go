@@ -2,14 +2,15 @@ package config
 
 import (
 	"context"
+	"io"
 	"log"
-	"math"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"dario.cat/mergo"
 	"github.com/dobyte/due/v2/core/value"
@@ -19,13 +20,24 @@ import (
 	"github.com/jinzhu/copier"
 )
 
+const (
+	// watchMinBackoff is the initial delay before retrying a failed config watch.
+	watchMinBackoff = time.Second
+	// watchMaxBackoff is the maximum delay before retrying a failed config watch.
+	watchMaxBackoff = 30 * time.Second
+)
+
 // Configurator manages a set of config sources and exposes the config loaded from them.
+//
+// The value store is merge-only: a config that a source no longer provides stays available until the
+// configurator is recreated.
 type Configurator interface {
 	// Has reports whether a config matching pattern exists.
 	Has(pattern string) bool
 	// Get returns the config value under pattern, falling back to def when the config is missing.
 	Get(pattern string, def ...any) value.Value
-	// Set sets the config value under pattern.
+	// Set sets the config value under pattern; a non-container value on the path is replaced when a
+	// nested pattern is given.
 	Set(pattern string, value any) error
 	// Match returns a [Matcher] over the given patterns.
 	Match(patterns ...string) Matcher
@@ -55,10 +67,10 @@ type defaultConfigurator struct {
 	cancel   context.CancelFunc
 	sources  map[string]Source
 	mu       sync.Mutex
-	idx      atomic.Int64
-	values   [2]map[string]any
+	values   atomic.Pointer[map[string]any]
 	rw       sync.RWMutex
 	watchers []*watcher
+	wg       sync.WaitGroup
 }
 
 var _ Configurator = &defaultConfigurator{}
@@ -116,14 +128,19 @@ func (c *defaultConfigurator) init() {
 	c.store(values)
 }
 
-// store publishes values to the slot that follows the current index.
+// store publishes values as the current snapshot. The map must not be modified afterwards, so that
+// readers loading the snapshot never observe a concurrent write.
 func (c *defaultConfigurator) store(values map[string]any) {
-	c.values[c.idx.Add(1)%int64(len(c.values))] = values
+	c.values.Store(&values)
 }
 
-// load returns the values of the slot that follows the current index.
+// load returns the current snapshot.
 func (c *defaultConfigurator) load() map[string]any {
-	return c.values[c.idx.Load()%int64(len(c.values))]
+	if values := c.values.Load(); values != nil {
+		return *values
+	}
+
+	return nil
 }
 
 // copy returns a deep copy of the currently loaded values.
@@ -151,71 +168,116 @@ func (c *defaultConfigurator) watch() {
 			continue
 		}
 
-		go func() {
-			defer w.Stop()
-
-			for {
-				select {
-				case <-c.ctx.Done():
-					return
-				default:
-					// exec watch
-				}
-				cs, err := w.Next()
-				if err != nil {
-					continue
-				}
-
-				names := make([]string, 0, len(cs))
-				values := make(map[string]any)
-				for _, cc := range cs {
-					if len(cc.Content) == 0 {
-						continue
-					}
-
-					v, err := c.opts.decoder(cc.Format, cc.Content)
-					if err != nil {
-						continue
-					}
-					names = append(names, cc.Name)
-					values[cc.Name] = v
-				}
-
-				func() {
-					c.mu.Lock()
-					defer c.mu.Unlock()
-
-					dst, err := c.copy()
-					if err != nil {
-						return
-					}
-
-					err = mergo.Merge(&dst, values, mergo.WithOverride)
-					if err != nil {
-						return
-					}
-
-					c.store(dst)
-				}()
-
-				if len(names) > 0 {
-					go c.notify(names...)
-				}
-			}
-		}()
+		c.wg.Go(func() {
+			c.watchSource(w)
+		})
 	}
 }
 
-// notify calls every watcher that matches one of the given names.
+// watchSource consumes the changes of a watcher until the configurator is closed. A failing watcher
+// is retried with a backoff instead of spinning on the error.
+func (c *defaultConfigurator) watchSource(w Watcher) {
+	defer w.Stop()
+
+	var (
+		delay  = watchMinBackoff
+		warned bool
+	)
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+			// exec watch
+		}
+
+		cs, err := w.Next()
+		if err != nil {
+			if c.ctx.Err() != nil || errors.Is(err, errors.ErrWatcherStopped) || errors.Is(err, io.EOF) {
+				return
+			}
+
+			if !warned {
+				log.Printf("watching configure change failed: %v", err)
+				warned = true
+			}
+
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+
+			if delay < watchMaxBackoff {
+				if delay > watchMaxBackoff/2 {
+					delay = watchMaxBackoff
+				} else {
+					delay *= 2
+				}
+			}
+
+			continue
+		}
+
+		warned = false
+		delay = watchMinBackoff
+
+		names := make([]string, 0, len(cs))
+		values := make(map[string]any)
+		for _, cc := range cs {
+			if len(cc.Content) == 0 {
+				continue
+			}
+
+			v, err := c.opts.decoder(cc.Format, cc.Content)
+			if err != nil {
+				log.Printf("decode configure failed: %v", err)
+				continue
+			}
+			names = append(names, cc.Name)
+			values[cc.Name] = v
+		}
+
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			dst, err := c.copy()
+			if err != nil {
+				log.Printf("copy configure failed: %v", err)
+				return
+			}
+
+			if err = mergo.Merge(&dst, values, mergo.WithOverride); err != nil {
+				log.Printf("merge configure failed: %v", err)
+				return
+			}
+
+			c.store(dst)
+		}()
+
+		if len(names) > 0 {
+			c.wg.Go(func() {
+				c.notify(names...)
+			})
+		}
+	}
+}
+
+// notify calls every watcher that matches one of the given names. The watcher list is snapshotted
+// before the callbacks run, so a callback can call [Configurator.Watch] without deadlocking.
 func (c *defaultConfigurator) notify(names ...string) {
 	c.rw.RLock()
-	defer c.rw.RUnlock()
+	watchers := make([]*watcher, len(c.watchers))
+	copy(watchers, c.watchers)
+	c.rw.RUnlock()
 
-	for _, w := range c.watchers {
+	for _, w := range watchers {
 		if len(w.names) == 0 {
 			w.callback(names...)
 		} else {
-			validNames := make([]string, 0, int(math.Min(float64(len(w.names)), float64(len(names)))))
+			validNames := make([]string, 0, min(len(w.names), len(names)))
 			for _, name := range names {
 				if _, ok := w.names[name]; ok {
 					validNames = append(validNames, name)
@@ -236,6 +298,8 @@ func (c *defaultConfigurator) Close() {
 	for _, source := range c.sources {
 		_ = source.Close()
 	}
+
+	c.wg.Wait()
 }
 
 // Has reports whether a config matching pattern exists.
@@ -264,12 +328,10 @@ func (c *defaultConfigurator) doHas(pattern string) bool {
 			}
 		case []any:
 			i, err := strconv.Atoi(key)
-			if err != nil {
+			if err != nil || i < 0 || i >= len(vs) {
 				found = false
-			} else if len(vs) > i {
-				node = vs[i]
 			} else {
-				found = false
+				node = vs[i]
 			}
 		default:
 			found = false
@@ -322,12 +384,10 @@ func (c *defaultConfigurator) doGet(pattern string) (value.Value, bool) {
 			}
 		case []any:
 			i, err := strconv.Atoi(key)
-			if err != nil {
+			if err != nil || i < 0 || i >= len(vs) {
 				found = false
-			} else if len(vs) > i {
-				node = vs[i]
 			} else {
-				found = false
+				node = vs[i]
 			}
 		default:
 			found = false
@@ -407,6 +467,10 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 				return err
 			}
 
+			if ii < 0 {
+				return errors.New("invalid index")
+			}
+
 			if ii >= len(vs) {
 				return errors.New("index overflow")
 			}
@@ -415,16 +479,16 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 				vs[ii] = value
 			} else {
 				rebuild := false
-				_, err = strconv.Atoi(keys[i+1])
+				next, parseErr := strconv.Atoi(keys[i+1])
 				switch nv := vs[ii].(type) {
 				case map[string]any:
-					rebuild = err == nil
+					rebuild = parseErr == nil
 				case []any:
-					rebuild = err != nil
+					rebuild = parseErr != nil
 					// the next node capacity is not enough
 					// expand capacity
-					if err == nil && ii >= len(nv) {
-						dst := make([]any, ii+1)
+					if parseErr == nil && next >= len(nv) {
+						dst := make([]any, next+1)
 						copy(dst, nv)
 						vs[ii] = dst
 					}
@@ -433,7 +497,7 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 				}
 
 				if rebuild {
-					if err != nil {
+					if parseErr != nil {
 						vs[ii] = make(map[string]any)
 					} else {
 						vs[ii] = make([]any, 1)
@@ -509,9 +573,9 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 		if len(override) > 0 && override[0] {
 			buf, err = c.opts.encoder(format, content)
 		} else {
-			dest, err := c.copy()
-			if err != nil {
-				return err
+			dest, copyErr := c.copy()
+			if copyErr != nil {
+				return copyErr
 			}
 
 			name := strings.TrimSuffix(filepath.Base(file), ext)
@@ -525,13 +589,12 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 					return err
 				}
 
-				maps, err := c.opts.decoder(format, buf)
-				if err != nil {
-					return err
+				maps, decodeErr := c.opts.decoder(format, buf)
+				if decodeErr != nil {
+					return decodeErr
 				}
 
-				err = mergo.Merge(&v, maps, mergo.WithOverride)
-				if err != nil {
+				if err = mergo.Merge(&v, maps, mergo.WithOverride); err != nil {
 					return err
 				}
 

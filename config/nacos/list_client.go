@@ -124,9 +124,8 @@ func newListConfigClient(client config_client.IConfigClient, o *options) config_
 
 	clientConfig := newClientConfig(o)
 
-	// The access token is fetched lazily when the first list request is rejected, so the wrapper
-	// does not need a periodic refresh goroutine. A login here is best-effort: if it fails the
-	// first request will trigger it again.
+	// The access token is fetched lazily by the first list request, so the wrapper neither blocks
+	// the constructor on a login round trip nor needs a periodic refresh goroutine.
 	agent := &http_agent.HttpAgent{TlsConfig: clientConfig.TLSCfg}
 
 	lc := &listClient{
@@ -138,8 +137,6 @@ func newListConfigClient(client config_client.IConfigClient, o *options) config_
 		timeout:       uint64(o.timeout.Milliseconds()),
 		agent:         agent,
 	}
-
-	_ = lc.login()
 
 	return lc
 }
@@ -159,7 +156,7 @@ func (c *listClient) SearchConfig(param vo.SearchConfigParam) (*model.ConfigPage
 			// same 403, so falling back only retries the same failing request. Keep the v3 path
 			// enabled and return a clear error so every subsequent call surfaces it rather than
 			// silently falling through to the SDK's opaque retry error.
-			return nil, errNoCredentials
+			return nil, errors.ErrConfigAuthRequired
 		}
 
 		// The cached access token may have expired; refresh it once and retry.
@@ -365,7 +362,7 @@ func (c *listClient) Export(group string) (map[string]string, error) {
 		if c.username == "" {
 			// Same reasoning as SearchConfig: the SDK fallback for content fetch (GetConfig) may
 			// also require auth on Nacos 3.x. Return a clear error rather than failing opaquely.
-			return nil, errNoCredentials
+			return nil, errors.ErrConfigAuthRequired
 		}
 
 		c.invalidateToken()
@@ -610,11 +607,6 @@ type listError struct {
 	code    int
 	message string
 }
-
-// errNoCredentials is returned when the v3 admin API rejects an anonymous request but no username
-// or password is configured. It avoids the futile fallback to the SDK, which would hit the same
-// v3 admin endpoint on Nacos 3.x and fail identically.
-var errNoCredentials = errors.New("nacos admin API requires authentication: configure username and password (e.g. WithUsername/WithPassword) or disable nacos.core.auth.admin.enabled on the server")
 
 // Error returns the error message reported by the Nacos server.
 func (e *listError) Error() string {

@@ -81,6 +81,50 @@ func TestLoadDirectory(t *testing.T) {
 	}
 }
 
+// TestLoadIgnoresHiddenDirectory verifies that the files of a dot directory are not loaded.
+func TestLoadIgnoresHiddenDirectory(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	hidden := filepath.Join(dir, ".hidden")
+	if err := os.MkdirAll(hidden, 0o755); err != nil {
+		t.Fatalf("create directory failed, err: %v", err)
+	}
+	writeFile(t, hidden, "secret.json", `{"secret":true}`)
+
+	source := file.NewSource(file.WithPath(dir))
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("invalid config count, expect: 1, actual: %d", len(configs))
+	}
+	if configs[0].File != configFile {
+		t.Fatalf("invalid config file, expect: %s, actual: %s", configFile, configs[0].File)
+	}
+}
+
+// TestLoadDotNamedRoot verifies that a dot-named source directory itself is still loaded.
+func TestLoadDotNamedRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".config")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("create directory failed, err: %v", err)
+	}
+	writeFile(t, root, configFile, `{"timezone":"Local"}`)
+
+	source := file.NewSource(file.WithPath(root))
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("invalid config count, expect: 1, actual: %d", len(configs))
+	}
+}
+
 func TestLoadMissingFile(t *testing.T) {
 	source := file.NewSource(file.WithPath(t.TempDir()))
 
@@ -192,6 +236,56 @@ func TestWatch(t *testing.T) {
 
 		if time.Now().After(deadline) {
 			t.Fatal("the watch callback is not triggered")
+		}
+	}
+}
+
+// TestStoreTriggersWatch verifies that a config stored by the file source is written atomically and
+// reported by the watcher.
+func TestStoreTriggersWatch(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	c := config.NewConfigurator(config.WithSources(file.NewSource(
+		file.WithPath(dir),
+		file.WithMode(config.ReadWrite),
+		file.WithFiles(configFile),
+	)))
+	defer c.Close()
+
+	notified := make(chan string, 2)
+	c.Watch(func(names ...string) {
+		for _, name := range names {
+			select {
+			case notified <- name:
+			default:
+			}
+		}
+	}, "config")
+
+	if err := c.Store(context.Background(), file.Name, configFile, map[string]any{"timezone": "UTC"}, true); err != nil {
+		t.Fatalf("store config failed, err: %v", err)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+
+	for {
+		select {
+		case name := <-notified:
+			if name != "config" {
+				t.Fatalf("invalid notified name, expect: config, actual: %s", name)
+			}
+
+			if got := c.Get("config.timezone").String(); got != "UTC" {
+				t.Fatalf("invalid value, expect: UTC, actual: %s", got)
+			}
+
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("the watch callback is not triggered by Store")
 		}
 	}
 }

@@ -2,22 +2,33 @@ package config
 
 import (
 	"context"
+	"sync"
 
 	"github.com/dobyte/due/v2/core/value"
 )
 
-var globalConfigurator Configurator
+var (
+	globalMu           sync.RWMutex
+	globalConfigurator Configurator
+)
 
 // SetConfigurator sets the global configurator, closing the previous one when it is not nil.
 func SetConfigurator(configurator Configurator) {
-	if globalConfigurator != nil {
-		globalConfigurator.Close()
-	}
+	globalMu.Lock()
+	previous := globalConfigurator
 	globalConfigurator = configurator
+	globalMu.Unlock()
+
+	if previous != nil && previous != configurator {
+		previous.Close()
+	}
 }
 
 // GetConfigurator returns the global configurator.
 func GetConfigurator() Configurator {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
+
 	return globalConfigurator
 }
 
@@ -29,72 +40,85 @@ func SetConfiguratorWithSources(sources ...Source) {
 
 // Has reports whether a config matching pattern exists.
 func Has(pattern string) bool {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return false
 	}
 
-	return globalConfigurator.Has(pattern)
+	return c.Has(pattern)
 }
 
 // Get returns the config value under pattern, falling back to def when the config is missing.
 func Get(pattern string, def ...any) value.Value {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return value.NewValue()
 	}
 
-	return globalConfigurator.Get(pattern, def...)
+	return c.Get(pattern, def...)
 }
 
 // Set sets the config value under pattern.
 func Set(pattern string, value any) error {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return nil
 	}
 
-	return globalConfigurator.Set(pattern, value)
+	return c.Set(pattern, value)
 }
 
 // Match returns a [Matcher] over the given patterns.
 func Match(patterns ...string) Matcher {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return newEmptyMatcher()
 	}
 
-	return globalConfigurator.Match(patterns...)
+	return c.Match(patterns...)
 }
 
 // Watch registers cb to be called when one of the named configs changes; empty names means every
 // config.
 func Watch(cb WatchCallbackFunc, names ...string) {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return
 	}
 
-	globalConfigurator.Watch(cb, names...)
+	c.Watch(cb, names...)
 }
 
 // Load loads the configurations of the named source; empty file means every file of the source.
 func Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return nil, nil
 	}
 
-	return globalConfigurator.Load(ctx, source, file...)
+	return c.Load(ctx, source, file...)
 }
 
 // Store saves content as file under the named source, merging it with the existing config unless
 // override is true.
 func Store(ctx context.Context, source string, file string, content any, override ...bool) error {
-	if globalConfigurator == nil {
+	c := GetConfigurator()
+	if c == nil {
 		return nil
 	}
 
-	return globalConfigurator.Store(ctx, source, file, content, override...)
+	return c.Store(ctx, source, file, content, override...)
 }
 
-// Close closes the global configurator and stops watching config changes.
+// Close closes the global configurator and stops watching config changes. The global configurator
+// is cleared, so later calls do not observe the closed configurator.
 func Close() {
-	if globalConfigurator != nil {
-		globalConfigurator.Close()
+	globalMu.Lock()
+	c := globalConfigurator
+	globalConfigurator = nil
+	globalMu.Unlock()
+
+	if c != nil {
+		c.Close()
 	}
 }

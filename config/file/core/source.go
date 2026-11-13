@@ -12,7 +12,6 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/pattern"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/utils/xos"
 )
 
 // Name is the name of the file config source.
@@ -122,7 +121,7 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrFileNotConfigured
 	}
 
-	return xos.WriteFile(filepath.Join(s.path, file), content)
+	return writeFileAtomic(filepath.Join(s.path, file), content)
 }
 
 // checkFilePath validates that file is a safe path under root; it rejects absolute paths and paths
@@ -267,12 +266,24 @@ func (s *Source) loadFile(path string) (*config.Configuration, error) {
 
 // loadDir loads every config file under path.
 func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
-	err = filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
+	root := path
+
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if d.IsDir() || strings.HasPrefix(d.Name(), ".") {
+		if d.IsDir() {
+			// Returning nil does not skip the directory, so a dot directory has to be skipped with
+			// fs.SkipDir; otherwise the files inside it would be loaded.
+			if path != root && strings.HasPrefix(d.Name(), ".") {
+				return fs.SkipDir
+			}
+
+			return nil
+		}
+
+		if strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
 
@@ -290,4 +301,56 @@ func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
 	})
 
 	return
+}
+
+// writeFileAtomic writes content to path through a temporary file and renames it into place, so
+// that a concurrent watcher never reads a partially written config file. The temporary file name
+// starts with a dot, so it is ignored by both the directory loader and the watcher.
+func writeFileAtomic(path string, content []byte) error {
+	dir := filepath.Dir(path)
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	file, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+
+	name := file.Name()
+
+	if _, err = file.Write(content); err != nil {
+		_ = file.Close()
+		_ = os.Remove(name)
+
+		return err
+	}
+
+	if err = file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(name)
+
+		return err
+	}
+
+	if err = file.Close(); err != nil {
+		_ = os.Remove(name)
+
+		return err
+	}
+
+	if err = os.Chmod(name, 0o644); err != nil {
+		_ = os.Remove(name)
+
+		return err
+	}
+
+	if err = os.Rename(name, path); err != nil {
+		_ = os.Remove(name)
+
+		return err
+	}
+
+	return nil
 }

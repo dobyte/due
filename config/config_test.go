@@ -408,6 +408,52 @@ func TestConfiguratorStoreNonMap(t *testing.T) {
 	}
 }
 
+// TestConfiguratorStoreEncoderError verifies that an encoding error is reported for a file that is
+// not merged with a loaded config instead of being swallowed.
+func TestConfiguratorStoreEncoderError(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		give string
+	}{
+		{name: "missing config", file: "fresh.unknown", give: `{"timezone":"Local"}`},
+		{name: "non-map config", file: "config.unknown", give: `[1,2]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := newFakeSource(tt.give)
+			c := config.NewConfigurator(config.WithSources(source))
+			defer c.Close()
+
+			err := c.Store(context.Background(), source.Name(), tt.file, map[string]any{"a": 1})
+			if !errors.Is(err, errors.ErrInvalidFormat) {
+				t.Fatalf("expect ErrInvalidFormat, actual: %v", err)
+			}
+
+			if content := source.storedContent(tt.file); content != nil {
+				t.Fatalf("nothing should be stored, actual: %q", content)
+			}
+		})
+	}
+}
+
+// TestConfiguratorSetNestedSlice verifies that setting an index beyond the length of a nested slice
+// expands that slice instead of reporting an overflow.
+func TestConfiguratorSetNestedSlice(t *testing.T) {
+	source := newFakeSource(`{"matrix":[[1,2]]}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	if err := c.Set("config.matrix.0.3", 9); err != nil {
+		t.Fatalf("set nested slice failed, err: %v", err)
+	}
+
+	if got := c.Get("config.matrix.0.3").Int(); got != 9 {
+		t.Fatalf("invalid value, expect: 9, actual: %d", got)
+	}
+}
+
 func TestConfiguratorWithCustomDecoder(t *testing.T) {
 	source := newFakeSource(`{"raw":"1"}`)
 
@@ -436,5 +482,156 @@ func TestConfigurationWithoutCodec(t *testing.T) {
 	var dst struct{}
 	if err := cc.Scan(&dst); !errors.Is(err, errors.ErrInvalidScanner) {
 		t.Fatalf("expect ErrInvalidScanner, actual: %v", err)
+	}
+}
+
+func TestConfiguratorInvalidIndex(t *testing.T) {
+	source := newFakeSource(`{"list":[10,20]}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	if c.Has("config.list.-1") {
+		t.Fatal("expect a negative index not to exist")
+	}
+
+	if got := c.Get("config.list.-1", "fallback").String(); got != "fallback" {
+		t.Fatalf("invalid fallback value for the negative index, actual: %s", got)
+	}
+
+	if err := c.Set("config.list.-1", 1); err == nil {
+		t.Fatal("expect an error for the negative index")
+	}
+
+	if got := c.Get("config.list.1").Int(); got != 20 {
+		t.Fatalf("the config is changed by an invalid index, actual: %d", got)
+	}
+}
+
+// TestConfiguratorConcurrentGetAndWatch verifies that reading the config while a change is being
+// published does not race; run it with -race to check the snapshot publication.
+func TestConfiguratorConcurrentGetAndWatch(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	var wg sync.WaitGroup
+
+	stop := make(chan struct{})
+
+	wg.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = c.Get("config.timezone").String()
+				_ = c.Has("config.timezone")
+			}
+		}
+	})
+
+	for range 100 {
+		source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+
+	for c.Get("config.timezone").String() != "UTC" {
+		if time.Now().After(deadline) {
+			t.Fatal("config is not reloaded after the changes")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	close(stop)
+	wg.Wait()
+}
+
+// TestConfiguratorWatchFromCallback verifies that a callback can register a new watcher without
+// deadlocking the notification.
+func TestConfiguratorWatchFromCallback(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	notified := make(chan struct{}, 1)
+
+	c.Watch(func(...string) {
+		c.Watch(func(...string) {})
+	}, "config")
+	c.Watch(func(...string) {
+		select {
+		case notified <- struct{}{}:
+		default:
+		}
+	}, "config")
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	select {
+	case <-notified:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch callback is blocked by the notification lock")
+	}
+}
+
+// TestConfiguratorCloseWaitsForCallback verifies that Close waits for an in-flight watch callback.
+func TestConfiguratorCloseWaitsForCallback(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+
+	started := make(chan struct{})
+	finished := make(chan struct{})
+
+	c.Watch(func(...string) {
+		close(started)
+
+		time.Sleep(100 * time.Millisecond)
+		close(finished)
+	})
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	<-started
+	c.Close()
+
+	select {
+	case <-finished:
+	default:
+		t.Fatal("Close returned before the watch callback finished")
+	}
+}
+
+// TestSetConfiguratorSameInstance verifies that installing the same configurator does not close it.
+func TestSetConfiguratorSameInstance(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	config.SetConfigurator(c)
+	config.SetConfigurator(c)
+	defer config.Close()
+
+	source.mu.Lock()
+	closed := source.closed
+	source.mu.Unlock()
+
+	if closed {
+		t.Fatal("the configurator is closed when it is installed twice")
+	}
+
+	if got := config.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("invalid value, expect: Local, actual: %s", got)
+	}
+}
+
+// TestGlobalConfiguratorCloseClears verifies that Close clears the global configurator.
+func TestGlobalConfiguratorCloseClears(t *testing.T) {
+	config.SetConfigurator(config.NewConfigurator(config.WithSources(newFakeSource(`{"timezone":"Local"}`))))
+	config.Close()
+
+	if config.GetConfigurator() != nil {
+		t.Fatal("expect the global configurator to be cleared")
 	}
 }

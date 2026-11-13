@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -131,7 +132,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return configurations, nil
 	}
 
-	wg, _ := task.WithContext(ctx)
+	wg, gctx := task.WithContext(ctx)
 	wg.SetLimit(loadConcurrency)
 
 	for _, item := range files {
@@ -142,7 +143,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		}
 
 		wg.Go(func() error {
-			configuration, err := s.load(ctx, fileName)
+			configuration, err := s.load(gctx, fileName)
 			if err != nil {
 				return err
 			}
@@ -158,6 +159,11 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	if err := wg.Wait(); err != nil {
 		return nil, err
 	}
+
+	// Keep the result deterministic regardless of the fetch completion order.
+	sort.Slice(configurations, func(i, j int) bool {
+		return configurations[i].File < configurations[j].File
+	})
 
 	return configurations, nil
 }

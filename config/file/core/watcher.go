@@ -38,7 +38,13 @@ func newWatcher(ctx context.Context, source *Source) (*watcher, error) {
 				return err
 			}
 
-			if strings.HasPrefix(d.Name(), ".") {
+			// Dot files are not watched; a dot directory has to be skipped with fs.SkipDir instead
+			// of returning nil, which would keep walking into it.
+			if path != source.path && strings.HasPrefix(d.Name(), ".") {
+				if d.IsDir() {
+					return fs.SkipDir
+				}
+
 				return nil
 			}
 
@@ -98,8 +104,14 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 				}
 			}
 
-			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Rename) {
 				if !w.source.matchFile(event.Name) {
+					continue
+				}
+
+				// A rename event is also raised for the old name, which no longer exists, so there
+				// is nothing to load; a rename onto this name is handled as a reload.
+				if info, statErr := os.Stat(event.Name); statErr != nil || info.IsDir() {
 					continue
 				}
 
@@ -128,7 +140,11 @@ func (w *watcher) addDir(dir string) error {
 			return err
 		}
 
-		if strings.HasPrefix(d.Name(), ".") {
+		if path != dir && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+
 			return nil
 		}
 

@@ -9,7 +9,6 @@ import (
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
-	"github.com/dobyte/due/v2/utils/xcall"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
 )
@@ -29,6 +28,7 @@ type watcher struct {
 	stopped atomic.Bool                  // Whether the watcher has stopped
 	warned  atomic.Bool                  // Whether the current watch failure was logged
 	chWatch chan []*config.Configuration // Configuration change channel
+	wg      sync.WaitGroup               // Waits for the watch goroutine to exit
 }
 
 // newWatcher creates a watcher.
@@ -58,7 +58,7 @@ func (w *watcher) init() (err error) {
 
 	w.plan.Handler = w.planHandler
 
-	xcall.Go(func() {
+	w.wg.Go(func() {
 		delay := watchMinBackoff
 
 		for {
@@ -183,6 +183,10 @@ func (w *watcher) Stop() error {
 
 	w.cancel()
 	w.plan.Stop()
+
+	// Wait for the watch goroutine to exit before closing the channel, so that no callback can send
+	// to a closed channel.
+	w.wg.Wait()
 
 	w.mu.Lock()
 	close(w.chWatch)

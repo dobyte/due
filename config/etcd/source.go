@@ -171,7 +171,9 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 
 	// Pull the full configuration once to use as the initial watch snapshot and to
 	// record the starting revision of the watch.
-	res, err := s.opts.client.Get(ctx, s.opts.path, clientv3.WithPrefix())
+	tctx, cancel := context.WithTimeout(ctx, s.opts.timeout)
+	res, err := s.opts.client.Get(tctx, s.opts.path, clientv3.WithPrefix())
+	cancel()
 	if err != nil {
 		log.Warnf("etcd watch get failed: %v", err)
 		res = nil
