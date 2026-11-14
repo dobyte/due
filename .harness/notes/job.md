@@ -786,11 +786,11 @@ trace_id
 - 并发策略。
 - 暂停、恢复、取消和手工触发。
 
-### Phase 4：MySQL 和 MongoDB（适配器已完成，待真实数据库环境做集成演练）
+### Phase 4：MySQL 和 MongoDB（适配器及一致性测试入口已完成，待真实数据库环境执行）
 
 - 独立 Go module。
 - 适配器迁移脚本。
-- 复用 conformance 测试。
+- 复用 `job/conformance` 测试。
 - 核对事务、条件写和批量抢占语义。
 
 ### Phase 5：生产能力

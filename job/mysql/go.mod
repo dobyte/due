@@ -3,12 +3,14 @@ module github.com/dobyte/due/job/mysql/v2
 go 1.27.0
 
 require (
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/dobyte/due/v2 v2.6.7
 	github.com/robfig/cron/v3 v3.0.1
 )
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.5 // indirect
