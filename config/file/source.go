@@ -1,7 +1,7 @@
 package file
 
 import (
-	"github.com/dobyte/due/v2/core/config"
+	"github.com/dobyte/due/v2/config"
 	corefile "github.com/dobyte/due/v2/core/config/file"
 	"github.com/dobyte/due/v2/log"
 )

@@ -8,7 +8,8 @@
 package etc
 
 import (
-	"github.com/dobyte/due/v2/core/config"
+	"github.com/dobyte/due/v2/config"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	corefile "github.com/dobyte/due/v2/core/config/file"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/env"
@@ -26,7 +27,7 @@ var globalConfigurator config.Configurator
 func init() {
 	path := env.Get(dueEtcEnvName, defaultEtcPath).String()
 	path = flag.String(dueEtcArgName, path)
-	globalConfigurator = config.NewConfigurator(config.WithSources(corefile.NewSource(path, config.ReadOnly)))
+	globalConfigurator = coreconfig.NewConfigurator(coreconfig.WithSources(corefile.NewSource(path, coreconfig.ReadOnly)))
 }
 
 // SetConfigurator sets the configurator.
