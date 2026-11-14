@@ -105,6 +105,14 @@ func (s *fakeSource) storedContent(file string) []byte {
 	return s.stored[file]
 }
 
+// isClosed reports whether the source has been closed.
+func (s *fakeSource) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.closed
+}
+
 // flakySource fails its first Load calls so that the startup retry can be exercised.
 type flakySource struct {
 	*fakeSource
@@ -148,6 +156,39 @@ func (s *flakyWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
 	s.failMu.Unlock()
 
 	return s.fakeSource.Watch(ctx)
+}
+
+// canceledWatcher returns context.Canceled from Next, simulating a watcher stopped by its source.
+type canceledWatcher struct{}
+
+func (w *canceledWatcher) Next() ([]*config.Configuration, error) { return nil, context.Canceled }
+func (w *canceledWatcher) Stop() error                            { return nil }
+
+// stoppedWatchSource returns a stopped watcher on the first call and a live watcher afterwards, so
+// that the reopening behavior of the configurator can be observed.
+type stoppedWatchSource struct {
+	*fakeSource
+	watches atomic.Int32
+}
+
+func (s *stoppedWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.watches.Add(1) == 1 {
+		return &canceledWatcher{}, nil
+	}
+
+	return s.fakeSource.Watch(ctx)
+}
+
+// closedWatchSource reports a closed source from Watch, so that the configurator stops watching it.
+type closedWatchSource struct {
+	*fakeSource
+	watches atomic.Int32
+}
+
+func (s *closedWatchSource) Watch(context.Context) (config.Watcher, error) {
+	s.watches.Add(1)
+
+	return nil, errors.ErrClosedConfigSource
 }
 
 // waitNames waits until the given name shows up in a notification, failing the test on timeout.
@@ -340,6 +381,55 @@ func TestConfiguratorWatch(t *testing.T) {
 	source.push(&config.Configuration{Name: "gate", Format: "json", Content: []byte(`{"name":"gate"}`)})
 	waitNames(t, all, "gate")
 	waitNames(t, filtered, "gate")
+}
+
+// TestConfiguratorReopensStoppedWatcher verifies that a watcher reporting context.Canceled is
+// reopened instead of being retried forever.
+func TestConfiguratorReopensStoppedWatcher(t *testing.T) {
+	source := &stoppedWatchSource{fakeSource: newFakeSource(`{"timezone":"Local"}`)}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	deadline := time.Now().Add(10 * time.Second)
+
+	for source.watches.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the configurator did not reopen the stopped watcher")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestConfiguratorStopsWatchingClosedSource verifies that a closed source is not watched again.
+func TestConfiguratorStopsWatchingClosedSource(t *testing.T) {
+	source := &closedWatchSource{fakeSource: newFakeSource(`{"timezone":"Local"}`)}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	if got := source.watches.Load(); got != 1 {
+		t.Fatalf("expect the closed source to be watched once, actual: %d", got)
+	}
+}
+
+// TestConfiguratorIgnoresDuplicateSources verifies that a duplicate source name keeps the first
+// source and closes the duplicate instead of leaking it.
+func TestConfiguratorIgnoresDuplicateSources(t *testing.T) {
+	first := newFakeSource(`{"timezone":"Local"}`)
+	second := newFakeSource(`{"timezone":"UTC"}`)
+
+	c := config.NewConfigurator(config.WithSources(first, second))
+	defer c.Close()
+
+	if !second.isClosed() {
+		t.Fatal("expect the duplicate source to be closed")
+	}
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("expect the first source to win, actual: %s", got)
+	}
 }
 
 func TestConfiguratorReloadReplacesValue(t *testing.T) {

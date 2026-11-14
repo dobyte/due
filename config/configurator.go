@@ -96,6 +96,8 @@ func NewConfigurator(opts ...Option) Configurator {
 		opt(o)
 	}
 
+	o.sources = normalizeSources(o.sources)
+
 	r := &defaultConfigurator{}
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
@@ -107,6 +109,42 @@ func NewConfigurator(opts ...Option) Configurator {
 	r.watch()
 
 	return r
+}
+
+// normalizeSources keeps the first source of every name and closes the duplicates, so that a
+// duplicate source cannot silently shadow another one or leak its connection.
+func normalizeSources(sources []Source) []Source {
+	if len(sources) < 2 {
+		return sources
+	}
+
+	var (
+		seen   = make(map[string]struct{}, len(sources))
+		unique = make([]Source, 0, len(sources))
+	)
+
+	for _, s := range sources {
+		if s == nil {
+			log.Printf("nil config source is ignored")
+			continue
+		}
+
+		name := s.Name()
+		if _, ok := seen[name]; ok {
+			log.Printf("duplicate config source %q is ignored", name)
+
+			if err := s.Close(); err != nil {
+				log.Printf("close duplicate config source %q failed: %v", name, err)
+			}
+
+			continue
+		}
+
+		seen[name] = struct{}{}
+		unique = append(unique, s)
+	}
+
+	return unique
 }
 
 // init initializes the config sources and loads their config into the value store. A source that
@@ -121,6 +159,12 @@ func (c *defaultConfigurator) init() {
 	for _, s := range c.opts.sources {
 		cs, err := s.Load(c.ctx)
 		if err != nil {
+			if errors.Is(err, errors.ErrClosedConfigSource) {
+				log.Printf("config source %q is closed, skip loading", s.Name())
+
+				continue
+			}
+
 			log.Printf("load configure failed: %v", err)
 
 			c.wg.Go(func() {
@@ -147,6 +191,12 @@ func (c *defaultConfigurator) reload(s Source) {
 		cs, err := s.Load(c.ctx)
 		if err != nil {
 			if c.ctx.Err() != nil {
+				return
+			}
+
+			if errors.Is(err, errors.ErrClosedConfigSource) {
+				log.Printf("config source %q is closed, stop reloading", s.Name())
+
 				return
 			}
 
@@ -293,6 +343,14 @@ func (c *defaultConfigurator) watchSource(s Source) {
 				return
 			}
 
+			// A closed source cannot be watched again; retrying would only log the same error on
+			// every backoff.
+			if errors.Is(err, errors.ErrClosedConfigSource) {
+				log.Printf("config source %q is closed, stop watching", s.Name())
+
+				return
+			}
+
 			if !warned {
 				log.Printf("watching configure change failed: %v", err)
 				warned = true
@@ -342,7 +400,13 @@ func (c *defaultConfigurator) consume(w Watcher, delay time.Duration) (bool, tim
 
 		cs, err := w.Next()
 		if err != nil {
-			if c.ctx.Err() != nil || errors.Is(err, errors.ErrWatcherStopped) || errors.Is(err, io.EOF) {
+			// A watcher reports context.Canceled once it has been stopped, so the configurator has
+			// to open a new one instead of retrying the stopped watcher forever.
+			if c.ctx.Err() != nil ||
+				errors.Is(err, errors.ErrWatcherStopped) ||
+				errors.Is(err, errors.ErrClosedConfigSource) ||
+				errors.Is(err, context.Canceled) ||
+				errors.Is(err, io.EOF) {
 				return warned, delay
 			}
 
