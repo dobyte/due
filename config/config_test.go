@@ -191,7 +191,7 @@ func (s *closedWatchSource) Watch(context.Context) (config.Watcher, error) {
 	return nil, errors.ErrClosedConfigSource
 }
 
-// blockingSource blocks its second Load call until release is closed.
+// blockingSource blocks every Load call after the first until release is closed.
 type blockingSource struct {
 	*fakeSource
 	calls   atomic.Int32
@@ -244,6 +244,57 @@ func (s *reloadWatchSource) set(body string) {
 func (s *reloadWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.watches.Add(1) == 1 {
 		return &canceledWatcher{}, nil
+	}
+
+	return s.fakeSource.Watch(ctx)
+}
+
+// errorWatcher reports a watcher failure from Next.
+type errorWatcher struct {
+	err error
+}
+
+func (w *errorWatcher) Next() ([]*config.Configuration, error) { return nil, w.err }
+func (w *errorWatcher) Stop() error                            { return nil }
+
+// erroringWatchSource is a reloadWatchSource whose first watcher reports a non-terminal error, so
+// that the reopen and reload performed after the error can be observed.
+type erroringWatchSource struct {
+	*reloadWatchSource
+}
+
+func newErroringWatchSource(body string) *erroringWatchSource {
+	return &erroringWatchSource{reloadWatchSource: newReloadWatchSource(body)}
+}
+
+func (s *erroringWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.reloadWatchSource.watches.Add(1) == 1 {
+		return &errorWatcher{err: errors.New("fsnotify overflow")}, nil
+	}
+
+	return s.fakeSource.Watch(ctx)
+}
+
+// reloadFailingSource serves the first load, fails every later load and exposes only the first
+// watcher, so that a reload failure cannot be hidden by reopening the watcher.
+type reloadFailingSource struct {
+	*fakeSource
+
+	loads   atomic.Int32
+	watches atomic.Int32
+}
+
+func (s *reloadFailingSource) Load(context.Context, ...string) ([]*config.Configuration, error) {
+	if s.loads.Add(1) == 1 {
+		return s.fakeSource.Load(context.Background())
+	}
+
+	return nil, errors.New("config source is unavailable")
+}
+
+func (s *reloadFailingSource) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.watches.Add(1) > 1 {
+		return nil, errors.New("config watcher is unavailable")
 	}
 
 	return s.fakeSource.Watch(ctx)
@@ -484,6 +535,67 @@ func TestConfiguratorReloadsOnWatcherReopen(t *testing.T) {
 	}
 }
 
+// TestConfiguratorKeepsWatchingAfterReloadFailure verifies that a failed reload does not stop the
+// watcher from delivering changes.
+func TestConfiguratorKeepsWatchingAfterReloadFailure(t *testing.T) {
+	source := &reloadFailingSource{fakeSource: newFakeSource(`{"timezone":"Local"}`)}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	// Wait for the reload performed when the watcher opens, so the change below is not raced by it.
+	deadline := time.Now().Add(5 * time.Second)
+
+	for source.loads.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the watcher reload did not run")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	waitNames(t, changed, "config")
+
+	if got := c.Get("config.timezone").String(); got != "UTC" {
+		t.Fatalf("the watcher is not delivering changes after a failed reload, actual: %s", got)
+	}
+}
+
+// TestConfiguratorReopensWatcherAfterError verifies that a non-terminal watcher error reopens the
+// watcher and reloads the source, so events lost during the failure are restored.
+func TestConfiguratorReopensWatcherAfterError(t *testing.T) {
+	source := newErroringWatchSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	// The first watcher fails immediately; the change lands while the configurator backs off before
+	// reopening it.
+	source.set(`{"timezone":"UTC"}`)
+
+	deadline := time.Now().Add(5 * time.Second)
+
+	for source.watches.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the watcher is not reopened after an error")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	waitNames(t, changed, "config")
+
+	if got := c.Get("config.timezone").String(); got != "UTC" {
+		t.Fatalf("the source is not reloaded after a watcher error, actual: %s", got)
+	}
+}
+
 // TestConfiguratorSkipsUnchangedConfig verifies that re-applying an unchanged config does not notify
 // the watchers.
 func TestConfiguratorSkipsUnchangedConfig(t *testing.T) {
@@ -593,7 +705,9 @@ func TestConfiguratorCloseWaitsForInflightLoad(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 
-	for source.calls.Load() < 2 {
+	// The first Load is the startup load, the second one is the reload performed when the watcher
+	// opens, and the third one is the explicit Load that Close has to wait for.
+	for source.calls.Load() < 3 {
 		if time.Now().After(deadline) {
 			t.Fatal("the explicit Load call did not start")
 		}

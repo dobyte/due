@@ -86,6 +86,7 @@ type defaultConfigurator struct {
 	pending  map[string]struct{}
 	chNotify chan struct{}
 	opsMu    sync.RWMutex
+	reloads  sync.Map
 	closed   atomic.Bool
 	wg       sync.WaitGroup
 }
@@ -190,9 +191,7 @@ func (c *defaultConfigurator) init() {
 
 			log.Printf("load configure failed: %v", err)
 
-			c.wg.Go(func() {
-				c.reload(s)
-			})
+			c.scheduleReload(s)
 
 			continue
 		}
@@ -201,10 +200,14 @@ func (c *defaultConfigurator) init() {
 	}
 }
 
-// reload retries loading the configurations of a source that failed at startup and merges them into
-// the store once the source becomes available.
+// reload retries loading the configurations of a source and merges them into the store once the
+// source becomes available. It backs off between attempts and logs only the first failure of a
+// streak.
 func (c *defaultConfigurator) reload(s Source) {
-	delay := watchMinBackoff
+	var (
+		delay  = watchMinBackoff
+		warned bool
+	)
 
 	for {
 		if !c.sleep(delay) {
@@ -223,11 +226,18 @@ func (c *defaultConfigurator) reload(s Source) {
 				return
 			}
 
-			log.Printf("load configure failed: %v", err)
+			if !warned {
+				log.Printf("reload configure of source %q failed: %v", s.Name(), err)
+				warned = true
+			}
 
 			delay = nextWatchDelay(delay)
 
 			continue
+		}
+
+		if warned {
+			log.Printf("config source %q reload recovered", s.Name())
 		}
 
 		if names := c.apply(cs); len(names) > 0 {
@@ -236,6 +246,20 @@ func (c *defaultConfigurator) reload(s Source) {
 
 		return
 	}
+}
+
+// scheduleReload starts a background reload retry for the source unless one is already running, so
+// that a failed load can recover without blocking the watcher of the source.
+func (c *defaultConfigurator) scheduleReload(s Source) {
+	if _, loaded := c.reloads.LoadOrStore(s.Name(), struct{}{}); loaded {
+		return
+	}
+
+	c.wg.Go(func() {
+		defer c.reloads.Delete(s.Name())
+
+		c.reload(s)
+	})
 }
 
 // apply decodes the given configurations and stores them in the value store. The value of every
@@ -403,13 +427,15 @@ func (c *defaultConfigurator) watchSource(s Source) {
 		// reported, so reopening a watcher does not notify the watchers again.
 		names, loadErr := c.reloadSource(s)
 		if loadErr != nil {
-			_ = w.Stop()
-
 			if c.ctx.Err() != nil {
+				_ = w.Stop()
+
 				return
 			}
 
 			if errors.Is(loadErr, errors.ErrClosedConfigSource) {
+				_ = w.Stop()
+
 				log.Printf("config source %q is closed, stop watching", s.Name())
 
 				return
@@ -420,23 +446,19 @@ func (c *defaultConfigurator) watchSource(s Source) {
 				warned = true
 			}
 
-			if !c.sleep(delay) {
-				return
-			}
-
-			delay = nextWatchDelay(delay)
-
-			continue
-		}
-
-		if len(names) > 0 {
+			// Keep consuming the watcher: changes still arrive while the reload is retried in the
+			// background, so a temporarily unreadable source does not disable hot reload.
+			c.scheduleReload(s)
+		} else if len(names) > 0 {
 			c.scheduleNotify(names)
 		}
 
 		warned = false
-		delay = watchMinBackoff
 
-		warned, delay = c.consume(w, delay)
+		if !c.consume(w) {
+			delay = watchMinBackoff
+		}
+
 		if c.ctx.Err() != nil {
 			return
 		}
@@ -462,49 +484,37 @@ func (c *defaultConfigurator) reloadSource(s Source) ([]string, error) {
 	return c.apply(cs), nil
 }
 
-// consume reads the changes of a watcher until it stops or the configurator is closed. It returns
-// the current warning state and the retry delay for the next watcher.
-func (c *defaultConfigurator) consume(w Watcher, delay time.Duration) (bool, time.Duration) {
+// consume reads the changes of a watcher until it stops or the configurator is closed. Any read
+// error ends the watcher as well: the caller reopens it and reloads the source, which restores the
+// events that were lost during the failure (for example, an fsnotify overflow). It reports whether
+// the watcher ended with a failure, so the caller can keep the backoff growing.
+func (c *defaultConfigurator) consume(w Watcher) (errored bool) {
 	defer w.Stop()
-
-	var warned bool
 
 	for {
 		select {
 		case <-c.ctx.Done():
-			return warned, delay
+			return false
 		default:
 			// exec watch
 		}
 
 		cs, err := w.Next()
 		if err != nil {
-			// A watcher reports context.Canceled once it has been stopped, so the configurator has
-			// to open a new one instead of retrying the stopped watcher forever.
-			if c.ctx.Err() != nil ||
-				errors.Is(err, errors.ErrWatcherStopped) ||
-				errors.Is(err, errors.ErrClosedConfigSource) ||
-				errors.Is(err, context.Canceled) ||
-				errors.Is(err, io.EOF) {
-				return warned, delay
-			}
-
-			if !warned {
+			// A watcher reports context.Canceled or a stopped error once it has ended, which is not
+			// a failure worth logging.
+			if c.ctx.Err() == nil &&
+				!errors.Is(err, errors.ErrWatcherStopped) &&
+				!errors.Is(err, errors.ErrClosedConfigSource) &&
+				!errors.Is(err, context.Canceled) &&
+				!errors.Is(err, io.EOF) {
 				log.Printf("watching configure change failed: %v", err)
-				warned = true
+
+				return true
 			}
 
-			if !c.sleep(delay) {
-				return warned, delay
-			}
-
-			delay = nextWatchDelay(delay)
-
-			continue
+			return false
 		}
-
-		warned = false
-		delay = watchMinBackoff
 
 		if names := c.apply(cs); len(names) > 0 {
 			c.scheduleNotify(names)
