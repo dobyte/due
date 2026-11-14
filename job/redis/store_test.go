@@ -1,7 +1,7 @@
 package redis
 
 import (
-	"errors"
+	stderrors "errors"
 	"testing"
 	"time"
 
@@ -44,7 +44,7 @@ func TestNextScheduleRejectsInvalidCron(t *testing.T) {
 		ScheduleType: job.ScheduleCron,
 		ScheduleExpr: "invalid",
 	}, time.Now())
-	if !errors.Is(err, job.ErrInvalidSchedule) {
+	if !stderrors.Is(err, job.ErrInvalidSchedule) {
 		t.Fatalf("NextSchedule() error = %v, want ErrInvalidSchedule", err)
 	}
 }

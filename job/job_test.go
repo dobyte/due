@@ -2,7 +2,7 @@ package job
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"testing"
 	"time"
 )
@@ -35,7 +35,7 @@ func TestValidateDefinitionAppliesDefaults(t *testing.T) {
 }
 
 func TestClassifyError(t *testing.T) {
-	base := errors.New("temporary")
+	base := stderrors.New("temporary")
 	tests := []struct {
 		name string
 		err  error
