@@ -797,7 +797,7 @@ trace_id
 
 - Metrics、可选 Logger 和事件唤醒 Notifier 已完成。
 - Outbox 或其他跨进程通知适配器。
-- 管理接口。
+- `ManagementHandler` 管理接口已完成，鉴权由宿主应用中间件负责。
 - 任务历史归档。
 - Redis 故障切换和长任务演练。
 
@@ -830,7 +830,7 @@ MySQL/MongoDB 可替换
 SQLite 暂不考虑
 ~~~
 
-当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger 和进程内事件唤醒 Notifier。真实 Redis/MySQL/MongoDB 集群演练、跨进程通知、管理接口和历史归档仍属于后续工作。
+当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger、进程内事件唤醒 Notifier、Redis Pub/Sub 通知和管理接口。真实 Redis/MySQL/MongoDB 集群演练、任务历史归档仍属于后续工作。
 
 ## 24. 当前代码入口
 
@@ -850,3 +850,22 @@ store := mongo.NewStore(mongo.WithDB(database))
 MySQL 和 MongoDB 的 adapter 不负责创建连接或关闭注入的连接；应用负责连接池生命周期。Redis adapter 管理自己创建的 Redis client，也支持 `WithClient` 注入外部 client。
 
 Service 的生产能力通过可选接口注入：`WithMetrics` 接收计数和耗时观测，`WithLogger` 接收 Due Logger 兼容接口，`NewChannelNotifier` 提供进程内立即唤醒。Redis 适配器提供 `redis.NewNotifier`，通过 Pub/Sub 向多个 Worker 广播唤醒事件；其他跨进程通知可复用同一 `EventNotifier` 接口。
+
+管理接口通过 `job.NewManagementHandler(service)` 挂载到宿主 HTTP 服务。当前路由如下：
+
+~~~text
+GET    /stats
+GET    /jobs                         # 当前返回到期任务定义
+POST   /jobs                         # 创建任务定义
+GET    /jobs/{job_id}
+PUT    /jobs/{job_id}?version={n}    # 更新定义并做乐观版本校验
+DELETE /jobs/{job_id}?version={n}    # 乐观版本校验
+POST   /jobs/{job_id}/pause?version={n}
+POST   /jobs/{job_id}/resume?version={n}
+POST   /jobs/{job_id}/trigger
+GET    /runs/{run_id}
+POST   /runs/{run_id}/cancel
+POST   /runs/{run_id}/retry
+~~~
+
+Handler 只负责路由、JSON 编解码和错误映射；认证、授权、限流和审计由宿主应用的外层中间件提供。
