@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/core/pattern"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -37,7 +37,7 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
-	o.files = pattern.NormalizeFiles(o.files)
+	o.files = coreconfig.NormalizeFiles(o.files)
 
 	s := &Source{}
 	s.opts = o
@@ -176,7 +176,7 @@ func (s *Source) matchFile(file string) bool {
 		return true
 	}
 
-	return pattern.MatchFile(s.opts.files, file)
+	return coreconfig.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It pulls the full configuration once as the

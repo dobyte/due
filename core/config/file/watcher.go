@@ -1,4 +1,4 @@
-package core
+package file
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/config"
 	"github.com/fsnotify/fsnotify"
 )
 

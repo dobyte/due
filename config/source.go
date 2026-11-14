@@ -1,39 +1,19 @@
 package config
 
-import "context"
+import "github.com/dobyte/due/v2/core/config"
 
 // The read-write modes of a [Source].
 const (
-	ReadOnly  Mode = "read-only"  // ReadOnly: the config source can only be read
-	WriteOnly Mode = "write-only" // WriteOnly: the config source can only be written
-	ReadWrite Mode = "read-write" // ReadWrite: the config source can be read and written
+	ReadOnly  = config.ReadOnly  // ReadOnly: the config source can only be read
+	WriteOnly = config.WriteOnly // WriteOnly: the config source can only be written
+	ReadWrite = config.ReadWrite // ReadWrite: the config source can be read and written
 )
 
 // Mode is the read-write mode of a [Source].
-type Mode string
+type Mode = config.Mode
 
 // Source loads, stores and watches configurations.
-type Source interface {
-	// Name returns the name of the source.
-	Name() string
-	// Load loads the configurations of the given files, or every file of the source when file is
-	// empty.
-	Load(ctx context.Context, file ...string) ([]*Configuration, error)
-	// Store saves content as file.
-	Store(ctx context.Context, file string, content []byte) error
-	// Watch starts watching the source and returns a [Watcher].
-	Watch(ctx context.Context) (Watcher, error)
-	// Close closes the source.
-	Close() error
-}
+type Source = config.Source
 
 // Watcher watches the config changes of a [Source].
-type Watcher interface {
-	// Next blocks until a config changes and returns the changed configurations. A non-nil error
-	// ends the watch: the configurator stops the watcher, reopens it and reloads the source, so a
-	// watcher may report transient failures as errors. Next must not be called again after it has
-	// returned an error.
-	Next() ([]*Configuration, error)
-	// Stop stops watching.
-	Stop() error
-}
+type Watcher = config.Watcher

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/core/pattern"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients"
@@ -83,11 +83,11 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
-	o.files = pattern.NormalizeFiles(o.files)
+	o.files = coreconfig.NormalizeFiles(o.files)
 
 	s := &Source{opts: o}
 	for _, file := range o.files {
-		if pattern.IsWildcard(file) {
+		if coreconfig.IsWildcard(file) {
 			s.patternMode = true
 			break
 		}
@@ -270,7 +270,7 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 // matchFile reports whether dataId is selected by the configured file list, which may mix exact
 // dataIds and "*" patterns.
 func (s *Source) matchFile(dataId string) bool {
-	return pattern.MatchFile(s.opts.files, dataId)
+	return coreconfig.MatchFile(s.opts.files, dataId)
 }
 
 // fixedItems converts an exact file list into config list items, so that loading reuses the same
@@ -357,7 +357,7 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 	// An exact entry does not necessarily contain any search term, so add the missing ones. The
 	// synthetic item carries no md5 and its content is fetched individually.
 	for _, file := range s.opts.files {
-		if pattern.IsWildcard(file) {
+		if coreconfig.IsWildcard(file) {
 			continue
 		}
 		if _, ok := seen[file]; ok {
@@ -385,7 +385,7 @@ func (s *Source) searchTerms() []string {
 	)
 
 	for _, file := range s.opts.files {
-		if !pattern.IsWildcard(file) {
+		if !coreconfig.IsWildcard(file) {
 			continue
 		}
 
@@ -412,7 +412,7 @@ func (s *Source) searchTerms() []string {
 // server-side keyword, so that the group has to be scanned once for it.
 func (s *Source) hasUntetheredPattern() bool {
 	for _, file := range s.opts.files {
-		if pattern.IsWildcard(file) && patternTerm(file) == "" {
+		if coreconfig.IsWildcard(file) && patternTerm(file) == "" {
 			return true
 		}
 	}

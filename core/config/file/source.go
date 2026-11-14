@@ -1,4 +1,4 @@
-package core
+package file
 
 import (
 	"context"
@@ -10,8 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/core/pattern"
+	"github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 )
 
@@ -34,7 +33,7 @@ var _ config.Source = &Source{}
 // unless it contains "*", which matches any sequence of characters. When files is empty, every
 // file under the source path is available.
 func NewSource(path string, mode config.Mode, files ...string) *Source {
-	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode, files: pattern.NormalizeFiles(files)}
+	return &Source{path: strings.TrimSuffix(path, "/"), mode: mode, files: config.NormalizeFiles(files)}
 }
 
 // Name returns the name of the source.
@@ -199,7 +198,7 @@ func (s *Source) matchFile(path string) bool {
 		rel = filepath.Base(absPath)
 	}
 
-	return pattern.MatchFile(s.files, filepath.ToSlash(rel))
+	return config.MatchFile(s.files, filepath.ToSlash(rel))
 }
 
 // isRoot reports whether path is the source path, which is either the config directory or, in

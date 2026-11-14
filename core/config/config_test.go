@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 )
 

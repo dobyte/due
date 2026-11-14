@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/core/pattern"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
@@ -1042,7 +1042,7 @@ func TestNormalizeFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pattern.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
+			if got := coreconfig.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
 				t.Fatalf("expect %v, got %v", tt.want, got)
 			}
 		})

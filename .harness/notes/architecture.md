@@ -566,7 +566,7 @@ NodeLinker 观察绑定到本 NID 的用户时登记 Node 关闭等待计数，�
 
 **配置建议**：关键启动参数显式校验；动态参数采用版本化整包、原子应用与失败回滚；明确空值/删除语义，避免同名文件和同名 Source。只有设计了重配置回调的参数才视为可在线调整。
 
-源码：[etc/etc.go](../../etc/etc.go)、[config/configurator.go](../../config/configurator.go)、[config/source.go](../../config/source.go)、[config/options.go](../../config/options.go)、[mode/mode.go](../../mode/mode.go)、[testdata/etc/etc.toml](../../testdata/etc/etc.toml)。
+源码：[etc/etc.go](../../etc/etc.go)、[core/config/configurator.go](../../core/config/configurator.go)、[core/config/source.go](../../core/config/source.go)、[core/config/options.go](../../core/config/options.go)、[mode/mode.go](../../mode/mode.go)、[testdata/etc/etc.toml](../../testdata/etc/etc.toml)。
 
 ### 12.2 公共接口与实现矩阵
 
@@ -877,7 +877,7 @@ request ID、UID、room ID、GID/NID、Route、generation 用于日志和追踪�
 | 超时、重连及内存回收 | `internal/transporter/internal/drpc/`、`core/buffer/`、`core/queue/` |
 | Mesh 如何发现与调度 | `cluster/mesh/`、`transport/{grpc,rpcx}/internal/resolver/` |
 | 实例发现与位置缓存差异 | `registry/`、`locate/`、`internal/link/` |
-| 动态配置为何未生效 | `etc/etc.go`、`config/configurator.go`、组件 `defaultOptions` |
+| 动态配置为何未生效 | `etc/etc.go`、`core/config/configurator.go`、组件 `defaultOptions` |
 | 缓存、锁、事件保证什么 | `cache/`、`lock/`、`eventbus/` 的具体实现 |
 
 维护本文时先更新代码 SHA、版本及模块基线，再核查通信路径、默认值和接口契约。涉及路由选项、Context/Buffer 所有权、ACK、状态选择、Actor 终结或配置合并的变更，应同步修改对应设计章节和验证场景；业务建议始终与已实现机制分开描述。

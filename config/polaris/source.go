@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/core/pattern"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
@@ -67,7 +67,7 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
-	o.files = pattern.NormalizeFiles(o.files)
+	o.files = coreconfig.NormalizeFiles(o.files)
 
 	s := &Source{}
 	s.opts = o
@@ -181,7 +181,7 @@ func (s *Source) exactFiles() ([]string, bool) {
 	)
 
 	for _, file := range s.opts.files {
-		if pattern.IsWildcard(file) {
+		if coreconfig.IsWildcard(file) {
 			hasPattern = true
 			continue
 		}
@@ -322,7 +322,7 @@ func (s *Source) matchFile(file string) bool {
 		return true
 	}
 
-	return pattern.MatchFile(s.opts.files, file)
+	return coreconfig.MatchFile(s.opts.files, file)
 }
 
 // Watch watches configuration items. It creates a new watcher and registers it
@@ -496,7 +496,7 @@ func (s *Source) refresh() {
 // cannot discover the files to subscribe.
 func (s *Source) retrySubscriptions() {
 	for _, fileName := range s.opts.files {
-		if pattern.IsWildcard(fileName) {
+		if coreconfig.IsWildcard(fileName) {
 			continue
 		}
 

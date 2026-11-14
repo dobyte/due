@@ -1,10 +1,10 @@
-package pattern_test
+package config_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/dobyte/due/v2/core/pattern"
+	"github.com/dobyte/due/v2/core/config"
 )
 
 func TestNormalizeFiles(t *testing.T) {
@@ -22,7 +22,7 @@ func TestNormalizeFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pattern.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
+			if got := config.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
 				t.Fatalf("expect %v, got %v", tt.want, got)
 			}
 		})
@@ -41,7 +41,7 @@ func TestIsWildcard(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := pattern.IsWildcard(tt.entry); got != tt.want {
+		if got := config.IsWildcard(tt.entry); got != tt.want {
 			t.Fatalf("IsWildcard(%q) = %v, want %v", tt.entry, got, tt.want)
 		}
 	}
@@ -69,7 +69,7 @@ func TestMatchWildcard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pattern.MatchWildcard(tt.pattern, tt.value); got != tt.want {
+			if got := config.MatchWildcard(tt.pattern, tt.value); got != tt.want {
 				t.Fatalf("MatchWildcard(%q, %q) = %v, want %v", tt.pattern, tt.value, got, tt.want)
 			}
 		})
@@ -94,7 +94,7 @@ func TestMatchFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pattern.MatchFile(tt.files, tt.value); got != tt.want {
+			if got := config.MatchFile(tt.files, tt.value); got != tt.want {
 				t.Fatalf("MatchFile(%v, %q) = %v, want %v", tt.files, tt.value, got, tt.want)
 			}
 		})
