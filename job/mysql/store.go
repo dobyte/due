@@ -12,12 +12,16 @@ import (
 	"github.com/dobyte/due/v2/job"
 )
 
-var _ job.JobStore = (*Store)(nil)
+var (
+	_ job.JobStore     = (*Store)(nil)
+	_ job.HistoryStore = (*Store)(nil)
+)
 
 type Store struct {
 	db         *sql.DB
 	definition string
 	run        string
+	history    string
 	skipLocked bool
 }
 
@@ -32,6 +36,7 @@ func NewStore(opts ...Option) *Store {
 		db:         o.db,
 		definition: o.tablePrefix + "_definition",
 		run:        o.tablePrefix + "_run",
+		history:    o.tablePrefix + "_history",
 		skipLocked: o.skipLocked,
 	}
 }
@@ -619,8 +624,144 @@ func (s *Store) GetStats(ctx context.Context, req job.StatsRequest) (*job.Stats,
 	return stats, rows.Err()
 }
 
+var mysqlRunColumns = "run_id,job_id,task_type,payload,scheduled_at,ready_at,retry_at,timeout_ms,status,attempt,concurrency_policy,max_attempts,retry_policy,lease_owner,lease_until,fencing_token,started_at,finished_at,error_class,error_code,error_message,result_ref,output,created_at,updated_at"
+
+func (s *Store) ArchiveRuns(ctx context.Context, req job.ArchiveRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	req.Limit = mysqlHistoryLimit(req.Limit)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf(
+		"SELECT %s FROM %s WHERE status IN ('succeeded','dead','canceled') AND updated_at<=? ORDER BY updated_at LIMIT ? FOR UPDATE",
+		mysqlRunColumns, s.run,
+	), millis(req.Before), req.Limit)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	runs := make([]*job.Run, 0, req.Limit)
+	for rows.Next() {
+		run, scanErr := scanRun(rows)
+		if scanErr != nil {
+			rows.Close()
+			_ = tx.Rollback()
+			return 0, scanErr
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		_ = tx.Rollback()
+		return 0, err
+	}
+	rows.Close()
+	for _, run := range runs {
+		if _, err := tx.ExecContext(ctx,
+			fmt.Sprintf("INSERT INTO %s (%s) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", s.history, mysqlRunColumns),
+			mysqlRunValues(run)...,
+		); err != nil {
+			_ = tx.Rollback()
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE run_id=?", s.run), run.ID); err != nil {
+			_ = tx.Rollback()
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(runs), nil
+}
+
+func (s *Store) GetHistory(ctx context.Context, runID string) (*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	row := s.db.QueryRowContext(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE run_id=?", mysqlRunColumns, s.history), runID)
+	run, err := scanRun(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, job.ErrRunNotFound
+	}
+	return run, err
+}
+
+func (s *Store) ListHistory(ctx context.Context, req job.HistoryRequest) ([]*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	limit := mysqlHistoryLimit(req.Limit)
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE 1=1", mysqlRunColumns, s.history)
+	args := make([]any, 0, 5)
+	if req.JobID != "" {
+		query += " AND job_id=?"
+		args = append(args, req.JobID)
+	}
+	if req.Status != "" {
+		query += " AND status=?"
+		args = append(args, string(req.Status))
+	}
+	if !req.Before.IsZero() {
+		query += " AND updated_at<=?"
+		args = append(args, millis(req.Before))
+	}
+	if !req.After.IsZero() {
+		query += " AND updated_at>=?"
+		args = append(args, millis(req.After))
+	}
+	query += " ORDER BY updated_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	runs := make([]*job.Run, 0, limit)
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, run)
+	}
+	return runs, rows.Err()
+}
+
+func (s *Store) PurgeHistory(ctx context.Context, req job.PurgeHistoryRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	result, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE updated_at<=? LIMIT ?", s.history), millis(req.Before), mysqlHistoryLimit(req.Limit))
+	if err != nil {
+		return 0, err
+	}
+	affected, err := result.RowsAffected()
+	return int(affected), err
+}
+
 type rowScanner interface {
 	Scan(dest ...any) error
+}
+
+func mysqlRunValues(run *job.Run) []any {
+	return []any{run.ID, run.JobID, run.TaskType, bytesOrEmpty(run.Payload), millis(run.ScheduledAt), millis(run.ReadyAt), millis(run.RetryAt), run.Timeout.Milliseconds(), string(run.Status), run.Attempt, string(run.ConcurrencyPolicy), run.MaxAttempts, encodeRetryPolicy(run.RetryPolicy), run.LeaseOwner, millis(run.LeaseUntil), run.FencingToken, millisPtr(run.StartedAt), millisPtr(run.FinishedAt), string(run.ErrorClass), run.ErrorCode, run.ErrorMessage, run.ResultRef, bytesOrEmpty(run.Output), millis(run.CreatedAt), millis(run.UpdatedAt)}
+}
+
+func mysqlHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	return limit
 }
 
 func scanDefinition(row rowScanner) (*job.Definition, error) {

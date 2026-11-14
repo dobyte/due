@@ -19,10 +19,13 @@ const (
 	pendingSuffix       = ":run:pending"
 	retrySuffix         = ":run:retry"
 	leaseSuffix         = ":run:lease"
+	terminalSuffix      = ":run:terminal"
+	historySuffix       = ":run:history"
 )
 
 var (
-	_ job.JobStore = (*Store)(nil)
+	_ job.JobStore     = (*Store)(nil)
+	_ job.HistoryStore = (*Store)(nil)
 
 	createDefinitionScript = redis.NewScript(
 		"if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end " +
@@ -85,6 +88,16 @@ var (
 			"table.insert(result, token) " +
 			"end end end " +
 			"return result",
+	)
+	archiveRunScript = redis.NewScript(
+		"if redis.call('EXISTS', KEYS[1]) == 0 then redis.call('ZREM', KEYS[3], ARGV[2]) return 0 end " +
+			"local values = redis.call('HGETALL', KEYS[1]) local updated = redis.call('HGET', KEYS[1], 'updated_at') " +
+			"if #values > 0 then redis.call('HSET', KEYS[2], unpack(values)) end " +
+			"redis.call('DEL', KEYS[1]) redis.call('ZREM', KEYS[3], ARGV[2]) redis.call('ZADD', KEYS[4], updated, ARGV[2]) return 1",
+	)
+	purgeHistoryScript = redis.NewScript(
+		"if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('DEL', KEYS[1]) end " +
+			"redis.call('ZREM', KEYS[2], ARGV[1]) return 1",
 	)
 )
 
@@ -194,6 +207,18 @@ func (s *Store) retryKey() string {
 
 func (s *Store) leaseKey() string {
 	return s.opts.prefix + leaseSuffix
+}
+
+func (s *Store) terminalKey() string {
+	return s.opts.prefix + terminalSuffix
+}
+
+func (s *Store) historyIndexKey() string {
+	return s.opts.prefix + historySuffix
+}
+
+func (s *Store) historyKey(runID string) string {
+	return s.historyIndexKey() + ":" + runID
 }
 
 func (s *Store) runPrefix() string {
@@ -603,10 +628,10 @@ func (s *Store) CompleteRun(ctx context.Context, req job.CompleteRunRequest) (jo
 			"if redis.call('HGET', KEYS[1], 'lease_owner') ~= ARGV[1] then return 0 end "+
 			"if redis.call('HGET', KEYS[1], 'fencing_token') ~= ARGV[2] then return 0 end "+
 			"redis.call('HSET', KEYS[1], 'status', 'succeeded', 'finished_at', ARGV[3], 'updated_at', ARGV[3], 'result_ref', ARGV[4], 'output', ARGV[5]) "+
-			"redis.call('ZREM', KEYS[2], ARGV[6]) "+
+			"redis.call('ZREM', KEYS[2], ARGV[6]) redis.call('ZADD', KEYS[4], ARGV[3], ARGV[6]) "+
 			"local job_id = redis.call('HGET', KEYS[1], 'job_id') "+
 			"redis.call('DEL', KEYS[3] .. job_id) return 1",
-		[]string{s.runKey(req.RunID), s.leaseKey(), s.activePrefix()},
+		[]string{s.runKey(req.RunID), s.leaseKey(), s.activePrefix(), s.terminalKey()},
 		req.OwnerID, strconv.FormatInt(req.FencingToken, 10),
 		strconv.FormatInt(time.Now().UnixMilli(), 10), req.ResultRef, output, req.RunID,
 	).Int()
@@ -630,8 +655,9 @@ func (s *Store) FailRun(ctx context.Context, req job.FailRunRequest) (job.Commit
 			"redis.call('HSET', KEYS[1], 'status', status, 'error_class', ARGV[3], 'error_code', ARGV[5], 'error_message', ARGV[6], 'retry_at', ARGV[4], 'finished_at', ARGV[7], 'updated_at', ARGV[7]) "+
 			"redis.call('ZREM', KEYS[2], ARGV[8]) "+
 			"if status == 'retry_wait' then redis.call('ZADD', KEYS[3], ARGV[4], ARGV[8]) end "+
-			"local job_id = redis.call('HGET', KEYS[1], 'job_id') redis.call('DEL', KEYS[4] .. job_id) return 1",
-		[]string{s.runKey(req.RunID), s.leaseKey(), s.retryKey(), s.activePrefix()},
+			"local job_id = redis.call('HGET', KEYS[1], 'job_id') redis.call('DEL', KEYS[4] .. job_id) "+
+			"if status == 'dead' then redis.call('ZADD', KEYS[5], ARGV[7], ARGV[8]) end return 1",
+		[]string{s.runKey(req.RunID), s.leaseKey(), s.retryKey(), s.activePrefix(), s.terminalKey()},
 		req.OwnerID, strconv.FormatInt(req.FencingToken, 10), string(req.Class), retryAt,
 		req.Code, req.Message, strconv.FormatInt(time.Now().UnixMilli(), 10), req.RunID,
 	).Int()
@@ -650,10 +676,10 @@ func (s *Store) CancelRun(ctx context.Context, req job.CancelRunRequest) error {
 		"local status = redis.call('HGET', KEYS[1], 'status') "+
 			"if status == false then return -1 end "+
 			"if status == 'succeeded' or status == 'dead' or status == 'canceled' then return 0 end "+
-			"redis.call('HSET', KEYS[1], 'status', 'canceled', 'updated_at', ARGV[1]) "+
+			"redis.call('HSET', KEYS[1], 'status', 'canceled', 'finished_at', ARGV[1], 'updated_at', ARGV[1]) "+
 			"redis.call('ZREM', KEYS[2], ARGV[2]) redis.call('ZREM', KEYS[3], ARGV[2]) redis.call('ZREM', KEYS[4], ARGV[2]) "+
-			"local job_id = redis.call('HGET', KEYS[1], 'job_id') redis.call('DEL', KEYS[5] .. job_id) return 1",
-		[]string{s.runKey(req.RunID), s.pendingKey(), s.retryKey(), s.leaseKey(), s.activePrefix()},
+			"redis.call('ZADD', KEYS[6], ARGV[1], ARGV[2]) local job_id = redis.call('HGET', KEYS[1], 'job_id') redis.call('DEL', KEYS[5] .. job_id) return 1",
+		[]string{s.runKey(req.RunID), s.pendingKey(), s.retryKey(), s.leaseKey(), s.activePrefix(), s.terminalKey()},
 		strconv.FormatInt(time.Now().UnixMilli(), 10), req.RunID,
 	).Int()
 	if err != nil {
@@ -727,6 +753,117 @@ func (s *Store) GetStats(ctx context.Context, req job.StatsRequest) (*job.Stats,
 		RetryWait: retryWait,
 		Running:   running,
 	}, nil
+}
+
+func (s *Store) ArchiveRuns(ctx context.Context, req job.ArchiveRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	limit := redisHistoryLimit(req.Limit)
+	ids, err := s.client.ZRangeByScore(ctx, s.terminalKey(), &redis.ZRangeBy{Min: "-inf", Max: strconv.FormatInt(req.Before.UnixMilli(), 10), Offset: 0, Count: int64(limit)}).Result()
+	if err != nil {
+		return 0, err
+	}
+	archived := 0
+	for _, runID := range ids {
+		result, err := archiveRunScript.Run(ctx, s.client, []string{s.runKey(runID), s.historyKey(runID), s.terminalKey(), s.historyIndexKey()}, strconv.FormatInt(req.Before.UnixMilli(), 10), runID).Int()
+		if err != nil {
+			return archived, err
+		}
+		archived += result
+	}
+	return archived, nil
+}
+
+func (s *Store) GetHistory(ctx context.Context, runID string) (*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	values, err := s.client.HGetAll(ctx, s.historyKey(runID)).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return nil, job.ErrRunNotFound
+	}
+	return decodeRun(values)
+}
+
+func (s *Store) ListHistory(ctx context.Context, req job.HistoryRequest) ([]*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	limit := redisHistoryLimit(req.Limit)
+	minScore, maxScore := "-inf", "+inf"
+	if !req.After.IsZero() {
+		minScore = strconv.FormatInt(req.After.UnixMilli(), 10)
+	}
+	if !req.Before.IsZero() {
+		maxScore = strconv.FormatInt(req.Before.UnixMilli(), 10)
+	}
+	runs := make([]*job.Run, 0, limit)
+	for offset := int64(0); len(runs) < limit; offset += int64(limit) {
+		ids, err := s.client.ZRevRangeByScore(ctx, s.historyIndexKey(), &redis.ZRangeBy{Max: maxScore, Min: minScore, Offset: offset, Count: int64(limit)}).Result()
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) == 0 {
+			break
+		}
+		for _, runID := range ids {
+			run, err := s.GetHistory(ctx, runID)
+			if errors.Is(err, job.ErrRunNotFound) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if req.JobID != "" && run.JobID != req.JobID || req.Status != "" && run.Status != req.Status {
+				continue
+			}
+			runs = append(runs, run)
+			if len(runs) >= limit {
+				break
+			}
+		}
+		if len(ids) < limit {
+			break
+		}
+	}
+	return runs, nil
+}
+
+func (s *Store) PurgeHistory(ctx context.Context, req job.PurgeHistoryRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	limit := redisHistoryLimit(req.Limit)
+	ids, err := s.client.ZRangeByScore(ctx, s.historyIndexKey(), &redis.ZRangeBy{Min: "-inf", Max: strconv.FormatInt(req.Before.UnixMilli(), 10), Offset: 0, Count: int64(limit)}).Result()
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for _, runID := range ids {
+		result, err := purgeHistoryScript.Run(ctx, s.client, []string{s.historyKey(runID), s.historyIndexKey()}, runID).Int()
+		if err != nil {
+			return purged, err
+		}
+		purged += result
+	}
+	return purged, nil
+}
+
+func redisHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	return limit
 }
 
 func definitionFields(definition *job.Definition) []any {

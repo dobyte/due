@@ -25,5 +25,13 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "retry_at", Value: 1}}},
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "lease_until", Value: 1}}},
 	})
+	if err != nil {
+		return err
+	}
+	_, err = s.history.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "updated_at", Value: -1}}},
+		{Keys: bson.D{{Key: "job_id", Value: 1}, {Key: "updated_at", Value: -1}}},
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "updated_at", Value: -1}}},
+	})
 	return err
 }

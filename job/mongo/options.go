@@ -8,10 +8,11 @@ type storeOptions struct {
 	db             *mongo.Database
 	definitionColl string
 	runColl        string
+	historyColl    string
 }
 
 func defaultOptions() *storeOptions {
-	return &storeOptions{definitionColl: "due_job_definition", runColl: "due_job_run"}
+	return &storeOptions{definitionColl: "due_job_definition", runColl: "due_job_run", historyColl: "due_job_history"}
 }
 
 func WithDB(db *mongo.Database) Option { return func(o *storeOptions) { o.db = db } }
@@ -21,6 +22,7 @@ func WithCollectionPrefix(prefix string) Option {
 		if prefix != "" {
 			o.definitionColl = prefix + "_definition"
 			o.runColl = prefix + "_run"
+			o.historyColl = prefix + "_history"
 		}
 	}
 }

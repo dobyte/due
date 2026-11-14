@@ -12,12 +12,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var _ job.JobStore = (*Store)(nil)
+var (
+	_ job.JobStore     = (*Store)(nil)
+	_ job.HistoryStore = (*Store)(nil)
+)
 
 type Store struct {
 	db          *mongo.Database
 	definitions *mongo.Collection
 	runs        *mongo.Collection
+	history     *mongo.Collection
 }
 
 type retryDocument struct {
@@ -81,7 +85,7 @@ func NewStore(opts ...Option) *Store {
 	for _, opt := range opts {
 		opt(o)
 	}
-	return &Store{db: o.db, definitions: collection(o.db, o.definitionColl), runs: collection(o.db, o.runColl)}
+	return &Store{db: o.db, definitions: collection(o.db, o.definitionColl), runs: collection(o.db, o.runColl), history: collection(o.db, o.historyColl)}
 }
 
 func collection(db *mongo.Database, name string) *mongo.Collection {
@@ -98,7 +102,7 @@ func (s *Store) Capabilities() job.Capabilities {
 func (s *Store) Close(context.Context) error { return nil }
 
 func (s *Store) check() error {
-	if s == nil || s.db == nil || s.definitions == nil || s.runs == nil {
+	if s == nil || s.db == nil || s.definitions == nil || s.runs == nil || s.history == nil {
 		return errors.ErrInvalidArgument
 	}
 	return nil
@@ -473,6 +477,149 @@ func (s *Store) GetStats(ctx context.Context, req job.StatsRequest) (*job.Stats,
 		}
 	}
 	return result, cursor.Err()
+}
+
+func (s *Store) ArchiveRuns(ctx context.Context, req job.ArchiveRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	limit := mongoHistoryLimit(req.Limit)
+	session, err := s.db.Client().StartSession()
+	if err != nil {
+		return 0, err
+	}
+	defer session.EndSession(ctx)
+	result, err := session.WithTransaction(ctx, func(sc mongo.SessionContext) (any, error) {
+		filter := bson.M{"status": bson.M{"$in": []string{string(job.RunSucceeded), string(job.RunDead), string(job.RunCanceled)}}, "updated_at": bson.M{"$lte": req.Before}}
+		cursor, err := s.runs.Find(sc, filter, options.Find().SetSort(bson.D{{Key: "updated_at", Value: 1}}).SetLimit(int64(limit)))
+		if err != nil {
+			return nil, err
+		}
+		defer cursor.Close(sc)
+		docs := make([]runDocument, 0, limit)
+		for cursor.Next(sc) {
+			var doc runDocument
+			if err := cursor.Decode(&doc); err != nil {
+				return nil, err
+			}
+			docs = append(docs, doc)
+		}
+		if err := cursor.Err(); err != nil {
+			return nil, err
+		}
+		for _, doc := range docs {
+			if _, err := s.history.InsertOne(sc, doc); err != nil {
+				return nil, err
+			}
+			if _, err := s.runs.DeleteOne(sc, bson.M{"run_id": doc.ID}); err != nil {
+				return nil, err
+			}
+		}
+		return len(docs), nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	count, _ := result.(int)
+	return count, nil
+}
+
+func (s *Store) GetHistory(ctx context.Context, runID string) (*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	var doc runDocument
+	err := s.history.FindOne(ctx, bson.M{"run_id": runID}).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, job.ErrRunNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return fromRunDocument(&doc), nil
+}
+
+func (s *Store) ListHistory(ctx context.Context, req job.HistoryRequest) ([]*job.Run, error) {
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	filter := bson.M{}
+	if req.JobID != "" {
+		filter["job_id"] = req.JobID
+	}
+	if req.Status != "" {
+		filter["status"] = string(req.Status)
+	}
+	if !req.Before.IsZero() || !req.After.IsZero() {
+		updated := bson.M{}
+		if !req.Before.IsZero() {
+			updated["$lte"] = req.Before
+		}
+		if !req.After.IsZero() {
+			updated["$gte"] = req.After
+		}
+		filter["updated_at"] = updated
+	}
+	cursor, err := s.history.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "updated_at", Value: -1}}).SetLimit(int64(mongoHistoryLimit(req.Limit))))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	runs := make([]*job.Run, 0, mongoHistoryLimit(req.Limit))
+	for cursor.Next(ctx) {
+		var doc runDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		runs = append(runs, fromRunDocument(&doc))
+	}
+	return runs, cursor.Err()
+}
+
+func (s *Store) PurgeHistory(ctx context.Context, req job.PurgeHistoryRequest) (int, error) {
+	if err := s.check(); err != nil {
+		return 0, err
+	}
+	if req.Before.IsZero() {
+		req.Before = time.Now()
+	}
+	limit := mongoHistoryLimit(req.Limit)
+	cursor, err := s.history.Find(ctx, bson.M{"updated_at": bson.M{"$lte": req.Before}}, options.Find().SetProjection(bson.M{"run_id": 1}).SetLimit(int64(limit)))
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+	ids := make([]string, 0, limit)
+	for cursor.Next(ctx) {
+		var row struct {
+			ID string `bson:"run_id"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return 0, err
+		}
+		ids = append(ids, row.ID)
+	}
+	if err := cursor.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result, err := s.history.DeleteMany(ctx, bson.M{"run_id": bson.M{"$in": ids}})
+	if err != nil {
+		return 0, err
+	}
+	return int(result.DeletedCount), nil
+}
+
+func mongoHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	return limit
 }
 
 func normalizeRun(run *job.Run) {

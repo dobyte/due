@@ -878,6 +878,8 @@ POST   /runs/{run_id}/retry
 
 Handler 只负责路由、JSON 编解码和错误映射；认证、授权、限流和审计由宿主应用的外层中间件提供。
 
+任务历史通过可选 `job.HistoryManager` 使用：`ArchiveRuns` 只归档 `succeeded`、`dead`、`canceled` 终态 Run，`ListHistory` 查询归档记录，`PurgeHistory` 按截止时间分批清理。归档操作从主 Run 存储删除记录后，主查询不再返回该 Run；历史查询仍保留完整执行结果和错误字段。生产环境应由独立保留策略定期调用归档和清理接口。
+
 Redis 集成演练通过以下环境变量启用：
 
 ~~~powershell

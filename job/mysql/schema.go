@@ -55,5 +55,6 @@ func Schema(tablePrefix string) string {
 		"UNIQUE KEY uk_due_job_run_schedule (job_id, scheduled_at)," +
 		"INDEX idx_due_job_run_ready (status, ready_at)," +
 		"INDEX idx_due_job_run_lease (status, lease_until)" +
-		") ENGINE=InnoDB;"
+		") ENGINE=InnoDB;" +
+		"CREATE TABLE " + tablePrefix + "_history LIKE " + tablePrefix + "_run;"
 }

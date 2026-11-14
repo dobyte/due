@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	stderrors "errors"
 	"sync"
 	"testing"
 	"time"
@@ -136,6 +137,54 @@ func Run(t *testing.T, factory Factory) {
 			t.Fatalf("run status = %q, want canceled", stored.Status)
 		}
 	})
+
+	t.Run("terminal_runs_can_be_archived_and_purged", func(t *testing.T) {
+		store := newStore(t, factory)
+		history, ok := store.(job.HistoryStore)
+		if !ok {
+			t.Skip("store does not implement HistoryStore")
+		}
+		run := newRun("history")
+		mustNoError(t, store.CreateRun(context.Background(), run))
+		claimed := claimOne(t, store, "history-worker", time.Second)
+		mustNoError(t, store.StartRun(context.Background(), job.StartRunRequest{RunID: claimed.Run.ID, OwnerID: claimed.OwnerID, FencingToken: claimed.FencingToken}))
+		commit, err := store.CompleteRun(context.Background(), job.CompleteRunRequest{RunID: claimed.Run.ID, OwnerID: claimed.OwnerID, FencingToken: claimed.FencingToken, Output: []byte("history")})
+		mustNoError(t, err)
+		if !commit.Applied {
+			t.Fatal("terminal run completion was not applied")
+		}
+
+		archived, err := history.ArchiveRuns(context.Background(), job.ArchiveRequest{Before: time.Now().Add(time.Second), Limit: 10})
+		mustNoError(t, err)
+		if archived != 1 {
+			t.Fatalf("archived runs = %d, want 1", archived)
+		}
+		if _, err := store.GetRun(context.Background(), run.ID); !jobErrorIs(err, job.ErrRunNotFound) {
+			t.Fatalf("primary run error = %v, want run not found", err)
+		}
+		stored, err := history.GetHistory(context.Background(), run.ID)
+		mustNoError(t, err)
+		if stored.Status != job.RunSucceeded || string(stored.Output) != "history" {
+			t.Fatalf("archived run = %+v", stored)
+		}
+		listed, err := history.ListHistory(context.Background(), job.HistoryRequest{JobID: run.JobID, Limit: 10})
+		mustNoError(t, err)
+		if len(listed) != 1 {
+			t.Fatalf("history rows = %d, want 1", len(listed))
+		}
+		purged, err := history.PurgeHistory(context.Background(), job.PurgeHistoryRequest{Before: time.Now().Add(time.Second), Limit: 10})
+		mustNoError(t, err)
+		if purged != 1 {
+			t.Fatalf("purged rows = %d, want 1", purged)
+		}
+		if _, err := history.GetHistory(context.Background(), run.ID); !jobErrorIs(err, job.ErrRunNotFound) {
+			t.Fatalf("purged history error = %v, want run not found", err)
+		}
+	})
+}
+
+func jobErrorIs(err, target error) bool {
+	return stderrors.Is(err, target)
 }
 
 func newStore(t *testing.T, factory Factory) job.JobStore {
