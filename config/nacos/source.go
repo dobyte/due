@@ -58,6 +58,7 @@ type Source struct {
 	ctx          context.Context       // Context
 	cancel       context.CancelFunc    // Cancel function
 	builtin      bool                  // Whether the client is built in
+	opsMu        sync.RWMutex          // Guards the client against the in-flight Load and Store calls
 	version      uint64                // Current search version
 	versions     map[string]uint64     // Search version of each dataId
 	searchFailed bool                  // Whether a search failure was logged; refresh goroutine only
@@ -129,6 +130,9 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	if s.err != nil {
 		return nil, s.err
 	}
+
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
 
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
@@ -296,7 +300,7 @@ func (s *Source) loadPatterns(ctx context.Context) ([]*config.Configuration, err
 
 	// Keep the result deterministic regardless of the fetch completion order.
 	sort.Slice(configurations, func(i, j int) bool {
-		return configurations[i].File < configurations[j].File
+		return configurations[i].FullPath < configurations[j].FullPath
 	})
 
 	return configurations, nil
@@ -570,6 +574,9 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return errors.ErrClosedConfigSource
 	}
@@ -655,9 +662,13 @@ func (s *Source) Close() error {
 			return true
 		})
 
+		// Wait for the in-flight Load and Store calls before the client is closed, so that the client
+		// is never destroyed under a running request.
+		s.opsMu.Lock()
 		if s.builtin {
 			s.opts.client.CloseClient()
 		}
+		s.opsMu.Unlock()
 	})
 
 	return nil
@@ -995,15 +1006,17 @@ func (s *Source) parseFileType(file string) string {
 
 // conv converts a configuration. It converts a dataId and its content into the
 // unified configuration structure, using the file extension of the dataId as the
-// config format. The dataId is relative to the group, so it is both the path within
-// the source and the file name, matching the other config sources.
+// config format. The dataId is relative to the group, so it is the path within the
+// source, while the file and name are derived from its base name to match the other
+// config sources.
 func (s *Source) conv(file, content string) *config.Configuration {
-	ext := path.Ext(file)
+	base := path.Base(file)
+	ext := path.Ext(base)
 
 	return &config.Configuration{
 		Path:     file,
-		File:     file,
-		Name:     strings.TrimSuffix(file, ext),
+		File:     base,
+		Name:     strings.TrimSuffix(base, ext),
 		Format:   strings.TrimPrefix(ext, "."),
 		Content:  []byte(content),
 		FullPath: file,

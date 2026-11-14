@@ -75,6 +75,13 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 				return nil, io.EOF
 			}
 
+			// A removed or renamed root ends the watch: fsnotify drops its watches together with the
+			// path, so no further event is delivered and hot reload would stay disabled. Ending the
+			// watch lets the configurator reopen it once the path exists again.
+			if (event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) && w.source.isRoot(event.Name) {
+				return nil, io.EOF
+			}
+
 			// Ignore dot files and other temporary files, matching the filter used when loading a
 			// config directory.
 			if strings.HasPrefix(filepath.Base(event.Name), ".") {

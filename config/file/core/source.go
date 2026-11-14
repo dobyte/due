@@ -200,6 +200,12 @@ func (s *Source) matchFile(path string) bool {
 	return pattern.MatchFile(s.files, filepath.ToSlash(rel))
 }
 
+// isRoot reports whether path is the source path, which is either the config directory or, in
+// single-file mode, the config file itself.
+func (s *Source) isRoot(path string) bool {
+	return filepath.Clean(path) == filepath.Clean(s.path)
+}
+
 // Watch starts watching the source path and returns a [config.Watcher]. It reports
 // [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {

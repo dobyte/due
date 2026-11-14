@@ -14,7 +14,7 @@ type watcher struct {
 	source  *Source                          // Config source
 	chWatch chan struct{}                    // Config change notification signal
 	mu      sync.Mutex                       // Mutex guarding the pending configurations
-	pending map[string]*config.Configuration // Pending configurations, keyed by dataId to merge the latest one
+	pending map[string]*config.Configuration // Pending configurations, keyed by full path to merge the latest one
 }
 
 // newWatcher creates a watcher.
@@ -29,11 +29,12 @@ func newWatcher(ctx context.Context, s *Source) *watcher {
 }
 
 // notice notifies a configuration change. It merges pending configurations by
-// dataId so that the latest configuration of every dataId is delivered, and sends
-// the signal without blocking so that the notification flow is not stalled.
+// their full path so that the latest configuration of every dataId is delivered,
+// even when two dataIds share a base name, and sends the signal without blocking
+// so that the notification flow is not stalled.
 func (w *watcher) notice(configuration *config.Configuration) {
 	w.mu.Lock()
-	w.pending[configuration.File] = configuration
+	w.pending[configuration.FullPath] = configuration
 	w.mu.Unlock()
 
 	// Send the signal without blocking so that a slow or stopped watcher does not stall notification.
@@ -64,7 +65,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 }
 
-// takePending drains and returns the pending configurations, keyed by dataId.
+// takePending drains and returns the pending configurations, keyed by full path.
 func (w *watcher) takePending() []*config.Configuration {
 	w.mu.Lock()
 	defer w.mu.Unlock()

@@ -505,6 +505,42 @@ func TestWatchWithFiles(t *testing.T) {
 	}
 }
 
+// TestWatchRootRemoval verifies that removing the watched root directory ends the watcher instead of
+// leaving it blocked forever, so that the configurator can reopen it.
+func TestWatchRootRemoval(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	source := file.NewSource(file.WithPath(dir))
+	defer source.Close()
+
+	watcher, err := source.Watch(context.Background())
+	if err != nil {
+		t.Fatalf("watch config failed, err: %v", err)
+	}
+	defer watcher.Stop()
+
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove the watched directory failed, err: %v", err)
+	}
+
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := watcher.Next()
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expect the watcher to end after the root directory is removed")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watcher is still blocked after the root directory is removed")
+	}
+}
+
 // TestWatchNewDirectory verifies that the files that already exist in a directory moved into the
 // watched tree are loaded, because a non-recursive watcher cannot observe their creation.
 func TestWatchNewDirectory(t *testing.T) {

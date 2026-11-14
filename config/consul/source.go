@@ -24,6 +24,7 @@ type Source struct {
 	opts      *options        // Configuration options
 	builtin   bool            // Whether the client is built in
 	transport *http.Transport // Underlying transport of the built-in client
+	opsMu     sync.RWMutex    // Guards the client against the in-flight Load, Store and Watch calls
 	watchers  sync.Map        // Watcher set
 	closed    atomic.Bool     // Whether the source has been closed
 }
@@ -79,6 +80,9 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
 	}
@@ -131,6 +135,9 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
 	}
+
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
 
 	if s.closed.Load() {
 		return errors.ErrClosedConfigSource
@@ -196,6 +203,9 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
 	}
@@ -229,6 +239,11 @@ func (s *Source) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+
+	// Wait for the in-flight Load, Store and Watch calls before the watchers are stopped and the
+	// idle connections are closed, so that the client is never torn down under a running request.
+	s.opsMu.Lock()
+	defer s.opsMu.Unlock()
 
 	s.watchers.Range(func(key, _ any) bool {
 		_ = key.(*watcher).Stop()

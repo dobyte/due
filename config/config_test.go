@@ -210,6 +210,45 @@ func (s *blockingSource) Load(ctx context.Context, file ...string) ([]*config.Co
 	return s.fakeSource.Load(ctx, file...)
 }
 
+// reloadWatchSource serves mutable content on Load and returns a stopped watcher on the first Watch
+// call, so that the reload performed when the watcher is reopened can be observed.
+type reloadWatchSource struct {
+	*fakeSource
+
+	mu      sync.Mutex
+	body    string
+	watches atomic.Int32
+}
+
+func newReloadWatchSource(body string) *reloadWatchSource {
+	return &reloadWatchSource{fakeSource: newFakeSource(body), body: body}
+}
+
+func (s *reloadWatchSource) Load(context.Context, ...string) ([]*config.Configuration, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return []*config.Configuration{{
+		Name:    "config",
+		Format:  "json",
+		Content: []byte(s.body),
+	}}, nil
+}
+
+func (s *reloadWatchSource) set(body string) {
+	s.mu.Lock()
+	s.body = body
+	s.mu.Unlock()
+}
+
+func (s *reloadWatchSource) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.watches.Add(1) == 1 {
+		return &canceledWatcher{}, nil
+	}
+
+	return s.fakeSource.Watch(ctx)
+}
+
 // waitNames waits until the given name shows up in a notification, failing the test on timeout.
 func waitNames(t *testing.T, ch <-chan []string, want string) {
 	t.Helper()
@@ -420,6 +459,50 @@ func TestConfiguratorReopensStoppedWatcher(t *testing.T) {
 	}
 }
 
+// TestConfiguratorReloadsOnWatcherReopen verifies that a change made while the watcher is down is
+// picked up when the watcher is reopened.
+func TestConfiguratorReloadsOnWatcherReopen(t *testing.T) {
+	source := newReloadWatchSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("invalid initial value, actual: %s", got)
+	}
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	// The first watcher stops immediately; the change lands while the configurator backs off before
+	// reopening it.
+	source.set(`{"timezone":"UTC"}`)
+
+	waitNames(t, changed, "config")
+
+	if got := c.Get("config.timezone").String(); got != "UTC" {
+		t.Fatalf("the config is not reloaded on watcher reopen, actual: %s", got)
+	}
+}
+
+// TestConfiguratorSkipsUnchangedConfig verifies that re-applying an unchanged config does not notify
+// the watchers.
+func TestConfiguratorSkipsUnchangedConfig(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"Local"}`)})
+
+	select {
+	case names := <-changed:
+		t.Fatalf("unexpected notification for an unchanged config: %v", names)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 // TestConfiguratorStopsWatchingClosedSource verifies that a closed source is not watched again.
 func TestConfiguratorStopsWatchingClosedSource(t *testing.T) {
 	source := &closedWatchSource{fakeSource: newFakeSource(`{"timezone":"Local"}`)}
@@ -448,6 +531,32 @@ func TestConfiguratorIgnoresDuplicateSources(t *testing.T) {
 
 	if got := c.Get("config.timezone").String(); got != "Local" {
 		t.Fatalf("expect the first source to win, actual: %s", got)
+	}
+}
+
+// TestConfiguratorIgnoresNilSource verifies that a nil source is ignored instead of panicking.
+func TestConfiguratorIgnoresNilSource(t *testing.T) {
+	c := config.NewConfigurator(config.WithSources(nil))
+	defer c.Close()
+
+	if c.Has("config") {
+		t.Fatal("expect no config from a nil source")
+	}
+}
+
+// TestConfiguratorKeepsRepeatedSource verifies that passing the same source instance twice does not
+// close the source that is kept.
+func TestConfiguratorKeepsRepeatedSource(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source, source))
+	defer c.Close()
+
+	if source.isClosed() {
+		t.Fatal("expect the repeated source instance not to be closed")
+	}
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("invalid value, actual: %s", got)
 	}
 }
 
@@ -798,6 +907,44 @@ func TestConfiguratorSetNestedSlice(t *testing.T) {
 	}
 }
 
+// TestConfiguratorSetNewNestedSlice verifies that a nested slice that does not exist yet is created
+// long enough for the index that is set, including a non-zero index.
+func TestConfiguratorSetNewNestedSlice(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	if err := c.Set("config.matrix.3.name", "gate"); err != nil {
+		t.Fatalf("set new nested slice failed, err: %v", err)
+	}
+	if got := c.Get("config.matrix.3.name").String(); got != "gate" {
+		t.Fatalf("invalid value, actual: %s", got)
+	}
+
+	if err := c.Set("extra.list.5", 1); err != nil {
+		t.Fatalf("set new nested slice with a non-zero index failed, err: %v", err)
+	}
+	if got := c.Get("extra.list.5").Int(); got != 1 {
+		t.Fatalf("invalid value, expect: 1, actual: %d", got)
+	}
+}
+
+// TestConfiguratorSetNegativeNestedSlice verifies that creating a nested slice with a negative index
+// reports an error instead of panicking.
+func TestConfiguratorSetNegativeNestedSlice(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	if err := c.Set("config.matrix.-5", 1); err == nil {
+		t.Fatal("expect an error for a negative index")
+	}
+
+	if err := c.Set("config.matrix.0.-5", 1); err == nil {
+		t.Fatal("expect an error for a nested negative index")
+	}
+}
+
 func TestConfiguratorWithCustomDecoder(t *testing.T) {
 	source := newFakeSource(`{"raw":"1"}`)
 
@@ -984,6 +1131,10 @@ func TestGlobalConfiguratorCloseClears(t *testing.T) {
 // configurator instead of silently returning nil.
 func TestGlobalConfiguratorMissing(t *testing.T) {
 	config.Close()
+
+	if got := config.Get("config.timezone", "fallback").String(); got != "fallback" {
+		t.Fatalf("expect the default value without a configurator, actual: %s", got)
+	}
 
 	if err := config.Set("config.timezone", "Local"); !errors.Is(err, errors.ErrNotFoundConfigurator) {
 		t.Fatalf("expect ErrNotFoundConfigurator, actual: %v", err)

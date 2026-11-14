@@ -20,11 +20,12 @@ const Name = "etcd"
 
 // Source is the etcd config source.
 type Source struct {
-	err      error       // Error returned when the client was built
-	opts     *options    // Configuration options
-	builtin  bool        // Whether the client is built in
-	watchers sync.Map    // Watcher set
-	closed   atomic.Bool // Whether the source has been closed
+	err      error        // Error returned when the client was built
+	opts     *options     // Configuration options
+	builtin  bool         // Whether the client is built in
+	opsMu    sync.RWMutex // Guards the client against the in-flight Load, Store and Watch calls
+	watchers sync.Map     // Watcher set
+	closed   atomic.Bool  // Whether the source has been closed
 }
 
 // NewSource creates a config source. It builds an etcd config center client from
@@ -76,6 +77,9 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
 	}
@@ -121,6 +125,9 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
 	}
+
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
 
 	if s.closed.Load() {
 		return errors.ErrClosedConfigSource
@@ -180,6 +187,9 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
 	}
@@ -219,6 +229,11 @@ func (s *Source) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
+
+	// Wait for the in-flight Load, Store and Watch calls before the watchers and the client are
+	// closed, so that the client is never destroyed under a running request.
+	s.opsMu.Lock()
+	defer s.opsMu.Unlock()
 
 	s.watchers.Range(func(key, _ any) bool {
 		_ = key.(*watcher).Stop()

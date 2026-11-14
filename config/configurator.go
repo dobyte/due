@@ -118,12 +118,12 @@ func NewConfigurator(opts ...Option) Configurator {
 // normalizeSources keeps the first source of every name and closes the duplicates, so that a
 // duplicate source cannot silently shadow another one or leak its connection.
 func normalizeSources(sources []Source) []Source {
-	if len(sources) < 2 {
-		return sources
+	if len(sources) == 0 {
+		return nil
 	}
 
 	var (
-		seen   = make(map[string]struct{}, len(sources))
+		seen   = make(map[string]Source, len(sources))
 		unique = make([]Source, 0, len(sources))
 	)
 
@@ -134,21 +134,40 @@ func normalizeSources(sources []Source) []Source {
 		}
 
 		name := s.Name()
-		if _, ok := seen[name]; ok {
+		if kept, ok := seen[name]; ok {
 			log.Printf("duplicate config source %q is ignored", name)
 
-			if err := s.Close(); err != nil {
-				log.Printf("close duplicate config source %q failed: %v", name, err)
+			// The same instance may be given twice; closing it would close the source that is kept.
+			if !sameSource(kept, s) {
+				if err := s.Close(); err != nil {
+					log.Printf("close duplicate config source %q failed: %v", name, err)
+				}
 			}
 
 			continue
 		}
 
-		seen[name] = struct{}{}
+		seen[name] = s
 		unique = append(unique, s)
 	}
 
 	return unique
+}
+
+// sameSource reports whether a and b are the same instance. Only pointer sources, which is the shape
+// every built-in source uses, are compared, because comparing interface values whose dynamic type is
+// not comparable panics.
+func sameSource(a, b Source) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
+	if va.Kind() != reflect.Pointer || vb.Kind() != reflect.Pointer {
+		return false
+	}
+
+	return va.Pointer() == vb.Pointer()
 }
 
 // init initializes the config sources and loads their config into the value store. A source that
@@ -221,9 +240,9 @@ func (c *defaultConfigurator) reload(s Source) {
 
 // apply decodes the given configurations and stores them in the value store. The value of every
 // applied config replaces its previous value as a whole, so a key removed from a changed config is
-// removed from the store. It returns the names of the configurations that were applied.
+// removed from the store. It returns the names of the configurations whose value changed, so that
+// reloading unchanged configs does not notify the watchers.
 func (c *defaultConfigurator) apply(cs []*Configuration) []string {
-	names := make([]string, 0, len(cs))
 	values := make(map[string]any, len(cs))
 
 	for _, cc := range cs {
@@ -245,26 +264,30 @@ func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 			continue
 		}
 
-		names = append(names, cc.Name)
 		values[cc.Name] = v
 	}
 
 	if len(values) == 0 {
-		return names
+		return nil
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	dst := c.shallowCopy()
+	changed := make([]string, 0, len(values))
 
 	for name, v := range values {
+		if current, ok := dst[name]; !ok || !reflect.DeepEqual(current, v) {
+			changed = append(changed, name)
+		}
+
 		dst[name] = v
 	}
 
 	c.store(dst)
 
-	return names
+	return changed
 }
 
 // store publishes values as the current snapshot. The map must not be modified afterwards, so that
@@ -375,6 +398,41 @@ func (c *defaultConfigurator) watchSource(s Source) {
 			continue
 		}
 
+		// Reload the source after the watcher is registered, so that a change that happened between
+		// the previous load and the watch registration is not lost. Unchanged configs are not
+		// reported, so reopening a watcher does not notify the watchers again.
+		names, loadErr := c.reloadSource(s)
+		if loadErr != nil {
+			_ = w.Stop()
+
+			if c.ctx.Err() != nil {
+				return
+			}
+
+			if errors.Is(loadErr, errors.ErrClosedConfigSource) {
+				log.Printf("config source %q is closed, stop watching", s.Name())
+
+				return
+			}
+
+			if !warned {
+				log.Printf("reload configure of source %q failed: %v", s.Name(), loadErr)
+				warned = true
+			}
+
+			if !c.sleep(delay) {
+				return
+			}
+
+			delay = nextWatchDelay(delay)
+
+			continue
+		}
+
+		if len(names) > 0 {
+			c.scheduleNotify(names)
+		}
+
 		warned = false
 		delay = watchMinBackoff
 
@@ -391,6 +449,17 @@ func (c *defaultConfigurator) watchSource(s Source) {
 
 		delay = nextWatchDelay(delay)
 	}
+}
+
+// reloadSource loads the configurations of the source and applies them. It returns the names of the
+// configs whose value changed.
+func (c *defaultConfigurator) reloadSource(s Source) ([]string, error) {
+	cs, err := s.Load(c.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.apply(cs), nil
 }
 
 // consume reads the changes of a watcher until it stops or the configurator is closed. It returns
@@ -746,7 +815,17 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 					if err != nil {
 						vs[key] = make(map[string]any)
 					} else {
-						vs[key] = make([]any, 1)
+						// The new slice has to be long enough for the index that is set next,
+						// otherwise the next lookup reports an overflow.
+						if ii < 0 {
+							return errors.New("invalid index")
+						}
+
+						if ii > maxSliceIndex {
+							return errors.New("index too large")
+						}
+
+						vs[key] = make([]any, ii+1)
 					}
 				}
 
@@ -795,7 +874,15 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 					if parseErr != nil {
 						vs[ii] = make(map[string]any)
 					} else {
-						vs[ii] = make([]any, 1)
+						if next < 0 {
+							return errors.New("invalid index")
+						}
+
+						if next > maxSliceIndex {
+							return errors.New("index too large")
+						}
+
+						vs[ii] = make([]any, next+1)
 					}
 				}
 

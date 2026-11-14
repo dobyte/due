@@ -47,7 +47,7 @@ func Has(pattern string) bool {
 // slices.
 func Get(pattern string, def ...any) value.Value {
 	if c := GetConfigurator(); c == nil {
-		return value.NewValue()
+		return value.NewValue(def...)
 	} else {
 		return c.Get(pattern, def...)
 	}

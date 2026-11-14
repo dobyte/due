@@ -40,6 +40,7 @@ type Source struct {
 	ctx            context.Context    // Context
 	cancel         context.CancelFunc // Cancel function
 	builtin        bool               // Whether the client is built in
+	opsMu          sync.RWMutex       // Guards the client against the in-flight Load and Store calls
 	version        uint64             // Current search version
 	versions       map[string]uint64  // Search version of each config file
 	searchFailed   bool               // Whether a search failure was logged; refresh goroutine only
@@ -104,6 +105,9 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource
 	}
@@ -121,35 +125,83 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return []*config.Configuration{configuration}, nil
 	}
 
-	var (
-		mu             sync.Mutex
-		configurations = make([]*config.Configuration, 0)
-	)
-
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
+	// A fixed file list does not need the group listing, so the files can be loaded directly. This
+	// also keeps the source usable on servers that do not provide the group query API.
+	if files, hasPattern := s.exactFiles(); len(files) > 0 && !hasPattern {
+		return s.loadFiles(ctx, files)
+	}
+
 	group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
 	if err != nil {
-		return nil, err
+		if !isUnimplementedError(err) {
+			return nil, err
+		}
+
+		// Older servers do not implement the group query API. The exact configured files can still
+		// be loaded directly; a pattern cannot be expanded without the group listing.
+		files, hasPattern := s.exactFiles()
+		if len(files) == 0 {
+			return nil, err
+		}
+
+		if hasPattern {
+			log.Warnf("%s/%s config group query is not supported by the server, the configured patterns cannot be expanded", s.opts.namespace, s.opts.group)
+		}
+
+		return s.loadFiles(ctx, files)
 	}
 
 	files, _, ok := group.GetFiles()
 	if !ok {
-		return configurations, nil
+		return nil, nil
 	}
+
+	names := make([]string, 0, len(files))
+	for _, item := range files {
+		if s.matchFile(item.FileName) {
+			names = append(names, item.FileName)
+		}
+	}
+
+	return s.loadFiles(ctx, names)
+}
+
+// exactFiles returns the configured entries that contain no wildcard and reports whether any entry
+// was skipped because it is a pattern.
+func (s *Source) exactFiles() ([]string, bool) {
+	var (
+		files      = make([]string, 0, len(s.opts.files))
+		hasPattern bool
+	)
+
+	for _, file := range s.opts.files {
+		if pattern.IsWildcard(file) {
+			hasPattern = true
+			continue
+		}
+
+		files = append(files, file)
+	}
+
+	return files, hasPattern
+}
+
+// loadFiles loads the given config files with a bounded number of concurrent requests, subscribing
+// every successful file to change notifications. The result is sorted by file name.
+func (s *Source) loadFiles(ctx context.Context, files []string) ([]*config.Configuration, error) {
+	var (
+		mu             sync.Mutex
+		configurations = make([]*config.Configuration, 0, len(files))
+	)
 
 	wg, gctx := task.WithContext(ctx)
 	wg.SetLimit(loadConcurrency)
 
-	for _, item := range files {
-		fileName := item.FileName
-
-		if !s.matchFile(fileName) {
-			continue
-		}
-
+	for _, fileName := range files {
 		wg.Go(func() error {
 			configuration, err := s.load(gctx, fileName)
 			if err != nil {
@@ -170,7 +222,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	// Keep the result deterministic regardless of the fetch completion order.
 	sort.Slice(configurations, func(i, j int) bool {
-		return configurations[i].File < configurations[j].File
+		return configurations[i].FullPath < configurations[j].FullPath
 	})
 
 	return configurations, nil
@@ -211,6 +263,9 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
 	}
+
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
 
 	if s.closed.Load() {
 		return errors.ErrClosedConfigSource
@@ -322,9 +377,13 @@ func (s *Source) Close() error {
 			return true
 		})
 
+		// Wait for the in-flight Load and Store calls before the SDK context is destroyed, so that
+		// the client is never destroyed under a running request.
+		s.opsMu.Lock()
 		if s.builtin {
 			s.opts.client.Destroy()
 		}
+		s.opsMu.Unlock()
 	})
 
 	return nil
@@ -657,15 +716,17 @@ func isExistedResourceError(err error) bool {
 
 // conv converts a configuration. It converts a config file name and its content
 // into the unified configuration structure, using the file extension of the name
-// as the config format. The file name is relative to the group, so it is both the
-// path within the source and the file name, matching the other config sources.
+// as the config format. The file name is relative to the group, so it is the path
+// within the source, while the file and name are derived from its base name to
+// match the other config sources.
 func conv(file, content string) *config.Configuration {
-	ext := path.Ext(file)
+	base := path.Base(file)
+	ext := path.Ext(base)
 
 	return &config.Configuration{
 		Path:     file,
-		File:     file,
-		Name:     strings.TrimSuffix(file, ext),
+		File:     base,
+		Name:     strings.TrimSuffix(base, ext),
 		Format:   strings.TrimPrefix(ext, "."),
 		Content:  []byte(content),
 		FullPath: file,

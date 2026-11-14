@@ -80,6 +80,38 @@ func (c *stubConfigClient) SearchConfig(param vo.SearchConfigParam) (*model.Conf
 
 func (c *stubConfigClient) CloseClient() {}
 
+// blockingConfigClient blocks GetConfig until release is closed and records that CloseClient ran.
+type blockingConfigClient struct {
+	*stubConfigClient
+
+	started chan struct{}
+	release chan struct{}
+	closed  atomic.Bool
+}
+
+func newBlockingConfigClient() *blockingConfigClient {
+	return &blockingConfigClient{
+		stubConfigClient: &stubConfigClient{},
+		started:          make(chan struct{}, 1),
+		release:          make(chan struct{}),
+	}
+}
+
+func (c *blockingConfigClient) GetConfig(vo.ConfigParam) (string, error) {
+	select {
+	case c.started <- struct{}{}:
+	default:
+	}
+
+	<-c.release
+
+	return "content", nil
+}
+
+func (c *blockingConfigClient) CloseClient() {
+	c.closed.Store(true)
+}
+
 // TestListClientSearchConfig verifies that SearchConfig uses the v3 admin list API and maps the
 // returned metadata without relying on the configuration content.
 func TestListClientSearchConfig(t *testing.T) {
@@ -738,8 +770,9 @@ func TestSourceLoadFixedFiles(t *testing.T) {
 	}
 }
 
-// TestSourceConv verifies that a dataId is exposed as the path within the source as well as the
-// file name, matching the configuration structure produced by the other config sources.
+// TestSourceConv verifies that the dataId is exposed as the path within the source while the file
+// and name are derived from its base name, matching the configuration structure produced by the
+// other config sources.
 func TestSourceConv(t *testing.T) {
 	configuration := (&Source{}).conv("config.json", "content")
 
@@ -754,6 +787,18 @@ func TestSourceConv(t *testing.T) {
 	}
 	if configuration.FullPath != "config.json" {
 		t.Fatalf("expect full path config.json, got %q", configuration.FullPath)
+	}
+
+	nested := (&Source{}).conv("sub/config.json", "content")
+
+	if nested.Path != "sub/config.json" {
+		t.Fatalf("expect path sub/config.json, got %q", nested.Path)
+	}
+	if nested.File != "config.json" || nested.Name != "config" {
+		t.Fatalf("expect the base name of a nested dataId, got %+v", nested)
+	}
+	if nested.FullPath != "sub/config.json" {
+		t.Fatalf("expect full path sub/config.json, got %q", nested.FullPath)
 	}
 }
 
@@ -821,7 +866,7 @@ func TestWatcherNextSkipsEmptySignal(t *testing.T) {
 		// Next is still waiting for a real change, as expected.
 	}
 
-	w.notice(&config.Configuration{File: "a.json"})
+	w.notice(&config.Configuration{File: "a.json", FullPath: "a.json"})
 
 	select {
 	case r := <-done:
@@ -833,6 +878,76 @@ func TestWatcherNextSkipsEmptySignal(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Next did not return the pending configuration")
+	}
+}
+
+// TestWatcherKeepsConfigsWithSameBaseName verifies that pending configurations are merged by their
+// full path, so that two dataIds sharing a base name are both delivered.
+func TestWatcherKeepsConfigsWithSameBaseName(t *testing.T) {
+	w := newWatcher(context.Background(), &Source{})
+
+	w.notice(&config.Configuration{Path: "a/config.json", File: "config.json", FullPath: "a/config.json"})
+	w.notice(&config.Configuration{Path: "b/config.json", File: "config.json", FullPath: "b/config.json"})
+
+	configs, err := w.Next()
+	if err != nil {
+		t.Fatalf("Next failed: %v", err)
+	}
+	if len(configs) != 2 {
+		t.Fatalf("expect 2 configurations, actual: %d", len(configs))
+	}
+}
+
+// TestSourceCloseWaitsForInflightLoad verifies that Close waits for an in-flight Load before the
+// built-in client is closed, so that the client is never destroyed under a running request.
+func TestSourceCloseWaitsForInflightLoad(t *testing.T) {
+	client := newBlockingConfigClient()
+
+	o := defaultOptions()
+	o.client = client
+	o.files = []string{"a.json"}
+
+	source := &Source{opts: o}
+	source.builtin = true
+	source.ctx, source.cancel = context.WithCancel(context.Background())
+
+	loaded := make(chan error, 1)
+
+	go func() {
+		_, err := source.Load(context.Background())
+		loaded <- err
+	}()
+
+	<-client.started
+
+	closed := make(chan struct{})
+
+	go func() {
+		_ = source.Close()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+		t.Fatal("Close returned before the in-flight Load finished")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if client.closed.Load() {
+		t.Fatal("the client is closed while a Load is still running")
+	}
+
+	close(client.release)
+	<-loaded
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return after the in-flight Load finished")
+	}
+
+	if !client.closed.Load() {
+		t.Fatal("expect the client to be closed after the in-flight Load finished")
 	}
 }
 
