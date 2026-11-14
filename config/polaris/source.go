@@ -131,7 +131,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	// A fixed file list does not need the group listing, so the files can be loaded directly. This
-	// also keeps the source usable on servers that do not provide the group query API.
+	// also keeps the source usable on servers that do not provide the group query API. The files are
+	// fetched without metadata, so every explicit load or watcher reopen reads all of them again.
 	if files, hasPattern := s.exactFiles(); len(files) > 0 && !hasPattern {
 		return s.loadFiles(ctx, files)
 	}

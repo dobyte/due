@@ -359,6 +359,8 @@ The config center focuses on business configuration management, providing a fast
 
 The core interface is `config.Configurator`, whose main methods are: `Has`, `Get`, `Set`, `Match`, `Watch` (listen for config changes), `Load`, `Store`, and `Close`. Its implementation is decoupled into "config source (Source) + codec (Codec)", so the config file format and the config source are independent of each other.
 
+When a configurator is constructed, every source is loaded once and its change watcher is started immediately after that load. The first successful watch open does not load the source again, so a change made between the startup load and the watch registration is only applied when the source reports a later event or when the watcher is reopened (a failed open, a stopped watcher, and a read error all reload the source). The window is kept as short as possible; applications with strict hot-reload requirements should be aware of it.
+
 2. Supported components
 
 * [file](config/file/README-ZH.md)

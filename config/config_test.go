@@ -558,6 +558,22 @@ func TestConfiguratorKeepsWatchingAfterReloadFailure(t *testing.T) {
 	}
 }
 
+// TestConfiguratorSkipsConcurrentReload verifies that the watcher does not issue another load while
+// a background reload retry for the same startup failure is running.
+func TestConfiguratorSkipsConcurrentReload(t *testing.T) {
+	source := &reloadFailingSource{fakeSource: newFakeSource(`{"timezone":"Local"}`)}
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	// The startup load fails and starts the background retry; the watcher's first open must not
+	// load the source again.
+	time.Sleep(200 * time.Millisecond)
+
+	if got := source.loads.Load(); got != 1 {
+		t.Fatalf("expect one startup load, actual: %d", got)
+	}
+}
+
 // TestConfiguratorSkipsInitialReload verifies that a source loaded at startup is not loaded again
 // when its watcher opens for the first time.
 func TestConfiguratorSkipsInitialReload(t *testing.T) {

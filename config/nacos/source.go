@@ -161,7 +161,8 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		}
 
 		// Fixed file list: load only the configured dataIds, without searching the group. These items
-		// carry no md5, so the content cache cannot detect a change: it is neither read nor replaced.
+		// carry no md5, so the content cache cannot detect a change: it is neither read nor replaced,
+		// and every explicit load or watcher reopen fetches the content of all listed dataIds.
 		configurations, _, err := s.loadItems(ctx, s.fixedItems())
 		if err != nil {
 			return nil, err

@@ -36,6 +36,13 @@ const (
 // The value store is merge-only: a config that a source no longer provides stays available until the
 // configurator is recreated. A changed config replaces its previous value as a whole, so a key
 // removed from a config file is removed from the store as well.
+//
+// At construction every source is loaded once and its watcher is started immediately after that load.
+// The first successful watcher open does not load the source again, so a change made between a
+// source's startup load and its watch registration is only applied when the source reports a later
+// event or when the watcher is reopened; a failed open, a stopped watcher and a read error all
+// reload the source. The window is kept as short as possible by starting each watcher right after
+// its load.
 type Configurator interface {
 	// Has reports whether a config matching pattern exists.
 	Has(pattern string) bool
@@ -53,6 +60,7 @@ type Configurator interface {
 	// arrive while a callback runs are merged into the next call.
 	Watch(cb WatchCallbackFunc, names ...string)
 	// Load loads the configurations of the named source; empty file means every file of the source.
+	// It returns the configurations without applying them to the value store.
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store saves content as file under the named source, merging it with the existing config unless
 	// override is true.
@@ -101,8 +109,9 @@ type reloadState struct {
 
 var _ Configurator = &defaultConfigurator{}
 
-// NewConfigurator returns a new [Configurator] configured with opts and starts watching the config
-// sources for changes.
+// NewConfigurator returns a new [Configurator] configured with opts. It loads every source once,
+// starts watching the source immediately after its load, and then returns. See [Configurator] for
+// the startup reload semantics.
 func NewConfigurator(opts ...Option) Configurator {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -276,6 +285,15 @@ func (c *defaultConfigurator) reload(s Source) {
 
 		return
 	}
+}
+
+// reloadRunning reports whether a background reload retry is running for the source.
+func (c *defaultConfigurator) reloadRunning(s Source) bool {
+	c.reloadMu.Lock()
+	_, ok := c.reloads[s.Name()]
+	c.reloadMu.Unlock()
+
+	return ok
 }
 
 // scheduleReload starts a background reload retry for the source unless one is already running, so
@@ -469,7 +487,9 @@ func (c *defaultConfigurator) watchSource(s Source, reloadOnOpen bool) {
 			continue
 		}
 
-		if reloadOnOpen {
+		// A background reload already covers the source, so the watcher does not issue a second load
+		// for the same failure.
+		if reloadOnOpen && !c.reloadRunning(s) {
 			// Reload the source after the watcher is registered, so that a change that happened
 			// between the previous load and the watch registration is not lost. Unchanged configs
 			// are not reported, so reopening a watcher does not notify the watchers again.
