@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 状态 | 设计方案 |
+| 状态 | 设计方案 + V1 核心实现 |
 | 模块名 | job |
 | 默认存储 | Redis |
 | 可选存储 | MySQL、MongoDB |
@@ -12,7 +12,7 @@
 | 执行方式 | job Worker 本地 Handler |
 | 可靠性语义 | 至少执行一次，业务 Handler 负责幂等 |
 
-本文描述建议方案，不表示仓库已经实现这些 API。实现时以当前源码和接口评审结果为准。
+本文同时记录当前 V1 实现。公开接口以 `job/` 源码为准，适配器通过独立 Go module 引入。
 
 ## 2. 已确定的范围
 
@@ -762,14 +762,14 @@ trace_id
 
 ## 21. 实施阶段
 
-### Phase 1：核心契约
+### Phase 1：核心契约（已完成）
 
 - 固定 Definition、Run 和状态机。
 - 固定 JobStore 接口。
 - 固定 Handler 和 Service 接口。
 - 固定 Redis Key 和错误语义。
 
-### Phase 2：Redis 实现
+### Phase 2：Redis 实现（已完成）
 
 - Redis Store。
 - Lua 脚本。
@@ -778,7 +778,7 @@ trace_id
 - 一次性和延迟任务。
 - 重试、租约和恢复测试。
 
-### Phase 3：计划能力
+### Phase 3：计划能力（已完成）
 
 - 固定周期。
 - Cron 和时区。
@@ -786,7 +786,7 @@ trace_id
 - 并发策略。
 - 暂停、恢复、取消和手工触发。
 
-### Phase 4：MySQL 和 MongoDB
+### Phase 4：MySQL 和 MongoDB（适配器已完成，待真实数据库环境做集成演练）
 
 - 独立 Go module。
 - 适配器迁移脚本。
@@ -830,4 +830,21 @@ MySQL/MongoDB 可替换
 SQLite 暂不考虑
 ~~~
 
-后续实现应先完成接口和状态机评审，再从 Redis 适配器开始编码，最后用同一套一致性测试验证 MySQL 和 MongoDB。
+当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复。真实 Redis/MySQL/MongoDB 集群演练及生产观测能力仍属于后续工作。
+
+## 24. 当前代码入口
+
+根模块提供 `job.Service`、`job.JobStore`、`job.Handler` 和计划计算。三个后端是独立模块：
+
+```go
+// Redis 默认后端
+store := redis.NewStore(redis.WithAddrs("127.0.0.1:6379"))
+
+// MySQL：传入已经初始化的 *sql.DB，并先执行 mysql.Schema(...)
+store := mysql.NewStore(mysql.WithDB(db), mysql.WithTablePrefix("due_job"))
+
+// MongoDB：传入已经初始化的 *mongo.Database，并在启动时执行 EnsureIndexes
+store := mongo.NewStore(mongo.WithDB(database))
+```
+
+MySQL 和 MongoDB 的 adapter 不负责创建连接或关闭注入的连接；应用负责连接池生命周期。Redis adapter 管理自己创建的 Redis client，也支持 `WithClient` 注入外部 client。
