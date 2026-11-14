@@ -62,15 +62,17 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			return nil, err
 		}
 
-		if !info.IsDir() {
-			return nil, errors.New("the specified file cannot be loaded at the file path")
-		}
+		if info.IsDir() {
+			if err = checkFilePath(s.path, file[0]); err != nil {
+				return nil, err
+			}
 
-		if err = checkFilePath(s.path, file[0]); err != nil {
-			return nil, err
+			path = filepath.Join(s.path, file[0])
+		} else if filepath.Clean(file[0]) != filepath.Base(s.path) &&
+			filepath.Clean(file[0]) != filepath.Clean(s.path) {
+			// The source path is a single file, so an explicit file has to refer to it.
+			return nil, errors.New("the specified file does not match the source file path")
 		}
-
-		path = filepath.Join(s.path, file[0])
 	}
 
 	info, err := os.Stat(path)
@@ -351,6 +353,12 @@ func writeFileAtomic(path string, content []byte) error {
 		return err
 	}
 
+	// Keep the permissions of an existing file; a new file gets the default mode.
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+
 	file, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -378,7 +386,7 @@ func writeFileAtomic(path string, content []byte) error {
 		return err
 	}
 
-	if err = os.Chmod(name, 0o644); err != nil {
+	if err = os.Chmod(name, mode); err != nil {
 		_ = os.Remove(name)
 
 		return err

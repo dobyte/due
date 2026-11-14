@@ -432,8 +432,8 @@ func (c *listClient) get(server constant.ServerConfig, path string, params map[s
 }
 
 // parseExport parses the ZIP archive returned by the v3 admin export endpoint and returns a map
-// from dataId to content. ZIP entries are named as groupName/dataId so the group prefix is
-// stripped.
+// from dataId to content. ZIP entries are named as groupName/dataId, so the group prefix is
+// stripped while the full relative dataId, including subdirectories, is kept as the key.
 func parseExport(data []byte, group string) (map[string]string, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -450,10 +450,10 @@ func parseExport(data []byte, group string) (map[string]string, error) {
 			continue
 		}
 
-		// Entries are named groupName/dataId; strip the group prefix when present.
+		// Entries are named groupName/dataId; strip the group prefix when present and keep the full
+		// relative dataId so that nested dataIds can be looked up by their complete name.
 		name, _ := strings.CutPrefix(f.Name, prefix)
-		// Strip any remaining directory components inside the group.
-		name = path.Base(name)
+		name = path.Clean(strings.TrimPrefix(name, "/"))
 		if name == "." || name == "/" {
 			continue
 		}

@@ -29,7 +29,10 @@ type Source interface {
 
 // Watcher watches the config changes of a [Source].
 type Watcher interface {
-	// Next blocks until a config changes and returns the changed configurations.
+	// Next blocks until a config changes and returns the changed configurations. A non-nil error
+	// ends the watch: the configurator stops the watcher, reopens it and reloads the source, so a
+	// watcher may report transient failures as errors. Next must not be called again after it has
+	// returned an error.
 	Next() ([]*Configuration, error)
 	// Stop stops watching.
 	Stop() error

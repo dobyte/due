@@ -51,6 +51,7 @@ type Source struct {
 	closed         atomic.Bool        // Whether the source has been closed
 	wg             sync.WaitGroup     // Wait group for goroutine exit
 	searchDisabled bool               // Whether group search is unavailable
+	patternWarned  atomic.Bool        // Whether the unexpandable-pattern warning was logged
 	configClient   api.ConfigFileAPI  // Config file client
 	groupClient    api.ConfigGroupAPI // Config group client
 	subscribed     sync.Map           // Config files that have registered a change listener
@@ -148,7 +149,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 			return nil, err
 		}
 
-		if hasPattern {
+		if hasPattern && s.patternWarned.CompareAndSwap(false, true) {
 			log.Warnf("%s/%s config group query is not supported by the server, the configured patterns cannot be expanded", s.opts.namespace, s.opts.group)
 		}
 

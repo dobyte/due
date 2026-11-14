@@ -719,6 +719,19 @@ func TestSourceStoreRespectsFixedFiles(t *testing.T) {
 	}
 }
 
+// TestSourceStoreEmptyFile verifies that storing an empty dataId is rejected.
+func TestSourceStoreEmptyFile(t *testing.T) {
+	o := defaultOptions()
+	o.client = &stubConfigClient{}
+	o.mode = config.ReadWrite
+
+	source := &Source{opts: o}
+
+	if err := source.Store(context.Background(), "", []byte("{}")); err == nil {
+		t.Fatal("expect an error for an empty file")
+	}
+}
+
 // TestSourceLoadFixedFiles verifies that a configured file list limits a full load to those
 // dataIds and skips the group search.
 func TestSourceLoadFixedFiles(t *testing.T) {
@@ -1049,7 +1062,7 @@ func TestListClientExport(t *testing.T) {
 		if _, err := w.Write(makeExportZip("test-group", map[string]string{
 			"a.json": `{"key":"a"}`,
 			"b.yaml": "key: b\n",
-			"sub/c":  "ignored", // nested path falls back to base name
+			"sub/c":  "nested", // nested dataIds keep their full relative name
 		})); err != nil {
 			t.Fatal(err)
 		}
@@ -1078,8 +1091,8 @@ func TestListClientExport(t *testing.T) {
 	if got := content["b.yaml"]; got != "key: b\n" {
 		t.Errorf("expect b.yaml content %q, got %q", "key: b\n", got)
 	}
-	if got := content["c"]; got != "ignored" {
-		t.Errorf("expect fallback base name c content %q, got %q", "ignored", got)
+	if got := content["sub/c"]; got != "nested" {
+		t.Errorf("expect nested dataId content %q, got %q", "nested", got)
 	}
 }
 
@@ -1150,6 +1163,25 @@ func TestSourceLoadWithExport(t *testing.T) {
 		default:
 			t.Errorf("unexpected config file %s", c.File)
 		}
+	}
+}
+
+// TestParseExportNestedDataId verifies that the export archive keeps the full relative dataId,
+// including subdirectories, so the load lookup by dataId works for nested configurations.
+func TestParseExportNestedDataId(t *testing.T) {
+	content, err := parseExport(makeExportZip("test-group", map[string]string{
+		"a.json":     "flat",
+		"sub/b.yaml": "nested",
+	}), "test-group")
+	if err != nil {
+		t.Fatalf("parse export failed: %v", err)
+	}
+
+	if got := content["a.json"]; got != "flat" {
+		t.Fatalf("expect flat content, actual: %q", got)
+	}
+	if got := content["sub/b.yaml"]; got != "nested" {
+		t.Fatalf("expect nested content, actual: %q", got)
 	}
 }
 

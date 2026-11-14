@@ -247,6 +247,11 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	// Replace the cache with the items of this load, so that removed items do not stay cached.
 	s.replaceCache(loaded)
 
+	// Keep the result deterministic regardless of the page and fetch completion order.
+	sort.Slice(configurations, func(i, j int) bool {
+		return configurations[i].FullPath < configurations[j].FullPath
+	})
+
 	return configurations, nil
 }
 
@@ -583,6 +588,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
+	}
+
+	if file == "" {
+		return errors.New("invalid file path: empty")
 	}
 
 	// A configured file list also constrains an explicit store, so that this source only writes the

@@ -64,6 +64,31 @@ func WithDecoder(decoder Decoder) Option {
 	return func(o *options) { o.decoder = decoder }
 }
 
+// WithScanner sets the scanner used when scanning config content into a destination.
+func WithScanner(scanner Scanner) Option {
+	return func(o *options) { o.scanner = scanner }
+}
+
+// normalize restores the defaults of options that were explicitly set to nil, so that a nil option
+// cannot cause a nil dereference later.
+func (o *options) normalize() {
+	if o.ctx == nil {
+		o.ctx = context.Background()
+	}
+
+	if o.encoder == nil {
+		o.encoder = defaultEncoder
+	}
+
+	if o.decoder == nil {
+		o.decoder = defaultDecoder
+	}
+
+	if o.scanner == nil {
+		o.scanner = defaultScanner
+	}
+}
+
 // defaultEncoder is the default [Encoder]; it supports JSON, XML, YAML and TOML.
 func defaultEncoder(format string, content any) ([]byte, error) {
 	switch strings.ToLower(format) {

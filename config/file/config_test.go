@@ -98,6 +98,28 @@ func TestLoadFile(t *testing.T) {
 	}
 }
 
+// TestLoadSingleFileExplicit verifies that an explicit load works when the source path is a single
+// file.
+func TestLoadSingleFileExplicit(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	source := file.NewSource(file.WithPath(filepath.Join(dir, configFile)))
+	defer source.Close()
+
+	configs, err := source.Load(context.Background(), configFile)
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("invalid config count, expect: 1, actual: %d", len(configs))
+	}
+
+	if _, err = source.Load(context.Background(), "other.json"); err == nil {
+		t.Fatal("expect an error for a file that does not match the source file")
+	}
+}
+
 func TestLoadDirectory(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, configFile, `{"timezone":"Local"}`)

@@ -59,8 +59,9 @@ type Configurator interface {
 	Store(ctx context.Context, source string, file string, content any, override ...bool) error
 	// Close closes the configurator and its config sources. It waits for a running callback and for
 	// the in-flight Load and Store calls to finish, discards the pending notifications, and reports
-	// [errors.ErrClosedConfigurator] from the later Load and Store calls. A callback must not call
-	// Close.
+	// [errors.ErrClosedConfigurator] from the later Set, Load and Store calls. An attempt to register
+	// a watcher after Close has no effect, while Get and Has keep serving the last published
+	// snapshot. A callback must not call Close.
 	Close()
 }
 
@@ -86,9 +87,16 @@ type defaultConfigurator struct {
 	pending  map[string]struct{}
 	chNotify chan struct{}
 	opsMu    sync.RWMutex
-	reloads  sync.Map
+	reloadMu sync.Mutex
+	reloads  map[string]*reloadState
 	closed   atomic.Bool
 	wg       sync.WaitGroup
+}
+
+// reloadState tracks the background reload retry of one source. pending records that another retry
+// was requested while the current run was finishing, so the worker runs again instead of exiting.
+type reloadState struct {
+	pending bool
 }
 
 var _ Configurator = &defaultConfigurator{}
@@ -101,6 +109,7 @@ func NewConfigurator(opts ...Option) Configurator {
 		opt(o)
 	}
 
+	o.normalize()
 	o.sources = normalizeSources(o.sources)
 
 	r := &defaultConfigurator{}
@@ -108,16 +117,17 @@ func NewConfigurator(opts ...Option) Configurator {
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 	r.watchers = make([]*watcher, 0)
 	r.pending = make(map[string]struct{})
+	r.reloads = make(map[string]*reloadState)
 	r.chNotify = make(chan struct{}, 1)
 	r.wg.Go(r.notifyLoop)
 	r.init()
-	r.watch()
 
 	return r
 }
 
-// normalizeSources keeps the first source of every name and closes the duplicates, so that a
-// duplicate source cannot silently shadow another one or leak its connection.
+// normalizeSources keeps the first source of every name and closes later duplicate instances, so
+// that a duplicate source cannot silently shadow another one or leak its connection. Passing the
+// same instance twice keeps it open.
 func normalizeSources(sources []Source) []Source {
 	if len(sources) == 0 {
 		return nil
@@ -155,25 +165,33 @@ func normalizeSources(sources []Source) []Source {
 	return unique
 }
 
-// sameSource reports whether a and b are the same instance. Only pointer sources, which is the shape
-// every built-in source uses, are compared, because comparing interface values whose dynamic type is
-// not comparable panics.
+// sameSource reports whether a and b are the same instance. Pointer sources, which is the shape every
+// built-in source uses, are compared by identity; other comparable values are compared by value.
 func sameSource(a, b Source) bool {
 	if a == nil || b == nil {
 		return false
 	}
 
 	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
-	if va.Kind() != reflect.Pointer || vb.Kind() != reflect.Pointer {
+	if va.Type() != vb.Type() {
 		return false
 	}
 
-	return va.Pointer() == vb.Pointer()
+	if va.Kind() == reflect.Pointer {
+		return va.Pointer() == vb.Pointer()
+	}
+
+	// Comparing interface values whose dynamic type is not comparable panics.
+	if !va.Comparable() {
+		return false
+	}
+
+	return a == b
 }
 
-// init initializes the config sources and loads their config into the value store. A source that
-// fails to load is retried in the background, so that a temporary failure does not leave the store
-// permanently incomplete.
+// init initializes the config sources, loads their config into the value store and starts a watcher
+// per source. A source that fails to load is retried in the background, so that a temporary failure
+// does not leave the store permanently incomplete.
 func (c *defaultConfigurator) init() {
 	c.sources = make(map[string]Source, len(c.opts.sources))
 	for _, s := range c.opts.sources {
@@ -189,14 +207,26 @@ func (c *defaultConfigurator) init() {
 				continue
 			}
 
-			log.Printf("load configure failed: %v", err)
+			log.Printf("load configure of source %q failed: %v", s.Name(), err)
 
 			c.scheduleReload(s)
+
+			// The startup load failed, so the watcher reloads the source when it opens.
+			c.wg.Go(func() {
+				c.watchSource(s, true)
+			})
 
 			continue
 		}
 
 		c.apply(cs)
+
+		// Start the watcher right after the load so that the window in which a change can be missed
+		// between the load and the watch registration stays short. The first open does not load the
+		// source again; every later open reloads it.
+		c.wg.Go(func() {
+			c.watchSource(s, false)
+		})
 	}
 }
 
@@ -249,16 +279,37 @@ func (c *defaultConfigurator) reload(s Source) {
 }
 
 // scheduleReload starts a background reload retry for the source unless one is already running, so
-// that a failed load can recover without blocking the watcher of the source.
+// that a failed load can recover without blocking the watcher of the source. A request that arrives
+// while a retry is finishing makes the worker run again, so no request is lost in the handoff.
 func (c *defaultConfigurator) scheduleReload(s Source) {
-	if _, loaded := c.reloads.LoadOrStore(s.Name(), struct{}{}); loaded {
+	c.reloadMu.Lock()
+	state, ok := c.reloads[s.Name()]
+	if ok {
+		state.pending = true
+		c.reloadMu.Unlock()
+
 		return
 	}
 
-	c.wg.Go(func() {
-		defer c.reloads.Delete(s.Name())
+	state = &reloadState{}
+	c.reloads[s.Name()] = state
+	c.reloadMu.Unlock()
 
-		c.reload(s)
+	c.wg.Go(func() {
+		for {
+			c.reload(s)
+
+			c.reloadMu.Lock()
+			if c.ctx.Err() != nil || !state.pending {
+				delete(c.reloads, s.Name())
+				c.reloadMu.Unlock()
+
+				return
+			}
+
+			state.pending = false
+			c.reloadMu.Unlock()
+		}
 	})
 }
 
@@ -364,20 +415,12 @@ func (c *defaultConfigurator) shallowCopy() map[string]any {
 	return dst
 }
 
-// watch starts a goroutine per source that opens a watcher for it and merges its changes into the
-// store.
-func (c *defaultConfigurator) watch() {
-	for _, s := range c.opts.sources {
-		c.wg.Go(func() {
-			c.watchSource(s)
-		})
-	}
-}
-
 // watchSource opens a watcher for the source and consumes its changes until the configurator is
-// closed. Both a watcher that cannot be opened and one that stops are retried with a backoff, so
-// that a temporary failure does not disable hot reload permanently.
-func (c *defaultConfigurator) watchSource(s Source) {
+// closed. reloadOnOpen controls whether the first successful open loads the source again: a source
+// that was just loaded at startup does not need it. Both a watcher that cannot be opened and one
+// that stops are retried with a backoff, so that a temporary failure does not disable hot reload
+// permanently.
+func (c *defaultConfigurator) watchSource(s Source, reloadOnOpen bool) {
 	var (
 		delay  = watchMinBackoff
 		warned bool
@@ -396,6 +439,10 @@ func (c *defaultConfigurator) watchSource(s Source) {
 			err = errors.New("nil config watcher")
 		}
 		if err != nil {
+			// The failed attempt means that changes may have been missed, so the next successful
+			// open reloads the source.
+			reloadOnOpen = true
+
 			if c.ctx.Err() != nil {
 				return
 			}
@@ -422,36 +469,41 @@ func (c *defaultConfigurator) watchSource(s Source) {
 			continue
 		}
 
-		// Reload the source after the watcher is registered, so that a change that happened between
-		// the previous load and the watch registration is not lost. Unchanged configs are not
-		// reported, so reopening a watcher does not notify the watchers again.
-		names, loadErr := c.reloadSource(s)
-		if loadErr != nil {
-			if c.ctx.Err() != nil {
-				_ = w.Stop()
+		if reloadOnOpen {
+			// Reload the source after the watcher is registered, so that a change that happened
+			// between the previous load and the watch registration is not lost. Unchanged configs
+			// are not reported, so reopening a watcher does not notify the watchers again.
+			names, loadErr := c.reloadSource(s)
+			if loadErr != nil {
+				if c.ctx.Err() != nil {
+					_ = w.Stop()
 
-				return
+					return
+				}
+
+				if errors.Is(loadErr, errors.ErrClosedConfigSource) {
+					_ = w.Stop()
+
+					log.Printf("config source %q is closed, stop watching", s.Name())
+
+					return
+				}
+
+				if !warned {
+					log.Printf("reload configure of source %q failed: %v", s.Name(), loadErr)
+					warned = true
+				}
+
+				// Keep consuming the watcher: changes still arrive while the reload is retried in
+				// the background, so a temporarily unreadable source does not disable hot reload.
+				c.scheduleReload(s)
+			} else if len(names) > 0 {
+				c.scheduleNotify(names)
 			}
-
-			if errors.Is(loadErr, errors.ErrClosedConfigSource) {
-				_ = w.Stop()
-
-				log.Printf("config source %q is closed, stop watching", s.Name())
-
-				return
-			}
-
-			if !warned {
-				log.Printf("reload configure of source %q failed: %v", s.Name(), loadErr)
-				warned = true
-			}
-
-			// Keep consuming the watcher: changes still arrive while the reload is retried in the
-			// background, so a temporarily unreadable source does not disable hot reload.
-			c.scheduleReload(s)
-		} else if len(names) > 0 {
-			c.scheduleNotify(names)
 		}
+
+		// Every open after this one has to reload the source again.
+		reloadOnOpen = true
 
 		warned = false
 
@@ -774,6 +826,10 @@ NOTFOUND:
 
 // Set sets the config value under pattern.
 func (c *defaultConfigurator) Set(pattern string, value any) error {
+	if c.closed.Load() {
+		return errors.ErrClosedConfigurator
+	}
+
 	var (
 		keys = strings.Split(pattern, ".")
 		node any
@@ -909,6 +965,10 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 // Watch registers cb to be called when one of the named configs changes; empty names means every
 // config.
 func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
+	if c.closed.Load() {
+		return
+	}
+
 	w := &watcher{}
 	w.names = make(map[string]struct{}, len(names))
 	w.callback = cb

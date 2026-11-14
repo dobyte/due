@@ -48,6 +48,12 @@ func newWatcher(ctx context.Context, source *Source) (*watcher, error) {
 				return nil
 			}
 
+			// Only directories are watched: a directory watch reports the changes of its files,
+			// and watching every file would consume the platform watch quota on large trees.
+			if !d.IsDir() {
+				return nil
+			}
+
 			return fsWatcher.Add(path)
 		})
 	} else {
@@ -152,6 +158,10 @@ func (w *watcher) addDir(dir string) error {
 				return fs.SkipDir
 			}
 
+			return nil
+		}
+
+		if !d.IsDir() {
 			return nil
 		}
 

@@ -71,8 +71,8 @@ func (w *watcher) newPlan() (*watch.Plan, error) {
 	return plan, nil
 }
 
-// run keeps the watch plan running until the watcher is stopped. Every failed attempt is retried
-// with a backoff and a fresh plan.
+// run keeps the watch plan running until the watcher is stopped. A plan that cannot be built is
+// retried with a backoff and a fresh plan.
 func (w *watcher) run() {
 	delay := watchMinBackoff
 
@@ -107,26 +107,18 @@ func (w *watcher) run() {
 			return
 		}
 
-		runErr := plan.RunWithClientAndHclog(w.source.opts.client, nil)
+		// The SDK retries watch failures internally and returns only when the plan is stopped, so a
+		// regular return means the watcher has ended. Release it so Next returns as well and the
+		// configurator can reopen the watcher instead of blocking forever.
+		plan.RunWithClientAndHclog(w.source.opts.client, nil)
 		w.setPlan(nil)
 
 		if w.ctx.Err() != nil {
 			return
 		}
 
-		if runErr != nil {
-			if w.warned.CompareAndSwap(false, true) {
-				log.Warnf("consul watch failed: %v", runErr)
-			}
-
-			if !w.sleep(delay) {
-				return
-			}
-
-			delay = nextWatchDelay(delay)
-
-			continue
-		}
+		// Cancel the watcher context so Next returns and the configurator can reopen the watcher.
+		w.cancel()
 
 		return
 	}

@@ -42,6 +42,7 @@ type fakeSource struct {
 	mu     sync.Mutex
 	stored map[string][]byte
 	closed bool
+	loads  atomic.Int32
 }
 
 func newFakeSource(content string) *fakeSource {
@@ -59,6 +60,8 @@ func (s *fakeSource) Name() string {
 }
 
 func (s *fakeSource) Load(_ context.Context, _ ...string) ([]*config.Configuration, error) {
+	s.loads.Add(1)
+
 	if s.content == nil {
 		return nil, nil
 	}
@@ -275,29 +278,18 @@ func (s *erroringWatchSource) Watch(ctx context.Context) (config.Watcher, error)
 	return s.fakeSource.Watch(ctx)
 }
 
-// reloadFailingSource serves the first load, fails every later load and exposes only the first
-// watcher, so that a reload failure cannot be hidden by reopening the watcher.
+// reloadFailingSource fails every load, so that a failed reload can be observed without stopping
+// watcher delivery.
 type reloadFailingSource struct {
 	*fakeSource
 
-	loads   atomic.Int32
-	watches atomic.Int32
+	loads atomic.Int32
 }
 
 func (s *reloadFailingSource) Load(context.Context, ...string) ([]*config.Configuration, error) {
-	if s.loads.Add(1) == 1 {
-		return s.fakeSource.Load(context.Background())
-	}
+	s.loads.Add(1)
 
 	return nil, errors.New("config source is unavailable")
-}
-
-func (s *reloadFailingSource) Watch(ctx context.Context) (config.Watcher, error) {
-	if s.watches.Add(1) > 1 {
-		return nil, errors.New("config watcher is unavailable")
-	}
-
-	return s.fakeSource.Watch(ctx)
 }
 
 // waitNames waits until the given name shows up in a notification, failing the test on timeout.
@@ -545,7 +537,8 @@ func TestConfiguratorKeepsWatchingAfterReloadFailure(t *testing.T) {
 	changed := make(chan []string, 8)
 	c.Watch(func(names ...string) { changed <- names })
 
-	// Wait for the reload performed when the watcher opens, so the change below is not raced by it.
+	// The startup load and the reload performed when the watcher opens both fail; the watcher must
+	// still deliver the change below.
 	deadline := time.Now().Add(5 * time.Second)
 
 	for source.loads.Load() < 2 {
@@ -562,6 +555,20 @@ func TestConfiguratorKeepsWatchingAfterReloadFailure(t *testing.T) {
 
 	if got := c.Get("config.timezone").String(); got != "UTC" {
 		t.Fatalf("the watcher is not delivering changes after a failed reload, actual: %s", got)
+	}
+}
+
+// TestConfiguratorSkipsInitialReload verifies that a source loaded at startup is not loaded again
+// when its watcher opens for the first time.
+func TestConfiguratorSkipsInitialReload(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	if got := source.loads.Load(); got != 1 {
+		t.Fatalf("expect one startup load, actual: %d", got)
 	}
 }
 
@@ -672,9 +679,10 @@ func TestConfiguratorKeepsRepeatedSource(t *testing.T) {
 	}
 }
 
-// TestConfiguratorClosedRejectsLoadAndStore verifies that a closed configurator reports
-// ErrClosedConfigurator from the later Load and Store calls, and that a second Close is a no-op.
-func TestConfiguratorClosedRejectsLoadAndStore(t *testing.T) {
+// TestConfiguratorClosedRejectsWrites verifies that a closed configurator reports
+// ErrClosedConfigurator from the later write calls, ignores new watchers, and treats a second Close
+// as a no-op.
+func TestConfiguratorClosedRejectsWrites(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))
 	c.Close()
@@ -686,6 +694,13 @@ func TestConfiguratorClosedRejectsLoadAndStore(t *testing.T) {
 	if err := c.Store(context.Background(), source.Name(), "config.json", map[string]any{}); !errors.Is(err, errors.ErrClosedConfigurator) {
 		t.Fatalf("expect ErrClosedConfigurator from Store, actual: %v", err)
 	}
+
+	if err := c.Set("config.timezone", "UTC"); !errors.Is(err, errors.ErrClosedConfigurator) {
+		t.Fatalf("expect ErrClosedConfigurator from Set, actual: %v", err)
+	}
+
+	// Registering a watcher after Close has no effect and must not panic.
+	c.Watch(func(...string) {})
 
 	c.Close()
 }
@@ -705,9 +720,9 @@ func TestConfiguratorCloseWaitsForInflightLoad(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 
-	// The first Load is the startup load, the second one is the reload performed when the watcher
-	// opens, and the third one is the explicit Load that Close has to wait for.
-	for source.calls.Load() < 3 {
+	// The first Load is the startup load and the second one is the explicit Load that Close has to
+	// wait for; the first watcher open does not reload the source.
+	for source.calls.Load() < 2 {
 		if time.Now().After(deadline) {
 			t.Fatal("the explicit Load call did not start")
 		}
@@ -1073,6 +1088,70 @@ func TestConfiguratorWithCustomDecoder(t *testing.T) {
 
 	if got := c.Get("config.custom").String(); got != "yes" {
 		t.Fatalf("invalid value, expect: yes, actual: %s", got)
+	}
+}
+
+func TestConfiguratorWithCustomScanner(t *testing.T) {
+	source := newFakeSource(`{"raw":"1"}`)
+	scanned := false
+
+	c := config.NewConfigurator(
+		config.WithSources(source),
+		config.WithScanner(func(string, []byte, any) error {
+			scanned = true
+
+			return nil
+		}),
+	)
+	defer c.Close()
+
+	configs, err := c.Load(context.Background(), source.Name())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+
+	if err = configs[0].Scan(&struct{ Raw string }{}); err != nil {
+		t.Fatalf("scan config failed, err: %v", err)
+	}
+
+	if !scanned {
+		t.Fatal("expect the custom scanner to be used")
+	}
+}
+
+func TestConfiguratorWithNilCodecs(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+
+	c := config.NewConfigurator(
+		config.WithContext(nil),
+		config.WithSources(source),
+		config.WithEncoder(nil),
+		config.WithDecoder(nil),
+		config.WithScanner(nil),
+	)
+	defer c.Close()
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("invalid value, expect: Local, actual: %s", got)
+	}
+
+	if err := c.Store(context.Background(), source.Name(), "config.json", map[string]any{"a": 1}, true); err != nil {
+		t.Fatalf("store config failed, err: %v", err)
+	}
+
+	configs, err := c.Load(context.Background(), source.Name())
+	if err != nil {
+		t.Fatalf("load config failed, err: %v", err)
+	}
+
+	var dst struct {
+		Timezone string `json:"timezone"`
+	}
+	if err = configs[0].Scan(&dst); err != nil {
+		t.Fatalf("scan config failed, err: %v", err)
+	}
+	if dst.Timezone != "Local" {
+		t.Fatalf("invalid scanned value, actual: %s", dst.Timezone)
 	}
 }
 
