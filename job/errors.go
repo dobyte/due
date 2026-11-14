@@ -4,24 +4,24 @@ import (
 	"context"
 	"time"
 
-	dueerrors "github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/errors"
 )
 
 var (
-	ErrDefinitionExists    = dueerrors.New("job definition exists")
-	ErrDefinitionNotFound  = dueerrors.New("job definition not found")
-	ErrRunNotFound         = dueerrors.New("job run not found")
-	ErrRunExists           = dueerrors.New("job run exists")
-	ErrHandlerNotFound     = dueerrors.New("job handler not found")
-	ErrLeaseLost           = dueerrors.New("job lease lost")
-	ErrInvalidDefinition   = dueerrors.New("invalid job definition")
-	ErrInvalidRun          = dueerrors.New("invalid job run")
-	ErrJobClosed           = dueerrors.New("job service is closed")
-	ErrJobStarted          = dueerrors.New("job service is started")
-	ErrUnsupportedStore    = dueerrors.New("job store lacks required capabilities")
-	ErrVersionConflict     = dueerrors.New("job version conflict")
-	ErrUnsupportedSchedule = dueerrors.New("job schedule is unsupported")
-	ErrInvalidSchedule     = dueerrors.New("invalid job schedule")
+	ErrDefinitionExists    = errors.New("job definition exists")
+	ErrDefinitionNotFound  = errors.New("job definition not found")
+	ErrRunNotFound         = errors.New("job run not found")
+	ErrRunExists           = errors.New("job run exists")
+	ErrHandlerNotFound     = errors.New("job handler not found")
+	ErrLeaseLost           = errors.New("job lease lost")
+	ErrInvalidDefinition   = errors.New("invalid job definition")
+	ErrInvalidRun          = errors.New("invalid job run")
+	ErrJobClosed           = errors.New("job service is closed")
+	ErrJobStarted          = errors.New("job service is started")
+	ErrUnsupportedStore    = errors.New("job store lacks required capabilities")
+	ErrVersionConflict     = errors.New("job version conflict")
+	ErrUnsupportedSchedule = errors.New("job schedule is unsupported")
+	ErrInvalidSchedule     = errors.New("invalid job schedule")
 )
 
 // RetryableError marks an error as retryable.
@@ -52,13 +52,13 @@ func ClassifyError(err error) ErrorClass {
 	}
 
 	var retryable *RetryableError
-	if dueerrors.As(err, &retryable) {
+	if errors.As(err, &retryable) {
 		return ErrorRetryable
 	}
-	if dueerrors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.DeadlineExceeded) {
 		return ErrorRetryable
 	}
-	if dueerrors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) {
 		return ErrorCanceled
 	}
 

@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	dueerrors "github.com/dobyte/due/v2/errors"
+	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/utils/xuuid"
 )
 
@@ -44,7 +44,7 @@ func NewRegistry() *Registry {
 // Register installs a Handler for taskType.
 func (r *Registry) Register(taskType string, handler Handler) error {
 	if r == nil || taskType == "" || handler == nil {
-		return dueerrors.ErrInvalidArgument
+		return errors.ErrInvalidArgument
 	}
 
 	r.mu.Lock()
@@ -75,7 +75,7 @@ func NewService(opts ...Option) (*Service, error) {
 	}
 
 	if o.store == nil {
-		return nil, dueerrors.ErrInvalidArgument
+		return nil, errors.ErrInvalidArgument
 	}
 	if !storeSupported(o.store.Capabilities()) {
 		return nil, ErrUnsupportedStore
@@ -92,7 +92,7 @@ func NewService(opts ...Option) (*Service, error) {
 // Register installs a Handler in the Service registry.
 func (s *Service) Register(taskType string, handler Handler) error {
 	if s == nil {
-		return dueerrors.ErrInvalidArgument
+		return errors.ErrInvalidArgument
 	}
 
 	return s.registry.Register(taskType, handler)
@@ -101,7 +101,7 @@ func (s *Service) Register(taskType string, handler Handler) error {
 // Start starts the Planner, Runner, and Recovery loops.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil || s.store == nil {
-		return dueerrors.ErrInvalidArgument
+		return errors.ErrInvalidArgument
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -224,7 +224,7 @@ func (s *Service) planLoop() {
 	defer ticker.Stop()
 
 	for {
-		if err := s.planOnce(s.currentContext()); err != nil && !dueerrors.Is(err, context.Canceled) {
+		if err := s.planOnce(s.currentContext()); err != nil && !errors.Is(err, context.Canceled) {
 			continue
 		}
 
@@ -241,7 +241,7 @@ func (s *Service) runLoop() {
 	defer ticker.Stop()
 
 	for {
-		if err := s.runOnce(s.currentContext()); err != nil && !dueerrors.Is(err, context.Canceled) {
+		if err := s.runOnce(s.currentContext()); err != nil && !errors.Is(err, context.Canceled) {
 			continue
 		}
 
@@ -389,7 +389,7 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 	}
 
 	if err == nil {
-		err = dueerrors.ErrInvalidArgument
+		err = errors.ErrInvalidArgument
 	}
 	class := ClassifyError(err)
 	retryAt := time.Time{}

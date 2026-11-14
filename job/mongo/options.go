@@ -2,22 +2,22 @@ package mongo
 
 import "go.mongodb.org/mongo-driver/mongo"
 
-type Option func(*options)
+type Option func(*storeOptions)
 
-type options struct {
+type storeOptions struct {
 	db             *mongo.Database
 	definitionColl string
 	runColl        string
 }
 
-func defaultOptions() *options {
-	return &options{definitionColl: "due_job_definition", runColl: "due_job_run"}
+func defaultOptions() *storeOptions {
+	return &storeOptions{definitionColl: "due_job_definition", runColl: "due_job_run"}
 }
 
-func WithDB(db *mongo.Database) Option { return func(o *options) { o.db = db } }
+func WithDB(db *mongo.Database) Option { return func(o *storeOptions) { o.db = db } }
 
 func WithCollectionPrefix(prefix string) Option {
-	return func(o *options) {
+	return func(o *storeOptions) {
 		if prefix != "" {
 			o.definitionColl = prefix + "_definition"
 			o.runColl = prefix + "_run"
@@ -26,7 +26,7 @@ func WithCollectionPrefix(prefix string) Option {
 }
 
 func WithCollections(definition, run string) Option {
-	return func(o *options) {
+	return func(o *storeOptions) {
 		if definition != "" {
 			o.definitionColl = definition
 		}

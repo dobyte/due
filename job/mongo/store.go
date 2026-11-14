@@ -9,7 +9,7 @@ import (
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	mongooptions "go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var _ job.JobStore = (*Store)(nil)
@@ -197,7 +197,7 @@ func (s *Store) ListDueDefinitions(ctx context.Context, req job.ListDueRequest) 
 	if req.Limit <= 0 {
 		req.Limit = 100
 	}
-	cursor, err := s.definitions.Find(ctx, bson.M{"status": string(job.DefinitionEnabled), "next_run_at": bson.M{"$lte": req.Now}}, mongooptions.Find().SetSort(bson.D{{Key: "next_run_at", Value: 1}}).SetLimit(int64(req.Limit)))
+	cursor, err := s.definitions.Find(ctx, bson.M{"status": string(job.DefinitionEnabled), "next_run_at": bson.M{"$lte": req.Now}}, options.Find().SetSort(bson.D{{Key: "next_run_at", Value: 1}}).SetLimit(int64(req.Limit)))
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (s *Store) CreateRunIfDue(ctx context.Context, req job.CreateRunRequest) (*
 	var created *job.Run
 	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (any, error) {
 		var doc definitionDocument
-		if err := s.definitions.FindOne(sc, bson.M{"job_id": req.JobID}, mongooptions.FindOne().SetSort(bson.D{{Key: "next_run_at", Value: 1}})).Decode(&doc); err != nil {
+		if err := s.definitions.FindOne(sc, bson.M{"job_id": req.JobID}, options.FindOne().SetSort(bson.D{{Key: "next_run_at", Value: 1}})).Decode(&doc); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				return nil, job.ErrDefinitionNotFound
 			}
@@ -308,7 +308,7 @@ func (s *Store) ClaimRuns(ctx context.Context, req job.ClaimRequest) ([]*job.Cla
 		leaseUntil := now.Add(req.LeaseDuration)
 		var doc runDocument
 		update := bson.M{"$set": bson.M{"status": string(job.RunLeased), "lease_owner": req.OwnerID, "lease_until": leaseUntil, "updated_at": now}, "$inc": bson.M{"fencing_token": 1, "attempt": 1}}
-		err := s.runs.FindOneAndUpdate(ctx, filter, update, mongooptions.FindOneAndUpdate().SetSort(bson.D{{Key: "ready_at", Value: 1}}).SetReturnDocument(mongooptions.After)).Decode(&doc)
+		err := s.runs.FindOneAndUpdate(ctx, filter, update, options.FindOneAndUpdate().SetSort(bson.D{{Key: "ready_at", Value: 1}}).SetReturnDocument(options.After)).Decode(&doc)
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			break
 		}
@@ -418,7 +418,7 @@ func (s *Store) RecoverExpiredRuns(ctx context.Context, req job.RecoverRequest) 
 		req.Limit = 100
 	}
 	ids := make([]string, 0, req.Limit)
-	cursor, err := s.runs.Find(ctx, bson.M{"status": bson.M{"$in": []string{string(job.RunLeased), string(job.RunRunning)}}, "lease_until": bson.M{"$gt": time.Time{}, "$lte": req.Now}}, mongooptions.Find().SetSort(bson.D{{Key: "lease_until", Value: 1}}).SetLimit(int64(req.Limit)))
+	cursor, err := s.runs.Find(ctx, bson.M{"status": bson.M{"$in": []string{string(job.RunLeased), string(job.RunRunning)}}, "lease_until": bson.M{"$gt": time.Time{}, "$lte": req.Now}}, options.Find().SetSort(bson.D{{Key: "lease_until", Value: 1}}).SetLimit(int64(req.Limit)))
 	if err != nil {
 		return 0, err
 	}
