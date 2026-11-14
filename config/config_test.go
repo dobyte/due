@@ -342,6 +342,61 @@ func TestConfiguratorWatch(t *testing.T) {
 	waitNames(t, filtered, "gate")
 }
 
+func TestConfiguratorReloadReplacesValue(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local","nested":{"a":1,"b":2}}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"nested":{"a":3}}`)})
+	waitNames(t, changed, "config")
+
+	if c.Has("config.nested.b") {
+		t.Fatal("expect a key removed from the config to disappear from the store")
+	}
+	if c.Has("config.timezone") {
+		t.Fatal("expect a key removed from the config to disappear from the store")
+	}
+	if got := c.Get("config.nested.a").Int(); got != 3 {
+		t.Fatalf("invalid value of config.nested.a, expect: 3, actual: %d", got)
+	}
+}
+
+// TestConfiguratorSkipsUndecodedConfig verifies that a config whose content cannot be decoded is
+// neither stored nor reported to the watchers, while the other configs of the same change are
+// applied.
+func TestConfiguratorSkipsUndecodedConfig(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	source.push(
+		&config.Configuration{Name: "broken", Format: "json", Content: []byte(`{`)},
+		&config.Configuration{Name: "gate", Format: "json", Content: []byte(`{"name":"gate"}`)},
+	)
+
+	select {
+	case names := <-changed:
+		if len(names) != 1 || names[0] != "gate" {
+			t.Fatalf("expect only the decoded config to be notified, actual: %v", names)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for the notification")
+	}
+
+	if c.Has("broken") {
+		t.Fatal("expect the undecoded config not to be stored")
+	}
+	if got := c.Get("gate.name").String(); got != "gate" {
+		t.Fatalf("invalid value of gate.name, expect: gate, actual: %s", got)
+	}
+}
+
 func TestConfiguratorLoad(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))

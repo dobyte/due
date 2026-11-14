@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,7 +34,8 @@ const (
 // Configurator manages a set of config sources and exposes the config loaded from them.
 //
 // The value store is merge-only: a config that a source no longer provides stays available until the
-// configurator is recreated.
+// configurator is recreated. A changed config replaces its previous value as a whole, so a key
+// removed from a config file is removed from the store as well.
 type Configurator interface {
 	// Has reports whether a config matching pattern exists.
 	Has(pattern string) bool
@@ -47,18 +49,21 @@ type Configurator interface {
 	// Match returns a [Matcher] over the given patterns.
 	Match(patterns ...string) Matcher
 	// Watch registers cb to be called when one of the named configs changes; empty names means every
-	// config.
+	// config. Callbacks run on a single goroutine and are never invoked concurrently; changes that
+	// arrive while a callback runs are merged into the next call.
 	Watch(cb WatchCallbackFunc, names ...string)
 	// Load loads the configurations of the named source; empty file means every file of the source.
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store saves content as file under the named source, merging it with the existing config unless
 	// override is true.
 	Store(ctx context.Context, source string, file string, content any, override ...bool) error
-	// Close closes the configurator and its config sources.
+	// Close closes the configurator and its config sources. It waits for a running callback to
+	// finish and discards the notifications that are still pending; a callback must not call Close.
 	Close()
 }
 
-// WatchCallbackFunc is called with the names of the configs that changed.
+// WatchCallbackFunc is called with the names of the configs that changed. The names are sorted and
+// may combine several changes.
 type WatchCallbackFunc func(names ...string)
 
 type watcher struct {
@@ -75,6 +80,9 @@ type defaultConfigurator struct {
 	values   atomic.Pointer[map[string]any]
 	rw       sync.RWMutex
 	watchers []*watcher
+	notifyMu sync.Mutex
+	pending  map[string]struct{}
+	chNotify chan struct{}
 	wg       sync.WaitGroup
 }
 
@@ -92,6 +100,9 @@ func NewConfigurator(opts ...Option) Configurator {
 	r.opts = o
 	r.ctx, r.cancel = context.WithCancel(o.ctx)
 	r.watchers = make([]*watcher, 0)
+	r.pending = make(map[string]struct{})
+	r.chNotify = make(chan struct{}, 1)
+	r.wg.Go(r.notifyLoop)
 	r.init()
 	r.watch()
 
@@ -147,17 +158,16 @@ func (c *defaultConfigurator) reload(s Source) {
 		}
 
 		if names := c.apply(cs); len(names) > 0 {
-			c.wg.Go(func() {
-				c.notify(names...)
-			})
+			c.scheduleNotify(names)
 		}
 
 		return
 	}
 }
 
-// apply decodes the given configurations and merges them into the value store. It returns the names
-// of the configurations that were applied.
+// apply decodes the given configurations and stores them in the value store. The value of every
+// applied config replaces its previous value as a whole, so a key removed from a changed config is
+// removed from the store. It returns the names of the configurations that were applied.
 func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 	names := make([]string, 0, len(cs))
 	values := make(map[string]any, len(cs))
@@ -186,17 +196,10 @@ func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	dst, err := c.copy()
-	if err != nil {
-		log.Printf("copy configure failed: %v", err)
+	dst := c.shallowCopy()
 
-		return names
-	}
-
-	if err = mergo.Merge(&dst, values, mergo.WithOverride); err != nil {
-		log.Printf("merge configure failed: %v", err)
-
-		return names
+	for name, v := range values {
+		dst[name] = v
 	}
 
 	c.store(dst)
@@ -237,6 +240,21 @@ func (c *defaultConfigurator) copy() (map[string]any, error) {
 	}
 
 	return dst, nil
+}
+
+// shallowCopy returns a copy of the top-level value map. The nested values are shared with the
+// current snapshot: every writer replaces a value as a whole instead of modifying it in place, so
+// the shared subtrees stay immutable.
+func (c *defaultConfigurator) shallowCopy() map[string]any {
+	values := c.load()
+
+	dst := make(map[string]any, len(values))
+
+	for name, v := range values {
+		dst[name] = v
+	}
+
+	return dst
 }
 
 // watch starts a goroutine per source that opens a watcher for it and merges its changes into the
@@ -346,9 +364,7 @@ func (c *defaultConfigurator) consume(w Watcher, delay time.Duration) (bool, tim
 		delay = watchMinBackoff
 
 		if names := c.apply(cs); len(names) > 0 {
-			c.wg.Go(func() {
-				c.notify(names...)
-			})
+			c.scheduleNotify(names)
 		}
 	}
 }
@@ -378,6 +394,62 @@ func nextWatchDelay(delay time.Duration) time.Duration {
 	}
 
 	return delay
+}
+
+// scheduleNotify records the given names and wakes the notifier without blocking, so that a slow
+// callback cannot stall the config sources.
+func (c *defaultConfigurator) scheduleNotify(names []string) {
+	c.notifyMu.Lock()
+	for _, name := range names {
+		c.pending[name] = struct{}{}
+	}
+	c.notifyMu.Unlock()
+
+	select {
+	case c.chNotify <- struct{}{}:
+	default:
+		// A pending notification signal is already queued, and the names are merged into the next
+		// callback by notifyLoop.
+	}
+}
+
+// notifyLoop delivers pending config names on a single goroutine until the configurator is closed.
+// Callbacks are therefore never invoked concurrently, and changes that arrive while a callback runs
+// are merged into the next call.
+func (c *defaultConfigurator) notifyLoop() {
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-c.chNotify:
+		}
+
+		if names := c.takePending(); len(names) > 0 {
+			c.notify(names...)
+		}
+	}
+}
+
+// takePending drains the pending names in a stable order, so that a callback always observes the
+// same argument order for the same set of changes.
+func (c *defaultConfigurator) takePending() []string {
+	c.notifyMu.Lock()
+	defer c.notifyMu.Unlock()
+
+	if len(c.pending) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(c.pending))
+	for name := range c.pending {
+		names = append(names, name)
+	}
+
+	clear(c.pending)
+
+	slices.Sort(names)
+
+	return names
 }
 
 // notify calls every watcher that matches one of the given names. The watcher list is snapshotted
@@ -419,7 +491,8 @@ func callWatchCallback(cb WatchCallbackFunc, names ...string) {
 	cb(names...)
 }
 
-// Close closes the configurator and its config sources.
+// Close closes the configurator and its config sources. It waits for a running callback to finish
+// and discards the notifications that are still pending.
 func (c *defaultConfigurator) Close() {
 	c.cancel()
 

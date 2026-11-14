@@ -31,9 +31,9 @@ const (
 const maxMaskedFields = 64
 
 var (
+	unmarshalerKinds    sync.Map // map[reflect.Type]unmarshalerKind
 	jsonUnmarshalerType = reflect.TypeOf((*jsonUnmarshaler)(nil)).Elem()
 	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
-	unmarshalerKinds    sync.Map // map[reflect.Type]unmarshalerKind
 	anyMapType          = reflect.TypeOf(map[string]any(nil))
 	anySliceType        = reflect.TypeOf([]any(nil))
 	stringStringMapType = reflect.TypeOf(map[string]string(nil))

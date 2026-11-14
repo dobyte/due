@@ -15,6 +15,7 @@ import (
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/polarismesh/polaris-go/api"
+	plog "github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
@@ -516,11 +517,85 @@ func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg.GetGlobal().GetAPI().SetTimeout(s.opts.timeout)
 	cfg.GetConfigFile().GetLocalCache().SetPersistDir(s.opts.cacheDir)
 
-	if err := api.ConfigLoggers(s.opts.logDir, api.InfoLog); err != nil {
+	if err := setLoggersDir(s.opts.logDir); err != nil {
 		return nil, errors.New("configure polaris loggers failed: " + err.Error())
 	}
 
 	return api.InitContextByConfig(cfg)
+}
+
+// setLoggersDir configures the process-wide Polaris SDK loggers once.
+//
+// The SDK shares its loggers across all contexts, so the built-in client only takes them over while
+// they still use the SDK defaults. Loggers configured by the application or by another component
+// are left untouched, and the configuration runs at most once per process to avoid rebuilding the
+// file loggers and leaking the replaced ones.
+var (
+	setLoggersDirOnce sync.Once
+	setLoggersDirErr  error
+)
+
+func setLoggersDir(logDir string) error {
+	setLoggersDirOnce.Do(func() {
+		if !loggersStillDefault() {
+			return
+		}
+
+		setLoggersDirErr = api.SetLoggersDir(logDir)
+	})
+
+	return setLoggersDirErr
+}
+
+// loggersStillDefault reports whether every Polaris logger still uses the SDK default directory and
+// log level.
+func loggersStillDefault() bool {
+	loggers := []plog.Logger{
+		plog.GetBaseLogger(),
+		plog.GetStatLogger(),
+		plog.GetStatReportLogger(),
+		plog.GetDetectLogger(),
+		plog.GetNetworkLogger(),
+		plog.GetCacheLogger(),
+		plog.GetEventLogger(),
+		plog.GetLosslessLogger(),
+		plog.GetRouteLogger(),
+		plog.GetAuthLogger(),
+		plog.GetRateLimitLogger(),
+		plog.GetCircuitBreakerLogger(),
+	}
+
+	for _, logger := range loggers {
+		if l, ok := logger.(plog.DirLogger); ok && !isDefaultLogDir(l.GetLogDir()) {
+			return false
+		}
+
+		if currentLogLevel(logger) != plog.DefaultLogLevel {
+			return false
+		}
+	}
+
+	return true
+}
+
+// currentLogLevel returns the lowest log level enabled by logger.
+func currentLogLevel(logger plog.Logger) int {
+	for _, level := range []int{plog.TraceLog, plog.DebugLog, plog.InfoLog, plog.WarnLog, plog.ErrorLog, plog.FatalLog} {
+		if logger.IsLevelEnabled(level) {
+			return level
+		}
+	}
+
+	return plog.NoneLog
+}
+
+// isDefaultLogDir reports whether dir is the SDK default log root or one of its subdirectories.
+func isDefaultLogDir(dir string) bool {
+	root := filepath.Clean(plog.DefaultLogRotationRootDir)
+
+	cleaned := filepath.Clean(dir)
+
+	return cleaned == root || strings.HasPrefix(cleaned, root+string(filepath.Separator))
 }
 
 // isUnimplementedError reports whether err is an unimplemented API error. Older
