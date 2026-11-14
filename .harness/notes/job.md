@@ -796,7 +796,7 @@ trace_id
 ### Phase 5：生产能力（进行中）
 
 - Metrics、可选 Logger 和事件唤醒 Notifier 已完成。
-- Outbox 或跨进程通知适配器。
+- Outbox 或其他跨进程通知适配器。
 - 管理接口。
 - 任务历史归档。
 - Redis 故障切换和长任务演练。
@@ -849,4 +849,4 @@ store := mongo.NewStore(mongo.WithDB(database))
 
 MySQL 和 MongoDB 的 adapter 不负责创建连接或关闭注入的连接；应用负责连接池生命周期。Redis adapter 管理自己创建的 Redis client，也支持 `WithClient` 注入外部 client。
 
-Service 的生产能力通过可选接口注入：`WithMetrics` 接收计数和耗时观测，`WithLogger` 接收 Due Logger 兼容接口，`NewChannelNotifier` 提供进程内立即唤醒；跨进程通知应在此接口上接入 Redis Pub/Sub、NATS 或其他事件总线。
+Service 的生产能力通过可选接口注入：`WithMetrics` 接收计数和耗时观测，`WithLogger` 接收 Due Logger 兼容接口，`NewChannelNotifier` 提供进程内立即唤醒。Redis 适配器提供 `redis.NewNotifier`，通过 Pub/Sub 向多个 Worker 广播唤醒事件；其他跨进程通知可复用同一 `EventNotifier` 接口。
