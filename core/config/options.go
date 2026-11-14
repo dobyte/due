@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"log"
 	"slices"
 	"strings"
 
@@ -11,28 +10,14 @@ import (
 	"github.com/dobyte/due/v2/encoding/xml"
 	"github.com/dobyte/due/v2/encoding/yaml"
 	"github.com/dobyte/due/v2/errors"
+	internallog "github.com/dobyte/due/v2/internal/logger"
 )
 
 // Option configures a configurator.
 type Option func(o *options)
 
-// Logger is the logging interface used by a configurator. A logger with level-specific methods,
-// such as the framework logger, satisfies it.
-type Logger interface {
-	// Infof writes a formatted info-level log record.
-	Infof(format string, a ...any)
-	// Warnf writes a formatted warn-level log record.
-	Warnf(format string, a ...any)
-	// Errorf writes a formatted error-level log record.
-	Errorf(format string, a ...any)
-}
-
-// defaultLogger writes every record to the standard logger.
-type defaultLogger struct{}
-
-func (defaultLogger) Infof(format string, a ...any)  { log.Printf(format, a...) }
-func (defaultLogger) Warnf(format string, a ...any)  { log.Printf(format, a...) }
-func (defaultLogger) Errorf(format string, a ...any) { log.Printf(format, a...) }
+// Logger is the logging interface used by a configurator.
+type Logger = internallog.Logger
 
 // Encoder encodes content in the given format into bytes.
 type Encoder func(format string, content any) ([]byte, error)
@@ -55,7 +40,6 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		ctx:     context.Background(),
-		logger:  defaultLogger{},
 		encoder: defaultEncoder,
 		decoder: defaultDecoder,
 		scanner: defaultScanner,
@@ -68,9 +52,31 @@ func WithContext(ctx context.Context) Option {
 }
 
 // WithLogger sets the logger used to report config source, watcher and callback events. The
-// configurator does not close the given logger.
+// configurator does not close the given logger. Log records are discarded when no logger is
+// provided.
 func WithLogger(logger Logger) Option {
 	return func(o *options) { o.logger = logger }
+}
+
+// infof writes a formatted info-level record when a logger is installed.
+func (o *options) infof(format string, a ...any) {
+	if o.logger != nil {
+		o.logger.Infof(format, a...)
+	}
+}
+
+// warnf writes a formatted warn-level record when a logger is installed.
+func (o *options) warnf(format string, a ...any) {
+	if o.logger != nil {
+		o.logger.Warnf(format, a...)
+	}
+}
+
+// errorf writes a formatted error-level record when a logger is installed.
+func (o *options) errorf(format string, a ...any) {
+	if o.logger != nil {
+		o.logger.Errorf(format, a...)
+	}
 }
 
 // WithSources sets the config sources. The given slice is copied, so later changes to it do not
@@ -101,10 +107,6 @@ func WithScanner(scanner Scanner) Option {
 func (o *options) normalize() {
 	if o.ctx == nil {
 		o.ctx = context.Background()
-	}
-
-	if o.logger == nil {
-		o.logger = defaultLogger{}
 	}
 
 	if o.encoder == nil {

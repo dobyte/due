@@ -18,8 +18,8 @@ func GetConfigurator() Configurator {
 	return config.GetConfigurator()
 }
 
-// SetConfiguratorWithSources creates a configurator from sources and installs it as the global
-// configurator.
+// SetConfiguratorWithSources creates a configurator with [NewConfigurator] and installs it as the
+// global configurator. It therefore uses the same framework logger default as [NewConfigurator].
 func SetConfiguratorWithSources(sources ...Source) {
 	SetConfigurator(NewConfigurator(WithSources(sources...)))
 }

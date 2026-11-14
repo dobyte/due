@@ -27,7 +27,10 @@ var globalConfigurator config.Configurator
 func init() {
 	path := env.Get(dueEtcEnvName, defaultEtcPath).String()
 	path = flag.String(dueEtcArgName, path)
-	globalConfigurator = coreconfig.NewConfigurator(coreconfig.WithSources(corefile.NewSource(path, coreconfig.ReadOnly)))
+	globalConfigurator = coreconfig.NewConfigurator(
+		coreconfig.WithLogger(stdLogger{}),
+		coreconfig.WithSources(corefile.NewSource(path, coreconfig.ReadOnly)),
+	)
 }
 
 // SetConfigurator sets the configurator.

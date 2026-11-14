@@ -28,7 +28,8 @@ func GetConfigurator() Configurator {
 }
 
 // SetConfiguratorWithSources creates a configurator from sources and installs it as the global
-// configurator.
+// configurator. It does not install a logger; use [NewConfigurator] with [WithLogger] when logging
+// is required.
 func SetConfiguratorWithSources(sources ...Source) {
 	SetConfigurator(NewConfigurator(WithSources(sources...)))
 }

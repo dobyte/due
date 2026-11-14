@@ -111,6 +111,10 @@ var _ Configurator = &defaultConfigurator{}
 // NewConfigurator returns a new [Configurator] configured with opts. It loads every source once,
 // starts watching the source immediately after its load, and then returns. See [Configurator] for
 // the startup reload semantics.
+//
+// The caller installs the logger with [WithLogger]; log records are discarded when no logger is
+// provided. The public config package installs the framework logger instead, and etc installs the
+// standard logger.
 func NewConfigurator(opts ...Option) Configurator {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -118,7 +122,7 @@ func NewConfigurator(opts ...Option) Configurator {
 	}
 
 	o.normalize()
-	o.sources = normalizeSources(o.sources, o.logger)
+	o.sources = normalizeSources(o.sources, o)
 
 	r := &defaultConfigurator{}
 	r.opts = o
@@ -136,7 +140,7 @@ func NewConfigurator(opts ...Option) Configurator {
 // normalizeSources keeps the first source of every name and closes later duplicate instances, so
 // that a duplicate source cannot silently shadow another one or leak its connection. Passing the
 // same instance twice keeps it open.
-func normalizeSources(sources []Source, logger Logger) []Source {
+func normalizeSources(sources []Source, opts *options) []Source {
 	if len(sources) == 0 {
 		return nil
 	}
@@ -148,18 +152,18 @@ func normalizeSources(sources []Source, logger Logger) []Source {
 
 	for _, s := range sources {
 		if s == nil {
-			logger.Warnf("nil config source is ignored")
+			opts.warnf("nil config source is ignored")
 			continue
 		}
 
 		name := s.Name()
 		if kept, ok := seen[name]; ok {
-			logger.Warnf("duplicate config source %q is ignored", name)
+			opts.warnf("duplicate config source %q is ignored", name)
 
 			// The same instance may be given twice; closing it would close the source that is kept.
 			if !sameSource(kept, s) {
 				if err := s.Close(); err != nil {
-					logger.Errorf("close duplicate config source %q failed: %v", name, err)
+					opts.errorf("close duplicate config source %q failed: %v", name, err)
 				}
 			}
 
@@ -210,12 +214,12 @@ func (c *defaultConfigurator) init() {
 		cs, err := s.Load(c.ctx)
 		if err != nil {
 			if errors.Is(err, errors.ErrClosedConfigSource) {
-				c.opts.logger.Warnf("config source %q is closed, skip loading", s.Name())
+				c.opts.warnf("config source %q is closed, skip loading", s.Name())
 
 				continue
 			}
 
-			c.opts.logger.Errorf("load configure of source %q failed: %v", s.Name(), err)
+			c.opts.errorf("load configure of source %q failed: %v", s.Name(), err)
 
 			c.scheduleReload(s)
 
@@ -259,13 +263,13 @@ func (c *defaultConfigurator) reload(s Source) {
 			}
 
 			if errors.Is(err, errors.ErrClosedConfigSource) {
-				c.opts.logger.Warnf("config source %q is closed, stop reloading", s.Name())
+				c.opts.warnf("config source %q is closed, stop reloading", s.Name())
 
 				return
 			}
 
 			if !warned {
-				c.opts.logger.Errorf("reload configure of source %q failed: %v", s.Name(), err)
+				c.opts.errorf("reload configure of source %q failed: %v", s.Name(), err)
 				warned = true
 			}
 
@@ -275,7 +279,7 @@ func (c *defaultConfigurator) reload(s Source) {
 		}
 
 		if warned {
-			c.opts.logger.Infof("config source %q reload recovered", s.Name())
+			c.opts.infof("config source %q reload recovered", s.Name())
 		}
 
 		if names := c.apply(cs); len(names) > 0 {
@@ -339,7 +343,7 @@ func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 
 	for _, cc := range cs {
 		if cc.Name == "" {
-			c.opts.logger.Warnf("config name is empty, the config is ignored")
+			c.opts.warnf("config name is empty, the config is ignored")
 
 			continue
 		}
@@ -351,7 +355,7 @@ func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 		v, err := c.opts.decoder(cc.Format, cc.Content)
 		if err != nil {
 			if !errors.Is(err, errors.ErrInvalidFormat) {
-				c.opts.logger.Errorf("decode configure failed: %v", err)
+				c.opts.errorf("decode configure failed: %v", err)
 			}
 			continue
 		}
@@ -467,13 +471,13 @@ func (c *defaultConfigurator) watchSource(s Source, reloadOnOpen bool) {
 			// A closed source cannot be watched again; retrying would only log the same error on
 			// every backoff.
 			if errors.Is(err, errors.ErrClosedConfigSource) {
-				c.opts.logger.Warnf("config source %q is closed, stop watching", s.Name())
+				c.opts.warnf("config source %q is closed, stop watching", s.Name())
 
 				return
 			}
 
 			if !warned {
-				c.opts.logger.Errorf("watching configure change failed: %v", err)
+				c.opts.errorf("watching configure change failed: %v", err)
 				warned = true
 			}
 
@@ -503,13 +507,13 @@ func (c *defaultConfigurator) watchSource(s Source, reloadOnOpen bool) {
 				if errors.Is(loadErr, errors.ErrClosedConfigSource) {
 					_ = w.Stop()
 
-					c.opts.logger.Warnf("config source %q is closed, stop watching", s.Name())
+					c.opts.warnf("config source %q is closed, stop watching", s.Name())
 
 					return
 				}
 
 				if !warned {
-					c.opts.logger.Errorf("reload configure of source %q failed: %v", s.Name(), loadErr)
+					c.opts.errorf("reload configure of source %q failed: %v", s.Name(), loadErr)
 					warned = true
 				}
 
@@ -579,7 +583,7 @@ func (c *defaultConfigurator) consume(w Watcher) (errored bool) {
 				!errors.Is(err, errors.ErrClosedConfigSource) &&
 				!errors.Is(err, context.Canceled) &&
 				!errors.Is(err, io.EOF) {
-				c.opts.logger.Errorf("watching configure change failed: %v", err)
+				c.opts.errorf("watching configure change failed: %v", err)
 
 				return true
 			}
@@ -708,7 +712,7 @@ func (c *defaultConfigurator) notify(names ...string) {
 func (c *defaultConfigurator) callWatchCallback(cb WatchCallbackFunc, names ...string) {
 	defer func() {
 		if err := recover(); err != nil {
-			c.opts.logger.Errorf("watch callback panic: %v", err)
+			c.opts.errorf("watch callback panic: %v", err)
 		}
 	}()
 

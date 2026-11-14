@@ -1,5 +1,5 @@
-// Package logger provides the minimal logging bridge shared by the framework logger and packages
-// that cannot import the log package directly.
+// Package logger provides the minimal logging interface and the framework logger bridge shared by
+// packages that cannot import the log package directly.
 package logger
 
 // Logger is the minimal logging interface used by the bridge.
