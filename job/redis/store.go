@@ -40,7 +40,7 @@ var (
 	createRunScript = redis.NewScript(
 		"if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end " +
 			"redis.call('HSET', KEYS[1], unpack(ARGV, 1, 46)) " +
-			"redis.call('ZADD', KEYS[2], ARGV[47], ARGV[1]) " +
+			"redis.call('ZADD', KEYS[2], ARGV[47], ARGV[2]) " +
 			"return 1",
 	)
 	createRunIfDueScript = redis.NewScript(
@@ -232,7 +232,7 @@ func (s *Store) CreateDefinition(ctx context.Context, definition *job.Definition
 	fields := definitionFields(definition)
 	args := make([]any, 0, len(fields)+2)
 	args = append(args, fields...)
-	args = append(args, definition.Status, score(definition.NextRunAt))
+	args = append(args, string(definition.Status), score(definition.NextRunAt))
 	result, err := createDefinitionScript.Run(ctx, s.client, []string{
 		s.definitionKey(definition.ID),
 		s.definitionsDueKey(),
@@ -276,7 +276,7 @@ func (s *Store) UpdateDefinition(ctx context.Context, definition *job.Definition
 	fields := definitionFields(definition)
 	args := []any{strconv.FormatInt(version, 10)}
 	args = append(args, fields...)
-	args = append(args, definition.ID, definition.Status, score(definition.NextRunAt))
+	args = append(args, definition.ID, string(definition.Status), score(definition.NextRunAt))
 	result, err := updateDefinitionScript.Run(ctx, s.client, []string{
 		s.definitionKey(definition.ID),
 		s.definitionsDueKey(),
@@ -495,6 +495,9 @@ func (s *Store) ClaimRuns(ctx context.Context, req job.ClaimRequest) ([]*job.Cla
 
 	now := time.Now()
 	leaseUntil := now.Add(req.LeaseDuration)
+	if _, err := s.RecoverExpiredRuns(ctx, job.RecoverRequest{Now: now, Limit: req.Limit}); err != nil {
+		return nil, err
+	}
 	if _, err := promoteRetryScript.Run(ctx, s.client, []string{
 		s.retryKey(),
 		s.pendingKey(),
@@ -645,7 +648,8 @@ func (s *Store) CancelRun(ctx context.Context, req job.CancelRunRequest) error {
 	}
 	result, err := s.client.Eval(ctx,
 		"local status = redis.call('HGET', KEYS[1], 'status') "+
-			"if status == false or status == 'succeeded' or status == 'dead' or status == 'canceled' then return 0 end "+
+			"if status == false then return -1 end "+
+			"if status == 'succeeded' or status == 'dead' or status == 'canceled' then return 0 end "+
 			"redis.call('HSET', KEYS[1], 'status', 'canceled', 'updated_at', ARGV[1]) "+
 			"redis.call('ZREM', KEYS[2], ARGV[2]) redis.call('ZREM', KEYS[3], ARGV[2]) redis.call('ZREM', KEYS[4], ARGV[2]) "+
 			"local job_id = redis.call('HGET', KEYS[1], 'job_id') redis.call('DEL', KEYS[5] .. job_id) return 1",
@@ -655,7 +659,7 @@ func (s *Store) CancelRun(ctx context.Context, req job.CancelRunRequest) error {
 	if err != nil {
 		return err
 	}
-	if result == 0 {
+	if result < 0 {
 		return job.ErrRunNotFound
 	}
 

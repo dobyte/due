@@ -786,12 +786,13 @@ trace_id
 - 并发策略。
 - 暂停、恢复、取消和手工触发。
 
-### Phase 4：MySQL 和 MongoDB（适配器及一致性测试入口已完成，待真实数据库环境执行）
+### Phase 4：MySQL 和 MongoDB（已完成真实实例一致性验证）
 
 - 独立 Go module。
 - 适配器迁移脚本。
 - 复用 `job/conformance` 测试。
 - 核对事务、条件写和批量抢占语义。
+- 已在 Docker Redis 6、MySQL 5.7 和 MongoDB 7 Replica Set 上执行 conformance 测试。
 
 ### Phase 5：生产能力（进行中）
 
@@ -800,6 +801,7 @@ trace_id
 - `ManagementHandler` 管理接口已完成，鉴权由宿主应用中间件负责。
 - 任务历史归档。
 - Redis 故障切换和长任务演练。
+- 多实例故障注入和长任务演练。
 
 ## 22. 与现有 Due 模块的关系
 
@@ -830,7 +832,7 @@ MySQL/MongoDB 可替换
 SQLite 暂不考虑
 ~~~
 
-当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger、进程内事件唤醒 Notifier、Redis Pub/Sub 通知和管理接口。真实 Redis/MySQL/MongoDB 集群演练、任务历史归档仍属于后续工作。
+当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger、进程内事件唤醒 Notifier、Redis Pub/Sub 通知和管理接口。已完成 Docker Redis 6、MySQL 5.7 和 MongoDB 7 Replica Set 的真实 conformance 验证；Redis 故障切换、多实例故障注入、长任务演练和任务历史归档仍属于后续工作。
 
 ## 24. 当前代码入口
 

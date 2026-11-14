@@ -13,7 +13,9 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		tablePrefix: "due_job",
-		skipLocked:  true,
+		// MySQL 5.7 does not support SKIP LOCKED. Applications using
+		// MySQL 8+ can opt in with WithSkipLocked(true).
+		skipLocked: false,
 	}
 }
 

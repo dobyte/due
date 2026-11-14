@@ -237,8 +237,7 @@ func (s *Store) CreateRunIfDue(ctx context.Context, req job.CreateRunRequest) (*
 		return nil, false, err
 	}
 	defer session.EndSession(ctx)
-	var created *job.Run
-	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (any, error) {
+	result, err := session.WithTransaction(ctx, func(sc mongo.SessionContext) (any, error) {
 		var doc definitionDocument
 		if err := s.definitions.FindOne(sc, bson.M{"job_id": req.JobID}, options.FindOne().SetSort(bson.D{{Key: "next_run_at", Value: 1}})).Decode(&doc); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
@@ -254,7 +253,7 @@ func (s *Store) CreateRunIfDue(ctx context.Context, req job.CreateRunRequest) (*
 		if err != nil {
 			return nil, err
 		}
-		created = &job.Run{ID: newRunID(), JobID: definition.ID, TaskType: definition.Type, Payload: append([]byte(nil), definition.Payload...), ScheduledAt: definition.NextRunAt, ReadyAt: definition.NextRunAt, Timeout: definition.Timeout, Status: job.RunPending, ConcurrencyPolicy: definition.ConcurrencyPolicy, MaxAttempts: definition.MaxAttempts, RetryPolicy: definition.RetryPolicy, CreatedAt: req.Now, UpdatedAt: req.Now}
+		created := &job.Run{ID: newRunID(), JobID: definition.ID, TaskType: definition.Type, Payload: append([]byte(nil), definition.Payload...), ScheduledAt: definition.NextRunAt, ReadyAt: definition.NextRunAt, Timeout: definition.Timeout, Status: job.RunPending, ConcurrencyPolicy: definition.ConcurrencyPolicy, MaxAttempts: definition.MaxAttempts, RetryPolicy: definition.RetryPolicy, CreatedAt: req.Now, UpdatedAt: req.Now}
 		if _, err := s.runs.InsertOne(sc, toRunDocument(created)); err != nil {
 			return nil, err
 		}
@@ -265,11 +264,12 @@ func (s *Store) CreateRunIfDue(ctx context.Context, req job.CreateRunRequest) (*
 		if result.MatchedCount == 0 {
 			return nil, job.ErrVersionConflict
 		}
-		return nil, nil
+		return created, nil
 	})
 	if err != nil {
 		return nil, false, err
 	}
+	created, _ := result.(*job.Run)
 	return created, created != nil, nil
 }
 

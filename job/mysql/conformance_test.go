@@ -29,8 +29,14 @@ func TestConformance(t *testing.T) {
 
 	conformance.Run(t, func(ctx context.Context, name string) (job.JobStore, error) {
 		prefix := strings.ReplaceAll(name, "-", "_")
-		if _, err := db.ExecContext(ctx, Schema(prefix)); err != nil {
-			return nil, err
+		for _, statement := range strings.Split(Schema(prefix), ";") {
+			statement = strings.TrimSpace(statement)
+			if statement == "" {
+				continue
+			}
+			if _, err := db.ExecContext(ctx, statement); err != nil {
+				return nil, err
+			}
 		}
 		return NewStore(WithDB(db), WithTablePrefix(prefix)), nil
 	})

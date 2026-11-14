@@ -87,6 +87,7 @@ func (s *Store) CreateDefinition(ctx context.Context, definition *job.Definition
 	if definition.UpdatedAt.IsZero() {
 		definition.UpdatedAt = now
 	}
+	definition.Payload = bytesOrEmpty(definition.Payload)
 
 	_, err := s.db.ExecContext(ctx, fmt.Sprintf(
 		"INSERT INTO %s (job_id,name,task_type,payload,schedule_type,schedule_expr,timezone,next_run_at,status,misfire_policy,concurrency_policy,max_attempts,retry_policy,timeout_ms,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -128,6 +129,7 @@ func (s *Store) UpdateDefinition(ctx context.Context, definition *job.Definition
 
 	definition.Version = version + 1
 	definition.UpdatedAt = time.Now()
+	definition.Payload = bytesOrEmpty(definition.Payload)
 	result, err := s.db.ExecContext(ctx, fmt.Sprintf(
 		"UPDATE %s SET name=?,task_type=?,payload=?,schedule_type=?,schedule_expr=?,timezone=?,next_run_at=?,status=?,misfire_policy=?,concurrency_policy=?,max_attempts=?,retry_policy=?,timeout_ms=?,version=?,updated_at=? WHERE job_id=? AND version=?",
 		s.definition,
@@ -232,6 +234,8 @@ func (s *Store) CreateRun(ctx context.Context, run *job.Run) error {
 	if run.UpdatedAt.IsZero() {
 		run.UpdatedAt = run.CreatedAt
 	}
+	run.Payload = bytesOrEmpty(run.Payload)
+	run.Output = bytesOrEmpty(run.Output)
 
 	_, err := s.db.ExecContext(ctx, fmt.Sprintf(
 		"INSERT INTO %s (run_id,job_id,task_type,payload,scheduled_at,ready_at,retry_at,timeout_ms,status,attempt,concurrency_policy,max_attempts,retry_policy,lease_owner,lease_until,fencing_token,started_at,finished_at,error_class,error_code,error_message,result_ref,output,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -297,6 +301,7 @@ func (s *Store) CreateRunIfDue(ctx context.Context, req job.CreateRunRequest) (*
 		CreatedAt:         req.Now,
 		UpdatedAt:         req.Now,
 	}
+	run.Payload = bytesOrEmpty(run.Payload)
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
 		"INSERT INTO %s (run_id,job_id,task_type,payload,scheduled_at,ready_at,retry_at,timeout_ms,status,attempt,concurrency_policy,max_attempts,retry_policy,lease_owner,lease_until,fencing_token,started_at,finished_at,error_class,error_code,error_message,result_ref,output,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
 		s.run,
@@ -375,21 +380,29 @@ func (s *Store) ClaimRuns(ctx context.Context, req job.ClaimRequest) ([]*job.Cla
 		return nil, err
 	}
 
-	runs := make([]*job.ClaimedRun, 0, req.Limit)
+	candidates := make([]*job.Run, 0, req.Limit)
 	for rows.Next() {
 		run, err := scanRun(rows)
 		if err != nil {
-			rows.Close()
 			_ = tx.Rollback()
 			return nil, err
 		}
+		candidates = append(candidates, run)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	runs := make([]*job.ClaimedRun, 0, req.Limit)
+	for _, run := range candidates {
 		if run.ConcurrencyPolicy == job.ForbidConcurrent {
 			var active int
 			if err := tx.QueryRowContext(ctx, fmt.Sprintf(
 				"SELECT COUNT(*) FROM %s WHERE job_id=? AND run_id<>? AND status IN ('leased','running')",
 				s.run,
 			), run.JobID, run.ID).Scan(&active); err != nil {
-				rows.Close()
 				_ = tx.Rollback()
 				return nil, err
 			}
@@ -406,7 +419,6 @@ func (s *Store) ClaimRuns(ctx context.Context, req job.ClaimRequest) ([]*job.Cla
 			"UPDATE %s SET status='leased',lease_owner=?,lease_until=?,fencing_token=?,attempt=?,updated_at=? WHERE run_id=?",
 			s.run,
 		), req.OwnerID, millis(leaseUntil), token, attempt, millis(now), run.ID); err != nil {
-			rows.Close()
 			_ = tx.Rollback()
 			return nil, err
 		}
@@ -421,11 +433,6 @@ func (s *Store) ClaimRuns(ctx context.Context, req job.ClaimRequest) ([]*job.Cla
 			LeaseUntil:   leaseUntil,
 			FencingToken: token,
 		})
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		_ = tx.Rollback()
-		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -710,6 +717,13 @@ func atoi(value string) int {
 func atoi64(value string) int64 {
 	result, _ := strconv.ParseInt(value, 10, 64)
 	return result
+}
+
+func bytesOrEmpty(value []byte) []byte {
+	if value == nil {
+		return []byte{}
+	}
+	return value
 }
 
 func millis(value time.Time) int64 {
