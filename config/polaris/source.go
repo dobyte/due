@@ -99,8 +99,8 @@ func (s *Source) Name() string {
 
 // Load loads configuration items.
 //
-// When file is provided it loads only that item; otherwise it loads every
-// published item under the group.
+// When the first entry of file is not empty it loads only that item; otherwise it loads every
+// published item under the group. Further entries are ignored.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err

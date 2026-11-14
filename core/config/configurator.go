@@ -58,8 +58,9 @@ type Configurator interface {
 	// config. Callbacks run on a single goroutine and are never invoked concurrently; changes that
 	// arrive while a callback runs are merged into the next call.
 	Watch(cb WatchCallbackFunc, names ...string)
-	// Load loads the configurations of the named source; empty file means every file of the source.
-	// It returns the configurations without applying them to the value store.
+	// Load loads the configurations of the named source and returns them without applying them to
+	// the value store. Only the first non-empty file is loaded; omitting file or passing an empty
+	// string loads every file of the source, and any further entries are ignored.
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store saves content as file under the named source, merging it with the existing config unless
 	// override is true.
@@ -401,24 +402,50 @@ func (c *defaultConfigurator) load() map[string]any {
 	return nil
 }
 
-// copy returns a deep copy of the currently loaded values.
-func (c *defaultConfigurator) copy() (map[string]any, error) {
-	values := c.load()
+// cloneValue returns a deep copy of a decoded config value, so that a writer can modify the copy
+// without modifying the published snapshot. Scalars are returned as is, because writing them always
+// replaces the value instead of mutating it in place.
+func cloneValue(value any) (any, error) {
+	switch value.(type) {
+	case map[string]any:
+		dst := make(map[string]any)
+		if err := copier.CopyWithOption(&dst, value, copier.Option{DeepCopy: true}); err != nil {
+			return nil, err
+		}
 
-	dst := make(map[string]any)
-
-	if len(values) == 0 {
 		return dst, nil
+	case []any:
+		dst := make([]any, 0)
+		if err := copier.CopyWithOption(&dst, value, copier.Option{DeepCopy: true}); err != nil {
+			return nil, err
+		}
+
+		return dst, nil
+	default:
+		return value, nil
+	}
+}
+
+// cloneConfig returns a deep copy of the named config when it is a map, so that Store can merge into
+// it without modifying the published snapshot. It returns a nil map when the config is absent or is
+// not a map.
+func (c *defaultConfigurator) cloneConfig(name string) (map[string]any, error) {
+	value, ok := c.load()[name]
+	if !ok {
+		return nil, nil
 	}
 
-	err := copier.CopyWithOption(&dst, values, copier.Option{
-		DeepCopy: true,
-	})
+	m, ok := value.(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+
+	cloned, err := cloneValue(m)
 	if err != nil {
 		return nil, err
 	}
 
-	return dst, nil
+	return cloned.(map[string]any), nil
 }
 
 // shallowCopy returns a copy of the top-level value map. The nested values are shared with the
@@ -434,6 +461,39 @@ func (c *defaultConfigurator) shallowCopy() map[string]any {
 	}
 
 	return dst
+}
+
+// writableValues returns a copy of the value store that Set may modify. Only the top-level config
+// that keys enter is deep copied, because the traversal never modifies another config; the remaining
+// configs are shared with the snapshot and are replaced as a whole on write.
+func (c *defaultConfigurator) writableValues(keys []string) (map[string]any, []string, error) {
+	values := c.load()
+
+	keys = reviseKeys(keys, values)
+
+	dst := make(map[string]any, len(values))
+
+	for name, v := range values {
+		dst[name] = v
+	}
+
+	if len(keys) == 0 {
+		return dst, keys, nil
+	}
+
+	v, ok := dst[keys[0]]
+	if !ok {
+		return dst, keys, nil
+	}
+
+	cloned, err := cloneValue(v)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dst[keys[0]] = cloned
+
+	return dst, keys, nil
 }
 
 // watchSource opens a watcher for the source and consumes its changes until the configurator is
@@ -861,12 +921,11 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	values, err := c.copy()
+	values, keys, err := c.writableValues(keys)
 	if err != nil {
 		return err
 	}
 
-	keys = reviseKeys(keys, values)
 	node = values
 	for i, key := range keys {
 		switch vs := node.(type) {
@@ -886,7 +945,7 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 						// expand capacity
 						if err == nil && ii >= len(nv) {
 							if ii > maxSliceIndex {
-								return errors.New("index too large")
+								return errors.ErrIndexTooLarge
 							}
 
 							dst := make([]any, ii+1)
@@ -907,11 +966,11 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 						// The new slice has to be long enough for the index that is set next,
 						// otherwise the next lookup reports an overflow.
 						if ii < 0 {
-							return errors.New("invalid index")
+							return errors.ErrInvalidIndex
 						}
 
 						if ii > maxSliceIndex {
-							return errors.New("index too large")
+							return errors.ErrIndexTooLarge
 						}
 
 						vs[key] = make([]any, ii+1)
@@ -927,11 +986,11 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 			}
 
 			if ii < 0 {
-				return errors.New("invalid index")
+				return errors.ErrInvalidIndex
 			}
 
 			if ii >= len(vs) {
-				return errors.New("index overflow")
+				return errors.ErrIndexOverflow
 			}
 
 			if i == len(keys)-1 {
@@ -948,7 +1007,7 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 					// expand capacity
 					if parseErr == nil && next >= len(nv) {
 						if next > maxSliceIndex {
-							return errors.New("index too large")
+							return errors.ErrIndexTooLarge
 						}
 
 						dst := make([]any, next+1)
@@ -964,11 +1023,11 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 						vs[ii] = make(map[string]any)
 					} else {
 						if next < 0 {
-							return errors.New("invalid index")
+							return errors.ErrInvalidIndex
 						}
 
 						if next > maxSliceIndex {
-							return errors.New("index too large")
+							return errors.ErrIndexTooLarge
 						}
 
 						vs[ii] = make([]any, next+1)
@@ -1005,8 +1064,9 @@ func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 	c.rw.Unlock()
 }
 
-// Load loads the configurations of the named source; empty file means every file of the source. It
-// reports [errors.ErrClosedConfigurator] once the configurator has been closed.
+// Load loads the configurations of the named source. Only the first non-empty file is loaded;
+// omitting file or passing an empty string loads every file of the source, and any further entries
+// are ignored. It reports [errors.ErrClosedConfigurator] once the configurator has been closed.
 func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
 	c.opsMu.RLock()
 	defer c.opsMu.RUnlock()
@@ -1063,17 +1123,16 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 		if len(override) > 0 && override[0] {
 			buf, err = c.opts.encoder(format, content)
 		} else {
-			dest, copyErr := c.copy()
-			if copyErr != nil {
-				return copyErr
-			}
-
 			name := strings.TrimSuffix(filepath.Base(file), ext)
 
-			val, ok := dest[name]
-			if !ok {
+			v, cloneErr := c.cloneConfig(name)
+			if cloneErr != nil {
+				return cloneErr
+			}
+
+			if v == nil {
 				buf, err = c.opts.encoder(format, content)
-			} else if v, ok := val.(map[string]any); ok {
+			} else {
 				buf, err = c.opts.encoder(format, content)
 				if err != nil {
 					return err
@@ -1089,8 +1148,6 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 				}
 
 				buf, err = c.opts.encoder(format, v)
-			} else {
-				buf, err = c.opts.encoder(format, content)
 			}
 		}
 	case reflect.Array, reflect.Slice:

@@ -52,8 +52,9 @@ func Watch(cb WatchCallbackFunc, names ...string) {
 	config.Watch(cb, names...)
 }
 
-// Load loads the configurations of the named source; empty file means every file of the source. It
-// reports errors.ErrNotFoundConfigurator when no global configurator is installed.
+// Load loads the configurations of the named source. Only the first non-empty file is loaded;
+// omitting file or passing an empty string loads every file of the source, and any further entries
+// are ignored. It reports errors.ErrNotFoundConfigurator when no global configurator is installed.
 func Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
 	return config.Load(ctx, source, file...)
 }

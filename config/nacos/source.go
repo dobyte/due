@@ -117,11 +117,12 @@ func (s *Source) Name() string {
 
 // Load loads configuration items.
 //
-// When file is provided it loads only that item, which must be among the configured files when a
-// fixed file list is set; otherwise it loads the fixed file list when one is configured, or pages
-// through and loads every item under the group. On the very first full load (cache empty) Load asks
-// the client to export all contents in one shot if supported, so N GetConfig calls are replaced by
-// a single ZIP download. Later full loads keep the md5-reuse shortcut.
+// When the first entry of file is not empty it loads only that item, which must be among the
+// configured files when a fixed file list is set; otherwise it loads the fixed file list when one
+// is configured, or pages through and loads every item under the group. Further entries are
+// ignored. On the very first full load (cache empty) Load asks the client to export all contents
+// in one shot if supported, so N GetConfig calls are replaced by a single ZIP download. Later full
+// loads keep the md5-reuse shortcut.
 //
 // A configured file entry may contain the "*" wildcard. In that case Load searches the group,
 // narrowed by a server-side blur keyword, keeps only the matching items and never uses the export

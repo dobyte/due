@@ -394,6 +394,39 @@ func TestConfiguratorSet(t *testing.T) {
 	}
 }
 
+// TestConfiguratorWriteKeepsSnapshot verifies that Set and the Store merge path copy only the config
+// they modify, so that a snapshot obtained by an earlier reader stays unchanged.
+func TestConfiguratorWriteKeepsSnapshot(t *testing.T) {
+	source := newFakeSource(`{"addr":{"host":"127.0.0.1"},"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	loaded, ok := c.Get("config").Value().(map[string]any)
+	if !ok {
+		t.Fatal("expect the loaded config to be a map")
+	}
+
+	if err := c.Set("config.addr.port", 8080); err != nil {
+		t.Fatalf("set config failed, err: %v", err)
+	}
+
+	if _, ok = loaded["addr"].(map[string]any)["port"]; ok {
+		t.Fatal("set modified the previously published snapshot")
+	}
+
+	if got := c.Get("config.addr.port").Int(); got != 8080 {
+		t.Fatalf("invalid value, expect: 8080, actual: %d", got)
+	}
+
+	if err := c.Store(context.Background(), source.Name(), "config.json", map[string]any{"port": 8080}); err != nil {
+		t.Fatalf("store config failed, err: %v", err)
+	}
+
+	if _, ok = loaded["port"]; ok {
+		t.Fatal("store merge modified the previously published snapshot")
+	}
+}
+
 func TestConfiguratorMatch(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))

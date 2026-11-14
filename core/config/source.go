@@ -16,8 +16,8 @@ type Mode string
 type Source interface {
 	// Name returns the name of the source.
 	Name() string
-	// Load loads the configurations of the given files, or every file of the source when file is
-	// empty.
+	// Load loads the configuration of the first non-empty file, or every file of the source when
+	// file is empty or not given. Any further entries are ignored.
 	Load(ctx context.Context, file ...string) ([]*Configuration, error)
 	// Store saves content as file.
 	Store(ctx context.Context, file string, content []byte) error

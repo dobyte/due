@@ -41,8 +41,9 @@ func (s *Source) Name() string {
 	return Name
 }
 
-// Load loads the configurations of the given files, or every file under the source path when file
-// is empty. It reports [errors.ErrClosedConfigSource] once the source has been closed.
+// Load loads the configuration of the first non-empty file, or every file under the source path
+// when file is empty or not given. Any further entries are ignored. It reports
+// [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.closed.Load() {
 		return nil, errors.ErrClosedConfigSource

@@ -69,9 +69,9 @@ func (s *Source) Name() string {
 	return Name
 }
 
-// Load loads configuration items. When file is provided, only the specified
-// configuration item is loaded; otherwise every configuration item under the base
-// path is loaded.
+// Load loads configuration items. When the first entry of file is not empty, only that
+// configuration item is loaded; otherwise every configuration item under the base path is loaded.
+// Further entries are ignored.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
