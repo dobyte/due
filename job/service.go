@@ -215,6 +215,11 @@ func (s *Service) Trigger(ctx context.Context, jobID string) (*Run, error) {
 	if err := s.store.CreateRun(ctx, run); err != nil {
 		return nil, err
 	}
+	if s.opts.notifier != nil {
+		if err := s.opts.notifier.Notify(ctx, jobID); err != nil {
+			return nil, err
+		}
+	}
 
 	return run, nil
 }
@@ -222,9 +227,14 @@ func (s *Service) Trigger(ctx context.Context, jobID string) (*Run, error) {
 func (s *Service) planLoop() {
 	ticker := time.NewTicker(s.opts.pollInterval)
 	defer ticker.Stop()
+	var events <-chan string
+	if notifier, ok := s.opts.notifier.(EventNotifier); ok {
+		events = notifier.Events()
+	}
 
 	for {
 		if err := s.planOnce(s.currentContext()); err != nil && !errors.Is(err, context.Canceled) {
+			s.logError("job planner failed", err)
 			continue
 		}
 
@@ -232,6 +242,10 @@ func (s *Service) planLoop() {
 		case <-s.currentContext().Done():
 			return
 		case <-ticker.C:
+		case _, ok := <-events:
+			if !ok {
+				events = nil
+			}
 		}
 	}
 }
@@ -239,9 +253,14 @@ func (s *Service) planLoop() {
 func (s *Service) runLoop() {
 	ticker := time.NewTicker(s.opts.pollInterval)
 	defer ticker.Stop()
+	var events <-chan string
+	if notifier, ok := s.opts.notifier.(EventNotifier); ok {
+		events = notifier.Events()
+	}
 
 	for {
 		if err := s.runOnce(s.currentContext()); err != nil && !errors.Is(err, context.Canceled) {
+			s.logError("job runner failed", err)
 			continue
 		}
 
@@ -249,6 +268,10 @@ func (s *Service) runLoop() {
 		case <-s.currentContext().Done():
 			return
 		case <-ticker.C:
+		case _, ok := <-events:
+			if !ok {
+				events = nil
+			}
 		}
 	}
 }
@@ -258,10 +281,15 @@ func (s *Service) recoveryLoop() {
 	defer ticker.Stop()
 
 	for {
-		_, _ = s.store.RecoverExpiredRuns(s.currentContext(), RecoverRequest{
+		recovered, err := s.store.RecoverExpiredRuns(s.currentContext(), RecoverRequest{
 			Now:   time.Now(),
 			Limit: s.opts.claimBatchSize,
 		})
+		if err != nil {
+			s.logError("job recovery failed", err)
+		} else if recovered > 0 {
+			s.addMetric(metricRecovery, float64(recovered))
+		}
 
 		select {
 		case <-s.currentContext().Done():
@@ -281,12 +309,16 @@ func (s *Service) planOnce(ctx context.Context) error {
 	}
 
 	for _, definition := range definitions {
-		if _, _, err := s.store.CreateRunIfDue(ctx, CreateRunRequest{
+		_, created, err := s.store.CreateRunIfDue(ctx, CreateRunRequest{
 			JobID:     definition.ID,
 			PlannerID: s.opts.workerID,
 			Now:       time.Now(),
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if created {
+			s.addMetric(metricDefinitionsPlanned, 1)
 		}
 	}
 
@@ -302,6 +334,7 @@ func (s *Service) runOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.addMetric(metricRunsClaimed, float64(len(claimed)))
 
 	for _, run := range claimed {
 		select {
@@ -322,6 +355,8 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 	if claimed == nil || claimed.Run == nil {
 		return
 	}
+	started := time.Now()
+	defer observeHandlerDuration(s.opts.metrics, started)
 
 	ctx, cancel := context.WithTimeout(s.currentContext(), runTimeout(claimed.Run, s.opts.leaseDuration))
 	defer cancel()
@@ -346,16 +381,21 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 
 	handler, ok := s.registry.Get(claimed.Run.TaskType)
 	if !ok {
+		s.addMetric(metricHandlerRejected, 1)
+		s.logWarn("job handler not found", claimed.Run.ID, claimed.Run.TaskType)
 		stopLease()
 		<-leaseDone
-		_, _ = s.store.FailRun(context.Background(), FailRunRequest{
+		s.addMetric(metricRunsFailed, 1)
+		if _, failErr := s.store.FailRun(context.Background(), FailRunRequest{
 			RunID:        claimed.Run.ID,
 			OwnerID:      claimed.OwnerID,
 			FencingToken: claimed.FencingToken,
 			Class:        ErrorNonRetryable,
 			Code:         "handler_not_found",
 			Message:      ErrHandlerNotFound.Error(),
-		})
+		}); failErr != nil {
+			s.logError("job handler rejection commit failed", failErr)
+		}
 		return
 	}
 
@@ -378,13 +418,20 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 	}
 
 	if err == nil && result != nil {
-		_, _ = s.store.CompleteRun(context.Background(), CompleteRunRequest{
+		commit, commitErr := s.store.CompleteRun(context.Background(), CompleteRunRequest{
 			RunID:        claimed.Run.ID,
 			OwnerID:      claimed.OwnerID,
 			FencingToken: claimed.FencingToken,
 			ResultRef:    result.ResultRef,
 			Output:       append([]byte(nil), result.Output...),
 		})
+		if commitErr != nil {
+			s.logError("job completion failed", commitErr)
+		} else if commit.Applied {
+			s.addMetric(metricRunsSucceeded, 1)
+		} else {
+			s.addMetric(metricLeaseLost, 1)
+		}
 		return
 	}
 
@@ -392,11 +439,21 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 		err = errors.ErrInvalidArgument
 	}
 	class := ClassifyError(err)
+	s.addMetric(metricRunsFailed, 1)
+	if class == ErrorRetryable {
+		s.addMetric(metricRunsRetried, 1)
+	}
+	if class == ErrorCanceled {
+		s.addMetric(metricRunsCanceled, 1)
+	}
+	if class == ErrorLeaseLost {
+		s.addMetric(metricLeaseLost, 1)
+	}
 	retryAt := time.Time{}
 	if class == ErrorRetryable && claimed.Run.MaxAttempts > 0 && claimed.Run.Attempt < claimed.Run.MaxAttempts {
 		retryAt = nextRetryAt(claimed.Run.Attempt, claimed.Run.RetryPolicy, time.Now())
 	}
-	_, _ = s.store.FailRun(context.Background(), FailRunRequest{
+	if _, failErr := s.store.FailRun(context.Background(), FailRunRequest{
 		RunID:        claimed.Run.ID,
 		OwnerID:      claimed.OwnerID,
 		FencingToken: claimed.FencingToken,
@@ -404,7 +461,9 @@ func (s *Service) executeRun(claimed *ClaimedRun) {
 		Code:         "handler_failed",
 		Message:      err.Error(),
 		RetryAt:      retryAt,
-	})
+	}); failErr != nil {
+		s.logError("job failure commit failed", failErr)
+	}
 }
 
 func (s *Service) renewLease(ctx context.Context, claimed *ClaimedRun, cancel context.CancelFunc) error {
@@ -453,4 +512,22 @@ func cloneDefinition(definition *Definition) *Definition {
 	copy := *definition
 	copy.Payload = append([]byte(nil), definition.Payload...)
 	return &copy
+}
+
+func (s *Service) addMetric(name string, value float64) {
+	if s != nil && s.opts != nil && s.opts.metrics != nil {
+		s.opts.metrics.Add(name, value)
+	}
+}
+
+func (s *Service) logError(message string, args ...any) {
+	if s != nil && s.opts != nil && s.opts.logger != nil {
+		s.opts.logger.Error(append([]any{message}, args...)...)
+	}
+}
+
+func (s *Service) logWarn(message string, args ...any) {
+	if s != nil && s.opts != nil && s.opts.logger != nil {
+		s.opts.logger.Warn(append([]any{message}, args...)...)
+	}
 }

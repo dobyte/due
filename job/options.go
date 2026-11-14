@@ -23,6 +23,8 @@ type Option func(*options)
 type options struct {
 	store             JobStore
 	notifier          Notifier
+	metrics           Metrics
+	logger            Logger
 	workerID          string
 	pollInterval      time.Duration
 	recoveryInterval  time.Duration
@@ -43,6 +45,20 @@ func WithStore(store JobStore) Option {
 func WithNotifier(notifier Notifier) Option {
 	return func(o *options) {
 		o.notifier = notifier
+	}
+}
+
+// WithMetrics sets the optional metrics sink.
+func WithMetrics(metrics Metrics) Option {
+	return func(o *options) {
+		o.metrics = metrics
+	}
+}
+
+// WithLogger sets the optional job logger.
+func WithLogger(logger Logger) Option {
+	return func(o *options) {
+		o.logger = logger
 	}
 }
 

@@ -793,10 +793,10 @@ trace_id
 - 复用 `job/conformance` 测试。
 - 核对事务、条件写和批量抢占语义。
 
-### Phase 5：生产能力
+### Phase 5：生产能力（进行中）
 
-- 指标和告警。
-- Outbox 或可选通知。
+- Metrics、可选 Logger 和事件唤醒 Notifier 已完成。
+- Outbox 或跨进程通知适配器。
 - 管理接口。
 - 任务历史归档。
 - Redis 故障切换和长任务演练。
@@ -830,7 +830,7 @@ MySQL/MongoDB 可替换
 SQLite 暂不考虑
 ~~~
 
-当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复。真实 Redis/MySQL/MongoDB 集群演练及生产观测能力仍属于后续工作。
+当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger 和进程内事件唤醒 Notifier。真实 Redis/MySQL/MongoDB 集群演练、跨进程通知、管理接口和历史归档仍属于后续工作。
 
 ## 24. 当前代码入口
 
@@ -848,3 +848,5 @@ store := mongo.NewStore(mongo.WithDB(database))
 ```
 
 MySQL 和 MongoDB 的 adapter 不负责创建连接或关闭注入的连接；应用负责连接池生命周期。Redis adapter 管理自己创建的 Redis client，也支持 `WithClient` 注入外部 client。
+
+Service 的生产能力通过可选接口注入：`WithMetrics` 接收计数和耗时观测，`WithLogger` 接收 Due Logger 兼容接口，`NewChannelNotifier` 提供进程内立即唤醒；跨进程通知应在此接口上接入 Redis Pub/Sub、NATS 或其他事件总线。
