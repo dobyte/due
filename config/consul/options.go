@@ -32,7 +32,7 @@ type options struct {
 	// When it is provided, it takes precedence over the built-in client. It defaults to nil.
 	client *api.Client
 
-	// path is the path and defaults to /config.
+	// path is the path and defaults to config.
 	path string
 
 	// mode is the read-write mode.

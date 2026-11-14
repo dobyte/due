@@ -289,9 +289,12 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrFileNotConfigured
 	}
 
-	if err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content)); err == nil {
+	err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content))
+	if err == nil {
 		return nil
-	} else if !isUnimplementedError(err) && !isDataConflictError(err) {
+	}
+
+	if !isUnimplementedError(err) && !isDataConflictError(err) {
 		return err
 	}
 
@@ -306,9 +309,12 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 // create the file and, when creation fails because the resource already exists,
 // falls back to updating it.
 func (s *Source) createOrUpdateConfigFile(file, content string) error {
-	if err := s.configClient.CreateConfigFile(s.opts.namespace, s.opts.group, file, content); err == nil {
+	err := s.configClient.CreateConfigFile(s.opts.namespace, s.opts.group, file, content)
+	if err == nil {
 		return nil
-	} else if !isExistedResourceError(err) {
+	}
+
+	if !isExistedResourceError(err) {
 		return err
 	}
 
