@@ -2,9 +2,9 @@ package etc
 
 import "log"
 
-// stdLogger writes every record to the standard library logger.
-type stdLogger struct{}
+// logger writes every record to the standard library logger.
+type logger struct{}
 
-func (stdLogger) Infof(format string, a ...any)  { log.Printf(format, a...) }
-func (stdLogger) Warnf(format string, a ...any)  { log.Printf(format, a...) }
-func (stdLogger) Errorf(format string, a ...any) { log.Printf(format, a...) }
+func (logger) Infof(format string, a ...any)  { log.Printf(format, a...) }
+func (logger) Warnf(format string, a ...any)  { log.Printf(format, a...) }
+func (logger) Errorf(format string, a ...any) { log.Printf(format, a...) }

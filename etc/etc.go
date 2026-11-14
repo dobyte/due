@@ -28,7 +28,7 @@ func init() {
 	path := env.Get(dueEtcEnvName, defaultEtcPath).String()
 	path = flag.String(dueEtcArgName, path)
 	globalConfigurator = coreconfig.NewConfigurator(
-		coreconfig.WithLogger(stdLogger{}),
+		coreconfig.WithLogger(logger{}),
 		coreconfig.WithSources(corefile.NewSource(path, coreconfig.ReadOnly)),
 	)
 }
