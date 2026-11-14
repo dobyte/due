@@ -91,7 +91,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 						return nil, addErr
 					}
 
-					configs, loadErr := w.source.loadDir(event.Name)
+					configs, loadErr := w.source.loadDir(w.ctx, event.Name)
 					if loadErr != nil {
 						return nil, loadErr
 					}

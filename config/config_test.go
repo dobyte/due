@@ -191,6 +191,25 @@ func (s *closedWatchSource) Watch(context.Context) (config.Watcher, error) {
 	return nil, errors.ErrClosedConfigSource
 }
 
+// blockingSource blocks its second Load call until release is closed.
+type blockingSource struct {
+	*fakeSource
+	calls   atomic.Int32
+	release chan struct{}
+}
+
+func (s *blockingSource) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
+	if s.calls.Add(1) > 1 {
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	return s.fakeSource.Load(ctx, file...)
+}
+
 // waitNames waits until the given name shows up in a notification, failing the test on timeout.
 func waitNames(t *testing.T, ch <-chan []string, want string) {
 	t.Helper()
@@ -429,6 +448,114 @@ func TestConfiguratorIgnoresDuplicateSources(t *testing.T) {
 
 	if got := c.Get("config.timezone").String(); got != "Local" {
 		t.Fatalf("expect the first source to win, actual: %s", got)
+	}
+}
+
+// TestConfiguratorClosedRejectsLoadAndStore verifies that a closed configurator reports
+// ErrClosedConfigurator from the later Load and Store calls, and that a second Close is a no-op.
+func TestConfiguratorClosedRejectsLoadAndStore(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	c.Close()
+
+	if _, err := c.Load(context.Background(), source.Name()); !errors.Is(err, errors.ErrClosedConfigurator) {
+		t.Fatalf("expect ErrClosedConfigurator from Load, actual: %v", err)
+	}
+
+	if err := c.Store(context.Background(), source.Name(), "config.json", map[string]any{}); !errors.Is(err, errors.ErrClosedConfigurator) {
+		t.Fatalf("expect ErrClosedConfigurator from Store, actual: %v", err)
+	}
+
+	c.Close()
+}
+
+// TestConfiguratorCloseWaitsForInflightLoad verifies that Close waits for an in-flight Load before
+// the sources are closed.
+func TestConfiguratorCloseWaitsForInflightLoad(t *testing.T) {
+	source := &blockingSource{fakeSource: newFakeSource(`{"timezone":"Local"}`), release: make(chan struct{})}
+	c := config.NewConfigurator(config.WithSources(source))
+
+	loaded := make(chan struct{})
+
+	go func() {
+		_, _ = c.Load(context.Background(), source.Name())
+		close(loaded)
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+
+	for source.calls.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the explicit Load call did not start")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	closed := make(chan struct{})
+
+	go func() {
+		c.Close()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+		t.Fatal("Close returned before the in-flight Load finished")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(source.release)
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return after the in-flight Load finished")
+	}
+
+	<-loaded
+}
+
+// TestConfiguratorIgnoresEmptyConfigName verifies that a config without a name is ignored.
+func TestConfiguratorIgnoresEmptyConfigName(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	source.push(
+		&config.Configuration{Name: "", Format: "json", Content: []byte(`{"a":1}`)},
+		&config.Configuration{Name: "gate", Format: "json", Content: []byte(`{"name":"gate"}`)},
+	)
+
+	select {
+	case names := <-changed:
+		if len(names) != 1 || names[0] != "gate" {
+			t.Fatalf("expect only the named config to be notified, actual: %v", names)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for the notification")
+	}
+
+	if c.Has("") {
+		t.Fatal("expect the config without a name to be ignored")
+	}
+}
+
+// TestWithSourcesCopiesSources verifies that WithSources does not keep the caller's slice.
+func TestWithSourcesCopiesSources(t *testing.T) {
+	sources := []config.Source{newFakeSource(`{"timezone":"Local"}`)}
+	option := config.WithSources(sources...)
+
+	sources[0] = nil
+
+	c := config.NewConfigurator(option)
+	defer c.Close()
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("expect the config to be loaded from the original source, actual: %q", got)
 	}
 }
 

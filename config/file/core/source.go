@@ -81,7 +81,7 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	// A directory is expanded and every file in it is filtered by the configured files, so the
 	// directory path itself must not be checked against the list.
 	if info.IsDir() {
-		return s.loadDir(path)
+		return s.loadDir(ctx, path)
 	}
 
 	if !s.matchFile(path) {
@@ -293,11 +293,15 @@ func (s *Source) loadFile(path string) (*config.Configuration, error) {
 }
 
 // loadDir loads every config file under path.
-func (s *Source) loadDir(path string) (cs []*config.Configuration, err error) {
+func (s *Source) loadDir(ctx context.Context, path string) (cs []*config.Configuration, err error) {
 	root := path
 
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+
+		if err = ctx.Err(); err != nil {
 			return err
 		}
 

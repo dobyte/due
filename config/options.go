@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/dobyte/due/v2/encoding/json"
@@ -45,9 +46,12 @@ func WithContext(ctx context.Context) Option {
 	return func(o *options) { o.ctx = ctx }
 }
 
-// WithSources sets the config sources.
+// WithSources sets the config sources. The given slice is copied, so later changes to it do not
+// affect the configurator.
 func WithSources(sources ...Source) Option {
-	return func(o *options) { o.sources = sources[:] }
+	cloned := slices.Clone(sources)
+
+	return func(o *options) { o.sources = cloned }
 }
 
 // WithEncoder sets the encoder used when storing config content.

@@ -57,8 +57,10 @@ type Configurator interface {
 	// Store saves content as file under the named source, merging it with the existing config unless
 	// override is true.
 	Store(ctx context.Context, source string, file string, content any, override ...bool) error
-	// Close closes the configurator and its config sources. It waits for a running callback to
-	// finish and discards the notifications that are still pending; a callback must not call Close.
+	// Close closes the configurator and its config sources. It waits for a running callback and for
+	// the in-flight Load and Store calls to finish, discards the pending notifications, and reports
+	// [errors.ErrClosedConfigurator] from the later Load and Store calls. A callback must not call
+	// Close.
 	Close()
 }
 
@@ -83,6 +85,8 @@ type defaultConfigurator struct {
 	notifyMu sync.Mutex
 	pending  map[string]struct{}
 	chNotify chan struct{}
+	opsMu    sync.RWMutex
+	closed   atomic.Bool
 	wg       sync.WaitGroup
 }
 
@@ -223,6 +227,12 @@ func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 	values := make(map[string]any, len(cs))
 
 	for _, cc := range cs {
+		if cc.Name == "" {
+			log.Printf("config name is empty, the config is ignored")
+
+			continue
+		}
+
 		if len(cc.Content) == 0 {
 			continue
 		}
@@ -555,14 +565,24 @@ func callWatchCallback(cb WatchCallbackFunc, names ...string) {
 	cb(names...)
 }
 
-// Close closes the configurator and its config sources. It waits for a running callback to finish
-// and discards the notifications that are still pending.
+// Close closes the configurator and its config sources. It waits for a running callback and for the
+// in-flight Load and Store calls to finish, and discards the notifications that are still pending.
 func (c *defaultConfigurator) Close() {
+	if !c.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	// Wait for the in-flight Load and Store calls before the sources are closed, so that a client is
+	// never destroyed under a running request.
+	c.opsMu.Lock()
+
 	c.cancel()
 
 	for _, source := range c.sources {
 		_ = source.Close()
 	}
+
+	c.opsMu.Unlock()
 
 	c.wg.Wait()
 }
@@ -805,8 +825,16 @@ func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 	c.rw.Unlock()
 }
 
-// Load loads the configurations of the named source; empty file means every file of the source.
+// Load loads the configurations of the named source; empty file means every file of the source. It
+// reports [errors.ErrClosedConfigurator] once the configurator has been closed.
 func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
+	c.opsMu.RLock()
+	defer c.opsMu.RUnlock()
+
+	if c.closed.Load() {
+		return nil, errors.ErrClosedConfigurator
+	}
+
 	s, ok := c.sources[source]
 	if !ok {
 		return nil, errors.ErrNotFoundConfigSource
@@ -825,8 +853,15 @@ func (c *defaultConfigurator) Load(ctx context.Context, source string, file ...s
 }
 
 // Store saves content as file under the named source, merging it with the existing config unless
-// override is true.
+// override is true. It reports [errors.ErrClosedConfigurator] once the configurator has been closed.
 func (c *defaultConfigurator) Store(ctx context.Context, source string, file string, content any, override ...bool) error {
+	c.opsMu.RLock()
+	defer c.opsMu.RUnlock()
+
+	if c.closed.Load() {
+		return errors.ErrClosedConfigurator
+	}
+
 	if content == nil {
 		return errors.ErrInvalidConfigContent
 	}

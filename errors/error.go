@@ -42,6 +42,7 @@ var (
 	ErrInvalidConfigContent    = New("invalid config content")
 	ErrNotFoundConfigSource    = New("not found config source")
 	ErrNotFoundConfigurator    = New("not found configurator")
+	ErrClosedConfigurator      = New("configurator is closed")
 	ErrClosedConfigSource      = New("config source is closed")
 	ErrConfigStoreFailed       = New("config store failed")
 	ErrFileNotConfigured       = New("config file is not in the configured files")
