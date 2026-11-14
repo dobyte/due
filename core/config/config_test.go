@@ -901,6 +901,35 @@ func TestConfiguratorSkipsUndecodedConfig(t *testing.T) {
 	}
 }
 
+// TestConfiguratorIgnoresEmptyContent verifies that a config with empty content keeps its previous
+// value and is not reported to the watchers.
+func TestConfiguratorIgnoresEmptyContent(t *testing.T) {
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source))
+	defer c.Close()
+
+	changed := make(chan []string, 8)
+	c.Watch(func(names ...string) { changed <- names })
+
+	source.push(
+		&config.Configuration{Name: "config", Format: "json"},
+		&config.Configuration{Name: "gate", Format: "json", Content: []byte(`{"name":"gate"}`)},
+	)
+
+	select {
+	case names := <-changed:
+		if len(names) != 1 || names[0] != "gate" {
+			t.Fatalf("expect only the changed config to be notified, actual: %v", names)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for the notification")
+	}
+
+	if got := c.Get("config.timezone").String(); got != "Local" {
+		t.Fatalf("the previous value is lost, actual: %s", got)
+	}
+}
+
 func TestConfiguratorLoad(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))

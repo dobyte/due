@@ -61,6 +61,7 @@ type Source struct {
 	opsMu        sync.RWMutex          // Guards the client against the in-flight Load and Store calls
 	version      uint64                // Current search version
 	versions     map[string]uint64     // Search version of each dataId
+	listening    map[string]struct{}   // dataIds whose listener is registered; refresh goroutine only
 	searchFailed bool                  // Whether a search failure was logged; refresh goroutine only
 	patternMode  bool                  // Whether the file list contains "*" patterns
 	chListen     chan listenRequest    // Listen request channel
@@ -95,6 +96,7 @@ func NewSource(opts ...Option) config.Source {
 
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
 	s.versions = make(map[string]uint64)
+	s.listening = make(map[string]struct{})
 	s.chListen = make(chan listenRequest)
 	s.chCancel = make(chan string)
 	s.cache = make(map[string]cachedItem)
@@ -731,22 +733,30 @@ func (s *Source) listen() {
 }
 
 // refresh registers the configuration listening. When an exact file list is configured, it
-// registers those dataIds once because the list never changes; otherwise, including pattern mode,
-// it runs a config search at a fixed interval to detect added or removed configuration items.
+// registers those dataIds and retries the ones that failed at every refresh interval, because the
+// list never changes but the server may be temporarily unavailable. Otherwise, including pattern
+// mode, it runs a config search at a fixed interval to detect added or removed configuration items.
 func (s *Source) refresh() {
 	if s.err != nil {
 		return
 	}
 
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+
 	if len(s.opts.files) > 0 && !s.patternMode {
-		s.listenFiles()
-		return
+		for {
+			s.listenFiles()
+
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
 	}
 
 	s.search()
-
-	ticker := time.NewTicker(refreshInterval)
-	defer ticker.Stop()
 
 	for {
 		select {
@@ -758,8 +768,8 @@ func (s *Source) refresh() {
 	}
 }
 
-// listenFiles registers config listening for the fixed file list. A failed registration is logged
-// by the listen goroutine and not retried, since the list is fixed and the error is deterministic.
+// listenFiles registers config listening for the fixed file list. A dataId whose registration
+// succeeded is not registered again; a failed one is retried on the next refresh round.
 func (s *Source) listenFiles() {
 	for _, dataId := range s.opts.files {
 		select {
@@ -769,7 +779,13 @@ func (s *Source) listenFiles() {
 			// continue
 		}
 
-		_ = s.requestListen(dataId)
+		if _, ok := s.listening[dataId]; ok {
+			continue
+		}
+
+		if err := s.requestListen(dataId); err == nil {
+			s.listening[dataId] = struct{}{}
+		}
 	}
 }
 

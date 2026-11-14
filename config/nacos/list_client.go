@@ -184,11 +184,6 @@ func (c *listClient) SearchConfig(param vo.SearchConfigParam) (*model.ConfigPage
 	return c.IConfigClient.SearchConfig(param)
 }
 
-// CloseClient closes the wrapped client. The list client holds no goroutine to stop.
-func (c *listClient) CloseClient() {
-	c.IConfigClient.CloseClient()
-}
-
 // login authenticates against the Nacos 3.x /v3/auth/user/login endpoint and caches the access
 // token. It is idempotent and throttled: repeated calls within the token TTL window reuse the
 // cached token, a forced re-login after a 403 is spaced by reLoginWindowSeconds, and a failed

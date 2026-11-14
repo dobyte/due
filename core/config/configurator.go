@@ -34,7 +34,8 @@ const (
 //
 // The value store is merge-only: a config that a source no longer provides stays available until the
 // configurator is recreated. A changed config replaces its previous value as a whole, so a key
-// removed from a config file is removed from the store as well.
+// removed from a config file is removed from the store as well. A config whose content is empty or
+// cannot be decoded is ignored, so its previous value stays available.
 //
 // At construction every source is loaded once and its watcher is started immediately after that load.
 // The first successful watcher open does not load the source again, so a change made between a
@@ -337,8 +338,10 @@ func (c *defaultConfigurator) scheduleReload(s Source) {
 
 // apply decodes the given configurations and stores them in the value store. The value of every
 // applied config replaces its previous value as a whole, so a key removed from a changed config is
-// removed from the store. It returns the names of the configurations whose value changed, so that
-// reloading unchanged configs does not notify the watchers.
+// removed from the store. A config with an empty name or empty content, and a config that cannot be
+// decoded, is skipped so that its previous value stays available. It returns the names of the
+// configurations whose value changed, so that reloading unchanged configs does not notify the
+// watchers.
 func (c *defaultConfigurator) apply(cs []*Configuration) []string {
 	values := make(map[string]any, len(cs))
 
