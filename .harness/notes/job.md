@@ -800,7 +800,7 @@ trace_id
 - Outbox 或其他跨进程通知适配器。
 - `ManagementHandler` 管理接口已完成，鉴权由宿主应用中间件负责。
 - 任务历史归档。
-- Redis 故障切换。
+- Redis 单实例重启恢复演练已完成；主从/哨兵自动故障切换仍待 HA 拓扑。
 - 多实例故障注入和长任务演练已在 Redis 集成测试中完成，真实故障切换仍待专项演练。
 
 ## 22. 与现有 Due 模块的关系
@@ -832,7 +832,7 @@ MySQL/MongoDB 可替换
 SQLite 暂不考虑
 ~~~
 
-当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger、进程内事件唤醒 Notifier、Redis Pub/Sub 通知和管理接口。已完成 Docker Redis 6、MySQL 5.7 和 MongoDB 7 Replica Set 的真实 conformance 验证，以及 Redis Worker 崩溃恢复和长任务租约续期集成测试；Redis 故障切换和任务历史归档仍属于后续工作。
+当前代码已完成核心接口、Redis 默认适配器、MySQL/MongoDB 可替换适配器、Cron 时区、租约续期和过期恢复、跨存储一致性测试、Metrics、可选 Logger、进程内事件唤醒 Notifier、Redis Pub/Sub 通知和管理接口。已完成 Docker Redis 6、MySQL 5.7 和 MongoDB 7 Replica Set 的真实 conformance 验证，Redis Worker 崩溃恢复和长任务租约续期集成测试，以及 Redis 单实例重启恢复演练；Redis 主从/哨兵自动切换和任务历史归档仍属于后续工作。
 
 ## 24. 当前代码入口
 
