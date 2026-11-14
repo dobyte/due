@@ -479,6 +479,33 @@ func (s *Source) refresh() {
 			return
 		case <-ticker.C:
 			s.search()
+
+			// Older servers do not support the group query API, so the search cycle cannot issue the
+			// listen requests. Retry the configured exact files that have no subscription yet.
+			if s.searchDisabled {
+				s.retrySubscriptions()
+			}
+		}
+	}
+}
+
+// retrySubscriptions queues a listen request for every configured exact file that has no active
+// subscription. It is used when the group query API is unavailable, where the periodic search
+// cannot discover the files to subscribe.
+func (s *Source) retrySubscriptions() {
+	for _, fileName := range s.opts.files {
+		if pattern.IsWildcard(fileName) {
+			continue
+		}
+
+		if _, ok := s.subscribed.Load(fileName); ok {
+			continue
+		}
+
+		select {
+		case s.chListen <- fileName:
+		case <-s.ctx.Done():
+			return
 		}
 	}
 }
