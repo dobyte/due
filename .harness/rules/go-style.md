@@ -81,7 +81,7 @@
 | [Import 分组](uber-go/style.md#import-group-ordering) | 使用两组：标准库、其他所有导入；组间空行，各组由格式工具排序。 |
 | [包名](uber-go/style.md#package-names) | 使用简短、有意义的小写单数名称，不含下划线或大写字母；避免 `common`、`util`、`shared`、`lib` 等缺乏职责的名称。 |
 | [函数名](uber-go/style.md#function-names) | 使用 MixedCaps；测试函数可按原文使用下划线分组。 |
-| [Import 别名](uber-go/style.md#import-aliasing) | 包声明名与导入路径末段不一致时显式设置别名；其他情况避免无必要的别名，名称冲突等情况按原文处理。 |
+| [Import 别名](uber-go/style.md#import-aliasing) | 按 [DUE-012](due-conventions.md#due-012) 执行：Due 包保持原名；与标准库冲突时标准库使用 `std` 前缀，与第三方库冲突时使用来源前缀。 |
 | [函数排列](uber-go/style.md#function-grouping-and-ordering) | 按接收者和大致调用顺序组织函数；公开函数靠前，构造函数可放在类型定义之后、接收者其他方法之前，独立辅助函数靠后。 |
 | [减少嵌套](uber-go/style.md#reduce-nesting) | 使用提前返回、`continue` 等方式处理特殊情况，保持正常路径清晰。 |
 | [计数循环](due-conventions.md#due-006) | 按 [DUE-006](due-conventions.md#due-006)执行：从 `0` 开始、步长为 `1` 的计数循环，不需要索引时用 `for range n`，需要索引时用 `for i := range n`，不使用 `for i := 0; i < n; i++`；非单位步长、逆序等场景仍用三段式 `for`。 |
@@ -146,7 +146,7 @@
 - Goroutine 可以取消并等待退出，资源清理与锁操作正确。
 - 错误处理没有重复记录，包装和错误类型符合对外契约。
 - 时间单位明确，Channel 容量和初始化例外有依据。
-- 命名符合 [DUE-010](due-conventions.md#due-010)，导入、布局和测试风格在包内一致。
+- 命名符合 [DUE-010](due-conventions.md#due-010)，导入别名符合 [DUE-012](due-conventions.md#due-012)，导入、布局和测试风格在包内一致。
 - 性能建议用于适用路径，性能声明有实际测量依据。
 
 ## 五、维护与上游更新
