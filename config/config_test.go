@@ -763,6 +763,24 @@ func TestGlobalConfiguratorCloseClears(t *testing.T) {
 	}
 }
 
+// TestGlobalConfiguratorMissing verifies that Set, Load and Store report a missing global
+// configurator instead of silently returning nil.
+func TestGlobalConfiguratorMissing(t *testing.T) {
+	config.Close()
+
+	if err := config.Set("config.timezone", "Local"); !errors.Is(err, errors.ErrNotFoundConfigurator) {
+		t.Fatalf("expect ErrNotFoundConfigurator, actual: %v", err)
+	}
+
+	if _, err := config.Load(context.Background(), "file"); !errors.Is(err, errors.ErrNotFoundConfigurator) {
+		t.Fatalf("expect ErrNotFoundConfigurator, actual: %v", err)
+	}
+
+	if err := config.Store(context.Background(), "file", "config.json", map[string]any{}); !errors.Is(err, errors.ErrNotFoundConfigurator) {
+		t.Fatalf("expect ErrNotFoundConfigurator, actual: %v", err)
+	}
+}
+
 // TestConfiguratorRetriesFailedLoad verifies that a source that fails to load at startup is retried
 // in the background.
 func TestConfiguratorRetriesFailedLoad(t *testing.T) {

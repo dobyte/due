@@ -41,6 +41,8 @@ var (
 	ErrNoOperationPermission   = New("no operation permission")
 	ErrInvalidConfigContent    = New("invalid config content")
 	ErrNotFoundConfigSource    = New("not found config source")
+	ErrNotFoundConfigurator    = New("not found configurator")
+	ErrClosedConfigSource      = New("config source is closed")
 	ErrConfigStoreFailed       = New("config store failed")
 	ErrFileNotConfigured       = New("config file is not in the configured files")
 	ErrConfigAuthRequired      = New("config source requires authentication: configure the credentials or disable server-side authentication")

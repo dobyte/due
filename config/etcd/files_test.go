@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 )
 
 func TestMatchFile(t *testing.T) {
@@ -38,5 +39,19 @@ func TestStoreRejectsEmptyFile(t *testing.T) {
 
 	if err := s.Store(context.Background(), "", []byte(`{}`)); err == nil {
 		t.Fatal("expect an error for the empty file name")
+	}
+}
+
+// TestWatchClosedSource verifies that a closed source rejects new watchers instead of registering a
+// watcher that is never stopped.
+func TestWatchClosedSource(t *testing.T) {
+	s := NewSource()
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("close source failed, err: %v", err)
+	}
+
+	if _, err := s.Watch(context.Background()); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource, actual: %v", err)
 	}
 }

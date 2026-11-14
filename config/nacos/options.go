@@ -2,7 +2,6 @@ package nacos
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/dobyte/due/v2/config"
@@ -134,33 +133,6 @@ func defaultOptions() *options {
 		logDir:      etc.Get(defaultLogDirKey, defaultLogDir).String(),
 		logLevel:    etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
 	}
-}
-
-// normalizeFiles trims the configured file list and drops empty and duplicate entries, so that an
-// empty dataId cannot fail a full load and a duplicated one cannot be fetched or listened twice.
-func normalizeFiles(files []string) []string {
-	if len(files) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(files))
-	normalized := make([]string, 0, len(files))
-
-	for _, file := range files {
-		file = strings.TrimSpace(file)
-		if file == "" {
-			continue
-		}
-
-		if _, ok := seen[file]; ok {
-			continue
-		}
-
-		seen[file] = struct{}{}
-		normalized = append(normalized, file)
-	}
-
-	return normalized
 }
 
 // WithContext sets the context.

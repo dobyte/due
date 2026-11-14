@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/core/pattern"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/config_client"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
@@ -897,7 +898,8 @@ func TestRefreshFixedFiles(t *testing.T) {
 	}
 }
 
-// TestNormalizeFiles verifies that the fixed file list drops empty entries and duplicates.
+// TestNormalizeFiles verifies that the fixed file list drops empty entries and duplicates and is
+// cleaned through the shared pattern helper.
 func TestNormalizeFiles(t *testing.T) {
 	tests := []struct {
 		name string
@@ -906,12 +908,13 @@ func TestNormalizeFiles(t *testing.T) {
 	}{
 		{name: "empty list", give: nil, want: nil},
 		{name: "trim and dedupe", give: []string{" a.json ", "", "b.yaml", "a.json", "  "}, want: []string{"a.json", "b.yaml"}},
+		{name: "clean paths", give: []string{"./a.json", "b/../c.yaml"}, want: []string{"a.json", "c.yaml"}},
 		{name: "all empty", give: []string{"", "  "}, want: []string{}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeFiles(tt.give); !slices.Equal(got, tt.want) {
+			if got := pattern.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
 				t.Fatalf("expect %v, got %v", tt.want, got)
 			}
 		})

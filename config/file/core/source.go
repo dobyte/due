@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/pattern"
@@ -21,8 +22,9 @@ const Name = "file"
 type Source struct {
 	path     string
 	mode     config.Mode
-	files    []string // Selected files; empty means every file under the source path
-	watchers sync.Map // Watcher set
+	files    []string    // Selected files; empty means every file under the source path
+	watchers sync.Map    // Watcher set
+	closed   atomic.Bool // Whether the source has been closed
 }
 
 var _ config.Source = &Source{}
@@ -189,8 +191,13 @@ func (s *Source) matchFile(path string) bool {
 	return pattern.MatchFile(s.files, filepath.ToSlash(rel))
 }
 
-// Watch starts watching the source path and returns a [config.Watcher].
+// Watch starts watching the source path and returns a [config.Watcher]. It reports
+// [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	w, err := newWatcher(ctx, s)
 	if err != nil {
 		return nil, err
@@ -198,11 +205,23 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 
 	s.watchers.Store(w, struct{}{})
 
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.closed.Load() {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	return w, nil
 }
 
 // Close closes the source. It stops the registered watchers.
 func (s *Source) Close() error {
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	s.watchers.Range(func(key, _ any) bool {
 		_ = key.(*watcher).Stop()
 

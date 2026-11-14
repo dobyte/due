@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 	"net/url"
-	"path/filepath"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -80,7 +80,7 @@ func NewSource(opts ...Option) config.Source {
 		opt(o)
 	}
 
-	o.files = normalizeFiles(o.files)
+	o.files = pattern.NormalizeFiles(o.files)
 
 	s := &Source{opts: o}
 	for _, file := range o.files {
@@ -612,10 +612,10 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	// The source may have been closed between the context check above and the registration, in
 	// which case the shutdown no longer visits the watcher. Stop it so that Next does not block
 	// forever on a closed source.
-	if err := s.ctx.Err(); err != nil {
+	if s.ctx.Err() != nil {
 		_ = w.Stop()
 
-		return nil, err
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	return w, nil
@@ -970,7 +970,7 @@ func newClientConfig(o *options) constant.ClientConfig {
 // the dataId to a Nacos config type supporting only json, xml and yaml; any other
 // format falls back to the default text type.
 func (s *Source) parseFileType(file string) string {
-	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(file), ".")) {
+	switch strings.ToLower(strings.TrimPrefix(path.Ext(file), ".")) {
 	case "json":
 		return "json"
 	case "xml":
@@ -987,7 +987,7 @@ func (s *Source) parseFileType(file string) string {
 // config format. The dataId is relative to the group, so it is both the path within
 // the source and the file name, matching the other config sources.
 func (s *Source) conv(file, content string) *config.Configuration {
-	ext := filepath.Ext(file)
+	ext := path.Ext(file)
 
 	return &config.Configuration{
 		Path:     file,

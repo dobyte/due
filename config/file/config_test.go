@@ -35,6 +35,20 @@ func TestName(t *testing.T) {
 	}
 }
 
+// TestWatchClosedSource verifies that a closed source rejects new watchers instead of registering a
+// watcher that is never stopped.
+func TestWatchClosedSource(t *testing.T) {
+	source := file.NewSource(file.WithPath(t.TempDir()))
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source failed, err: %v", err)
+	}
+
+	if _, err := source.Watch(context.Background()); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource, actual: %v", err)
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, configFile, `{"timezone":"Local"}`)

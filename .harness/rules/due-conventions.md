@@ -6,7 +6,7 @@
 
 Due 以 [Uber Go Style Guide](uber-go/style.md)作为通用编码规范。本文件补充项目约定；与通用规范存在冲突时，优先执行本文件中适用的 Due 规则，其余部分继续遵循 Uber 指南。
 
-其中，`DUE-003` 是对 Uber `Defer to Clean Up` 在高性能场景下的明确覆盖，`DUE-005` 是对 Uber 基准测试示例循环写法的明确覆盖，`DUE-006` 是对上游示例中计数式循环写法的明确覆盖，`DUE-010` 是对 Uber `Prefix unexported globals with _` 命名建议的明确覆盖。项目约定不能以遗漏资源清理、破坏错误处理或引入并发错误为代价。
+其中，`DUE-003` 是对 Uber `Defer to Clean Up` 在高性能场景下的明确覆盖，`DUE-005` 是对 Uber 基准测试示例循环写法的明确覆盖，`DUE-006` 是对上游示例中计数式循环写法的明确覆盖，`DUE-010` 是对 Uber `Prefix unexported globals with _` 命名建议的明确覆盖，`DUE-011` 明确初始化期全局对象不做防御性同步的适用边界。项目约定不能以遗漏资源清理、破坏错误处理或引入并发错误为代价。
 
 ## 二、规则索引
 
@@ -22,6 +22,7 @@ Due 以 [Uber Go Style Guide](uber-go/style.md)作为通用编码规范。本文
 | [DUE-008](#due-008) | 全局错误变量 | 统一定义在 Due errors 包，使用 `Err` 前缀并导出。 |
 | [DUE-009](#due-009) | 多变量声明分组 | 同一作用域内多个变量使用 `var ()`，仅声明在上、声明赋值在下。 |
 | [DUE-010](#due-010) | 命名的下划线前缀 | 所有标识符不以下划线开头。 |
+| [DUE-011](#due-011) | 全局对象的注册与读取 | 只在初始化阶段注册，之后不再修改，读取不加锁。 |
 
 ## 三、规则详情
 
@@ -260,17 +261,64 @@ const _defaultTagKey = "default"
 - 该条覆盖 Uber 指南中“未导出全局命名使用 `_` 前缀”的建议；Due 统一使用普通驼峰命名，不使用下划线前缀。
 - 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
 
+### DUE-011
+
+**进程级全局对象只在初始化阶段注册，之后不再修改，读取路径不加同步（强制）。**
+
+正确写法：
+
+```go
+var globalConfigurator Configurator
+
+// SetConfigurator installs the global configurator during initialization.
+func SetConfigurator(configurator Configurator) {
+	previous := globalConfigurator
+	globalConfigurator = configurator
+
+	if previous != nil && previous != configurator {
+		previous.Close()
+	}
+}
+
+func GetConfigurator() Configurator {
+	return globalConfigurator
+}
+```
+
+错误写法：
+
+```go
+var (
+	globalMu           sync.RWMutex
+	globalConfigurator Configurator
+)
+
+func GetConfigurator() Configurator {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
+
+	return globalConfigurator
+}
+```
+
+- 适用于进程级单例或注册表型全局对象，例如全局 configurator、全局日志实例、全局注册表句柄及其对应的 `SetXxx`、`GetXxx`、`Close` 入口。
+- 这类对象只能在程序初始化阶段（启动装配期）安装或替换，之后被并发读取而不再修改；因此全局读取入口直接读取包级变量，不得为防御性并发加锁或使用原子操作。
+- 对应的关闭或清理入口同样属于初始化/反初始化生命周期，按同一前提实现，不额外同步。
+- 若某个全局对象确实需要在运行期被并发修改（例如动态注册表），不属于本条范围；此时必须显式采用并发安全设计（互斥、原子或快照发布），并在注释或文档中声明其运行期可变语义。
+- 不得以“可能有人在运行期修改”为理由给初始化期全局对象加锁，牺牲读取热路径的性能。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
 ## 四、Harness 执行与审查
 
 1. 编码前同时读取 [Go 编码规范入口](go-style.md)和本文件，按规则编号确定本次涉及的项目约定。
-2. 审查新增和修改代码的实际调用，确认 JSON、errors、全局错误变量归属、命名下划线前缀、变量声明分组、时间操作、基准测试循环、计数循环和 `WaitGroup` 管理的 Goroutine 启动采用正确写法；导入别名不能作为判断依据。
+2. 审查新增和修改代码的实际调用，确认 JSON、errors、全局错误变量归属、全局对象的注册与读取同步、命名下划线前缀、变量声明分组、时间操作、基准测试循环、计数循环和 `WaitGroup` 管理的 Goroutine 启动采用正确写法；导入别名不能作为判断依据。
 3. 涉及高性能路径时检查可避免的 `defer`，并复核所有相关退出路径的清理行为；按变更运行适用的测试，并对性能结论进行测量。
 4. 工具检查通过不能替代场景判断：高性能路径、强制时区要求和资源清理完整性需要结合代码语义审查。
 5. 现有代码不构成豁免依据。新增和修改时在任务范围内落实规则，全仓库审计或批量迁移作为独立任务处理。
 
 ## 五、后续追加规则
 
-- 在本文件追加新规则，使用递增、稳定的编号，从 `DUE-011` 开始；已有编号不重排、不复用。
+- 在本文件追加新规则，使用递增、稳定的编号，从 `DUE-012` 开始；已有编号不重排、不复用。
 - 每条规则写明适用场景、要求强度、指定包或实现方式，以及必要的实施边界。
 - 同步更新规则索引；与 Uber 通用规范存在冲突时，明确覆盖范围，并更新 [Go 编码规范入口](go-style.md)中的对应说明。
 - 废止规则时保留原编号并标注状态，方便历史变更和审查记录引用。

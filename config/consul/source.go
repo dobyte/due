@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/pattern"
@@ -24,6 +25,7 @@ type Source struct {
 	builtin   bool            // Whether the client is built in
 	transport *http.Transport // Underlying transport of the built-in client
 	watchers  sync.Map        // Watcher set
+	closed    atomic.Bool     // Whether the source has been closed
 }
 
 // NewSource creates a config source. It builds a Consul config center client from
@@ -179,10 +181,15 @@ func (s *Source) matchFile(file string) bool {
 }
 
 // Watch watches configuration items. It creates a watcher that observes
-// configuration changes under the base path.
+// configuration changes under the base path. It reports
+// [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	w, err := newWatcher(ctx, s)
@@ -191,6 +198,14 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	}
 
 	s.watchers.Store(w, struct{}{})
+
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.closed.Load() {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
 
 	return w, nil
 }
@@ -201,6 +216,10 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
+	}
+
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
 	}
 
 	s.watchers.Range(func(key, _ any) bool {

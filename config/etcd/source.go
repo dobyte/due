@@ -3,9 +3,10 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
 	"github.com/dobyte/due/v2/core/pattern"
@@ -19,10 +20,11 @@ const Name = "etcd"
 
 // Source is the etcd config source.
 type Source struct {
-	err      error    // Error returned when the client was built
-	opts     *options // Configuration options
-	builtin  bool     // Whether the client is built in
-	watchers sync.Map // Watcher set
+	err      error       // Error returned when the client was built
+	opts     *options    // Configuration options
+	builtin  bool        // Whether the client is built in
+	watchers sync.Map    // Watcher set
+	closed   atomic.Bool // Whether the source has been closed
 }
 
 // NewSource creates a config source. It builds an etcd config center client from
@@ -138,12 +140,12 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 // parseKV parses an etcd key-value pair into the unified configuration structure.
 func (s *Source) parseKV(key, value []byte) *config.Configuration {
 	fullPath := string(key)
-	path := strings.TrimPrefix(fullPath, s.opts.path)
-	file := filepath.Base(fullPath)
-	ext := filepath.Ext(file)
+	relPath := strings.TrimPrefix(fullPath, s.opts.path)
+	file := path.Base(fullPath)
+	ext := path.Ext(file)
 
 	return &config.Configuration{
-		Path:     path,
+		Path:     relPath,
 		File:     file,
 		Name:     strings.TrimSuffix(file, ext),
 		Format:   strings.TrimPrefix(ext, "."),
@@ -163,10 +165,15 @@ func (s *Source) matchFile(file string) bool {
 }
 
 // Watch watches configuration items. It pulls the full configuration once as the
-// initial snapshot and then creates a watcher to observe subsequent changes.
+// initial snapshot and then creates a watcher to observe subsequent changes. It
+// reports [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	// Pull the full configuration once to use as the initial watch snapshot and to
@@ -182,6 +189,14 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	w := newWatcher(ctx, s, res)
 	s.watchers.Store(w, struct{}{})
 
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.closed.Load() {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	return w, nil
 }
 
@@ -191,6 +206,10 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
+	}
+
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
 	}
 
 	s.watchers.Range(func(key, _ any) bool {

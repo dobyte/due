@@ -3,6 +3,7 @@ package polaris
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -172,7 +173,9 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 // load loads a single configuration item. It fetches the content from the Polaris
 // server by config file name and converts it into the unified configuration
 // structure. On success it also subscribes to the file's changes, so that older
-// servers without the group query API can still deliver change notifications.
+// servers without the group query API can still deliver change notifications. A
+// published config file with empty content is returned as an empty config, matching
+// the other config sources.
 func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -181,10 +184,6 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	configFile, err := s.configClient.GetConfigFile(s.opts.namespace, s.opts.group, file)
 	if err != nil {
 		return nil, err
-	}
-
-	if !configFile.HasContent() {
-		return nil, errors.New("config file not exist")
 	}
 
 	s.subscribe(file)
@@ -261,9 +260,14 @@ func (s *Source) matchFile(file string) bool {
 
 // Watch watches configuration items. It creates a new watcher and registers it
 // with the config source; the watcher is notified when the configuration changes.
+// It reports [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.ctx.Err() != nil {
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	w, err := newWatcher(ctx, s)
@@ -272,6 +276,14 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	}
 
 	s.watchers.Store(w, struct{}{})
+
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.ctx.Err() != nil {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
 
 	return w, nil
 }
@@ -637,7 +649,7 @@ func isExistedResourceError(err error) bool {
 // as the config format. The file name is relative to the group, so it is both the
 // path within the source and the file name, matching the other config sources.
 func conv(file, content string) *config.Configuration {
-	ext := filepath.Ext(file)
+	ext := path.Ext(file)
 
 	return &config.Configuration{
 		Path:     file,
