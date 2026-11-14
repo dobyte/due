@@ -49,6 +49,26 @@ func TestWatchClosedSource(t *testing.T) {
 	}
 }
 
+// TestClosedSourceRejectsLoadAndStore verifies that a closed source rejects Load and Store.
+func TestClosedSourceRejectsLoadAndStore(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, configFile, `{"timezone":"Local"}`)
+
+	source := file.NewSource(file.WithPath(dir), file.WithMode(config.ReadWrite))
+
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source failed, err: %v", err)
+	}
+
+	if _, err := source.Load(context.Background(), configFile); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Load, actual: %v", err)
+	}
+
+	if err := source.Store(context.Background(), configFile, []byte(`{}`)); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Store, actual: %v", err)
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, configFile, `{"timezone":"Local"}`)

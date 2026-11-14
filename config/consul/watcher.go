@@ -29,6 +29,7 @@ type watcher struct {
 	mu       sync.Mutex                       // Send lock
 	configMu sync.Mutex                       // Guards the configuration snapshot
 	configs  map[string]*config.Configuration // Configuration snapshot
+	synced   bool                             // Whether the initial snapshot has been recorded
 	stopped  atomic.Bool                      // Whether the watcher has stopped
 	warned   atomic.Bool                      // Whether the current watch failure was logged
 	chWatch  chan []*config.Configuration     // Configuration change channel
@@ -204,12 +205,24 @@ func (w *watcher) planHandler(idx uint64, raw any) {
 	}
 }
 
-// diff records configs as the current snapshot and returns the configs that are new or changed. A
-// removed config is dropped from the snapshot but not reported, because a deletion has no
-// representation in a config item and the value store is merge-only.
+// diff records configs as the current snapshot and returns the configs that are new or changed. The
+// first call only seeds the snapshot without reporting anything, because the configurator has
+// already loaded the configurations through Load before it opens the watcher. A removed config is
+// dropped from the snapshot but not reported, because a deletion has no representation in a config
+// item and the value store is merge-only.
 func (w *watcher) diff(configs []*config.Configuration) []*config.Configuration {
 	w.configMu.Lock()
 	defer w.configMu.Unlock()
+
+	if !w.synced {
+		w.synced = true
+
+		for _, c := range configs {
+			w.configs[c.FullPath] = c
+		}
+
+		return nil
+	}
 
 	changed := make([]*config.Configuration, 0, len(configs))
 	seen := make(map[string]struct{}, len(configs))

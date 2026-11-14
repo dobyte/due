@@ -76,6 +76,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	var (
 		key  = s.opts.path
 		opts []clientv3.OpOption
@@ -116,6 +120,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
+	}
+
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
 	}
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {

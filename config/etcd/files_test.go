@@ -55,3 +55,20 @@ func TestWatchClosedSource(t *testing.T) {
 		t.Fatalf("expect ErrClosedConfigSource, actual: %v", err)
 	}
 }
+
+// TestClosedSourceRejectsLoadAndStore verifies that a closed source rejects Load and Store.
+func TestClosedSourceRejectsLoadAndStore(t *testing.T) {
+	s := NewSource()
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("close source failed, err: %v", err)
+	}
+
+	if _, err := s.Load(context.Background(), "config.json"); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Load, actual: %v", err)
+	}
+
+	if err := s.Store(context.Background(), "config.json", []byte(`{}`)); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Store, actual: %v", err)
+	}
+}

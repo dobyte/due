@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/config"
@@ -65,6 +66,7 @@ type Source struct {
 	chCancel     chan string           // Cancel-listen request channel
 	watchers     sync.Map              // Watcher set
 	once         sync.Once             // Ensures the shutdown runs only once
+	closed       atomic.Bool           // Whether the source has been closed
 	wg           sync.WaitGroup        // Wait group for goroutine exit
 	cacheMu      sync.Mutex            // Guards the content cache
 	cache        map[string]cachedItem // Content cache of the last full load, keyed by dataId
@@ -126,6 +128,10 @@ func (s *Source) Name() string {
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	if len(file) > 0 && file[0] != "" {
@@ -564,6 +570,10 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return s.err
 	}
 
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
+	}
+
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
 	}
@@ -612,7 +622,7 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	// The source may have been closed between the context check above and the registration, in
 	// which case the shutdown no longer visits the watcher. Stop it so that Next does not block
 	// forever on a closed source.
-	if s.ctx.Err() != nil {
+	if s.closed.Load() {
 		_ = w.Stop()
 
 		return nil, errors.ErrClosedConfigSource
@@ -631,6 +641,7 @@ func (s *Source) Close() error {
 
 	// Ensure the shutdown runs only once to avoid closing the client twice and panicking.
 	s.once.Do(func() {
+		s.closed.Store(true)
 		s.cancel()
 
 		// Wait for the listen and refresh goroutines to exit so that the client is not closed concurrently.

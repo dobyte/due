@@ -43,8 +43,12 @@ func (s *Source) Name() string {
 }
 
 // Load loads the configurations of the given files, or every file under the source path when file
-// is empty.
+// is empty. It reports [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -96,8 +100,13 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	return []*config.Configuration{c}, nil
 }
 
-// Store saves content as file under the source path.
+// Store saves content as file under the source path. It reports
+// [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
+	}
+
 	if s.mode != config.WriteOnly && s.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
 	}

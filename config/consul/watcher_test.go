@@ -8,14 +8,18 @@ import (
 	"github.com/dobyte/due/v2/errors"
 )
 
-// TestWatcherDiff verifies that only new or changed configs are reported and that removed configs
-// are dropped from the snapshot.
+// TestWatcherDiff verifies that the first snapshot only seeds the state, that only new or changed
+// configs are reported afterwards, and that removed configs are dropped from the snapshot.
 func TestWatcherDiff(t *testing.T) {
 	w := &watcher{configs: make(map[string]*config.Configuration)}
 
 	first := &config.Configuration{FullPath: "config/app.json", Content: []byte(`{"a":1}`)}
-	if changed := w.diff([]*config.Configuration{first}); len(changed) != 1 {
-		t.Fatalf("expect the new config to be reported, actual: %d", len(changed))
+	if changed := w.diff([]*config.Configuration{first}); len(changed) != 0 {
+		t.Fatalf("expect the initial snapshot not to be reported, actual: %d", len(changed))
+	}
+
+	if len(w.configs) != 1 {
+		t.Fatalf("expect the initial snapshot to be recorded, actual: %d", len(w.configs))
 	}
 
 	same := &config.Configuration{FullPath: "config/app.json", Content: []byte(`{"a":1}`)}
@@ -48,5 +52,22 @@ func TestWatchClosedSource(t *testing.T) {
 
 	if _, err := s.Watch(context.Background()); !errors.Is(err, errors.ErrClosedConfigSource) {
 		t.Fatalf("expect ErrClosedConfigSource, actual: %v", err)
+	}
+}
+
+// TestClosedSourceRejectsLoadAndStore verifies that a closed source rejects Load and Store.
+func TestClosedSourceRejectsLoadAndStore(t *testing.T) {
+	s := NewSource()
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("close source failed, err: %v", err)
+	}
+
+	if _, err := s.Load(context.Background(), "config.json"); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Load, actual: %v", err)
+	}
+
+	if err := s.Store(context.Background(), "config.json", []byte(`{}`)); !errors.Is(err, errors.ErrClosedConfigSource) {
+		t.Fatalf("expect ErrClosedConfigSource from Store, actual: %v", err)
 	}
 }

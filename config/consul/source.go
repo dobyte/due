@@ -79,6 +79,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 		return nil, s.err
 	}
 
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	// When file is provided, query by the exact key and return only the target
 	// configuration item.
 	if len(file) > 0 && file[0] != "" {
@@ -126,6 +130,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	if s.err != nil {
 		return s.err
+	}
+
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
 	}
 
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
