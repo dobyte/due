@@ -10,6 +10,7 @@ type Option func(*options)
 
 type options struct {
 	addrs      []string
+	masterName string
 	db         int
 	username   string
 	password   string
@@ -28,6 +29,12 @@ func defaultOptions() *options {
 
 func WithAddrs(addrs ...string) Option {
 	return func(o *options) { o.addrs = addrs }
+}
+
+// WithSentinelMaster enables Redis Sentinel failover for the named master.
+// WithAddrs must contain Sentinel addresses when this option is used.
+func WithSentinelMaster(masterName string) Option {
+	return func(o *options) { o.masterName = masterName }
 }
 
 func WithDB(db int) Option {
@@ -61,6 +68,7 @@ func clientFromOptions(ctx context.Context, o *options) (redis.UniversalClient, 
 
 	return redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:      o.addrs,
+		MasterName: o.masterName,
 		DB:         o.db,
 		Username:   o.username,
 		Password:   o.password,

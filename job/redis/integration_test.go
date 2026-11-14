@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,6 +133,40 @@ func TestLongRunningHandlerRenewsLease(t *testing.T) {
 	}
 	if run.Attempt != 1 || run.FencingToken != 1 {
 		t.Fatalf("run attempt/token = %d/%d, want 1/1", run.Attempt, run.FencingToken)
+	}
+}
+
+func TestSentinelStore(t *testing.T) {
+	addresses := os.Getenv("JOB_REDIS_SENTINEL_ADDRS")
+	masterName := os.Getenv("JOB_REDIS_SENTINEL_MASTER")
+	if addresses == "" || masterName == "" {
+		t.Skip("set JOB_REDIS_SENTINEL_ADDRS and JOB_REDIS_SENTINEL_MASTER to run Sentinel integration tests")
+	}
+	store := NewStore(
+		WithAddrs(strings.Split(addresses, ",")...),
+		WithSentinelMaster(masterName),
+		WithPrefix("due:job:integration:{sentinel-"+xuuid.UUID()+"}"),
+	)
+	defer store.Close(context.Background())
+	definition := &job.Definition{
+		ID:                "job-" + xuuid.UUID(),
+		Type:              "sentinel",
+		ScheduleType:      job.ScheduleOnce,
+		NextRunAt:         time.Now().Add(time.Hour),
+		Status:            job.DefinitionEnabled,
+		MisfirePolicy:     job.MisfireFireOnce,
+		ConcurrencyPolicy: job.AllowConcurrent,
+		MaxAttempts:       1,
+	}
+	if err := store.CreateDefinition(context.Background(), definition); err != nil {
+		t.Fatalf("create definition through Sentinel: %v", err)
+	}
+	stored, err := store.GetDefinition(context.Background(), definition.ID)
+	if err != nil {
+		t.Fatalf("get definition through Sentinel: %v", err)
+	}
+	if stored.ID != definition.ID {
+		t.Fatalf("stored job ID = %q, want %q", stored.ID, definition.ID)
 	}
 }
 
