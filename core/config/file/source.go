@@ -137,8 +137,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 	return writeFileAtomic(filepath.Join(s.path, file), content)
 }
 
-// checkFilePath validates that file is a safe path under root; it rejects absolute paths and paths
-// containing "..".
+// checkFilePath validates that file is a concrete path under root; it rejects absolute paths, paths
+// containing ".." and wildcard entries, which are only meaningful in the configured file list.
 func checkFilePath(root, file string) error {
 	if file == "" {
 		return errors.New("invalid file path: empty")
@@ -146,6 +146,10 @@ func checkFilePath(root, file string) error {
 
 	if filepath.IsAbs(file) {
 		return errors.New("invalid file path: absolute path is not allowed")
+	}
+
+	if strings.Contains(filepath.ToSlash(file), "*") {
+		return errors.New("invalid file path: wildcard is not allowed")
 	}
 
 	for _, item := range strings.Split(filepath.ToSlash(file), "/") {

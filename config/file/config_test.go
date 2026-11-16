@@ -226,6 +226,24 @@ func TestStore(t *testing.T) {
 	}
 }
 
+// TestExplicitFileRejectsWildcard verifies that a wildcard selects entries in the configured file
+// list only, so it cannot address a concrete entry for Load or Store.
+func TestExplicitFileRejectsWildcard(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "gate.yaml", "name: gate\n")
+
+	source := file.NewSource(file.WithPath(dir), file.WithMode(config.ReadWrite))
+	defer source.Close()
+
+	if _, err := source.Load(context.Background(), "*.yaml"); err == nil {
+		t.Fatal("expect an error for a wildcard load entry")
+	}
+
+	if err := source.Store(context.Background(), "*.yaml", []byte(`{}`)); err == nil {
+		t.Fatal("expect an error for a wildcard store entry")
+	}
+}
+
 func TestStoreWithoutPermission(t *testing.T) {
 	source := file.NewSource(file.WithPath(t.TempDir()), file.WithMode(config.ReadOnly))
 
