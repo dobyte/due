@@ -1366,6 +1366,15 @@ func TestSourceStorePatterns(t *testing.T) {
 	if err := source.Store(context.Background(), "other.json", []byte("content")); err != errors.ErrFileNotConfigured {
 		t.Fatalf("expect errors.ErrFileNotConfigured, got %v", err)
 	}
+
+	// A wildcard selects configurations in the file list, but it is not a concrete entry to read
+	// or write.
+	if err := source.Store(context.Background(), "gate-*.json", []byte("content")); err == nil {
+		t.Fatal("expect an error for a wildcard store entry")
+	}
+	if _, err := source.Load(context.Background(), "gate-*.json"); err == nil {
+		t.Fatal("expect an error for a wildcard load entry")
+	}
 }
 
 // TestRefreshPatterns verifies that a pattern list searches the group instead of registering the

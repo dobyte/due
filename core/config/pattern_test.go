@@ -84,7 +84,7 @@ func TestValidateFileEntry(t *testing.T) {
 	}{
 		{entry: "config.json", valid: true},
 		{entry: "gateway/gate.yaml", valid: true},
-		{entry: "*.yaml", valid: true},
+		{entry: "*.yaml", valid: false},
 		{entry: "", valid: false},
 		{entry: "/etc/gate.yaml", valid: false},
 		{entry: "../gate.yaml", valid: false},

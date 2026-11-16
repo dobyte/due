@@ -61,9 +61,9 @@ func UnmatchableFiles(files []string) []string {
 	return invalid
 }
 
-// ValidateFileEntry validates an entry relative to the source root. It reports
-// [errors.ErrInvalidFilePath] when the entry is empty, absolute, resolves to the root itself or
-// contains a directory traversal.
+// ValidateFileEntry validates a concrete entry relative to the source root. It reports
+// [errors.ErrInvalidFilePath] when the entry is empty, absolute, resolves to the root itself,
+// contains a directory traversal or a wildcard.
 func ValidateFileEntry(entry string) error {
 	if entry == "" {
 		return errors.ErrInvalidFilePath
@@ -74,6 +74,10 @@ func ValidateFileEntry(entry string) error {
 	}
 
 	if path.Clean(filepath.ToSlash(strings.TrimSpace(entry))) == "." {
+		return errors.ErrInvalidFilePath
+	}
+
+	if IsWildcard(entry) {
 		return errors.ErrInvalidFilePath
 	}
 
