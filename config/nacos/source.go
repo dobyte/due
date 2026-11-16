@@ -131,8 +131,9 @@ func (s *Source) Name() string {
 // loads keep the md5-reuse shortcut.
 //
 // A configured file entry may contain the "*" wildcard. In that case Load searches the group,
-// narrowed by a server-side blur keyword, keeps only the matching items and never uses the export
-// shortcut, so that the content of unmatched configurations is not loaded into memory.
+// narrowed by the server-side blur pattern of each entry, keeps only the matching items and never
+// uses the export shortcut, so that the content of unmatched configurations is not loaded into
+// memory.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -325,12 +326,12 @@ func (s *Source) loadPatterns(ctx context.Context) ([]*config.Configuration, err
 
 // discover returns the config list items selected by the configured files. A group with no file
 // list yields every item. With a pattern list the candidate set is narrowed by one server-side blur
-// keyword per pattern and then filtered by the configured files; exact entries are appended when
-// the search does not return them. The result is deduplicated and sorted by dataId.
+// pattern per entry and then filtered by the configured files; exact entries are appended when the
+// search does not return them. The result is deduplicated and sorted by dataId.
 func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 	var (
 		terms = s.searchTerms()
-		full  = len(s.opts.files) == 0 || terms == nil || s.hasUntetheredPattern()
+		full  = len(terms) == 0
 		items = make([]model.ConfigItem, 0)
 		seen  = make(map[string]struct{})
 	)
@@ -350,9 +351,8 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 		}
 	}
 
-	// A whole-group scan already covers every term, so it is used alone when a pattern has no
-	// usable keyword. Otherwise each keyword narrows the server-side search, which is what keeps
-	// the candidate set out of memory.
+	// The whole group is scanned when no pattern is configured; otherwise every pattern narrows the
+	// server-side search, which keeps the candidate set small.
 	if full {
 		if err := s.eachSearchPage(ctx, "", collect); err != nil {
 			return nil, err
@@ -365,8 +365,8 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 		}
 	}
 
-	// An exact entry does not necessarily contain any search term, so add the missing ones. The
-	// synthetic item carries no md5 and its content is fetched individually.
+	// An exact entry is not covered by a pattern search, so add the missing ones. The synthetic item
+	// carries no md5 and its content is fetched individually.
 	for _, file := range s.opts.files {
 		if coreconfig.IsWildcard(file) {
 			continue
@@ -386,9 +386,10 @@ func (s *Source) discover(ctx context.Context) ([]model.ConfigItem, error) {
 	return items, nil
 }
 
-// searchTerms returns the deduplicated server-side blur keywords of the configured patterns. It
-// returns nil when no pattern has a literal segment long enough to narrow the search, in which case
-// the caller scans the whole group once.
+// searchTerms returns the deduplicated wildcard entries of the configured files. Nacos matches the
+// dataId of a blur search as a pattern in which "*" is the wildcard, so the entry itself is sent to
+// the server instead of a literal keyword. It returns nil when no pattern is configured, in which
+// case the caller scans the whole group once.
 func (s *Source) searchTerms() []string {
 	var (
 		seen  = make(map[string]struct{}, len(s.opts.files))
@@ -400,16 +401,12 @@ func (s *Source) searchTerms() []string {
 			continue
 		}
 
-		term := patternTerm(file)
-		if term == "" {
-			continue
-		}
-		if _, ok := seen[term]; ok {
+		if _, ok := seen[file]; ok {
 			continue
 		}
 
-		seen[term] = struct{}{}
-		terms = append(terms, term)
+		seen[file] = struct{}{}
+		terms = append(terms, file)
 	}
 
 	if len(terms) == 0 {
@@ -419,20 +416,8 @@ func (s *Source) searchTerms() []string {
 	return terms
 }
 
-// hasUntetheredPattern reports whether a configured pattern has no literal segment usable as a
-// server-side keyword, so that the group has to be scanned once for it.
-func (s *Source) hasUntetheredPattern() bool {
-	for _, file := range s.opts.files {
-		if coreconfig.IsWildcard(file) && patternTerm(file) == "" {
-			return true
-		}
-	}
-
-	return false
-}
-
 // eachSearchPage pages through the config list of the group and calls fn for every page. dataId is
-// used as the server-side blur keyword; an empty value lists the whole group.
+// used as the server-side blur pattern; an empty value lists the whole group.
 func (s *Source) eachSearchPage(ctx context.Context, dataId string, fn func([]model.ConfigItem)) error {
 	index := 1
 
@@ -834,11 +819,14 @@ func (s *Source) search() {
 		}
 	}
 
-	var err error
+	var (
+		err   error
+		items []model.ConfigItem
+	)
+
 	if len(s.opts.files) == 0 {
 		err = s.eachSearchPage(s.ctx, "", mark)
 	} else {
-		var items []model.ConfigItem
 		if items, err = s.discover(s.ctx); err == nil {
 			mark(items)
 		}

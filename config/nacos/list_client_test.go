@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -783,6 +782,45 @@ func TestSourceLoadFixedFiles(t *testing.T) {
 	}
 }
 
+// TestSourceLoadPatternUsesBlurPattern verifies that a wildcard entry is sent to the server as the
+// blur dataId pattern, because Nacos matches that parameter as a wildcard pattern instead of a
+// literal keyword.
+func TestSourceLoadPatternUsesBlurPattern(t *testing.T) {
+	var dataIds []string
+
+	stub := &stubConfigClient{searchFunc: func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
+		dataIds = append(dataIds, param.DataId)
+
+		return &model.ConfigPage{
+			TotalCount:     2,
+			PageNumber:     1,
+			PagesAvailable: 1,
+			PageItems: []model.ConfigItem{
+				{DataId: "hangzhoumahjong.json", Content: `{"a":1}`},
+				{DataId: "other.json", Content: `{"b":2}`},
+			},
+		}, nil
+	}}
+
+	o := defaultOptions()
+	o.client = stub
+	o.groupName = "test-group"
+	o.files = []string{"hangzhoumahjong.*"}
+
+	source := &Source{opts: o, patternMode: true}
+
+	configs, err := source.Load(context.Background())
+	if err != nil {
+		t.Fatalf("load configs failed: %v", err)
+	}
+	if len(configs) != 1 || configs[0].File != "hangzhoumahjong.json" {
+		t.Fatalf("unexpected configurations: %+v", configs)
+	}
+	if !slices.Equal(dataIds, []string{"hangzhoumahjong.*"}) {
+		t.Fatalf("expect the blur pattern to be sent as the dataId, actual: %v", dataIds)
+	}
+}
+
 // TestSourceConv verifies that the dataId is exposed as the path within the source while the file
 // and name are derived from its base name, matching the configuration structure produced by the
 // other config sources.
@@ -1198,30 +1236,6 @@ func makeExportZip(group string, contents map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// TestPatternTerm verifies the literal segment pushed to the server as the blur keyword.
-func TestPatternTerm(t *testing.T) {
-	tests := []struct {
-		name    string
-		pattern string
-		want    string
-	}{
-		{name: "prefix", pattern: "gate-*.json", want: "gate-"},
-		{name: "path prefix", pattern: "rooms/*.yaml", want: "rooms/"},
-		{name: "weak extension anchor", pattern: "*.json", want: ".json"},
-		{name: "short first segment", pattern: "a*-gate.json", want: "-gate.json"},
-		{name: "no literal", pattern: "*", want: ""},
-		{name: "suffix", pattern: "*-gate.json", want: "-gate.json"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := patternTerm(tt.pattern); got != tt.want {
-				t.Fatalf("patternTerm(%q) = %q, want %q", tt.pattern, got, tt.want)
-			}
-		})
-	}
-}
-
 // exportStub wraps a stub client and records whether the export shortcut was used.
 type exportStub struct {
 	*stubConfigClient
@@ -1234,8 +1248,8 @@ func (c *exportStub) Export(string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-// TestSourceLoadPatterns verifies that pattern mode searches the group with the server-side blur
-// keyword, keeps only the matching items, adds the exact entries the search does not return and
+// TestSourceLoadPatterns verifies that pattern mode searches the group with the configured blur
+// patterns, keeps only the matching items, adds the exact entries the search does not return and
 // never uses the export shortcut.
 func TestSourceLoadPatterns(t *testing.T) {
 	items := []model.ConfigItem{
@@ -1253,9 +1267,10 @@ func TestSourceLoadPatterns(t *testing.T) {
 
 		pageItems := make([]model.ConfigItem, 0, len(items))
 		for _, item := range items {
-			if param.DataId != "" && !strings.Contains(item.DataId, param.DataId) {
+			if param.DataId != "" && !coreconfig.MatchFile([]string{param.DataId}, item.DataId) {
 				continue
 			}
+
 			pageItems = append(pageItems, item)
 		}
 
@@ -1291,7 +1306,7 @@ func TestSourceLoadPatterns(t *testing.T) {
 	if got := stub.getCalls.Load(); got != 2 {
 		t.Fatalf("expect 2 get config calls, got %d", got)
 	}
-	if wantSearched := []string{"gate-"}; !slices.Equal(searched, wantSearched) {
+	if wantSearched := []string{"gate-*.json"}; !slices.Equal(searched, wantSearched) {
 		t.Fatalf("expect searches %v, got %v", wantSearched, searched)
 	}
 	if got := export.exportCalls.Load(); got != 0 {
@@ -1299,10 +1314,10 @@ func TestSourceLoadPatterns(t *testing.T) {
 	}
 }
 
-// TestSourceLoadPatternsWholeGroupScan verifies that a pattern without a usable keyword scans the
-// whole group once instead of querying every keyword as well.
-func TestSourceLoadPatternsWholeGroupScan(t *testing.T) {
-	searched := make([]string, 0, 1)
+// TestSourceLoadPatternsSendsEveryPattern verifies that each configured pattern is sent to the
+// server as is, so that a pattern whose literal segments are too short still narrows the search.
+func TestSourceLoadPatternsSendsEveryPattern(t *testing.T) {
+	searched := make([]string, 0, 2)
 	stub := &stubConfigClient{
 		searchFunc: func(param vo.SearchConfigParam) (*model.ConfigPage, error) {
 			searched = append(searched, param.DataId)
@@ -1319,7 +1334,6 @@ func TestSourceLoadPatternsWholeGroupScan(t *testing.T) {
 	o := defaultOptions()
 	o.client = stub
 	o.groupName = "test-group"
-	// "a*" has no literal segment long enough, so the whole group has to be scanned.
 	o.files = []string{"gate-*.json", "a*"}
 
 	source := &Source{opts: o, patternMode: true, cache: make(map[string]cachedItem)}
@@ -1328,7 +1342,7 @@ func TestSourceLoadPatternsWholeGroupScan(t *testing.T) {
 		t.Fatalf("load configs failed: %v", err)
 	}
 
-	if want := []string{""}; !slices.Equal(searched, want) {
+	if want := []string{"gate-*.json", "a*"}; !slices.Equal(searched, want) {
 		t.Fatalf("expect searches %v, got %v", want, searched)
 	}
 }

@@ -175,9 +175,9 @@ func WithGroupName(groupName string) Option {
 //
 // Exact entries are fetched individually, so the group export shortcut and the
 // md5-based content cache do not apply to them. A list containing a pattern
-// searches the group at start and at every refresh interval, narrowed by a
-// server-side blur keyword derived from each pattern, and only the content of
-// matching items is loaded. Empty and duplicate entries are ignored.
+// searches the group at start and at every refresh interval, narrowed by the
+// server-side blur pattern of each entry, and only the content of matching items
+// is loaded. Empty and duplicate entries are ignored.
 func WithFiles(files ...string) Option {
 	return func(o *options) { o.files = files }
 }
