@@ -96,6 +96,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	if len(file) > 0 && file[0] != "" {
 		name := strings.TrimPrefix(file[0], "/")
 
+		if err := coreconfig.ValidateFileEntry(name); err != nil {
+			return nil, err
+		}
+
 		if !s.matchFile(name) {
 			return nil, errors.ErrFileNotConfigured
 		}

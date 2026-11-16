@@ -146,6 +146,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
+		if err := coreconfig.ValidateFileEntry(file[0]); err != nil {
+			return nil, err
+		}
+
 		// A configured file list also constrains an explicit load, so that this source only exposes
 		// the configurations it is configured to load and listen to.
 		if len(s.opts.files) > 0 && !s.matchFile(file[0]) {

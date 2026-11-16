@@ -118,6 +118,10 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 	}
 
 	if len(file) > 0 && file[0] != "" {
+		if err := coreconfig.ValidateFileEntry(file[0]); err != nil {
+			return nil, err
+		}
+
 		if !s.matchFile(file[0]) {
 			return nil, errors.ErrFileNotConfigured
 		}
