@@ -4,6 +4,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/dobyte/due/v2/errors"
 )
 
 // NormalizeFiles trims the configured file list and drops empty, "." and duplicate entries. Entries
@@ -57,6 +59,25 @@ func UnmatchableFiles(files []string) []string {
 	}
 
 	return invalid
+}
+
+// ValidateFileEntry validates an entry relative to the source root. It reports
+// [errors.ErrInvalidFilePath] when the entry is empty, absolute, resolves to the root itself or
+// contains a directory traversal.
+func ValidateFileEntry(entry string) error {
+	if entry == "" {
+		return errors.ErrInvalidFilePath
+	}
+
+	if len(UnmatchableFiles([]string{entry})) > 0 {
+		return errors.ErrInvalidFilePath
+	}
+
+	if path.Clean(filepath.ToSlash(strings.TrimSpace(entry))) == "." {
+		return errors.ErrInvalidFilePath
+	}
+
+	return nil
 }
 
 // MatchFile reports whether name is selected by files. An entry without "*" must equal name;

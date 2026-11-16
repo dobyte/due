@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dobyte/due/v2/core/config"
+	"github.com/dobyte/due/v2/errors"
 )
 
 func TestNormalizeFiles(t *testing.T) {
@@ -71,6 +72,34 @@ func TestMatchWildcard(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := config.MatchWildcard(tt.pattern, tt.value); got != tt.want {
 				t.Fatalf("MatchWildcard(%q, %q) = %v, want %v", tt.pattern, tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateFileEntry(t *testing.T) {
+	tests := []struct {
+		entry string
+		valid bool
+	}{
+		{entry: "config.json", valid: true},
+		{entry: "gateway/gate.yaml", valid: true},
+		{entry: "*.yaml", valid: true},
+		{entry: "", valid: false},
+		{entry: "/etc/gate.yaml", valid: false},
+		{entry: "../gate.yaml", valid: false},
+		{entry: "a/../../b", valid: false},
+		{entry: ".", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.entry, func(t *testing.T) {
+			err := config.ValidateFileEntry(tt.entry)
+			if tt.valid && err != nil {
+				t.Fatalf("expect %q to be valid, actual: %v", tt.entry, err)
+			}
+			if !tt.valid && !errors.Is(err, errors.ErrInvalidFilePath) {
+				t.Fatalf("expect ErrInvalidFilePath for %q, actual: %v", tt.entry, err)
 			}
 		})
 	}

@@ -49,6 +49,7 @@ var (
 	ErrClosedConfigSource      = New("config source is closed")
 	ErrConfigStoreFailed       = New("config store failed")
 	ErrFileNotConfigured       = New("config file is not in the configured files")
+	ErrInvalidFilePath         = New("invalid file path")
 	ErrConfigAuthRequired      = New("config source requires authentication: configure the credentials or disable server-side authentication")
 	ErrInvalidFormat           = New("invalid format")
 	ErrIllegalRequest          = New("illegal request")

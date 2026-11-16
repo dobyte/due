@@ -67,7 +67,9 @@ func Match(patterns ...string) config.Matcher {
 	return globalConfigurator.Match(patterns...)
 }
 
-// Close closes configuration watching.
+// Close closes configuration watching. The global configurator is kept, so Has and Get keep
+// serving the last published configuration while Set reports errors.ErrClosedConfigurator; install
+// a new configurator with SetConfigurator to load configuration again.
 func Close() {
 	globalConfigurator.Close()
 }

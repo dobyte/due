@@ -153,8 +153,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 
 	name := strings.TrimPrefix(file, "/")
 
-	if name == "" {
-		return errors.New("invalid file path: empty")
+	if err := coreconfig.ValidateFileEntry(name); err != nil {
+		return err
 	}
 
 	if !s.matchFile(name) {

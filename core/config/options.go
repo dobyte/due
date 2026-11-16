@@ -177,6 +177,12 @@ func unmarshal(content []byte, fn func(data []byte, v any) error) (dest any, err
 	}
 
 	dest = make([]any, 0)
+	if err = fn(content, &dest); err == nil {
+		return
+	}
+
+	// The root of a config may also be a scalar, such as a string or a number.
+	dest = nil
 	err = fn(content, &dest)
 
 	return

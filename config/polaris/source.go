@@ -69,6 +69,10 @@ func NewSource(opts ...Option) config.Source {
 
 	o.files = coreconfig.NormalizeFiles(o.files)
 
+	for _, file := range coreconfig.UnmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
+	}
+
 	s := &Source{}
 	s.opts = o
 	s.ctx, s.cancel = context.WithCancel(o.ctx)
@@ -281,8 +285,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return err
 	}
 
-	if file == "" {
-		return errors.New("invalid file name: empty")
+	if err := coreconfig.ValidateFileEntry(file); err != nil {
+		return err
 	}
 
 	if !s.matchFile(file) {

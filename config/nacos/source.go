@@ -86,6 +86,10 @@ func NewSource(opts ...Option) config.Source {
 
 	o.files = coreconfig.NormalizeFiles(o.files)
 
+	for _, file := range coreconfig.UnmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
+	}
+
 	s := &Source{opts: o}
 	for _, file := range o.files {
 		if coreconfig.IsWildcard(file) {
@@ -594,8 +598,8 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return errors.ErrNoOperationPermission
 	}
 
-	if file == "" {
-		return errors.New("invalid file path: empty")
+	if err := coreconfig.ValidateFileEntry(file); err != nil {
+		return err
 	}
 
 	// A configured file list also constrains an explicit store, so that this source only writes the

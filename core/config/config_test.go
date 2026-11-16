@@ -930,6 +930,30 @@ func TestConfiguratorIgnoresEmptyContent(t *testing.T) {
 	}
 }
 
+// TestConfiguratorScalarRootConfig verifies that a config whose root is a scalar is decoded and
+// stored like the configs with an object or array root.
+func TestConfiguratorScalarRootConfig(t *testing.T) {
+	tests := []struct {
+		content string
+		want    string
+	}{
+		{content: `"hello"`, want: "hello"},
+		{content: `42`, want: "42"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.content, func(t *testing.T) {
+			source := newFakeSource(tt.content)
+			c := config.NewConfigurator(config.WithSources(source))
+			defer c.Close()
+
+			if got := c.Get("config").String(); got != tt.want {
+				t.Fatalf("invalid value, expect: %s, actual: %s", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestConfiguratorLoad(t *testing.T) {
 	source := newFakeSource(`{"timezone":"Local"}`)
 	c := config.NewConfigurator(config.WithSources(source))
