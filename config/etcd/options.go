@@ -64,7 +64,8 @@ type options struct {
 	// password is the password.
 	password string
 
-	// timeout is the context timeout and defaults to 3 seconds.
+	// timeout bounds the reads issued by a watcher, that is the initial pull and every resync, and
+	// defaults to 3 seconds. Load and Store use the caller context as is.
 	timeout time.Duration
 }
 
@@ -129,7 +130,7 @@ func WithPassword(password string) Option {
 	return func(o *options) { o.password = password }
 }
 
-// WithTimeout sets the context timeout.
+// WithTimeout sets the timeout of the reads issued by a watcher.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
 }
