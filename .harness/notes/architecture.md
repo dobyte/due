@@ -560,7 +560,7 @@ NodeLinker 观察绑定到本 NID 的用户时登记 Node 关闭等待计数，�
 - Watch 以新事件合并当前视图，不是持续按静态 source 优先级重算；同名内容可能由后到事件覆盖。
 - Set 修改内存；Store 才尝试写源，仍受读写模式限制。
 - 配置内容支持 JSON/XML/YAML/TOML；它与消息 codec 的支持列表不同。
-- 文件 Remove/Rename、空内容及上层配置删除的语义不完整，不应把“动态合并”当作严格快照替换。
+- 文件 Remove/Rename 与上层配置删除不会清除已加载的值（存储是 merge-only）；空内容或解码失败的配置会被忽略并保留旧值，因此不应把“动态合并”当作严格快照替换。
 - 日志默认值：`core/config` 不内置 logger，未通过 `core/config.WithLogger` 注入时丢弃日志；`config` 门面默认注入 Due logger（`log` 包未初始化时回退标准库）；`etc` 在 `etc/logger.go` 自行实现标准库 logger 并显式注入。
 
 运行模式支持 debug、test、pre-release、release，优先级为配置文件 < `DUE_MODE` < `--mode` < `mode.SetMode`。mode 是进程级运行标志，不能代替环境 namespace、权限或部署隔离。
