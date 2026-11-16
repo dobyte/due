@@ -987,6 +987,10 @@ func TestConfiguratorStore(t *testing.T) {
 		t.Fatalf("expect ErrInvalidConfigContent, actual: %v", err)
 	}
 
+	if err := c.Store(ctx, source.Name(), "", map[string]any{"a": 1}); !errors.Is(err, errors.ErrInvalidFilePath) {
+		t.Fatalf("expect ErrInvalidFilePath, actual: %v", err)
+	}
+
 	if err := c.Store(ctx, "missing", "config.json", map[string]any{"a": 1}); !errors.Is(err, errors.ErrNotFoundConfigSource) {
 		t.Fatalf("expect ErrNotFoundConfigSource, actual: %v", err)
 	}
@@ -1493,6 +1497,66 @@ func TestConfiguratorRetriesFailedWatch(t *testing.T) {
 	case <-notified:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the reopened watcher does not report changes")
+	}
+}
+
+// recordLogger counts the records written by the configurator so that a test can assert which
+// events were reported.
+type recordLogger struct {
+	mu     sync.Mutex
+	warns  int
+	errors int
+}
+
+func (l *recordLogger) Infof(string, ...any) {}
+
+func (l *recordLogger) Warnf(string, ...any) {
+	l.mu.Lock()
+	l.warns++
+	l.mu.Unlock()
+}
+
+func (l *recordLogger) Errorf(string, ...any) {
+	l.mu.Lock()
+	l.errors++
+	l.mu.Unlock()
+}
+
+func (l *recordLogger) counts() (int, int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.warns, l.errors
+}
+
+// TestConfiguratorWatchNilCallback verifies that a nil callback is ignored instead of being reported
+// as a panic on every config change.
+func TestConfiguratorWatchNilCallback(t *testing.T) {
+	logger := &recordLogger{}
+	source := newFakeSource(`{"timezone":"Local"}`)
+	c := config.NewConfigurator(config.WithSources(source), config.WithLogger(logger))
+	defer c.Close()
+
+	notified := make(chan struct{}, 1)
+
+	c.Watch(nil)
+	c.Watch(func(...string) {
+		select {
+		case notified <- struct{}{}:
+		default:
+		}
+	}, "config")
+
+	source.push(&config.Configuration{Name: "config", Format: "json", Content: []byte(`{"timezone":"UTC"}`)})
+
+	select {
+	case <-notified:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watcher is not notified after a change")
+	}
+
+	if warns, errs := logger.counts(); warns != 1 || errs != 0 {
+		t.Fatalf("expect one warn and no error record, actual warns: %d, errors: %d", warns, errs)
 	}
 }
 

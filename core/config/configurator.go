@@ -56,15 +56,15 @@ type Configurator interface {
 	// Match returns a [Matcher] over the given patterns.
 	Match(patterns ...string) Matcher
 	// Watch registers cb to be called when one of the named configs changes; empty names means every
-	// config. Callbacks run on a single goroutine and are never invoked concurrently; changes that
-	// arrive while a callback runs are merged into the next call.
+	// config and a nil callback is ignored. Callbacks run on a single goroutine and are never invoked
+	// concurrently; changes that arrive while a callback runs are merged into the next call.
 	Watch(cb WatchCallbackFunc, names ...string)
 	// Load loads the configurations of the named source and returns them without applying them to
 	// the value store. Only the first non-empty file is loaded; omitting file or passing an empty
 	// string loads every file of the source, and any further entries are ignored.
 	Load(ctx context.Context, source string, file ...string) ([]*Configuration, error)
 	// Store saves content as file under the named source, merging it with the existing config unless
-	// override is true.
+	// override is true. An empty file reports [errors.ErrInvalidFilePath].
 	Store(ctx context.Context, source string, file string, content any, override ...bool) error
 	// Close closes the configurator and its config sources. It waits for a running callback and for
 	// the in-flight Load and Store calls to finish, discards the pending notifications, and reports
@@ -1048,9 +1048,15 @@ func (c *defaultConfigurator) Set(pattern string, value any) error {
 }
 
 // Watch registers cb to be called when one of the named configs changes; empty names means every
-// config.
+// config. A nil callback is ignored.
 func (c *defaultConfigurator) Watch(cb WatchCallbackFunc, names ...string) {
 	if c.closed.Load() {
+		return
+	}
+
+	if cb == nil {
+		c.opts.warnf("nil watch callback is ignored")
+
 		return
 	}
 
@@ -1107,6 +1113,10 @@ func (c *defaultConfigurator) Store(ctx context.Context, source string, file str
 
 	if content == nil {
 		return errors.ErrInvalidConfigContent
+	}
+
+	if file == "" {
+		return errors.ErrInvalidFilePath
 	}
 
 	s, ok := c.sources[source]
