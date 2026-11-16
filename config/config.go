@@ -3,98 +3,70 @@ package config
 import (
 	"context"
 
+	"github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/core/value"
 )
 
-var globalConfigurator Configurator
-
-// SetConfigurator sets the global configurator, closing the previous one when it is not nil.
+// SetConfigurator sets the global configurator, closing the previous one when it is not nil. It
+// must be called during initialization, before the configurator is used concurrently.
 func SetConfigurator(configurator Configurator) {
-	if globalConfigurator != nil {
-		globalConfigurator.Close()
-	}
-	globalConfigurator = configurator
+	config.SetConfigurator(configurator)
 }
 
 // GetConfigurator returns the global configurator.
 func GetConfigurator() Configurator {
-	return globalConfigurator
+	return config.GetConfigurator()
 }
 
-// SetConfiguratorWithSources creates a configurator from sources and installs it as the global
-// configurator.
+// SetConfiguratorWithSources creates a configurator with [NewConfigurator] and installs it as the
+// global configurator. It therefore uses the same framework logger default as [NewConfigurator].
 func SetConfiguratorWithSources(sources ...Source) {
 	SetConfigurator(NewConfigurator(WithSources(sources...)))
 }
 
 // Has reports whether a config matching pattern exists.
 func Has(pattern string) bool {
-	if globalConfigurator == nil {
-		return false
-	}
-
-	return globalConfigurator.Has(pattern)
+	return config.Has(pattern)
 }
 
-// Get returns the config value under pattern, falling back to def when the config is missing.
+// Get returns the config value under pattern, falling back to def when the config is missing. The
+// returned value must be treated as read-only, since it may reference the internal config maps and
+// slices.
 func Get(pattern string, def ...any) value.Value {
-	if globalConfigurator == nil {
-		return value.NewValue()
-	}
-
-	return globalConfigurator.Get(pattern, def...)
+	return config.Get(pattern, def...)
 }
 
 // Set sets the config value under pattern.
 func Set(pattern string, value any) error {
-	if globalConfigurator == nil {
-		return nil
-	}
-
-	return globalConfigurator.Set(pattern, value)
+	return config.Set(pattern, value)
 }
 
 // Match returns a [Matcher] over the given patterns.
 func Match(patterns ...string) Matcher {
-	if globalConfigurator == nil {
-		return newEmptyMatcher()
-	}
-
-	return globalConfigurator.Match(patterns...)
+	return config.Match(patterns...)
 }
 
 // Watch registers cb to be called when one of the named configs changes; empty names means every
 // config.
 func Watch(cb WatchCallbackFunc, names ...string) {
-	if globalConfigurator == nil {
-		return
-	}
-
-	globalConfigurator.Watch(cb, names...)
+	config.Watch(cb, names...)
 }
 
-// Load loads the configurations of the named source; empty file means every file of the source.
+// Load loads the configurations of the named source. Only the first non-empty file is loaded;
+// omitting file or passing an empty string loads every file of the source, and any further entries
+// are ignored. It reports errors.ErrNotFoundConfigurator when no global configurator is installed.
 func Load(ctx context.Context, source string, file ...string) ([]*Configuration, error) {
-	if globalConfigurator == nil {
-		return nil, nil
-	}
-
-	return globalConfigurator.Load(ctx, source, file...)
+	return config.Load(ctx, source, file...)
 }
 
 // Store saves content as file under the named source, merging it with the existing config unless
-// override is true.
+// override is true. It reports errors.ErrNotFoundConfigurator when no global configurator is
+// installed.
 func Store(ctx context.Context, source string, file string, content any, override ...bool) error {
-	if globalConfigurator == nil {
-		return nil
-	}
-
-	return globalConfigurator.Store(ctx, source, file, content, override...)
+	return config.Store(ctx, source, file, content, override...)
 }
 
-// Close closes the global configurator and stops watching config changes.
+// Close closes the global configurator and clears it.
 func Close() {
-	if globalConfigurator != nil {
-		globalConfigurator.Close()
-	}
+	config.Close()
 }

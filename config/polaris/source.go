@@ -3,22 +3,35 @@ package polaris
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dobyte/due/v2/config"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/dobyte/due/v2/task"
 	"github.com/polarismesh/polaris-go/api"
+	plog "github.com/polarismesh/polaris-go/pkg/log"
 	"github.com/polarismesh/polaris-go/pkg/model"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 )
 
 // Name is the name of the config source.
 const Name = "polaris"
+
+// loadConcurrency limits the concurrent content fetches of one full load, so that loading a large
+// group does not create an unbounded number of requests and goroutines at once.
+const loadConcurrency = 8
+
+// refreshInterval is the interval at which the config group is searched again to detect config
+// files added to or removed from the group.
+const refreshInterval = 3 * time.Second
 
 // Source is a config source backed by Polaris.
 type Source struct {
@@ -27,14 +40,18 @@ type Source struct {
 	ctx            context.Context    // Context
 	cancel         context.CancelFunc // Cancel function
 	builtin        bool               // Whether the client is built in
+	opsMu          sync.RWMutex       // Guards the client against the in-flight Load and Store calls
 	version        uint64             // Current search version
 	versions       map[string]uint64  // Search version of each config file
+	searchFailed   bool               // Whether a search failure was logged; refresh goroutine only
 	chListen       chan string        // Listen request channel
 	chCancel       chan string        // Cancel-listen request channel
 	watchers       sync.Map           // Watcher set
 	once           sync.Once          // Ensures the shutdown runs only once
+	closed         atomic.Bool        // Whether the source has been closed
 	wg             sync.WaitGroup     // Wait group for goroutine exit
 	searchDisabled bool               // Whether group search is unavailable
+	patternWarned  atomic.Bool        // Whether the unexpandable-pattern warning was logged
 	configClient   api.ConfigFileAPI  // Config file client
 	groupClient    api.ConfigGroupAPI // Config group client
 	subscribed     sync.Map           // Config files that have registered a change listener
@@ -48,6 +65,12 @@ func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	o.files = coreconfig.NormalizeFiles(o.files)
+
+	for _, file := range coreconfig.UnmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
 	}
 
 	s := &Source{}
@@ -67,17 +90,8 @@ func NewSource(opts ...Option) config.Source {
 		s.groupClient = api.NewConfigGroupAPIBySDKContext(o.client)
 	}
 
-	s.wg.Add(2)
-
-	go func() {
-		defer s.wg.Done()
-		s.listen()
-	}()
-
-	go func() {
-		defer s.wg.Done()
-		s.refresh()
-	}()
+	s.wg.Go(s.listen)
+	s.wg.Go(s.refresh)
 
 	return s
 }
@@ -89,69 +103,147 @@ func (s *Source) Name() string {
 
 // Load loads configuration items.
 //
-// When file is provided it loads only that item; otherwise it loads every
-// published item under the group.
+// When the first entry of file is not empty it loads only that item; otherwise it loads every
+// published item under the group. Further entries are ignored.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	if len(file) > 0 && file[0] != "" {
-		if configuration, err := s.load(ctx, file[0]); err != nil {
-			return nil, err
-		} else {
-			return []*config.Configuration{configuration}, nil
-		}
-	} else {
-		var (
-			mu             sync.Mutex
-			configurations = make([]*config.Configuration, 0)
-		)
-
-		if err := ctx.Err(); err != nil {
+		if err := coreconfig.ValidateFileEntry(file[0]); err != nil {
 			return nil, err
 		}
 
-		group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
+		if !s.matchFile(file[0]) {
+			return nil, errors.ErrFileNotConfigured
+		}
+
+		configuration, err := s.load(ctx, file[0])
 		if err != nil {
 			return nil, err
 		}
 
-		files, _, ok := group.GetFiles()
-		if !ok {
-			return configurations, nil
-		}
+		return []*config.Configuration{configuration}, nil
+	}
 
-		wg, _ := task.WithContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
-		for _, item := range files {
-			fileName := item.FileName
-			wg.Go(func() error {
-				configuration, err := s.load(ctx, fileName)
-				if err != nil {
-					return err
-				}
+	// A fixed file list does not need the group listing, so the files can be loaded directly. This
+	// also keeps the source usable on servers that do not provide the group query API. The files are
+	// fetched without metadata, so every explicit load or watcher reopen reads all of them again.
+	if files, hasPattern := s.exactFiles(); len(files) > 0 && !hasPattern {
+		return s.loadFiles(ctx, files)
+	}
 
-				mu.Lock()
-				configurations = append(configurations, configuration)
-				mu.Unlock()
-
-				return nil
-			})
-		}
-
-		if err := wg.Wait(); err != nil {
+	group, err := s.groupClient.GetConfigGroup(s.opts.namespace, s.opts.group)
+	if err != nil {
+		if !isUnimplementedError(err) {
 			return nil, err
 		}
 
-		return configurations, nil
+		// Older servers do not implement the group query API. The exact configured files can still
+		// be loaded directly; a pattern cannot be expanded without the group listing.
+		files, hasPattern := s.exactFiles()
+		if len(files) == 0 {
+			return nil, err
+		}
+
+		if hasPattern && s.patternWarned.CompareAndSwap(false, true) {
+			log.Warnf("%s/%s config group query is not supported by the server, the configured patterns cannot be expanded", s.opts.namespace, s.opts.group)
+		}
+
+		return s.loadFiles(ctx, files)
 	}
+
+	files, _, ok := group.GetFiles()
+	if !ok {
+		return nil, nil
+	}
+
+	names := make([]string, 0, len(files))
+	for _, item := range files {
+		if s.matchFile(item.FileName) {
+			names = append(names, item.FileName)
+		}
+	}
+
+	return s.loadFiles(ctx, names)
+}
+
+// exactFiles returns the configured entries that contain no wildcard and reports whether any entry
+// was skipped because it is a pattern.
+func (s *Source) exactFiles() ([]string, bool) {
+	var (
+		files      = make([]string, 0, len(s.opts.files))
+		hasPattern bool
+	)
+
+	for _, file := range s.opts.files {
+		if coreconfig.IsWildcard(file) {
+			hasPattern = true
+			continue
+		}
+
+		files = append(files, file)
+	}
+
+	return files, hasPattern
+}
+
+// loadFiles loads the given config files with a bounded number of concurrent requests, subscribing
+// every successful file to change notifications. The result is sorted by file name.
+func (s *Source) loadFiles(ctx context.Context, files []string) ([]*config.Configuration, error) {
+	var (
+		mu             sync.Mutex
+		configurations = make([]*config.Configuration, 0, len(files))
+	)
+
+	wg, gctx := task.WithContext(ctx)
+	wg.SetLimit(loadConcurrency)
+
+	for _, fileName := range files {
+		wg.Go(func() error {
+			configuration, err := s.load(gctx, fileName)
+			if err != nil {
+				return err
+			}
+
+			mu.Lock()
+			configurations = append(configurations, configuration)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := wg.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Keep the result deterministic regardless of the fetch completion order.
+	sort.Slice(configurations, func(i, j int) bool {
+		return configurations[i].FullPath < configurations[j].FullPath
+	})
+
+	return configurations, nil
 }
 
 // load loads a single configuration item. It fetches the content from the Polaris
 // server by config file name and converts it into the unified configuration
 // structure. On success it also subscribes to the file's changes, so that older
-// servers without the group query API can still deliver change notifications.
+// servers without the group query API can still deliver change notifications. A
+// published config file with empty content is returned as an empty config, matching
+// the other config sources.
 func (s *Source) load(ctx context.Context, file string) (*config.Configuration, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -160,10 +252,6 @@ func (s *Source) load(ctx context.Context, file string) (*config.Configuration, 
 	configFile, err := s.configClient.GetConfigFile(s.opts.namespace, s.opts.group, file)
 	if err != nil {
 		return nil, err
-	}
-
-	if !configFile.HasContent() {
-		return nil, errors.New("config file not exist")
 	}
 
 	s.subscribe(file)
@@ -186,6 +274,13 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
+	}
+
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
 	}
@@ -194,9 +289,20 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return err
 	}
 
-	if err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content)); err == nil {
+	if err := coreconfig.ValidateFileEntry(file); err != nil {
+		return err
+	}
+
+	if !s.matchFile(file) {
+		return errors.ErrFileNotConfigured
+	}
+
+	err := s.configClient.UpsertAndPublishConfigFile(s.opts.namespace, s.opts.group, file, string(content))
+	if err == nil {
 		return nil
-	} else if !isUnimplementedError(err) && !isDataConflictError(err) {
+	}
+
+	if !isUnimplementedError(err) && !isDataConflictError(err) {
 		return err
 	}
 
@@ -211,20 +317,38 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 // create the file and, when creation fails because the resource already exists,
 // falls back to updating it.
 func (s *Source) createOrUpdateConfigFile(file, content string) error {
-	if err := s.configClient.CreateConfigFile(s.opts.namespace, s.opts.group, file, content); err == nil {
+	err := s.configClient.CreateConfigFile(s.opts.namespace, s.opts.group, file, content)
+	if err == nil {
 		return nil
-	} else if !isExistedResourceError(err) {
+	}
+
+	if !isExistedResourceError(err) {
 		return err
 	}
 
 	return s.configClient.UpdateConfigFile(s.opts.namespace, s.opts.group, file, content)
 }
 
+// matchFile reports whether file is selected by the configured file list. When no
+// file is configured, every file is selected.
+func (s *Source) matchFile(file string) bool {
+	if len(s.opts.files) == 0 {
+		return true
+	}
+
+	return coreconfig.MatchFile(s.opts.files, file)
+}
+
 // Watch watches configuration items. It creates a new watcher and registers it
 // with the config source; the watcher is notified when the configuration changes.
+// It reports [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
 	}
 
 	w, err := newWatcher(ctx, s)
@@ -233,6 +357,14 @@ func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	}
 
 	s.watchers.Store(w, struct{}{})
+
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.closed.Load() {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
 
 	return w, nil
 }
@@ -247,14 +379,27 @@ func (s *Source) Close() error {
 
 	// Ensure the shutdown runs only once to avoid destroying the SDK context twice and panicking.
 	s.once.Do(func() {
+		s.closed.Store(true)
 		s.cancel()
 
 		// Wait for the listen and refresh goroutines to exit so that the SDK context is not destroyed concurrently.
 		s.wg.Wait()
 
+		// Stop the registered watchers so that their Next returns instead of blocking forever on
+		// a watcher context that is not derived from the source context.
+		s.watchers.Range(func(key, _ any) bool {
+			_ = key.(*watcher).Stop()
+
+			return true
+		})
+
+		// Wait for the in-flight Load and Store calls before the SDK context is destroyed, so that
+		// the client is never destroyed under a running request.
+		s.opsMu.Lock()
 		if s.builtin {
 			s.opts.client.Destroy()
 		}
+		s.opsMu.Unlock()
 	})
 
 	return nil
@@ -294,6 +439,10 @@ func (s *Source) listen() {
 // watcher sees the latest published configuration (matching Nacos ListenConfig,
 // which also invokes the callback once right after a listener is registered).
 func (s *Source) subscribe(fileName string) {
+	if !s.matchFile(fileName) {
+		return
+	}
+
 	// Reserve the slot atomically so that only one goroutine performs the network
 	// subscription and listener registration per file, avoiding duplicate listeners
 	// and duplicate notifications under concurrency.
@@ -337,7 +486,7 @@ func (s *Source) refresh() {
 		return
 	}
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
 
 	for {
@@ -346,6 +495,33 @@ func (s *Source) refresh() {
 			return
 		case <-ticker.C:
 			s.search()
+
+			// Older servers do not support the group query API, so the search cycle cannot issue the
+			// listen requests. Retry the configured exact files that have no subscription yet.
+			if s.searchDisabled {
+				s.retrySubscriptions()
+			}
+		}
+	}
+}
+
+// retrySubscriptions queues a listen request for every configured exact file that has no active
+// subscription. It is used when the group query API is unavailable, where the periodic search
+// cannot discover the files to subscribe.
+func (s *Source) retrySubscriptions() {
+	for _, fileName := range s.opts.files {
+		if coreconfig.IsWildcard(fileName) {
+			continue
+		}
+
+		if _, ok := s.subscribed.Load(fileName); ok {
+			continue
+		}
+
+		select {
+		case s.chListen <- fileName:
+		case <-s.ctx.Done():
+			return
 		}
 	}
 }
@@ -368,13 +544,21 @@ func (s *Source) search() {
 			// config file changes.
 			s.searchDisabled = true
 			log.Warnf("search config list is not supported by server, disable group search: %v", err)
-		} else {
+		} else if !s.searchFailed {
+			// Warn once per failure streak: an unreachable server would otherwise log a warning at
+			// every refresh interval.
+			s.searchFailed = true
 			log.Warnf("search config list failed: %v", err)
-			// Return immediately when the query fails; otherwise the incremented version
-			// with an unrefreshed config list would make the cancel loop below treat every
-			// item as stale and cancel all listeners in bulk.
 		}
+		// Return immediately when the query fails; otherwise the incremented version
+		// with an unrefreshed config list would make the cancel loop below treat every
+		// item as stale and cancel all listeners in bulk.
 		return
+	}
+
+	if s.searchFailed {
+		s.searchFailed = false
+		log.Infof("search config list recovered")
 	}
 
 	files, _, ok := group.GetFiles()
@@ -394,6 +578,10 @@ func (s *Source) search() {
 	}
 
 	for _, item := range files {
+		if !s.matchFile(item.FileName) {
+			continue
+		}
+
 		_, found := s.versions[item.FileName]
 		_, subscribed := s.subscribed.Load(item.FileName)
 
@@ -434,12 +622,17 @@ func (s *Source) onChange(event model.ConfigFileChangeEvent) {
 		return
 	}
 
-	s.notify(conv(event.ConfigFileMetadata.GetFileName(), event.NewValue))
+	fileName := event.ConfigFileMetadata.GetFileName()
+	if !s.matchFile(fileName) {
+		return
+	}
+
+	s.notify(conv(fileName, event.NewValue))
 }
 
 // buildClient builds the Polaris SDK context. It sets the server addresses, the
-// communication protocol and the request timeout, then builds the SDK context
-// from the configuration.
+// communication protocol, the request timeout, the cache directory and the log
+// directory, then builds the SDK context from the configuration.
 func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg := api.NewConfiguration()
 
@@ -447,8 +640,87 @@ func (s *Source) buildClient() (api.SDKContext, error) {
 	cfg.GetGlobal().GetServerConnector().SetProtocol(s.opts.protocol)
 	cfg.GetGlobal().GetServerConnector().SetMessageTimeout(s.opts.timeout)
 	cfg.GetGlobal().GetAPI().SetTimeout(s.opts.timeout)
+	cfg.GetConfigFile().GetLocalCache().SetPersistDir(s.opts.cacheDir)
+
+	if err := setLoggersDir(s.opts.logDir); err != nil {
+		return nil, errors.New("configure polaris loggers failed: " + err.Error())
+	}
 
 	return api.InitContextByConfig(cfg)
+}
+
+// setLoggersDir configures the process-wide Polaris SDK loggers once.
+//
+// The SDK shares its loggers across all contexts, so the built-in client only takes them over while
+// they still use the SDK defaults. Loggers configured by the application or by another component
+// are left untouched, and the configuration runs at most once per process to avoid rebuilding the
+// file loggers and leaking the replaced ones.
+var (
+	setLoggersDirOnce sync.Once
+	setLoggersDirErr  error
+)
+
+func setLoggersDir(logDir string) error {
+	setLoggersDirOnce.Do(func() {
+		if !loggersStillDefault() {
+			return
+		}
+
+		setLoggersDirErr = api.SetLoggersDir(logDir)
+	})
+
+	return setLoggersDirErr
+}
+
+// loggersStillDefault reports whether every Polaris logger still uses the SDK default directory and
+// log level.
+func loggersStillDefault() bool {
+	loggers := []plog.Logger{
+		plog.GetBaseLogger(),
+		plog.GetStatLogger(),
+		plog.GetStatReportLogger(),
+		plog.GetDetectLogger(),
+		plog.GetNetworkLogger(),
+		plog.GetCacheLogger(),
+		plog.GetEventLogger(),
+		plog.GetLosslessLogger(),
+		plog.GetRouteLogger(),
+		plog.GetAuthLogger(),
+		plog.GetRateLimitLogger(),
+		plog.GetCircuitBreakerLogger(),
+	}
+
+	for _, logger := range loggers {
+		if l, ok := logger.(plog.DirLogger); ok && !isDefaultLogDir(l.GetLogDir()) {
+			return false
+		}
+
+		if currentLogLevel(logger) != plog.DefaultLogLevel {
+			return false
+		}
+	}
+
+	return true
+}
+
+// currentLogLevel returns the lowest log level enabled by logger.
+func currentLogLevel(logger plog.Logger) int {
+	for _, level := range []int{plog.TraceLog, plog.DebugLog, plog.InfoLog, plog.WarnLog, plog.ErrorLog, plog.FatalLog} {
+		if logger.IsLevelEnabled(level) {
+			return level
+		}
+	}
+
+	return plog.NoneLog
+}
+
+// isDefaultLogDir reports whether dir is the SDK default log root or one of its subdirectories.
+func isDefaultLogDir(dir string) bool {
+	root := filepath.Clean(plog.DefaultLogRotationRootDir)
+
+	cleaned := filepath.Clean(dir)
+
+	return cleaned == root || strings.HasPrefix(cleaned, root+string(filepath.Separator))
 }
 
 // isUnimplementedError reports whether err is an unimplemented API error. Older
@@ -487,13 +759,17 @@ func isExistedResourceError(err error) bool {
 
 // conv converts a configuration. It converts a config file name and its content
 // into the unified configuration structure, using the file extension of the name
-// as the config format.
+// as the config format. The file name is relative to the group, so it is the path
+// within the source, while the file and name are derived from its base name to
+// match the other config sources.
 func conv(file, content string) *config.Configuration {
-	ext := filepath.Ext(file)
+	base := path.Base(file)
+	ext := path.Ext(base)
 
 	return &config.Configuration{
-		File:     file,
-		Name:     strings.TrimSuffix(file, ext),
+		Path:     file,
+		File:     base,
+		Name:     strings.TrimSuffix(base, ext),
 		Format:   strings.TrimPrefix(ext, "."),
 		Content:  []byte(content),
 		FullPath: file,

@@ -1,3 +1,10 @@
+//go:build integration
+// +build integration
+
+// These tests require a running etcd server (defaulting to 127.0.0.1:2379) and are excluded from
+// the default test run. Run them with:
+//
+//	go test -tags integration ./...
 package etcd_test
 
 import (
@@ -7,6 +14,7 @@ import (
 
 	"github.com/dobyte/due/config/etcd/v2"
 	"github.com/dobyte/due/v2/config"
+	"github.com/dobyte/due/v2/errors"
 )
 
 func init() {
@@ -66,6 +74,22 @@ func TestStore(t *testing.T) {
 	err = config.Store(ctx, etcd.Name, file, content2)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestFiles verifies that an explicit load or store outside the configured file list is rejected.
+func TestFiles(t *testing.T) {
+	source := etcd.NewSource(etcd.WithMode(config.ReadWrite), etcd.WithFiles("config.json"))
+	defer source.Close()
+
+	ctx := context.Background()
+
+	if _, err := source.Load(ctx, "gate.json"); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
+	}
+
+	if err := source.Store(ctx, "gate.json", []byte(`{}`)); !errors.Is(err, errors.ErrFileNotConfigured) {
+		t.Fatalf("expect ErrFileNotConfigured, actual: %v", err)
 	}
 }
 

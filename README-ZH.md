@@ -359,6 +359,8 @@ go install github.com/dobyte/mongo-dao-generator@latest
 
 核心接口为`config.Configurator`，主要方法：`Has`、`Get`、`Set`、`Match`、`Watch`（监听配置变更）、`Load`、`Store`、`Close`。其实现按「配置源（Source）+ 编解码（Codec）」解耦，因此配置文件格式与配置源相互独立。
 
+构造配置器时，每个配置源会同步执行一次启动加载，并紧接着启动该源的变更监听；首次成功打开监听时不会重复加载，因此“启动加载完成到监听注册完成”之间发生的变更，只会在此后收到新事件或监听重建（打开失败、监听停止、读取错误都会触发重新加载）时生效。该窗口已尽量缩短，对热更新可靠性要求极高的场景需要关注这一点。
+
 2.支持的组件
 
 * [file](config/file/README-ZH.md)

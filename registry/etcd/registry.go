@@ -139,13 +139,13 @@ func (r *Registry) doBuildWatcherMgr(ctx context.Context, serviceName string) (*
 
 	if mgr := r.loadWatcherMgr(serviceName); mgr != nil {
 		return mgr, nil
-	} else {
-		mgr := newWatcherMgr(r, serviceName, res)
-		r.watchers.Store(serviceName, mgr)
-		mgr.init()
-
-		return mgr, nil
 	}
+
+	mgr := newWatcherMgr(r, serviceName, res)
+	r.watchers.Store(serviceName, mgr)
+	mgr.init()
+
+	return mgr, nil
 }
 
 // loadWatcherMgr loads the watch manager for serviceName.

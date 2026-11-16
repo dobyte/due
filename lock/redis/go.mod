@@ -3,7 +3,7 @@ module github.com/dobyte/due/lock/redis/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.7
+	github.com/dobyte/due/v2 v2.6.8
 	github.com/redis/go-redis/v9 v9.22.0
 )
 
@@ -11,8 +11,8 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.15.4 // indirect
-	github.com/bytedance/sonic/loader v0.5.2 // indirect
+	github.com/bytedance/sonic v1.15.5 // indirect
+	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

@@ -51,7 +51,7 @@
 | [使用 defer 清理](uber-go/style.md#defer-to-clean-up) | 普通场景使用 `defer` 清理，按 Uber 的条件评估开销；高性能场景优先执行 [DUE-003](due-conventions.md#due-003)，能不用就不用，并保证清理语义完整。 |
 | [Channel 容量](uber-go/style.md#channel-size-is-one-or-none) | 通常使用无缓冲 Channel 或容量为 1 的 Channel；其他容量应严格审查大小依据、满载时是否阻塞以及阻塞如何处理。 |
 | [原子操作](uber-go/style.md#use-gouberorgatomic) | 按上游使用 `go.uber.org/atomic` 提供的类型封装，减少原始类型与原子操作混用产生的错误。 |
-| [Goroutine 生命周期](uber-go/style.md#dont-fire-and-forget-goroutines) | 不启动无人管理的 Goroutine。每个 Goroutine 应有可预测的结束条件或取消信号，并提供等待退出的机制。 |
+| [Goroutine 生命周期](uber-go/style.md#dont-fire-and-forget-goroutines) | 不启动无人管理的 Goroutine。每个 Goroutine 应有可预测的结束条件或取消信号，并提供等待退出的机制。由 `sync.WaitGroup` 管理时，按 [DUE-007](due-conventions.md#due-007)使用 `wg.Go(func(){})` 启动。 |
 | [等待退出](uber-go/style.md#wait-for-goroutines-to-exit) | `Close`、`Stop` 或 `Shutdown` 等入口既通知停止，也等待退出；对可能启动 Goroutine 的包，按原文使用 `go.uber.org/goleak` 检查泄漏。 |
 | [禁止在 init 中启动 Goroutine](uber-go/style.md#no-goroutines-in-init) | 不在 `init()` 中启动 Goroutine，将启动、取消和等待放入明确的生命周期入口。 |
 
@@ -61,7 +61,7 @@
 | --- | --- |
 | [错误类型](uber-go/style.md#error-types) | 按调用方是否需要匹配错误或提取信息，选择静态错误、格式化错误或自定义类型；导出的错误值和类型属于公共 API。需要使用 errors 包时，按 [DUE-002](due-conventions.md#due-002)采用 Due 统一入口。 |
 | [错误包装](uber-go/style.md#error-wrapping) | 没有新增上下文时可以原样返回。使用 `%w` 或 `%v` 前判断底层原因是否应成为调用方可观察的错误契约，避免重复堆叠上下文。 |
-| [错误命名](uber-go/style.md#error-naming) | 存为包级变量的错误值使用 `Err` 或 `err` 前缀；自定义错误类型使用 `Error` 后缀，遵守原文导出性规则。 |
+| [错误命名](uber-go/style.md#error-naming) | 存为包级变量的错误值使用 `Err` 或 `err` 前缀；自定义错误类型使用 `Error` 后缀，遵守原文导出性规则。Due 项目要求包级错误值统一定义在 errors 包，按 [DUE-008](due-conventions.md#due-008)执行。 |
 | [错误只处理一次](uber-go/style.md#handle-errors-once) | 正常情况下选择恢复、记录并降级、或向上传递等一种处理方式，避免无必要地同时记录并返回同一错误。 |
 | [类型断言失败](uber-go/style.md#handle-type-assertion-failures) | 使用 comma-ok 形式处理可能失败的类型断言，避免未处理的断言引发 Panic。 |
 | [避免 Panic](uber-go/style.md#dont-panic) | 普通生产错误通过 `error` 传播，不以 `panic/recover` 实现日常错误处理；保留原文不可恢复错误等例外，测试优先使用 `t.Fatal` 或 `t.FailNow`。 |
@@ -86,10 +86,10 @@
 | [减少嵌套](uber-go/style.md#reduce-nesting) | 使用提前返回、`continue` 等方式处理特殊情况，保持正常路径清晰。 |
 | [计数循环](due-conventions.md#due-006) | 按 [DUE-006](due-conventions.md#due-006)执行：从 `0` 开始、步长为 `1` 的计数循环，不需要索引时用 `for range n`，需要索引时用 `for i := range n`，不使用 `for i := 0; i < n; i++`；非单位步长、逆序等场景仍用三段式 `for`。 |
 | [不必要的 else](uber-go/style.md#unnecessary-else) | 前一分支已经返回时，去掉无必要的 `else`。 |
-| [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。 |
-| [未导出全局命名](uber-go/style.md#prefix-unexported-globals-with-_) | 未导出的包级变量和常量使用 `_` 前缀；未导出错误值采用 `err` 前缀，是原文的明确例外。 |
+| [包级变量声明](uber-go/style.md#top-level-variable-declarations) | 顶层变量在类型可推导时省略重复类型；需要表达不同类型时显式声明。同一作用域内声明多个变量时，按 [DUE-009](due-conventions.md#due-009)使用 `var ()` 分组。 |
+| [未导出全局命名](uber-go/style.md#prefix-unexported-globals-with-_) | 按 [DUE-010](due-conventions.md#due-010) 执行：所有命名不以下划线开头；未导出错误值仍采用 `err` 前缀。 |
 | [结构体嵌入排列](uber-go/style.md#embedding-in-structs) | 嵌入字段放在结构体最前面，与普通命名字段用空行分隔；是否嵌入仍遵守类型与 API 规则。 |
-| [局部变量声明](uber-go/style.md#local-variable-declarations) | 非零初始化通常用 `:=`；零值结构体和 Slice 等使用原文规定的 `var` 形式。 |
+| [局部变量声明](uber-go/style.md#local-variable-declarations) | 非零初始化通常用 `:=`；零值结构体和 Slice 等使用原文规定的 `var` 形式。同一作用域内声明多个变量时，按 [DUE-009](due-conventions.md#due-009)使用 `var ()` 分组。 |
 | [nil Slice](uber-go/style.md#nil-is-a-valid-slice) | 将 `nil` 视为有效的空 Slice，空结果优先返回 `nil`，判断空使用 `len(s) == 0`；明确 `nil` 与已分配空 Slice 在序列化等场景的差别。 |
 | [变量作用域](uber-go/style.md#reduce-scope-of-variables) | 在不增加无必要嵌套的前提下缩小变量作用域。 |
 | [含义不明的参数](uber-go/style.md#avoid-naked-parameters) | 对含义不清的布尔值或其他字面量参数，用命名类型等方式表达语义，必要时添加参数注释。 |
@@ -119,7 +119,7 @@
 1. **读取约定**：编码前读取本文件、[Due 项目专属编码规范](due-conventions.md)、任务涉及目录的 `AGENTS.md`，并依据改动主题阅读完整英文规范的对应章节。
 2. **确定范围**：识别待修改包、最近的 `go.mod`、受影响调用方、协议和生命周期约束。不要只按根模块判断独立模块的 Go 版本和依赖。
 3. **实现变更**：在任务范围内应用规范；并发、错误契约、公开 API、数据所有权和初始化行为需要语义审查，不能仅依赖格式工具。
-4. **格式和静态检查**：检查修改文件的 `gofmt`、导入分组和静态分析结果；采用项目可用且与工具版本兼容的检查方式，不在没有相关任务授权时顺带安装工具、改 CI 或批量升级依赖。
+4. **格式和静态检查**：检查修改文件的 `gofmt`、导入分组、命名下划线前缀和静态分析结果；采用项目可用且与工具版本兼容的检查方式，不在没有相关任务授权时顺带安装工具、改 CI 或批量升级依赖。
 5. **验证行为**：按受影响的 Go 模块运行适用构建、测试和 `go vet`；涉及共享实现时扩展至受影响的依赖方，并发修改追加适用的 race 检查，性能结论由基准测试支持。
 6. **回报结果**：记录实际执行的检查、结果及未完成项。检查工具缺失或服务不可用不能记为通过，静态检查通过也不能宣称全部编码规则已经得到验证。
 
@@ -146,7 +146,7 @@
 - Goroutine 可以取消并等待退出，资源清理与锁操作正确。
 - 错误处理没有重复记录，包装和错误类型符合对外契约。
 - 时间单位明确，Channel 容量和初始化例外有依据。
-- 命名、导入、布局和测试风格在包内一致。
+- 命名符合 [DUE-010](due-conventions.md#due-010)，导入、布局和测试风格在包内一致。
 - 性能建议用于适用路径，性能声明有实际测量依据。
 
 ## 五、维护与上游更新

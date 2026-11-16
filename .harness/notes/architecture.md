@@ -560,13 +560,14 @@ NodeLinker 观察绑定到本 NID 的用户时登记 Node 关闭等待计数，�
 - Watch 以新事件合并当前视图，不是持续按静态 source 优先级重算；同名内容可能由后到事件覆盖。
 - Set 修改内存；Store 才尝试写源，仍受读写模式限制。
 - 配置内容支持 JSON/XML/YAML/TOML；它与消息 codec 的支持列表不同。
-- 文件 Remove/Rename、空内容及上层配置删除的语义不完整，不应把“动态合并”当作严格快照替换。
+- 文件 Remove/Rename 与上层配置删除不会清除已加载的值（存储是 merge-only）；空内容或解码失败的配置会被忽略并保留旧值，因此不应把“动态合并”当作严格快照替换。
+- 日志默认值：`core/config` 不内置 logger，未通过 `core/config.WithLogger` 注入时丢弃日志；`config` 门面默认注入 Due logger（`log` 包未初始化时回退标准库）；`etc` 在 `etc/logger.go` 自行实现标准库 logger 并显式注入。
 
 运行模式支持 debug、test、pre-release、release，优先级为配置文件 < `DUE_MODE` < `--mode` < `mode.SetMode`。mode 是进程级运行标志，不能代替环境 namespace、权限或部署隔离。
 
 **配置建议**：关键启动参数显式校验；动态参数采用版本化整包、原子应用与失败回滚；明确空值/删除语义，避免同名文件和同名 Source。只有设计了重配置回调的参数才视为可在线调整。
 
-源码：[etc/etc.go](../../etc/etc.go)、[config/configurator.go](../../config/configurator.go)、[config/source.go](../../config/source.go)、[config/options.go](../../config/options.go)、[mode/mode.go](../../mode/mode.go)、[testdata/etc/etc.toml](../../testdata/etc/etc.toml)。
+源码：[etc/etc.go](../../etc/etc.go)、[etc/logger.go](../../etc/logger.go)、[core/config/configurator.go](../../core/config/configurator.go)、[core/config/source.go](../../core/config/source.go)、[core/config/options.go](../../core/config/options.go)、[internal/logger/logger.go](../../internal/logger/logger.go)、[mode/mode.go](../../mode/mode.go)、[testdata/etc/etc.toml](../../testdata/etc/etc.toml)。
 
 ### 12.2 公共接口与实现矩阵
 
@@ -877,7 +878,7 @@ request ID、UID、room ID、GID/NID、Route、generation 用于日志和追踪�
 | 超时、重连及内存回收 | `internal/transporter/internal/drpc/`、`core/buffer/`、`core/queue/` |
 | Mesh 如何发现与调度 | `cluster/mesh/`、`transport/{grpc,rpcx}/internal/resolver/` |
 | 实例发现与位置缓存差异 | `registry/`、`locate/`、`internal/link/` |
-| 动态配置为何未生效 | `etc/etc.go`、`config/configurator.go`、组件 `defaultOptions` |
+| 动态配置为何未生效 | `etc/etc.go`、`core/config/configurator.go`、组件 `defaultOptions` |
 | 缓存、锁、事件保证什么 | `cache/`、`lock/`、`eventbus/` 的具体实现 |
 
 维护本文时先更新代码 SHA、版本及模块基线，再核查通信路径、默认值和接口契约。涉及路由选项、Context/Buffer 所有权、ACK、状态选择、Actor 终结或配置合并的变更，应同步修改对应设计章节和验证场景；业务建议始终与已实现机制分开描述。

@@ -26,6 +26,11 @@ func (codec) Unmarshal(data []byte, v any) error {
 	return unmarshal(data, v)
 }
 
+// UnmarshalString decodes a JSON string into v.
+func (codec) UnmarshalString(s string, v any) error {
+	return unmarshalString(s, v)
+}
+
 // Marshal encodes v using the default codec.
 func Marshal(v any) ([]byte, error) {
 	return DefaultCodec.Marshal(v)
@@ -34,4 +39,9 @@ func Marshal(v any) ([]byte, error) {
 // Unmarshal decodes data into v using the default codec.
 func Unmarshal(data []byte, v any) error {
 	return DefaultCodec.Unmarshal(data, v)
+}
+
+// UnmarshalString decodes a JSON string into v using the default codec.
+func UnmarshalString(s string, v any) error {
+	return DefaultCodec.UnmarshalString(s, v)
 }

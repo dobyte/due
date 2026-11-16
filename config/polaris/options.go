@@ -16,6 +16,8 @@ const (
 	defaultGroup     = "default"
 	defaultTimeout   = "3s"
 	defaultProtocol  = "grpc"
+	defaultCacheDir  = "./run/polaris/config/cache"
+	defaultLogDir    = "./run/polaris/config/log"
 )
 
 const (
@@ -23,8 +25,11 @@ const (
 	defaultUrlsKey      = "etc.config.polaris.urls"
 	defaultNamespaceKey = "etc.config.polaris.namespace"
 	defaultGroupKey     = "etc.config.polaris.group"
+	defaultFilesKey     = "etc.config.polaris.files"
 	defaultTimeoutKey   = "etc.config.polaris.timeout"
 	defaultProtocolKey  = "etc.config.polaris.protocol"
+	defaultCacheDirKey  = "etc.config.polaris.cacheDir"
+	defaultLogDirKey    = "etc.config.polaris.logDir"
 )
 
 // Option is a config option.
@@ -51,11 +56,24 @@ type options struct {
 	// Config group, defaulting to default.
 	group string
 
+	// List of file names to load, store and watch, defaulting to empty. When empty,
+	// every file under the group is loaded and watched. An entry without "*" is an
+	// exact file name; an entry containing "*" is a pattern where "*" matches any
+	// sequence of characters. An explicit load or store of a file outside this list
+	// is rejected.
+	files []string
+
 	// Timeout for requests to the Polaris server, defaulting to 3 seconds.
 	timeout time.Duration
 
 	// Protocol for communicating with the Polaris server, defaulting to grpc.
 	protocol string
+
+	// Cache directory of config files, defaulting to ./run/polaris/config/cache.
+	cacheDir string
+
+	// Log directory, defaulting to ./run/polaris/config/log.
+	logDir string
 }
 
 // defaultOptions returns the default config options.
@@ -66,8 +84,11 @@ func defaultOptions() *options {
 		urls:      etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
 		namespace: etc.Get(defaultNamespaceKey, defaultNamespace).String(),
 		group:     etc.Get(defaultGroupKey, defaultGroup).String(),
+		files:     etc.Get(defaultFilesKey, []string{}).Strings(),
 		timeout:   etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
 		protocol:  etc.Get(defaultProtocolKey, defaultProtocol).String(),
+		cacheDir:  etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
+		logDir:    etc.Get(defaultLogDirKey, defaultLogDir).String(),
 	}
 }
 
@@ -103,6 +124,17 @@ func WithGroup(group string) Option {
 	return func(o *options) { o.group = group }
 }
 
+// WithFiles sets the list of file names to load, store and watch. When it is empty,
+// every file under the group is available.
+//
+// An entry is an exact file name unless it contains "*", in which case it is a
+// pattern where "*" matches any sequence of characters and every other character is
+// literal; only "*" is supported as a wildcard. When the list is not empty, an
+// explicit load or store of a file outside the list is rejected.
+func WithFiles(files ...string) Option {
+	return func(o *options) { o.files = files }
+}
+
 // WithTimeout sets the timeout for requests to the Polaris server.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
@@ -111,4 +143,16 @@ func WithTimeout(timeout time.Duration) Option {
 // WithProtocol sets the protocol for communicating with the Polaris server.
 func WithProtocol(protocol string) Option {
 	return func(o *options) { o.protocol = protocol }
+}
+
+// WithCacheDir sets the cache directory of config files. It applies to the
+// built-in SDK context; an external SDK context configures its own cache.
+func WithCacheDir(cacheDir string) Option {
+	return func(o *options) { o.cacheDir = cacheDir }
+}
+
+// WithLogDir sets the log directory. It applies to the built-in SDK context; an
+// external SDK context configures its own loggers.
+func WithLogDir(logDir string) Option {
+	return func(o *options) { o.logDir = logDir }
 }

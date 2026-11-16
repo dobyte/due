@@ -1,0 +1,131 @@
+package config_test
+
+import (
+	"slices"
+	"testing"
+
+	"github.com/dobyte/due/v2/core/config"
+	"github.com/dobyte/due/v2/errors"
+)
+
+func TestNormalizeFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		give []string
+		want []string
+	}{
+		{name: "empty list", give: nil, want: nil},
+		{name: "trim and dedupe", give: []string{" a.json ", "", "b.yaml", "a.json", "  "}, want: []string{"a.json", "b.yaml"}},
+		{name: "clean", give: []string{"./a.json", "gateway/", "x//y.json", ".//z.json"}, want: []string{"a.json", "gateway", "x/y.json", "z.json"}},
+		{name: "all empty", give: []string{"", ".", " ./ "}, want: []string{}},
+		{name: "wildcard", give: []string{"./*.yaml", "gateway/*.yaml"}, want: []string{"*.yaml", "gateway/*.yaml"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := config.NormalizeFiles(tt.give); !slices.Equal(got, tt.want) {
+				t.Fatalf("expect %v, got %v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestIsWildcard(t *testing.T) {
+	tests := []struct {
+		entry string
+		want  bool
+	}{
+		{entry: "config.json", want: false},
+		{entry: "*.json", want: true},
+		{entry: "gate-*.json", want: true},
+		{entry: "*", want: true},
+	}
+
+	for _, tt := range tests {
+		if got := config.IsWildcard(tt.entry); got != tt.want {
+			t.Fatalf("IsWildcard(%q) = %v, want %v", tt.entry, got, tt.want)
+		}
+	}
+}
+
+func TestMatchWildcard(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		value   string
+		want    bool
+	}{
+		{name: "suffix", pattern: "*.yaml", value: "gate.yaml", want: true},
+		{name: "prefix", pattern: "gate*", value: "gate.yaml", want: true},
+		{name: "middle segment", pattern: "gate-*-prod.json", value: "gate-a-prod.json", want: true},
+		{name: "middle segment across separator", pattern: "gate-*-prod.json", value: "gate-a/b-prod.json", want: true},
+		{name: "multiple segments", pattern: "a*b*c", value: "a-1-b-2-c", want: true},
+		{name: "multiple segments mismatch", pattern: "a*b*c", value: "a-1-b-2-d", want: false},
+		{name: "middle segment missing", pattern: "gate-*-prod.json", value: "gate-a-dev.json", want: false},
+		{name: "middle segment order", pattern: "gate-*-prod-*.json", value: "gate-prod-1-a.json", want: false},
+		{name: "only wildcard", pattern: "*", value: "any/path.json", want: true},
+		{name: "empty segments", pattern: "a**b", value: "ab", want: true},
+		{name: "mismatch", pattern: "gate-*.json", value: "gate-a.yaml", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := config.MatchWildcard(tt.pattern, tt.value); got != tt.want {
+				t.Fatalf("MatchWildcard(%q, %q) = %v, want %v", tt.pattern, tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateFileEntry(t *testing.T) {
+	tests := []struct {
+		entry string
+		valid bool
+	}{
+		{entry: "config.json", valid: true},
+		{entry: "gateway/gate.yaml", valid: true},
+		{entry: "*.yaml", valid: false},
+		{entry: "", valid: false},
+		{entry: "/etc/gate.yaml", valid: false},
+		{entry: "../gate.yaml", valid: false},
+		{entry: "a/../../b", valid: false},
+		{entry: ".", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.entry, func(t *testing.T) {
+			err := config.ValidateFileEntry(tt.entry)
+			if tt.valid && err != nil {
+				t.Fatalf("expect %q to be valid, actual: %v", tt.entry, err)
+			}
+			if !tt.valid && !errors.Is(err, errors.ErrInvalidFilePath) {
+				t.Fatalf("expect ErrInvalidFilePath for %q, actual: %v", tt.entry, err)
+			}
+		})
+	}
+}
+
+func TestMatchFile(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		value string
+		want  bool
+	}{
+		{name: "empty list", files: nil, value: "config.json", want: false},
+		{name: "exact", files: []string{"config.json"}, value: "config.json", want: true},
+		{name: "exact mismatch", files: []string{"config.json"}, value: "gate.json", want: false},
+		{name: "pattern", files: []string{"config.json", "gate-*.json"}, value: "gate-a.json", want: true},
+		{name: "star matches separator", files: []string{"rooms/*.yaml"}, value: "rooms/a/b.yaml", want: true},
+		{name: "literal meta in exact entry", files: []string{"weird[1]?.json"}, value: "weird[1]?.json", want: true},
+		{name: "literal meta is not a wildcard", files: []string{"weird[1]?.json"}, value: "weird1.json", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := config.MatchFile(tt.files, tt.value); got != tt.want {
+				t.Fatalf("MatchFile(%v, %q) = %v, want %v", tt.files, tt.value, got, tt.want)
+			}
+		})
+	}
+}

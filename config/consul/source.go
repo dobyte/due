@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/dobyte/due/v2/config"
+	coreconfig "github.com/dobyte/due/v2/core/config"
 	"github.com/dobyte/due/v2/errors"
 	"github.com/dobyte/due/v2/log"
 	"github.com/hashicorp/consul/api"
@@ -21,6 +24,9 @@ type Source struct {
 	opts      *options        // Configuration options
 	builtin   bool            // Whether the client is built in
 	transport *http.Transport // Underlying transport of the built-in client
+	opsMu     sync.RWMutex    // Guards the client against the in-flight Load, Store and Watch calls
+	watchers  sync.Map        // Watcher set
+	closed    atomic.Bool     // Whether the source has been closed
 }
 
 // NewSource creates a config source. It builds a Consul config center client from
@@ -30,6 +36,12 @@ func NewSource(opts ...Option) config.Source {
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(o)
+	}
+
+	o.files = coreconfig.NormalizeFiles(o.files)
+
+	for _, file := range coreconfig.UnmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
 	}
 
 	s := &Source{}
@@ -64,18 +76,35 @@ func (s *Source) Name() string {
 	return Name
 }
 
-// Load loads configuration items. When file is provided, only the specified
-// configuration item is loaded; otherwise every configuration item under the base
-// path is loaded.
+// Load loads configuration items. When the first entry of file is not empty, only that
+// configuration item is loaded; otherwise every configuration item under the base path is loaded.
+// Further entries are ignored.
 func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configuration, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
 	// When file is provided, query by the exact key and return only the target
 	// configuration item.
 	if len(file) > 0 && file[0] != "" {
-		key := s.opts.path + "/" + strings.TrimPrefix(file[0], "/")
+		name := strings.TrimPrefix(file[0], "/")
+
+		if err := coreconfig.ValidateFileEntry(name); err != nil {
+			return nil, err
+		}
+
+		if !s.matchFile(name) {
+			return nil, errors.ErrFileNotConfigured
+		}
+
+		key := s.opts.path + "/" + name
 
 		kv, _, err := s.opts.client.KV().Get(key, (&api.QueryOptions{}).WithContext(ctx))
 		if err != nil {
@@ -97,7 +126,12 @@ func (s *Source) Load(ctx context.Context, file ...string) ([]*config.Configurat
 
 	configs := make([]*config.Configuration, 0, len(kvs))
 	for _, kv := range kvs {
-		configs = append(configs, s.parseKV(kv.Key, kv.Value))
+		c := s.parseKV(kv.Key, kv.Value)
+		if !s.matchFile(c.Path) {
+			continue
+		}
+
+		configs = append(configs, c)
 	}
 
 	return configs, nil
@@ -110,11 +144,28 @@ func (s *Source) Store(ctx context.Context, file string, content []byte) error {
 		return s.err
 	}
 
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
+	if s.closed.Load() {
+		return errors.ErrClosedConfigSource
+	}
+
 	if s.opts.mode != config.WriteOnly && s.opts.mode != config.ReadWrite {
 		return errors.ErrNoOperationPermission
 	}
 
-	key := s.opts.path + "/" + strings.TrimPrefix(file, "/")
+	name := strings.TrimPrefix(file, "/")
+
+	if err := coreconfig.ValidateFileEntry(name); err != nil {
+		return err
+	}
+
+	if !s.matchFile(name) {
+		return errors.ErrFileNotConfigured
+	}
+
+	key := s.opts.path + "/" + name
 
 	_, err := s.opts.client.KV().Put(&api.KVPair{
 		Key:   key,
@@ -142,22 +193,71 @@ func (s *Source) parseKV(key string, value []byte) *config.Configuration {
 	}
 }
 
+// matchFile reports whether file is selected by the configured file list. When no
+// file is configured, every file is selected.
+func (s *Source) matchFile(file string) bool {
+	if len(s.opts.files) == 0 {
+		return true
+	}
+
+	return coreconfig.MatchFile(s.opts.files, file)
+}
+
 // Watch watches configuration items. It creates a watcher that observes
-// configuration changes under the base path.
+// configuration changes under the base path. It reports
+// [errors.ErrClosedConfigSource] once the source has been closed.
 func (s *Source) Watch(ctx context.Context) (config.Watcher, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 
-	return newWatcher(ctx, s)
+	s.opsMu.RLock()
+	defer s.opsMu.RUnlock()
+
+	if s.closed.Load() {
+		return nil, errors.ErrClosedConfigSource
+	}
+
+	w, err := newWatcher(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	s.watchers.Store(w, struct{}{})
+
+	// The source may have been closed between the check above and the registration, in which case
+	// the shutdown no longer visits the watcher. Stop it so that it does not stay registered.
+	if s.closed.Load() {
+		_ = w.Stop()
+
+		return nil, errors.ErrClosedConfigSource
+	}
+
+	return w, nil
 }
 
-// Close closes the config source. It closes the idle connections of the built-in
-// client's transport; an external client is closed by the caller.
+// Close closes the config source. It stops the registered watchers and closes the
+// idle connections of the built-in client's transport; an external client is
+// closed by the caller.
 func (s *Source) Close() error {
 	if s.err != nil {
 		return s.err
 	}
+
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// Wait for the in-flight Load, Store and Watch calls before the watchers are stopped and the
+	// idle connections are closed, so that the client is never torn down under a running request.
+	s.opsMu.Lock()
+	defer s.opsMu.Unlock()
+
+	s.watchers.Range(func(key, _ any) bool {
+		_ = key.(*watcher).Stop()
+
+		return true
+	})
 
 	if s.builtin && s.transport != nil {
 		s.transport.CloseIdleConnections()

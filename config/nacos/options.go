@@ -15,15 +15,7 @@ const (
 	defaultClusterName = "DEFAULT"
 	defaultGroupName   = "DEFAULT_GROUP"
 	defaultTimeout     = "3s"
-	defaultNamespaceId = ""
-	defaultEndpoint    = ""
-	defaultRegionId    = ""
-	defaultAccessKey   = ""
-	defaultSecretKey   = ""
-	defaultOpenKMS     = false
 	defaultCacheDir    = "./run/nacos/config/cache"
-	defaultUsername    = ""
-	defaultPassword    = ""
 	defaultLogDir      = "./run/nacos/config/log"
 	defaultLogLevel    = "info"
 )
@@ -33,6 +25,7 @@ const (
 	defaultUrlsKey        = "etc.config.nacos.urls"
 	defaultClusterNameKey = "etc.config.nacos.clusterName"
 	defaultGroupNameKey   = "etc.config.nacos.groupName"
+	defaultFilesKey       = "etc.config.nacos.files"
 	defaultTimeoutKey     = "etc.config.nacos.timeout"
 	defaultNamespaceIdKey = "etc.config.nacos.namespaceId"
 	defaultEndpointKey    = "etc.config.nacos.endpoint"
@@ -71,6 +64,12 @@ type options struct {
 
 	// Group name, defaulting to DEFAULT_GROUP.
 	groupName string
+
+	// List of dataIds to load and listen to, defaulting to empty. When empty, every
+	// configuration under the group is loaded and listened to. An entry without "*" is an
+	// exact dataId; an entry containing "*" is a pattern where "*" matches any sequence of
+	// characters. An explicit load or store of a file outside this list is rejected.
+	files []string
 
 	// Timeout for requests to the Nacos server, defaulting to 3 seconds.
 	timeout time.Duration
@@ -120,16 +119,17 @@ func defaultOptions() *options {
 		urls:        etc.Get(defaultUrlsKey, []string{defaultUrl}).Strings(),
 		clusterName: etc.Get(defaultClusterNameKey, defaultClusterName).String(),
 		groupName:   etc.Get(defaultGroupNameKey, defaultGroupName).String(),
+		files:       etc.Get(defaultFilesKey, []string{}).Strings(),
 		timeout:     etc.Get(defaultTimeoutKey, defaultTimeout).Duration(),
-		namespaceId: etc.Get(defaultNamespaceIdKey, defaultNamespaceId).String(),
-		endpoint:    etc.Get(defaultEndpointKey, defaultEndpoint).String(),
-		regionId:    etc.Get(defaultRegionIdKey, defaultRegionId).String(),
-		accessKey:   etc.Get(defaultAccessKeyKey, defaultAccessKey).String(),
-		secretKey:   etc.Get(defaultSecretKeyKey, defaultSecretKey).String(),
-		openKMS:     etc.Get(defaultOpenKMSKey, defaultOpenKMS).Bool(),
+		namespaceId: etc.Get(defaultNamespaceIdKey).String(),
+		endpoint:    etc.Get(defaultEndpointKey).String(),
+		regionId:    etc.Get(defaultRegionIdKey).String(),
+		accessKey:   etc.Get(defaultAccessKeyKey).String(),
+		secretKey:   etc.Get(defaultSecretKeyKey).String(),
+		openKMS:     etc.Get(defaultOpenKMSKey).Bool(),
 		cacheDir:    etc.Get(defaultCacheDirKey, defaultCacheDir).String(),
-		username:    etc.Get(defaultUsernameKey, defaultUsername).String(),
-		password:    etc.Get(defaultPasswordKey, defaultPassword).String(),
+		username:    etc.Get(defaultUsernameKey).String(),
+		password:    etc.Get(defaultPasswordKey).String(),
 		logDir:      etc.Get(defaultLogDirKey, defaultLogDir).String(),
 		logLevel:    etc.Get(defaultLogLevelKey, defaultLogLevel).String(),
 	}
@@ -163,6 +163,23 @@ func WithClusterName(clusterName string) Option {
 // WithGroupName sets the group name.
 func WithGroupName(groupName string) Option {
 	return func(o *options) { o.groupName = groupName }
+}
+
+// WithFiles sets the list of dataIds to load and listen to. When it is empty,
+// every configuration under the group is loaded and listened to.
+//
+// An entry is an exact dataId unless it contains "*", in which case it is a
+// pattern where "*" matches any sequence of characters and every other character
+// is literal; only "*" is supported as a wildcard. When the list is not empty, an
+// explicit load or store of a file outside the list is rejected.
+//
+// Exact entries are fetched individually, so the group export shortcut and the
+// md5-based content cache do not apply to them. A list containing a pattern
+// searches the group at start and at every refresh interval, narrowed by the
+// server-side blur pattern of each entry, and only the content of matching items
+// is loaded. Empty and duplicate entries are ignored.
+func WithFiles(files ...string) Option {
+	return func(o *options) { o.files = files }
 }
 
 // WithTimeout sets the timeout for requests to the Nacos server.

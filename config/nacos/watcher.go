@@ -14,7 +14,7 @@ type watcher struct {
 	source  *Source                          // Config source
 	chWatch chan struct{}                    // Config change notification signal
 	mu      sync.Mutex                       // Mutex guarding the pending configurations
-	pending map[string]*config.Configuration // Pending configurations, keyed by dataId to merge the latest one
+	pending map[string]*config.Configuration // Pending configurations, keyed by full path to merge the latest one
 }
 
 // newWatcher creates a watcher.
@@ -29,11 +29,12 @@ func newWatcher(ctx context.Context, s *Source) *watcher {
 }
 
 // notice notifies a configuration change. It merges pending configurations by
-// dataId so that the latest configuration of every dataId is delivered, and sends
-// the signal without blocking so that the notification flow is not stalled.
+// their full path so that the latest configuration of every dataId is delivered,
+// even when two dataIds share a base name, and sends the signal without blocking
+// so that the notification flow is not stalled.
 func (w *watcher) notice(configuration *config.Configuration) {
 	w.mu.Lock()
-	w.pending[configuration.File] = configuration
+	w.pending[configuration.FullPath] = configuration
 	w.mu.Unlock()
 
 	// Send the signal without blocking so that a slow or stopped watcher does not stall notification.
@@ -45,20 +46,32 @@ func (w *watcher) notice(configuration *config.Configuration) {
 
 // Next returns the changed configuration list.
 //
-// It blocks until a configuration change notification arrives and returns every
+// It blocks until at least one configuration change is pending and returns every
 // latest pending configuration; it returns an error when the context is cancelled.
 func (w *watcher) Next() ([]*config.Configuration, error) {
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case <-w.chWatch:
-	}
+	for {
+		select {
+		case <-w.ctx.Done():
+			return nil, w.ctx.Err()
+		case <-w.chWatch:
+		}
 
+		if configs := w.takePending(); len(configs) > 0 {
+			return configs, nil
+		}
+
+		// The signal carried no configuration: its changes were merged into a previous Next call.
+		// Keep waiting instead of returning an empty result.
+	}
+}
+
+// takePending drains and returns the pending configurations, keyed by full path.
+func (w *watcher) takePending() []*config.Configuration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if len(w.pending) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	configs := make([]*config.Configuration, 0, len(w.pending))
@@ -67,7 +80,7 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 	}
 	w.pending = make(map[string]*config.Configuration)
 
-	return configs, nil
+	return configs
 }
 
 // Stop stops watching.

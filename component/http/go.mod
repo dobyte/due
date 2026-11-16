@@ -3,7 +3,7 @@ module github.com/dobyte/due/component/http/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.7
+	github.com/dobyte/due/v2 v2.6.8
 	github.com/go-openapi/runtime v0.33.1
 	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/valyala/fasthttp v1.73.0
@@ -14,8 +14,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.15.4 // indirect
-	github.com/bytedance/sonic/loader v0.5.2 // indirect
+	github.com/bytedance/sonic v1.15.5 // indirect
+	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

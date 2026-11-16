@@ -9,7 +9,8 @@ package etc
 
 import (
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/file/core"
+	coreconfig "github.com/dobyte/due/v2/core/config"
+	corefile "github.com/dobyte/due/v2/core/config/file"
 	"github.com/dobyte/due/v2/core/value"
 	"github.com/dobyte/due/v2/env"
 	"github.com/dobyte/due/v2/flag"
@@ -26,7 +27,10 @@ var globalConfigurator config.Configurator
 func init() {
 	path := env.Get(dueEtcEnvName, defaultEtcPath).String()
 	path = flag.String(dueEtcArgName, path)
-	globalConfigurator = config.NewConfigurator(config.WithSources(core.NewSource(path, config.ReadOnly)))
+	globalConfigurator = coreconfig.NewConfigurator(
+		coreconfig.WithLogger(logger{}),
+		coreconfig.WithSources(corefile.NewSource(path, coreconfig.ReadOnly)),
+	)
 }
 
 // SetConfigurator sets the configurator.
@@ -63,7 +67,9 @@ func Match(patterns ...string) config.Matcher {
 	return globalConfigurator.Match(patterns...)
 }
 
-// Close closes configuration watching.
+// Close closes configuration watching. The global configurator is kept, so Has and Get keep
+// serving the last published configuration while Set reports errors.ErrClosedConfigurator; install
+// a new configurator with SetConfigurator to load configuration again.
 func Close() {
 	globalConfigurator.Close()
 }

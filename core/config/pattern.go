@@ -1,0 +1,127 @@
+package config
+
+import (
+	"path"
+	"path/filepath"
+	"strings"
+
+	"github.com/dobyte/due/v2/errors"
+)
+
+// NormalizeFiles trims the configured file list and drops empty, "." and duplicate entries. Entries
+// are converted to slash-separated, cleaned paths so that they match the relative path of a file on
+// every platform.
+func NormalizeFiles(files []string) []string {
+	if len(files) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(files))
+	normalized := make([]string, 0, len(files))
+
+	for _, file := range files {
+		file = path.Clean(filepath.ToSlash(strings.TrimSpace(file)))
+		if file == "." {
+			continue
+		}
+
+		if _, ok := seen[file]; ok {
+			continue
+		}
+
+		seen[file] = struct{}{}
+		normalized = append(normalized, file)
+	}
+
+	return normalized
+}
+
+// IsWildcard reports whether a configured file entry contains the "*" wildcard.
+func IsWildcard(entry string) bool {
+	return strings.Contains(entry, "*")
+}
+
+// UnmatchableFiles returns the configured entries that can never match a path relative to the
+// source path, because they are absolute or contain a directory traversal.
+func UnmatchableFiles(files []string) []string {
+	var invalid []string
+
+	for _, file := range files {
+		file = path.Clean(filepath.ToSlash(strings.TrimSpace(file)))
+		if file == "." {
+			continue
+		}
+
+		if strings.HasPrefix(file, "/") || filepath.IsAbs(filepath.FromSlash(file)) ||
+			file == ".." || strings.HasPrefix(file, "../") {
+			invalid = append(invalid, file)
+		}
+	}
+
+	return invalid
+}
+
+// ValidateFileEntry validates a concrete entry relative to the source root. It reports
+// [errors.ErrInvalidFilePath] when the entry is empty, absolute, resolves to the root itself,
+// contains a directory traversal or a wildcard.
+func ValidateFileEntry(entry string) error {
+	if entry == "" {
+		return errors.ErrInvalidFilePath
+	}
+
+	if len(UnmatchableFiles([]string{entry})) > 0 {
+		return errors.ErrInvalidFilePath
+	}
+
+	if path.Clean(filepath.ToSlash(strings.TrimSpace(entry))) == "." {
+		return errors.ErrInvalidFilePath
+	}
+
+	if IsWildcard(entry) {
+		return errors.ErrInvalidFilePath
+	}
+
+	return nil
+}
+
+// MatchFile reports whether name is selected by files. An entry without "*" must equal name;
+// otherwise it is a pattern where "*" matches any sequence of characters and every other character
+// is literal; only "*" is supported as a wildcard.
+func MatchFile(files []string, name string) bool {
+	for _, file := range files {
+		if file == name {
+			return true
+		}
+
+		if IsWildcard(file) && MatchWildcard(file, name) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// MatchWildcard matches name against pattern, where "*" matches any sequence of characters and
+// every other character is literal.
+func MatchWildcard(pattern, name string) bool {
+	segments := strings.Split(pattern, "*")
+	if len(segments) == 1 {
+		return pattern == name
+	}
+
+	if !strings.HasPrefix(name, segments[0]) {
+		return false
+	}
+	name = name[len(segments[0]):]
+
+	for _, segment := range segments[1 : len(segments)-1] {
+		index := strings.Index(name, segment)
+		if index < 0 {
+			return false
+		}
+
+		name = name[index+len(segment):]
+	}
+
+	return strings.HasSuffix(name, segments[len(segments)-1])
+}

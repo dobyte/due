@@ -2,17 +2,12 @@ package file
 
 import (
 	"github.com/dobyte/due/v2/config"
-	"github.com/dobyte/due/v2/config/file/core"
+	corefile "github.com/dobyte/due/v2/core/config/file"
 	"github.com/dobyte/due/v2/log"
 )
 
 // Name is the name of the file config source.
-const Name = core.Name
-
-// Source is a file-based config source.
-type Source struct {
-	opts *options
-}
+const Name = corefile.Name
 
 // NewSource returns a new file config source configured with opts.
 func NewSource(opts ...Option) config.Source {
@@ -22,8 +17,12 @@ func NewSource(opts ...Option) config.Source {
 	}
 
 	if o.path == "" {
-		log.Fatal("no config file path specified")
+		log.Warnf("no config file path specified, loading the config will fail")
 	}
 
-	return core.NewSource(o.path, o.mode)
+	for _, file := range corefile.UnmatchableFiles(o.files) {
+		log.Warnf("config file entry %q is absolute or contains a directory traversal, it will never be matched", file)
+	}
+
+	return corefile.NewSource(o.path, o.mode, o.files...)
 }

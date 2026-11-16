@@ -6,8 +6,6 @@ package nacos
 
 import (
 	"context"
-	stdnet "net"
-	"net/url"
 	"sync"
 	"sync/atomic"
 
@@ -66,24 +64,13 @@ func NewRegistry(opts ...Option) *Registry {
 		serverConfigs := make([]constant.ServerConfig, 0, len(o.urls))
 
 		for _, v := range o.urls {
-			raw, err := url.Parse(v)
+			serverConfig, err := parseServerConfig(v)
 			if err != nil {
 				log.Warnf("%s parse failed: %v", v, err)
 				continue
 			}
 
-			host, port, err := stdnet.SplitHostPort(raw.Host)
-			if err != nil {
-				log.Warnf("%s parse failed: %v", v, err)
-				continue
-			}
-
-			serverConfigs = append(serverConfigs, constant.ServerConfig{
-				Scheme:      raw.Scheme,
-				ContextPath: raw.Path,
-				IpAddr:      host,
-				Port:        xconv.Uint64(port),
-			})
+			serverConfigs = append(serverConfigs, serverConfig)
 		}
 
 		if len(serverConfigs) == 0 {
@@ -163,11 +150,12 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 	param.Metadata[metaFieldWeight] = xconv.String(int(param.Weight))
 
 	if len(ins.Routes) > 0 {
-		if routes, err := json.Marshal(ins.Routes); err != nil {
+		routes, err := marshalRoutes(ins.Routes)
+		if err != nil {
 			return err
-		} else {
-			param.Metadata[metaFieldRoutes] = xconv.BytesToString(routes)
 		}
+
+		param.Metadata[metaFieldRoutes] = routes
 	}
 
 	if len(ins.Events) > 0 {
@@ -192,6 +180,11 @@ func (r *Registry) Register(ctx context.Context, ins *registry.ServiceInstance) 
 		} else {
 			param.Metadata[metaFieldMetadata] = xconv.BytesToString(metadata)
 		}
+	}
+
+	if size := metadataSize(param.Metadata); size > nacosMetadataLimit {
+		log.Warnf("instance metadata length %d exceeds the nacos limit %d, insID: %s kind: %s name: %s",
+			size, nacosMetadataLimit, ins.ID, ins.Kind, ins.Name)
 	}
 
 	if ok, err := r.opts.client.RegisterInstance(param); err != nil {

@@ -44,6 +44,10 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 		// Use the full pull result as the initial snapshot.
 		for _, kv := range res.Kvs {
 			c := w.source.parseKV(kv.Key, kv.Value)
+			if !w.source.matchFile(c.Path) {
+				continue
+			}
+
 			w.configs[c.FullPath] = c
 		}
 
@@ -84,8 +88,8 @@ func newWatcher(ctx context.Context, s *Source, res *clientv3.GetResponse) *watc
 	return w
 }
 
-// Next returns the configuration list. It blocks until the configuration changes
-// and returns an error once the watcher has been stopped.
+// Next returns the changed configuration list. It blocks until the configuration
+// changes and returns an error once the watcher has been stopped.
 func (w *watcher) Next() ([]*config.Configuration, error) {
 	select {
 	case <-w.ctx.Done():
@@ -100,8 +104,8 @@ func (w *watcher) Next() ([]*config.Configuration, error) {
 }
 
 // watchLoop is the watch event loop. It handles etcd watch events: PUT updates an
-// entry of the configuration snapshot and DELETE removes it; the latest
-// configuration is then broadcast.
+// entry of the configuration snapshot and DELETE removes it; the changed entries
+// are then broadcast, so that the configurator only decodes what actually changed.
 func (w *watcher) watchLoop() {
 	for {
 		select {
@@ -118,18 +122,28 @@ func (w *watcher) watchLoop() {
 			}
 
 			w.rw.Lock()
+			changed := make([]*config.Configuration, 0, len(res.Events))
 			for _, ev := range res.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
 					c := w.source.parseKV(ev.Kv.Key, ev.Kv.Value)
+					if !w.source.matchFile(c.Path) {
+						continue
+					}
+
 					w.configs[c.FullPath] = c
+					changed = append(changed, c)
 				case mvccpb.DELETE:
 					delete(w.configs, string(ev.Kv.Key))
 				}
 			}
 			w.rw.Unlock()
 
-			w.broadcast()
+			// A deletion has no representation in a config item, so only the changed items are
+			// reported; the value store is merge-only anyway.
+			if len(changed) > 0 {
+				w.notify(changed)
+			}
 		}
 	}
 }
@@ -157,6 +171,10 @@ func (w *watcher) resync() bool {
 			w.configs = make(map[string]*config.Configuration)
 			for _, kv := range res.Kvs {
 				c := w.source.parseKV(kv.Key, kv.Value)
+				if !w.source.matchFile(c.Path) {
+					continue
+				}
+
 				w.configs[c.FullPath] = c
 			}
 			w.rw.Unlock()
@@ -183,7 +201,8 @@ func (w *watcher) resync() bool {
 }
 
 // broadcast broadcasts the configuration list. It reads the full configuration
-// from the snapshot and notifies the watcher.
+// from the snapshot and notifies the watcher; it is used after a resync, where the
+// whole snapshot has to be replayed.
 func (w *watcher) broadcast() {
 	w.rw.RLock()
 	configs := w.snapshot()
@@ -192,40 +211,23 @@ func (w *watcher) broadcast() {
 	w.notify(configs)
 }
 
-// notify notifies the watcher that the configuration list has been updated. It
-// clears the stale data and then sends the latest configuration snapshot in a
-// non-blocking way.
+// notify notifies the watcher that configurations have changed. The batch is delivered as is: the
+// channel carries deltas, so dropping or merging a batch would lose the changes it carries.
 func (w *watcher) notify(configs []*config.Configuration) {
 	if w.stopped.Load() {
 		return
 	}
 
 	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	if w.stopped.Load() {
-		w.mu.Unlock()
 		return
 	}
-
-	w.flush()
 
 	select {
 	case w.chWatch <- configs:
 	case <-w.ctx.Done():
-	}
-
-	w.mu.Unlock()
-}
-
-// flush clears every stale item and keeps only the latest configuration snapshot.
-func (w *watcher) flush() {
-	for {
-		select {
-		case <-w.chWatch:
-			// continue
-		default:
-			return
-		}
 	}
 }
 
@@ -246,6 +248,8 @@ func (w *watcher) Stop() error {
 	w.wg.Wait()
 
 	w.watcher.Close()
+
+	w.source.watchers.Delete(w)
 
 	return nil
 }

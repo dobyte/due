@@ -3,9 +3,9 @@ module github.com/dobyte/due/config/polaris/v2
 go 1.27.0
 
 require (
-	github.com/dobyte/due/v2 v2.6.7
-	github.com/polarismesh/polaris-go v1.7.1
-	github.com/polarismesh/specification v1.8.0
+	github.com/dobyte/due/v2 v2.6.8
+	github.com/polarismesh/polaris-go v1.7.2
+	github.com/polarismesh/specification v1.8.1-0.20260730090605-7b2855bfb207
 )
 
 require (
@@ -13,8 +13,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.15.4 // indirect
-	github.com/bytedance/sonic/loader v0.5.2 // indirect
+	github.com/bytedance/sonic v1.15.5 // indirect
+	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/dlclark/regexp2 v1.7.0 // indirect

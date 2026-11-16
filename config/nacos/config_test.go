@@ -1,3 +1,10 @@
+//go:build integration
+// +build integration
+
+// These tests require a running Nacos server (defaulting to http://127.0.0.1:8848/nacos) and are
+// excluded from the default test run. Run them with:
+//
+//	go test -tags integration ./...
 package nacos_test
 
 import (
@@ -20,7 +27,7 @@ func init() {
 
 func TestWatch(t *testing.T) {
 	ticker1 := time.NewTicker(2 * time.Second)
-	ticker2 := time.After(20 * time.Minute)
+	ticker2 := time.After(time.Minute)
 
 	for {
 		select {

@@ -1,9 +1,17 @@
 package log
 
+import (
+	internallog "github.com/dobyte/due/v2/internal/logger"
+)
+
 var globalLogger Logger
 
 func init() {
 	SetLogger(NewLogger())
+
+	internallog.Register(func() internallog.Logger {
+		return GetLogger()
+	})
 }
 
 // SetLogger sets the global logger.

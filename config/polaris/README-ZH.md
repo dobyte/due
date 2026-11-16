@@ -35,6 +35,12 @@ go get -u github.com/dobyte/due/config/polaris/v2@latest
         timeout = "3s"
         # 与Polaris服务端的通信协议，可选：grpc，默认为grpc
         protocol = "grpc"
+        # 配置缓存目录，默认为 ./run/polaris/config/cache
+        cacheDir = "./run/polaris/config/cache"
+        # 日志目录，默认为 ./run/polaris/config/log
+        logDir = "./run/polaris/config/log"
+        # 需要加载、修改和监听的配置文件清单，相对 group 的文件名。为空表示 group 下的所有文件
+        files = ["config.json", "gateway/*.yaml"]
 ```
 
 3.开始使用
@@ -89,9 +95,19 @@ func main() {
 }
 ```
 
-### 3.外部SDK上下文
+### 3.文件清单
 
-polaris组件支持传入外部SDK上下文，用于复用已有的polaris-go SDK实例，此时SDK上下文的销毁由调用方负责。
+`files` 用于限定需要加载、修改和监听的配置文件，条目为 `group` 下的文件名（可包含路径前缀）。为空时保持原有行为，`group` 下的所有文件均可用。
+
+* 不含 `*` 的项为精确文件名，必须与配置文件名完全一致。
+* 含 `*` 的项为模式，`*` 可匹配任意字符（包括 `/`），其他字符按字面值匹配；仅支持 `*` 一种通配符。
+* 清单非空时，`Load` 只会返回命中清单的配置；显式加载或存储清单外的文件会返回 `errors.ErrFileNotConfigured`。
+* 监听同样只会上报命中清单的配置变更。
+* 精确清单不查询分组元数据，显式加载或 watcher 重连触发的 reload 会重新读取清单内全部文件的内容；配置项较多且内容较大时需评估该开销。
+
+### 4.外部SDK上下文
+
+polaris组件支持传入外部SDK上下文，用于复用已有的polaris-go SDK实例，此时SDK上下文的销毁由调用方负责。此时 `cacheDir` 与 `logDir` 不生效，缓存与日志由外部SDK上下文自行配置。
 
 ```go
 package main
@@ -117,7 +133,7 @@ func main() {
 }
 ```
 
-### 4.服务端版本兼容性
+### 5.服务端版本兼容性
 
 polaris组件兼容不同版本的服务端，部分新接口在旧版本服务端上不可用时，组件会自动降级：
 
@@ -128,8 +144,8 @@ polaris组件兼容不同版本的服务端，部分新接口在旧版本服务�
 | 分组文件发现 | 支持 | 不支持分组查询接口，自动禁用分组搜索 |
 | 变更监听（Watch） | 分组搜索自动发现新文件 | 通过显式加载（Load）订阅文件变更 |
 
-> 注意：旧版本服务端不支持配置分组查询接口，配置文件的变更监听需在加载（Load）该文件后生效。
+> 注意：旧版本服务端不支持配置分组查询接口。配置了 `files` 时，精确文件名仍可直接加载并订阅变更；含 `*` 的模式条目无法展开，需服务端支持分组查询。配置文件的变更监听需在加载（Load）该文件后生效。
 
-### 5.详细示例
+### 6.详细示例
 
 更多详细示例请点击[due-examples](https://github.com/dobyte/due-examples)

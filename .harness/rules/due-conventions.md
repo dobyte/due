@@ -6,7 +6,7 @@
 
 Due 以 [Uber Go Style Guide](uber-go/style.md)作为通用编码规范。本文件补充项目约定；与通用规范存在冲突时，优先执行本文件中适用的 Due 规则，其余部分继续遵循 Uber 指南。
 
-其中，`DUE-003` 是对 Uber `Defer to Clean Up` 在高性能场景下的明确覆盖，`DUE-005` 是对 Uber 基准测试示例循环写法的明确覆盖，`DUE-006` 是对上游示例中计数式循环写法的明确覆盖。项目约定不能以遗漏资源清理、破坏错误处理或引入并发错误为代价。
+其中，`DUE-003` 是对 Uber `Defer to Clean Up` 在高性能场景下的明确覆盖，`DUE-005` 是对 Uber 基准测试示例循环写法的明确覆盖，`DUE-006` 是对上游示例中计数式循环写法的明确覆盖，`DUE-010` 是对 Uber `Prefix unexported globals with _` 命名建议的明确覆盖，`DUE-011` 明确初始化期全局对象不做防御性同步的适用边界。项目约定不能以遗漏资源清理、破坏错误处理或引入并发错误为代价。
 
 ## 二、规则索引
 
@@ -18,6 +18,11 @@ Due 以 [Uber Go Style Guide](uber-go/style.md)作为通用编码规范。本文
 | [DUE-004](#due-004) | 无强制时区要求的时间操作 | 只能使用标准库 `time` 包。 |
 | [DUE-005](#due-005) | 基准测试循环写法 | 无索引需求用 `for b.Loop()`，需要索引用 `for i := range b.N`。 |
 | [DUE-006](#due-006) | 计数循环写法 | 计数循环使用 `for i := range n`。 |
+| [DUE-007](#due-007) | `WaitGroup` 管理的 Goroutine | 使用 `wg.Go(func(){})`，不使用 `wg.Add` + `go func`。 |
+| [DUE-008](#due-008) | 全局错误变量 | 统一定义在 Due errors 包，使用 `Err` 前缀并导出。 |
+| [DUE-009](#due-009) | 多变量声明分组 | 同一作用域内多个变量使用 `var ()`，仅声明在上、声明赋值在下。 |
+| [DUE-010](#due-010) | 命名的下划线前缀 | 所有标识符不以下划线开头。 |
+| [DUE-011](#due-011) | 全局对象的注册与读取 | 只在初始化阶段注册，之后不再修改，读取不加锁。 |
 
 ## 三、规则详情
 
@@ -140,17 +145,180 @@ for i := 0; i < n; i++ {
 - 基准测试中的 `b.N` 循环按 [DUE-005](#due-005)执行，不重复套用本条。
 - 整数 range 依赖模块 Go 版本支持，按各模块 `go.mod` 确认，不为此降低模块的 Go 版本要求。
 
+### DUE-007
+
+**由 `sync.WaitGroup` 管理的 Goroutine 统一使用 `WaitGroup.Go` 启动（强制）。**
+
+正确写法：
+
+```go
+var wg sync.WaitGroup
+
+wg.Go(func() {
+	// ...
+})
+```
+
+错误写法：
+
+```go
+var wg sync.WaitGroup
+wg.Add(1)
+
+go func() {
+	defer wg.Done()
+	// ...
+}()
+```
+
+- 适用于模块 Go 版本已支持 `WaitGroup.Go`（Go 1.25 及以上）的代码，按各模块 `go.mod` 确认，不为此降低模块的 Go 版本要求。
+- `WaitGroup.Go` 已负责启动前计数、结束后的 `Done` 调用，不得再额外 `Add`，也不得在传入函数内自行 `Done`，避免重复记账。
+- 本条只统一启动与计数写法，不改变 [Goroutine 生命周期](go-style.md#并发资源与生命周期)的要求：每个 Goroutine 仍需有明确的结束条件或取消信号，并在生命周期入口等待退出。
+- 不由 `WaitGroup` 管理、而由其他机制结束的 Goroutine 不适用本条，继续遵循通用规范。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
+### DUE-008
+
+**全局错误变量统一定义在 Due errors 包（强制）。**
+
+正确写法：
+
+```go
+// errors/error.go
+var (
+	ErrInvalidRoutes = New("invalid routes metadata")
+)
+```
+
+```go
+// 其他包
+return errors.ErrInvalidRoutes
+```
+
+错误写法：
+
+```go
+var errInvalidRoutes = errors.New("invalid routes metadata")
+```
+
+- 需要跨函数、跨包或跨模块复用、匹配（如 `errors.Is`）以及对外暴露的包级错误，必须在 `github.com/dobyte/due/v2/errors` 中定义并导出，使用方通过 `errors.ErrXxx` 引用。
+- 错误变量使用 `Err` 前缀；错误文本、错误编码等定义集中维护在 errors 包，业务包内不得再定义包级错误变量，包括未导出的 `errXxx`。
+- errors 包中已有语义一致的错误时复用既有变量，不新增同义错误。
+- 仅在单次调用内创建、不参与匹配或对外暴露的错误，可以直接使用 `errors.New` 返回，不要求进入 errors 包。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
+### DUE-009
+
+**同一作用域内的多变量声明统一使用 `var ()` 分组（强制）。**
+
+正确写法：
+
+```go
+var (
+	total    int
+	failed   int
+	services = make([]*registry.ServiceInstance, 0, len(instances))
+)
+```
+
+错误写法：
+
+```go
+var total, failed int
+
+services := make([]*registry.ServiceInstance, 0, len(instances))
+```
+
+- 同一作用域内需要声明多个变量时，统一收敛到一个 `var (...)` 分组，不拆成多条独立 `var`，也不与 `:=` 混用。
+- 分组内每行只声明一个变量，不使用 `a, b int` 这类合并声明。
+- 仅声明的变量放在分组上部；声明并赋值的变量放在分组下部，使用 `name = value` 在同一行完成声明与赋值。
+- `var ()` 内不使用空行分隔。
+- 适用边界：单个变量声明（含 `:=` 短声明）、函数参数与命名返回值、`for`/`if`/`switch` 的初始化语句，以及必须在同一条语句内完成的解构式赋值（如多返回值接收 `host, port, err := parseEndpoint(...)`）不强制改为 `var ()` 分组。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
+### DUE-010
+
+**所有命名不以下划线开头（强制）。**
+
+正确写法：
+
+```go
+var structInfos sync.Map
+
+const defaultTagKey = "default"
+```
+
+错误写法：
+
+```go
+var _structInfos sync.Map
+
+const _defaultTagKey = "default"
+```
+
+- 适用于变量、常量、函数、方法、类型、字段、参数、返回值等所有标识符，包级和局部声明均包含在内。
+- Go 的空白标识符 `_` 不属于命名，不在限制范围内。
+- 该条覆盖 Uber 指南中“未导出全局命名使用 `_` 前缀”的建议；Due 统一使用普通驼峰命名，不使用下划线前缀。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
+### DUE-011
+
+**进程级全局对象只在初始化阶段注册，之后不再修改，读取路径不加同步（强制）。**
+
+正确写法：
+
+```go
+var globalConfigurator Configurator
+
+// SetConfigurator installs the global configurator during initialization.
+func SetConfigurator(configurator Configurator) {
+	previous := globalConfigurator
+	globalConfigurator = configurator
+
+	if previous != nil && previous != configurator {
+		previous.Close()
+	}
+}
+
+func GetConfigurator() Configurator {
+	return globalConfigurator
+}
+```
+
+错误写法：
+
+```go
+var (
+	globalMu           sync.RWMutex
+	globalConfigurator Configurator
+)
+
+func GetConfigurator() Configurator {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
+
+	return globalConfigurator
+}
+```
+
+- 适用于进程级单例或注册表型全局对象，例如全局 configurator、全局日志实例、全局注册表句柄及其对应的 `SetXxx`、`GetXxx`、`Close` 入口。
+- 这类对象只能在程序初始化阶段（启动装配期）安装或替换，之后被并发读取而不再修改；因此全局读取入口直接读取包级变量，不得为防御性并发加锁或使用原子操作。
+- 对应的关闭或清理入口同样属于初始化/反初始化生命周期，按同一前提实现，不额外同步。
+- 若某个全局对象确实需要在运行期被并发修改（例如动态注册表），不属于本条范围；此时必须显式采用并发安全设计（互斥、原子或快照发布），并在注释或文档中声明其运行期可变语义。
+- 不得以“可能有人在运行期修改”为理由给初始化期全局对象加锁，牺牲读取热路径的性能。
+- 现有代码不构成本条豁免依据；新增和修改时在任务范围内落实，全仓库迁移作为独立任务处理。
+
 ## 四、Harness 执行与审查
 
 1. 编码前同时读取 [Go 编码规范入口](go-style.md)和本文件，按规则编号确定本次涉及的项目约定。
-2. 审查新增和修改代码的实际调用，确认 JSON、errors、时间操作、基准测试循环和计数循环采用正确写法；导入别名不能作为判断依据。
+2. 审查新增和修改代码的实际调用，确认 JSON、errors、全局错误变量归属、全局对象的注册与读取同步、命名下划线前缀、变量声明分组、时间操作、基准测试循环、计数循环和 `WaitGroup` 管理的 Goroutine 启动采用正确写法；导入别名不能作为判断依据。
 3. 涉及高性能路径时检查可避免的 `defer`，并复核所有相关退出路径的清理行为；按变更运行适用的测试，并对性能结论进行测量。
 4. 工具检查通过不能替代场景判断：高性能路径、强制时区要求和资源清理完整性需要结合代码语义审查。
 5. 现有代码不构成豁免依据。新增和修改时在任务范围内落实规则，全仓库审计或批量迁移作为独立任务处理。
 
 ## 五、后续追加规则
 
-- 在本文件追加新规则，使用递增、稳定的编号，从 `DUE-007` 开始；已有编号不重排、不复用。
+- 在本文件追加新规则，使用递增、稳定的编号，从 `DUE-012` 开始；已有编号不重排、不复用。
 - 每条规则写明适用场景、要求强度、指定包或实现方式，以及必要的实施边界。
 - 同步更新规则索引；与 Uber 通用规范存在冲突时，明确覆盖范围，并更新 [Go 编码规范入口](go-style.md)中的对应说明。
 - 废止规则时保留原编号并标注状态，方便历史变更和审查记录引用。
