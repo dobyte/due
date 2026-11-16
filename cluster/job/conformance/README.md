@@ -6,13 +6,19 @@
 
 ```powershell
 $env:JOB_REDIS_ADDR = "127.0.0.1:6379"
-go test ./job/redis/...
+Push-Location cluster/job/redis
+go test ./...
+Pop-Location
 
 $env:JOB_MYSQL_DSN = "user:password@tcp(127.0.0.1:3306)/database"
-go test ./job/mysql/...
+Push-Location cluster/job/mysql
+go test ./...
+Pop-Location
 
 $env:JOB_MONGO_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0"
-go test ./job/mongo/...
+Push-Location cluster/job/mongo
+go test ./...
+Pop-Location
 ```
 
 MongoDB 的 `CreateRunIfDue` 事务测试要求 Replica Set 或分片集群。测试不会自动清理外部数据库中的测试表或 collection，建议使用专用测试数据库。

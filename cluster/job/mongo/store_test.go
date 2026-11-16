@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/v2/job"
+	"github.com/dobyte/due/v2/cluster/job"
 )
 
 func TestDocumentRoundTrip(t *testing.T) {

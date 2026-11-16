@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dobyte/due/v2/cluster/job"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/job"
 )
 
 var (

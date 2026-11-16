@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dobyte/due/v2/cluster/job"
 	"github.com/dobyte/due/v2/errors"
-	"github.com/dobyte/due/v2/job"
 	"github.com/dobyte/due/v2/utils/xuuid"
 	"github.com/redis/go-redis/v9"
 )

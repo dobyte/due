@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dobyte/due/v2/job"
-	"github.com/dobyte/due/v2/job/conformance"
+	"github.com/dobyte/due/v2/cluster/job"
+	"github.com/dobyte/due/v2/cluster/job/conformance"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

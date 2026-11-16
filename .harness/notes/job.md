@@ -12,7 +12,7 @@
 | 执行方式 | job Worker 本地 Handler |
 | 可靠性语义 | 至少执行一次，业务 Handler 负责幂等 |
 
-本文同时记录当前 V1 实现。公开接口以 `job/` 源码为准，适配器通过独立 Go module 引入。
+本文同时记录当前 V1 实现。公开接口以 `cluster/job/` 源码为准，适配器通过独立 Go module 引入。
 
 ## 2. 已确定的范围
 
@@ -21,7 +21,7 @@
 新增模块统一命名为 job，不新增 scheduler 包或同名公共接口。
 
 ~~~text
-job/
+cluster/job/
 ├── job.go                 # JobService 和生命周期
 ├── definition.go          # Definition 任务定义
 ├── run.go                 # Run 执行实例
@@ -790,7 +790,7 @@ trace_id
 
 - 独立 Go module。
 - 适配器迁移脚本。
-- 复用 `job/conformance` 测试。
+- 复用 `cluster/job/conformance` 测试。
 - 核对事务、条件写和批量抢占语义。
 - 已在 Docker Redis 6、MySQL 5.7 和 MongoDB 7 Replica Set 上执行 conformance 测试。
 
@@ -836,9 +836,11 @@ SQLite 暂不考虑
 
 ## 24. 当前代码入口
 
-根模块提供 `job.Service`、`job.JobStore`、`job.Handler` 和计划计算。三个后端是独立模块：
+`cluster/job` 模块提供 `job.Service`、`job.JobStore`、`job.Handler` 和计划计算。三个后端是独立模块：
 
 ```go
+import "github.com/dobyte/due/v2/cluster/job"
+
 // Redis 默认后端
 store := redis.NewStore(redis.WithAddrs("127.0.0.1:6379"))
 

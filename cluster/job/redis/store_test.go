@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dobyte/due/v2/job"
+	"github.com/dobyte/due/v2/cluster/job"
 )
 
 func TestFieldArgumentCounts(t *testing.T) {
